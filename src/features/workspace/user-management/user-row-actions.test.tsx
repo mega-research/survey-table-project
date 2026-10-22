@@ -34,6 +34,7 @@ const BASE: UserListItem = {
   fieldworkOrgId: null,
   fieldworkOrgName: null,
   fieldworkRole: null,
+  teamNames: [],
   createdAt: '2026-08-26T00:00:00.000Z',
 };
 

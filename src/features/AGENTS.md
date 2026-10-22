@@ -18,7 +18,7 @@ src/
 │   │                           # 루트 개수는 목표가 아니라 이 기준의 결과다(2026-08-25 전수 실측: 72파일 중 이동 1건). 새 묶음의 진입점은 폴더 안(table-editor 방식), 기존 group-manager·condition-card 는 유지
 │   ├── survey-builder/         # 설문 편집기 + 설문 목록 (150개) — importer 그래프의 닫힌 묶음대로 폴더화
 │   │   ├── survey-list/        # 설문 목록 (survey-list-view 진입점, 티켓 08 — .pen FLOW 6)
-│   │   │                       # 툴바(상태 칩·검색·정렬)·상세 검색 패널·페이지네이션·카드 + 순수 파이프라인
+│   │   │                       # 툴바(상태 칩·검색·정렬)·상세 검색 패널·카드 + 순수 파이프라인 (페이지네이션은 components/ui/list-pagination)
 │   │   │                       # (survey-list-pipeline)·버튼 노출 근사(survey-list-capability — 판정은 서버)
 │   │   │   └── groups/         # 설문 그룹 UI (티켓 12 — .pen FLOW 2): 관리 모달(CRUD·dnd 정렬)·
 │   │   │                       # 담기 패널(미분류 전용)·삭제 확인·카드 케밥 이동 서브메뉴·그룹 화면 머리
@@ -85,7 +85,7 @@ src/
 │   │   │                       # + fieldwork-org-card(카드·계정 명단·종료 확인) + fieldwork-org-form-modal
 │   │   │                       # + queries/use-fieldwork-orgs. **사용자 관리를 import 하지 않는다** —
 │   │   │                       # 저쪽이 이 묶음을 부르므로 방향이 한쪽이어야 한다(계정 발급 모달은 상위가 연다)
-│   │   ├── user-management/    # user-management-view 진입점 + user-create-modal + user-row-actions
+│   │   ├── user-management/    # user-management-view 진입점(20명씩 쪽 나눔 · 기본 보기는 퇴사자 제외, 상태 머리글 정렬로 포함) + user-create-modal + user-row-actions
 │   │   │                       # + user-reset-password-modal · user-rehire-modal
 │   │   │                       # + queries/use-users. 어휘·쿼리 키는 루트로 올라갔다(티켓 24)
 │   │   │                       # 케밥이 여는 액션은 availableUserStatusActions(전이표)가 정한다 — 화면이 표를 따로 들지 않는다

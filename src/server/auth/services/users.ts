@@ -3,7 +3,15 @@ import 'server-only';
 import { type SQL, and, asc, count, eq, sql } from 'drizzle-orm';
 
 import { type DbTransaction as Tx, db } from '@/db';
-import { accounts, fieldworkOrgs, sessions, userStatusEvents, users } from '@/db/schema';
+import {
+  accounts,
+  fieldworkOrgs,
+  sessions,
+  teamMembers,
+  teams,
+  userStatusEvents,
+  users,
+} from '@/db/schema';
 import { auth } from '@/lib/auth/server';
 import { isUniqueViolation } from '@/lib/pg-error';
 import {
@@ -70,6 +78,14 @@ export async function listUsers(input: ListUsersInput): Promise<ListUsersOutput>
       fieldworkOrgId: users.fieldworkOrgId,
       fieldworkOrgName: fieldworkOrgs.name,
       fieldworkRole: users.fieldworkRole,
+      // 겸직이 있어 조인하면 행이 불어난다 — 상관 서브쿼리로 한 사람 한 행을 지킨다.
+      // 팀 테이블은 workspace 도메인 소유지만 타 도메인 테이블 직접 읽기는 허용이다.
+      teamNames: sql<string[]>`coalesce((
+        select jsonb_agg(${teams.name} order by ${teams.order}, ${teams.name})
+        from ${teamMembers}
+        join ${teams} on ${teams.id} = ${teamMembers.teamId}
+        where ${teamMembers.userId} = ${users.id} and ${teams.status} = 'active'
+      ), '[]'::jsonb)`,
       createdAt: users.createdAt,
     })
     .from(users)

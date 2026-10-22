@@ -126,7 +126,7 @@ src/
 │   └── index.ts                # 잔존 사유 주석 배럴 (auth 는 Better Auth 로 이관 완료)
 │
 ├── components/                 # 진짜 공용 UI 만 — features 를 모른다(ESLint)
-│   ├── ui/                     # shadcn/ui 기반 컴포넌트 (23개 + rich-text-editor/)
+│   ├── ui/                     # shadcn/ui 기반 컴포넌트 (24개 + rich-text-editor/) — list-pagination 은 설문 목록·사용자 관리 공용
 │   ├── auth/                   # logout-button (authClient.signOut 공용 버튼)
 │   └── providers/              # Context providers
 │

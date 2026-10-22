@@ -4,10 +4,11 @@ import { useState } from 'react';
 
 import Link from 'next/link';
 
-import { ArrowLeft, ChevronDown, Loader2, Plus } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, Loader2, Plus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import type { UserType } from '@/shared/contracts/auth';
+import { ListPagination } from '@/components/ui/list-pagination';
+import type { UserStatus, UserType } from '@/shared/contracts/auth';
 import { FIELDWORK_ROLE_LABEL } from '@/shared/contracts/auth';
 import {
   type UserListItem,
@@ -54,30 +55,79 @@ function avatarTone(userType: UserType): string {
   return userType === 'guest' ? 'bg-[#FEF3C7] text-[#D97706]' : 'bg-[#E0E7FF] text-[#2743AE]';
 }
 
+const PAGE_SIZE = 20;
+
+/** 상태 머리글 정렬 — 누를 때마다 기본 → 오름차순 → 내림차순 → 기본으로 돈다. */
+type StatusSort = 'default' | 'asc' | 'desc';
+
+const NEXT_STATUS_SORT: Record<StatusSort, StatusSort> = {
+  default: 'asc',
+  asc: 'desc',
+  desc: 'default',
+};
+
+/** 상태 정렬 순서 — 지금 일하는 사람이 앞, 퇴사가 끝. pending·rejected 는 v2 에서 도달 불가 어휘다. */
+const STATUS_RANK: Record<UserStatus, number> = {
+  active: 0,
+  suspended: 1,
+  pending: 2,
+  rejected: 3,
+  departed: 4,
+};
+
 /**
- * 퇴사자는 목록 뒤로 보내고 기본으로 접는다.
+ * 표에 실을 행.
  *
- * 서버는 발급순으로 주는데, 테스트·검증용으로 만들었다 퇴사 처리한 계정이 앞쪽에 몰려 있어
- * 지금 일하는 사람을 찾으려면 그 줄들을 넘겨야 했다. 순서만 바꾸고(같은 무리 안은 발급순
- * 그대로) 퇴사자는 상태 머리글이나 표 아래 줄로 펼친다. 상태 필터로 「퇴사」를 고른 화면은
- * 퇴사자를 보러 온 것이라 접지 않는다.
+ * 기본 보기는 퇴사자를 뺀다 — 서버가 발급순으로 주는데, 테스트하다 퇴사 처리한 계정이 앞쪽에
+ * 몰려 지금 일하는 사람이 밀려났다. 퇴사자는 상태 머리글로 정렬하거나 상태 필터로 「퇴사」를
+ * 고르면 나온다. 정렬은 안정 정렬이라 같은 상태 안은 발급순 그대로다.
  */
 function arrangeUsers(
   items: readonly UserListItem[],
-  showDeparted: boolean,
-): { visible: UserListItem[]; departedCount: number } {
-  const current = items.filter((user) => user.status !== 'departed');
-  const departed = items.filter((user) => user.status === 'departed');
-  return {
-    visible: showDeparted ? [...current, ...departed] : current,
-    departedCount: departed.length,
-  };
+  sort: StatusSort,
+  statusFilter: UserStatusFilter,
+): UserListItem[] {
+  if (sort === 'default') {
+    return statusFilter === 'all' ? items.filter((user) => user.status !== 'departed') : [...items];
+  }
+  const direction = sort === 'asc' ? 1 : -1;
+  return [...items].sort((a, b) => (STATUS_RANK[a.status] - STATUS_RANK[b.status]) * direction);
+}
+
+const ARIA_SORT: Record<StatusSort, 'none' | 'ascending' | 'descending'> = {
+  default: 'none',
+  asc: 'ascending',
+  desc: 'descending',
+};
+
+function StatusSortIcon({ sort }: { sort: StatusSort }) {
+  if (sort === 'asc') return <ArrowUp className="h-3 w-3" />;
+  if (sort === 'desc') return <ArrowDown className="h-3 w-3" />;
+  return <ArrowUpDown className="h-3 w-3 opacity-60" />;
+}
+
+/**
+ * 「소속」 칸 — 유형마다 출처가 다르다. 직원은 팀(겸직이면 줄마다 하나), 게스트는 기관 메모,
+ * 실사는 업체 이름.
+ */
+function Affiliation({ user }: { user: UserListItem }) {
+  if (user.userType === 'internal' && user.teamNames.length > 0) {
+    return (
+      <span className="flex flex-col gap-0.5">
+        {user.teamNames.map((name) => (
+          <span key={name}>{name}</span>
+        ))}
+      </span>
+    );
+  }
+  return <>{user.fieldworkOrgName ?? user.organization ?? '—'}</>;
 }
 
 export function UserManagementView() {
   const [userType, setUserType] = useState<UserTypeFilter>('all');
   const [status, setStatus] = useState<UserStatusFilter>('all');
-  const [departedOpen, setDepartedOpen] = useState(false);
+  const [statusSort, setStatusSort] = useState<StatusSort>('default');
+  const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
   // 대상 사용자를 그대로 들고 연다 — 모달 안에서 목록을 다시 뒤지지 않아도 되고, 열려 있는
   // 사이 목록이 새로고침돼도 보고 있던 사람이 바뀌지 않는다.
@@ -88,15 +138,11 @@ export function UserManagementView() {
   const { data, isLoading, error } = useUsers(userType, status);
 
   const typeCounts = data?.typeCounts;
-  const { visible: items, departedCount } = arrangeUsers(
-    data?.items ?? [],
-    departedOpen || status === 'departed',
-  );
-  // 접을 퇴사자가 있을 때만 펼침 장치를 그린다 — 퇴사 필터 화면은 처음부터 다 보인다.
-  const departedToggle = status !== 'departed' && departedCount > 0;
-  const departedToggleLabel = departedOpen
-    ? `퇴사자 ${departedCount}명 숨기기`
-    : `퇴사자 ${departedCount}명 보기`;
+  const rows = arrangeUsers(data?.items ?? [], statusSort, status);
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  // 상태가 바뀌어 행이 줄면 보고 있던 쪽이 사라질 수 있다 — 마지막 쪽으로 접는다.
+  const currentPage = Math.min(page, totalPages);
+  const items = rows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   return (
     <div className="min-h-screen bg-[#F9FAFB] px-4 py-8">
@@ -132,7 +178,10 @@ export function UserManagementView() {
                   key={typeFilter}
                   type="button"
                   aria-pressed={selected}
-                  onClick={() => setUserType(typeFilter)}
+                  onClick={() => {
+                    setUserType(typeFilter);
+                    setPage(1);
+                  }}
                   className={`h-[30px] rounded-lg px-3 text-[12.5px] transition-colors ${
                     selected
                       ? 'bg-[#EEF2FF] font-semibold text-[#2743AE]'
@@ -153,7 +202,10 @@ export function UserManagementView() {
             <select
               id="status-filter"
               value={status}
-              onChange={(e) => setStatus(e.target.value as UserStatusFilter)}
+              onChange={(e) => {
+                setStatus(e.target.value as UserStatusFilter);
+                setPage(1);
+              }}
               className="h-8 rounded-lg border border-[#D1D5DB] bg-white px-2 text-[12.5px] text-[#3A3A3C]"
             >
               <option value="all">상태 · 전체</option>
@@ -171,30 +223,22 @@ export function UserManagementView() {
                 <tr className="text-left text-[11.5px] font-medium text-[#9CA3AF]">
                   <th className="px-5 py-3 font-medium">사용자</th>
                   <th className="px-3 py-3 font-medium">유형</th>
-                  {/* 소속·역할은 유형마다 출처가 다르다 — 지금 채울 수 있는 것은 게스트의
-                    소속 기관과 내부의 직책뿐이고, 팀(티켓 06)·업체(24)·팀 역할이 뒤이어 붙는다. */}
                   <th className="px-3 py-3 font-medium">소속 (팀·기관·업체)</th>
                   <th className="px-3 py-3 font-medium">직책·역할</th>
-                  <th className="px-3 py-3 font-medium">
-                    {departedToggle ? (
-                      <button
-                        type="button"
-                        aria-expanded={departedOpen}
-                        aria-label={departedToggleLabel}
-                        onClick={() => setDepartedOpen((open) => !open)}
-                        className="inline-flex items-center gap-1 hover:text-[#3A3A3C]"
-                      >
-                        상태
-                        <span className="rounded-full bg-[#F3F4F6] px-1.5 py-px text-[10.5px] text-[#6E6E73]">
-                          퇴사 {departedCount}
-                        </span>
-                        <ChevronDown
-                          className={`h-3 w-3 transition-transform ${departedOpen ? 'rotate-180' : ''}`}
-                        />
-                      </button>
-                    ) : (
-                      '상태'
-                    )}
+                  <th className="px-3 py-3 font-medium" aria-sort={ARIA_SORT[statusSort]}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStatusSort((current) => NEXT_STATUS_SORT[current]);
+                        setPage(1);
+                      }}
+                      className={`inline-flex items-center gap-1 hover:text-[#3A3A3C] ${
+                        statusSort === 'default' ? '' : 'text-[#3A3A3C]'
+                      }`}
+                    >
+                      상태
+                      <StatusSortIcon sort={statusSort} />
+                    </button>
                   </th>
                   <th className="px-3 py-3 font-medium">
                     <span className="sr-only">액션</span>
@@ -227,10 +271,8 @@ export function UserManagementView() {
                         {USER_TYPE_LABEL[user.userType]}
                       </span>
                     </td>
-                    {/* 소속의 출처가 유형마다 다르다 — 게스트는 기관 메모, 실사는 업체 이름.
-                      내부의 팀은 겸직이 가능해 값이 하나가 아니라 팀 관리가 따로 진다. */}
                     <td className="px-3 py-3 text-[12.5px] text-[#6E6E73]">
-                      {user.fieldworkOrgName ?? user.organization ?? '—'}
+                      <Affiliation user={user} />
                     </td>
                     <td className="px-3 py-3 text-[12.5px] text-[#6E6E73]">
                       {user.fieldworkRole
@@ -258,20 +300,6 @@ export function UserManagementView() {
               </tbody>
             </table>
 
-            {departedToggle && (
-              <button
-                type="button"
-                aria-expanded={departedOpen}
-                onClick={() => setDepartedOpen((open) => !open)}
-                className="flex w-full items-center justify-center gap-1 border-t border-[#E5E5EA] py-2.5 text-[12.5px] text-[#6E6E73] hover:bg-[#F9FAFB] hover:text-[#3A3A3C]"
-              >
-                {departedToggleLabel}
-                <ChevronDown
-                  className={`h-3.5 w-3.5 transition-transform ${departedOpen ? 'rotate-180' : ''}`}
-                />
-              </button>
-            )}
-
             {isLoading && (
               <div className="flex items-center justify-center gap-2 py-10 text-[13px] text-[#6E6E73]">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -283,12 +311,16 @@ export function UserManagementView() {
                 사용자 목록을 불러오지 못했습니다.
               </p>
             )}
-            {!isLoading && !error && items.length === 0 && departedCount === 0 && (
+            {!isLoading && !error && items.length === 0 && (
               <p className="py-10 text-center text-[13px] text-[#9CA3AF]">
                 조건에 맞는 사용자가 없습니다.
               </p>
             )}
           </div>
+
+          {rows.length > 0 && (
+            <ListPagination page={currentPage} totalPages={totalPages} onPageChange={setPage} />
+          )}
         </>
       </div>
 

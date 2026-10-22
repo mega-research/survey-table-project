@@ -51,7 +51,7 @@ export function parsePageJump(raw: string, totalPages: number): number | null {
 const PAGE_BOX = 'flex h-[34px] min-w-[34px] items-center justify-center rounded-[8px] text-[13px]';
 
 /**
- * 목록 하단 페이지네이션 (.pen FLOW 6 페이지네이션 행).
+ * 목록 하단 페이지네이션 (.pen FLOW 6 페이지네이션 행) — 설문 목록과 사용자 관리가 함께 쓴다.
  *
  * 1페이지뿐이어도 그린다 — 목록이 어디서 끝나는지와 페이지가 몇 개인지를 늘 같은 자리에서
  * 알려준다(목업이 그렇게 그린다). 그때 이전·다음은 비활성이다.

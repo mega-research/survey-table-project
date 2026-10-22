@@ -47,9 +47,8 @@ export type UserStatusFilter = z.infer<typeof UserStatusFilter>;
 /**
  * 사용자 관리 목록 한 행.
  *
- * 「소속」 열은 유형마다 출처가 다르다 — internal 은 팀(티켓 06), guest 는 organization,
- * fieldwork 는 실사 업체(티켓 24). 팀만 아직 이 모양에 없다: 겸직이 가능해 값이 하나가
- * 아니고(team_members 는 여러 행), 팀 축의 화면은 팀 관리(.pen FLOW 7)가 따로 진다.
+ * 「소속」 열은 유형마다 출처가 다르다 — internal 은 팀, guest 는 organization,
+ * fieldwork 는 실사 업체(티켓 24). 팀은 겸직이 가능해 이름 배열(`teamNames`)로 싣는다.
  */
 export const UserListItem = z.object({
   id: z.uuid(),
@@ -68,6 +67,11 @@ export const UserListItem = z.object({
   fieldworkOrgName: z.string().nullable(),
   /** 업체 내 역할 — fieldwork 전용. 「직책·역할」 열이 직책 대신 이 값을 그린다. */
   fieldworkRole: z.enum(fieldworkRoleValues).nullable(),
+  /**
+   * 소속 팀 이름 — 활성 팀만, 팀 순서(사이드바와 같은 `order`)대로. 겸직이면 여럿, 미배치면 빈
+   * 배열. 해산한 팀의 멤버십 행은 감사용으로 남아 있지만 유효 소속이 아니라 빠진다(ADR-0011).
+   */
+  teamNames: z.array(z.string()),
   /** 가입일 — 직렬화 경계를 건너므로 ISO 문자열. */
   createdAt: z.string(),
 });

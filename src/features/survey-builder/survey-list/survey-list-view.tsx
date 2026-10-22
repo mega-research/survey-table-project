@@ -28,7 +28,7 @@ import {
 } from './empty-states';
 import { GroupManageModal } from './groups/group-manage-modal';
 import { GroupViewFooterNote, GroupViewHeader } from './groups/group-view-header';
-import { ListPagination } from './list-pagination';
+import { ListPagination } from '@/components/ui/list-pagination';
 import { ListToolbar } from './list-toolbar';
 import { SurveyCard } from './survey-card';
 import {
