@@ -6,7 +6,7 @@ import {
   isQuestionAnswered,
   resolveGroupedRequiredMessage,
 } from '@/features/survey-response/lib/answer-validation';
-import { resolveChoiceGroupVisibleCellIds } from '@/features/survey-response/lib/numeric-validation';
+import { resolveChoiceTableVisibleCellIds } from '@/features/survey-response/lib/numeric-validation';
 import { CHOICE_GROUPS_KEY } from '@/lib/survey/choice-selection';
 import type { Question, QuestionConditionGroup } from '@/types/survey';
 
@@ -78,7 +78,7 @@ const questions = [source, table];
 const answer = (groups: Record<string, string>) => ({ [CHOICE_GROUPS_KEY]: groups });
 
 function visibleFor(b3: string[], response: unknown) {
-  return resolveChoiceGroupVisibleCellIds(table, response, {
+  return resolveChoiceTableVisibleCellIds(table, response, {
     allResponses: { b3, c8: response },
     allQuestions: questions,
   });
@@ -127,9 +127,9 @@ describe('보기 그룹 표 — 행 표시조건으로 숨은 필수 그룹', ()
     );
   });
 
-  it('보이는 셀 집합은 보기 그룹 표에만 만든다', () => {
+  it('보이는 셀 집합은 보기를 표로 그리는 문항에만 만든다', () => {
     expect(
-      resolveChoiceGroupVisibleCellIds(source, ['01'], {
+      resolveChoiceTableVisibleCellIds(source, ['01'], {
         allResponses: { b3: ['01'] },
         allQuestions: questions,
       }),

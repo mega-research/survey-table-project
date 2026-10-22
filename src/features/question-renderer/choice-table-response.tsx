@@ -18,7 +18,6 @@ import {
 } from '@/features/question-renderer/mobile-row-wise-original-sheet';
 import { useOptionTexts, useResponseSources } from '@/features/question-renderer/response-sources';
 import { TablePreview } from '@/features/question-renderer/table-preview';
-import { projectConditionalTableLayout } from '@/features/question-renderer/utils/conditional-table-layout';
 import { buildMobileRowWiseOriginalModel } from '@/features/question-renderer/utils/mobile-row-wise-original';
 import {
   findMobileHeaderCell,
@@ -41,7 +40,6 @@ import { usePriorHighlight } from '@/features/question-renderer/prior-answers-co
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { Question, TableCell, TableRow } from '@/types/survey';
-import { shouldDisplayDynamicGroup } from '@/utils/branch-logic';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 import {
   type GroupedChoiceAnswer,
@@ -61,12 +59,15 @@ import {
 } from './utils/row-scale-bars';
 import { collectChoiceOptCells, resolveChoiceOptions } from '@/utils/choice-source';
 import {
+  collectProjectedCellIds,
+  projectResponseTableLayout,
+} from '@/utils/conditional-table-layout';
+import {
   isRowWiseMobileTableDisplayMode,
   resolveMobileTableDisplayMode,
 } from '@/utils/mobile-table-display-mode';
 import { omitKey } from '@/utils/omit-key';
 import { resolveRequiredMessage } from '@/utils/required-message';
-import { recalculateRowspansForVisibleRows } from '@/utils/table-merge-helpers';
 
 import { ChoiceGroupScaleBar } from './choice-group-scale-bar';
 import { ChoiceTableCellControl } from './choice-table-cell-control';
@@ -163,6 +164,36 @@ export function ChoiceTableResponse({
   // 조건 평가 컨텍스트 — 빠뜨리면 attr/lookup 피연산자가 undefined 로 평가된다.
   const branchEvalCtx = useBranchEvalCtx(allResponses);
   const [activeDynamicGroupId, setActiveDynamicGroupId] = useState<string | null>(null);
+  /**
+   * 응답자에게 보이는 격자 — 행·열 표시조건과 동적 행 선택을 반영한 투영. **모든 화면(데스크톱 표와
+   * 모바일 표시 방식 전부)이 이 투영을 쓴다.** 차단 검증·저장 경계 strip 도 같은 투영으로 숨은 칸을
+   * 정하므로(`resolveTableCellVisibility`), 화면마다 다른 행을 보이면 보이는 칸의 답이 지워지거나
+   * 숨은 칸의 선택이 답으로 남는다. 여태 데스크톱·자동 카드·드릴다운은 동적 행 선택을, 자동 카드와
+   * 드릴다운은 행·열 조건까지 무시했다.
+   */
+  const rowWiseLayout = useMemo(
+    () =>
+      projectResponseTableLayout({
+        columns: question.tableColumns ?? [],
+        rows: question.tableRowsData ?? [],
+        ...(question.tableHeaderGrid ? { headerGrid: question.tableHeaderGrid } : {}),
+        dynamicRowConfigs: question.dynamicRowConfigs,
+        selectedDynamicRowIds,
+        // ignoreDisplayConditions: 빌더 편집 미리보기 — 응답 ctx 를 빼서 전 열·행 표시
+        allResponses: ignoreDisplayConditions ? undefined : allResponses,
+        allQuestions: ignoreDisplayConditions ? undefined : allQuestions,
+        evalCtx: branchEvalCtx,
+      }),
+    [
+      allQuestions,
+      allResponses,
+      question,
+      selectedDynamicRowIds,
+      ignoreDisplayConditions,
+      branchEvalCtx,
+    ],
+  );
+
   const options = useMemo(() => resolveChoiceOptions(question), [question]);
   const optionByValue = useMemo(
     () => new Map(options.map((option) => [option.value, option])),
@@ -189,6 +220,21 @@ export function ChoiceTableResponse({
     return typeof value === 'string' && value ? [value] : [];
   }, [isCheckbox, isGrouped, value]);
 
+  /**
+   * 보이는 칸을 가리키는 선택 — 숨은 칸(행·열 조건, 고르지 않은 동적 행)의 선택은 답이 아니다.
+   * 개수·최대 선택·상세기재 입력칸·게이팅 재료가 이것을 본다(검증의 `dropSelectionsOutsideVisibleCells`
+   * 와 같은 규칙 — 표에 없는 id 는 숨김 판정 소관이 아니라 그대로 둔다). 숨은 선택 자체는 응답 흐름의
+   * strip 이 곧바로 지운다.
+   */
+  const visibleSelectedIds: string[] = useMemo(() => {
+    const visible = collectProjectedCellIds(rowWiseLayout.rows);
+    const authored = new Set(
+      (question.tableRowsData ?? []).flatMap((row) => row.cells.map((cell) => cell.id)),
+    );
+    const kept = selectedIds.filter((id) => visible.has(id) || !authored.has(id));
+    return kept.length === selectedIds.length ? selectedIds : kept;
+  }, [question.tableRowsData, rowWiseLayout.rows, selectedIds]);
+
   const minSel = question.minSelections;
   const maxSel = question.maxSelections;
   // 단독 선택 보기 판정 — choice_opt 셀의 exclusiveChoice. 그룹 문항은 호출부가 같은 그룹의
@@ -203,7 +249,7 @@ export function ChoiceTableResponse({
     isCheckbox &&
     maxSel !== undefined &&
     maxSel > 0 &&
-    countSelectionsTowardMax(selectedIds, isExclusiveChoiceCell) >= maxSel;
+    countSelectionsTowardMax(visibleSelectedIds, isExclusiveChoiceCell) >= maxSel;
   // 표 전체 범위 단독 보기 — 그룹 문항에서 다른 그룹까지 비운다
   const tableExclusiveIds = useMemo(
     () => collectTableExclusiveChoiceCellIds(collectChoiceOptCells(question.tableRowsData)),
@@ -270,7 +316,7 @@ export function ChoiceTableResponse({
       onChange(checked ? cellId : null);
       return;
     }
-    let next = selectedIds.slice();
+    let next = visibleSelectedIds.slice();
     if (checked) {
       // 최대 선택 가드는 단독 선택 보기에는 걸지 않는다 — 고르면 그것 하나만 남아 상한 안이고,
       // "나중에 누른 쪽이 이긴다"는 규칙상 꽉 찬 상태에서도 「없음」은 들어가야 한다.
@@ -339,7 +385,8 @@ export function ChoiceTableResponse({
    * 열마다 하나씩 있는 표에서는 칩 문구가 같아 어느 칸 것인지 구분되지 않는다.
    */
   const textInputEntries = useMemo((): OptionTextStackEntry[] => {
-    const selected = new Set(selectedIds);
+    // 숨은 칸의 선택은 답이 아니다 — 그 상세기재 입력칸도 그리지 않는다(검증도 요구하지 않는다).
+    const selected = new Set(visibleSelectedIds);
     const groups = question.choiceGroups ?? [];
     const groupLabelById = new Map(groups.map((group) => [group.id, (group.label ?? '').trim()]));
     const showGroupPrefix = groups.length > 1;
@@ -359,88 +406,22 @@ export function ChoiceTableResponse({
       }
     }
     return entries;
-  }, [attrs, optionByValue, question, quotes, selectedIds]);
-
-  const rowWiseLayout = useMemo(() => {
-    const columns = question.tableColumns ?? [];
-    const rows = question.tableRowsData ?? [];
-    const conditionalLayout = projectConditionalTableLayout({
-      columns,
-      rows,
-      ...(question.tableHeaderGrid ? { headerGrid: question.tableHeaderGrid } : {}),
-      // ignoreDisplayConditions: 빌더 편집 미리보기 — 응답 ctx 를 빼서 전 열·행 표시
-      allResponses: ignoreDisplayConditions ? undefined : allResponses,
-      allQuestions: ignoreDisplayConditions ? undefined : allQuestions,
-      evalCtx: branchEvalCtx,
-    });
-    const visibleConfigs = (question.dynamicRowConfigs ?? []).filter(
-      (config) =>
-        config.enabled &&
-        (!config.displayCondition ||
-          ignoreDisplayConditions ||
-          !allResponses ||
-          !allQuestions ||
-          shouldDisplayDynamicGroup(config, allResponses, allQuestions)),
-    );
-    const visibleGroupIds = new Set(visibleConfigs.map((config) => config.groupId));
-    const selectedSet = new Set(selectedDynamicRowIds);
-    const selectedGroupIds = new Set<string>();
-    for (const row of conditionalLayout.rows) {
-      if (
-        row.dynamicGroupId &&
-        visibleGroupIds.has(row.dynamicGroupId) &&
-        selectedSet.has(row.id)
-      ) {
-        selectedGroupIds.add(row.dynamicGroupId);
-      }
-    }
-    const visibleRowIds = new Set(
-      conditionalLayout.rows
-        .filter((row) => {
-          if (row.dynamicGroupId && visibleGroupIds.has(row.dynamicGroupId)) {
-            return selectedSet.has(row.id);
-          }
-          if (row.showWhenDynamicGroupId && visibleGroupIds.has(row.showWhenDynamicGroupId)) {
-            return selectedGroupIds.has(row.showWhenDynamicGroupId);
-          }
-          return true;
-        })
-        .map((row) => row.id),
-    );
-    return {
-      // 조건만 적용한 행 — 동적 행 선택은 반영하지 않는다. 데스크톱 표가 쓴다.
-      conditionalRows: conditionalLayout.rows,
-      columns: conditionalLayout.columns,
-      rows: recalculateRowspansForVisibleRows(conditionalLayout.rows, visibleRowIds),
-      headerGrid: conditionalLayout.headerGrid,
-      configs: visibleConfigs,
-      dynamicRows: conditionalLayout.rows.filter(
-        (row) => row.dynamicGroupId && visibleGroupIds.has(row.dynamicGroupId),
-      ),
-    };
-  }, [
-    allQuestions,
-    allResponses,
-    question,
-    selectedDynamicRowIds,
-    ignoreDisplayConditions,
-    branchEvalCtx,
-  ]);
+  }, [attrs, optionByValue, question, quotes, visibleSelectedIds]);
 
   // 상세 기재 자리 셀(optionTextSlot) — 그 행의 상세 기재는 표 아래 스택이 아니라 그 셀 안에
   // 나란히 그린다. 데스크톱 전용 분기이고, 모바일 카드는 카드 아래 스택 그대로다.
-  // 판정은 원본이 아니라 **표시 조건을 투영한 행**으로 한다 — 자리 셀의 열이 조건으로 숨으면
+  // 판정은 원본이 아니라 **보이는 격자로 투영한 행**으로 한다 — 자리 셀의 열이 조건으로 숨으면
   // 셀이 투영에서 빠져 그 행의 입력은 표 아래 스택으로 돌아간다. 원본으로 판정하면 입력칸이
   // 어디에도 안 그려진 채 필수 상세기재가 "다음"을 막는다.
   const slotRowByCellId = useMemo(() => {
     const m = new Map<string, TableRow>();
-    for (const row of rowWiseLayout.conditionalRows) {
+    for (const row of rowWiseLayout.rows) {
       for (const cell of row.cells) {
         if (cell.type === 'text' && cell.optionTextSlot && !cell.isHidden) m.set(cell.id, row);
       }
     }
     return m;
-  }, [rowWiseLayout.conditionalRows]);
+  }, [rowWiseLayout.rows]);
   const slottedOptionIds = useMemo(() => {
     const ids = new Set<string>();
     for (const row of slotRowByCellId.values()) {
@@ -459,7 +440,8 @@ export function ChoiceTableResponse({
     () => collectTableCells(question.tableRowsData),
     [question.tableRowsData],
   );
-  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  // 숨은 칸의 선택은 컨트롤러로도 치지 않는다 — 저장 경계도 숨은 선택을 지운 뒤 게이팅을 본다.
+  const selectedIdSet = useMemo(() => new Set(visibleSelectedIds), [visibleSelectedIds]);
   // 모바일 카드에서 미충족 셀을 걸러낼 때 filled·numeric 조건의 재료 — 같은 표 input 셀의 사이드카 값
   // 값은 주입된 옵션 텍스트 원본(response-sources)에 산다 — 렌더러는 저장소가 무엇인지 모른다.
   const { optionTexts: optionTextSource } = useResponseSources();
@@ -655,10 +637,10 @@ export function ChoiceTableResponse({
     <div className="flex items-center justify-end gap-2 text-sm">
       <span className="text-gray-600">
         {maxSel !== undefined && maxSel > 0
-          ? `${selectedIds.length}/${maxSel}개 선택됨`
-          : `${selectedIds.length}개 선택됨`}
+          ? `${visibleSelectedIds.length}/${maxSel}개 선택됨`
+          : `${visibleSelectedIds.length}개 선택됨`}
       </span>
-      {!satisfiesMinSelections(selectedIds, minSel, isExclusiveChoiceCell) && (
+      {!satisfiesMinSelections(visibleSelectedIds, minSel, isExclusiveChoiceCell) && (
         <span className="text-orange-600">최소 {minSel}개 이상 선택해주세요</span>
       )}
     </div>
@@ -1109,7 +1091,12 @@ export function ChoiceTableResponse({
         if (label) columnLabelByCellId.set(cell.id, label);
       });
     }
-    const visibleRows = rowWiseLayout.conditionalRows;
+    const visibleRows = rowWiseLayout.rows;
+    // 칸이 전부 숨은 축(그룹)은 카드를 내지 않는다 — 고를 것이 없는 빈 카드가 된다.
+    const visibleCellIds = collectProjectedCellIds(visibleRows);
+    const axisGroups = collectChoiceGroups(question).filter((group) =>
+      group.cells.some((c) => visibleCellIds.has(c.id)),
+    );
     const resolveRowTitleCell = (row: TableRow): TableCell | undefined =>
       findMobileHeaderCell(row.cells) ??
       row.cells.find(
@@ -1123,7 +1110,7 @@ export function ChoiceTableResponse({
 
     return (
       <div className="space-y-3">
-        {collectChoiceGroups(question).map((group) => {
+        {axisGroups.map((group) => {
           const groupId = group.cells[0]?.choiceGroupId ?? 'none';
           const columnLabel = group.cells
             .map((c) => columnLabelByCellId.get(c.id) ?? '')
@@ -1227,16 +1214,6 @@ export function ChoiceTableResponse({
   };
 
   const mobileMode = resolveMobileTableDisplayMode(question);
-  /**
-   * 표 격자 두 벌.
-   * - `conditional` — 행·열 표시조건만 적용한 것. **데스크톱 표가 쓴다.** 여태 이 계산이
-   *   모바일 분기에서만 돌아, 데스크톱은 tableRowsData 를 가공 없이 넘기며 행·열 조건을
-   *   통째로 무시했다.
-   * - 나머지 — 거기에 동적 행 선택까지 반영한 것. 모바일 경로가 쓴다.
-   *
-   * 두 벌을 한 memo 에서 낸다. 조건 투영을 별도 memo 로 떼면 React Compiler 가 이
-   * 컴포넌트의 수동 메모이제이션을 보존하지 못한다(preserve-manual-memoization 경고).
-   */
   const rowWiseOriginalModel = useMemo(() => {
     if (!isRowWiseMobileTableDisplayMode(mobileMode)) return { sections: [] };
     const columns = question.tableColumns ?? [];
@@ -1302,6 +1279,72 @@ export function ChoiceTableResponse({
   };
 
   /**
+   * 동적 행 고르기 — 행 풀에서 응답자가 고른 행만 표에 나온다. 버튼 목록(그룹마다 하나)을 표 위에,
+   * 고르는 모달을 표 아래에 둔다. **모든 화면이 같은 것을 그린다** — 고르지 않은 동적 행은 어느
+   * 화면에서도 숨은 행이고(저장 경계도 그 행의 답을 지운다), 고를 길이 없는 화면이 있으면 그 화면의
+   * 응답자는 그 행에 답할 수 없다.
+   */
+  const dynamicRowSelector =
+    rowWiseLayout.dynamicConfigs.length > 0 && onDynamicRowSelectionChange ? (
+      <div className="divide-y divide-gray-200 overflow-hidden rounded-xl border border-gray-200 bg-white">
+        {rowWiseLayout.dynamicConfigs.map((config) => {
+          const selectedCount = selectedDynamicRowIds.filter((rowId) =>
+            rowWiseLayout.dynamicRows.some(
+              (row) => row.id === rowId && row.dynamicGroupId === config.groupId,
+            ),
+          ).length;
+          return (
+            <button
+              key={config.groupId}
+              type="button"
+              className="flex min-h-11 w-full items-center gap-2 px-4 py-3 text-left hover:bg-gray-50"
+              onClick={() => setActiveDynamicGroupId(config.groupId)}
+            >
+              <ListChecks className="h-4 w-4 shrink-0 text-gray-500" />
+              <span className="flex-1 text-sm font-medium text-gray-700">
+                {config.label || '항목 선택'}
+              </span>
+              <span className="text-xs text-gray-500">{selectedCount}개 선택</span>
+              <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />
+            </button>
+          );
+        })}
+      </div>
+    ) : null;
+  const dynamicRowModal =
+    activeDynamicGroupId && onDynamicRowSelectionChange ? (
+      <DynamicRowSelectorModal
+        open
+        onOpenChange={(open) => {
+          if (!open) setActiveDynamicGroupId(null);
+        }}
+        dynamicRows={rowWiseLayout.dynamicRows.filter(
+          (row) => row.dynamicGroupId === activeDynamicGroupId,
+        )}
+        selectedRowIds={selectedDynamicRowIds.filter((rowId) =>
+          rowWiseLayout.dynamicRows.some(
+            (row) => row.id === rowId && row.dynamicGroupId === activeDynamicGroupId,
+          ),
+        )}
+        label={
+          rowWiseLayout.dynamicConfigs.find((config) => config.groupId === activeDynamicGroupId)
+            ?.label
+        }
+        onConfirm={confirmDynamicRows}
+      />
+    ) : null;
+  const withDynamicRowSelector = (node: ReactNode): ReactNode =>
+    dynamicRowSelector || dynamicRowModal ? (
+      <div className="space-y-2">
+        {dynamicRowSelector}
+        {node}
+        {dynamicRowModal}
+      </div>
+    ) : (
+      node
+    );
+
+  /**
    * 데스크톱 표. rowWiseLayout 선언 **뒤에** 둔다 — 훅보다 앞에 두면 React Compiler 가
    * 이 컴포넌트의 수동 메모이제이션을 보존하지 못해 최적화를 통째로 건너뛴다.
    */
@@ -1311,7 +1354,7 @@ export function ChoiceTableResponse({
         cellOutlineEdges={groupOutline}
         {...(question.tableTitle !== undefined ? { tableTitle: question.tableTitle } : {})}
         columns={rowWiseLayout.columns}
-        rows={rowWiseLayout.conditionalRows}
+        rows={rowWiseLayout.rows}
         {...(rowWiseLayout.headerGrid ? { tableHeaderGrid: rowWiseLayout.headerGrid } : {})}
         {...(question.hideColumnLabels !== undefined
           ? { hideColumnLabels: question.hideColumnLabels }
@@ -1333,32 +1376,7 @@ export function ChoiceTableResponse({
   if (isMobile && isRowWiseMobileTableDisplayMode(mobileMode)) {
     return (
       <div className="space-y-2">
-        {rowWiseLayout.configs.length > 0 && onDynamicRowSelectionChange ? (
-          <div className="divide-y divide-gray-200 overflow-hidden rounded-xl border border-gray-200 bg-white">
-            {rowWiseLayout.configs.map((config) => {
-              const selectedCount = selectedDynamicRowIds.filter((rowId) =>
-                rowWiseLayout.dynamicRows.some(
-                  (row) => row.id === rowId && row.dynamicGroupId === config.groupId,
-                ),
-              ).length;
-              return (
-                <button
-                  key={config.groupId}
-                  type="button"
-                  className="flex min-h-11 w-full items-center gap-2 px-4 py-3 text-left hover:bg-gray-50"
-                  onClick={() => setActiveDynamicGroupId(config.groupId)}
-                >
-                  <ListChecks className="h-4 w-4 shrink-0 text-gray-500" />
-                  <span className="flex-1 text-sm font-medium text-gray-700">
-                    {config.label || '항목 선택'}
-                  </span>
-                  <span className="text-xs text-gray-500">{selectedCount}개 선택</span>
-                  <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
+        {dynamicRowSelector}
         <MobileRowWiseOriginalSheet
           model={rowWiseOriginalModel}
           // 데스크톱 표의 미충족 그룹 덩어리 외곽선과 같은 판정 — 행별 표에서는 그 그룹의
@@ -1410,59 +1428,45 @@ export function ChoiceTableResponse({
           }}
         />
         {counter}
-        {activeDynamicGroupId ? (
-          <DynamicRowSelectorModal
-            open
-            onOpenChange={(open) => {
-              if (!open) setActiveDynamicGroupId(null);
-            }}
-            dynamicRows={rowWiseLayout.dynamicRows.filter(
-              (row) => row.dynamicGroupId === activeDynamicGroupId,
-            )}
-            selectedRowIds={selectedDynamicRowIds.filter((rowId) =>
-              rowWiseLayout.dynamicRows.some(
-                (row) => row.id === rowId && row.dynamicGroupId === activeDynamicGroupId,
-              ),
-            )}
-            label={
-              rowWiseLayout.configs.find((config) => config.groupId === activeDynamicGroupId)?.label
-            }
-            onConfirm={confirmDynamicRows}
-          />
-        ) : null}
+        {dynamicRowModal}
       </div>
     );
   }
 
   if (isMobile && mobileMode === 'drilldown-original-row') {
-    return (
+    return withDynamicRowSelector(
       <ChoiceTableDrilldown
         question={question}
-        selectedIds={selectedIds}
+        columns={rowWiseLayout.columns}
+        rows={rowWiseLayout.rows}
+        headerGrid={rowWiseLayout.headerGrid}
+        selectedIds={visibleSelectedIds}
         renderChoiceCell={renderSelectedRowCell}
         resolveChoiceLabel={resolveChoiceLabel}
         counter={counter}
-      />
+      />,
     );
   }
 
   if (isMobile && mobileMode === 'axis-cards') {
-    return renderAxisCards();
+    return withDynamicRowSelector(renderAxisCards());
   }
 
   if (
     isMobile &&
     (mobileMode === 'auto' || mobileMode === 'row-cards' || mobileMode === 'row-group-cards')
   ) {
-    // 행 단위 카드는 행·열 표시 조건을 적용한 행을 쓴다 — 조건이 참이 된 행(병역특례 여부·
-    // 기타 상세 기재)이 카드로 나와야 한다. 자동 카드는 도입 전 동작(전 행) 그대로 둔다.
-    const perRow = mobileMode !== 'auto';
-    return renderMobileOptionCards(
-      perRow,
-      perRow ? rowWiseLayout.conditionalRows : (question.tableRowsData ?? []),
-      mobileMode === 'row-group-cards',
+    // 카드도 보이는 격자의 행을 쓴다 — 조건이 참이 된 행(병역특례 여부·기타 상세 기재)이 카드로
+    // 나오고, 숨은 행은 카드로 나오지 않는다. 자동 카드가 전 행을 그리던 시절에는 데스크톱에서
+    // 숨은 행의 보기를 모바일 응답자가 고를 수 있었다 — 그 선택은 저장 경계에서 지워진다.
+    return withDynamicRowSelector(
+      renderMobileOptionCards(
+        mobileMode !== 'auto',
+        rowWiseLayout.rows,
+        mobileMode === 'row-group-cards',
+      ),
     );
   }
 
-  return renderOriginalTable();
+  return withDynamicRowSelector(renderOriginalTable());
 }

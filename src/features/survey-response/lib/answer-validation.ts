@@ -17,6 +17,10 @@ import { parseRankingAnswers } from '@/utils/ranking-shared';
 import { resolveRequiredMessage } from '@/utils/required-message';
 import { collectChoiceOptCells } from '@/utils/choice-source';
 import { isChoiceGroupTableQuestion, readTableChoiceGroups } from '@/lib/survey/choice-selection';
+import {
+  dropGroupSelectionsOutsideVisibleCells,
+  dropSelectionsOutsideVisibleCells,
+} from '@/lib/survey/table-cell-visibility';
 
 /**
  * 질문 타입별 응답 충족 여부를 판정하는 순수 함수.
@@ -67,30 +71,47 @@ export function isExclusiveChoiceValue(question: Question, val: unknown): boolea
 }
 
 /**
- * 필수 판정 옵션 — 보기 그룹 표에서 **화면에 보이는 셀 id 집합**.
+ * 필수 판정 옵션 — 보기를 표로 그리는 문항(보기 그룹 표·보기 소스 radio/checkbox)에서 **화면에 보이는
+ * 셀 id 집합**.
  *
- * 행·열 표시조건이나 선택 안 된 동적 행으로 숨은 그룹은 응답자가 채울 수 없으므로 필수
- * 판정에서 뺀다. 집합은 호출부가 `resolveChoiceGroupVisibleCellIds` 로 만든다 — 렌더러가
- * 숨기는 행과 같은 판정이어야 해서 이 순수 함수는 조건을 직접 평가하지 않는다.
- * 넘기지 않으면 종전대로 모든 그룹을 본다.
+ * 행·열 표시조건이나 선택 안 된 동적 행으로 숨은 칸은 응답자가 채울 수 없으므로 필수 판정에서 뺀다.
+ * 숨은 칸을 가리키는 선택도 답이 아니다 — 필수·최소 선택·단독 보기를 채우지 않는다. 집합은
+ * 호출부가 `resolveChoiceTableVisibleCellIds` 로 만든다 — 렌더러가 숨기는 칸과 같은 판정이어야 해서
+ * 이 순수 함수는 조건을 직접 평가하지 않는다. 넘기지 않으면 종전대로 모든 칸을 본다.
  */
 export interface ChoiceGroupVisibility {
   visibleCellIds?: ReadonlySet<string> | undefined;
 }
 
+/** 보이는 보기 칸이 하나도 없는 비그룹 보기 소스 표 — 고를 것이 없어 막지 않는다. */
+function hasNoVisibleChoiceCell(
+  question: Question,
+  visibleCellIds: ReadonlySet<string> | undefined,
+): boolean {
+  if (!visibleCellIds || question.type === 'table' || isGroupedChoiceQuestion(question)) return false;
+  return !collectChoiceOptCells(question.tableRowsData).some((cell) => visibleCellIds.has(cell.id));
+}
+
 export function isQuestionAnswered(
   question: Question,
-  response: unknown,
+  responseRaw: unknown,
   visibility: ChoiceGroupVisibility = {},
 ): boolean {
   // 필수 그룹이 전부 숨었으면 채울 것이 없다 — 응답 전(undefined)이라도 막지 않는다.
   if (
     visibility.visibleCellIds &&
-    isChoiceGroupTableQuestion(question) &&
+    (isChoiceGroupTableQuestion(question) || isGroupedChoiceQuestion(question)) &&
     checkTargetChoiceGroups(question, visibility).length === 0
   ) {
     return true;
   }
+  if (hasNoVisibleChoiceCell(question, visibility.visibleCellIds)) return true;
+  // 숨은 칸을 가리키는 선택은 답이 아니다 — 빼고 판정한다.
+  const response = dropSelectionsOutsideVisibleCells(
+    question,
+    responseRaw,
+    visibility.visibleCellIds,
+  );
   if (response === undefined || response === null) return false;
 
   switch (question.type) {
@@ -189,11 +210,20 @@ function isTableExclusiveSelected(question: Question, map: Record<string, unknow
 
 /**
  * 그룹 선택 맵 — 레거시 radio/checkbox 는 문항 응답 자체가 `{그룹키: ...}` 이고,
- * 보기 그룹 표(table)는 표 응답 안 예약 키에 있다. 두 모양을 한 맵으로 편다.
+ * 보기 그룹 표(table)는 표 응답 안 예약 키에 있다. 두 모양을 한 맵으로 편다. 보이는 칸 집합을
+ * 받으면 그 밖의 선택은 뺀다.
  */
-function groupSelectionMap(question: Question, response: unknown): Record<string, unknown> {
-  if (question.type === 'table') return readTableChoiceGroups(response);
-  return (response ?? {}) as Record<string, unknown>;
+function groupSelectionMap(
+  question: Question,
+  response: unknown,
+  { visibleCellIds }: ChoiceGroupVisibility = {},
+): Record<string, unknown> {
+  const map =
+    question.type === 'table'
+      ? readTableChoiceGroups(response)
+      : ((response ?? {}) as Record<string, unknown>);
+  // 숨은 칸을 가리키는 선택은 그룹을 채우지 않는다.
+  return dropGroupSelectionsOutsideVisibleCells(question, map, visibleCellIds);
 }
 
 /**
@@ -258,7 +288,7 @@ export function collectUnfilledChoiceGroupCellIds(
   visibility: ChoiceGroupVisibility = {},
 ): Set<string> {
   if (!isGroupedChoiceQuestion(question)) return new Set();
-  const map = groupSelectionMap(question, response);
+  const map = groupSelectionMap(question, response, visibility);
   const out = new Set<string>();
   if (isTableExclusiveSelected(question, map)) return out;
   for (const group of checkTargetChoiceGroups(question, visibility)) {
@@ -289,7 +319,7 @@ export function collectUnfilledChoiceGroupIssues(
   visibility: ChoiceGroupVisibility = {},
 ): UnfilledChoiceGroupIssue[] {
   if (!isGroupedChoiceQuestion(question)) return [];
-  const map = groupSelectionMap(question, response);
+  const map = groupSelectionMap(question, response, visibility);
   if (isTableExclusiveSelected(question, map)) return [];
   const fallback = resolveRequiredMessage(question);
   const byMessage = new Map<string, string[]>();
@@ -309,7 +339,7 @@ export function resolveGroupedRequiredMessage(
   visibility: ChoiceGroupVisibility = {},
 ): string {
   if (isGroupedChoiceQuestion(question)) {
-    const map = groupSelectionMap(question, response);
+    const map = groupSelectionMap(question, response, visibility);
     const unmet = isTableExclusiveSelected(question, map)
       ? undefined
       : checkTargetChoiceGroups(question, visibility).find((g) => !isChoiceGroupFilled(g, map));

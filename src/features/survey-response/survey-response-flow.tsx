@@ -111,7 +111,7 @@ import {
   type NumericIssue,
   collectNumericIssues,
   collectVisibleTableCells,
-  resolveChoiceGroupVisibleCellIds,
+  resolveChoiceTableVisibleCellIds,
 } from '@/features/survey-response/lib/numeric-validation';
 import { resolveEffectiveOptionTextsByQuestion } from '@/features/question-renderer/utils/effective-option-texts';
 import { collectRequiredOptionTextIssues } from '@/features/survey-response/lib/required-option-text-validation';
@@ -1090,12 +1090,20 @@ function SurveyResponseFlowActive({
   const isQuestionAnswered = useCallback(
     (question: Question) => {
       const response = responses[question.id];
+      // 조건 평가 재료는 렌더러(useBranchEvalCtx)·evalCtx 와 같게 — 인용값을 명단 attrs 에 얹는다.
       const visibilityCtx = {
         allResponses: responses,
         allQuestions: questions,
         lookups: loadedSurvey?.lookups ?? [],
-        contactAttrs,
+        contactAttrs: { ...contactAttrs, ...answerQuotes },
       };
+      // 보기를 표로 그리는 문항의 보이는 칸 — 숨은 칸(행·열 조건, 고르지 않은 동적 행)의 필수 그룹은
+      // 빼고, 숨은 칸을 가리키는 선택은 답으로 치지 않는다.
+      const choiceVisibleCellIds = resolveChoiceTableVisibleCellIds(
+        question,
+        response,
+        visibilityCtx,
+      );
       const visibleCellIds =
         question.type === 'table'
           ? new Set(
@@ -1107,12 +1115,9 @@ function SurveyResponseFlowActive({
                 visibilityCtx,
               ).map((cell) => cell.id),
             )
-          : undefined;
+          : choiceVisibleCellIds;
       return (
-        // 보기 그룹 표는 숨은 행·열의 필수 그룹을 빼고 판정한다 — 채울 수 없는 그룹이 「다음」을 막지 않게.
-        isQuestionAnsweredPure(question, response, {
-          visibleCellIds: resolveChoiceGroupVisibleCellIds(question, response, visibilityCtx),
-        }) &&
+        isQuestionAnsweredPure(question, response, { visibleCellIds: choiceVisibleCellIds }) &&
         // 텍스트형 쿼터 차원 — 대상 칸이 비면 쿼터 확인이 발동하지 않으므로 미답변으로 막는다.
         isQuotaTargetFilled(loadedSurvey?.quotaGate, question.id, response) &&
         !collectRequiredOptionTextIssues(
@@ -1128,6 +1133,7 @@ function SurveyResponseFlowActive({
       effectiveOptionTextsByQuestion,
       questions,
       contactAttrs,
+      answerQuotes,
       loadedSurvey?.lookups,
       loadedSurvey?.quotaGate,
     ],

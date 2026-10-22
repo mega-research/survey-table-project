@@ -6,11 +6,10 @@ import type {
 } from '@/types/survey';
 import { OPT_TEXTS_KEY } from '@/lib/option-text-read';
 import { type BranchEvalCtx, responsesToLookupShape } from '@/utils/branch-eval';
-import { shouldDisplayQuestion, shouldDisplayRow } from '@/utils/branch-logic';
-import { recalculateRowspansForVisibleRows } from '@/utils/table-merge-helpers';
+import { shouldDisplayQuestion } from '@/utils/branch-logic';
 
-import { CHOICE_GROUPS_KEY } from './choice-selection';
 import { PERSISTED_ROOT_SIDECAR_KEYS } from './response-sidecars';
+import { dropHiddenTableSelections, resolveTableCellVisibility } from './table-cell-visibility';
 
 /**
  * 표시 조건으로 숨겨진 문항의 응답 처리 (스펙: 2026-09-07 숨은 문항 응답 삭제).
@@ -256,42 +255,18 @@ function stripHiddenQuestionsOnce(
   return changed ? next : responses;
 }
 
-/** 보기 그룹 선택 맵에서 지울 셀을 뺀다. 그룹이 비면 키째 뺀다. 뺄 것이 없으면 null. */
-function stripChoiceGroupSelections(
-  raw: unknown,
-  cellIds: ReadonlySet<string>,
-): Record<string, unknown> | null {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
-  let changed = false;
-  const next: Record<string, unknown> = {};
-  for (const [groupKey, value] of Object.entries(raw as Record<string, unknown>)) {
-    if (typeof value === 'string' && cellIds.has(value)) {
-      changed = true;
-      continue;
-    }
-    if (Array.isArray(value)) {
-      const kept = value.filter((id) => !(typeof id === 'string' && cellIds.has(id)));
-      if (kept.length !== value.length) {
-        changed = true;
-        if (kept.length > 0) next[groupKey] = kept;
-        continue;
-      }
-    }
-    next[groupKey] = value;
-  }
-  return changed ? next : null;
-}
-
 /**
- * 표시되는 표 문항에서 **행 표시조건으로 숨은 행**의 답을 뺀다 — 셀 값, 보기 그룹 선택,
- * 기타 상세기재 사이드카. 숨은 문항과 같은 규칙이다: 숨는 순간 지우고, 되돌려도 살아나지 않는다.
+ * 표시되는 문항 중 **보기를 표로 그리는 문항**(표 문항·보기 소스 radio/checkbox)에서 지금 숨은 칸 —
+ * 행 표시조건·열 표시조건·고르지 않은 동적 행 — 의 답을 뺀다. 셀 값, 보기 선택(보기 소스 표의 문항 값,
+ * 보기 그룹 선택), 기타 상세기재·표 안 입력칸 사이드카. 숨은 문항과 같은 규칙이다: 숨는 순간 지우고,
+ * 되돌려도 살아나지 않는다.
  *
- * 판정은 렌더러(interactive-table-response)가 행을 숨기는 것과 같은 `shouldDisplayRow` 다.
- * 동적 행·열 표시조건은 여기 소관이 아니다 — 동적 행은 선택 해제가 곧 값 정리 경로를 따로 갖고,
- * 열 조건으로 숨은 셀은 이번 범위에서 다루지 않았다. 표 응답 안 `__selectedRowIds` 같은 다른
- * 예약 키는 건드리지 않는다. 지울 것이 없으면 입력 참조를 그대로 돌려준다.
+ * 판정은 렌더러·차단 검증과 같은 `resolveTableCellVisibility` 다 — 숨은 행에서 시작한 세로 병합 칸처럼
+ * 렌더러가 보이는 행에 올려 그리는 칸은 보이는 칸이라 지우지 않는다. 표 응답 안 `__selectedRowIds`
+ * 같은 다른 예약 키는 건드리지 않는다. 동적 행 선택 해제도 여기서 값이 지워진다 — 선택을 풀면
+ * 행이 숨고, 숨은 행의 답은 남기지 않는다. 지울 것이 없으면 입력 참조를 그대로 돌려준다.
  */
-function stripHiddenRowValues(
+function stripHiddenTableCellValues(
   questions: Question[],
   responses: Record<string, unknown>,
   evalCtx: BranchEvalCtx | undefined,
@@ -299,55 +274,22 @@ function stripHiddenRowValues(
   let out: Record<string, unknown> | null = null;
   const ctx = evalCtx ? { ...evalCtx, responses: responsesToLookupShape(responses) } : undefined;
   for (const question of questions) {
-    if (question.type !== 'table' || !Object.hasOwn(responses, question.id)) continue;
-    const rows = question.tableRowsData ?? [];
-    if (!rows.some((row) => row.displayCondition)) continue;
+    const visibility = resolveTableCellVisibility(question, responses, questions, ctx);
+    if (!visibility || visibility.hiddenCellIds.size === 0) continue;
+    const { hiddenCellIds } = visibility;
 
-    const hiddenCellIds = new Set<string>();
-    const visibleRowIds = new Set<string>();
-    for (const row of rows) {
-      if (!row.displayCondition || shouldDisplayRow(row, responses, questions, ctx)) {
-        visibleRowIds.add(row.id);
-        continue;
-      }
-      for (const cell of row.cells) hiddenCellIds.add(cell.id);
-    }
-    if (hiddenCellIds.size === 0) continue;
-    // 숨은 행이 가진 세로 병합 시작 셀은 렌더러가 같은 id 로 첫 가시 행에 올려 그린다 —
-    // 응답자에게 보이는 칸이므로 지우지 않는다. 렌더러와 같은 투영으로 판정한다.
-    for (const row of recalculateRowspansForVisibleRows(rows, visibleRowIds)) {
-      for (const cell of row.cells) if (!cell.isHidden) hiddenCellIds.delete(cell.id);
-    }
-    if (hiddenCellIds.size === 0) continue;
-
-    const value = responses[question.id];
-    if (value && typeof value === 'object' && !Array.isArray(value)) {
-      const cellValues = value as Record<string, unknown>;
-      let changed = false;
-      const next: Record<string, unknown> = {};
-      for (const [key, cellValue] of Object.entries(cellValues)) {
-        if (hiddenCellIds.has(key)) {
-          changed = true;
-          continue;
-        }
-        if (key === CHOICE_GROUPS_KEY) {
-          const stripped = stripChoiceGroupSelections(cellValue, hiddenCellIds);
-          if (stripped) {
-            changed = true;
-            next[key] = stripped;
-            continue;
-          }
-        }
-        next[key] = cellValue;
-      }
-      if (changed) {
+    if (Object.hasOwn(responses, question.id)) {
+      const value = responses[question.id];
+      const next = dropHiddenTableSelections(question, value, hiddenCellIds);
+      if (next !== value) {
         out ??= { ...responses };
-        out[question.id] = next;
+        if (next === undefined) delete out[question.id];
+        else out[question.id] = next;
       }
     }
 
-    // 기타 상세기재는 루트 사이드카 `__optTexts__[문항 id][셀 id]` 에 있다. 누적 결과에서 이어
-    // 써야 앞 표에서 지운 항목이 이 표를 처리하며 되살아나지 않는다.
+    // 기타 상세기재·표 안 입력칸은 루트 사이드카 `__optTexts__[문항 id][셀 id]` 에 있다. 누적 결과에서
+    // 이어 써야 앞 표에서 지운 항목이 이 표를 처리하며 되살아나지 않는다.
     const sidecar = (out ?? responses)[OPT_TEXTS_KEY];
     if (sidecar && typeof sidecar === 'object' && !Array.isArray(sidecar)) {
       const texts = (sidecar as Record<string, unknown>)[question.id];
@@ -368,13 +310,14 @@ function stripHiddenRowValues(
 }
 
 /**
- * 숨은 문항의 답과 사이드카 항목, 그리고 표시되는 표의 숨은 행 답을 제거한 응답.
+ * 숨은 문항의 답과 사이드카 항목, 그리고 표시되는 표의 숨은 칸(행·열 조건, 고르지 않은 동적 행) 답을
+ * 제거한 응답.
  * 원본은 변형하지 않는다. 지울 것이 없으면 입력 참조를 그대로 돌려준다 — 호출부의 메모
  * 의존을 흔들지 않는다.
  *
- * 문항 숨김과 행 숨김은 서로를 부른다 — 숨은 행의 값을 조건으로 쓰던 문항이 숨고, 숨은 문항을
- * 조건으로 쓰던 행이 숨는다. 둘을 번갈아 돌려 더 지울 것이 없을 때까지 수렴시킨다. 매 바퀴가
- * 값을 지우기만 하므로(되살리지 않는다) 바퀴 수는 문항 수 + 행 수를 넘지 않는다.
+ * 문항 숨김과 칸 숨김은 서로를 부른다 — 숨은 칸의 값을 조건으로 쓰던 문항이 숨고, 숨은 문항을
+ * 조건으로 쓰던 행·열이 숨는다. 둘을 번갈아 돌려 더 지울 것이 없을 때까지 수렴시킨다. 매 바퀴가
+ * 값을 지우기만 하므로(되살리지 않는다) 바퀴 수는 문항 수 + 행 수 + 열 수를 넘지 않는다.
  */
 export function stripHiddenQuestionValues(
   questions: Question[],
@@ -383,7 +326,12 @@ export function stripHiddenQuestionValues(
   evalCtx?: BranchEvalCtx,
 ): Record<string, unknown> {
   const maxPasses =
-    questions.length + questions.reduce((n, q) => n + (q.tableRowsData?.length ?? 0), 0) + 1;
+    questions.length +
+    questions.reduce(
+      (n, q) => n + (q.tableRowsData?.length ?? 0) + (q.tableColumns?.length ?? 0),
+      0,
+    ) +
+    1;
   let current = responses;
   for (let pass = 0; pass < maxPasses; pass++) {
     // 행 값을 지운 뒤 바퀴는 평가 컨텍스트의 응답 뷰도 지운 상태로 다시 만든다 — 숫자 비교
@@ -393,7 +341,7 @@ export function stripHiddenQuestionValues(
         ? { ...evalCtx, responses: responsesToLookupShape(current) }
         : evalCtx;
     const afterQuestions = stripHiddenQuestionsOnce(questions, current, groups, ctx);
-    const afterRows = stripHiddenRowValues(questions, afterQuestions, evalCtx);
+    const afterRows = stripHiddenTableCellValues(questions, afterQuestions, evalCtx);
     const settled = afterRows === afterQuestions;
     current = afterRows;
     if (settled) break;

@@ -9,7 +9,7 @@ import {
 import { MobileOriginalRowTable } from '@/features/question-renderer/mobile-original-row-table';
 import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
-import type { Question, TableCell } from '@/types/survey';
+import type { HeaderCell, Question, TableCell, TableColumn, TableRow } from '@/types/survey';
 import {
   DEFAULT_GROUP_KEY,
   collectChoiceGroups,
@@ -30,10 +30,17 @@ import {
 import { clampMobileDrilldownOmitLeadingColumns } from '@/utils/mobile-table-display-mode';
 
 const EMPTY_COLUMNS: NonNullable<Question['tableColumns']> = [];
-const EMPTY_ROWS: NonNullable<Question['tableRowsData']> = [];
 
 interface ChoiceTableDrilldownProps {
   question: Question;
+  /**
+   * 응답자에게 보이는 격자(행·열 표시조건과 동적 행 선택을 반영한 투영) — 데스크톱 표와 같은 것.
+   * 목차·상세가 이 행·열만 그린다. 작성 열 순서(상세 제외 선행 열 수)는 question 에서 읽는다.
+   */
+  columns: TableColumn[];
+  rows: TableRow[];
+  headerGrid?: HeaderCell[][] | undefined;
+  /** 보이는 칸을 가리키는 선택 — 숨은 칸의 선택은 진행 수에 세지 않는다. */
   selectedIds: string[];
   renderChoiceCell: (cell: TableCell) => ReactNode;
   resolveChoiceLabel: (cellId: string) => string | undefined;
@@ -42,6 +49,9 @@ interface ChoiceTableDrilldownProps {
 
 export function ChoiceTableDrilldown({
   question,
+  columns,
+  rows,
+  headerGrid,
   selectedIds,
   renderChoiceCell,
   resolveChoiceLabel,
@@ -49,8 +59,7 @@ export function ChoiceTableDrilldown({
 }: ChoiceTableDrilldownProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
-  const columns = question.tableColumns ?? EMPTY_COLUMNS;
-  const rows = question.tableRowsData ?? EMPTY_ROWS;
+  const authoredColumns = question.tableColumns ?? EMPTY_COLUMNS;
   const repeatHeaderRange = useMemo(
     () =>
       resolveMobileDrilldownRepeatHeaderRange({
@@ -75,7 +84,7 @@ export function ChoiceTableDrilldown({
   const includeColumnHeader = includesMobileDrilldownColumnHeader(repeatHeaderRange);
   const omit = clampMobileDrilldownOmitLeadingColumns(
     question.mobileDrilldownOmitLeadingColumns,
-    columns.length,
+    authoredColumns.length,
   );
   const detailRowById = useMemo(() => new Map(rows.map((row) => [row.id, row])), [rows]);
   const navigationRowById = useMemo(
@@ -91,10 +100,10 @@ export function ChoiceTableDrilldown({
       classifyTable({
         tableColumns: columns,
         tableRowsData: navigationRows,
-        tableHeaderGrid: question.tableHeaderGrid,
+        tableHeaderGrid: headerGrid,
         answerableCellTypes: ['choice_opt'],
       }),
-    [columns, navigationRows, question.tableHeaderGrid],
+    [columns, navigationRows, headerGrid],
   );
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const titledSections = useMemo(
@@ -104,7 +113,7 @@ export function ChoiceTableDrilldown({
           const row = detailRowById.get(leaf.rowId);
           if (!row) return leaf;
           const labelCandidate = getMobileOriginalRowLabelCandidate({
-            authoredColumns: columns,
+            authoredColumns,
             row,
             omitLeadingAuthoredColumns: omit,
             resolveChoiceLabel,
@@ -135,7 +144,7 @@ export function ChoiceTableDrilldown({
           leaves,
         };
       }),
-    [attrs, quotes, cellById, columns, detailRowById, omit, resolveChoiceLabel, sections],
+    [attrs, quotes, cellById, authoredColumns, detailRowById, omit, resolveChoiceLabel, sections],
   );
   const horizontalScrollRef = useRef(0);
 
@@ -207,9 +216,9 @@ export function ChoiceTableDrilldown({
     const row = detailRowById.get(leaf.rowId);
     if (!row) return null;
     const projection = projectMobileOriginalRow({
-      authoredColumns: columns,
+      authoredColumns,
       visibleColumns: columns,
-      visibleHeaderGrid: question.tableHeaderGrid ?? undefined,
+      visibleHeaderGrid: headerGrid,
       displayRows: rows,
       selectedRowId: leaf.rowId,
       omitLeadingAuthoredColumns: omit,
