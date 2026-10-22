@@ -6,6 +6,7 @@ import { type ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tan
 
 import { Badge } from '@/components/ui/badge';
 import { LocalDateTime } from '@/components/ui/local-date-time';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useSearchParamsMutator } from '@/features/operations/hooks/use-search-params-mutator';
 import { formatPlatformKo } from '@/lib/operations/parse-ua';
 import {
@@ -197,19 +198,24 @@ export function ProfilesTable({
           id: c.key,
           accessorFn: (r: DisplayRow) => r.entryParams?.[entryName] ?? '',
           header: c.label,
-          // 패널 회원 ID(UUID)는 길어 앞부분만 보인다. 글자는 전부 화면에 두어 title 로
-          // 확인하고 끌어 선택하면 전체가 복사된다 — 검색은 전체 검색·열 선택 검색이 맡는다.
+          // 패널 회원 ID(UUID)는 길어 앞부분만 보인다. 올리면 툴팁으로 전체를 보이고, 글자는
+          // 전부 화면에 두어 끌어 선택하면 전체가 복사된다 — 검색은 전체 검색·열 선택 검색이 맡는다.
+          // 브라우저 기본 title 은 1초가량 멈춰야 떠서 쓰지 않는다.
           cell: ({ row }) => {
             const value = row.original.entryParams?.[entryName];
             if (!value) return '—';
             return (
-              <span
-                className="inline-block truncate align-bottom"
-                style={{ maxWidth: `${ENTRY_PARAM_DISPLAY_LEN + 1}ch` }}
-                title={value}
-              >
-                {value}
-              </span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    className="inline-block truncate align-bottom"
+                    style={{ maxWidth: `${ENTRY_PARAM_DISPLAY_LEN + 1}ch` }}
+                  >
+                    {value}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="font-mono">{value}</TooltipContent>
+              </Tooltip>
             );
           },
           meta: meta('left', false),
@@ -371,104 +377,106 @@ export function ProfilesTable({
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          {table.getHeaderGroups().map((headerGroup) => (
-            <tr key={headerGroup.id} className="bg-slate-50">
-              {headerGroup.headers.map((header) => {
-                const m = header.column.columnDef.meta as ColumnMeta | undefined;
-                const align = m?.align ?? 'left';
-                const sortable = m?.sortable ?? false;
-                const isActive = sortable && sort === (header.column.id as SortKey);
-                const ariaSort = isActive ? (dir === 'asc' ? 'ascending' : 'descending') : 'none';
-                return (
-                  <th
-                    key={header.id}
-                    scope="col"
-                    aria-sort={ariaSort}
-                    className={cn(
-                      'px-3 py-2 text-xs font-medium tracking-wider whitespace-nowrap text-slate-600 uppercase',
-                      ALIGN_CLASS[align],
-                    )}
-                  >
-                    <span className="inline-flex items-center gap-1">
-                      {sortable ? (
-                        <button
-                          type="button"
-                          onClick={() => handleSortClick(header.column.id)}
-                          className={cn(
-                            'inline-flex items-center gap-1 rounded select-none hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400',
-                            align === 'right' ? 'flex-row-reverse' : '',
-                          )}
-                        >
-                          {flexRender(header.column.columnDef.header, header.getContext())}
-                          <SortIndicator direction={isActive ? dir : false} />
-                        </button>
-                      ) : (
-                        flexRender(header.column.columnDef.header, header.getContext())
+    <TooltipProvider delayDuration={150}>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            {table.getHeaderGroups().map((headerGroup) => (
+              <tr key={headerGroup.id} className="bg-slate-50">
+                {headerGroup.headers.map((header) => {
+                  const m = header.column.columnDef.meta as ColumnMeta | undefined;
+                  const align = m?.align ?? 'left';
+                  const sortable = m?.sortable ?? false;
+                  const isActive = sortable && sort === (header.column.id as SortKey);
+                  const ariaSort = isActive ? (dir === 'asc' ? 'ascending' : 'descending') : 'none';
+                  return (
+                    <th
+                      key={header.id}
+                      scope="col"
+                      aria-sort={ariaSort}
+                      className={cn(
+                        'px-3 py-2 text-xs font-medium tracking-wider whitespace-nowrap text-slate-600 uppercase',
+                        ALIGN_CLASS[align],
                       )}
-                      {m?.filterSource && (
-                        <HeaderFilterPopover
-                          surveyId={surveyId}
-                          source={m.filterSource}
-                          label={String(header.column.columnDef.header ?? '')}
-                          {...(m.filterSource === 'status'
-                            ? {
-                                fixedOptions: STATUS_FUNNEL_OPTIONS,
-                                // 상단 상태 select 와 모순 AND 방지 — 깔때기 적용이 이긴다.
-                                // 단 status=deleted 는 삭제 뷰 선택이므로 보존.
-                                onApplyParams: (p: URLSearchParams) => {
-                                  if (p.get('status') !== 'deleted') p.delete('status');
-                                },
-                              }
-                            : {})}
-                        />
+                    >
+                      <span className="inline-flex items-center gap-1">
+                        {sortable ? (
+                          <button
+                            type="button"
+                            onClick={() => handleSortClick(header.column.id)}
+                            className={cn(
+                              'inline-flex items-center gap-1 rounded select-none hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400',
+                              align === 'right' ? 'flex-row-reverse' : '',
+                            )}
+                          >
+                            {flexRender(header.column.columnDef.header, header.getContext())}
+                            <SortIndicator direction={isActive ? dir : false} />
+                          </button>
+                        ) : (
+                          flexRender(header.column.columnDef.header, header.getContext())
+                        )}
+                        {m?.filterSource && (
+                          <HeaderFilterPopover
+                            surveyId={surveyId}
+                            source={m.filterSource}
+                            label={String(header.column.columnDef.header ?? '')}
+                            {...(m.filterSource === 'status'
+                              ? {
+                                  fixedOptions: STATUS_FUNNEL_OPTIONS,
+                                  // 상단 상태 select 와 모순 AND 방지 — 깔때기 적용이 이긴다.
+                                  // 단 status=deleted 는 삭제 뷰 선택이므로 보존.
+                                  onApplyParams: (p: URLSearchParams) => {
+                                    if (p.get('status') !== 'deleted') p.delete('status');
+                                  },
+                                }
+                              : {})}
+                          />
+                        )}
+                      </span>
+                    </th>
+                  );
+                })}
+              </tr>
+            ))}
+          </thead>
+          <tbody>
+            {table.getRowModel().rows.map((row) => (
+              <tr key={row.id} className="border-b border-slate-100">
+                {row.getVisibleCells().map((cell) => {
+                  const m = cell.column.columnDef.meta as ColumnMeta | undefined;
+                  const align = m?.align ?? 'left';
+                  const isFreeText = m?.nowrap === false;
+                  return (
+                    <td
+                      key={cell.id}
+                      // 자유 텍스트(attrs·pii)는 내용 폭만큼 한 줄 유지, 최대 폭 초과 시
+                      // 말줄임 + title 로 전체 노출. 컬럼이 많아지면 내용 기준으로
+                      // wrapper 의 overflow-x-auto 가로 스크롤이 생긴다.
+                      title={isFreeText ? String(cell.getValue() ?? '') : undefined}
+                      className={cn(
+                        'px-3 py-2 whitespace-nowrap text-slate-700 tabular-nums',
+                        isFreeText && 'max-w-60 truncate',
+                        ALIGN_CLASS[align],
                       )}
-                    </span>
-                  </th>
-                );
-              })}
-            </tr>
-          ))}
-        </thead>
-        <tbody>
-          {table.getRowModel().rows.map((row) => (
-            <tr key={row.id} className="border-b border-slate-100">
-              {row.getVisibleCells().map((cell) => {
-                const m = cell.column.columnDef.meta as ColumnMeta | undefined;
-                const align = m?.align ?? 'left';
-                const isFreeText = m?.nowrap === false;
-                return (
-                  <td
-                    key={cell.id}
-                    // 자유 텍스트(attrs·pii)는 내용 폭만큼 한 줄 유지, 최대 폭 초과 시
-                    // 말줄임 + title 로 전체 노출. 컬럼이 많아지면 내용 기준으로
-                    // wrapper 의 overflow-x-auto 가로 스크롤이 생긴다.
-                    title={isFreeText ? String(cell.getValue() ?? '') : undefined}
-                    className={cn(
-                      'px-3 py-2 whitespace-nowrap text-slate-700 tabular-nums',
-                      isFreeText && 'max-w-60 truncate',
-                      ALIGN_CLASS[align],
-                    )}
-                  >
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                    >
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
 
-      {totalPages > 1 && (
-        <TablePagerFooter
-          total={total}
-          page={page}
-          totalPages={totalPages}
-          onPage={handlePageChange}
-        />
-      )}
-    </div>
+        {totalPages > 1 && (
+          <TablePagerFooter
+            total={total}
+            page={page}
+            totalPages={totalPages}
+            onPage={handlePageChange}
+          />
+        )}
+      </div>
+    </TooltipProvider>
   );
 }
