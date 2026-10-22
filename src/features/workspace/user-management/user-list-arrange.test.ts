@@ -93,6 +93,15 @@ describe('arrangeUsers — 직책 정렬', () => {
 });
 
 describe('arrangeUsers — 유형 정렬', () => {
+  it('총괄(슈퍼어드민)이 직원보다 앞에 선다', () => {
+    const items = [
+      user('직원1'),
+      user('대표', { isSuperadmin: true }),
+      user('게스트1', { userType: 'guest' }),
+    ];
+    expect(arrange(items, { key: 'type', direction: 'asc' })).toEqual(['대표', '직원1', '게스트1']);
+  });
+
   it('직원 → 게스트 → 실사 순이고 같은 유형 안은 발급순이다', () => {
     const items = [
       user('실사1', { userType: 'fieldwork' }),

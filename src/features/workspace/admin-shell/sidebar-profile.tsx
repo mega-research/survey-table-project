@@ -11,6 +11,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import type { TeamRole } from '@/shared/contracts/workspace';
 
+import { SUPERADMIN_LABEL } from '../account-vocabulary';
+
 const TEAM_ROLE_LABEL: Record<TeamRole, string> = {
   leader: '팀장',
   member: '팀원',
@@ -27,10 +29,10 @@ export function SidebarProfile({ user, memberships, collapsed }: Props) {
   const [open, setOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
-  // 슈퍼어드민 → "슈퍼어드민", 아니면 첫 소속 팀의 역할 표기. 팀 미배치는 계정 상태와 맞춰
+  // 슈퍼어드민 → "총괄"(SUPERADMIN_LABEL), 아니면 첫 소속 팀의 역할 표기. 팀 미배치는 계정 상태와 맞춰
   // "재직 중"(이 셸에 도달하는 사용자는 항상 active).
   const roleLabel = user.isSuperadmin
-    ? '슈퍼어드민'
+    ? SUPERADMIN_LABEL
     : memberships[0]
       ? TEAM_ROLE_LABEL[memberships[0].role]
       : '재직 중';

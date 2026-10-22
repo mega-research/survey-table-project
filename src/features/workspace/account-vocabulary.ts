@@ -16,6 +16,16 @@ export const USER_TYPE_LABEL: Record<UserType, string> = {
 };
 
 /**
+ * 슈퍼어드민의 화면 표기 — 「총괄」.
+ *
+ * 계정 유형이 아니다. 슈퍼어드민은 직원(internal) 위에 얹힌 플래그(`isSuperadmin`)이고, 유형은
+ * 권한 관문(`authed` 의 internal 판정)이 읽는 축이라 새 값을 만들면 그 관문들이 전부 다시
+ * 물어야 한다. 그래서 값은 그대로 두고 표시만 갈라 쓴다 — 사용자 표의 유형 칸과 사이드바
+ * 프로필이 이 이름을 함께 본다. 대표·시스템 관리 담당처럼 팀 경계 없이 전체를 보는 사람이다.
+ */
+export const SUPERADMIN_LABEL = '총괄';
+
+/**
  * 상태 표시. pending/rejected 는 도달 불가 어휘지만(ADR-0018) 과거 데이터가 실려 있어도
  * 빈 배지로 보이지 않게 라벨을 함께 둔다 — 필터 선택지에는 없다.
  */

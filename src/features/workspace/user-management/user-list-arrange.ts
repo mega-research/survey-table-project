@@ -19,8 +19,15 @@ export function nextUserSort(current: UserSort, key: UserSortKey): UserSort {
   return current.direction === 'asc' ? { key, direction: 'desc' } : null;
 }
 
-/** 유형 순서 — 유형 칩과 같은 순서(직원 → 게스트 → 실사). */
-const TYPE_RANK: Record<UserType, number> = { internal: 0, guest: 1, fieldwork: 2 };
+/**
+ * 유형 순서 — 총괄(슈퍼어드민) → 직원 → 게스트 → 실사. 총괄은 유형이 아니라 직원 위의 플래그라
+ * 유형 칸에 보이는 그대로 맨 앞에 세운다(`SUPERADMIN_LABEL`).
+ */
+const TYPE_RANK: Record<UserType, number> = { internal: 1, guest: 2, fieldwork: 3 };
+
+function typeRank(user: UserListItem): number {
+  return user.isSuperadmin ? 0 : TYPE_RANK[user.userType];
+}
 
 /** 상태 순서 — 지금 일하는 사람이 앞, 퇴사가 끝. pending·rejected 는 v2 에서 도달 불가 어휘다. */
 const STATUS_RANK: Record<UserStatus, number> = {
@@ -72,7 +79,7 @@ function compareJobTitle(a: string, b: string): number {
 }
 
 function compareUsers(a: UserListItem, b: UserListItem, key: UserSortKey): number {
-  if (key === 'type') return TYPE_RANK[a.userType] - TYPE_RANK[b.userType];
+  if (key === 'type') return typeRank(a) - typeRank(b);
   if (key === 'status') return STATUS_RANK[a.status] - STATUS_RANK[b.status];
   return compareJobTitle(userRoleLabel(a) ?? '', userRoleLabel(b) ?? '');
 }

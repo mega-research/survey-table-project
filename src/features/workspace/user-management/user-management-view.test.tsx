@@ -252,3 +252,15 @@ describe('UserManagementView — 소속 필터', () => {
     expect(rowNames()).toEqual(['미배치']);
   });
 });
+
+describe('UserManagementView — 총괄', () => {
+  it('슈퍼어드민은 유형 칸에 「직원」 대신 「총괄」로 보인다', () => {
+    mockItems = [{ ...staff('대표', 'active'), isSuperadmin: true }, staff('사원', 'active')];
+    render(<UserManagementView />);
+    const body = screen.getAllByRole('rowgroup')[1]!;
+    const [head, member] = within(body).getAllByRole('row');
+    expect(within(head!).getByText('총괄')).toBeInTheDocument();
+    expect(within(head!).queryByText('직원')).toBeNull();
+    expect(within(member!).getByText('직원')).toBeInTheDocument();
+  });
+});

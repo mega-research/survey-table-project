@@ -516,6 +516,7 @@ _Avoid_: 팀 게스트
 
 **슈퍼어드민 (superadmin)**:
 팀 소속과 무관한 시스템 전역 관리자. 가입 승인, 팀 생성·배정을 전담하며 시스템 전체 보기와 모든 설문(private 포함)에 접근한다.
+화면 표기는 **「총괄」**이다(사용자 표의 유형 칸·사이드바 프로필, `SUPERADMIN_LABEL`). 계정 유형이 아니라 직원 위에 얹힌 플래그라 유형 값은 internal 그대로다.
 _Avoid_: 관리자(팀장과 모호), admin(기존 단일 admin 어감)
 → 정본: `src/server/AGENTS.md` 「인증과 권한」(superadmin 베이스)
 

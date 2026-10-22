@@ -16,7 +16,12 @@ import {
   selectableUserStatusValues,
 } from '@/shared/contracts/auth-io';
 
-import { USER_STATUS_LABEL, USER_STATUS_PILL, USER_TYPE_LABEL } from '../account-vocabulary';
+import {
+  SUPERADMIN_LABEL,
+  USER_STATUS_LABEL,
+  USER_STATUS_PILL,
+  USER_TYPE_LABEL,
+} from '../account-vocabulary';
 import { PRIMARY_BUTTON } from '../field-styles';
 import { useTeams } from '../team-management/queries/use-teams';
 import { useUsers } from './queries/use-users';
@@ -57,6 +62,12 @@ const TYPE_PILL: Record<UserType, string> = {
   guest: 'bg-[#FEF3C7] text-[#D97706]',
   fieldwork: 'bg-[#F3F4F6] text-[#6E6E73]',
 };
+
+/** 유형 칸 — 슈퍼어드민은 유형(직원) 대신 「총괄」로 보인다. 진한 남색으로 직원 배지와 가른다. */
+function typeBadge(user: UserListItem): { label: string; tone: string } {
+  if (user.isSuperadmin) return { label: SUPERADMIN_LABEL, tone: 'bg-[#2743AE] text-white' };
+  return { label: USER_TYPE_LABEL[user.userType], tone: TYPE_PILL[user.userType] };
+}
 
 /** 아바타 이니셜 — 이름 첫 글자. 게스트만 유형색을 달리 준다(.pen). */
 function avatarTone(userType: UserType): string {
@@ -330,9 +341,9 @@ export function UserManagementView() {
                     </td>
                     <td className="px-3 py-3">
                       <span
-                        className={`inline-flex rounded-full px-2 py-[3px] text-[11px] font-semibold ${TYPE_PILL[user.userType]}`}
+                        className={`inline-flex rounded-full px-2 py-[3px] text-[11px] font-semibold ${typeBadge(user).tone}`}
                       >
-                        {USER_TYPE_LABEL[user.userType]}
+                        {typeBadge(user).label}
                       </span>
                     </td>
                     <td className="px-3 py-3 text-[12.5px] text-[#6E6E73]">
