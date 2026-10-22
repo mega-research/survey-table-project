@@ -4,12 +4,11 @@ import { useState } from 'react';
 
 import Link from 'next/link';
 
-import { ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, Loader2, Plus } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, Loader2, Plus, Search } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { ListPagination } from '@/components/ui/list-pagination';
-import type { UserStatus, UserType } from '@/shared/contracts/auth';
-import { FIELDWORK_ROLE_LABEL } from '@/shared/contracts/auth';
+import type { UserType } from '@/shared/contracts/auth';
 import {
   type UserListItem,
   type UserStatusFilter,
@@ -23,6 +22,13 @@ import { useUsers } from './queries/use-users';
 import { UserCreateModal } from './user-create-modal';
 import { UserDepartModal } from './user-depart-modal';
 import { UserEditModal } from './user-edit-modal';
+import {
+  type UserSort,
+  type UserSortKey,
+  arrangeUsers,
+  nextUserSort,
+  userRoleLabel,
+} from './user-list-arrange';
 import { UserRehireModal } from './user-rehire-modal';
 import { UserResetPasswordModal } from './user-reset-password-modal';
 import { UserRowActions } from './user-row-actions';
@@ -57,53 +63,42 @@ function avatarTone(userType: UserType): string {
 
 const PAGE_SIZE = 20;
 
-/** 상태 머리글 정렬 — 누를 때마다 기본 → 오름차순 → 내림차순 → 기본으로 돈다. */
-type StatusSort = 'default' | 'asc' | 'desc';
-
-const NEXT_STATUS_SORT: Record<StatusSort, StatusSort> = {
-  default: 'asc',
-  asc: 'desc',
-  desc: 'default',
-};
-
-/** 상태 정렬 순서 — 지금 일하는 사람이 앞, 퇴사가 끝. pending·rejected 는 v2 에서 도달 불가 어휘다. */
-const STATUS_RANK: Record<UserStatus, number> = {
-  active: 0,
-  suspended: 1,
-  pending: 2,
-  rejected: 3,
-  departed: 4,
-};
-
-/**
- * 표에 실을 행.
- *
- * 기본 보기는 퇴사자를 뺀다 — 서버가 발급순으로 주는데, 테스트하다 퇴사 처리한 계정이 앞쪽에
- * 몰려 지금 일하는 사람이 밀려났다. 퇴사자는 상태 머리글로 정렬하거나 상태 필터로 「퇴사」를
- * 고르면 나온다. 정렬은 안정 정렬이라 같은 상태 안은 발급순 그대로다.
- */
-function arrangeUsers(
-  items: readonly UserListItem[],
-  sort: StatusSort,
-  statusFilter: UserStatusFilter,
-): UserListItem[] {
-  if (sort === 'default') {
-    return statusFilter === 'all' ? items.filter((user) => user.status !== 'departed') : [...items];
-  }
-  const direction = sort === 'asc' ? 1 : -1;
-  return [...items].sort((a, b) => (STATUS_RANK[a.status] - STATUS_RANK[b.status]) * direction);
+function SortIcon({ direction }: { direction: 'asc' | 'desc' | null }) {
+  if (direction === 'asc') return <ArrowUp className="h-3 w-3" />;
+  if (direction === 'desc') return <ArrowDown className="h-3 w-3" />;
+  return <ArrowUpDown className="h-3 w-3 opacity-60" />;
 }
 
-const ARIA_SORT: Record<StatusSort, 'none' | 'ascending' | 'descending'> = {
-  default: 'none',
-  asc: 'ascending',
-  desc: 'descending',
-};
-
-function StatusSortIcon({ sort }: { sort: StatusSort }) {
-  if (sort === 'asc') return <ArrowUp className="h-3 w-3" />;
-  if (sort === 'desc') return <ArrowDown className="h-3 w-3" />;
-  return <ArrowUpDown className="h-3 w-3 opacity-60" />;
+/** 정렬 머리글 — 누를 때마다 오름차순 → 내림차순 → 정렬 없음(`nextUserSort`). */
+function SortableHeader({
+  label,
+  sortKey,
+  sort,
+  onSort,
+  className,
+}: {
+  label: string;
+  sortKey: UserSortKey;
+  sort: UserSort;
+  onSort: (key: UserSortKey) => void;
+  className: string;
+}) {
+  const direction = sort?.key === sortKey ? sort.direction : null;
+  const ariaSort = direction === 'asc' ? 'ascending' : direction === 'desc' ? 'descending' : 'none';
+  return (
+    <th className={className} aria-sort={ariaSort}>
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={`inline-flex items-center gap-1 hover:text-[#3A3A3C] ${
+          direction ? 'text-[#3A3A3C]' : ''
+        }`}
+      >
+        {label}
+        <SortIcon direction={direction} />
+      </button>
+    </th>
+  );
 }
 
 /**
@@ -126,7 +121,8 @@ function Affiliation({ user }: { user: UserListItem }) {
 export function UserManagementView() {
   const [userType, setUserType] = useState<UserTypeFilter>('all');
   const [status, setStatus] = useState<UserStatusFilter>('all');
-  const [statusSort, setStatusSort] = useState<StatusSort>('default');
+  const [sort, setSort] = useState<UserSort>(null);
+  const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
   // 대상 사용자를 그대로 들고 연다 — 모달 안에서 목록을 다시 뒤지지 않아도 되고, 열려 있는
@@ -138,11 +134,16 @@ export function UserManagementView() {
   const { data, isLoading, error } = useUsers(userType, status);
 
   const typeCounts = data?.typeCounts;
-  const rows = arrangeUsers(data?.items ?? [], statusSort, status);
+  const rows = arrangeUsers(data?.items ?? [], { sort, statusFilter: status, query });
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   // 상태가 바뀌어 행이 줄면 보고 있던 쪽이 사라질 수 있다 — 마지막 쪽으로 접는다.
   const currentPage = Math.min(page, totalPages);
   const items = rows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  const handleSort = (key: UserSortKey) => {
+    setSort((current) => nextUserSort(current, key));
+    setPage(1);
+  };
 
   return (
     <div className="min-h-screen bg-[#F9FAFB] px-4 py-8">
@@ -196,6 +197,21 @@ export function UserManagementView() {
 
             <div className="flex-1" />
 
+            <div className="relative">
+              <Search className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-[#9CA3AF]" />
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setPage(1);
+                }}
+                placeholder="이름·이메일 검색"
+                aria-label="사용자 검색"
+                className="h-8 w-[200px] rounded-lg border border-[#D1D5DB] bg-white pr-2 pl-8 text-[12.5px] text-[#1C1C1E] outline-none placeholder:text-[#9CA3AF] focus:border-[#2E4FCE]"
+              />
+            </div>
+
             <label className="sr-only" htmlFor="status-filter">
               상태 필터
             </label>
@@ -222,24 +238,28 @@ export function UserManagementView() {
               <thead className="bg-[#F9FAFB]">
                 <tr className="text-left text-[11.5px] font-medium text-[#9CA3AF]">
                   <th className="px-5 py-3 font-medium">사용자</th>
-                  <th className="px-3 py-3 font-medium">유형</th>
+                  <SortableHeader
+                    label="유형"
+                    sortKey="type"
+                    sort={sort}
+                    onSort={handleSort}
+                    className="px-3 py-3 font-medium"
+                  />
                   <th className="px-3 py-3 font-medium">소속 (팀·기관·업체)</th>
-                  <th className="px-3 py-3 font-medium">직책·역할</th>
-                  <th className="px-3 py-3 font-medium" aria-sort={ARIA_SORT[statusSort]}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setStatusSort((current) => NEXT_STATUS_SORT[current]);
-                        setPage(1);
-                      }}
-                      className={`inline-flex items-center gap-1 hover:text-[#3A3A3C] ${
-                        statusSort === 'default' ? '' : 'text-[#3A3A3C]'
-                      }`}
-                    >
-                      상태
-                      <StatusSortIcon sort={statusSort} />
-                    </button>
-                  </th>
+                  <SortableHeader
+                    label="직책·역할"
+                    sortKey="jobTitle"
+                    sort={sort}
+                    onSort={handleSort}
+                    className="px-3 py-3 font-medium"
+                  />
+                  <SortableHeader
+                    label="상태"
+                    sortKey="status"
+                    sort={sort}
+                    onSort={handleSort}
+                    className="px-3 py-3 font-medium"
+                  />
                   <th className="px-3 py-3 font-medium">
                     <span className="sr-only">액션</span>
                   </th>
@@ -275,9 +295,7 @@ export function UserManagementView() {
                       <Affiliation user={user} />
                     </td>
                     <td className="px-3 py-3 text-[12.5px] text-[#6E6E73]">
-                      {user.fieldworkRole
-                        ? FIELDWORK_ROLE_LABEL[user.fieldworkRole]
-                        : (user.jobTitle ?? '—')}
+                      {userRoleLabel(user) ?? '—'}
                     </td>
                     <td className="px-3 py-3">
                       <span

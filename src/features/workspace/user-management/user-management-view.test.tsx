@@ -181,3 +181,35 @@ describe('UserManagementView — 소속 칸', () => {
     expect(within(unassigned!).getAllByText('—').length).toBeGreaterThan(0);
   });
 });
+
+describe('UserManagementView — 검색·열 정렬', () => {
+  beforeEach(() => {
+    mockItems = [
+      staff('김대리', 'active'),
+      { ...staff('박부장', 'active'), jobTitle: '부장' },
+      { ...staff('이과장', 'active'), jobTitle: '과장' },
+    ];
+  });
+
+  it('이름으로 검색하면 맞는 사람만 남는다', async () => {
+    const user = userEvent.setup();
+    render(<UserManagementView />);
+    await user.type(screen.getByLabelText('사용자 검색'), '과장');
+    expect(rowNames()).toEqual(['이과장']);
+  });
+
+  it('직책 머리글을 누르면 높은 직급부터 서고, 빈 직책은 끝이다', async () => {
+    const user = userEvent.setup();
+    render(<UserManagementView />);
+    await user.click(screen.getByRole('button', { name: '직책·역할' }));
+    expect(rowNames()).toEqual(['박부장', '이과장', '김대리']);
+  });
+
+  it('유형 머리글도 정렬 버튼이다', () => {
+    render(<UserManagementView />);
+    expect(screen.getByRole('button', { name: '유형' }).closest('th')).toHaveAttribute(
+      'aria-sort',
+      'none',
+    );
+  });
+});

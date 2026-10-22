@@ -85,7 +85,7 @@ src/
 │   │   │                       # + fieldwork-org-card(카드·계정 명단·종료 확인) + fieldwork-org-form-modal
 │   │   │                       # + queries/use-fieldwork-orgs. **사용자 관리를 import 하지 않는다** —
 │   │   │                       # 저쪽이 이 묶음을 부르므로 방향이 한쪽이어야 한다(계정 발급 모달은 상위가 연다)
-│   │   ├── user-management/    # user-management-view 진입점(20명씩 쪽 나눔 · 기본 보기는 퇴사자 제외, 상태 머리글 정렬로 포함) + user-create-modal + user-row-actions
+│   │   ├── user-management/    # user-management-view 진입점(20명씩 쪽 나눔 · 이름·이메일 검색 · 유형·직책·상태 열 정렬 · 기본 보기는 퇴사자 제외, 상태 정렬·상태 필터로 포함 — 순수 규칙은 user-list-arrange) + user-create-modal + user-row-actions
 │   │   │                       # + user-reset-password-modal · user-rehire-modal
 │   │   │                       # + queries/use-users. 어휘·쿼리 키는 루트로 올라갔다(티켓 24)
 │   │   │                       # 케밥이 여는 액션은 availableUserStatusActions(전이표)가 정한다 — 화면이 표를 따로 들지 않는다
