@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useEffect, useEffectEvent, useRef } from 'react';
+import React, { useEffect, useEffectEvent, useId, useRef, useState } from 'react';
 
 import { Input } from '@/components/ui/input';
 import { resolveCellTextHtml } from '@/features/question-renderer/cell-text';
 import {
   useAnswerQuotes,
   useContactAttrs,
+  useSurveyLookups,
 } from '@/features/question-renderer/contact-attrs-context';
 import { useAutoGrowTextarea } from '@/hooks/use-auto-grow-textarea';
 import { useFieldFocus } from '@/features/question-renderer/hooks/use-field-focus';
@@ -18,6 +19,11 @@ import {
 import { useResponseSources } from '@/features/question-renderer/response-sources';
 import { resolveCellTextQualityViolation } from '@/features/question-renderer/utils/cell-text-quality';
 import { formatSampleValue } from '@/features/question-renderer/utils/input-format';
+import {
+  buildLookupPickPatch,
+  resolveLookupSearch,
+  searchLookupRows,
+} from '@/features/question-renderer/utils/lookup-search';
 import {
   PRIOR_HIGHLIGHT_TEXT_CLS,
   isPriorText,
@@ -35,6 +41,8 @@ import { isInputFormat } from '@/types/input-type';
 
 import { CellContentLayout } from './cell-content-layout';
 import { FloatingHint } from './floating-hint';
+import { useGatingTableCells } from './gating-table-cells-context';
+import { LookupSearchSuggestions } from './lookup-search-suggestions';
 import type { InteractiveCellProps } from './types';
 
 /** 텍스트 입력 셀 (인터랙티브) */
@@ -42,6 +50,7 @@ export const InputCell = React.memo(function InputCell({
   cell,
   cellResponse,
   onUpdateValue,
+  onPatchValues,
   questionId,
   inputIdScope,
   ariaInvalid,
@@ -93,6 +102,61 @@ export const InputCell = React.memo(function InputCell({
   // 높이 늘리기를 켜면 줄 수가 1 이어도 여러 줄 칸이다 — 줄 수는 처음(최소) 높이가 된다
   const autoGrow = isFreeText && cell.inputAutoGrow === true;
   const isMultiline = rows >= 2 || autoGrow;
+
+  // 목록에서 찾기 — 평문 한 줄 칸만. 명단 값으로 잠긴 칸과 응답 표 밖(여러 칸 쓰기 통로·표 셀
+  // 정의가 없다)은 평범한 입력칸으로 그린다. 저장되는 것은 칸에 적힌 글자 그대로다.
+  const lookups = useSurveyLookups();
+  const tableCells = useGatingTableCells();
+  const lookupSearch =
+    isFreeText && !isMultiline && !isPrefilled && onPatchValues && tableCells
+      ? resolveLookupSearch(cell.lookupSearch, lookups)
+      : null;
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  // 누르거나 아래 화살표로 연 목록은 선택 상자처럼 전체를 보인다 — 이미 고른 회사를 바꾸려는데
+  // 적힌 이름으로 좁혀 그 회사 하나만 보이면 안 된다. 글자를 치면 그 글자로 좁힌다.
+  const [browseAll, setBrowseAll] = useState(false);
+  const [activeHit, setActiveHit] = useState(0);
+  const hits =
+    lookupSearch && suggestOpen
+      ? searchLookupRows(lookupSearch, browseAll ? '' : currentValue)
+      : [];
+  const listboxId = useId();
+  const openBrowse = () => {
+    if (!lookupSearch || suggestOpen) return;
+    const all = searchLookupRows(lookupSearch, '');
+    const current = all.findIndex((hit) => hit.label === currentValue.trim());
+    setBrowseAll(true);
+    setActiveHit(current >= 0 ? current : 0);
+    setSuggestOpen(true);
+  };
+  const pickHit = (position: number) => {
+    const hit = hits[position];
+    if (!hit || !lookupSearch || !tableCells || !onPatchValues) return;
+    onPatchValues(buildLookupPickPatch(lookupSearch, hit.index, cell.id, tableCells));
+    setSuggestOpen(false);
+  };
+  const handleLookupKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!suggestOpen && e.key === 'ArrowDown') {
+      e.preventDefault();
+      openBrowse();
+      return;
+    }
+    if (hits.length === 0) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveHit((i) => (i + 1) % hits.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveHit((i) => (i - 1 + hits.length) % hits.length);
+    } else if (e.key === 'Enter') {
+      // 한글 조합을 끝내는 Enter 는 고르기가 아니다
+      if (e.nativeEvent.isComposing) return;
+      e.preventDefault();
+      pickHit(Math.min(activeHit, hits.length - 1));
+    } else if (e.key === 'Escape') {
+      setSuggestOpen(false);
+    }
+  };
 
   const { displayValue, handleChange, handleFocus, handleBlur, unitReading, rangeViolation } =
     useFormattedNumericInput({
@@ -273,16 +337,42 @@ export const InputCell = React.memo(function InputCell({
               type="text"
               inputMode={isNumberMode ? 'decimal' : formatField.inputMode}
               value={isPrefilled ? prefilledValue : displayValue}
-              onChange={format ? formatField.handleChange : handleChange}
+              onChange={
+                format
+                  ? formatField.handleChange
+                  : lookupSearch
+                    ? (e) => {
+                        handleChange(e);
+                        setBrowseAll(false);
+                        setSuggestOpen(true);
+                        setActiveHit(0);
+                      }
+                    : handleChange
+              }
+              onKeyDown={lookupSearch ? handleLookupKeyDown : undefined}
+              onClick={lookupSearch ? openBrowse : undefined}
+              {...(lookupSearch
+                ? {
+                    role: 'combobox',
+                    autoComplete: 'off',
+                    'aria-autocomplete': 'list' as const,
+                    'aria-expanded': hits.length > 0,
+                    'aria-controls': listboxId,
+                    'aria-activedescendant':
+                      hits.length > 0 ? `${listboxId}-${Math.min(activeHit, hits.length - 1)}` : undefined,
+                  }
+                : {})}
               onFocus={() => {
                 handleFocus();
                 formatField.handleFocus();
                 focus.onFocus();
+                openBrowse();
               }}
               onBlur={() => {
                 handleBlur();
                 formatField.handleBlur();
                 focus.onBlur();
+                setSuggestOpen(false);
               }}
               placeholder={
                 cell.placeholder ||
@@ -321,6 +411,17 @@ export const InputCell = React.memo(function InputCell({
         남겨두면 그쪽만 다시 줄을 밀어 어긋남이 되살아난다.
         상시 표시인 단위 읽기는 아래 행에 영구히 겹치면 안 되므로 흐름에 그대로 둔다.
       */}
+      {hits.length > 0 && (
+        <LookupSearchSuggestions
+          anchorRef={anchorRef}
+          listboxId={listboxId}
+          hits={hits}
+          activeIndex={Math.min(activeHit, hits.length - 1)}
+          onPick={pickHit}
+          onHover={setActiveHit}
+        />
+      )}
+
       {!hintInFlow && hasViolation && (
         <FloatingHint anchorRef={anchorRef}>
           {rangeViolation && (

@@ -44,6 +44,8 @@ export const TABLE_CELL_FIELD_POLICY = {
   spssVarType: OWNED,
   spssMeasure: OWNED,
   spssNumericCode: OWNED,
+  // 보기 칸 변수번호 — 폼에 칸이 없어 원본 그대로 두고, 문항 안 번호라 보관함에는 싣지 않는다
+  optionCode: { form: 'kept', library: 'drop' },
   // 원본 이미지를 지우면 보관함 사본이 깨진다
   imageUrl: OWNED_NOT_LIBRARY,
   videoUrl: OWNED,
@@ -61,6 +63,8 @@ export const TABLE_CELL_FIELD_POLICY = {
   inputRows: OWNED,
   inputAutoGrow: OWNED,
   inputWidth: OWNED,
+  // 목록에서 찾기 — 설문 참조표와 같은 표의 칸을 가리켜 보관함에는 싣지 않는다
+  lookupSearch: OWNED_NOT_LIBRARY,
   defaultValueTemplate: OWNED,
   prefillEditable: OWNED,
   inputType: OWNED,

@@ -275,7 +275,7 @@ describe('resumeOrCreateResponse 응답 복원', () => {
       expect(updateSetMock).not.toHaveBeenCalled();
     });
 
-    it('drop 이라도 버전이 다르면 복원하지 않는다 - 구버전 답 주입 차단', async () => {
+    it('버전이 다르고 이관할 수 없으면(스냅샷 없음) drop 이라도 복원하지 않는다 - 이관은 resume-version-migration 이 본다', async () => {
       await mockTestTargetRow({ ...testTargetRowBase, status: 'drop', versionId: 'version-0' });
 
       await expect(resume()).resolves.toBeNull();

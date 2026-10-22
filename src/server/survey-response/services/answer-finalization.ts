@@ -2,9 +2,11 @@ import 'server-only';
 
 import { encryptResponsesForStorage, hasPiiTargets, type PiiTargets } from '@/lib/crypto/response-pii';
 import { logger } from '@/lib/logger';
+import { createAnswerEvalCtx } from '@/lib/survey/answer-eval-ctx';
+import { stripUnreachedQuestionValues } from '@/lib/survey/answer-path';
 import { withCalcValues } from '@/lib/survey/cell-formula';
 import { stripDisabledCellValues } from '@/lib/survey/cell-gating';
-import { stripHiddenQuestionValues } from '@/lib/survey/question-visibility';
+import { resolveVisibleQuestionIds } from '@/lib/survey/question-visibility';
 import { sanitizeRootSidecar, splitRootSidecars } from '@/lib/survey/response-sidecars';
 import { loadRespondentContactAttrs } from '@/server/read-models/respondent-contact-attrs';
 import {
@@ -14,7 +16,6 @@ import {
 } from '@/server/read-models/version-snapshot';
 import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 import type { Question, QuestionGroup, SurveyLookup } from '@/types/survey';
-import { type BranchEvalCtx, responsesToLookupShape } from '@/utils/branch-eval';
 
 import { detectScreenOut } from '../domain/screen-out';
 import { loadPiiTargets } from './submitted-answers';
@@ -23,10 +24,19 @@ import { loadPiiTargets } from './submitted-answers';
  * 응답 확정 (CONTEXT.md 「응답 확정」) — 완료 제출·관리자 응답 수정이 저장 직전에 최종 평문과
  * 저장값을 만드는 한 곳.
  *
- * 순서가 계약이다: 숨은 문항 strip → 게이팅 strip → calc 재계산 → 등록 사이드카만 → 자격미달
- * 판정 → 암호화. 문항이 통째로 사라지면 그 표의 셀 값도 함께 사라져 게이팅 판정의 입력이
- * 달라지고, 수식은 지워진 값 기준으로 계산해야 한다. 판정은 암호화 이전 평문이어야 분기
- * 매칭이 성립한다.
+ * 순서가 계약이다: 숨은 문항 strip → 경로 밖 strip(둘을 고정점까지) → 게이팅 strip → calc 재계산
+ * → 등록 사이드카만 → 자격미달 판정 → 암호화. 문항이 통째로 사라지면 그 표의 셀 값도 함께
+ * 사라져 게이팅 판정의 입력이 달라지고, 수식은 지워진 값 기준으로 계산해야 한다. 판정은 암호화
+ * 이전 평문이어야 분기 매칭이 성립한다.
+ *
+ * 경로 밖 strip(lib/survey/answer-path)은 분기 이동(goto·end)으로 건너뛴 페이지의 답을 지운다 —
+ * 남겨 두면 건너뛴 페이지의 자격미달 보기가 정상 완료를 자격미달로 뒤집는다. 경로를 확정할 수
+ * 없으면(문항 섞기·기록된 마지막 페이지가 경로 밖) 건너뛴다. calc 은 남은
+ * 문항(표시 + 경로 위)에만 새로 채운다 — 가 보지 않은 표에 계산값이 들어가 답한 것처럼 보이지 않게.
+ *
+ * 조건 평가 컨텍스트는 응답 화면과 같다 — 명단 값 위에 응답 인용값을 얹고(`createAnswerEvalCtx`),
+ * 인용값은 strip 바퀴마다 지운 결과로 다시 계산한다(화면이 지운 뒤 다시 그리며 다시 계산하는 것과
+ * 같은 수렴). 계산 칸 수식은 화면처럼 명단 값만 쓴다.
  *
  * 세 단계는 설문 구성과 무관하게 늘 돈다 — 계산 칸·게이팅 칸 유무로 건너뛰던 시절에 표시
  * 조건만 있는 설문의 빈 complete 가 숨은 값을 남겼다. 각 단계는 할 일이 없으면 받은 객체를
@@ -100,26 +110,43 @@ export function finalizeAnswers(
   options: {
     /**
      * 숨은 문항 strip 생략 — 관리자 수정의 구버전 응답 이관(migrating) 전용. 재배포로 새로 생기거나
-     * 좁혀진 표시 조건이 이미 수집된 답을 소급해 지우면 안 된다.
+     * 좁혀진 표시 조건이 이미 수집된 답을 소급해 지우면 안 된다. 경로 밖 strip 도 함께 생략한다 —
+     * 같은 이유로 재배포가 바꾼 분기가 이미 수집된 답을 지우면 안 된다.
      */
     skipHiddenStrip?: boolean;
+    /**
+     * 응답 행에 기록된 마지막 페이지(`current_step_id`). 응답자 완료 제출이 넘긴다 — 그 페이지가
+     * 계산한 경로 밖이면 응답자가 시뮬레이션대로 걷지 않은 것이라 경로 밖 strip 을 건너뛴다.
+     * 관리자 수정은 넘기지 않는다(편집 화면은 첫 페이지부터 분기대로 걷는다).
+     */
+    lastStepId?: string | null;
   } = {},
 ): AnswerFinalization {
   const { questions, groups, lookups, contactAttrs } = material;
-  const evalCtx = (responses: Record<string, unknown>): BranchEvalCtx => ({
-    responses: responsesToLookupShape(responses),
-    contactAttrs,
-    lookups,
-  });
+  const evalCtx = createAnswerEvalCtx({ questions, contactAttrs, lookups });
 
   let current = plain;
   // 스냅샷이 없으면 확정 단계를 건너뛴다 — 응답자·운영자의 저장을 막지 않는 fail-safe.
   if (material.snapshot) {
-    if (!options.skipHiddenStrip) {
-      current = stripHiddenQuestionValues(questions, current, groups, evalCtx(current));
+    let reachedQuestionIds: ReadonlySet<string>;
+    if (options.skipHiddenStrip) {
+      // 이관은 아무것도 지우지 않는다. 계산값은 표시되는 문항에만 새로 채운다(값이 남은 문항은
+      // withCalcValues 가 다시 계산한다).
+      reachedQuestionIds = resolveVisibleQuestionIds(questions, current, groups, evalCtx);
+    } else {
+      const reached = stripUnreachedQuestionValues(questions, current, groups, evalCtx, {
+        settings: material.snapshot.settings,
+        lastStepId: options.lastStepId,
+      });
+      current = reached.responses;
+      reachedQuestionIds = reached.reachedQuestionIds;
     }
     current = stripDisabledCellValues(questions, current);
-    current = withCalcValues(current, { questions, responses: current, lookups, contactAttrs });
+    current = withCalcValues(
+      current,
+      { questions, responses: current, lookups, contactAttrs },
+      { reachedQuestionIds },
+    );
   }
   current = keepRegisteredSidecars(current, material);
 

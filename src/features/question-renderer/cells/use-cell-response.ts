@@ -84,5 +84,15 @@ export function useCellResponse(
     mergePatch({ [cellId]: undefined });
   }, [mergePatch, cellId]);
 
-  return { cellResponse: localResponse, updateValue, clearValue };
+  // 같은 표의 여러 칸을 한 번에 쓴다(목록에서 찾기 — 기업명과 번호 칸). 다른 칸은 각자의
+  // 구독으로 새 값을 받는다. 이 칸 값이 들어 있으면 로컬 상태도 맞춘다.
+  const patchValues = useCallback(
+    (patch: Record<string, string>) => {
+      if (cellId in patch) setLocalResponse(patch[cellId]);
+      mergePatch(patch);
+    },
+    [cellId, mergePatch],
+  );
+
+  return { cellResponse: localResponse, updateValue, clearValue, patchValues };
 }

@@ -46,6 +46,8 @@ import { UnmodifiedChangedDialog } from '@/features/survey-response/unmodified-c
 import { SurveyResponseHeader } from '@/features/question-renderer/survey-response-header';
 import {
   DesktopOnlyScreen,
+  EndRedirectNotice,
+  EndRedirectingScreen,
   InvalidTestLinkScreen,
   SurveyCompletedScreen,
   SurveyEmptyScreen,
@@ -65,6 +67,12 @@ import {
   isAwaitingChangeConfirmation,
   readChangeConfirmations,
 } from '@/lib/survey/change-confirmation';
+import {
+  type EndRedirectOutcome,
+  normalizePassParamNames,
+  pickEntryParams,
+  resolveEndRedirectUrl,
+} from '@/lib/survey/end-redirect';
 import { resolvePriorWaveLabel } from '@/lib/survey/prior-answers';
 import { PriorAnswersProvider } from '@/features/question-renderer/prior-answers-context';
 import { isChoiceGroupTableQuestion } from '@/lib/survey/choice-selection';
@@ -103,7 +111,7 @@ import {
   type NumericIssue,
   collectNumericIssues,
   collectVisibleTableCells,
-  resolveChoiceGroupVisibleCellIds,
+  resolveChoiceTableVisibleCellIds,
 } from '@/features/survey-response/lib/numeric-validation';
 import { resolveEffectiveOptionTextsByQuestion } from '@/features/question-renderer/utils/effective-option-texts';
 import { collectRequiredOptionTextIssues } from '@/features/survey-response/lib/required-option-text-validation';
@@ -157,6 +165,11 @@ export interface SurveyResponseFlowProps {
   inviteToken?: string | null;
   // ?test=<token> — 운영 콘솔 발급 테스트 링크. public 모드에서만 의미가 있다(미전달 시 null).
   testToken?: string | null;
+  /**
+   * 들어온 링크의 쿼리 문자열 전체. 설정된 이름(종료 후 이동 주소의 passParams — 리멤버 `euid`)의
+   * 값만 골라 종료 주소에 붙이고 응답 행에 남긴다. public 모드에서만 의미가 있다.
+   */
+  entryQuery?: string | null;
   // admin-edit 모드 전용 — Task 15 에서 활성화.
   adminContext?: {
     responseId: string;
@@ -302,6 +315,7 @@ function SurveyResponseFlowControl({
   entrySeed,
   inviteToken: inviteTokenProp = null,
   testToken: testTokenProp = null,
+  entryQuery = null,
   mode = 'public',
   adminContext,
   previewContext,
@@ -365,6 +379,7 @@ function SurveyResponseFlowControl({
         surveyIdentifier,
         inviteToken: inviteTokenProp,
         testToken: testTokenProp,
+        entryQuery,
         mode,
         ...(adminContext ? { adminContext } : {}),
         ...(previewContext ? { previewContext } : {}),
@@ -398,6 +413,7 @@ function SurveyResponseFlowActive({
   flowProps: {
     inviteToken: inviteTokenProp = null,
     testToken: testTokenProp = null,
+    entryQuery = null,
     mode = 'public',
     adminContext,
   },
@@ -421,6 +437,16 @@ function SurveyResponseFlowActive({
   const inviteToken = isAdminEdit || isPreview ? null : (inviteTokenProp ?? null);
   const testToken = isAdminEdit || isPreview ? null : (testTokenProp ?? null);
   const [inviteIsInvalid, setInviteIsInvalid] = useState(false);
+  // 이어 넘길 값(패널 회원 ID) — 설정은 라이브 값(control)이라 재발행 없이 반영된다.
+  // 관리자 수정·미리보기는 응답자가 들어온 링크가 없다.
+  const passParamsKey = normalizePassParamNames(control?.endRedirects?.passParams).join(',');
+  const entryParams = useMemo(
+    () =>
+      isAdminEdit || isPreview || passParamsKey === ''
+        ? {}
+        : pickEntryParams(passParamsKey.split(','), new URLSearchParams(entryQuery ?? '')),
+    [isAdminEdit, isPreview, passParamsKey, entryQuery],
+  );
 
   // 응답 스토어 — 액션만 셀렉트 (전체 구독 → 불필요 리렌더 방지)
   const { setCurrentResponseId, setPendingResponse, resetResponseState } = useSurveyResponseStore(
@@ -1070,12 +1096,20 @@ function SurveyResponseFlowActive({
   const isQuestionAnswered = useCallback(
     (question: Question) => {
       const response = responses[question.id];
+      // 조건 평가 재료는 렌더러(useBranchEvalCtx)·evalCtx 와 같게 — 인용값을 명단 attrs 에 얹는다.
       const visibilityCtx = {
         allResponses: responses,
         allQuestions: questions,
         lookups: loadedSurvey?.lookups ?? [],
-        contactAttrs,
+        contactAttrs: { ...contactAttrs, ...answerQuotes },
       };
+      // 보기를 표로 그리는 문항의 보이는 칸 — 숨은 칸(행·열 조건, 고르지 않은 동적 행)의 필수 그룹은
+      // 빼고, 숨은 칸을 가리키는 선택은 답으로 치지 않는다.
+      const choiceVisibleCellIds = resolveChoiceTableVisibleCellIds(
+        question,
+        response,
+        visibilityCtx,
+      );
       const visibleCellIds =
         question.type === 'table'
           ? new Set(
@@ -1087,12 +1121,9 @@ function SurveyResponseFlowActive({
                 visibilityCtx,
               ).map((cell) => cell.id),
             )
-          : undefined;
+          : choiceVisibleCellIds;
       return (
-        // 보기 그룹 표는 숨은 행·열의 필수 그룹을 빼고 판정한다 — 채울 수 없는 그룹이 「다음」을 막지 않게.
-        isQuestionAnsweredPure(question, response, {
-          visibleCellIds: resolveChoiceGroupVisibleCellIds(question, response, visibilityCtx),
-        }) &&
+        isQuestionAnsweredPure(question, response, { visibleCellIds: choiceVisibleCellIds }) &&
         // 텍스트형 쿼터 차원 — 대상 칸이 비면 쿼터 확인이 발동하지 않으므로 미답변으로 막는다.
         isQuotaTargetFilled(loadedSurvey?.quotaGate, question.id, response) &&
         !collectRequiredOptionTextIssues(
@@ -1108,6 +1139,7 @@ function SurveyResponseFlowActive({
       effectiveOptionTextsByQuestion,
       questions,
       contactAttrs,
+      answerQuotes,
       loadedSurvey?.lookups,
       loadedSurvey?.quotaGate,
     ],
@@ -1372,6 +1404,7 @@ function SurveyResponseFlowActive({
       adminContext,
       inviteToken,
       testToken,
+      entryParams,
       isTestSession,
       testIdentity,
       hasTestAttemptOwnership,
@@ -1804,9 +1837,32 @@ function SurveyResponseFlowActive({
     return () => window.removeEventListener('popstate', handlePopState);
   }, [loadedSurvey, currentStepIndex, isCompleted]);
 
-  // 페이지 이탈 시 경고
+  // 종료 후 이동 (패널 연동, CONTEXT.md 「종료 후 이동 주소」). 완료·자격미달은 완료 화면,
+  // 쿼터 마감은 입장·진행 중·제출 어느 시점이든 quota_closed 차단 화면에서 정해진다.
+  // 관리자 수정은 응답자가 아니라 보내지 않는다. 테스트·미리보기는 패널 집계에 잡히지 않게
+  // 보내지 않고 화면에 주소만 보인다.
+  const endOutcome: EndRedirectOutcome | null = isCompleted
+    ? completionOutcome
+    : duplicateStatus.kind === 'blocked' && duplicateStatus.reason === 'quota_closed'
+      ? 'quota_closed'
+      : null;
+  const endRedirectUrl =
+    endOutcome && !isAdminEdit
+      ? resolveEndRedirectUrl(control?.endRedirects, endOutcome, entryParams)
+      : null;
+  const redirectsNow = endRedirectUrl !== null && !isPreview && !isTestSession;
+  // 테스트·미리보기만 완료 화면 아래에 갈 주소를 보인다. 실응답은 아래에서 이동 중 화면으로 바꾼다.
+  const endRedirectFooter =
+    endRedirectUrl && !redirectsNow ? <EndRedirectNotice url={endRedirectUrl} /> : null;
   useEffect(() => {
-    if (isPreview || !hasResponses || isCompleted) return;
+    // replace — 뒤로 가기로 우리 종료 화면에 돌아와 같은 주소로 다시 튕기지 않게 한다
+    if (redirectsNow && endRedirectUrl) window.location.replace(endRedirectUrl);
+  }, [redirectsNow, endRedirectUrl]);
+
+  // 페이지 이탈 시 경고 — 종료 후 이동 중이면 걸지 않는다(진행 중 쿼터 마감은 답이 남아 있어
+  // 경고가 이동을 막는다)
+  useEffect(() => {
+    if (isPreview || !hasResponses || isCompleted || redirectsNow) return;
     const handler = (e: BeforeUnloadEvent) => {
       e.preventDefault();
       // Chrome/Edge/Firefox 는 returnValue 를 요구
@@ -1814,7 +1870,13 @@ function SurveyResponseFlowActive({
     };
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
-  }, [isPreview, hasResponses, isCompleted]);
+  }, [isPreview, hasResponses, isCompleted, redirectsNow]);
+
+  // 종료 후 이동 — 완료·쿼터 마감 화면을 그리지 않고 곧장 이동 중 화면. 완료 카드가 패널 종료
+  // 페이지가 열리기 전 잠깐 비치면 응답자가 거기서 창을 닫는다(이동은 위 effect 가 건다).
+  if (redirectsNow && endRedirectUrl) {
+    return <EndRedirectingScreen url={endRedirectUrl} />;
+  }
 
   // 중복 검사 진행 중
   if (duplicateStatus.kind === 'checking') {
@@ -1842,6 +1904,7 @@ function SurveyResponseFlowActive({
               ? (refetchedPausedMessage ?? control?.pausedMessage ?? DEFAULT_PAUSED_MESSAGE)
               : null
         }
+        footer={endRedirectFooter}
       />
     );
   }
@@ -1859,6 +1922,7 @@ function SurveyResponseFlowActive({
         title={isPreview ? '설문 확인 완료' : screen.title}
         thankYouMessage={isPreview ? '입력 내용은 저장되지 않았습니다.' : screen.message}
         showCompletedTime={!isPreview}
+        footer={endRedirectFooter}
       />
     );
   }

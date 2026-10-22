@@ -18,6 +18,7 @@ import {
 import type { CompleteQuestionWrite } from '@/db/schema/question-persisted-fields';
 import { extractR2KeysFromJsonbValue } from '@/server/storage-lifecycle/key-extract';
 import { collectSaveDiffAndRevival } from '@/server/storage-lifecycle/save-diff-collector';
+import { normalizeEndRedirects } from '@/lib/survey/end-redirect';
 import { retentionDateToTimestamp } from '@/lib/survey/pii-retention';
 import {
   promoteSurveyImages,
@@ -387,6 +388,7 @@ export async function saveSurveyDiff(
           forceWideLayout: metadata.settings.forceWideLayout ?? false,
           priorWaveLabel: normalizePriorWaveLabel(metadata.settings.priorWaveLabel),
           changeConfirmEnabled: metadata.settings.changeConfirmEnabled ?? false,
+          endRedirects: normalizeEndRedirects(metadata.settings.endRedirects),
           responseHeader: promotedResponseHeader ?? null,
           updatedAt: new Date(),
         })
@@ -684,6 +686,7 @@ export async function saveSurveyWithDetails(
         forceWideLayout: surveyData.settings.forceWideLayout ?? false,
         priorWaveLabel: normalizePriorWaveLabel(surveyData.settings.priorWaveLabel),
         changeConfirmEnabled: surveyData.settings.changeConfirmEnabled ?? false,
+        endRedirects: normalizeEndRedirects(surveyData.settings.endRedirects),
         responseHeader: promotedResponseHeader ?? null,
         updatedAt: new Date(),
       };
@@ -734,6 +737,7 @@ export async function saveSurveyWithDetails(
         forceWideLayout: surveyData.settings.forceWideLayout ?? false,
         priorWaveLabel: normalizePriorWaveLabel(surveyData.settings.priorWaveLabel),
         changeConfirmEnabled: surveyData.settings.changeConfirmEnabled ?? false,
+        endRedirects: normalizeEndRedirects(surveyData.settings.endRedirects),
         responseHeader: promotedResponseHeader ?? null,
         lookups: surveyData.lookups ?? [],
       });

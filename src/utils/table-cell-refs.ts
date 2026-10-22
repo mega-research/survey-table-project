@@ -3,7 +3,7 @@
  *
  * 셀 id 를 새로 발번하는 경로(질문 복제, 행 반복 펼치기)는 참조를 함께 옮기지 않으면
  * 사본이 원본의 셀을 계속 가리킨다. 게이팅은 원본 컨트롤러를 보고 열리고 닫히며,
- * 검증 수식은 남의 칸 값으로 판정한다.
+ * 검증 수식은 남의 칸 값으로 판정하고, 목록에서 찾기는 원본 표의 칸을 채우려 든다.
  *
  * **대응표에 없는 id 는 건드리지 않는다.** 복사 범위 밖을 가리키는 참조는 모든 사본이
  * 같은 바깥 셀에 매이는 것이 옳고, 다른 질문 참조(`questionId` 명시)도 그대로 둔다.
@@ -37,7 +37,7 @@ export function remapCalcExprCellIds(
   }
 }
 
-/** 셀 하나의 게이팅·수식 참조를 대응표로 옮긴다 (바뀔 것이 없으면 원본 참조 반환). */
+/** 셀 하나의 게이팅·수식·목록에서 찾기 참조를 대응표로 옮긴다 (바뀔 것이 없으면 원본 참조 반환). */
 export function remapCellRefs(
   cell: TableCell,
   idMap: ReadonlyMap<string, string>,
@@ -63,6 +63,17 @@ export function remapCellRefs(
     if (target !== cell.calcValidation.target) {
       next = { ...next, calcValidation: { ...cell.calcValidation, target } };
     }
+  }
+
+  if (cell.lookupSearch?.fills) {
+    let changed = false;
+    const fills = cell.lookupSearch.fills.map((fill) => {
+      const mapped = idMap.get(fill.cellId);
+      if (!mapped) return fill;
+      changed = true;
+      return { ...fill, cellId: mapped };
+    });
+    if (changed) next = { ...next, lookupSearch: { ...cell.lookupSearch, fills } };
   }
 
   return next;

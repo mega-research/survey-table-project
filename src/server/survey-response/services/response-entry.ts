@@ -8,6 +8,7 @@ import { db } from '@/db';
 import { NewSurveyResponse, surveyResponses } from '@/db/schema';
 import { encryptAnswerForQuestion } from '@/lib/crypto/response-pii';
 import { parseBrowser, parsePlatform } from '@/lib/operations/parse-ua';
+import { normalizePassParamNames, pickEntryParams } from '@/lib/survey/end-redirect';
 import { isValidTestToken } from '@/server/read-models/survey-control';
 import type { PageVisit } from '@/shared/contracts/survey-response';
 
@@ -259,6 +260,7 @@ async function admitAndCreateResponseInner(
     honeypot,
     testToken,
     attemptId,
+    entryParams,
   } = input;
 
   if (inviteToken != null && testToken != null) {
@@ -388,6 +390,13 @@ async function admitAndCreateResponseInner(
     enteredAt: new Date().toISOString(),
   };
 
+  // 이어 넘길 값(패널 회원 ID) — 클라이언트가 고른 것을 믿지 않고 설문 설정으로 다시 고른다.
+  // 새로 만드는 행에만 싣는다. 물려받는 행(같은 세션 재진입·컨택 재사용)은 처음 만들 때 이미 남았다.
+  const storedEntryParams = pickEntryParams(
+    normalizePassParamNames(survey.endRedirects?.passParams),
+    entryParams,
+  );
+
   const newResponse: NewSurveyResponse = {
     surveyId,
     sessionId,
@@ -407,6 +416,9 @@ async function admitAndCreateResponseInner(
     pageVisits: [firstVisit],
     contactTargetId,
     isTest,
+    ...(Object.keys(storedEntryParams).length > 0
+      ? { metadata: { entryParams: storedEntryParams } }
+      : {}),
   };
 
   const result =

@@ -229,6 +229,20 @@ describe('loadRawExportRows — 토글 꺼짐', () => {
   });
 });
 
+describe('loadRawExportRows — 이어 넘길 값', () => {
+  it('응답 행 metadata.entryParams 를 행에 싣고, 없는 행은 키가 없다', async () => {
+    useCounts({ responses: 2, nonRespondents: 0 });
+    responseFindManyMock.mockResolvedValue([
+      responseRow({ id: 'r1', metadata: { draftSeq: 2, entryParams: { euid: '12345' } } }),
+      responseRow({ id: 'r2' }),
+    ]);
+    const result = await loadRawExportRows(surveyId, 'real', { includeNonRespondents: false });
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+    expect(result.rows.map((r) => r.entryParams)).toEqual([{ euid: '12345' }, undefined]);
+  });
+});
+
 describe('loadRawExportRows — 토글 켜짐', () => {
   it('count 2회 뒤 미응답 조사 대상을 조회해 시스템ID 순으로 합친다', async () => {
     useCounts({ responses: 4, nonRespondents: 2 });

@@ -236,7 +236,8 @@ function emitChoiceGroupColumns(
         group.cells.forEach((cell, idx) => {
           if (!cell.allowTextInput) return;
           const varNumber =
-            cell.spssNumericCode != null ? String(cell.spssNumericCode) : String(idx + 1);
+            cell.optionCode ??
+            (cell.spssNumericCode != null ? String(cell.spssNumericCode) : String(idx + 1));
           columns.push({
             spssVarName: buildOptionTextVarName(groupVarName, varNumber),
             questionText: q.title,
@@ -255,11 +256,12 @@ function emitChoiceGroupColumns(
           const qCode = questionCode;
         group.cells.forEach((cell, idx) => {
           const code = cell.spssNumericCode ?? idx + 1;
-          // 변수명: default 그룹이면 buildCheckboxItemVarName(질문코드, undefined, i) — 기존 checkbox 하위호환
+          // 변수명: default 그룹이면 buildCheckboxItemVarName(질문코드, 칸 변수번호, i) — 기존 checkbox 하위호환
           //         명시 그룹이면 질문코드_groupKey_그룹내1-based
+          // 칸에 변수번호(optionCode)를 적었으면 순번 대신 쓴다 — 일반 보기와 같은 규칙
           const varName = isDefault
-            ? buildCheckboxItemVarName(qCode, undefined, idx)
-            : `${qCode}_${group.groupKey}_${idx + 1}`;
+            ? buildCheckboxItemVarName(qCode, cell.optionCode, idx)
+            : `${qCode}_${group.groupKey}_${cell.optionCode ?? idx + 1}`;
           // 보기 라벨: choiceLabel > content > '(라벨 없음)'
           const optLabel =
             (cell.choiceLabel ?? '').trim() || (cell.content ?? '').trim() || '(라벨 없음)';
@@ -281,7 +283,7 @@ function emitChoiceGroupColumns(
           if (cell.allowTextInput) {
             const sidecarBase = isDefault ? qCode : `${qCode}_${group.groupKey}`;
             columns.push({
-              spssVarName: buildOptionTextVarName(sidecarBase, String(idx + 1)),
+              spssVarName: buildOptionTextVarName(sidecarBase, cell.optionCode ?? String(idx + 1)),
               questionText: q.title,
               optionLabel: `${optLabel}`,
               questionId: q.id,

@@ -707,6 +707,7 @@ export function CellContentModal({
               showCellAnswerQuote={showCellAnswerQuote}
               answerQuoteEnabled={answerQuoteEnabled}
               prefillSupported={prefillSupported}
+              cellId={cell.id}
             />
           </TabsContent>
 

@@ -1,6 +1,10 @@
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 import type { QuotaGate } from '@/shared/contracts/quota';
-import type { GroupNameDesign, SurveyResponseHeaderConfig } from '@/shared/contracts/survey';
+import type {
+  GroupNameDesign,
+  SurveyEndRedirects,
+  SurveyResponseHeaderConfig,
+} from '@/shared/contracts/survey';
 import type { InputType } from '@/types/input-type';
 import type { MobileTableDisplayMode } from '@/types/mobile-table-display';
 
@@ -217,6 +221,24 @@ export interface NumericComparison {
 // 설문에 복사된 LUT 사본 (snapshot 시점 freeze)
 // LUT 자체는 키/값 구분 없이 columns + rows 만 보유. 어떤 컬럼이 키이고 어떤 컬럼이
 // 비교 값인지는 조건 에디터(RightOperand.lookup)에서 결정한다.
+/**
+ * 표 입력 칸 「목록에서 찾기」 설정 (TableCell.lookupSearch).
+ * fills 의 cellId 는 같은 표의 입력 칸이다 — 셀 id 를 새로 발번하는 경로는 remapCellRefs 가 옮긴다.
+ */
+export interface CellLookupSearch {
+  /** 설문 참조표 id (SurveyLookup.id) */
+  lookupId: string;
+  /** 후보로 보이고 이 칸에 들어갈 열 */
+  labelColumn: string;
+  /** 고르면 함께 채울 칸 — 참조표 열 → 같은 표의 입력 칸 */
+  fills?: CellLookupFill[];
+}
+
+export interface CellLookupFill {
+  column: string;
+  cellId: string;
+}
+
 export interface SurveyLookup {
   id: string; // nanoid
   name: string;
@@ -449,6 +471,11 @@ export interface TableCell {
   spssMeasure?: 'Nominal' | 'Ordinal' | 'Continuous';
   // SPSS 숫자코드 (ranking_opt 셀이 Case 2 옵션 소스로 쓰일 때 사용. 비어있으면 1-based 인덱스 자동)
   spssNumericCode?: number;
+  /**
+   * 보기 칸(choice_opt)의 변수번호 — 일반 보기의 optionCode 와 같은 자리(`D2_1_opt01`, `D2_1_opt04_text`).
+   * 비우면 종전대로 순번이다. 빌더 편집 폼에는 아직 칸이 없다(스크립트로만 적는다).
+   */
+  optionCode?: string;
   content: string;
   /**
    * 셀 본문의 서식본(HTML) — 글자 일부에 색·굵게를 준 경우에만 채운다. `content` 는 여전히
@@ -505,6 +532,13 @@ export interface TableCell {
    * 오른쪽 단위 글자(년·월)가 입력칸 바로 뒤에 붙는다. 모바일 카드는 무시하고 폭 전체를 쓴다.
    */
   inputWidth?: number;
+  /**
+   * 목록에서 찾기 — 응답자가 글자를 치면 설문 참조표(LUT)의 행을 후보로 띄우고, 고르면 이 칸에
+   * 표시 열 값을, 같은 표의 다른 입력 칸에 지정한 열 값을 채운다(기업명 → 법인번호·사업자번호).
+   * 평문 한 줄 입력 칸 전용이고 목록에 없는 값도 직접 적을 수 있다. 판정은
+   * features/question-renderer/utils/lookup-search.
+   */
+  lookupSearch?: CellLookupSearch;
   // input 셀 prefill 템플릿 — {{attrs_key}} 포함 가능
   defaultValueTemplate?: string;
   /**
@@ -1017,6 +1051,9 @@ export interface SurveySettings {
   // 응답자가 고치면 덮어쓴다. true 면 잠긴 표시 + 문항별 확인 + 내보내기 _CHG 변수.
   // 버전 스냅샷에 넣지 않는 라이브 값이라 응답 페이지는 control 로 전달받는다 (0101 마이그레이션).
   changeConfirmEnabled?: boolean;
+  // 종료 후 이동 주소 (패널 연동) — 완료·자격미달·쿼터 마감별 주소. 키가 없으면 종료 화면.
+  // 버전 스냅샷에 넣지 않는 라이브 값이라 응답 페이지는 control 로 전달받는다 (0138 마이그레이션).
+  endRedirects?: SurveyEndRedirects | null;
 }
 
 // 기타 옵션 입력값 처리를 위한 타입

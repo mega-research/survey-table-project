@@ -47,6 +47,11 @@ export interface RawExportResponseRow {
    * 조사 대상이 없는 익명 응답은 키 자체가 없고, 컨택은 있으나 값이 없는 키는 ''.
    */
   contactValues?: Readonly<Record<string, string>>;
+  /**
+   * 이어 넘길 값 — 응답자가 들어온 링크의 패널 회원 ID 등(metadata.entryParams). 이름 → 값.
+   * 남긴 값이 없는 응답·미응답 행은 키가 없다.
+   */
+  entryParams?: Readonly<Record<string, string>>;
 }
 
 /** 미응답 조사 대상 행 — 응답이 아니므로 응답 메타(단말·소요시간 등)를 빈칸으로 그린다. */
@@ -97,6 +102,11 @@ export interface RawExportContext {
    * 들어간다. 비어 있거나 없으면 명단 열이 없는 열 구성이다.
    */
   contactColumns?: readonly RawExportContactColumn[];
+  /**
+   * 이어 넘길 값의 이름(종료 후 이동 주소 설정의 passParams) — 명단 열 다음·개별 URL 앞에
+   * 이름 그대로 한 열씩 붙는다. 비어 있거나 없으면 열이 없다.
+   */
+  entryParamNames?: readonly string[];
   /**
    * 반복 블록별 "실제로 쓰인 최대 벌" — 뒤쪽 미사용 벌의 열을 빼는 판정.
    * 워크북 빌더가 진입부에서 모수 전체를 1회 스캔해 채운다(withUsedRepeatCounts).
@@ -176,8 +186,14 @@ interface RawMetaColumn {
  */
 const CONTACT_COLUMNS_SLOT = 'contact-columns';
 
-/** 메타 열 하나 또는 명단 열 슬롯 — 슬롯 이름은 리터럴 타입이라 오타를 tsc 가 잡는다. */
-type RawMetaLayoutItem = RawMetaColumn | typeof CONTACT_COLUMNS_SLOT;
+/** 이어 넘길 값 열 자리 표식 — 명단 열 슬롯과 같은 방식. */
+const ENTRY_PARAMS_SLOT = 'entry-params';
+
+/** 메타 열 하나 또는 열 슬롯 — 슬롯 이름은 리터럴 타입이라 오타를 tsc 가 잡는다. */
+type RawMetaLayoutItem =
+  | RawMetaColumn
+  | typeof CONTACT_COLUMNS_SLOT
+  | typeof ENTRY_PARAMS_SLOT;
 
 /**
  * Raw Data·분할 시트 왼쪽 메타 열 레이아웃 (헤더·값·생성 조건·명단 열 자리의 단일 출처).
@@ -195,6 +211,7 @@ const RAW_META_LAYOUT: readonly RawMetaLayoutItem[] = [
   },
   { header: '순번', value: (_row, seq) => seq ?? '' },
   CONTACT_COLUMNS_SLOT,
+  ENTRY_PARAMS_SLOT,
   {
     header: '개별 URL',
     value: (row, _seq, ctx) => (row.inviteCode ? buildInviteUrl(row.inviteCode, ctx.appUrl) : ''),
@@ -228,6 +245,12 @@ function activeMetaColumns(ctx: RawExportContext): RawMetaColumn[] {
         value: (row) => row.contactValues?.[col.source] ?? '',
       }));
     }
+    if (item === ENTRY_PARAMS_SLOT) {
+      return (ctx.entryParamNames ?? []).map<RawMetaColumn>((name) => ({
+        header: name,
+        value: (row) => row.entryParams?.[name] ?? '',
+      }));
+    }
     return (item.enabled?.(ctx) ?? true) ? [item] : [];
   });
 }
@@ -257,10 +280,12 @@ export function addResponseListSheet(
 ): void {
   const ws = workbook.addWorksheet('응답 내역');
   const contactColumns = ctx.contactColumns ?? [];
+  const entryParamNames = ctx.entryParamNames ?? [];
   const headers = [
     ...(ctx.hasContacts ? [RESID_DEFAULT_LABEL] : []),
     '순번',
     ...contactColumns.map((c) => c.label),
+    ...entryParamNames,
     '접속 단말',
     '브라우저',
     '상태',
@@ -277,6 +302,7 @@ export function addResponseListSheet(
       ...(ctx.hasContacts ? [row.resid ?? ''] : []),
       seqMap.get(row) ?? '',
       ...contactColumns.map((c) => row.contactValues?.[c.source] ?? ''),
+      ...entryParamNames.map((name) => row.entryParams?.[name] ?? ''),
       nonRespondent ? '' : formatPlatformKo(row.platform as Platform | null),
       nonRespondent ? '' : (row.browser ?? 'Other'),
       formatExportStatusLabel(row.status),

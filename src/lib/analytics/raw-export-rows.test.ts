@@ -13,6 +13,13 @@ import type { RawExportResponseRow } from '@/lib/analytics/raw-workbook';
 import { NOT_RESPONDED_STATUS } from '@/lib/operations/profiles-format';
 import type { Question } from '@/types/survey';
 
+import {
+  QUOTE_CONDITION_QUESTIONS,
+  QUOTE_CONTACT_ATTRS,
+  quoteFromOptionResponses,
+  quoteFromOtherTextResponses,
+} from '../../../tests/helpers/answer-quote-condition-survey';
+
 // 조사 대상 4명(resid 1~4) 중 2·4 만 응답했고 1·3 은 미응답. 익명 응답 2건은 시스템ID 가 없다.
 const t1: NonRespondentTarget = { id: 't1', resid: 1, inviteCode: 'c1' };
 const t3: NonRespondentTarget = { id: 't3', resid: 3, inviteCode: 'c3' };
@@ -249,6 +256,111 @@ describe('stripHiddenFromExportRows', () => {
 
     expect(input).toEqual([row]);
     expect(row.questionResponses).toEqual({ 'q-switch': 'no', 'q-dep': '값' });
+  });
+});
+
+describe('stripHiddenFromExportRows — 경로 밖 문항', () => {
+  // 1페이지 q-route('skip' → q-last 로 goto) / 2페이지 q-mid / 3페이지 q-last
+  function routeFixture(): Question[] {
+    return [
+      {
+        id: 'q-route',
+        type: 'radio',
+        title: '경로',
+        required: false,
+        order: 0,
+        options: [
+          {
+            id: 'o-skip',
+            label: '건너뛰기',
+            value: 'skip',
+            branchRule: { id: 'b1', value: '', action: 'goto', targetQuestionId: 'q-last' },
+          },
+          { id: 'o-stay', label: '계속', value: 'stay' },
+        ],
+      },
+      { id: 'q-mid', type: 'text', title: '중간', required: false, order: 1, pageBreakBefore: true },
+      { id: 'q-last', type: 'text', title: '끝', required: false, order: 2, pageBreakBefore: true },
+    ];
+  }
+
+  it('건너뛴 페이지의 답을 내보내는 값에서 뺀다', () => {
+    const row = response({
+      id: 'r-skip',
+      status: 'drop',
+      questionResponses: { 'q-route': 'skip', 'q-mid': '전에 적은 답', 'q-last': '답' },
+    });
+
+    const [out] = stripHiddenFromExportRows([row], new Map([['r-skip', { questions: routeFixture() }]]));
+
+    expect(out?.questionResponses).toEqual({ 'q-route': 'skip', 'q-last': '답' });
+    expect(row.questionResponses).toHaveProperty('q-mid');
+  });
+
+  it('진행 중 행이 아직 가지 않은 앞쪽 경로 페이지의 답은 남긴다', () => {
+    const row = response({
+      id: 'r-ongoing',
+      status: 'in_progress',
+      currentStepId: 'page:q-route',
+      questionResponses: { 'q-route': 'stay', 'q-last': '미리 적은 답' },
+    });
+
+    const [out] = stripHiddenFromExportRows(
+      [row],
+      new Map([['r-ongoing', { questions: routeFixture() }]]),
+    );
+
+    expect(out).toBe(row);
+  });
+
+  it('문항 섞기 설문은 건너뛰지 않는다', () => {
+    const row = response({
+      id: 'r-shuffle',
+      status: 'drop',
+      questionResponses: { 'q-route': 'skip', 'q-mid': '답', 'q-last': '답' },
+    });
+
+    const [out] = stripHiddenFromExportRows(
+      [row],
+      new Map([['r-shuffle', { questions: routeFixture(), settings: { shuffleQuestions: true } }]]),
+    );
+
+    expect(out).toBe(row);
+  });
+
+  it('응답자가 마지막으로 선 페이지가 계산한 경로 밖이면 건너뛴다', () => {
+    const row = response({
+      id: 'r-off',
+      status: 'drop',
+      currentStepId: 'page:q-mid',
+      questionResponses: { 'q-route': 'skip', 'q-mid': '답' },
+    });
+
+    const [out] = stripHiddenFromExportRows([row], new Map([['r-off', { questions: routeFixture() }]]));
+
+    expect(out).toBe(row);
+  });
+});
+
+describe('stripHiddenFromExportRows — 응답 인용값을 읽는 조건', () => {
+  // 응답 화면은 명단 값 위에 응답 인용값을 얹어 조건을 푼다 — 명단 `지역=서울`, 인용값 `부산`.
+  it.each([
+    ['보기 문구', quoteFromOptionResponses],
+    ['기타 상세 기재', quoteFromOtherTextResponses],
+  ])('인용값(%s)으로 보이는 열·행·문항의 답을 내보낸다', (_label, payload) => {
+    const row = response({ id: 'r-quote', status: 'in_progress', questionResponses: payload() });
+
+    const [out] = stripHiddenFromExportRows(
+      [row],
+      new Map([
+        [
+          'r-quote',
+          { questions: QUOTE_CONDITION_QUESTIONS, contactAttrs: QUOTE_CONTACT_ATTRS },
+        ],
+      ]),
+    );
+
+    expect(out).toBe(row);
   });
 });
 

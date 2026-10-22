@@ -34,6 +34,7 @@ import {
   stripHiddenFromExportRows,
 } from '@/lib/analytics/raw-export-rows';
 import type { RawExportContext, RawExportResponseRow } from '@/lib/analytics/raw-workbook';
+import { readEntryParams } from '@/lib/survey/end-redirect';
 
 // ============================================================
 // Raw 내보내기 로더 — raw / raw-split 라우트와 split-preview 가 공유
@@ -47,6 +48,8 @@ export interface RawExportContextOptions {
    * 않고 복호화도 하지 않는다 (기존 쿼리 그대로).
    */
   contactColumns?: readonly RawExportContactColumn[];
+  /** 이어 넘길 값 열 — 종료 후 이동 주소 설정의 passParams. 없으면 열이 없다. */
+  entryParamNames?: readonly string[];
 }
 
 export interface RawExportLoadOptions extends RawExportContextOptions {
@@ -277,7 +280,7 @@ async function loadStripContexts(
 
   for (const r of candidates) {
     const snap = snapshotById.get(r.versionId as string) as
-      | { questions?: unknown; groups?: unknown; lookups?: unknown }
+      | { questions?: unknown; groups?: unknown; lookups?: unknown; settings?: unknown }
       | null
       | undefined;
     if (!snap || !Array.isArray(snap.questions)) continue;
@@ -291,6 +294,11 @@ async function loadStripContexts(
         ? (snap.lookups as ExportStripContext['lookups'])
         : undefined,
       contactAttrs: attrs,
+      // 문항 섞기 여부 — 켜진 버전은 경로 밖 strip 을 건너뛴다.
+      settings:
+        snap.settings && typeof snap.settings === 'object'
+          ? (snap.settings as ExportStripContext['settings'])
+          : undefined,
     });
   }
   return out;
@@ -398,6 +406,8 @@ export async function loadRawExportRows(
       completedAt: r.completedAt,
       totalSeconds: r.totalSeconds,
     };
+    const entryParams = readEntryParams(r.metadata);
+    if (entryParams) row.entryParams = entryParams;
     return attachContactValues(row, c ? contactValues?.get(c.id) : undefined);
   });
 
@@ -482,6 +492,7 @@ export async function buildRawExportContext(
     questionMeta: buildQuestionMetaMap(questions),
     changeConfirmQuestionIds,
     ...(options.contactColumns ? { contactColumns: options.contactColumns } : {}),
+    ...(options.entryParamNames?.length ? { entryParamNames: options.entryParamNames } : {}),
   };
 }
 

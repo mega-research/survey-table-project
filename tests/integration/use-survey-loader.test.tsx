@@ -85,6 +85,7 @@ const noneControl: SurveyControl = {
   testSessionKind: null,
   priorWaveLabel: null,
   changeConfirmEnabled: false,
+  endRedirects: null,
 };
 
 function responseResult(control: SurveyControl = noneControl): NonNullable<SurveyForResponseResult> {

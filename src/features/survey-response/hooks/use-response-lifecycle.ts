@@ -91,6 +91,11 @@ interface UseResponseLifecycleArgs {
   inviteToken: string | null;
   /** ?test=<token>. isTestSession 일 때만 create/complete 게이트로 전달해 isTest 로 기록시킨다. */
   testToken: string | null;
+  /**
+   * 이어 넘길 값 — 들어온 링크의 쿼리 중 설정된 이름의 값(패널 회원 ID). 응답 행을 만드는
+   * create 두 경로에 실어 서버가 metadata.entryParams 로 남기게 한다. 없으면 빈 객체.
+   */
+  entryParams?: Readonly<Record<string, string>>;
   /** control.testSession==='valid'. 유효 테스트 세션이면 중단 게이트를 우회한다. */
   isTestSession: boolean;
   /** 대상자 테스트에서만 존재하는 현재 화면의 안정적인 attempt/session 식별자. */
@@ -210,6 +215,8 @@ interface UseResponseLifecycleResult {
  * - isQuestionRequired(= question.required)는 원본에서 비메모 인라인 함수라 deps 에 없으므로
  *   여기서도 module-level 동등 함수로 두고 deps 에 넣지 않는다 (참조 안정성/의미론 동일).
  */
+const NO_ENTRY_PARAMS: Readonly<Record<string, string>> = {};
+
 export function useResponseLifecycle({
   isAdminEdit,
   isPreview = false,
@@ -218,6 +225,7 @@ export function useResponseLifecycle({
   adminContext,
   inviteToken,
   testToken,
+  entryParams = NO_ENTRY_PARAMS,
   isTestSession,
   testIdentity,
   hasTestAttemptOwnership,
@@ -297,6 +305,11 @@ export function useResponseLifecycle({
 
   // 저장 경계(draft flush / complete / beacon / admin-edit)에서 calc 셀 값을 페이로드에 주입.
   // 4지점이 각자 ctx 를 조립하면 한 곳만 어긋나는 버그가 생기므로 클로저 하나로 공유한다.
+  //
+  // 계산값은 표시 조건상 보이는 문항에만 새로 채운다 — 숨은 문항의 표에 계산값이 들어가 Raw 에서
+  // 답한 것처럼 보이던 것을 막는다. 분기 이동으로 건너뛴 문항은 여기서 가르지 않는다(초안은 부분
+  // 패치라 경로를 확정할 수 없다) — 완료 제출의 응답 확정이 경로 밖 답과 함께 지운다. 수식 평가는
+  // 숨은 문항 값까지 그대로 본다.
   const injectCalc = useCallback(
     (answers: Record<string, unknown>) => {
       const ctx: FormulaEvalCtx = {
@@ -305,9 +318,11 @@ export function useResponseLifecycle({
         lookups: loadedSurvey?.lookups ?? [],
         contactAttrs,
       };
-      return withCalcValues(answers, ctx);
+      return withCalcValues(answers, ctx, {
+        reachedQuestionIds: new Set(visibleQuestions.map((q) => q.id)),
+      });
     },
-    [questions, responses, loadedSurvey?.lookups, contactAttrs],
+    [questions, responses, loadedSurvey?.lookups, contactAttrs, visibleQuestions],
   );
   // beacon 은 visibilitychange/pagehide 리스너 안에서 이탈 시점에 호출된다. 리스너 재등록을
   // (isAdminEdit 등) 몇 개 값에만 묶어두려는 기존 설계를 유지하려면 questions/responses/
@@ -567,6 +582,7 @@ export function useResponseLifecycle({
           ...(inviteToken != null ? { inviteToken } : {}),
           ...(isTestSession && testToken != null ? { testToken } : {}),
           ...(testIdentity?.attemptId ? { attemptId: testIdentity.attemptId } : {}),
+          ...(Object.keys(entryParams).length > 0 ? { entryParams } : {}),
           clientSignals: signalsRef.current,
           ...(honeypotRef.current?.value ? { honeypot: honeypotRef.current.value } : {}),
         });
@@ -663,6 +679,7 @@ export function useResponseLifecycle({
       setCurrentResponseId,
       inviteToken,
       testToken,
+      entryParams,
       isTestSession,
       testIdentity,
       hasTestAttemptOwnership,
@@ -864,6 +881,7 @@ export function useResponseLifecycle({
             ...(inviteToken != null ? { inviteToken } : {}),
             ...(isTestSession && testToken != null ? { testToken } : {}),
             ...(testIdentity?.attemptId ? { attemptId: testIdentity.attemptId } : {}),
+            ...(Object.keys(entryParams).length > 0 ? { entryParams } : {}),
             clientSignals: signalsRef.current,
             ...(honeypotRef.current?.value ? { honeypot: honeypotRef.current.value } : {}),
           });
@@ -1081,6 +1099,7 @@ export function useResponseLifecycle({
     onVersionRebase,
     visibleQuestions,
     testToken,
+    entryParams,
     isTestSession,
     testIdentity,
     hasTestAttemptOwnership,

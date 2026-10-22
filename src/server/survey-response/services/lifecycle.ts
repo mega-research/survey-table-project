@@ -344,21 +344,42 @@ export async function resumeOrCreateResponse(
           // 두 지점이 같은 판정 함수(isResumableTestStatus)를 쓴다 — 갈라지면 진입에서 복원한 답을
           // 첫 입력이 지우는 조용한 유실이 된다.
           //
-          // 버전 불일치는 이탈 여부와 무관한 별개의 안전장치다 — 재배포로 구조가 바뀐 구버전 답을
-          // 주입하면 유령 답과 필수 검증 우회가 생기므로 status 와 무관하게 복원하지 않는다.
+          if (!isResumableTestStatus(existingByContact.status)) return null;
+
+          // 버전 불일치(재발행)는 실응답과 같이 응답 버전 이관으로 현재 버전에 얹어 이어 간다
+          // (2026-10-20 — 전에는 테스터가 재발행마다 처음부터 다시 했다). 구조 생존 판정이
+          // 유령 답을 걸러 낸다. 이관 불능(스냅샷 훼손·경합)이면 복원하지 않고, 행이 구버전에
+          // 남아 첫 입력의 acquireTestTargetResponse 가 제자리 초기화한다.
           const versionMatched = existingByContact.versionId === flags?.currentVersionId;
-          if (!versionMatched || !isResumableTestStatus(existingByContact.status)) return null;
+          const reviveFromDrop = existingByContact.status === 'drop';
+          const migration = versionMatched
+            ? null
+            : await migrateResumedRowIfStale({
+                responseId: existingByContact.id,
+                rowVersionId: existingByContact.versionId,
+                currentVersionId: flags?.currentVersionId,
+                storedResponses: existingByContact.questionResponses ?? {},
+                reviveFromDrop,
+                now: new Date(),
+              });
+          if (!versionMatched && !migration) return null;
 
           const restored = {
             id: existingByContact.id,
             status: 'in_progress' as const,
-            questionResponses: decryptQuestionResponses(existingByContact.questionResponses ?? {}, {
-              responseId: existingByContact.id,
-            }),
+            questionResponses: decryptQuestionResponses(
+              migration?.survivingResponses ?? existingByContact.questionResponses ?? {},
+              { responseId: existingByContact.id },
+            ),
             currentStepId: existingByContact.currentStepId,
+            ...(migration && migration.affectedQuestionIds.length > 0
+              ? { affectedQuestionIds: migration.affectedQuestionIds }
+              : {}),
             ...(draftSeq !== undefined ? { draftSeq } : {}),
           };
-          if (existingByContact.status === 'drop') {
+          // 이관 UPDATE 가 되살리기(status → in_progress)까지 함께 했다
+          if (migration) return { ...restored, resumed: reviveFromDrop };
+          if (reviveFromDrop) {
             // 중도 이탈 되살리기 — 아래 비-테스트 컨택 경로와 동일한 UPDATE.
             // 중단 모드 게이트는 두지 않는다: 이 분기의 행은 isTest 라 비-테스트 경로에서도
             // 게이트 예외 대상이며, 운영자 QA 를 막지 않는 것이 기존 동작이다.

@@ -6,7 +6,7 @@ import { isStagedRowsIntact } from '@/features/question-renderer/utils/staged-ro
 import { DynamicTableEditor } from '@/features/survey-builder/table-editor/dynamic-table-editor';
 import { disableRowRepeat, expandRepeatRows, isRowRepeatIntact } from '@/lib/question/row-repeat';
 import { getGroupTypeOfCell } from '@/utils/choice-group-helpers';
-import type { Question, StagedRowsConfig } from '@/types/survey';
+import type { DynamicRowGroupConfig, Question, StagedRowsConfig } from '@/types/survey';
 
 interface QuestionTableFieldsProps {
   question: Question;
@@ -46,7 +46,7 @@ export function QuestionTableFields({
 
       <div className="rounded bg-blue-50 p-2 text-xs text-blue-600">
         {isRankingTableSource
-          ? '💡 이 랭킹 질문 안에 표시될 설명 테이블입니다. 옵션으로 쓸 셀은 편집 모달의 "순위 옵션" 탭으로 저장하세요.'
+          ? '💡 이 랭킹 질문 안에 표시될 설명 테이블입니다. 옵션으로 쓸 셀은 편집 모달의 "순위 옵션" 탭으로 저장하세요. 순위형 표는 행·열 조건부 표시와 동적 행 그룹을 쓸 수 없습니다 — 응답 화면이 이 설정을 읽지 않습니다.'
           : '💡 테이블 질문은 매트리스(고정 행) 패턴으로 자동 설정됩니다. 엑셀 내보내기 시 각 셀의 코드가 열 이름에 반영됩니다.'}
       </div>
 
@@ -122,17 +122,24 @@ export function QuestionTableFields({
               },
             }
           : {})}
-        onDynamicRowConfigsChange={(configs) => {
-          setFormData((prev) => {
-            const next: Partial<Question> = { ...prev };
-            if (configs !== undefined) {
-              next.dynamicRowConfigs = configs;
-            } else {
-              delete next.dynamicRowConfigs;
-            }
-            return next;
-          });
-        }}
+        // 순위형 내장 표는 응답 화면(순위형 렌더러)이 행·열 표시조건과 동적 행을 읽지 않는다 —
+        // 설정 입구를 내지 않는다. 이미 저장된 설정은 건드리지 않는다.
+        allowDisplayConditions={!isRankingTableSource}
+        {...(isRankingTableSource
+          ? {}
+          : {
+              onDynamicRowConfigsChange: (configs: DynamicRowGroupConfig[] | undefined) => {
+                setFormData((prev) => {
+                  const next: Partial<Question> = { ...prev };
+                  if (configs !== undefined) {
+                    next.dynamicRowConfigs = configs;
+                  } else {
+                    delete next.dynamicRowConfigs;
+                  }
+                  return next;
+                });
+              },
+            })}
       />
 
       {/* 미리보기 */}

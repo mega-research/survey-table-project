@@ -1,5 +1,7 @@
 'use client';
 
+import type { ReactNode } from 'react';
+
 import { AlertCircle, ArrowLeft, CheckCircle, Loader2, Lock, Monitor } from 'lucide-react';
 import Link from 'next/link';
 
@@ -169,10 +171,13 @@ export function SurveyCompletedScreen({
   thankYouMessage,
   title = '응답 완료!',
   showCompletedTime = true,
+  footer,
 }: {
   thankYouMessage: string | null | undefined;
   title?: string;
   showCompletedTime?: boolean;
+  /** 카드 맨 아래 — 종료 후 이동 안내(EndRedirectNotice) 자리. */
+  footer?: ReactNode;
 }) {
   return (
     <div className="flex min-h-dvh items-center justify-center bg-gray-50">
@@ -188,8 +193,43 @@ export function SurveyCompletedScreen({
               <p>응답 완료 시간: {formatLocalDateTime(new Date())}</p>
             </div>
           )}
+          {footer}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+/**
+ * 종료 후 이동 중 화면 (패널 연동). 실응답이 종료 주소로 가는 동안 완료 카드 대신 이것만 그린다 —
+ * 패널 종료 페이지가 열리기 전 잠깐 「응답 완료」가 비치면 응답자가 거기서 창을 닫는다.
+ * 이동이 막힌 경우를 위해 손으로 누를 링크를 남긴다.
+ */
+export function EndRedirectingScreen({ url }: { url: string }) {
+  return (
+    <div className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-gray-50 px-4 text-center">
+      <Loader2 className="h-8 w-8 animate-spin text-blue-500" aria-hidden />
+      <p className="text-gray-700">잠시만 기다려 주세요.</p>
+      <p className="text-sm text-gray-500">
+        이동하지 않으면{' '}
+        <a href={url} className="font-medium text-blue-600 underline">
+          여기를 눌러 주세요
+        </a>
+        .
+      </p>
+    </div>
+  );
+}
+
+/**
+ * 종료 후 이동 안내 (패널 연동) — 테스트·미리보기는 패널 집계에 잡히지 않게 이동하지 않고
+ * 완료 화면 아래에 어디로 갈지만 보인다. 실응답은 EndRedirectingScreen 이 대신 선다.
+ */
+export function EndRedirectNotice({ url }: { url: string }) {
+  return (
+    <div className="mt-6 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+      <p>테스트 응답이라 이동하지 않습니다. 실제 응답은 아래 주소로 이동합니다.</p>
+      <p className="mt-1 font-medium break-all text-gray-900">{url}</p>
     </div>
   );
 }

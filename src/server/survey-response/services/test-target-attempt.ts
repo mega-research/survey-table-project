@@ -199,7 +199,10 @@ export async function acquireTestTargetResponse(
   if (!response) throw new Error('테스트 응답을 시작할 수 없습니다');
 
   // 버전 불일치는 이탈 여부와 무관한 별개의 안전장치 — 재배포로 구조가 바뀐 구버전 답을
-  // 주입하면 유령 답과 필수 검증 우회가 생기므로 status 와 무관하게 항상 초기화한다.
+  // 주입하면 유령 답과 필수 검증 우회가 생기므로 status 와 무관하게 초기화한다.
+  // 재발행 뒤 다시 들어온 테스터는 진입(resumeOrCreateResponse)이 먼저 현재 버전으로 이관해
+  // 여기서는 버전이 같다. 여기 걸리는 것은 이관이 안 된 경우(스냅샷 훼손·경합)와 재발행 전에
+  // 열어 둔 화면(priorAttempt — 초기화 대신 다시 열라고 거부한다)뿐이다.
   const reset =
     !isResumableTestStatus(response.status) || response.versionId !== survey.currentVersionId;
   // 중도 이탈 행을 이어받는 경우 — 답은 그대로 두고 status 만 되살린다.

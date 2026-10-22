@@ -18,6 +18,7 @@ import {
   testFlagForScope,
 } from '@/server/data-scope';
 import type { FilterClause } from '@/lib/operations/filter-shared';
+import { readStoredEntryParams } from '@/lib/survey/end-redirect';
 import {
   buildNegativeCodeExists,
   getResultCodeStatuses,
@@ -92,6 +93,8 @@ export async function listResponsesForProfiles(
       completedAt: surveyResponses.completedAt,
       totalSeconds: surveyResponses.totalSeconds,
       ipHash: surveyResponses.ipHash,
+      // 이어 넘길 값(패널 회원 ID 등) — 표의 entry.* 열과 검색 절이 함께 본다.
+      entryParams: sql<unknown>`${surveyResponses.metadata}->'entryParams'`.as('entry_params'),
       isTest: surveyResponses.isTest,
       groupValue: contactTargets.groupValue,
       contactResid: contactTargets.resid,
@@ -167,6 +170,7 @@ export async function listResponsesForProfiles(
         contactResid: sql`${numbered.contactResid}`,
         contactAttrs: sql`${numbered.contactAttrs}`,
         contactTargetId: sql`${numbered.contactTargetId}`,
+        entryParams: sql`${numbered.entryParams}`,
       }),
     );
   }
@@ -219,6 +223,7 @@ export async function listResponsesForProfiles(
       completedAt: numbered.completedAt,
       totalSeconds: numbered.totalSeconds,
       ipHash: numbered.ipHash,
+      entryParams: numbered.entryParams,
       isTest: numbered.isTest,
       groupValue: numbered.groupValue,
       resid: numbered.contactResid,
@@ -250,6 +255,7 @@ export async function listResponsesForProfiles(
     attrs: (r.attrs ?? null) as Record<string, string> | null,
     contactTargetId: r.contactTargetId ?? null,
     ipHash: r.ipHash ?? null,
+    entryParams: readStoredEntryParams(r.entryParams) ?? null,
   }));
 
   return { rows, total, page: clampedPage };

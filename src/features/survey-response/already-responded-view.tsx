@@ -1,5 +1,7 @@
 'use client';
 
+import type { ReactNode } from 'react';
+
 import { AlertCircle, CheckCircle2 } from 'lucide-react';
 
 import { Card, CardContent } from '@/components/ui/card';
@@ -20,6 +22,8 @@ interface Props {
   contactEmail: string | null;
   /** quota_closed 등 설문별 커스텀 문구. 있으면 기본 body 대신 표시(줄바꿈 보존). */
   customBody?: string | null;
+  /** 카드 맨 아래 — 종료 후 이동 안내(EndRedirectNotice) 자리. */
+  footer?: ReactNode;
 }
 
 interface MessageDef {
@@ -84,7 +88,13 @@ const MESSAGES: Record<NoticeReason, MessageDef> = {
   },
 };
 
-export function AlreadyRespondedView({ reason, surveyTitle, contactEmail, customBody }: Props) {
+export function AlreadyRespondedView({
+  reason,
+  surveyTitle,
+  contactEmail,
+  customBody,
+  footer,
+}: Props) {
   const msg = MESSAGES[reason];
   const Icon = msg.tone === 'error' ? AlertCircle : CheckCircle2;
   const iconColor = msg.tone === 'error' ? 'text-red-500' : 'text-blue-500';
@@ -120,6 +130,7 @@ export function AlreadyRespondedView({ reason, surveyTitle, contactEmail, custom
               <p className="mt-1 font-medium break-all text-gray-900">{contactEmail}</p>
             </div>
           )}
+          {footer}
         </CardContent>
       </Card>
     </div>

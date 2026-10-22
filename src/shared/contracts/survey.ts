@@ -58,6 +58,22 @@ export interface SurveyVersionSnapshot {
  * 루트 질문 그룹 이름 배지 디자인 설정 (응답 페이지). 미설정/누락 시 기본 라이트 블루 배지로 폴백.
  * 복합 디자인 설정은 단일 JSONB 로 묶는다(responseHeader 선례).
  */
+/**
+ * 종료 후 이동 주소 (surveys.end_redirects, 0138) — 패널 연동. 응답이 그 결과로 끝나면 우리 종료
+ * 화면 대신 이 주소로 보낸다. 키가 없으면 종전대로 종료 화면. 스냅샷 밖 라이브 값이다.
+ * 정규화(http(s) 만 남김)는 lib/survey/end-redirect 의 normalizeEndRedirects.
+ */
+export interface SurveyEndRedirects {
+  completed?: string;
+  screenedOut?: string;
+  quotaClosed?: string;
+  /**
+   * 이어 넘길 값 — 응답자가 들어온 링크의 이 이름들의 쿼리 값을 종료 주소에 그대로 붙이고
+   * 응답 행 metadata.entryParams 에 기록한다(리멤버 `euid`). 정규화는 normalizePassParamNames.
+   */
+  passParams?: string[];
+}
+
 export interface GroupNameDesign {
   fullWidth?: boolean; // true 면 카드 콘텐츠 영역 전체 너비(w-full), 기본 false = 컨텐츠 크기(w-fit)
   bgColor?: string; // 배경색 hex (미설정 시 bg-blue-50)

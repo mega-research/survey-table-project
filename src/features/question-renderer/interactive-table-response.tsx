@@ -730,13 +730,15 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
       if (
         g.enabled &&
         g.displayCondition &&
-        !shouldDisplayDynamicGroup(g, allResponses, allQuestions)
+        // 행·열 조건과 같은 평가 컨텍스트 — 저장 경계 strip 도 이 컨텍스트로 숨은 동적 그룹의 답을
+        // 지운다. 빠뜨리면 attr/lookup 조건이 화면과 strip 에서 다르게 평가된다.
+        !shouldDisplayDynamicGroup(g, allResponses, allQuestions, branchEvalCtx)
       ) {
         hidden.add(g.groupId);
       }
     }
     return hidden.size > 0 ? hidden : undefined;
-  }, [dynamicRowConfigs, allResponses, allQuestions, ignoreDisplayConditions]);
+  }, [dynamicRowConfigs, allResponses, allQuestions, ignoreDisplayConditions, branchEvalCtx]);
 
   // 동적 행 파이프라인 — 상태 → 가시 행 필터링 → 레이아웃 → 행 완료 맵을 한 seam 뒤로
   const {

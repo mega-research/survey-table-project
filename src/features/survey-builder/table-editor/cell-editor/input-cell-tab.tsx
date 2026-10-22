@@ -25,6 +25,7 @@ import { isPartialNumericInput } from '@/utils/numeric-input';
 import { isPlainTextInput } from '@/features/question-renderer/utils/text-quality';
 
 import type { CellFormActions, CellFormSetters, UseCellFormResult } from './hooks/use-cell-form';
+import { LookupSearchFields } from './lookup-search-fields';
 
 interface InputCellTabProps {
   form: UseCellFormResult['form'];
@@ -44,6 +45,8 @@ interface InputCellTabProps {
    * 내놓지 않는다(이미 적힌 템플릿은 지울 수 있게 칸만 남긴다).
    */
   prefillSupported?: boolean | undefined;
+  /** 편집 중인 칸 id — 목록에서 찾기의 채울 칸 후보에서 자기 자신을 뺀다. */
+  cellId: string;
 }
 
 /**
@@ -61,6 +64,7 @@ export function InputCellTab({
   showCellAnswerQuote,
   answerQuoteEnabled = false,
   prefillSupported = true,
+  cellId,
 }: InputCellTabProps) {
   const {
     inputType,
@@ -76,6 +80,7 @@ export function InputCellTab({
     inputPlaceholder,
     inputDefaultValueTemplate,
     inputPrefillEditable,
+    inputLookupSearch,
     inputMaxLength,
     inputRows,
     inputAutoGrow,
@@ -101,6 +106,7 @@ export function InputCellTab({
     setInputPlaceholder,
     setInputDefaultValueTemplate,
     setInputPrefillEditable,
+    setInputLookupSearch,
     setInputMaxLength,
     setInputRows,
     setInputAutoGrow,
@@ -278,6 +284,17 @@ export function InputCellTab({
           className="w-full"
         />
       </div>
+
+      {/* 테이블 유형 문항만 — 보기·순위 문항의 내장 표는 input 셀을 사이드카 입력칸으로 그린다(prefill 과 같은 이유) */}
+      {(prefillSupported || inputLookupSearch !== null) && (
+        <LookupSearchFields
+          value={inputLookupSearch}
+          onChange={setInputLookupSearch}
+          rows={ownQuestion.tableRowsData ?? []}
+          cellId={cellId}
+          locked={!isPlainTextInput({ type: 'text', inputType })}
+        />
+      )}
 
       {(prefillSupported || inputDefaultValueTemplate.trim().length > 0) && (
         <div className="space-y-2">

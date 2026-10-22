@@ -470,6 +470,7 @@ export async function duplicateSurvey(
         maxResponses: original.maxResponses,
         thankYouMessage: original.thankYouMessage,
         screenedOutMessage: original.screenedOutMessage,
+        endRedirects: original.endRedirects ?? null,
         responseHeader: original.responseHeader ?? null,
         // LUT 사본은 질문(옵션 소스·조건)이 id 로 참조하므로 함께 복사해야 복제본이 깨지지 않는다.
         lookups: original.lookups ?? [],

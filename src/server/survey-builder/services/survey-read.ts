@@ -353,6 +353,8 @@ export async function getSurveyForResponse(
     // 변동 확인 스위치도 같은 이유로 라이브다 — 스위치 하나 바꾸려고 재발행하면 응답 중인
     // 사람의 구조가 rebase 된다.
     changeConfirmEnabled: survey.changeConfirmEnabled,
+    // 종료 후 이동 주소도 라이브다 — 실사 중 주소 교체가 재발행 없이 반영돼야 한다.
+    endRedirects: survey.endRedirects ?? null,
   };
 
   // 배포된 버전이 있으면 스냅샷 기반으로 반환

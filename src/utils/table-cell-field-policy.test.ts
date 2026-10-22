@@ -9,11 +9,11 @@ import {
 } from './table-cell-field-policy';
 
 describe('셀 필드 정책', () => {
-  it('폼이 모르는 키(kept)는 id·병합 숨김·렌더 표식뿐이다', () => {
+  it('폼이 모르는 키(kept)는 id·병합 숨김·렌더 표식·보기 칸 변수번호뿐이다', () => {
     const kept = Object.keys(TABLE_CELL_FIELD_POLICY).filter(
       (k) => !(CELL_FORM_STRIPPED_KEYS as readonly string[]).includes(k),
     );
-    expect(kept.sort()).toEqual(['_gridRowSpanExtra', '_isContinuation', 'id', 'isHidden']);
+    expect(kept.sort()).toEqual(['_gridRowSpanExtra', '_isContinuation', 'id', 'isHidden', 'optionCode']);
   });
 
   it('저장하면 늘 빠지는 키(dropped)는 셀의 textInputPlaceholder 하나다', () => {
@@ -23,7 +23,7 @@ describe('셀 필드 정책', () => {
     expect(dropped).toEqual(['textInputPlaceholder']);
   });
 
-  it('보관함 제거 목록 — 위치·병합·이미지·표 안 관계·설문 전역 이름·렌더 표식', () => {
+  it('보관함 제거 목록 — 위치·병합·이미지·표 안 관계(목록에서 찾기 포함)·설문 전역 이름·렌더 표식·보기 칸 변수번호', () => {
     expect([...CELL_LIBRARY_DROPPED_KEYS].sort()).toEqual(
       [
         'id',
@@ -37,7 +37,9 @@ describe('셀 필드 정책', () => {
         'imageUrl',
         'radioGroupName',
         'distinctGroup',
+        'lookupSearch',
         'rankVarNames',
+        'optionCode',
         'answerQuoteEnabled',
         'answerQuoteName',
         '_isContinuation',

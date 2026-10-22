@@ -8,6 +8,10 @@ import { resolveRankingOptions } from '@/utils/ranking-source';
 import { hasExplicitRequiredChoiceGroup } from './answer-validation';
 import { isChoiceGroupTableQuestion, readTableChoiceGroups } from '@/lib/survey/choice-selection';
 import {
+  dropGroupSelectionsOutsideVisibleCells,
+  dropSelectionsOutsideVisibleCells,
+} from '@/lib/survey/table-cell-visibility';
+import {
   collectVisibleTableCells as collectNumericVisibleTableCells,
   isRequiredCell,
 } from './numeric-validation';
@@ -190,9 +194,14 @@ export function collectRequiredOptionTextIssues(
       isChoiceGroupTableQuestion(question) &&
       (question.required === true || hasExplicitRequiredChoiceGroup(question))
     ) {
+      // 숨은 칸(행·열 조건, 고르지 않은 동적 행)의 선택은 답이 아니다 — 그 상세기재는 요구하지 않는다.
       const groupTargets = collectMissingSelectedOptionTextTargetIds(
         question.id,
-        readTableChoiceGroups(tableResponse),
+        dropGroupSelectionsOutsideVisibleCells(
+          question,
+          readTableChoiceGroups(tableResponse),
+          context?.visibleCellIds,
+        ),
         resolveChoiceOptions(question),
         resolvedOptionTexts,
       );
@@ -205,9 +214,10 @@ export function collectRequiredOptionTextIssues(
     if (question.type === 'ranking') {
       detailTargetIds = collectMissingQuestionRankingTextTargetIds(question, response);
     } else if (question.type === 'radio' || question.type === 'checkbox') {
+      // 보기 소스 표 — 숨은 칸을 가리키는 선택의 상세기재는 화면에 입력칸이 없다. 요구하지 않는다.
       detailTargetIds = collectMissingSelectedOptionTextTargetIds(
         question.id,
-        response,
+        dropSelectionsOutsideVisibleCells(question, response, context?.visibleCellIds),
         resolveChoiceOptions(question),
         resolvedOptionTexts,
       );

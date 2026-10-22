@@ -96,6 +96,7 @@ describe('resolvedSurveyId 가 있으면 식별자 조회 왕복이 없다', () 
         testSessionKind: null,
         priorWaveLabel: null,
         changeConfirmEnabled: false,
+        endRedirects: null,
       },
     });
     attrsLookup.mockResolvedValue({});
@@ -143,6 +144,7 @@ describe('resolvedSurveyId 가 있으면 식별자 조회 왕복이 없다', () 
               testSessionKind: null,
               priorWaveLabel: null,
               changeConfirmEnabled: false,
+              endRedirects: null,
             },
           },
           contactAttrs: { 회사: '메가리서치' },

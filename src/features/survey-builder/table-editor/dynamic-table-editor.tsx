@@ -77,7 +77,16 @@ interface DynamicTableEditorProps {
     // 해제는 명시적 null (키 생략 금지) — use-table-editor 의 계약과 동일.
     tableHeaderGrid: HeaderCell[][] | null;
   }) => void;
+  /**
+   * 동적 행 그룹 핸들러. 주지 않으면 동적 행 그룹 카드를 그리지 않는다 — 응답 화면이 동적 행을
+   * 읽지 않는 표(순위형 내장 표)에서 설정만 받아 두면 저작자는 걸려 있다고 믿는다.
+   */
   onDynamicRowConfigsChange?: (configs: DynamicRowGroupConfig[] | undefined) => void;
+  /**
+   * 행·열 조건부 표시 입구를 낼지(기본 true). 순위형 내장 표는 응답 화면이 조건을 읽지 않아 끈다 —
+   * 이미 저장된 조건은 건드리지 않는다.
+   */
+  allowDisplayConditions?: boolean | undefined;
   /** null 을 주면 반복을 끈다 (뒤쪽 벌이 구조에서 걷힌다) */
   onRowRepeatConfigChange?: (config: RowRepeatConfig | null) => void;
   /** null 을 주면 끈다 (행은 그대로다) */
@@ -730,7 +739,9 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
                 onUnmergeColumnHeader={unmergeColumnHeader}
                 onSetEditingColumnWidth={setEditingColumnWidth}
                 onColumnWidthChange={handleColumnWidthChange}
-                onOpenColumnConditionModal={openColumnConditionModal}
+                onOpenColumnConditionModal={
+                  props.allowDisplayConditions === false ? undefined : openColumnConditionModal
+                }
               />
 
               {/* 데이터 행들 — 행 반복 2벌 이후는 그리지 않는다.
@@ -753,7 +764,9 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
                   onStartDragCopy={startDragCopy}
                   onUpdateRowLabel={updateRowLabel}
                   onUpdateRowCode={updateRowCode}
-                  onOpenRowConditionModal={openRowConditionModal}
+                  onOpenRowConditionModal={
+                    props.allowDisplayConditions === false ? undefined : openRowConditionModal
+                  }
                   dynamicRowConfigs={dynamicRowConfigs}
                   onSetDynamicGroupId={setDynamicGroupId}
                   onSetShowWhenDynamicGroupId={setShowWhenDynamicGroupId}
@@ -824,164 +837,166 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
         />
       )}
 
-      {/* 동적 행 그룹 설정 */}
-      <Card>
-        <CardContent className="space-y-3 p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <ListChecks className="h-4 w-4 text-purple-600" />
-              <span className="text-sm font-medium text-gray-700">동적 행 그룹</span>
-              {dynamicRowConfigs.length > 0 && (
-                <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-600">
-                  {dynamicRowConfigs.length}개 그룹
-                </span>
-              )}
+      {/* 동적 행 그룹 설정 — 호스트가 핸들러를 줄 때만(위 props 주석) */}
+      {onDynamicRowConfigsChange && (
+        <Card>
+          <CardContent className="space-y-3 p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ListChecks className="h-4 w-4 text-purple-600" />
+                <span className="text-sm font-medium text-gray-700">동적 행 그룹</span>
+                {dynamicRowConfigs.length > 0 && (
+                  <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-600">
+                    {dynamicRowConfigs.length}개 그룹
+                  </span>
+                )}
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 gap-1 text-xs"
+                onClick={() => {
+                  const newGroup: DynamicRowGroupConfig = {
+                    groupId: generateId(),
+                    enabled: true,
+                    label: `그룹 ${dynamicRowConfigs.length + 1}`,
+                  };
+                  onDynamicRowConfigsChange?.([...dynamicRowConfigs, newGroup]);
+                }}
+              >
+                <Plus className="h-3 w-3" />
+                그룹 추가
+              </Button>
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 gap-1 text-xs"
-              onClick={() => {
-                const newGroup: DynamicRowGroupConfig = {
-                  groupId: generateId(),
-                  enabled: true,
-                  label: `그룹 ${dynamicRowConfigs.length + 1}`,
-                };
-                onDynamicRowConfigsChange?.([...dynamicRowConfigs, newGroup]);
-              }}
-            >
-              <Plus className="h-3 w-3" />
-              그룹 추가
-            </Button>
-          </div>
 
-          {dynamicRowConfigs.length === 0 && (
-            <p className="text-xs text-gray-400">그룹을 추가하면 행을 동적으로 선택/표시할 수 있습니다.</p>
-          )}
+            {dynamicRowConfigs.length === 0 && (
+              <p className="text-xs text-gray-400">그룹을 추가하면 행을 동적으로 선택/표시할 수 있습니다.</p>
+            )}
 
-          {dynamicRowConfigs.map((group) => {
-            const groupRowCount = currentRows.filter((r) => r.dynamicGroupId === group.groupId).length;
-            return (
-              <div key={group.groupId} className="space-y-2 rounded-md border border-purple-200 bg-purple-50/30 p-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={group.enabled}
-                      onChange={(e) => {
-                        const updated = dynamicRowConfigs.map((g) =>
-                          g.groupId === group.groupId ? { ...g, enabled: e.target.checked } : g,
-                        );
-                        onDynamicRowConfigsChange?.(updated);
-                      }}
-                      className="rounded"
-                    />
-                    <span className="text-xs font-medium text-purple-700">
-                      {group.label || group.groupId}
-                    </span>
-                    <span className="text-xs text-gray-400">{groupRowCount}개 행</span>
-                  </div>
-                  <button
-                    onClick={() => {
-                      // 그룹 삭제 + 고아 행 정리
-                      const updated = dynamicRowConfigs.filter((g) => g.groupId !== group.groupId);
-                      onDynamicRowConfigsChange?.(updated.length > 0 ? updated : undefined);
-                      // 해당 그룹에 배정된 행들의 groupId 정리 (각 액션이 commitRows + notifyChange 로 영속)
-                      currentRowsRef.current.forEach((row) => {
-                        if (row.dynamicGroupId === group.groupId) setDynamicGroupId(row.id, undefined);
-                        if (row.showWhenDynamicGroupId === group.groupId) setShowWhenDynamicGroupId(row.id, undefined);
-                      });
-                    }}
-                    className="text-xs text-red-400 hover:text-red-600"
-                    title="그룹 삭제"
-                  >
-                    삭제
-                  </button>
-                </div>
-                {group.enabled && (
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="space-y-1">
-                      <Label className="text-[10px] text-gray-500">버튼 텍스트</Label>
-                      <Input
-                        value={group.label ?? ''}
-                        onChange={(e) => {
-                          const updated = dynamicRowConfigs.map((g) => {
-                            if (g.groupId !== group.groupId) return g;
-                            const newLabel = e.target.value;
-                            const { label: _l, ...rest } = g;
-                            return newLabel ? { ...rest, label: newLabel } : rest;
-                          });
-                          onDynamicRowConfigsChange?.(updated);
-                        }}
-                        placeholder="항목 선택"
-                        className="h-7 text-xs"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-[10px] text-gray-500">삽입 위치</Label>
-                      <select
-                        value={group.insertAfterRowId ?? ''}
-                        onChange={(e) => {
-                          const updated = dynamicRowConfigs.map((g) => {
-                            if (g.groupId !== group.groupId) return g;
-                            const newId = e.target.value;
-                            const { insertAfterRowId: _iid, ...rest } = g;
-                            return newId ? { ...rest, insertAfterRowId: newId } : rest;
-                          });
-                          onDynamicRowConfigsChange?.(updated);
-                        }}
-                        className="h-7 w-full rounded-md border border-input bg-background px-1 text-xs"
-                      >
-                        <option value="">헤더 바로 아래</option>
-                        {nonDynamicRows.map((row) => (
-                          <option key={row.id} value={row.id}>{row.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-[10px] text-gray-500">정렬</Label>
-                      <select
-                        value={group.buttonAlign ?? 'left'}
+            {dynamicRowConfigs.map((group) => {
+              const groupRowCount = currentRows.filter((r) => r.dynamicGroupId === group.groupId).length;
+              return (
+                <div key={group.groupId} className="space-y-2 rounded-md border border-purple-200 bg-purple-50/30 p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={group.enabled}
                         onChange={(e) => {
                           const updated = dynamicRowConfigs.map((g) =>
-                            g.groupId === group.groupId
-                              ? { ...g, buttonAlign: e.target.value as 'left' | 'center' | 'right' }
-                              : g,
+                            g.groupId === group.groupId ? { ...g, enabled: e.target.checked } : g,
                           );
                           onDynamicRowConfigsChange?.(updated);
                         }}
-                        className="h-7 w-full rounded-md border border-input bg-background px-1 text-xs"
-                      >
-                        <option value="left">좌측</option>
-                        <option value="center">중앙</option>
-                        <option value="right">우측</option>
-                      </select>
+                        className="rounded"
+                      />
+                      <span className="text-xs font-medium text-purple-700">
+                        {group.label || group.groupId}
+                      </span>
+                      <span className="text-xs text-gray-400">{groupRowCount}개 행</span>
                     </div>
-                    {/* 그룹 표시 조건 */}
-                    <div className="col-span-3">
-                      <button
-                        onClick={() => setEditingGroupCondition(group)}
-                        className={`flex items-center gap-1 text-[10px] transition-colors ${
-                          group.displayCondition && group.displayCondition.conditions.length > 0
-                            ? 'text-blue-600 hover:text-blue-800'
-                            : 'text-gray-400 hover:text-gray-600'
-                        }`}
-                      >
-                        <Eye className="h-3 w-3" />
-                        <span>
-                          {group.displayCondition && group.displayCondition.conditions.length > 0
-                            ? `표시 조건 ${group.displayCondition.conditions.length}개`
-                            : '표시 조건 설정'}
-                        </span>
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => {
+                        // 그룹 삭제 + 고아 행 정리
+                        const updated = dynamicRowConfigs.filter((g) => g.groupId !== group.groupId);
+                        onDynamicRowConfigsChange?.(updated.length > 0 ? updated : undefined);
+                        // 해당 그룹에 배정된 행들의 groupId 정리 (각 액션이 commitRows + notifyChange 로 영속)
+                        currentRowsRef.current.forEach((row) => {
+                          if (row.dynamicGroupId === group.groupId) setDynamicGroupId(row.id, undefined);
+                          if (row.showWhenDynamicGroupId === group.groupId) setShowWhenDynamicGroupId(row.id, undefined);
+                        });
+                      }}
+                      className="text-xs text-red-400 hover:text-red-600"
+                      title="그룹 삭제"
+                    >
+                      삭제
+                    </button>
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </CardContent>
-      </Card>
+                  {group.enabled && (
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] text-gray-500">버튼 텍스트</Label>
+                        <Input
+                          value={group.label ?? ''}
+                          onChange={(e) => {
+                            const updated = dynamicRowConfigs.map((g) => {
+                              if (g.groupId !== group.groupId) return g;
+                              const newLabel = e.target.value;
+                              const { label: _l, ...rest } = g;
+                              return newLabel ? { ...rest, label: newLabel } : rest;
+                            });
+                            onDynamicRowConfigsChange?.(updated);
+                          }}
+                          placeholder="항목 선택"
+                          className="h-7 text-xs"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] text-gray-500">삽입 위치</Label>
+                        <select
+                          value={group.insertAfterRowId ?? ''}
+                          onChange={(e) => {
+                            const updated = dynamicRowConfigs.map((g) => {
+                              if (g.groupId !== group.groupId) return g;
+                              const newId = e.target.value;
+                              const { insertAfterRowId: _iid, ...rest } = g;
+                              return newId ? { ...rest, insertAfterRowId: newId } : rest;
+                            });
+                            onDynamicRowConfigsChange?.(updated);
+                          }}
+                          className="h-7 w-full rounded-md border border-input bg-background px-1 text-xs"
+                        >
+                          <option value="">헤더 바로 아래</option>
+                          {nonDynamicRows.map((row) => (
+                            <option key={row.id} value={row.id}>{row.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] text-gray-500">정렬</Label>
+                        <select
+                          value={group.buttonAlign ?? 'left'}
+                          onChange={(e) => {
+                            const updated = dynamicRowConfigs.map((g) =>
+                              g.groupId === group.groupId
+                                ? { ...g, buttonAlign: e.target.value as 'left' | 'center' | 'right' }
+                                : g,
+                            );
+                            onDynamicRowConfigsChange?.(updated);
+                          }}
+                          className="h-7 w-full rounded-md border border-input bg-background px-1 text-xs"
+                        >
+                          <option value="left">좌측</option>
+                          <option value="center">중앙</option>
+                          <option value="right">우측</option>
+                        </select>
+                      </div>
+                      {/* 그룹 표시 조건 */}
+                      <div className="col-span-3">
+                        <button
+                          onClick={() => setEditingGroupCondition(group)}
+                          className={`flex items-center gap-1 text-[10px] transition-colors ${
+                            group.displayCondition && group.displayCondition.conditions.length > 0
+                              ? 'text-blue-600 hover:text-blue-800'
+                              : 'text-gray-400 hover:text-gray-600'
+                          }`}
+                        >
+                          <Eye className="h-3 w-3" />
+                          <span>
+                            {group.displayCondition && group.displayCondition.conditions.length > 0
+                              ? `표시 조건 ${group.displayCondition.conditions.length}개`
+                              : '표시 조건 설정'}
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
 
       {/* 셀 내용 편집 모달 */}
       {selectedCellContext && (

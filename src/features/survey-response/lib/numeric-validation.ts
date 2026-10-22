@@ -6,7 +6,6 @@
  * tableValidationRules(분기 전용, utils/branch-logic.ts)와 완전히 별개다.
  * 응답 shape: 단답형 = raw 숫자 문자열, 테이블 = { [cellId]: value } 평면 객체.
  */
-import { projectConditionalTableLayout } from '@/features/question-renderer/utils/conditional-table-layout';
 import { findDistinctViolations } from '@/features/question-renderer/utils/distinct-select-group';
 import { optionTextTargetId } from '@/features/question-renderer/utils/option-text-target';
 import { stagedOptionalCellIds } from '@/features/question-renderer/utils/staged-rows';
@@ -31,6 +30,11 @@ import {
   isChoiceTableCellEmpty,
 } from '@/lib/survey/choice-table-cell-value';
 import {
+  dropGroupSelectionsOutsideVisibleCells,
+  dropSelectionsOutsideVisibleCells,
+  resolveTableCellVisibility,
+} from '@/lib/survey/table-cell-visibility';
+import {
   type PriorAnswers,
   isUntouchedPriorValue,
   priorAnswerText,
@@ -45,6 +49,8 @@ import {
   shouldDisplayRow,
 } from '@/utils/branch-logic';
 import { isChoiceTableSource, resolveChoiceOptions } from '@/utils/choice-source';
+import { projectResponseTableLayout } from '@/utils/conditional-table-layout';
+import { getDynamicRowSelections } from '@/utils/dynamic-row-selection-sidecar';
 import { formatFailureMessage, parseInputFormat } from '@/features/question-renderer/utils/input-format';
 import { rangeViolationMessage } from '@/utils/number-format';
 import { parseNumericInput } from '@/utils/numeric-input';
@@ -219,18 +225,30 @@ export function collectVisibleTableCells(
 }
 
 /**
- * 보기 그룹 표의 필수 판정에 넘길 **보이는 셀 id 집합** (`answer-validation` 의 visibleCellIds).
+ * 보기를 표로 그리는 문항의 필수 판정에 넘길 **보이는 셀 id 집합** (`answer-validation` 의 visibleCellIds).
  *
- * 필수 셀·범위 검증과 같은 필터(collectVisibleTableCells)를 써서, 행·열 표시조건이나 선택 안 된
- * 동적 행으로 숨은 보기 그룹이 「다음」을 막지 않게 한다. 보기 그룹 표가 아니면 undefined —
- * 레거시 보기 소스 표(radio/checkbox)는 동적 행 선택이 표 응답 밖(루트 사이드카)에 있어 이
- * 필터로 판정하면 선택된 동적 행까지 숨은 것으로 오판한다.
+ * 행·열 표시조건이나 선택 안 된 동적 행으로 숨은 칸은 응답자가 채울 수 없고, 숨은 칸을 가리키는
+ * 선택은 답이 아니다 — 이 집합 밖의 선택은 필수·최소 선택·단독 보기를 채우지 않는다.
+ * - 보기 그룹 표(table): 필수 셀·범위 검증과 같은 필터(collectVisibleTableCells).
+ * - 보기 소스 표(radio·checkbox): 렌더러·저장 경계 strip 과 같은 투영(`resolveTableCellVisibility`).
+ *   동적 행 선택은 표 응답 밖(루트 사이드카)에 있어 `ctx.allResponses` 에서 읽는다.
+ *   숨김이 생길 수 없는 표(조건·동적 행 없음)는 undefined — 종전 판정 그대로다.
+ * 그 밖의 문항은 undefined.
  */
-export function resolveChoiceGroupVisibleCellIds(
+export function resolveChoiceTableVisibleCellIds(
   question: Question,
   response: unknown,
   ctx: NumericValidationCtx,
 ): ReadonlySet<string> | undefined {
+  if (question.type === 'radio' || question.type === 'checkbox') {
+    if (!isChoiceTableSource(question)) return undefined;
+    return resolveTableCellVisibility(
+      question,
+      ctx.allResponses,
+      ctx.allQuestions,
+      toBranchEvalCtx(ctx),
+    )?.visibleCellIds;
+  }
   if (!isChoiceGroupTableQuestion(question)) return undefined;
   const cellValues =
     response && typeof response === 'object' && !Array.isArray(response)
@@ -585,7 +603,7 @@ function collectOptionTextIssues(
  * 보기-소스 표(choice_opt) 안에 놓인 단답형 셀의 차단형 검증 — 필수 미입력·범위 위반.
  *
  * 값이 `__optTexts__` 사이드카에 셀 id 로 저장돼 표 문항 경로(cellValues)를 타지 않으므로
- * 여기서 따로 본다. **행 표시조건으로 숨은 행의 셀은 보지 않는다** — 화면에 없는 칸이
+ * 여기서 따로 본다. **행·열 표시조건이나 고르지 않은 동적 행으로 숨은 셀은 보지 않는다** — 화면에 없는 칸이
  * "다음"을 막으면 응답자가 따를 수 있는 길이 없다 (게이팅 셀을 검증에서 빼는 것과 같은 이유).
  */
 function collectChoiceTableInputCellIssues(
@@ -601,25 +619,18 @@ function collectChoiceTableInputCellIssues(
   // 렌더러(choice-table-response)와 **같은 투영**을 쓴다 — 조건으로 숨은 열의 셀은
   // 화면에 없으므로 검증 대상이 아니다. 행 조건만 보면 숨은 열에 남은 잔존값이
   // "고칠 입력칸이 없는 채로" 다음을 영구 차단한다.
-  // 열 정의가 없는 표는 투영하지 않는다 — 보이는 열이 0개로 잡혀 셀이 통째로 사라지고
-  // 필수 셀 검사까지 조용히 꺼진다(레거시 데이터 방어).
-  const columns = question.tableColumns ?? [];
+  // 고르지 않은 동적 행도 화면에 없다 — 선택은 루트 사이드카에 있다.
+  // 열 정의가 없는 표(레거시)는 투영이 열을 건드리지 않는다(conditional-table-layout 주석).
   const rows = question.tableRowsData ?? [];
-  const visibleRows =
-    columns.length === 0
-      ? rows.filter(
-          (row) =>
-            !ctx ||
-            !row.displayCondition ||
-            shouldDisplayRow(row, ctx.allResponses, ctx.allQuestions, toBranchEvalCtx(ctx)),
-        )
-      : projectConditionalTableLayout({
-          columns,
-          rows,
-          ...(question.tableHeaderGrid ? { headerGrid: question.tableHeaderGrid } : {}),
-          ...(ctx ? { allResponses: ctx.allResponses, allQuestions: ctx.allQuestions } : {}),
-          ...(ctx ? { evalCtx: toBranchEvalCtx(ctx) } : {}),
-        }).rows;
+  const visibleRows = projectResponseTableLayout({
+    columns: question.tableColumns ?? [],
+    rows,
+    ...(question.tableHeaderGrid ? { headerGrid: question.tableHeaderGrid } : {}),
+    dynamicRowConfigs: question.dynamicRowConfigs,
+    selectedDynamicRowIds: ctx ? getDynamicRowSelections(ctx.allResponses, question.id) : [],
+    ...(ctx ? { allResponses: ctx.allResponses, allQuestions: ctx.allQuestions } : {}),
+    ...(ctx ? { evalCtx: toBranchEvalCtx(ctx) } : {}),
+  }).rows;
 
   // 게이팅 — 미충족 셀은 화면에 컨트롤이 없으므로(choice-table-gated-cell) 검증하지 않는다.
   // 컨트롤러가 보기 옵션이면 선택된 보기 id 집합, 같은 표의 셀이면 사이드카 값으로 판정한다.
@@ -799,7 +810,20 @@ export function collectNumericIssues(
       ctx?.priorAnswers,
     );
     if (quality) issues.push({ kind: 'text-quality', message: quality.message });
-    const optionTextIssues = collectRequiredOptionTextIssues(question, response, ctx?.optionTexts);
+    // 보기 소스 표 — 숨은 칸을 가리키는 선택은 답이 아니다. 그 상세기재를 요구하지 않고 최대
+    // 선택에도 세지 않는다(렌더러도 그 입력칸을 그리지 않는다).
+    const visibleResponse = ctx
+      ? dropSelectionsOutsideVisibleCells(
+          question,
+          response,
+          resolveChoiceTableVisibleCellIds(question, response, ctx),
+        )
+      : response;
+    const optionTextIssues = collectRequiredOptionTextIssues(
+      question,
+      visibleResponse,
+      ctx?.optionTexts,
+    );
     if (optionTextIssues.questionMissing) {
       issues.push({
         kind: 'required-detail',
@@ -808,10 +832,10 @@ export function collectNumericIssues(
       });
     }
     issues.push(
-      ...collectOptionTextIssues(question, response, ctx?.optionTexts, ctx?.priorAnswers),
+      ...collectOptionTextIssues(question, visibleResponse, ctx?.optionTexts, ctx?.priorAnswers),
     );
     issues.push(...collectChoiceTableInputCellIssues(question, ctx));
-    const selectionMax = selectionMaxIssue(question, response, ctx);
+    const selectionMax = selectionMaxIssue(question, visibleResponse, ctx);
     if (selectionMax) issues.push(selectionMax);
     return issues;
   }
@@ -830,16 +854,21 @@ export function collectNumericIssues(
 
   // 보기 그룹 표 — 고른 보기의 상세기재(숫자 모드·형식)는 레거시 보기 소스 표와 같은 규칙.
   // 선택은 표 응답 안 예약 키에 있어 그 맵을 응답으로 넘긴다.
+  // 숨은 칸(행·열 조건, 고르지 않은 동적 행)의 선택은 답이 아니다 — 그 상세기재는 보지 않는다.
+  const visible = collectVisibleTableCells(question, cellValues, ctx);
   const groupOptionTextIssues = isChoiceGroupTableQuestion(question)
     ? collectOptionTextIssues(
         question,
-        readTableChoiceGroups(cellValues),
+        dropGroupSelectionsOutsideVisibleCells(
+          question,
+          readTableChoiceGroups(cellValues),
+          new Set(visible.map((cell) => cell.id)),
+        ),
         ctx?.optionTexts,
         ctx?.priorAnswers,
       )
     : [];
 
-  const visible = collectVisibleTableCells(question, cellValues, ctx);
   // 게이팅 — 비활성 셀은 모든 차단형 검증에서 제외한다 (비활성 필수 셀이 "다음"을
   // 영구 차단하는 것 방지). isCellEnabled 는 같은 질문의 cellValues 만 본다.
   // 표 전체 셀을 함께 전달해야 option 조건의 {optionId} 래핑·id 저장 응답을 컨트롤러 셀

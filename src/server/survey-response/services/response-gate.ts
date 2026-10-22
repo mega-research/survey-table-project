@@ -3,6 +3,7 @@ import 'server-only';
 
 import { db } from '@/db';
 import { surveyVersions, surveys } from '@/db/schema';
+import type { SurveyEndRedirects } from '@/shared/contracts/survey';
 
 import { completeResponseDenial, newResponseDenial } from '../domain/acceptance';
 import type { BlockReason } from '../domain/duplicate';
@@ -29,6 +30,8 @@ export type SurveyGateRow = {
   isPaused: boolean;
   testModeEnabled: boolean;
   testToken: string | null;
+  // 이어 넘길 값 — 응답 행에 기록할 쿼리 이름(passParams)을 고른다. 게이트 판정에는 쓰지 않는다.
+  endRedirects?: SurveyEndRedirects | null;
 };
 
 /** 가용성 게이트 입력 — 응답 시점 활성 버전(없으면 null). */
@@ -111,6 +114,7 @@ export async function loadSurveyGateRow(surveyId: string): Promise<SurveyGateRow
       isPaused: true,
       testModeEnabled: true,
       testToken: true,
+      endRedirects: true,
     },
   });
   if (!row) {

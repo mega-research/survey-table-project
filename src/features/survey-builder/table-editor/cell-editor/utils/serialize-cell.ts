@@ -5,6 +5,7 @@ import {
   CalcCellValidation,
   CalcExpr,
   CellEnableCondition,
+  CellLookupSearch,
   CheckboxOption,
   InputType,
   NumberFormat,
@@ -54,6 +55,8 @@ export interface CellFormState {
   inputDefaultValueTemplate: string;
   /** prefill 값을 응답자가 고칠 수 있게 (TableCell.prefillEditable) — 템플릿이 있을 때만 저장한다 */
   inputPrefillEditable: boolean;
+  /** 목록에서 찾기 (TableCell.lookupSearch) — 평문 모드에서만 저장한다. null 이면 끔 */
+  inputLookupSearch: CellLookupSearch | null;
   inputType: InputType;
   /** input 셀 개인정보 암호화 (TableCell.piiEncrypted) */
   inputPiiEncrypted: boolean;
@@ -227,6 +230,21 @@ export function narrowCellType(t: TableCell['type'] | undefined): ContentType {
   return !t ? 'text' : t;
 }
 
+/** 목록에서 찾기 저장형 — 반쯤 적힌 채우기 줄(열·칸 중 하나가 빈 것)은 버린다. */
+function serializeLookupSearch(
+  value: CellLookupSearch | null,
+): { lookupSearch?: CellLookupSearch } {
+  if (!value || value.lookupId === '' || value.labelColumn === '') return {};
+  const fills = (value.fills ?? []).filter((fill) => fill.column !== '' && fill.cellId !== '');
+  return {
+    lookupSearch: {
+      lookupId: value.lookupId,
+      labelColumn: value.labelColumn,
+      ...(fills.length > 0 ? { fills } : {}),
+    },
+  };
+}
+
 /** TableCell → 초기 폼 상태 생성 */
 export function cellToFormState(cell: TableCell): CellFormState {
   const contentType = narrowCellType(cell.type);
@@ -251,6 +269,7 @@ export function cellToFormState(cell: TableCell): CellFormState {
     inputWidth: cell.inputWidth || '',
     inputDefaultValueTemplate: cell.defaultValueTemplate ?? '',
     inputPrefillEditable: cell.prefillEditable === true,
+    inputLookupSearch: cell.lookupSearch ?? null,
     inputType: cell.inputType ?? 'text',
     inputPiiEncrypted: cell.piiEncrypted === true,
     emptyDefaultEnabled: cell.emptyDefault !== undefined,
@@ -416,6 +435,10 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
           ...(form.cellTextValidation &&
           isPlainTextInput({ type: 'text', inputType: form.inputType })
             ? { textValidation: form.cellTextValidation }
+            : {}),
+          // 목록에서 찾기도 평문 모드 전용 — 참조표·표시 열을 고르지 않았으면 저장하지 않는다
+          ...(isPlainTextInput({ type: 'text', inputType: form.inputType })
+            ? serializeLookupSearch(form.inputLookupSearch)
             : {}),
         }
       : {}),

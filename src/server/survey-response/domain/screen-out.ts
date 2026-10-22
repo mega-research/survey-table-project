@@ -27,6 +27,11 @@ interface DetectScreenOutOptions {
  * 2026-09-07 이후로는 숨은 문항 값이 저장 경계에서 이미 걷힌다
  * (lib/survey/question-visibility.ts 의 stripHiddenQuestionValues). 이 필터는 그 뒤에
  * 돌아 사실상 no-op 이지만, 외부에서 직접 호출된 페이로드에 대한 방어로 남긴다.
+ *
+ * 분기 이동(goto·end)으로 건너뛴 페이지의 값도 "값의 존재 = 도달" 을 깬다 — 표시 조건은
+ * 참이라 이 필터로는 못 거른다. 그 값은 응답 확정이 판정 전에 지운다
+ * (lib/survey/answer-path.ts 의 stripUnreachedQuestionValues). 경로를 확정할 수 없는 설문
+ * (문항 섞기 등)은 지우지 않으므로 종전 판정이 그대로다.
  */
 export function detectScreenOut(
   questions: Question[],

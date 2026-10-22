@@ -15,12 +15,17 @@ export default function SurveyResponsePage() {
   // 대행 힌트(`?fw=1`)는 **없다** (ADR-0026, 티켓 09). 그 파라미터의 유일한 목적이 대행
   // 배너를 물을지 정하는 것이었는데 대행 표시 자체가 사라졌다 — 외주가 보는 화면은 응답자가
   // 보는 것과 글자 하나 다르지 않다. 귀속은 저장 경계가 쿠키를 보고 찍는다.
+  //
+  // 패널 연동 — 링크에 붙어 온 회원 식별값(?euid=)을 종료 주소·응답 행으로 이어 넘긴다.
+  // 어떤 이름을 고를지는 설정이 정하므로 쿼리 전체를 넘긴다.
+  const entryQuery = searchParams?.toString() ?? '';
 
   return (
     <SurveyResponseFlow
       surveyIdentifier={identifier}
       inviteToken={inviteToken}
       testToken={testToken}
+      entryQuery={entryQuery}
     />
   );
 }

@@ -25,7 +25,7 @@ import {
 import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import {
   type NumericIssue,
-  resolveChoiceGroupVisibleCellIds,
+  resolveChoiceTableVisibleCellIds,
 } from '@/features/survey-response/lib/numeric-validation';
 import { usePriorAnswers } from '@/features/question-renderer/prior-answers-context';
 import { resolveQuestionTitleHtml } from '@/lib/survey/question-title-html';
@@ -71,11 +71,11 @@ export function GroupStepItem({
   evalCtx?: BranchEvalCtx | undefined;
 }) {
   const q = item.question;
-  // 보기 그룹 표에서 화면에 보이는 셀 — 필수 게이트(survey-response-flow)와 같은 판정이라야
-  // 숨은 행의 그룹이 붉은 외곽선·안내 배너에 뜨지 않는다.
+  // 보기를 표로 그리는 문항에서 화면에 보이는 셀 — 필수 게이트(survey-response-flow)와 같은 판정이라야
+  // 숨은 칸의 그룹이 붉은 외곽선·안내 배너에 뜨지 않고, 숨은 칸의 선택이 그룹을 채운 것으로 보이지 않는다.
   const choiceGroupVisibility = useMemo(
     () => ({
-      visibleCellIds: resolveChoiceGroupVisibleCellIds(q, responses[q.id], {
+      visibleCellIds: resolveChoiceTableVisibleCellIds(q, responses[q.id], {
         allResponses: responses,
         allQuestions: questions,
         lookups: evalCtx?.lookups ?? [],
