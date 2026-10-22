@@ -85,3 +85,51 @@ describe('withCalcValues', () => {
     expect((out['q2'] as Record<string, unknown>)['q2-c']).toBe('20');
   });
 });
+
+describe('withCalcValues — 채울 문항 한정 (reachedQuestionIds)', () => {
+  const ctxOf = (questions: Question[], responses: Record<string, unknown>) => ({
+    questions,
+    responses,
+    lookups: [],
+    contactAttrs: {},
+  });
+
+  it('닿지 않은 문항에는 계산값을 새로 만들지 않는다', () => {
+    const q1 = calcTable('q1');
+    const q2 = calcTable('q2', 'q1');
+    const responses = { q1: { 'q1-a': '5' } };
+    const out = withCalcValues(responses, ctxOf([q1, q2], responses), {
+      reachedQuestionIds: new Set(['q1']),
+    });
+    expect((out['q1'] as Record<string, unknown>)['q1-c']).toBe('5');
+    expect(out).not.toHaveProperty('q2');
+  });
+
+  it('닿지 않았어도 이미 값이 있는 문항은 다시 계산한다 — 수식과 다른 저장값을 남기지 않는다', () => {
+    const q1 = calcTable('q1');
+    const q2 = calcTable('q2', 'q1');
+    const responses = { q1: { 'q1-a': '5' }, q2: { 'q2-a': '1', 'q2-c': '999' } };
+    const out = withCalcValues(responses, ctxOf([q1, q2], responses), {
+      reachedQuestionIds: new Set(['q1']),
+    });
+    expect((out['q2'] as Record<string, unknown>)['q2-c']).toBe('5');
+  });
+
+  it('숨은 문항의 값을 참조하는 수식은 그대로 계산한다', () => {
+    const q1 = calcTable('q1');
+    const q2 = calcTable('q2', 'q1');
+    const responses = { q1: { 'q1-a': '7' } };
+    const out = withCalcValues({}, ctxOf([q1, q2], responses), {
+      reachedQuestionIds: new Set(['q2']),
+    });
+    expect((out['q2'] as Record<string, unknown>)['q2-c']).toBe('7');
+  });
+
+  it('한정이 없으면 종전대로 모든 계산 칸 문항을 채운다', () => {
+    const q1 = calcTable('q1');
+    const q2 = calcTable('q2', 'q1');
+    const out = withCalcValues({}, ctxOf([q1, q2], {}));
+    expect(out).toHaveProperty('q1');
+    expect(out).toHaveProperty('q2');
+  });
+});

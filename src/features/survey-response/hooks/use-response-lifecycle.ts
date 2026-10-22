@@ -305,6 +305,11 @@ export function useResponseLifecycle({
 
   // 저장 경계(draft flush / complete / beacon / admin-edit)에서 calc 셀 값을 페이로드에 주입.
   // 4지점이 각자 ctx 를 조립하면 한 곳만 어긋나는 버그가 생기므로 클로저 하나로 공유한다.
+  //
+  // 계산값은 표시 조건상 보이는 문항에만 새로 채운다 — 숨은 문항의 표에 계산값이 들어가 Raw 에서
+  // 답한 것처럼 보이던 것을 막는다. 분기 이동으로 건너뛴 문항은 여기서 가르지 않는다(초안은 부분
+  // 패치라 경로를 확정할 수 없다) — 완료 제출의 응답 확정이 경로 밖 답과 함께 지운다. 수식 평가는
+  // 숨은 문항 값까지 그대로 본다.
   const injectCalc = useCallback(
     (answers: Record<string, unknown>) => {
       const ctx: FormulaEvalCtx = {
@@ -313,9 +318,11 @@ export function useResponseLifecycle({
         lookups: loadedSurvey?.lookups ?? [],
         contactAttrs,
       };
-      return withCalcValues(answers, ctx);
+      return withCalcValues(answers, ctx, {
+        reachedQuestionIds: new Set(visibleQuestions.map((q) => q.id)),
+      });
     },
-    [questions, responses, loadedSurvey?.lookups, contactAttrs],
+    [questions, responses, loadedSurvey?.lookups, contactAttrs, visibleQuestions],
   );
   // beacon 은 visibilitychange/pagehide 리스너 안에서 이탈 시점에 호출된다. 리스너 재등록을
   // (isAdminEdit 등) 몇 개 값에만 묶어두려는 기존 설계를 유지하려면 questions/responses/
