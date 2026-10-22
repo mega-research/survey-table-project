@@ -66,13 +66,14 @@ const BADGE_INSET = 6;
  * 없으면(폭을 꽉 채운 사진) 순위형 보기 돋보기처럼 사진 안 우상단에 둔다. 아래쪽을 쓰지 않는 것은 본문
  * 이미지 바로 밑에 글이 붙는 경우가 많고, 가로로 긴 띠 그림은 설명 글자가 아래쪽에 몰려서다.
  *
- * 입력과 결과는 같은 좌표계다. 부르는 쪽이 돋보기를 띄우는 상자의 원점을 빼서 쓴다.
+ * `bounds` 는 돋보기가 바깥에 나가도 되는 영역이다 — 부르는 쪽이 사진이 혼자 놓인 블록(문단·표 칸)을
+ * 넘기고, 옆에 다른 내용이 있으면 사진 자신을 넘겨 안에 두게 한다. 입력과 결과는 같은 좌표계다.
  */
 export function placeEnlargeBadge(
   image: ImageBox,
-  container: ImageBox,
+  bounds: ImageBox,
 ): { left: number; top: number; outside: boolean } {
-  if (container.right - image.right >= ENLARGE_BADGE_SIZE + BADGE_GAP) {
+  if (bounds.right - image.right >= ENLARGE_BADGE_SIZE + BADGE_GAP) {
     return {
       left: image.right + BADGE_GAP,
       top: image.top,

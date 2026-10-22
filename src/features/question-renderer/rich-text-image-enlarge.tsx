@@ -29,8 +29,9 @@ import {
  *
  * 이미지를 감싸는 요소를 끼우지 않는다 — 에디터가 이미지 크기를 % 로 적어 감싸는 상자가 생기면 크기가
  * 바뀐다. 마우스 기기는 확대 커서·어두워짐(`RICH_TEXT_ENLARGE_CLASS`)으로 알리고, 터치 기기는 hover 가
- * 없어 돋보기(`badges`)를 본문 상자 위에 따로 띄운다 — 자리는 `placeEnlargeBadge`(늘 사진의 오른쪽 위 — 오른쪽에
- * 자리가 있으면 바깥, 없으면 안). 돋보기는 본문 상자의 형제라 부르는 쪽이 둘을 `relative` 상자로 감싼다.
+ * 없어 돋보기(`badges`)를 본문 상자 위에 따로 띄운다 — 자리는 `placeEnlargeBadge`(늘 사진의 오른쪽 위 — 사진이 혼자
+ * 놓인 문단·표 칸의 오른쪽에 자리가 있으면 바깥, 없으면 안). 돋보기는 본문 상자의 형제라 부르는 쪽이 둘을
+ * `relative` 상자로 감싸고, 본문의 보이는 영역으로 잘리는 층 안에 뜬다.
  */
 
 const ENLARGE_MARK = 'data-enlargeable';
@@ -39,12 +40,27 @@ const ENLARGE_MARK = 'data-enlargeable';
 export const RICH_TEXT_ENLARGE_CLASS =
   '[&_img[data-enlargeable]]:cursor-zoom-in [@media(hover:hover)]:[&_img[data-enlargeable]:hover]:brightness-90';
 
-/** 띄운 돋보기 하나 — 좌표는 돋보기를 띄우는 상자(본문 상자의 offsetParent) 기준 */
+/** 띄운 돋보기 하나 — 좌표는 돋보기 층(본문 상자의 보이는 영역) 기준 */
 interface EnlargeBadge {
   img: HTMLImageElement;
   left: number;
   top: number;
 }
+
+/**
+ * 돋보기 층 — 본문 상자의 보이는 영역(테두리 안쪽)과 같은 자리·크기로 띄우고 넘치는 것을 자른다. 모바일
+ * 본문은 넓은 표를 가로 스크롤하므로(globals.css `.tiptap-mobile-tame`), 스크롤로 가려진 이미지의
+ * 돋보기가 본문 밖에 남지 않게 한다. 좌표는 `relative` 상자(본문 상자의 offsetParent) 기준이다.
+ */
+interface BadgeLayer {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  badges: EnlargeBadge[];
+}
+
+const EMPTY_LAYER: BadgeLayer = { left: 0, top: 0, width: 0, height: 0, badges: [] };
 
 const toBox = (rect: DOMRect): ImageBox => ({
   left: rect.left,
@@ -53,22 +69,55 @@ const toBox = (rect: DOMRect): ImageBox => ({
   bottom: rect.bottom,
 });
 
-function measureBadges(container: HTMLElement): EnlargeBadge[] {
-  const containerRect = container.getBoundingClientRect();
-  // 돋보기를 띄우는 상자의 원점 — 본문 상자가 그 안에서 offsetLeft·offsetTop 만큼 떨어져 있다
-  const originLeft = containerRect.left - container.offsetLeft;
-  const originTop = containerRect.top - container.offsetTop;
-  return Array.from(container.querySelectorAll<HTMLImageElement>(`img[${ENLARGE_MARK}]`)).map(
-    (img) => {
-      const place = placeEnlargeBadge(toBox(img.getBoundingClientRect()), toBox(containerRect));
-      return { img, left: place.left - originLeft, top: place.top - originTop };
-    },
-  );
+/** 이미지가 놓인 블록 — 에디터는 이미지를 문단 안 inline 으로 넣는다 */
+const IMAGE_BLOCK = 'p, li, td, th, figure, blockquote, h1, h2, h3, h4, h5, h6';
+
+/**
+ * 돋보기를 바깥에 둘 수 있는 오른쪽 끝. 이미지가 혼자 놓인 블록(문단·표 칸)이면 그 블록의 오른쪽 끝이다 —
+ * 본문 끝까지 재면 표 칸의 이미지가 옆 칸을 덮는다. 같은 블록에 다른 이미지나 글이 있으면 그 옆이 비어
+ * 있다고 볼 수 없어 이미지 자신을 돌려준다(오른쪽 자리 0 — 사진 안에 둔다).
+ */
+function badgeBounds(img: HTMLImageElement, container: HTMLElement): ImageBox {
+  const block = img.closest(IMAGE_BLOCK);
+  const scope = block && container.contains(block) ? block : container;
+  const alone =
+    scope.querySelectorAll('img').length === 1 && (scope.textContent ?? '').trim() === '';
+  return toBox((alone ? scope : img).getBoundingClientRect());
 }
 
-const sameBadges = (a: EnlargeBadge[], b: EnlargeBadge[]) =>
-  a.length === b.length &&
-  a.every((x, i) => x.img === b[i]!.img && x.left === b[i]!.left && x.top === b[i]!.top);
+function measureBadgeLayer(container: HTMLElement): BadgeLayer {
+  const containerRect = container.getBoundingClientRect();
+  // 층의 원점 = 본문 상자 테두리 안쪽 왼쪽 위(화면 좌표)
+  const originLeft = containerRect.left + container.clientLeft;
+  const originTop = containerRect.top + container.clientTop;
+  const badges = Array.from(
+    container.querySelectorAll<HTMLImageElement>(`img[${ENLARGE_MARK}]`),
+  ).map((img) => {
+    const place = placeEnlargeBadge(
+      toBox(img.getBoundingClientRect()),
+      badgeBounds(img, container),
+    );
+    return { img, left: place.left - originLeft, top: place.top - originTop };
+  });
+  return {
+    left: container.offsetLeft + container.clientLeft,
+    top: container.offsetTop + container.clientTop,
+    width: container.clientWidth,
+    height: container.clientHeight,
+    badges,
+  };
+}
+
+const sameLayer = (a: BadgeLayer, b: BadgeLayer) =>
+  a.left === b.left &&
+  a.top === b.top &&
+  a.width === b.width &&
+  a.height === b.height &&
+  a.badges.length === b.badges.length &&
+  a.badges.every(
+    (x, i) =>
+      x.img === b.badges[i]!.img && x.left === b.badges[i]!.left && x.top === b.badges[i]!.top,
+  );
 
 interface OpenImage {
   src: string;
@@ -111,7 +160,7 @@ export function useRichTextImageEnlarge<T extends HTMLElement>(
   overlay: ReactNode;
 } {
   const [opened, setOpened] = useState<OpenImage | null>(null);
-  const [badgeList, setBadgeList] = useState<EnlargeBadge[]>([]);
+  const [badgeLayer, setBadgeLayer] = useState<BadgeLayer>(EMPTY_LAYER);
 
   // 본문이 바뀌면 이미지를 다시 찾는다. 로드가 끝나야 원본 크기를 알고, 상자 폭이 바뀌면 다시 잰다.
   // 다른 이미지의 로드·글 줄바꿈으로 사진 자리가 바뀌므로 돋보기 자리는 매번 전부 다시 잰다
@@ -123,8 +172,8 @@ export function useRichTextImageEnlarge<T extends HTMLElement>(
       for (const img of images) {
         if (img === loaded || (img.complete && img.naturalWidth > 0)) markImage(img);
       }
-      const next = measureBadges(container);
-      setBadgeList((prev) => (sameBadges(prev, next) ? prev : next));
+      const next = measureBadgeLayer(container);
+      setBadgeLayer((prev) => (sameLayer(prev, next) ? prev : next));
     };
     const onLoad = (event: Event) => refresh(event.currentTarget as HTMLImageElement);
     const onScroll = () => refresh();
@@ -165,21 +214,35 @@ export function useRichTextImageEnlarge<T extends HTMLElement>(
         open(img);
       },
     },
-    badges: badgeList.map((badge, index) => (
-      <button
-        key={index}
-        type="button"
-        // 이미지가 이미 이름 있는 버튼이라 돋보기는 보조 기술·탭 순서에 한 번 더 나오지 않는다
-        aria-hidden
-        tabIndex={-1}
-        data-enlarge-badge
-        onClick={() => open(badge.img)}
-        style={{ left: badge.left, top: badge.top }}
-        className="absolute flex size-7 items-center justify-center rounded-full bg-black/65 text-white [@media(hover:hover)]:hidden"
-      >
-        <Maximize2 className="size-3.5" />
-      </button>
-    )),
+    badges:
+      badgeLayer.badges.length > 0 ? (
+        <div
+          data-enlarge-badge-layer
+          style={{
+            left: badgeLayer.left,
+            top: badgeLayer.top,
+            width: badgeLayer.width,
+            height: badgeLayer.height,
+          }}
+          className="pointer-events-none absolute overflow-hidden [@media(hover:hover)]:hidden"
+        >
+          {badgeLayer.badges.map((badge, index) => (
+            <button
+              key={index}
+              type="button"
+              // 이미지가 이미 이름 있는 버튼이라 돋보기는 보조 기술·탭 순서에 한 번 더 나오지 않는다
+              aria-hidden
+              tabIndex={-1}
+              data-enlarge-badge
+              onClick={() => open(badge.img)}
+              style={{ left: badge.left, top: badge.top }}
+              className="pointer-events-auto absolute flex size-7 items-center justify-center rounded-full bg-black/65 text-white [@media(hover:hover)]:hidden"
+            >
+              <Maximize2 className="size-3.5" />
+            </button>
+          ))}
+        </div>
+      ) : null,
     overlay: opened ? <ImageEnlargeOverlay {...opened} onClose={() => setOpened(null)} /> : null,
   };
 }
