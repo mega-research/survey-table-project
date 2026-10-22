@@ -4,7 +4,7 @@ import { useState } from 'react';
 
 import Link from 'next/link';
 
-import { ArrowLeft, Loader2, Plus } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Loader2, Plus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import type { UserType } from '@/shared/contracts/auth';
@@ -54,9 +54,30 @@ function avatarTone(userType: UserType): string {
   return userType === 'guest' ? 'bg-[#FEF3C7] text-[#D97706]' : 'bg-[#E0E7FF] text-[#2743AE]';
 }
 
+/**
+ * 퇴사자는 목록 뒤로 보내고 기본으로 접는다.
+ *
+ * 서버는 발급순으로 주는데, 테스트·검증용으로 만들었다 퇴사 처리한 계정이 앞쪽에 몰려 있어
+ * 지금 일하는 사람을 찾으려면 그 줄들을 넘겨야 했다. 순서만 바꾸고(같은 무리 안은 발급순
+ * 그대로) 퇴사자는 상태 머리글이나 표 아래 줄로 펼친다. 상태 필터로 「퇴사」를 고른 화면은
+ * 퇴사자를 보러 온 것이라 접지 않는다.
+ */
+function arrangeUsers(
+  items: readonly UserListItem[],
+  showDeparted: boolean,
+): { visible: UserListItem[]; departedCount: number } {
+  const current = items.filter((user) => user.status !== 'departed');
+  const departed = items.filter((user) => user.status === 'departed');
+  return {
+    visible: showDeparted ? [...current, ...departed] : current,
+    departedCount: departed.length,
+  };
+}
+
 export function UserManagementView() {
   const [userType, setUserType] = useState<UserTypeFilter>('all');
   const [status, setStatus] = useState<UserStatusFilter>('all');
+  const [departedOpen, setDepartedOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   // 대상 사용자를 그대로 들고 연다 — 모달 안에서 목록을 다시 뒤지지 않아도 되고, 열려 있는
   // 사이 목록이 새로고침돼도 보고 있던 사람이 바뀌지 않는다.
@@ -66,8 +87,16 @@ export function UserManagementView() {
   const [departTarget, setDepartTarget] = useState<UserListItem | null>(null);
   const { data, isLoading, error } = useUsers(userType, status);
 
-  const items = data?.items ?? [];
   const typeCounts = data?.typeCounts;
+  const { visible: items, departedCount } = arrangeUsers(
+    data?.items ?? [],
+    departedOpen || status === 'departed',
+  );
+  // 접을 퇴사자가 있을 때만 펼침 장치를 그린다 — 퇴사 필터 화면은 처음부터 다 보인다.
+  const departedToggle = status !== 'departed' && departedCount > 0;
+  const departedToggleLabel = departedOpen
+    ? `퇴사자 ${departedCount}명 숨기기`
+    : `퇴사자 ${departedCount}명 보기`;
 
   return (
     <div className="min-h-screen bg-[#F9FAFB] px-4 py-8">
@@ -146,7 +175,27 @@ export function UserManagementView() {
                     소속 기관과 내부의 직책뿐이고, 팀(티켓 06)·업체(24)·팀 역할이 뒤이어 붙는다. */}
                   <th className="px-3 py-3 font-medium">소속 (팀·기관·업체)</th>
                   <th className="px-3 py-3 font-medium">직책·역할</th>
-                  <th className="px-3 py-3 font-medium">상태</th>
+                  <th className="px-3 py-3 font-medium">
+                    {departedToggle ? (
+                      <button
+                        type="button"
+                        aria-expanded={departedOpen}
+                        aria-label={departedToggleLabel}
+                        onClick={() => setDepartedOpen((open) => !open)}
+                        className="inline-flex items-center gap-1 hover:text-[#3A3A3C]"
+                      >
+                        상태
+                        <span className="rounded-full bg-[#F3F4F6] px-1.5 py-px text-[10.5px] text-[#6E6E73]">
+                          퇴사 {departedCount}
+                        </span>
+                        <ChevronDown
+                          className={`h-3 w-3 transition-transform ${departedOpen ? 'rotate-180' : ''}`}
+                        />
+                      </button>
+                    ) : (
+                      '상태'
+                    )}
+                  </th>
                   <th className="px-3 py-3 font-medium">
                     <span className="sr-only">액션</span>
                   </th>
@@ -209,6 +258,20 @@ export function UserManagementView() {
               </tbody>
             </table>
 
+            {departedToggle && (
+              <button
+                type="button"
+                aria-expanded={departedOpen}
+                onClick={() => setDepartedOpen((open) => !open)}
+                className="flex w-full items-center justify-center gap-1 border-t border-[#E5E5EA] py-2.5 text-[12.5px] text-[#6E6E73] hover:bg-[#F9FAFB] hover:text-[#3A3A3C]"
+              >
+                {departedToggleLabel}
+                <ChevronDown
+                  className={`h-3.5 w-3.5 transition-transform ${departedOpen ? 'rotate-180' : ''}`}
+                />
+              </button>
+            )}
+
             {isLoading && (
               <div className="flex items-center justify-center gap-2 py-10 text-[13px] text-[#6E6E73]">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -220,7 +283,7 @@ export function UserManagementView() {
                 사용자 목록을 불러오지 못했습니다.
               </p>
             )}
-            {!isLoading && !error && items.length === 0 && (
+            {!isLoading && !error && items.length === 0 && departedCount === 0 && (
               <p className="py-10 text-center text-[13px] text-[#9CA3AF]">
                 조건에 맞는 사용자가 없습니다.
               </p>
