@@ -18,15 +18,17 @@ describe('getSidebarMenuItemIds', () => {
 });
 
 describe('isSidebarHiddenPath', () => {
-  it('설문 편집기와 운영 콘솔에서는 사이드바를 감춘다', () => {
+  it('설문 편집기·새 설문 만들기·운영 콘솔에서는 사이드바를 감춘다', () => {
     expect(isSidebarHiddenPath('/surveys/abc/edit')).toBe(true);
     expect(isSidebarHiddenPath('/surveys/abc/operations')).toBe(true);
     expect(isSidebarHiddenPath('/surveys/abc/operations/contacts/1')).toBe(true);
+    // 새 설문 만들기는 편집기와 같은 화면이다.
+    expect(isSidebarHiddenPath('/surveys/create')).toBe(true);
+    expect(isSidebarHiddenPath('/surveys/create/')).toBe(true);
   });
 
-  it('목록·생성·미리보기·분석·기타 admin 화면은 사이드바를 둔다', () => {
+  it('목록·미리보기·분석·기타 admin 화면은 사이드바를 둔다', () => {
     expect(isSidebarHiddenPath('/surveys')).toBe(false);
-    expect(isSidebarHiddenPath('/surveys/create')).toBe(false);
     expect(isSidebarHiddenPath('/surveys/abc/preview')).toBe(false);
     expect(isSidebarHiddenPath('/surveys/abc/analytics')).toBe(false);
     expect(isSidebarHiddenPath('/surveys/abc/editor')).toBe(false);
