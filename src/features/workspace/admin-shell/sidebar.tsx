@@ -47,7 +47,8 @@ export function Sidebar({ user, memberships, collapsed, onToggle }: SidebarProps
 
   return (
     <aside
-      className="flex shrink-0 flex-col gap-2 bg-[#0D1B4C] p-4 pt-[18px]"
+      // 화면 높이에 붙여 둔다 — 셸의 flex 행이 본문 높이로 늘어나면 하단 프로필이 긴 목록 끝까지 밀려난다.
+      className="sticky top-0 flex h-screen shrink-0 flex-col gap-2 self-start bg-[#0D1B4C] p-4 pt-[18px]"
       style={{ width: collapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH }}
     >
       <div className={cn('flex items-center', collapsed ? 'flex-col gap-2' : 'justify-between')}>
@@ -71,7 +72,9 @@ export function Sidebar({ user, memberships, collapsed, onToggle }: SidebarProps
 
       <TeamSwitcher memberships={memberships} collapsed={collapsed} />
 
-      <nav className="flex flex-col gap-[3px]">
+      {/* 그룹·참여 트리가 길어지면 메뉴만 스크롤한다 — 프로필은 하단에 남는다. */}
+      <nav className="flex min-h-0 flex-1 flex-col gap-[3px] overflow-y-auto">
+
         {menuItemIds.includes('surveys') &&
           fieldworkTeamId !== null &&
           // 접힌 사이드바는 이름 없는 줄만 남으므로 「참여 중」 아이콘 하나로 줄인다.
@@ -129,8 +132,6 @@ export function Sidebar({ user, memberships, collapsed, onToggle }: SidebarProps
           />
         )}
       </nav>
-
-      <div className="flex-1" />
 
       <SidebarProfile user={user} memberships={memberships} collapsed={collapsed} />
     </aside>
