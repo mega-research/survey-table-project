@@ -33,6 +33,7 @@ export interface PageVisit {
 //   in_progress ──(완료 제출 + 자격미달 판정)──▶ screened_out
 //   in_progress ──(3h 유휴 sweep_stale_sessions)──▶ drop ──(재진입 되살리기)──▶ in_progress
 //   in_progress ──(쿼터 마감 markQuotaFull)────▶ quotaful_out
+//   quotaful_out ─(재진입 + 셀에 자리 있음 reopenQuotaClosedResponse)──▶ drop ──(되살리기)──▶ in_progress
 //   completed   ──(운영 콘솔 재응답 허용)──────▶ in_progress
 //   screened_out ─(운영 콘솔 재응답 허용)──────▶ in_progress
 //   screened_out ⇄ completed ─(운영 콘솔 응답 수정 + 자격미달 재판정)

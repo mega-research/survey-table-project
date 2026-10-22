@@ -740,6 +740,7 @@ R2 영구 객체 삭제의 유일한 경로는 유예 삭제 큐다 (`server/sto
 - **미분류**(차원 하나라도 카테고리 없음)는 쿼터에 걸리지 않고 통과한다. 속성형에서는 익명 응답이 항상 미분류라 `requireInviteToken` 을 켜는 것이 관례다(편집 화면이 경고, 코드 강제 없음). 현황판 요약 `unclassified` 가 그 수를 보인다.
 - **쿼터 게이트**(`lib/quota/quota-gate-build.ts` → `Survey.quotaGate`): 속성형은 게이트 문항을 만들지 않는다. 텍스트형 표 문항은 `cellIdsByQuestion` 의 대상 칸에 값이 있어야 "답변됨"이다 — 표 응답은 다른 칸만 채워도 객체가 생겨, 객체 존재로 판정하면 응답당 1회뿐인 확인이 주소를 적기 전에 소진된다. 문항 기반 차원이 없는 플랜은 `checkWithoutQuestions` 로 첫 전환에서 확인한다.
 - `enabled=false`면 정의·집계만 하고 응답자를 차단하지 않는다. 마감 차단 시 응답 status는 `quotaful_out`.
+- **쿼터마감 다시 열기** (2026-10-22, CONTEXT.md 「쿼터마감 다시 열기」): `quotaful_out` 응답자가 같은 링크로 다시 들어오면 그 응답의 셀에 지금 자리가 있을 때(목표 증가·쿼터 끔·셀 소멸) 마감을 풀고 남긴 답으로 이어 간다 — `quotaful_out → drop → in_progress`, 답 보존, `metadata.quotaReopenedAt` 표식. 판정은 입장 판정과 같은 사슬(`read-models/quota-cell`)이고 `server/survey-response/services/quota-reopen.ts` 의 `reopenQuotaClosedResponse` 하나를 재개(`resumeOrCreateResponse` — 설문이 응답을 받는 중일 때만)와 첫 답 저장(`settleReuseCandidate`)이 부른다. 자리를 예약하지 않으므로 초과는 페이지 재확인·제출 하드 차단이 막는다. 테스트 응답 제외. 마이그레이션 없음. 실DB 테스트 `tests/integration/quota-closed-reopen.realdb.test.ts`.
 - **publish 없이 즉시 반영되는 라이브 컬럼** (`isPaused`/`pausedMessage`와 동일 취급).
 - 실시간 달성률은 완료 응답 기준 — `docs/adr/0002-quota-realtime-from-completed-answers.md`.
 - **「진행 중 마감」** (`midSurveyClose`, 기본 꺼짐 — ADR 0025, CONTEXT.md 「진행 중 마감」): 셀 완료 수가 목표를 넘으면 안 되는 조사(완료자 전원 사례 지급)용. 켜면 두 가지가 바뀐다.

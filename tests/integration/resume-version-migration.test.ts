@@ -58,6 +58,11 @@ vi.mock('@/server/read-models/invite-lookup', () => ({
   findContactByInviteToken: vi.fn(),
 }));
 
+// 쿼터 마감 다시 열기 판정은 실DB 테스트(quota-closed-reopen.realdb)가 맡는다 — 여기서는 자리가 없는 경우로 고정.
+vi.mock('@/server/survey-response/services/quota-reopen', () => ({
+  reopenQuotaClosedResponse: vi.fn().mockResolvedValue(false),
+}));
+
 import { resumeOrCreateResponse } from '@/server/survey-response/services/lifecycle';
 
 const ROW_BASE = {

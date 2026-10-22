@@ -29,6 +29,7 @@ import type {
   ResumeOrCreateResponseOutput,
 } from '../domain/lifecycle';
 import { extractDraftSeq } from '../domain/draft-seq';
+import { reopenQuotaClosedResponse } from './quota-reopen';
 import { SurveyNotAcceptingResponsesError } from './response-gate';
 
 // ========================
@@ -129,6 +130,22 @@ async function touchOrReviveResponse(
         : { lastActivityAt: opts.now },
     )
     .where(eq(surveyResponses.id, responseId));
+}
+
+/**
+ * 재진입한 쿼터 마감 행 — 목표가 늘어 자리가 생겼으면 drop 으로 되돌리고 바뀐 status 를 돌려준다.
+ * 호출부는 돌려받은 status 로 평소 재개 판정(drop 되살리기)을 이어 간다.
+ *
+ * 설문이 지금 응답을 받지 않으면(중단·종료) 열지 않는다 — 열어 두면 응답자는 어차피 막히고
+ * 상태만 쿼터 마감에서 이탈로 바뀐다.
+ */
+async function reopenQuotaClosedOnResume(
+  row: { id: string; status: string },
+  flags: Awaited<ReturnType<typeof getSurveyControlFlags>>,
+): Promise<string> {
+  if (row.status !== 'quotaful_out') return row.status;
+  if (!flags || ongoingResponseDenial(flags, { isTest: false })) return row.status;
+  return (await reopenQuotaClosedResponse(row.id)) ? 'drop' : row.status;
 }
 
 /**
@@ -278,6 +295,7 @@ export async function recordVisibilitySegment(input: RecordVisibilitySegmentInpu
  * - drop 상태면 in_progress 로 UPDATE + lastActivityAt 갱신
  * - in_progress 면 그대로 (lastActivityAt만 갱신해 stale 방지)
  * - completed/screened_out/quotaful_out/bad 면 그대로 반환 — 호출자가 "이미 끝남" UX 처리
+ * - quotaful_out 이어도 목표가 늘어 그 셀에 자리가 생겼으면 다시 열어 in_progress 로 이어 간다
  *
  * 반환 null 이면 첫 진입 — 호출자는 평소대로 createResponseWithFirstAnswer 흐름.
  *
@@ -389,9 +407,11 @@ export async function resumeOrCreateResponse(
           return { ...restored, resumed: false };
         }
         const now = new Date();
+        // 쿼터 마감이어도 목표가 늘어 자리가 생겼으면 drop 으로 되돌려 아래 되살리기로 잇는다.
+        const status = await reopenQuotaClosedOnResume(existingByContact, flags);
         // 열림(in_progress·drop) 판정 — contracts 의 isOpenResponseStatus 가 SSOT.
         // 종결·알 수 없는 값은 종전대로 아래 null 로 흘러 첫 답변 경로(decideResponseReuse)가 차단한다.
-        if (isOpenResponseStatus(existingByContact.status)) {
+        if (isOpenResponseStatus(status)) {
           // 중단 모드: 행이 isTest 이거나 유효한 테스트 링크로 재진입한 경우만 예외.
           // 두 면제 갈래를 OR 로 합쳐 domain 의 단일 isTest 면제 규칙에 넘긴다.
           // flags 미조회(설문 삭제 등)는 종전대로 fail-open.
@@ -403,7 +423,7 @@ export async function resumeOrCreateResponse(
           if (contactPausedDenial) {
             throw new SurveyNotAcceptingResponsesError(contactPausedDenial);
           }
-          const reviveFromDrop = existingByContact.status === 'drop';
+          const reviveFromDrop = status === 'drop';
           // 답·스텝 복원 — invite 토큰 소지 = 이어가기 권한 (2026-08-12 제품 결정):
           // 초대 링크는 컨택별 개인 발송이므로 토큰 소지 자체를 소유 증명으로 보고,
           // 다른 기기·시크릿탭 재진입에도 복호화 답과 진행 위치를 복원한다. 링크 유출 시
@@ -490,8 +510,11 @@ export async function resumeOrCreateResponse(
   const now = new Date();
   const draftSeq = extractDraftSeq(existing.metadata);
 
+  // 쿼터 마감이어도 목표가 늘어 자리가 생겼으면 drop 으로 되돌려 아래 되살리기로 잇는다.
+  const status = await reopenQuotaClosedOnResume(existing, flags);
+
   // 열림(in_progress·drop) 판정 — contracts 의 isOpenResponseStatus 가 SSOT.
-  if (isOpenResponseStatus(existing.status)) {
+  if (isOpenResponseStatus(status)) {
     // 중단 모드: 행이 isTest 이거나 유효한 테스트 링크로 재진입한 경우만 예외.
     // 두 면제 갈래를 OR 로 합쳐 domain 의 단일 isTest 면제 규칙에 넘긴다.
     // flags 미조회(설문 삭제 등)는 종전대로 fail-open.
@@ -501,7 +524,7 @@ export async function resumeOrCreateResponse(
     if (sessionPausedDenial) {
       throw new SurveyNotAcceptingResponsesError(sessionPausedDenial);
     }
-    const reviveFromDrop = existing.status === 'drop';
+    const reviveFromDrop = status === 'drop';
     // 응답 버전 이관 — 구버전 행이면 현재 버전으로 재고정 (실패·불필요 시 null → 기존 동작)
     const migration = await migrateResumedRowIfStale({
       responseId: existing.id,

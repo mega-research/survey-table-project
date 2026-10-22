@@ -131,6 +131,10 @@ vi.mock('@/server/survey-response/services/check', () => ({
   checkTrackA: (...a: unknown[]) => checkTrackAMock(...a),
   checkTrackB: (...a: unknown[]) => checkTrackBMock(...a),
 }));
+// 쿼터 마감 다시 열기 판정은 실DB 테스트(quota-closed-reopen.realdb)가 맡는다 — 여기서는 자리가 없는 경우로 고정.
+vi.mock('@/server/survey-response/services/quota-reopen', () => ({
+  reopenQuotaClosedResponse: vi.fn().mockResolvedValue(false),
+}));
 
 // completeResponse / saveAdminEdit 이 공유하는 정규화 저장 — 전달된 맵의 암호화 여부를 검증한다.
 vi.mock('@/server/survey-response/services/response-answers', () => ({
