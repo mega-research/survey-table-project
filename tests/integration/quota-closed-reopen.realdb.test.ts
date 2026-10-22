@@ -39,6 +39,8 @@ const ATTR_KEY = '산업 분야';
 const ATTR_VALUE = '스마트 도시 및 인프라/통신';
 const SAVED_ANSWERS = { 'q-consent': '동의' };
 const INVITE = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+const CLOSED_ENTERED_AT = '2026-10-19T05:59:43.309Z';
+const CLOSED_AT = '2026-10-19T05:59:57.632Z';
 
 const createdSurveyIds: string[] = [];
 
@@ -145,6 +147,9 @@ async function seed(target: number) {
       isCompleted: false,
       currentStepId: 'page:1',
       questionResponses: SAVED_ANSWERS,
+      // 마감 처리는 마지막 방문을 닫지 않는다 — 다시 열 때 닫아야 공백 기간이 체류로 잡히지 않는다.
+      pageVisits: [{ stepId: 'page:1', enteredAt: CLOSED_ENTERED_AT }],
+      lastActivityAt: new Date(CLOSED_AT),
     })
     .returning({ id: surveyResponses.id });
   if (!closed) throw new Error('마감 응답 시드 실패');
@@ -163,6 +168,7 @@ async function loadRow(responseId: string) {
     .select({
       status: surveyResponses.status,
       questionResponses: surveyResponses.questionResponses,
+      pageVisits: surveyResponses.pageVisits,
     })
     .from(surveyResponses)
     .where(eq(surveyResponses.id, responseId));
@@ -202,6 +208,26 @@ describe.skipIf(!isLocalDb)('쿼터 마감 응답 다시 열기 (real local DB)'
     const row = await loadRow(s.closedResponseId);
     expect(row?.status).toBe('in_progress');
     expect(row?.questionResponses).toEqual(SAVED_ANSWERS);
+  });
+
+  it('다시 열 때 열린 채 남은 마지막 방문을 마감 시각으로 닫는다 — 공백 기간이 소요시간에 들어가지 않게', async () => {
+    const s = await seed(2);
+    mockFindContactByInviteToken.mockResolvedValue({
+      kind: 'valid',
+      contactTargetId: s.closedContactId,
+      respondedAt: null,
+      isTest: false,
+    });
+
+    await resumeOrCreateResponse({
+      surveyId: s.surveyId,
+      sessionId: 'another-device',
+      inviteToken: INVITE,
+    });
+
+    const visits = (await loadRow(s.closedResponseId))?.pageVisits ?? [];
+    expect(visits).toHaveLength(1);
+    expect(Date.parse(visits[0]?.leftAt ?? '')).toBe(Date.parse(CLOSED_AT));
   });
 
   it('초대 링크 재진입: 여전히 가득 차 있으면 마감 그대로 둔다', async () => {

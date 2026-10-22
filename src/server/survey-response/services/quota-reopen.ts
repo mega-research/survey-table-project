@@ -60,6 +60,19 @@ export async function reopenQuotaClosedResponse(responseId: string): Promise<boo
     .update(surveyResponses)
     .set({
       status: 'drop',
+      // 마감 처리(markQuotaFull)는 마지막 방문을 닫지 않는다. 열린 채 되살리면 재진입 첫 이동이
+      // 그 방문을 지금 시각으로 닫아, 마감~재진입 공백(며칠)이 체류·소요시간에 들어간다.
+      // 이탈 처리(sweep_stale_sessions)와 같이 마지막 활동 시각(= 마감 시각)으로 닫는다.
+      pageVisits: sql`CASE
+        WHEN jsonb_array_length(COALESCE(${surveyResponses.pageVisits}, '[]'::jsonb)) > 0
+         AND (${surveyResponses.pageVisits} -> -1 ->> 'leftAt') IS NULL
+        THEN jsonb_set(
+          ${surveyResponses.pageVisits},
+          ARRAY[(jsonb_array_length(${surveyResponses.pageVisits}) - 1)::text, 'leftAt'],
+          to_jsonb(${surveyResponses.lastActivityAt}::text)
+        )
+        ELSE ${surveyResponses.pageVisits}
+      END`,
       // 언제 다시 열렸는지 남긴다 — 응답 내역에서 "마감됐다가 이어 간 응답" 을 가릴 근거.
       metadata: sql`jsonb_set(
         COALESCE(${surveyResponses.metadata}, '{}'::jsonb),
