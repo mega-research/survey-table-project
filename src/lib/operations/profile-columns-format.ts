@@ -1,14 +1,35 @@
 // 응답 내역(profiles) 표시 컬럼 스킴 헬퍼 — 클라이언트(에디터)·서버(페이지) 공용, server-only 금지.
-import type { ProfileColumnDef, ProfileColumnScheme } from '@/shared/contracts/operations';
 import { RESID_DEFAULT_LABEL, attrsKeyOf, piiKeyOf } from '@/lib/operations/contacts-format';
 import type {
   NormalizedContactColumnScheme,
   RawExportContactColumn,
 } from '@/lib/operations/contacts-format';
+import type { ProfileColumnDef, ProfileColumnScheme } from '@/shared/contracts/operations';
 
 const ATTRS_PREFIX = 'attrs.';
 const PII_PREFIX = 'pii.';
 const ENTRY_PREFIX = 'entry.';
+const ANSWER_PREFIX = 'answer.';
+
+/**
+ * 응답값 열 키 — 문항 하나의 응답(`answer.<문항 id>`) 또는 표 문항의 칸 하나
+ * (`answer.<문항 id>.<칸 id>`). 변수명(Q1_r1_c2)은 문항코드·행 순서로 매번 다시 만들어지는
+ * 이름이라 저장하지 않고, 바뀌지 않는 id 로 가리킨다.
+ */
+export function answerColumnKey(questionId: string, cellId?: string | null): string {
+  return cellId ? `${ANSWER_PREFIX}${questionId}.${cellId}` : `${ANSWER_PREFIX}${questionId}`;
+}
+
+/** `answer.<문항 id>[.<칸 id>]` 이면 그 id 들, 아니면 null. */
+export function answerKeyOf(key: string): { questionId: string; cellId: string | null } | null {
+  if (!key.startsWith(ANSWER_PREFIX)) return null;
+  const rest = key.slice(ANSWER_PREFIX.length);
+  const dot = rest.indexOf('.');
+  const questionId = dot === -1 ? rest : rest.slice(0, dot);
+  const cellId = dot === -1 ? null : rest.slice(dot + 1);
+  if (!questionId || cellId === '') return null;
+  return { questionId, cellId };
+}
 
 /** 이어 넘길 값 열 키 — 종료 후 이동 주소 설정의 passParams 이름마다 하나(`entry.euid`). */
 export function entryColumnKey(name: string): string {
@@ -48,6 +69,7 @@ export const PROFILE_SYS_COLUMNS: readonly SysColumnDef[] = [
  * - 저장 스킴에 같은 key 가 있으면 저장값(label/order/hidden)이 이긴다.
  * - 미저장 key 는 sys 는 defaultHidden, entry 는 보임(패널 회원 ID 를 받겠다고 설정했으면 볼
  *   값이다), attrs/pii 는 hidden=true 로 시작.
+ * - 응답값 열(answer.)은 풀에 없다 — 컬럼 설정에서 추가한 저장 열만 answerColumnKeys 로 걸러 잇는다.
  * - 컨택 스킴·이어 넘길 값 설정에서 사라진 고아 key 는 결과에서 제거 → save 시 자동 정리.
  */
 export function hydrateProfileColumns(
@@ -55,6 +77,11 @@ export function hydrateProfileColumns(
   savedScheme: ProfileColumnScheme | null,
   /** 종료 후 이동 주소 설정의 passParams(normalizePassParamNames 결과). */
   entryParamNames: readonly string[] = [],
+  /**
+   * 지금 설문 구조에 있는 응답값 열 키. 저장 스킴의 answer.* 열은 여기 있는 것만 남는다 —
+   * 문항·칸이 지워지면 열도 빠진다. 넘기지 않으면 answer.* 열을 전부 뺀다(명단 열만 보는 호출부).
+   */
+  answerColumnKeys: ReadonlySet<string> = new Set(),
 ): ProfileColumnDef[] {
   const residLabel =
     contactScheme?.columns.find((c) => c.source === 'system.resid')?.label?.trim() ||
@@ -69,9 +96,7 @@ export function hydrateProfileColumns(
   const entryPool = entryParamNames.map((name) => ({ key: entryColumnKey(name), label: name }));
 
   const pool: SysColumnDef[] = [
-    ...PROFILE_SYS_COLUMNS.map((c) =>
-      c.key === 'sys.resid' ? { ...c, label: residLabel } : c,
-    ),
+    ...PROFILE_SYS_COLUMNS.map((c) => (c.key === 'sys.resid' ? { ...c, label: residLabel } : c)),
     ...entryPool,
     ...contactPool,
   ];
@@ -89,7 +114,12 @@ export function hydrateProfileColumns(
     };
   });
 
-  return merged.sort((a, b) => a.order - b.order);
+  // 응답값 열은 풀이 아니라 사람이 골라 추가한 것만 있다 — 저장 스킴에서 지금 구조에 있는 것만 잇는다.
+  const answerColumns = (savedScheme?.columns ?? []).filter(
+    (c) => answerKeyOf(c.key) !== null && answerColumnKeys.has(c.key),
+  );
+
+  return [...merged, ...answerColumns].sort((a, b) => a.order - b.order);
 }
 
 /** 표시 컬럼만 order 순으로. */

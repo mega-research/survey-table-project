@@ -3,6 +3,20 @@
 // client-safe — server-only·Node·DB 의존 없음.
 import type { Platform } from '@/lib/operations/parse-ua';
 
+/**
+ * 응답 내역에 응답값 열로 고를 수 있는 칸 하나 — 컬럼 설정의 「응답값 열 추가」 목록과 열 소스
+ * 표기에 쓴다. 서버가 지금 설문 구조에서 만든다(read-models/profile-column-scheme).
+ */
+export interface ProfileAnswerSource {
+  /** `answer.<문항 id>[.<칸 id>]` — lib/operations/profile-columns-format 의 answerColumnKey */
+  key: string;
+  /** 내보내기 변수명 — 지금 구조로 만든 이름이라 문항코드·행이 바뀌면 같이 바뀐다 */
+  varName: string;
+  questionTitle: string;
+  /** 표 칸이면 「행 - 열」, 문항 전체면 null */
+  cellLabel: string | null;
+}
+
 // RSC 가 SQL 로 뽑아 클라이언트 표에 props 로 넘기는 모양.
 // 조회 자체는 server/operations/services/profiles.server 소관이고 여기는 모양만 둔다.
 export interface ProfilesRow {

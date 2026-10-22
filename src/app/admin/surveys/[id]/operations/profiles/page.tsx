@@ -20,14 +20,17 @@ import {
 } from '@/lib/operations/profiles-format';
 import { listResponsesForProfiles } from '@/server/operations/services/profiles';
 import {
+  answerKeyOf,
   entryKeyOf,
   hydrateProfileColumns,
   visibleProfileColumns,
 } from '@/lib/operations/profile-columns-format';
 import {
+  getProfileAnswerSources,
   getProfileColumnScheme,
   getProfileEntryParamNames,
 } from '@/server/read-models/profile-column-scheme';
+import { loadProfileAnswerValues } from '@/server/operations/services/profile-answer-values';
 import { decryptPiiForTargets } from '@/lib/crypto/contact-pii-repo';
 import { getContactColumnScheme, buildColumnCandidates } from '@/server/read-models/contacts';
 import {
@@ -84,14 +87,20 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
     isViewOnlyViewer(surveyId),
   ]);
 
-  const [contactScheme, profileScheme, entryParamNames] = await Promise.all([
+  const [contactScheme, profileScheme, entryParamNames, answerSources] = await Promise.all([
     getContactColumnScheme(surveyId, scope),
     getProfileColumnScheme(surveyId),
     getProfileEntryParamNames(surveyId),
+    getProfileAnswerSources(surveyId),
   ]);
   // 표시 컬럼 스킴 — NULL(미설정)이면 hydrate 가 기본 스킴(기존 9컬럼)을 만든다.
   const displayColumns = visibleProfileColumns(
-    hydrateProfileColumns(contactScheme, profileScheme, entryParamNames),
+    hydrateProfileColumns(
+      contactScheme,
+      profileScheme,
+      entryParamNames,
+      new Set(answerSources.map((s) => s.key)),
+    ),
   );
   // 전체(system.all) 는 컨택 유무와 무관하게 상시 노출 — 컨택 없는 설문에서도
   // 브라우저 부분일치 전개(파서 훅)로 유효하다.
@@ -176,6 +185,18 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
       ? Object.fromEntries(await decryptPiiForTargets(piiTargetIds, piiKeys))
       : {};
 
+  // 응답값 열 — 이 쪽 행의 응답에서 표시 중인 문항·칸 값만 꺼낸다.
+  const answerColumnKeys = displayColumns
+    .map((c) => c.key)
+    .filter((k) => answerKeyOf(k) !== null);
+  const answerValues =
+    answerColumnKeys.length > 0
+      ? await loadProfileAnswerValues(
+          rows.map((r) => r.id),
+          answerColumnKeys,
+        )
+      : {};
+
   // currentStepId(페이지 step ID) → 대표 질문 order/번호 역매핑. 진행중 응답의 N/M·Qx 표기에 사용.
   const stepLocations = Object.fromEntries(buildStepLocationMap(qs, groups));
   const totalSteps = qs.length;
@@ -241,6 +262,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
               viewOnly={viewOnly}
               columnScheme={displayColumns}
               piiByTarget={piiByTarget}
+              answerValues={answerValues}
             />
           )}
         </CardContent>

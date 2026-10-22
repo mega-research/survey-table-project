@@ -1,14 +1,15 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
-import { ProfileColumnEditor } from '@/features/operations/profiles/profile-column-editor';
 import { Button } from '@/components/ui/button';
+import { ProfileColumnEditor } from '@/features/operations/profiles/profile-column-editor';
+import { getOperationsDataScope } from '@/server/data-scope';
 import { getContactColumnScheme } from '@/server/read-models/contacts';
 import {
+  getProfileAnswerSources,
   getProfileColumnScheme,
   getProfileEntryParamNames,
 } from '@/server/read-models/profile-column-scheme';
-import { getOperationsDataScope } from '@/server/data-scope';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,17 +25,18 @@ interface PageProps {
  * 응답 내역 컬럼 설정 페이지 — 진척률 컬럼 설정(report/columns)과 동일 패턴.
  *
  * - server component: profile_columns(현재 스킴)·contact_columns(attrs./pii. 풀)·이어 넘길 값
- *   이름(entry. 풀) 병렬 조회.
+ *   이름(entry. 풀)·응답값 열 후보(answer.) 병렬 조회.
  * - 실제 편집 인터랙션은 ProfileColumnEditor(client) 가 담당.
  */
 export default async function ProfilesColumnsPage({ params }: PageProps) {
   const { id: surveyId } = await params;
   const scope = await getOperationsDataScope(surveyId);
 
-  const [scheme, contactScheme, entryParamNames] = await Promise.all([
+  const [scheme, contactScheme, entryParamNames, answerSources] = await Promise.all([
     getProfileColumnScheme(surveyId),
     getContactColumnScheme(surveyId, scope),
     getProfileEntryParamNames(surveyId),
+    getProfileAnswerSources(surveyId),
   ]);
 
   return (
@@ -54,6 +56,7 @@ export default async function ProfilesColumnsPage({ params }: PageProps) {
         initialScheme={scheme}
         contactScheme={contactScheme}
         entryParamNames={entryParamNames}
+        answerSources={answerSources}
       />
     </main>
   );

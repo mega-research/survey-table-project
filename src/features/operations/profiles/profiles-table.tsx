@@ -11,6 +11,7 @@ import { useSearchParamsMutator } from '@/features/operations/hooks/use-search-p
 import { formatPlatformKo } from '@/lib/operations/parse-ua';
 import {
   ENTRY_PARAM_DISPLAY_LEN,
+  answerKeyOf,
   entryKeyOf,
   formatIpHash,
 } from '@/lib/operations/profile-columns-format';
@@ -81,6 +82,8 @@ interface Props {
   columnScheme: ProfileColumnDef[];
   /** contactTargetId → columnKey → 복호화 평문. 표시 스킴의 pii.* 키만 채워진다. */
   piiByTarget: Record<string, Record<string, string>>;
+  /** 응답 id → answer.* 열 키 → 표시 글자. 표시 스킴의 응답값 열만 채워진다. */
+  answerValues?: Record<string, Record<string, string>>;
 }
 
 interface DisplayRow {
@@ -109,6 +112,8 @@ interface DisplayRow {
   entryParams: Record<string, string> | null;
 }
 
+const EMPTY_ANSWER_VALUES: Record<string, Record<string, string>> = {};
+
 const meta = (align: CellAlign, sortable: boolean, nowrap = true): ColumnMeta => ({
   align,
   sortable,
@@ -136,6 +141,7 @@ export function ProfilesTable({
   viewOnly = false,
   columnScheme,
   piiByTarget,
+  answerValues = EMPTY_ANSWER_VALUES,
 }: Props) {
   const pushParams = useSearchParamsMutator();
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -222,6 +228,15 @@ export function ProfilesTable({
             );
           },
           meta: meta('left', false),
+        };
+      }
+      if (answerKeyOf(c.key) !== null) {
+        return {
+          id: c.key,
+          accessorFn: (r: DisplayRow) => answerValues[r.id]?.[c.key] || '—',
+          header: c.label,
+          // 응답 원문 — attrs 처럼 wrap 허용. 정렬·검색은 응답 JSONB 를 뒤져야 해 받지 않는다.
+          meta: meta('left', false, false),
         };
       }
       if (c.key.startsWith('pii.')) {
@@ -347,7 +362,7 @@ export function ProfilesTable({
         meta: meta('center', false),
       },
     ];
-  }, [surveyId, view, hasContacts, isGuest, viewOnly, columnScheme, piiByTarget]);
+  }, [surveyId, view, hasContacts, isGuest, viewOnly, columnScheme, piiByTarget, answerValues]);
 
   // TanStack Table useReactTable은 React Compiler 비호환 API라 국소 예외로 둔다.
   // eslint-disable-next-line react-hooks/incompatible-library
