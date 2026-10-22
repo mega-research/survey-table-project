@@ -225,4 +225,13 @@ describe('표 이미지 셀 — 이미지 크게 보기', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(window.history.state?.imageEnlarge).toBeUndefined();
   });
+
+  it('마우스 기기의 배지는 키보드 포커스일 때만 남는다 — 창을 닫아 포커스가 돌아와도 남지 않는다', () => {
+    const { container } = renderTable();
+    loadImageWithSize(container.querySelector('img') as HTMLImageElement, shrunk);
+
+    const badge = container.querySelector('[data-enlarge-badge]') as HTMLElement;
+    expect(badge.className).toContain('group-has-[:focus-visible]/enlarge:opacity-100');
+    expect(badge.className).not.toContain('focus-within');
+  });
 });

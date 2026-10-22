@@ -162,7 +162,7 @@ export function EnlargeableImage({
           <span
             aria-hidden
             data-enlarge-badge
-            className="pointer-events-none absolute right-1.5 bottom-1.5 flex size-7 items-center justify-center rounded-full bg-black/65 text-white transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-focus-within/enlarge:opacity-100 [@media(hover:hover)]:group-hover/enlarge:opacity-100"
+            className="pointer-events-none absolute right-1.5 bottom-1.5 flex size-7 items-center justify-center rounded-full bg-black/65 text-white transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/enlarge:opacity-100 [@media(hover:hover)]:group-has-[:focus-visible]/enlarge:opacity-100"
           >
             <Maximize2 className="size-3.5" />
           </span>
