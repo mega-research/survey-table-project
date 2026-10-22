@@ -41,7 +41,7 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 
 | 영역           | 기술                                         | 버전            |
 | -------------- | -------------------------------------------- | --------------- |
-| 프레임워크     | Next.js (App Router, Turbopack)              | 16.3.8          |
+| 프레임워크     | Next.js (App Router, Turbopack)              | 16.4.2          |
 | UI 라이브러리  | React (React Compiler)                       | 19.2.3          |
 | 스타일링       | TailwindCSS                                  | 4.x             |
 | 컴포넌트       | shadcn/ui (Radix UI)                         | -               |
@@ -60,7 +60,7 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 | 데이터베이스   | PostgreSQL (Supabase)                        | -               |
 | 파일 저장소    | Cloudflare R2 (S3 호환)                      | -               |
 | 이미지 처리    | sharp                                        | 0.35.5          |
-| HTML sanitize  | sanitize-html                                | 2.17.0          |
+| HTML sanitize  | sanitize-html                                | 2.18.1          |
 | 이메일 발송    | Resend + React Email                         | 6.12.3          |
 | 이메일 webhook | svix                                         | 1.93.0          |
 | 백그라운드 잡  | Inngest                                      | 4.4.0           |
@@ -71,7 +71,7 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 | SPSS .sav 생성 | sav-writer                                   | 1.0.0           |
 | 차트           | Recharts + Tremor                            | 2.15.4 / 3.18.7 |
 | 에러 모니터링  | Sentry (@sentry/nextjs)                      | 10.x            |
-| 테스트         | Vitest + Testing Library + MSW + Playwright  | 4.1.0 / 1.60    |
+| 테스트         | Vitest + Testing Library + MSW + Playwright  | 4.1.12 / 1.60   |
 | 언어           | TypeScript (strict)                          | 5.9.3           |
 
 > 참고: `xlsx`, `jszip` 의존성은 제거됨(2026-06-05). 엑셀 생성은 ExcelJS, SPSS는 sav-writer 사용.
