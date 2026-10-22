@@ -1,8 +1,9 @@
 import type { Question, QuestionGroup } from '@/types/survey';
-import { type BranchEvalCtx, responsesToLookupShape } from '@/utils/branch-eval';
+import type { BranchEvalCtx } from '@/utils/branch-eval';
 import { collectTraversedQuestionIds } from '@/utils/branch-logic';
 import { buildRenderSteps, stepIdOf, type RenderStep } from '@/utils/group-ordering';
 
+import { type EvalCtxSource, evalCtxForView } from './answer-eval-ctx';
 import { resolveVisibleQuestionIds, stripHiddenQuestionValues } from './question-visibility';
 import { PERSISTED_ROOT_SIDECAR_KEYS } from './response-sidecars';
 
@@ -22,6 +23,10 @@ import { PERSISTED_ROOT_SIDECAR_KEYS } from './response-sidecars';
  * **경로를 확정할 수 없으면 경로 밖 strip 을 건너뛴다**(fail-safe — 숨은 문항 strip 은 그대로).
  * 서버가 계산한 경로가 응답 화면과 어긋나면 멀쩡한 답을 지우기 때문이다. 사유는 `AnswerPathSkip`.
  *
+ * 조건 평가 컨텍스트는 응답 화면과 같아야 경로가 같다 — 화면은 명단 값 위에 응답 인용값을 얹어
+ * 조건을 푼다. 호출부(응답 확정·Raw 내보내기)는 `createAnswerEvalCtx` 로 뷰마다 인용값을 다시
+ * 계산하는 출처를 넘긴다.
+ *
  * 저장 경계 중 응답 확정(완료 제출·빈 complete·관리자 수정)과 Raw 내보내기의 마지막 그물만 쓴다.
  * 응답 화면은 즉시 지우지 않고, 초안·구간 저장에도 걸지 않는다 — 부분 패치라 경로를 정하는 상류
  * 답이 없어 멀쩡한 답을 지운다(주의사항 14). server-only 의존 금지.
@@ -31,11 +36,6 @@ import { PERSISTED_ROOT_SIDECAR_KEYS } from './response-sidecars';
 export type AnswerPathSkip =
   /** 문항 섞기 — 응답자마다 순서가 달라질 수 있는 설정. 지금은 응답 화면이 섞지 않지만 켜진 설문은 믿지 않는다. */
   | 'shuffle'
-  /**
-   * 문항·그룹 표시 조건이 응답 인용 이름을 명단 값 자리로 읽는다. 응답 화면은 인용값을 명단 값 위에
-   * 얹어 조건을 풀지만(인용 우선) 서버 재료에는 인용값이 없다.
-   */
-  | 'answer-quote-condition'
   /** 응답 행에 기록된 마지막 페이지가 계산한 경로 위에 없다 — 응답자가 이 시뮬레이션대로 걷지 않았다. */
   | 'last-step-off-path'
   /** 기록된 마지막 페이지가 지금 구조에 없다(재배포·옛 형식) — 경로를 맞춰 볼 수 없다. */
@@ -65,57 +65,9 @@ export interface ReachedAnswers {
   pathSkipped: AnswerPathSkip | null;
 }
 
-/** 조건 트리 어디에든 박힌 `attrsKey` 문자열을 모은다(attr 피연산자·LUT 키 매핑 공통). */
-function collectAttrsKeys(node: unknown, out: Set<string>): void {
-  if (!node || typeof node !== 'object') return;
-  if (Array.isArray(node)) {
-    for (const item of node) collectAttrsKeys(item, out);
-    return;
-  }
-  for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
-    if (key === 'attrsKey' && typeof value === 'string') out.add(value);
-    else collectAttrsKeys(value, out);
-  }
-}
-
-/** 이 설문이 만드는 응답 인용 이름(문항 레벨 + 셀 레벨) — answer-quote 의 수집 규칙과 같은 기준. */
-function collectAnswerQuoteNames(questions: readonly Question[]): Set<string> {
-  const names = new Set<string>();
-  for (const question of questions) {
-    const name = question.answerQuoteEnabled ? (question.answerQuoteName ?? '').trim() : '';
-    if (name) names.add(name);
-    for (const row of question.tableRowsData ?? []) {
-      for (const cell of row.cells ?? []) {
-        const cellName = cell.answerQuoteEnabled ? (cell.answerQuoteName ?? '').trim() : '';
-        if (cellName) names.add(cellName);
-      }
-    }
-  }
-  return names;
-}
-
-/** 걸음을 정하는 표시 조건(문항·그룹)이 응답 인용 이름을 읽는가. */
-function pathConditionsReadAnswerQuotes(
-  questions: readonly Question[],
-  groups: readonly QuestionGroup[],
-): boolean {
-  const names = collectAnswerQuoteNames(questions);
-  if (names.size === 0) return false;
-  const keys = new Set<string>();
-  for (const question of questions) collectAttrsKeys(question.displayCondition, keys);
-  for (const group of groups) collectAttrsKeys(group.displayCondition, keys);
-  for (const key of keys) if (names.has(key)) return true;
-  return false;
-}
-
 /** 응답과 상관없이 정해지는 건너뛰기 사유. */
-function staticSkipReason(
-  questions: readonly Question[],
-  groups: readonly QuestionGroup[],
-  options: AnswerPathOptions,
-): AnswerPathSkip | null {
+function staticSkipReason(options: AnswerPathOptions): AnswerPathSkip | null {
   if (options.settings?.shuffleQuestions) return 'shuffle';
-  if (pathConditionsReadAnswerQuotes(questions, groups)) return 'answer-quote-condition';
   return null;
 }
 
@@ -162,27 +114,34 @@ function dropQuestionAnswers(
  * 지우면 그 값을 조건으로 쓰던 문항이 숨거나 분기가 바뀌어 경로가 다시 바뀔 수 있다. 매 바퀴가
  * 지우기만 하므로(되살리지 않는다) 바퀴 수는 문항 수를 넘지 않는다.
  *
- * `evalCtx` 의 명단 값·LUT 은 그대로 쓰고 응답 뷰만 바퀴마다 지운 상태로 다시 만든다
- * (숨은 문항 strip 과 같은 규칙). 원본은 변형하지 않는다.
+ * 평가 컨텍스트는 바퀴마다 지운 상태로 다시 만든다 — 고정 컨텍스트는 응답 뷰만, 뷰마다 만드는
+ * 함수(`createAnswerEvalCtx`)는 인용값까지(숨은 문항 strip 과 같은 규칙). 원본은 변형하지 않는다.
  */
 export function stripUnreachedQuestionValues(
   questions: Question[],
   responses: Record<string, unknown>,
   groups: QuestionGroup[] | undefined,
-  evalCtx: BranchEvalCtx | undefined,
+  evalCtx: EvalCtxSource | undefined,
   options: AnswerPathOptions = {},
 ): ReachedAnswers {
   const groupList = groups ?? [];
   const ctxFor = (view: Record<string, unknown>): BranchEvalCtx | undefined =>
-    evalCtx && view !== responses
-      ? { ...evalCtx, responses: responsesToLookupShape(view) }
-      : evalCtx;
+    evalCtxForView(evalCtx, view, responses);
+  // 숨은 문항 strip 에는 뷰마다 만드는 출처를 그대로 넘긴다 — 지운 결과로 인용값을 다시 계산하는
+  // 수렴을 그쪽이 돈다.
+  const stripHidden = (view: Record<string, unknown>) =>
+    stripHiddenQuestionValues(
+      questions,
+      view,
+      groups,
+      typeof evalCtx === 'function' ? evalCtx : ctxFor(view),
+    );
 
-  let current = stripHiddenQuestionValues(questions, responses, groups, ctxFor(responses));
+  let current = stripHidden(responses);
   const visibleOf = (view: Record<string, unknown>) =>
     resolveVisibleQuestionIds(questions, view, groups, ctxFor(view));
 
-  const skip = staticSkipReason(questions, groupList, options);
+  const skip = staticSkipReason(options);
   if (skip) return { responses: current, reachedQuestionIds: visibleOf(current), pathSkipped: skip };
 
   const steps = buildRenderSteps(questions, groupList);
@@ -217,7 +176,7 @@ export function stripUnreachedQuestionValues(
     if (next === current) {
       return { responses: current, reachedQuestionIds: traversed, pathSkipped: null };
     }
-    current = stripHiddenQuestionValues(questions, next, groups, ctxFor(next));
+    current = stripHidden(next);
   }
   // 도달 불가 — 바퀴마다 문항이 하나 이상 지워지므로 문항 수 안에 수렴한다. 방어적으로 마지막 상태.
   const traversed = collectTraversedQuestionIds(steps, current, questions, groups, ctxFor(current));

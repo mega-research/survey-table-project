@@ -13,6 +13,13 @@ import type { RawExportResponseRow } from '@/lib/analytics/raw-workbook';
 import { NOT_RESPONDED_STATUS } from '@/lib/operations/profiles-format';
 import type { Question } from '@/types/survey';
 
+import {
+  QUOTE_CONDITION_QUESTIONS,
+  QUOTE_CONTACT_ATTRS,
+  quoteFromOptionResponses,
+  quoteFromOtherTextResponses,
+} from '../../../tests/helpers/answer-quote-condition-survey';
+
 // 조사 대상 4명(resid 1~4) 중 2·4 만 응답했고 1·3 은 미응답. 익명 응답 2건은 시스템ID 가 없다.
 const t1: NonRespondentTarget = { id: 't1', resid: 1, inviteCode: 'c1' };
 const t3: NonRespondentTarget = { id: 't3', resid: 3, inviteCode: 'c3' };
@@ -330,6 +337,28 @@ describe('stripHiddenFromExportRows — 경로 밖 문항', () => {
     });
 
     const [out] = stripHiddenFromExportRows([row], new Map([['r-off', { questions: routeFixture() }]]));
+
+    expect(out).toBe(row);
+  });
+});
+
+describe('stripHiddenFromExportRows — 응답 인용값을 읽는 조건', () => {
+  // 응답 화면은 명단 값 위에 응답 인용값을 얹어 조건을 푼다 — 명단 `지역=서울`, 인용값 `부산`.
+  it.each([
+    ['보기 문구', quoteFromOptionResponses],
+    ['기타 상세 기재', quoteFromOtherTextResponses],
+  ])('인용값(%s)으로 보이는 열·행·문항의 답을 내보낸다', (_label, payload) => {
+    const row = response({ id: 'r-quote', status: 'in_progress', questionResponses: payload() });
+
+    const [out] = stripHiddenFromExportRows(
+      [row],
+      new Map([
+        [
+          'r-quote',
+          { questions: QUOTE_CONDITION_QUESTIONS, contactAttrs: QUOTE_CONTACT_ATTRS },
+        ],
+      ]),
+    );
 
     expect(out).toBe(row);
   });

@@ -1,11 +1,11 @@
 import type { RawExportContactColumn } from '@/lib/operations/contacts-format';
 import { NOT_RESPONDED_STATUS } from '@/lib/operations/profiles-format';
+import { createAnswerEvalCtx } from '@/lib/survey/answer-eval-ctx';
 import { stripUnreachedQuestionValues } from '@/lib/survey/answer-path';
 import { stripDisabledCellValues } from '@/lib/survey/cell-gating';
 import { omitDisabledPriorAnswers } from '@/lib/survey/prior-answer-condition';
 import { OPT_TEXTS_KEY } from '@/lib/option-text-read';
 import type { Question, QuestionGroup, SurveyLookup } from '@/types/survey';
-import { responsesToLookupShape } from '@/utils/branch-eval';
 
 import type { RawExportResponseRow } from './raw-workbook';
 
@@ -77,7 +77,8 @@ export function buildContactValues(
 
 /**
  * 한 행의 숨은 문항 판정에 필요한 재료 — 그 응답이 **수집된 버전**의 스냅샷 + 컨택 attrs.
- * 응답 페이지·제출·어드민 수정이 쓰는 평가 컨텍스트와 같은 재료다. 하나라도 빠지면
+ * 응답 페이지·제출·어드민 수정이 쓰는 평가 컨텍스트와 같은 재료다(응답 인용값은 행의 응답에서
+ * `createAnswerEvalCtx` 가 계산해 명단 값 위에 얹는다). 하나라도 빠지면
  * LUT·attrs·수식을 쓰는 조건이 여기서만 다르게 풀려 멀쩡한 답이 지워진다.
  */
 export interface ExportStripContext {
@@ -121,11 +122,11 @@ export function stripHiddenFromExportRows(
       ctx.questions,
       row.questionResponses,
       ctx.groups,
-      {
-        responses: responsesToLookupShape(row.questionResponses),
+      createAnswerEvalCtx({
+        questions: ctx.questions,
         contactAttrs: ctx.contactAttrs ?? {},
         lookups: ctx.lookups ?? [],
-      },
+      }),
       { settings: ctx.settings, lastStepId: row.currentStepId },
     );
     const stripped = stripDisabledCellValues(ctx.questions, reached);

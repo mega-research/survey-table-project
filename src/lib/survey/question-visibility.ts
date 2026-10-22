@@ -5,9 +5,10 @@ import type {
   QuestionGroup,
 } from '@/types/survey';
 import { OPT_TEXTS_KEY } from '@/lib/option-text-read';
-import { type BranchEvalCtx, responsesToLookupShape } from '@/utils/branch-eval';
+import type { BranchEvalCtx } from '@/utils/branch-eval';
 import { shouldDisplayQuestion } from '@/utils/branch-logic';
 
+import { type EvalCtxSource, evalCtxForView } from './answer-eval-ctx';
 import { PERSISTED_ROOT_SIDECAR_KEYS } from './response-sidecars';
 import { dropHiddenTableSelections, resolveTableCellVisibility } from './table-cell-visibility';
 
@@ -159,42 +160,35 @@ function withoutHidden(
 }
 
 /**
- * 평가 컨텍스트의 응답 뷰를 지워진 상태 기준으로 다시 만든다.
- *
- * `table-cell-check` 의 숫자 비교가 다른 문항의 셀을 가리키면 그 값은 응답 본문이 아니라
- * `ctx.responses` 에서 풀린다 (`branch-eval` 의 `kind: 'cell'` operand). 호출부가 strip 전에
- * 만든 뷰를 그대로 쓰면, 이미 지워진 문항의 셀 값으로 하류 조건이 만족해 한 단계 덜 지워진다.
- * 반복마다 다시 만들어 본문과 컨텍스트가 같은 것을 보게 한다.
- *
- * 지운 것이 없으면 원본 ctx 를 그대로 돌려준다 — 흔한 경로에서 객체를 만들지 않는다.
- */
-function maskedCtx(
-  evalCtx: BranchEvalCtx | undefined,
-  view: Record<string, unknown>,
-  hidden: ReadonlySet<string>,
-): BranchEvalCtx | undefined {
-  if (!evalCtx || hidden.size === 0) return evalCtx;
-  return { ...evalCtx, responses: responsesToLookupShape(view) };
-}
-
-/**
  * 표시되는 문항 id 집합. 삭제 연쇄를 고정점까지 수렴시킨다.
  *
  * "전부 표시" 에서 시작해 숨김만 늘린다 — 숨김이 단조 증가라야 종료가 보장된다. 반대
  * 방향(전부 숨김에서 늘려가기)은 순환 조건에서 진동한다. 각 문항은 표시→숨김으로 많아야
  * 한 번 뒤집히므로 큐는 반드시 빈다 (stripDisabledCellValues 의 게이팅 체인 수렴과 같은 논거).
+ *
+ * 평가 컨텍스트의 응답 뷰는 숨김이 늘 때마다 지워진 상태 기준으로 다시 만든다. `table-cell-check`
+ * 의 숫자 비교가 다른 문항의 셀을 가리키면 그 값은 응답 본문이 아니라 `ctx.responses` 에서
+ * 풀린다(`branch-eval` 의 `kind: 'cell'` operand) — strip 전에 만든 뷰를 그대로 쓰면 이미 지워진
+ * 문항의 셀 값으로 하류 조건이 만족해 한 단계 덜 지워진다. 지운 것이 없으면 원본 ctx 그대로다.
+ *
+ * 뷰마다 컨텍스트를 만드는 출처(`EvalCtxSource` 함수)는 받은 응답으로 한 번 만들어 고정한다 —
+ * 응답 화면이 한 번 그릴 때와 같다(인용값은 그 렌더의 응답으로 계산하고 숨김 연쇄 동안 고정).
+ * 지운 결과로 인용값을 다시 계산하는 수렴은 `stripHiddenQuestionValues` 가 돈다.
  */
 export function resolveVisibleQuestionIds(
   questions: Question[],
   responses: Record<string, unknown>,
   groups?: QuestionGroup[],
-  evalCtx?: BranchEvalCtx,
+  evalCtx?: EvalCtxSource,
 ): Set<string> {
   const visible = new Set(questions.map((q) => q.id));
   const byId = new Map(questions.map((q) => [q.id, q]));
   const ancestryOf = buildGroupAncestry(groups);
   const dependents = buildDependents(questions, groups, ancestryOf);
   const hidden = new Set<string>();
+  const baseCtx = evalCtxForView(evalCtx, responses, responses);
+  let view = responses;
+  let ctx = baseCtx;
 
   const queue = conditionedQuestionIds(questions, groups, ancestryOf);
   while (queue.length > 0) {
@@ -202,11 +196,11 @@ export function resolveVisibleQuestionIds(
     if (hidden.has(id)) continue;
     const question = byId.get(id);
     if (!question) continue;
-    const view = withoutHidden(responses, hidden);
-    if (shouldDisplayQuestion(question, view, questions, groups, maskedCtx(evalCtx, view, hidden)))
-      continue;
+    if (shouldDisplayQuestion(question, view, questions, groups, ctx)) continue;
     hidden.add(id);
     visible.delete(id);
+    view = withoutHidden(responses, hidden);
+    ctx = evalCtxForView(baseCtx, view);
     for (const dependentId of dependents.get(id) ?? []) {
       if (!hidden.has(dependentId)) queue.push(dependentId);
     }
@@ -272,7 +266,7 @@ function stripHiddenTableCellValues(
   evalCtx: BranchEvalCtx | undefined,
 ): Record<string, unknown> {
   let out: Record<string, unknown> | null = null;
-  const ctx = evalCtx ? { ...evalCtx, responses: responsesToLookupShape(responses) } : undefined;
+  const ctx = evalCtxForView(evalCtx, responses);
   for (const question of questions) {
     const visibility = resolveTableCellVisibility(question, responses, questions, ctx);
     if (!visibility || visibility.hiddenCellIds.size === 0) continue;
@@ -318,12 +312,16 @@ function stripHiddenTableCellValues(
  * 문항 숨김과 칸 숨김은 서로를 부른다 — 숨은 칸의 값을 조건으로 쓰던 문항이 숨고, 숨은 문항을
  * 조건으로 쓰던 행·열이 숨는다. 둘을 번갈아 돌려 더 지울 것이 없을 때까지 수렴시킨다. 매 바퀴가
  * 값을 지우기만 하므로(되살리지 않는다) 바퀴 수는 문항 수 + 행 수 + 열 수를 넘지 않는다.
+ *
+ * `evalCtx` 가 고정 컨텍스트면 응답 화면이 한 번 그릴 때처럼 명단 값·인용값을 그대로 둔다(화면은
+ * 지운 뒤 다시 그릴 때 인용값을 다시 계산한다). 뷰마다 컨텍스트를 만드는 함수(응답 확정·Raw
+ * 내보내기의 `createAnswerEvalCtx`)면 그 다시 그리기까지 여기서 수렴시킨다.
  */
 export function stripHiddenQuestionValues(
   questions: Question[],
   responses: Record<string, unknown>,
   groups?: QuestionGroup[],
-  evalCtx?: BranchEvalCtx,
+  evalCtx?: EvalCtxSource,
 ): Record<string, unknown> {
   const maxPasses =
     questions.length +
@@ -332,14 +330,36 @@ export function stripHiddenQuestionValues(
       0,
     ) +
     1;
+  if (typeof evalCtx !== 'function') {
+    return stripHiddenWithCtx(questions, responses, groups, evalCtx, maxPasses);
+  }
+  // 뷰마다 컨텍스트를 만드는 출처(응답 인용값) — 응답 화면은 숨은 값을 지운 뒤 다시 그리며 인용값을
+  // 지금 응답으로 다시 계산하고, 바뀐 인용값으로 조건을 다시 풀어 또 지운다. 같은 수렴을 여기서
+  // 돈다: 지금 응답으로 만든 컨텍스트로 지우고, 더 지울 것이 없을 때까지. 문항 연쇄(역인덱스)는
+  // 인용 이름으로 이어진 의존을 모르므로 바퀴를 다시 돌려야 잡힌다. 바퀴마다 아직 값이 남은 문항·
+  // 행·열을 하나 이상 지우므로 아래 상한 안에 수렴한다.
+  let current = responses;
+  for (let pass = 0; pass < maxPasses; pass++) {
+    const next = stripHiddenWithCtx(questions, current, groups, evalCtx(current), maxPasses);
+    if (next === current) break;
+    current = next;
+  }
+  return current;
+}
+
+/** 고정 컨텍스트로 숨은 문항·칸을 고정점까지 지운다 — 응답 뷰만 바퀴마다 다시 만든다. */
+function stripHiddenWithCtx(
+  questions: Question[],
+  responses: Record<string, unknown>,
+  groups: QuestionGroup[] | undefined,
+  evalCtx: BranchEvalCtx | undefined,
+  maxPasses: number,
+): Record<string, unknown> {
   let current = responses;
   for (let pass = 0; pass < maxPasses; pass++) {
     // 행 값을 지운 뒤 바퀴는 평가 컨텍스트의 응답 뷰도 지운 상태로 다시 만든다 — 숫자 비교
-    // operand 가 다른 표의 셀을 ctx.responses 에서 읽는다(maskedCtx 주석과 같은 이유).
-    const ctx =
-      evalCtx && current !== responses
-        ? { ...evalCtx, responses: responsesToLookupShape(current) }
-        : evalCtx;
+    // operand 가 다른 표의 셀을 ctx.responses 에서 읽는다(resolveVisibleQuestionIds 주석과 같은 이유).
+    const ctx = evalCtxForView(evalCtx, current, responses);
     const afterQuestions = stripHiddenQuestionsOnce(questions, current, groups, ctx);
     const afterRows = stripHiddenTableCellValues(questions, afterQuestions, evalCtx);
     const settled = afterRows === afterQuestions;

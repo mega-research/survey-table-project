@@ -8,6 +8,7 @@ import { responsesToLookupShape } from '@/utils/branch-eval';
 import { collectTraversedQuestionIds } from '@/utils/branch-logic';
 import { buildRenderSteps, stepIdOf } from '@/utils/group-ordering';
 
+import { createAnswerEvalCtx } from './answer-eval-ctx';
 import { stripUnreachedQuestionValues } from './answer-path';
 
 /**
@@ -171,6 +172,60 @@ describe('stripUnreachedQuestionValues — 경로 밖 문항', () => {
   });
 });
 
+describe('stripUnreachedQuestionValues — 응답 인용값', () => {
+  it('응답 인용 이름을 읽는 표시 조건도 인용값을 얹은 컨텍스트로 경로를 정한다', () => {
+    const questions: Question[] = [
+      {
+        ...SKIP_SURVEY[0]!,
+        answerQuoteEnabled: true,
+        answerQuoteName: '선택',
+        options: [
+          { ...OPT('skip', GOTO_Q3), answerQuoteText: 'skip' },
+          { ...OPT('stay'), answerQuoteText: 'stay' },
+        ],
+      } as Question,
+      SKIP_SURVEY[1]!,
+      Q('q3', 2, {
+        pageBreakBefore: true,
+        displayCondition: {
+          logicType: 'AND',
+          conditions: [
+            {
+              id: 'c-quote',
+              enabled: true,
+              logicType: 'AND',
+              conditionType: 'expression',
+              expressionConfig: {
+                clauses: [
+                  {
+                    kind: 'comparison',
+                    comparison: {
+                      left: { kind: 'attr', attrsKey: '선택' },
+                      op: '==',
+                      right: { kind: 'literal', value: 'skip' },
+                    },
+                  },
+                ],
+                joinOps: [],
+              },
+            },
+          ],
+        },
+      } as unknown as Partial<Question>),
+    ];
+    // 응답 화면은 명단 값(`선택=stay`) 위에 인용값(`skip`)을 얹어 q3 를 보인다 — 서버도 같아야 한다.
+    const input = { q1: 'skip', q2: 'in', q3: 'a' };
+    const result = stripUnreachedQuestionValues(
+      questions,
+      input,
+      [],
+      createAnswerEvalCtx({ questions, contactAttrs: { 선택: 'stay' }, lookups: [] }),
+    );
+    expect(result.pathSkipped).toBeNull();
+    expect(result.responses).toEqual({ q1: 'skip', q3: 'a' });
+  });
+});
+
 describe('stripUnreachedQuestionValues — 경로를 확정할 수 없으면 건너뛴다', () => {
   it('문항 섞기 설문은 경로 밖 strip 을 하지 않는다', () => {
     const input = { q1: 'skip', q2: 'out', q3: 'a' };
@@ -206,44 +261,6 @@ describe('stripUnreachedQuestionValues — 경로를 확정할 수 없으면 건
       { settings: { shuffleQuestions: true } },
     );
     expect(result.responses).toEqual({ q1: 'skip', q2: 'in' });
-  });
-
-  it('응답 인용 이름을 읽는 문항 표시 조건이 있으면 건너뛴다 — 서버는 인용값을 모른다', () => {
-    const questions: Question[] = [
-      { ...SKIP_SURVEY[0]!, answerQuoteEnabled: true, answerQuoteName: '선택' } as Question,
-      SKIP_SURVEY[1]!,
-      Q('q3', 2, {
-        pageBreakBefore: true,
-        displayCondition: {
-          logicType: 'AND',
-          conditions: [
-            {
-              id: 'c-quote',
-              enabled: true,
-              logicType: 'AND',
-              conditionType: 'expression',
-              expressionConfig: {
-                clauses: [
-                  {
-                    kind: 'comparison',
-                    comparison: {
-                      left: { kind: 'attr', attrsKey: '선택' },
-                      op: '==',
-                      right: { kind: 'literal', value: 'skip' },
-                    },
-                  },
-                ],
-                joinOps: [],
-              },
-            },
-          ],
-        },
-      } as unknown as Partial<Question>),
-    ];
-    const input = { q1: 'skip', q2: 'in' };
-    const result = strip(questions, input);
-    expect(result.pathSkipped).toBe('answer-quote-condition');
-    expect(result.responses['q2']).toBe('in');
   });
 
   it('기록된 마지막 페이지가 계산한 경로 위에 없으면 건너뛴다', () => {

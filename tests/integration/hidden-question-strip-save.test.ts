@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import {
+  QUOTE_CONDITION_QUESTIONS,
+  QUOTE_CONTACT_ATTRS,
+  quoteFromOptionResponses,
+  quoteFromOtherTextResponses,
+} from '../helpers/answer-quote-condition-survey';
+
 /**
  * 저장 경계의 숨은 문항 strip — **호출부** 계약 검증.
  *
@@ -571,5 +578,99 @@ describe('completeResponse — 행 표시조건만 컨택 attrs 를 읽는 설�
       questionResponses: Record<string, unknown>;
     };
     expect(setArg.questionResponses['q-attr-row']).toEqual({ ar1_in: '서울' });
+  });
+});
+
+// ─── 응답 인용값을 읽는 조건 ───────────────────────────────────────────────
+
+/**
+ * 명단 `지역=서울` 위에 같은 이름의 응답 인용값 `부산` 이 얹혀, 응답 화면에서는 `지역 == 부산`
+ * 조건의 열·행·문항이 보이고 입력됐다. 저장 경계가 명단 값만으로 조건을 풀면 그 답을 지운다.
+ */
+describe('저장 경계 — 응답 인용값을 읽는 조건', () => {
+  const CONTACT_ID = '00000000-0000-4000-8000-0000000000c2';
+  beforeEach(() => {
+    vi.clearAllMocks();
+    surveyFindFirstMock.mockResolvedValue({
+      id: SURVEY_ID,
+      status: 'published',
+      endDate: null,
+      maxResponses: null,
+      isPublic: true,
+      requireInviteToken: false,
+      currentVersionId: VERSION_ID,
+      isPaused: false,
+      testModeEnabled: false,
+      testToken: null,
+    });
+    versionFindFirstMock.mockResolvedValue({ surveyId: SURVEY_ID, status: 'published' });
+    selectThenMock.mockReturnValue([{ total: 0 }]);
+    // limit 조회는 스냅샷·컨택 attrs 가 같은 모의를 탄다 — 한 행에 둘 다 싣는다
+    selectLimitMock.mockResolvedValue([
+      { snapshot: { questions: QUOTE_CONDITION_QUESTIONS }, attrs: QUOTE_CONTACT_ATTRS },
+    ]);
+    stubExecute(QUOTE_CONDITION_QUESTIONS.map((q) => q.id));
+    updateReturningMock.mockReturnValue([
+      { id: RESPONSE_ID, surveyId: SURVEY_ID, contactTargetId: CONTACT_ID, pageVisits: null },
+    ]);
+  });
+
+  it.each([
+    ['보기 문구', quoteFromOptionResponses],
+    ['기타 상세 기재', quoteFromOtherTextResponses],
+  ])('완료 제출이 인용값(%s)으로 보이는 답을 지우지 않는다', async (_label, payload) => {
+    responseFindFirstMock.mockResolvedValue({
+      surveyId: SURVEY_ID,
+      versionId: VERSION_ID,
+      contactTargetId: CONTACT_ID,
+      isTest: false,
+    });
+    const { completeResponse } = await import(
+      '@/server/survey-response/services/response-completion'
+    );
+    const input = payload();
+    await completeResponse({ responseId: RESPONSE_ID, data: { questionResponses: input } });
+
+    const setArg = updateSetLogMock.mock.calls[0]![0] as {
+      questionResponses: Record<string, unknown>;
+    };
+    expect(setArg.questionResponses['q-tbl']).toEqual(input['q-tbl']);
+    expect(setArg.questionResponses['q-dep']).toBe('부산 문항 답');
+  });
+
+  it.each([
+    ['보기 문구', quoteFromOptionResponses],
+    ['기타 상세 기재', quoteFromOtherTextResponses],
+  ])('관리자 수정이 인용값(%s)으로 보이는 답을 지우지 않는다', async (_label, payload) => {
+    const input = payload();
+    responseFindFirstMock.mockResolvedValue({
+      id: RESPONSE_ID,
+      surveyId: SURVEY_ID,
+      versionId: VERSION_ID,
+      deletedAt: null,
+      status: 'completed',
+      contactTargetId: CONTACT_ID,
+      questionResponses: input,
+    });
+    updateReturningMock.mockReturnValue([{ id: RESPONSE_ID }]);
+    const { saveAdminEdit } = await import(
+      '@/server/survey-response/services/response-edit'
+    );
+    await saveAdminEdit(
+      {
+        surveyId: SURVEY_ID,
+        responseId: RESPONSE_ID,
+        questionResponses: { ...input, 'q-dep': '고친 답' },
+        versionId: VERSION_ID,
+      },
+      { id: 'admin-1', email: 'a@b.com' },
+      false,
+    );
+
+    const setArg = updateSetLogMock.mock.calls[0]![0] as {
+      questionResponses: Record<string, unknown>;
+    };
+    expect(setArg.questionResponses['q-tbl']).toEqual(input['q-tbl']);
+    expect(setArg.questionResponses['q-dep']).toBe('고친 답');
   });
 });

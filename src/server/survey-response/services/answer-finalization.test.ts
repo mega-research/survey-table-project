@@ -4,6 +4,13 @@ import { EMPTY_PII_TARGETS, isEncryptedAnswerValue } from '@/lib/crypto/response
 import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 import type { Question } from '@/types/survey';
 
+import {
+  QUOTE_CONDITION_QUESTIONS,
+  QUOTE_CONTACT_ATTRS,
+  quoteFromOptionResponses,
+  quoteFromOtherTextResponses,
+} from '../../../../tests/helpers/answer-quote-condition-survey';
+
 import { type FinalizationMaterial, finalizeAnswers } from './answer-finalization';
 
 vi.mock('@/db', () => ({ db: {} }));
@@ -458,5 +465,72 @@ describe('finalizeAnswers — 경로 밖 문항', () => {
     );
 
     expect(result.plain['q-mid']).toBe('mid-in');
+  });
+});
+
+/**
+ * 응답 인용값을 읽는 조건 — 응답 화면은 `{ ...명단 값, ...응답 인용값 }` 으로 조건을 푼다.
+ * 명단 `지역=서울` 위에 인용값 `부산` 이 얹혀 「부산 전용」 열·행·문항이 보이고 입력됐다.
+ * 확정도 같은 컨텍스트로 풀어야 그 답을 지우지 않는다.
+ */
+describe('finalizeAnswers — 응답 인용값을 읽는 조건', () => {
+  const quoteMaterial = (questions: Question[] = QUOTE_CONDITION_QUESTIONS) =>
+    material(questions, { contactAttrs: QUOTE_CONTACT_ATTRS });
+
+  it('보기 문구 인용값으로 보이는 열·행·문항의 답을 지우지 않는다', () => {
+    const input = quoteFromOptionResponses();
+    const result = finalizeAnswers(quoteMaterial(), input);
+
+    expect(result.plain).toEqual(input);
+    expect(result.changed).toBe(false);
+  });
+
+  it('기타 상세 기재로 만든 인용값도 같다 — 재료는 루트 __optTexts__ 사이드카다', () => {
+    const input = quoteFromOtherTextResponses();
+    const result = finalizeAnswers(quoteMaterial(), input);
+
+    expect(result.plain['q-tbl']).toEqual(input['q-tbl']);
+    expect(result.plain['q-dep']).toBe('부산 문항 답');
+    expect(result.plain['__optTexts__']).toEqual({ 'q-src': { 'opt-etc': '부산' } });
+  });
+
+  it('인용값의 출처 문항이 숨어 지워지면 인용값을 다시 계산해 그 값을 읽던 답도 지운다', () => {
+    // 화면은 출처 문항 답을 지운 뒤 다시 그리며 인용값을 새 응답으로 계산한다 — 인용값이 비어
+    // 「부산 전용」이 숨고 그 답도 지워진다. 처음 인용값으로 고정하면 남는다.
+    const gate = {
+      id: 'q-gate',
+      type: 'radio',
+      title: '부산 질문 여부',
+      order: -1,
+      options: [
+        { id: 'opt-y', label: '예', value: 'yes' },
+        { id: 'opt-n', label: '아니오', value: 'no' },
+      ],
+    } as unknown as Question;
+    const [src, tbl, dep] = QUOTE_CONDITION_QUESTIONS;
+    const gatedSrc = {
+      ...src!,
+      displayCondition: {
+        logicType: 'AND',
+        conditions: [
+          {
+            id: 'src-c1',
+            enabled: true,
+            logicType: 'AND',
+            conditionType: 'value-match',
+            sourceQuestionId: 'q-gate',
+            requiredValues: ['yes'],
+          },
+        ],
+      },
+    } as Question;
+    const result = finalizeAnswers(quoteMaterial([gate, gatedSrc, tbl!, dep!]), {
+      'q-gate': 'no',
+      ...quoteFromOptionResponses(),
+    });
+
+    expect(result.plain['q-src']).toBeUndefined();
+    expect(result.plain['q-dep']).toBeUndefined();
+    expect(result.plain['q-tbl']).toEqual({ 'c-all-a': '1' });
   });
 });

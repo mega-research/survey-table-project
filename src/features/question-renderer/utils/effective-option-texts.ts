@@ -1,3 +1,5 @@
+import { readOptTextsSidecar } from '@/lib/option-text-read';
+
 type OptionTextsByQuestion = Record<string, Record<string, string>>;
 
 function readOptionTextsRecord(value: unknown): Record<string, string> {
@@ -14,24 +16,20 @@ function readOptionTextsRecord(value: unknown): Record<string, string> {
  * 현재 편집값은 빈 문자열도 명시적인 삭제 의사이므로 저장값보다 우선한다.
  *
  * 응답 페이지와 빌더 미리보기가 같은 병합 규칙을 봐야 해서 두 기능의 아래인
- * 렌더러가 소유한다.
+ * 렌더러가 소유한다. 저장분 읽기는 서버(응답 확정·Raw 내보내기의 인용값 재료)와 같은
+ * `readOptTextsSidecar` 다 — 화면은 거기에 편집 중인 값을 얹을 뿐이다.
  */
 export function resolveEffectiveOptionTextsByQuestion(
   responses: Record<string, unknown>,
   currentOptionTexts: OptionTextsByQuestion,
 ): OptionTextsByQuestion {
-  const persistedRoot =
-    responses['__optTexts__'] &&
-    typeof responses['__optTexts__'] === 'object' &&
-    !Array.isArray(responses['__optTexts__'])
-      ? (responses['__optTexts__'] as Record<string, unknown>)
-      : {};
-  const questionIds = new Set([...Object.keys(persistedRoot), ...Object.keys(currentOptionTexts)]);
+  const persisted = readOptTextsSidecar(responses);
+  const questionIds = new Set([...Object.keys(persisted), ...Object.keys(currentOptionTexts)]);
   const effective: OptionTextsByQuestion = {};
 
   for (const questionId of questionIds) {
     const merged = {
-      ...readOptionTextsRecord(persistedRoot[questionId]),
+      ...persisted[questionId],
       ...readOptionTextsRecord(currentOptionTexts[questionId]),
     };
     if (Object.keys(merged).length > 0) effective[questionId] = merged;

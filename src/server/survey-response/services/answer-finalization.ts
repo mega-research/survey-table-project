@@ -2,6 +2,7 @@ import 'server-only';
 
 import { encryptResponsesForStorage, hasPiiTargets, type PiiTargets } from '@/lib/crypto/response-pii';
 import { logger } from '@/lib/logger';
+import { createAnswerEvalCtx } from '@/lib/survey/answer-eval-ctx';
 import { stripUnreachedQuestionValues } from '@/lib/survey/answer-path';
 import { withCalcValues } from '@/lib/survey/cell-formula';
 import { stripDisabledCellValues } from '@/lib/survey/cell-gating';
@@ -15,7 +16,6 @@ import {
 } from '@/server/read-models/version-snapshot';
 import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 import type { Question, QuestionGroup, SurveyLookup } from '@/types/survey';
-import { type BranchEvalCtx, responsesToLookupShape } from '@/utils/branch-eval';
 
 import { detectScreenOut } from '../domain/screen-out';
 import { loadPiiTargets } from './submitted-answers';
@@ -31,8 +31,12 @@ import { loadPiiTargets } from './submitted-answers';
  *
  * 경로 밖 strip(lib/survey/answer-path)은 분기 이동(goto·end)으로 건너뛴 페이지의 답을 지운다 —
  * 남겨 두면 건너뛴 페이지의 자격미달 보기가 정상 완료를 자격미달로 뒤집는다. 경로를 확정할 수
- * 없으면(문항 섞기·인용값을 읽는 조건·기록된 마지막 페이지가 경로 밖) 건너뛴다. calc 은 남은
+ * 없으면(문항 섞기·기록된 마지막 페이지가 경로 밖) 건너뛴다. calc 은 남은
  * 문항(표시 + 경로 위)에만 새로 채운다 — 가 보지 않은 표에 계산값이 들어가 답한 것처럼 보이지 않게.
+ *
+ * 조건 평가 컨텍스트는 응답 화면과 같다 — 명단 값 위에 응답 인용값을 얹고(`createAnswerEvalCtx`),
+ * 인용값은 strip 바퀴마다 지운 결과로 다시 계산한다(화면이 지운 뒤 다시 그리며 다시 계산하는 것과
+ * 같은 수렴). 계산 칸 수식은 화면처럼 명단 값만 쓴다.
  *
  * 세 단계는 설문 구성과 무관하게 늘 돈다 — 계산 칸·게이팅 칸 유무로 건너뛰던 시절에 표시
  * 조건만 있는 설문의 빈 complete 가 숨은 값을 남겼다. 각 단계는 할 일이 없으면 받은 객체를
@@ -119,11 +123,7 @@ export function finalizeAnswers(
   } = {},
 ): AnswerFinalization {
   const { questions, groups, lookups, contactAttrs } = material;
-  const evalCtx = (responses: Record<string, unknown>): BranchEvalCtx => ({
-    responses: responsesToLookupShape(responses),
-    contactAttrs,
-    lookups,
-  });
+  const evalCtx = createAnswerEvalCtx({ questions, contactAttrs, lookups });
 
   let current = plain;
   // 스냅샷이 없으면 확정 단계를 건너뛴다 — 응답자·운영자의 저장을 막지 않는 fail-safe.
@@ -132,9 +132,9 @@ export function finalizeAnswers(
     if (options.skipHiddenStrip) {
       // 이관은 아무것도 지우지 않는다. 계산값은 표시되는 문항에만 새로 채운다(값이 남은 문항은
       // withCalcValues 가 다시 계산한다).
-      reachedQuestionIds = resolveVisibleQuestionIds(questions, current, groups, evalCtx(current));
+      reachedQuestionIds = resolveVisibleQuestionIds(questions, current, groups, evalCtx);
     } else {
-      const reached = stripUnreachedQuestionValues(questions, current, groups, evalCtx(current), {
+      const reached = stripUnreachedQuestionValues(questions, current, groups, evalCtx, {
         settings: material.snapshot.settings,
         lastStepId: options.lastStepId,
       });
