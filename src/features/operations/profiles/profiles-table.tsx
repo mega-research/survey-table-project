@@ -8,7 +8,11 @@ import { Badge } from '@/components/ui/badge';
 import { LocalDateTime } from '@/components/ui/local-date-time';
 import { useSearchParamsMutator } from '@/features/operations/hooks/use-search-params-mutator';
 import { formatPlatformKo } from '@/lib/operations/parse-ua';
-import { formatIpHash } from '@/lib/operations/profile-columns-format';
+import {
+  ENTRY_PARAM_DISPLAY_LEN,
+  entryKeyOf,
+  formatIpHash,
+} from '@/lib/operations/profile-columns-format';
 import {
   type ProfilesView,
   type SortDir,
@@ -98,6 +102,8 @@ interface DisplayRow {
   contactTargetId: string | null;
   /** ipHash 앞 8자 표시값 (전체 해시는 렌더하지 않음) */
   ipHashText: string;
+  /** 들어온 링크의 이어 넘길 값 — 스킴의 entry.* 컬럼 표시용 */
+  entryParams: Record<string, string> | null;
 }
 
 const meta = (align: CellAlign, sortable: boolean, nowrap = true): ColumnMeta => ({
@@ -165,6 +171,7 @@ export function ProfilesTable({
           attrs: r.attrs,
           contactTargetId: r.contactTargetId,
           ipHashText: formatIpHash(r.ipHash),
+          entryParams: r.entryParams,
         };
       }),
     [rows, stepLocations, totalSteps],
@@ -182,6 +189,30 @@ export function ProfilesTable({
           // 자유 텍스트 — wrap 허용해 정형 컬럼 대신 남는 폭을 흡수.
           // 정렬은 조사 대상과 같은 attrs 자연 정렬 (숫자 값은 숫자순).
           meta: { ...meta('left', true, false), filterSource: c.key },
+        };
+      }
+      const entryName = entryKeyOf(c.key);
+      if (entryName !== null) {
+        return {
+          id: c.key,
+          accessorFn: (r: DisplayRow) => r.entryParams?.[entryName] ?? '',
+          header: c.label,
+          // 패널 회원 ID(UUID)는 길어 앞부분만 보인다. 글자는 전부 화면에 두어 title 로
+          // 확인하고 끌어 선택하면 전체가 복사된다 — 검색은 전체 검색·열 선택 검색이 맡는다.
+          cell: ({ row }) => {
+            const value = row.original.entryParams?.[entryName];
+            if (!value) return '—';
+            return (
+              <span
+                className="inline-block truncate align-bottom"
+                style={{ maxWidth: `${ENTRY_PARAM_DISPLAY_LEN + 1}ch` }}
+                title={value}
+              >
+                {value}
+              </span>
+            );
+          },
+          meta: meta('left', false),
         };
       }
       if (c.key.startsWith('pii.')) {

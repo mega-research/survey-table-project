@@ -8,6 +8,17 @@ import type {
 
 const ATTRS_PREFIX = 'attrs.';
 const PII_PREFIX = 'pii.';
+const ENTRY_PREFIX = 'entry.';
+
+/** 이어 넘길 값 열 키 — 종료 후 이동 주소 설정의 passParams 이름마다 하나(`entry.euid`). */
+export function entryColumnKey(name: string): string {
+  return `${ENTRY_PREFIX}${name}`;
+}
+
+/** `entry.<name>` 이면 name, 아니면 null. */
+export function entryKeyOf(key: string): string | null {
+  return key.startsWith(ENTRY_PREFIX) ? key.slice(ENTRY_PREFIX.length) : null;
+}
 
 interface SysColumnDef {
   key: string;
@@ -31,16 +42,19 @@ export const PROFILE_SYS_COLUMNS: readonly SysColumnDef[] = [
 ];
 
 /**
- * 시스템 컬럼 풀 + 컨택 스킴(attrs/pii) 풀 + 저장 스킴 머지.
+ * 시스템 컬럼 풀 + 이어 넘길 값 풀 + 컨택 스킴(attrs/pii) 풀 + 저장 스킴 머지.
  *
- * - 풀 순서: sys 고정 세트 → 컨택 스킴 attrs./pii. (컨택 order 정렬).
+ * - 풀 순서: sys 고정 세트 → 이어 넘길 값 entry. (설정 순서) → 컨택 스킴 attrs./pii. (컨택 order 정렬).
  * - 저장 스킴에 같은 key 가 있으면 저장값(label/order/hidden)이 이긴다.
- * - 미저장 key 는 sys 는 defaultHidden, attrs/pii 는 hidden=true 로 시작.
- * - 컨택 스킴에서 사라진 attrs/pii 고아 key 는 결과에서 제거 → save 시 자동 정리.
+ * - 미저장 key 는 sys 는 defaultHidden, entry 는 보임(패널 회원 ID 를 받겠다고 설정했으면 볼
+ *   값이다), attrs/pii 는 hidden=true 로 시작.
+ * - 컨택 스킴·이어 넘길 값 설정에서 사라진 고아 key 는 결과에서 제거 → save 시 자동 정리.
  */
 export function hydrateProfileColumns(
   contactScheme: NormalizedContactColumnScheme | null,
   savedScheme: ProfileColumnScheme | null,
+  /** 종료 후 이동 주소 설정의 passParams(normalizePassParamNames 결과). */
+  entryParamNames: readonly string[] = [],
 ): ProfileColumnDef[] {
   const residLabel =
     contactScheme?.columns.find((c) => c.source === 'system.resid')?.label?.trim() ||
@@ -52,10 +66,13 @@ export function hydrateProfileColumns(
     .sort((a, b) => a.order - b.order)
     .map((c) => ({ key: c.source, label: c.label, defaultHidden: true }));
 
-  const pool = [
+  const entryPool = entryParamNames.map((name) => ({ key: entryColumnKey(name), label: name }));
+
+  const pool: SysColumnDef[] = [
     ...PROFILE_SYS_COLUMNS.map((c) =>
       c.key === 'sys.resid' ? { ...c, label: residLabel } : c,
     ),
+    ...entryPool,
     ...contactPool,
   ];
 
@@ -90,6 +107,12 @@ export function formatIpHash(hash: string | null): string {
   if (!hash) return '—';
   return hash.slice(0, IP_HASH_DISPLAY_LEN);
 }
+
+/**
+ * 이어 넘길 값(패널 회원 ID) 표시 자릿수 — UUID 첫 마디만큼만 보이고 나머지는 말줄임.
+ * IP 해시와 달리 값을 감출 이유는 없어 전체 값은 title·복사로 꺼낼 수 있게 화면에 둔다.
+ */
+export const ENTRY_PARAM_DISPLAY_LEN = 8;
 
 /**
  * Raw 내보내기에 붙일 조사 대상 명단 열 — 응답 내역 컬럼 설정에서 **표시 중인** attrs.*·pii.* 열만,

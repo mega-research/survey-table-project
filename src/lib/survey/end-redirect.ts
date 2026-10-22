@@ -162,7 +162,11 @@ export function appendEntryParams(
  */
 export function readEntryParams(metadata: unknown): Record<string, string> | undefined {
   if (metadata === null || typeof metadata !== 'object') return undefined;
-  const stored = (metadata as Record<string, unknown>)['entryParams'];
+  return readStoredEntryParams((metadata as Record<string, unknown>)['entryParams']);
+}
+
+/** metadata.entryParams 칸 값 자체 읽기 — 응답 내역 목록처럼 그 칸만 꺼내 온 경우. */
+export function readStoredEntryParams(stored: unknown): Record<string, string> | undefined {
   if (stored === null || typeof stored !== 'object' || Array.isArray(stored)) return undefined;
   const params: Record<string, string> = {};
   for (const [name, value] of Object.entries(stored)) {

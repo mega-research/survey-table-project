@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import type { ProfileColumnScheme } from '@/shared/contracts/operations';
 import { normalizeContactColumnScheme } from '@/lib/operations/contacts-format';
 import {
+  entryColumnKey,
+  entryKeyOf,
   formatIpHash,
   hydrateProfileColumns,
   selectRawExportContactColumns,
@@ -78,6 +80,45 @@ describe('hydrateProfileColumns', () => {
     };
     const cols = hydrateProfileColumns(contactScheme, saved);
     expect(cols.some((c) => c.key === 'attrs.삭제된키')).toBe(false);
+  });
+
+  it('이어 넘길 값 이름마다 entry 열을 시스템 열 뒤에 보이는 채로 만든다', () => {
+    const cols = hydrateProfileColumns(contactScheme, null, ['euid', 'pid']);
+    const keys = cols.map((c) => c.key);
+    expect(keys.slice(10, 12)).toEqual(['entry.euid', 'entry.pid']);
+    expect(cols.find((c) => c.key === 'entry.euid')).toEqual({
+      key: 'entry.euid',
+      label: 'euid',
+      order: 10,
+    });
+  });
+
+  it('이어 넘길 값 설정이 없으면 entry 열도 없다 — 저장된 entry 열은 고아로 빠진다', () => {
+    expect(hydrateProfileColumns(contactScheme, null).some((c) => c.key.startsWith('entry.'))).toBe(
+      false,
+    );
+    const saved: ProfileColumnScheme = {
+      version: 1,
+      columns: [{ key: 'entry.euid', label: '회원 ID', order: 0 }],
+    };
+    expect(hydrateProfileColumns(contactScheme, saved).some((c) => c.key === 'entry.euid')).toBe(
+      false,
+    );
+    expect(
+      hydrateProfileColumns(contactScheme, saved, ['euid']).find((c) => c.key === 'entry.euid'),
+    ).toEqual({
+      key: 'entry.euid',
+      label: '회원 ID',
+      order: 0,
+    });
+  });
+});
+
+describe('entryColumnKey / entryKeyOf', () => {
+  it('entry.<name> 키를 만들고 되읽는다', () => {
+    expect(entryColumnKey('euid')).toBe('entry.euid');
+    expect(entryKeyOf('entry.euid')).toBe('euid');
+    expect(entryKeyOf('attrs.euid')).toBeNull();
   });
 });
 

@@ -6,6 +6,7 @@ import { eq } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveys } from '@/db/schema/surveys';
+import { normalizePassParamNames } from '@/lib/survey/end-redirect';
 import type { ProfileColumnScheme } from '@/shared/contracts/operations';
 
 /**
@@ -22,3 +23,16 @@ export const getProfileColumnScheme = cache(
     return row?.scheme ?? null;
   },
 );
+
+/**
+ * 응답 내역 entry.* 열의 이름 — 종료 후 이동 주소 설정의 이어 넘길 값(passParams).
+ * 설정이 없으면 빈 배열이라 열도 검색 후보도 생기지 않는다.
+ */
+export const getProfileEntryParamNames = cache(async (surveyId: string): Promise<string[]> => {
+  const [row] = await db
+    .select({ endRedirects: surveys.endRedirects })
+    .from(surveys)
+    .where(eq(surveys.id, surveyId))
+    .limit(1);
+  return normalizePassParamNames(row?.endRedirects?.passParams);
+});

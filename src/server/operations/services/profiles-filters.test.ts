@@ -29,7 +29,15 @@ const COLS: ProfilesClauseCols = {
   contactResid: sql`"numbered"."contact_resid"`,
   contactAttrs: sql`"numbered"."contact_attrs"`,
   contactTargetId: sql`"numbered"."contact_target_id"`,
+  entryParams: sql`"numbered"."entry_params"`,
 };
+
+/** 이어 넘길 값 열이 보이는 설문 — 페이지가 표시 중인 entry 열을 후보로 올린다. */
+const entryCandidates: ColumnCandidate[] = [
+  ...candidates,
+  { source: 'entry.euid', label: 'euid' },
+  { source: 'entry.pid', label: 'pid', hidden: true },
+];
 
 describe('parseProfilesClausesFromUrl — 검색바 다중 조건', () => {
   it('col 없으면 빈 배열', () => {
@@ -93,6 +101,24 @@ describe('parseProfilesClausesFromUrl — 검색바 다중 조건', () => {
     expect(subs.some((s) => s.source === 'attrs.전시회명' && s.mode === 'text')).toBe(true);
     expect(subs.some((s) => s.source === 'browser' && s.mode === 'text')).toBe(true);
   });
+
+  it('전체 전개에 보이는 이어 넘길 값 열만 부분일치로 들어간다', () => {
+    const clauses = parseProfilesClausesFromUrl('system.all', '68e901de', undefined, entryCandidates);
+    const subs = clauses[0]?.condition.subConditions ?? [];
+    expect(subs).toContainEqual({ source: 'entry.euid', mode: 'text', value: '68e901de' });
+    expect(subs.some((s) => s.source === 'entry.pid')).toBe(false);
+    const plain = parseProfilesClausesFromUrl('system.all', '68e901de', undefined, candidates);
+    expect((plain[0]?.condition.subConditions ?? []).some((s) => s.source.startsWith('entry.'))).toBe(
+      false,
+    );
+  });
+
+  it('이어 넘길 값 열을 골라 찾으면 부분일치 절 — 후보에 없거나 숨긴 열은 버린다', () => {
+    const clauses = parseProfilesClausesFromUrl('entry.euid', ' 59431873 ', undefined, entryCandidates);
+    expect(clauses[0]?.condition).toEqual({ source: 'entry.euid', mode: 'text', value: '59431873' });
+    expect(parseProfilesClausesFromUrl('entry.pid', 'x', undefined, entryCandidates)).toEqual([]);
+    expect(parseProfilesClausesFromUrl('entry.euid', 'x', undefined, candidates)).toEqual([]);
+  });
 });
 
 describe('parseProfilesHeaderFiltersFromUrl — 헤더 깔때기', () => {
@@ -123,6 +149,13 @@ describe('parseProfilesHeaderFiltersFromUrl — 헤더 깔때기', () => {
 });
 
 describe('buildProfilesFilterSql — 응답 내역 절 SQL', () => {
+  it('이어 넘길 값 절은 entryParams jsonb 의 이름 칸을 부분일치로 본다', () => {
+    const clauses = parseProfilesClausesFromUrl('entry.euid', '5943_1873', undefined, entryCandidates);
+    const query = dialect.sqlToQuery(buildProfilesFilterSql(clauses, COLS));
+    expect(query.sql).toContain('"numbered"."entry_params"->>$1 ILIKE');
+    expect(query.params).toEqual(['euid', '5943\\_1873']);
+  });
+
   it('idx/browser/status 는 numbered 컬럼 참조로 렌더된다', () => {
     const clauses = [
       ...parseProfilesClausesFromUrl(['idx', 'browser'], ['1-5', 'Chrome'], ['', 'AND'], candidates),

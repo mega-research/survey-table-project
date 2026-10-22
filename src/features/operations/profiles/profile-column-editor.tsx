@@ -19,12 +19,15 @@ interface Props {
   initialScheme: ProfileColumnScheme | null;
   /** contact_columns 의 attrs./pii. 풀 — 조사 대상 정보 컬럼 소스 */
   contactScheme: NormalizedContactColumnScheme | null;
+  /** 종료 후 이동 주소 설정의 이어 넘길 값 이름 — entry. 풀 */
+  entryParamNames: string[];
 }
 
 /** 소스 표기 — sys 는 시스템, attrs/pii 는 조사 대상 정보 출처를 드러낸다. */
 function sourceLabel(key: string): string {
   if (key.startsWith('attrs.')) return key;
   if (key.startsWith('pii.')) return `${key} (개인정보)`;
+  if (key.startsWith('entry.')) return `${key} (링크로 받은 값)`;
   return key;
 }
 
@@ -32,12 +35,17 @@ function sourceLabel(key: string): string {
  * 응답 내역 컬럼 설정 에디터 — 진척률 컬럼 에디터(progress-column-editor)와 동일 패턴.
  * 시스템 컬럼 + 조사 대상 attrs/pii 를 한 목록에서 순서·라벨·표시 여부로 편집한다.
  */
-export function ProfileColumnEditor({ surveyId, initialScheme, contactScheme }: Props) {
+export function ProfileColumnEditor({
+  surveyId,
+  initialScheme,
+  contactScheme,
+  entryParamNames,
+}: Props) {
   const router = useRouter();
 
   const hydratedColumns = useMemo<ProfileColumnDef[]>(
-    () => hydrateProfileColumns(contactScheme, initialScheme),
-    [contactScheme, initialScheme],
+    () => hydrateProfileColumns(contactScheme, initialScheme, entryParamNames),
+    [contactScheme, initialScheme, entryParamNames],
   );
 
   const [columns, setColumns] = useState<ProfileColumnDef[]>(hydratedColumns);
@@ -97,7 +105,7 @@ export function ProfileColumnEditor({ surveyId, initialScheme, contactScheme }: 
           setError(resultErrorMessage(result.error, '초기화에 실패했습니다.'));
           return;
         }
-        setColumns(hydrateProfileColumns(contactScheme, null));
+        setColumns(hydrateProfileColumns(contactScheme, null, entryParamNames));
         router.refresh();
       } catch (e) {
         setError((e as Error).message);

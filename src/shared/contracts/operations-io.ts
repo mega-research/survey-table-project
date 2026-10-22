@@ -29,6 +29,8 @@ export interface ProfilesRow {
   contactTargetId: string | null;
   /** 중복 감지용 ipHash. 표시는 formatIpHash 로 앞 8자만 노출한다. */
   ipHash: string | null;
+  /** 들어온 링크에서 받은 이어 넘길 값(metadata.entryParams, 리멤버 euid 등). 없으면 null. */
+  entryParams: Record<string, string> | null;
   /** 현재 서버 scope에 속한 응답의 테스트 여부. real scope는 false, test scope는 true로 고정된다. */
   isTest: boolean;
 }
