@@ -39,9 +39,7 @@ export function UserEditModal({ user, onClose }: Props) {
   const [jobTitle, setJobTitle] = useState(user.jobTitle ?? '');
   const [organization, setOrganization] = useState(user.organization ?? '');
   const [fieldworkOrgId, setFieldworkOrgId] = useState(user.fieldworkOrgId ?? '');
-  const [fieldworkRole, setFieldworkRole] = useState<FieldworkRole>(
-    user.fieldworkRole ?? 'worker',
-  );
+  const [fieldworkRole, setFieldworkRole] = useState<FieldworkRole>(user.fieldworkRole ?? 'worker');
   const [error, setError] = useState<string | null>(null);
   const { mutateAsync: updateUser, isPending } = useUpdateUser();
   const { data: orgOptions } = useFieldworkOrgOptions(user.userType === 'fieldwork');

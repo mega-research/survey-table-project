@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import type { UserListItem } from '@/shared/contracts/auth-io';
 
-import { type UserSort, arrangeUsers, nextUserSort } from './user-list-arrange';
+import {
+  type UserSort,
+  type UserTeamFilter,
+  arrangeUsers,
+  nextUserSort,
+} from './user-list-arrange';
 
 function user(name: string, overrides: Partial<UserListItem> = {}): UserListItem {
   return {
@@ -137,5 +142,32 @@ describe('arrangeUsers — 검색', () => {
 
   it('빈 검색어는 전부 통과다', () => {
     expect(arrange(items, null, '   ')).toEqual(['김현아', '이정운']);
+  });
+});
+
+describe('arrangeUsers — 소속', () => {
+  const items = [
+    user('팀원', { teamNames: ['연구3본부 5팀'] }),
+    user('본부장', { teamNames: ['연구3본부 5팀', '연구3본부 6팀'] }),
+    user('다른팀', { teamNames: ['실사팀'] }),
+    user('미배치'),
+    user('게스트', { userType: 'guest' }),
+  ];
+
+  function byTeam(team: UserTeamFilter) {
+    return names(arrangeUsers(items, { sort: null, statusFilter: 'all', query: '', team }));
+  }
+
+  it('팀을 고르면 그 팀 사람만, 겸직자는 어느 팀으로도 나온다', () => {
+    expect(byTeam({ kind: 'team', name: '연구3본부 5팀' })).toEqual(['팀원', '본부장']);
+    expect(byTeam({ kind: 'team', name: '연구3본부 6팀' })).toEqual(['본부장']);
+  });
+
+  it('미배치는 팀 없는 직원만이다 — 게스트는 빠진다', () => {
+    expect(byTeam({ kind: 'unassigned' })).toEqual(['미배치']);
+  });
+
+  it('검색어가 팀 이름에도 걸린다', () => {
+    expect(arrange(items, null, '연구3본부')).toEqual(['팀원', '본부장']);
   });
 });

@@ -56,6 +56,18 @@ vi.mock('./queries/use-users', () => ({
   useChangeUserStatus: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
+vi.mock('../team-management/queries/use-teams', () => ({
+  useTeams: () => ({
+    data: {
+      teams: [
+        { id: 't-5', name: '연구3본부 5팀', kind: 'standard', memberCount: 2, surveyCount: 0 },
+        { id: 't-6', name: '연구3본부 6팀', kind: 'standard', memberCount: 1, surveyCount: 0 },
+      ],
+      systemSummary: { teamCount: 2, surveyCount: 0 },
+    },
+  }),
+}));
+
 beforeEach(() => {
   mockItems = [FIELDWORK_USER];
 });
@@ -211,5 +223,32 @@ describe('UserManagementView — 검색·열 정렬', () => {
       'aria-sort',
       'none',
     );
+  });
+});
+
+describe('UserManagementView — 소속 필터', () => {
+  beforeEach(() => {
+    mockItems = [
+      staff('팀원', 'active', ['연구3본부 5팀']),
+      staff('본부장', 'active', ['연구3본부 5팀', '연구3본부 6팀']),
+      staff('미배치', 'active'),
+    ];
+  });
+
+  it('선택지는 활성 팀 목록 + 미배치이고, 고른 팀 사람만 남는다', async () => {
+    const user = userEvent.setup();
+    render(<UserManagementView />);
+    const select = screen.getByLabelText('소속 필터');
+    expect(
+      within(select)
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['소속 · 전체', '소속 · 연구3본부 5팀', '소속 · 연구3본부 6팀', '소속 · 미배치']);
+
+    await user.selectOptions(select, 'team:연구3본부 6팀');
+    expect(rowNames()).toEqual(['본부장']);
+
+    await user.selectOptions(select, 'unassigned');
+    expect(rowNames()).toEqual(['미배치']);
   });
 });

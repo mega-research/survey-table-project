@@ -18,6 +18,7 @@ import {
 
 import { USER_STATUS_LABEL, USER_STATUS_PILL, USER_TYPE_LABEL } from '../account-vocabulary';
 import { PRIMARY_BUTTON } from '../field-styles';
+import { useTeams } from '../team-management/queries/use-teams';
 import { useUsers } from './queries/use-users';
 import { UserCreateModal } from './user-create-modal';
 import { UserDepartModal } from './user-depart-modal';
@@ -25,6 +26,7 @@ import { UserEditModal } from './user-edit-modal';
 import {
   type UserSort,
   type UserSortKey,
+  type UserTeamFilter,
   arrangeUsers,
   nextUserSort,
   userRoleLabel,
@@ -118,11 +120,32 @@ function Affiliation({ user }: { user: UserListItem }) {
   return <>{user.fieldworkOrgName ?? user.organization ?? '—'}</>;
 }
 
+/** 소속 필터의 select 값 — 팀은 이름 앞에 접두를 붙여 「미배치」·「전체」와 겹치지 않게 한다. */
+const TEAM_ALL = 'all';
+const TEAM_UNASSIGNED = 'unassigned';
+const TEAM_PREFIX = 'team:';
+
+function teamFilterFromValue(value: string): UserTeamFilter {
+  if (value === TEAM_UNASSIGNED) return { kind: 'unassigned' };
+  if (value.startsWith(TEAM_PREFIX)) return { kind: 'team', name: value.slice(TEAM_PREFIX.length) };
+  return { kind: 'all' };
+}
+
+function teamFilterValue(filter: UserTeamFilter): string {
+  if (filter.kind === 'unassigned') return TEAM_UNASSIGNED;
+  if (filter.kind === 'team') return `${TEAM_PREFIX}${filter.name}`;
+  return TEAM_ALL;
+}
+
 export function UserManagementView() {
   const [userType, setUserType] = useState<UserTypeFilter>('all');
   const [status, setStatus] = useState<UserStatusFilter>('all');
   const [sort, setSort] = useState<UserSort>(null);
   const [query, setQuery] = useState('');
+  const [team, setTeam] = useState<UserTeamFilter>({ kind: 'all' });
+  // 선택지는 활성 팀 목록에서 온다 — 지금 보이는 행에서 뽑으면 유형 칩을 바꿀 때 고른 팀이
+  // 선택지에서 사라진다. 순서는 팀 관리 화면과 같은 팀 순서다.
+  const teamOptions = useTeams().data?.teams ?? [];
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
   // 대상 사용자를 그대로 들고 연다 — 모달 안에서 목록을 다시 뒤지지 않아도 되고, 열려 있는
@@ -134,7 +157,7 @@ export function UserManagementView() {
   const { data, isLoading, error } = useUsers(userType, status);
 
   const typeCounts = data?.typeCounts;
-  const rows = arrangeUsers(data?.items ?? [], { sort, statusFilter: status, query });
+  const rows = arrangeUsers(data?.items ?? [], { sort, statusFilter: status, query, team });
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   // 상태가 바뀌어 행이 줄면 보고 있던 쪽이 사라질 수 있다 — 마지막 쪽으로 접는다.
   const currentPage = Math.min(page, totalPages);
@@ -206,11 +229,32 @@ export function UserManagementView() {
                   setQuery(e.target.value);
                   setPage(1);
                 }}
-                placeholder="이름·이메일 검색"
+                placeholder="이름·이메일·팀 검색"
                 aria-label="사용자 검색"
                 className="h-8 w-[200px] rounded-lg border border-[#D1D5DB] bg-white pr-2 pl-8 text-[12.5px] text-[#1C1C1E] outline-none placeholder:text-[#9CA3AF] focus:border-[#2E4FCE]"
               />
             </div>
+
+            <label className="sr-only" htmlFor="team-filter">
+              소속 필터
+            </label>
+            <select
+              id="team-filter"
+              value={teamFilterValue(team)}
+              onChange={(e) => {
+                setTeam(teamFilterFromValue(e.target.value));
+                setPage(1);
+              }}
+              className="h-8 max-w-[180px] rounded-lg border border-[#D1D5DB] bg-white px-2 text-[12.5px] text-[#3A3A3C]"
+            >
+              <option value={TEAM_ALL}>소속 · 전체</option>
+              {teamOptions.map((option) => (
+                <option key={option.id} value={`${TEAM_PREFIX}${option.name}`}>
+                  소속 · {option.name}
+                </option>
+              ))}
+              <option value={TEAM_UNASSIGNED}>소속 · 미배치</option>
+            </select>
 
             <label className="sr-only" htmlFor="status-filter">
               상태 필터

@@ -77,15 +77,37 @@ function compareUsers(a: UserListItem, b: UserListItem, key: UserSortKey): numbe
   return compareJobTitle(userRoleLabel(a) ?? '', userRoleLabel(b) ?? '');
 }
 
-/** 이름·이메일 부분 일치 — 대소문자와 앞뒤 공백을 무시한다. 빈 검색어는 전부 통과다. */
+/**
+ * 이름·이메일·소속 팀 부분 일치 — 대소문자와 앞뒤 공백을 무시한다. 빈 검색어는 전부 통과다.
+ * 팀 이름까지 보는 것은 「연구3본부」처럼 본부 단위로 묶어 보려는 것이다(필터는 팀 하나만 고른다).
+ */
 function matchesQuery(user: UserListItem, query: string): boolean {
   const needle = query.trim().toLowerCase();
   if (needle === '') return true;
-  return user.name.toLowerCase().includes(needle) || user.email.toLowerCase().includes(needle);
+  return [user.name, user.email, ...user.teamNames].some((text) =>
+    text.toLowerCase().includes(needle),
+  );
 }
 
 /**
- * 표에 실을 행 — 검색 → 퇴사자 제외 → 정렬.
+ * 소속 필터 — 팀 하나, 또는 팀이 없는 직원(미배치).
+ *
+ * 팀은 이름으로 고른다. 목록 행이 들고 오는 것이 팀 이름이고, 활성 팀 이름은 DB 가 유일을
+ * 강제한다(`teams_active_name_uq`). 겸직자는 자기가 속한 어느 팀을 골라도 나온다.
+ * 미배치는 직원만이다 — 게스트·실사는 애초에 팀에 들 수 없어 「팀 없음」이 빈칸이 아니다.
+ */
+export type UserTeamFilter =
+  { kind: 'all' } | { kind: 'unassigned' } | { kind: 'team'; name: string };
+
+function matchesTeam(user: UserListItem, team: UserTeamFilter): boolean {
+  if (team.kind === 'all') return true;
+  if (team.kind === 'unassigned')
+    return user.userType === 'internal' && user.teamNames.length === 0;
+  return user.teamNames.includes(team.name);
+}
+
+/**
+ * 표에 실을 행 — 검색·소속 필터 → 퇴사자 제외 → 정렬.
  *
  * 기본 보기는 퇴사자를 뺀다. 서버가 발급순으로 주는데 테스트하다 퇴사 처리한 계정이 앞쪽에
  * 몰려 지금 일하는 사람이 밀려났기 때문이다. 퇴사자가 나오는 경우는 둘이다 — 상태 필터로
@@ -97,12 +119,20 @@ function matchesQuery(user: UserListItem, query: string): boolean {
  */
 export function arrangeUsers(
   items: readonly UserListItem[],
-  options: { sort: UserSort; statusFilter: UserStatusFilter; query: string },
+  options: {
+    sort: UserSort;
+    statusFilter: UserStatusFilter;
+    query: string;
+    team?: UserTeamFilter;
+  },
 ): UserListItem[] {
-  const { sort, statusFilter, query } = options;
+  const { sort, statusFilter, query, team = { kind: 'all' } } = options;
   const showDeparted = statusFilter !== 'all' || sort?.key === 'status';
   const rows = items.filter(
-    (user) => matchesQuery(user, query) && (showDeparted || user.status !== 'departed'),
+    (user) =>
+      matchesQuery(user, query) &&
+      matchesTeam(user, team) &&
+      (showDeparted || user.status !== 'departed'),
   );
   if (!sort) return rows;
 

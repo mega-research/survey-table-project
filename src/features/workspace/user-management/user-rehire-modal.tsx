@@ -20,10 +20,10 @@ import { ChangeUserStatusInput, MIN_PASSWORD_LENGTH } from '@/shared/contracts/a
 import type { UserListItem } from '@/shared/contracts/auth-io';
 import type { TeamRole } from '@/shared/contracts/workspace';
 
+import { USER_STATUS_LABEL } from '../account-vocabulary';
 import { FIELD_HINT, FIELD_INPUT, FIELD_LABEL } from '../field-styles';
 import { useTeams } from '../team-management/queries/use-teams';
 import { useChangeUserStatus } from './queries/use-users';
-import { USER_STATUS_LABEL } from '../account-vocabulary';
 
 const ROLE_LABEL: Record<TeamRole, string> = { member: '팀원', leader: '팀장' };
 
