@@ -9,6 +9,8 @@ import { KpiRow } from '@/features/operations/kpi-row';
 import { PageDwellDistribution } from '@/features/operations/page-dwell-distribution';
 import { QuotaStatusPanel } from '@/features/operations/quota/quota-status-panel';
 import { ResponseTimeStats } from '@/features/operations/response-time-stats';
+import { isGuestViewer, isOverviewOnlyViewer } from '@/lib/auth/guest-viewer';
+import { getOperationsDataScope } from '@/server/data-scope';
 import {
   aggregateDaily,
   aggregateDailyAvailableDates,
@@ -17,10 +19,8 @@ import { aggregateStatus } from '@/server/operations/services/aggregate-status';
 import { getDailyStats } from '@/server/operations/services/daily-stats';
 import { getDropFunnel } from '@/server/operations/services/drop-funnel';
 import { getPageDwell } from '@/server/operations/services/page-dwell';
-import { getQuotaStatus } from '@/server/quota/services/quota-status';
 import { getResponseTime } from '@/server/operations/services/response-time';
-import { getOperationsDataScope } from '@/server/data-scope';
-import { isGuestViewer } from '@/lib/auth/guest-viewer';
+import { getQuotaStatus } from '@/server/quota/services/quota-status';
 import { getSurveyById } from '@/server/survey-builder/services/survey-read';
 
 /**
@@ -84,31 +84,53 @@ export default async function OperationsOverviewPage({
   searchParams,
 }: OperationsOverviewPageProps) {
   const { id: surveyId } = await params;
-  const { mode = 'day', date, weekOffset: weekOffsetStr, dwellOffset: dwellOffsetStr } = await searchParams;
+  const {
+    mode = 'day',
+    date,
+    weekOffset: weekOffsetStr,
+    dwellOffset: dwellOffsetStr,
+  } = await searchParams;
   const weekOffset = Math.max(0, parseInt(weekOffsetStr ?? '0', 10) || 0);
   const dwellOffset = Math.max(0, parseInt(dwellOffsetStr ?? '0', 10) || 0);
 
   // hour 모드 진입 시 date 미지정이면 응답이 있는 가장 최근 일자, 응답 자체가 없으면 KST 오늘로
   // fallback. 어댑터가 effectiveDate 없는 hour 모드에서 throw 하지 않도록 보장.
-  const [scope, isGuest] = await Promise.all([getOperationsDataScope(surveyId), isGuestViewer()]);
+  const [scope, isGuest, overviewOnly] = await Promise.all([
+    getOperationsDataScope(surveyId),
+    isGuestViewer(),
+    isOverviewOnlyViewer(surveyId),
+  ]);
   const availableDates = await aggregateDailyAvailableDates(surveyId, scope);
   const latestAvailable =
     availableDates.length > 0 ? availableDates[availableDates.length - 1] : undefined;
-  const effectiveDate =
-    mode === 'hour' ? (date ?? latestAvailable ?? todayKst()) : undefined;
+  const effectiveDate = mode === 'hour' ? (date ?? latestAvailable ?? todayKst()) : undefined;
 
-  const [statusCounts, dailyBuckets, dailyStats, responseTime, dropFunnel, pageDwell, quotaStatus, survey] =
-    await Promise.all([
-      aggregateStatus(surveyId, scope),
-      aggregateDaily({ surveyId, scope, mode, ...(effectiveDate !== undefined ? { hourModeDate: effectiveDate } : {}) }),
-      getDailyStats(surveyId, scope),
-      getResponseTime(surveyId, scope),
-      getDropFunnel(surveyId, scope),
-      getPageDwell(surveyId, scope),
-      // 테스트 모드에서도 테스트 응답 기준으로 집계해 보여준다(표시 전용 — 집행은 실응답만).
-      getQuotaStatus(surveyId, scope),
-      getSurveyById(surveyId),
-    ]);
+  const [
+    statusCounts,
+    dailyBuckets,
+    dailyStats,
+    responseTime,
+    dropFunnel,
+    pageDwell,
+    quotaStatus,
+    survey,
+  ] = await Promise.all([
+    aggregateStatus(surveyId, scope),
+    aggregateDaily({
+      surveyId,
+      scope,
+      mode,
+      ...(effectiveDate !== undefined ? { hourModeDate: effectiveDate } : {}),
+    }),
+    // 응답 현황만 보는 게스트에게 감추는 카드 — 그리지 않으므로 집계도 하지 않는다.
+    overviewOnly ? null : getDailyStats(surveyId, scope),
+    overviewOnly ? null : getResponseTime(surveyId, scope),
+    overviewOnly ? null : getDropFunnel(surveyId, scope),
+    overviewOnly ? null : getPageDwell(surveyId, scope),
+    // 테스트 모드에서도 테스트 응답 기준으로 집계해 보여준다(표시 전용 — 집행은 실응답만).
+    getQuotaStatus(surveyId, scope),
+    getSurveyById(surveyId),
+  ]);
 
   return (
     <main className="mx-auto max-w-7xl space-y-4 px-6 py-8">
@@ -116,7 +138,9 @@ export default async function OperationsOverviewPage({
         <div>
           <h2 className="text-xl font-bold text-gray-900">응답 현황</h2>
           <p className="text-sm text-slate-500">
-            응답자 진행 현황 · 일자별 추이 · 응답시간 통계 · 이탈 위치 분석
+            {overviewOnly
+              ? '응답자 진행 현황 · 일자별 추이'
+              : '응답자 진행 현황 · 일자별 추이 · 응답시간 통계 · 이탈 위치 분석'}
           </p>
         </div>
         {/* analytics 대시보드와 동일한 내보내기 모달 — RawData·SPSS·분할 다운로드. 게스트에게는 숨김 */}
@@ -136,16 +160,16 @@ export default async function OperationsOverviewPage({
         weekOffset={weekOffset}
       />
 
-      <DailyStatsTable data={dailyStats} />
+      {dailyStats && <DailyStatsTable data={dailyStats} />}
 
-      <ResponseTimeStats data={responseTime} />
+      {responseTime && <ResponseTimeStats data={responseTime} />}
 
-      <DropFunnel data={dropFunnel} />
+      {dropFunnel && <DropFunnel data={dropFunnel} />}
 
-      <PageDwellDistribution data={pageDwell} pageOffset={dwellOffset} />
+      {pageDwell && <PageDwellDistribution data={pageDwell} pageOffset={dwellOffset} />}
 
       {/* 응답자 문의사항 (백엔드 미구현 — 슬라이스 1 범위 외) */}
-      <InquiriesEmptyCard />
+      {!overviewOnly && <InquiriesEmptyCard />}
     </main>
   );
 }

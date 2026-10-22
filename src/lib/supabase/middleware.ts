@@ -5,6 +5,7 @@ import { createServerClient } from '@supabase/ssr';
 import {
   GUEST_FORCE_LOGOUT_PATH,
   getGuestSurveyIds,
+  getOverviewOnlySurveyIds,
   guestPathRedirect,
 } from '@/lib/auth/guest-grants';
 
@@ -64,7 +65,11 @@ export async function updateSession(request: NextRequest) {
       // 리다이렉트하고, 로그인 페이지는 로그인된 상태라도 그대로 보여준다
       // (재로그인 시 로그인 액션이 자기 grant 설문으로 보낸다).
       if (guestSurveyIds.length > 0) {
-        const dest = guestPathRedirect(request.nextUrl.pathname, guestSurveyIds);
+        const dest = guestPathRedirect(
+          request.nextUrl.pathname,
+          guestSurveyIds,
+          getOverviewOnlySurveyIds(user.id),
+        );
         if (dest) {
           const url = request.nextUrl.clone();
           url.pathname = dest;

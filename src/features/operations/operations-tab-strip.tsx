@@ -16,6 +16,8 @@ interface OperationsTabStripProps {
   surveyId: string;
   /** 게스트 세션 — 쿼터 탭을 숨긴다. */
   isGuest: boolean;
+  /** 응답 현황만 보는 게스트 — 「실사 현황 > 응답 현황」 하나만 낸다. */
+  overviewOnly?: boolean;
   /** 조사표가 붙은 설문인가 — 문항 수요 탭은 이때만 낸다. */
   hasSurveyDocument?: boolean;
 }
@@ -29,12 +31,14 @@ interface OperationsTabStripProps {
  * - "메일" trigger → `템플릿` / `단체 발송` / `비용 정산` 드롭다운 (수신거부자는 단체 발송 페이지 하단 세그먼트)
  * - "쿼터" 는 단일 페이지 링크 (`/operations/quota`)
  * - "문항 수요" 는 조사표가 붙은 설문에서만 나타난다 — 다른 설문에서는 쓸 일이 없는 탭이다
+ * - 응답 현황만 보는 게스트(`overviewOnly`)에게는 「실사 현황 > 응답 현황」 하나만 낸다
  * - shadcn NavigationMenu primitive 가 hover/click/키보드 표준을 처리하며
  *   Trigger 의 ChevronDown 이 내장돼 있어 caret 마크업은 별도로 그리지 않는다.
  */
 export function OperationsTabStrip({
   surveyId,
   isGuest,
+  overviewOnly = false,
   hasSurveyDocument = false,
 }: OperationsTabStripProps) {
   const pathname = usePathname() ?? '';
@@ -53,10 +57,10 @@ export function OperationsTabStrip({
   const isContactsRootActive =
     pathname === contactsHref ||
     (pathname.startsWith(`${contactsHref}/`) &&
-     !pathname.startsWith(contactsUploadHref) &&
-     !pathname.startsWith(contactsColumnsHref) &&
-     !pathname.startsWith(contactsResultCodesHref) &&
-     !pathname.startsWith(contactsAssignmentsHref));
+      !pathname.startsWith(contactsUploadHref) &&
+      !pathname.startsWith(contactsColumnsHref) &&
+      !pathname.startsWith(contactsResultCodesHref) &&
+      !pathname.startsWith(contactsAssignmentsHref));
   const isContactsUploadActive = pathname.startsWith(contactsUploadHref);
   const isContactsColumnsActive = pathname.startsWith(contactsColumnsHref);
   const isContactsResultCodesActive = pathname.startsWith(contactsResultCodesHref);
@@ -89,10 +93,7 @@ export function OperationsTabStrip({
   return (
     <div className="border-b border-gray-200 bg-white">
       <NavigationMenu className="mx-auto max-w-7xl justify-start px-6">
-        <NavigationMenuList
-          aria-label="현황 콘솔 메뉴"
-          className="justify-start gap-1"
-        >
+        <NavigationMenuList aria-label="현황 콘솔 메뉴" className="justify-start gap-1">
           <NavigationMenuItem>
             <NavigationMenuTrigger
               className={cn(
@@ -108,116 +109,122 @@ export function OperationsTabStrip({
               <SubLink href={overviewHref} active={isOverviewActive}>
                 응답 현황
               </SubLink>
-              <SubLink href={profilesHref} active={isProfilesActive}>
-                응답 내역
-              </SubLink>
-            </NavigationMenuContent>
-          </NavigationMenuItem>
-
-          <NavigationMenuItem>
-            <Link
-              href={reportHref}
-              aria-current={isReportActive ? 'page' : undefined}
-              className={cn(
-                'flex h-auto items-center gap-1 rounded-none border-b-2 bg-transparent px-4 py-3 text-sm transition-colors',
-                isReportActive
-                  ? 'border-blue-600 font-semibold text-blue-600 hover:text-blue-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-900',
-              )}
-            >
-              진척 보고
-            </Link>
-          </NavigationMenuItem>
-
-          <NavigationMenuItem>
-            <NavigationMenuTrigger
-              className={cn(
-                'flex h-auto items-center gap-1 rounded-none border-b-2 bg-transparent px-4 py-3 text-sm transition-colors hover:bg-transparent data-[state=open]:bg-transparent',
-                isContactsActive
-                  ? 'border-blue-600 font-semibold text-blue-600 hover:text-blue-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-900',
-              )}
-            >
-              조사 대상
-            </NavigationMenuTrigger>
-            <NavigationMenuContent className="min-w-[180px] p-1">
-              <SubLink href={contactsHref} active={isContactsRootActive}>
-                조사 대상 목록
-              </SubLink>
-              <SubLink href={contactsUploadHref} active={isContactsUploadActive}>
-                조사 대상 업로드
-              </SubLink>
-              <SubLink href={contactsColumnsHref} active={isContactsColumnsActive}>
-                컬럼 설정
-              </SubLink>
-              <SubLink href={contactsResultCodesHref} active={isContactsResultCodesActive}>
-                결과코드 설정
-              </SubLink>
-              {/* 컨택원은 내부 실사 운영 도구 — 게스트에게는 메뉴가 없다 */}
-              {!isGuest && (
-                <SubLink href={contactsAssignmentsHref} active={isContactsAssignmentsActive}>
-                  컨택원 관리
+              {!overviewOnly && (
+                <SubLink href={profilesHref} active={isProfilesActive}>
+                  응답 내역
                 </SubLink>
               )}
             </NavigationMenuContent>
           </NavigationMenuItem>
 
-          <NavigationMenuItem>
-            <NavigationMenuTrigger
-              className={cn(
-                'flex h-auto items-center gap-1 rounded-none border-b-2 bg-transparent px-4 py-3 text-sm transition-colors hover:bg-transparent data-[state=open]:bg-transparent',
-                isMailActive
-                  ? 'border-blue-600 font-semibold text-blue-600 hover:text-blue-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-900',
+          {!overviewOnly && (
+            <>
+              <NavigationMenuItem>
+                <Link
+                  href={reportHref}
+                  aria-current={isReportActive ? 'page' : undefined}
+                  className={cn(
+                    'flex h-auto items-center gap-1 rounded-none border-b-2 bg-transparent px-4 py-3 text-sm transition-colors',
+                    isReportActive
+                      ? 'border-blue-600 font-semibold text-blue-600 hover:text-blue-600'
+                      : 'border-transparent text-slate-500 hover:text-slate-900',
+                  )}
+                >
+                  진척 보고
+                </Link>
+              </NavigationMenuItem>
+
+              <NavigationMenuItem>
+                <NavigationMenuTrigger
+                  className={cn(
+                    'flex h-auto items-center gap-1 rounded-none border-b-2 bg-transparent px-4 py-3 text-sm transition-colors hover:bg-transparent data-[state=open]:bg-transparent',
+                    isContactsActive
+                      ? 'border-blue-600 font-semibold text-blue-600 hover:text-blue-600'
+                      : 'border-transparent text-slate-500 hover:text-slate-900',
+                  )}
+                >
+                  조사 대상
+                </NavigationMenuTrigger>
+                <NavigationMenuContent className="min-w-[180px] p-1">
+                  <SubLink href={contactsHref} active={isContactsRootActive}>
+                    조사 대상 목록
+                  </SubLink>
+                  <SubLink href={contactsUploadHref} active={isContactsUploadActive}>
+                    조사 대상 업로드
+                  </SubLink>
+                  <SubLink href={contactsColumnsHref} active={isContactsColumnsActive}>
+                    컬럼 설정
+                  </SubLink>
+                  <SubLink href={contactsResultCodesHref} active={isContactsResultCodesActive}>
+                    결과코드 설정
+                  </SubLink>
+                  {/* 컨택원은 내부 실사 운영 도구 — 게스트에게는 메뉴가 없다 */}
+                  {!isGuest && (
+                    <SubLink href={contactsAssignmentsHref} active={isContactsAssignmentsActive}>
+                      컨택원 관리
+                    </SubLink>
+                  )}
+                </NavigationMenuContent>
+              </NavigationMenuItem>
+
+              <NavigationMenuItem>
+                <NavigationMenuTrigger
+                  className={cn(
+                    'flex h-auto items-center gap-1 rounded-none border-b-2 bg-transparent px-4 py-3 text-sm transition-colors hover:bg-transparent data-[state=open]:bg-transparent',
+                    isMailActive
+                      ? 'border-blue-600 font-semibold text-blue-600 hover:text-blue-600'
+                      : 'border-transparent text-slate-500 hover:text-slate-900',
+                  )}
+                >
+                  메일
+                </NavigationMenuTrigger>
+                <NavigationMenuContent className="min-w-[180px] p-1">
+                  <SubLink href={mailTemplatesHref} active={isMailTemplatesActive}>
+                    템플릿
+                  </SubLink>
+                  <SubLink href={mailCampaignsHref} active={isMailCampaignsActive}>
+                    단체 발송
+                  </SubLink>
+                  <SubLink href={mailCostHref} active={false}>
+                    비용 정산
+                  </SubLink>
+                </NavigationMenuContent>
+              </NavigationMenuItem>
+
+              {hasSurveyDocument && (
+                <NavigationMenuItem>
+                  <Link
+                    href={demandHref}
+                    aria-current={isDemandActive ? 'page' : undefined}
+                    className={cn(
+                      'flex h-auto items-center gap-1 rounded-none border-b-2 bg-transparent px-4 py-3 text-sm transition-colors',
+                      isDemandActive
+                        ? 'border-blue-600 font-semibold text-blue-600 hover:text-blue-600'
+                        : 'border-transparent text-slate-500 hover:text-slate-900',
+                    )}
+                  >
+                    문항 수요
+                  </Link>
+                </NavigationMenuItem>
               )}
-            >
-              메일
-            </NavigationMenuTrigger>
-            <NavigationMenuContent className="min-w-[180px] p-1">
-              <SubLink href={mailTemplatesHref} active={isMailTemplatesActive}>
-                템플릿
-              </SubLink>
-              <SubLink href={mailCampaignsHref} active={isMailCampaignsActive}>
-                단체 발송
-              </SubLink>
-              <SubLink href={mailCostHref} active={false}>
-                비용 정산
-              </SubLink>
-            </NavigationMenuContent>
-          </NavigationMenuItem>
 
-          {hasSurveyDocument && (
-            <NavigationMenuItem>
-              <Link
-                href={demandHref}
-                aria-current={isDemandActive ? 'page' : undefined}
-                className={cn(
-                  'flex h-auto items-center gap-1 rounded-none border-b-2 bg-transparent px-4 py-3 text-sm transition-colors',
-                  isDemandActive
-                    ? 'border-blue-600 font-semibold text-blue-600 hover:text-blue-600'
-                    : 'border-transparent text-slate-500 hover:text-slate-900',
-                )}
-              >
-                문항 수요
-              </Link>
-            </NavigationMenuItem>
-          )}
-
-          {!isGuest && (
-            <NavigationMenuItem>
-              <Link
-                href={quotaHref}
-                aria-current={isQuotaActive ? 'page' : undefined}
-                className={cn(
-                  'flex h-auto items-center gap-1 rounded-none border-b-2 bg-transparent px-4 py-3 text-sm transition-colors',
-                  isQuotaActive
-                    ? 'border-blue-600 font-semibold text-blue-600 hover:text-blue-600'
-                    : 'border-transparent text-slate-500 hover:text-slate-900',
-                )}
-              >
-                쿼터
-              </Link>
-            </NavigationMenuItem>
+              {!isGuest && (
+                <NavigationMenuItem>
+                  <Link
+                    href={quotaHref}
+                    aria-current={isQuotaActive ? 'page' : undefined}
+                    className={cn(
+                      'flex h-auto items-center gap-1 rounded-none border-b-2 bg-transparent px-4 py-3 text-sm transition-colors',
+                      isQuotaActive
+                        ? 'border-blue-600 font-semibold text-blue-600 hover:text-blue-600'
+                        : 'border-transparent text-slate-500 hover:text-slate-900',
+                    )}
+                  >
+                    쿼터
+                  </Link>
+                </NavigationMenuItem>
+              )}
+            </>
           )}
         </NavigationMenuList>
       </NavigationMenu>
@@ -245,4 +252,3 @@ function SubLink({ href, active, children }: SubLinkProps) {
     </Link>
   );
 }
-

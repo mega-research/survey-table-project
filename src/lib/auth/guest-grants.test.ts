@@ -3,11 +3,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   canAccessSurvey,
   getGuestSurveyIds,
+  getOverviewOnlySurveyIds,
   guestPathRedirect,
   guestPostLoginRedirect,
   isAdminOrGuestGrantHolder,
   isForeignSurveyConsolePath,
   isGuestUser,
+  isOverviewOnlyGuest,
   parseGuestGrants,
 } from '@/lib/auth/guest-grants';
 
@@ -101,9 +103,7 @@ describe('guestPathRedirect', () => {
 
   it('grant 된 모든 설문의 operations 는 허용 (+ 로그인·강제 로그아웃 라우트)', () => {
     expect(guestPathRedirect('/admin/surveys/survey-a/operations', grants)).toBeNull();
-    expect(
-      guestPathRedirect('/admin/surveys/survey-b/operations/contacts', grants),
-    ).toBeNull();
+    expect(guestPathRedirect('/admin/surveys/survey-b/operations/contacts', grants)).toBeNull();
     expect(guestPathRedirect('/admin/login', grants)).toBeNull();
     expect(guestPathRedirect('/admin/logout', grants)).toBeNull();
   });
@@ -151,6 +151,62 @@ describe('guestPathRedirect', () => {
       expect(guestPathRedirect(`${base}/contacts/new`, grants)).toBeNull();
       expect(guestPathRedirect(`${base}/contacts/abc123`, grants)).toBeNull();
     }
+  });
+});
+
+describe('응답 현황만 보는 게스트 grant', () => {
+  const GUEST9 = 'c79af8a1-186a-4157-be4c-2bebfbde4a8d';
+  const AI_2026_PUBLIC = '253534a5-913a-4891-a019-f9643ccea0a7';
+  const base = `/admin/surveys/${AI_2026_PUBLIC}/operations`;
+  const overview = `${base}/overview`;
+
+  it('등록된 계정이 그 설문 grant 를 가질 때만 응답 현황 전용이다', () => {
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `${GUEST9}:${AI_2026_PUBLIC},${GUEST9}:other-survey`);
+    expect(getOverviewOnlySurveyIds(GUEST9)).toEqual([AI_2026_PUBLIC]);
+    expect(isOverviewOnlyGuest(GUEST9, AI_2026_PUBLIC)).toBe(true);
+    expect(isOverviewOnlyGuest(GUEST9, 'other-survey')).toBe(false);
+    expect(isOverviewOnlyGuest('guest-other', AI_2026_PUBLIC)).toBe(false);
+
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `${GUEST9}:other-survey`);
+    expect(getOverviewOnlySurveyIds(GUEST9)).toEqual([]);
+  });
+
+  it('응답 현황 밖의 콘솔 화면과 설문 보기는 응답 현황으로 돌려보낸다', () => {
+    const grants = [AI_2026_PUBLIC, 'survey-b'];
+    const only = [AI_2026_PUBLIC];
+    expect(guestPathRedirect(overview, grants, only)).toBeNull();
+    expect(guestPathRedirect(`${overview}/anything`, grants, only)).toBeNull();
+    for (const sub of [
+      '',
+      '/profiles',
+      '/profiles/r1/edit',
+      '/report',
+      '/contacts',
+      '/contacts/abc',
+      '/mail/campaigns',
+      '/demand',
+      '/quota',
+    ]) {
+      expect(guestPathRedirect(`${base}${sub}`, grants, only)).toBe(overview);
+    }
+    expect(guestPathRedirect(`/admin/surveys/${AI_2026_PUBLIC}/preview`, grants, only)).toBe(
+      overview,
+    );
+    // 같은 계정의 다른 grant 설문은 종전 규칙 그대로
+    expect(
+      guestPathRedirect('/admin/surveys/survey-b/operations/contacts', grants, only),
+    ).toBeNull();
+    expect(guestPathRedirect('/admin/surveys/survey-b/preview', grants, only)).toBeNull();
+    // grant 밖은 종전대로 강제 로그아웃
+    expect(guestPathRedirect('/admin/surveys', grants, only)).toBe('/admin/logout');
+  });
+
+  it('로그인 직후 다른 화면이 목적지여도 응답 현황에 정착시킨다', () => {
+    const grants = [AI_2026_PUBLIC];
+    expect(guestPostLoginRedirect(`${base}/contacts?page=2`, grants, grants)).toBe(overview);
+    expect(guestPostLoginRedirect(`${overview}?mode=hour`, grants, grants)).toBe(
+      `${overview}?mode=hour`,
+    );
   });
 });
 

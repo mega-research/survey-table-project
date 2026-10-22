@@ -13,6 +13,8 @@ interface Props {
   surveyTitle: string;
   /** 게스트(설문 단위 grant) 세션 — 설문 편집 등 admin 전용 버튼을 숨긴다. */
   isGuest: boolean;
+  /** 응답 현황만 보는 게스트 — 설문 보기 버튼도 숨긴다. */
+  overviewOnly?: boolean;
   control: {
     isPaused: boolean;
     pausedMessage: string | null;
@@ -32,7 +34,13 @@ interface Props {
  * `/admin/surveys/[id]/operations/*` 라우트의 layout 에서 한 번만 마운트되어
  * 모든 하위 페이지(현황/응답 내역/보고서/조사 대상)가 동일한 상단을 공유한다.
  */
-export function OperationsPageHeader({ surveyId, surveyTitle, isGuest, control }: Props) {
+export function OperationsPageHeader({
+  surveyId,
+  surveyTitle,
+  isGuest,
+  overviewOnly = false,
+  control,
+}: Props) {
   return (
     <nav className="border-b border-gray-200 bg-white px-6 py-4">
       <div className="mx-auto flex max-w-7xl items-center justify-between">
@@ -59,12 +67,14 @@ export function OperationsPageHeader({ surveyId, surveyTitle, isGuest, control }
           <RefreshButton />
           {/* 설문 중단·테스트 모드는 어드민 전용 — 게스트에게는 렌더하지 않는다 */}
           {!isGuest && <SurveyControlButtons surveyId={surveyId} initial={control} />}
-          <Link href={`/admin/surveys/${surveyId}/preview`}>
-            <Button variant="outline" size="sm">
-              <Eye className="mr-2 h-4 w-4" />
-              설문 보기
-            </Button>
-          </Link>
+          {!overviewOnly && (
+            <Link href={`/admin/surveys/${surveyId}/preview`}>
+              <Button variant="outline" size="sm">
+                <Eye className="mr-2 h-4 w-4" />
+                설문 보기
+              </Button>
+            </Link>
+          )}
           {!isGuest && (
             <Link href={`/admin/surveys/${surveyId}/edit`}>
               <Button variant="outline" size="sm">
