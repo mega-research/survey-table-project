@@ -3,13 +3,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   canAccessSurvey,
   getGuestSurveyIds,
-  getOverviewOnlySurveyIds,
+  getViewOnlySurveyIds,
   guestPathRedirect,
   guestPostLoginRedirect,
   isAdminOrGuestGrantHolder,
   isForeignSurveyConsolePath,
   isGuestUser,
-  isOverviewOnlyGuest,
+  isViewOnlyGuest,
   parseGuestGrants,
 } from '@/lib/auth/guest-grants';
 
@@ -154,32 +154,33 @@ describe('guestPathRedirect', () => {
   });
 });
 
-describe('응답 현황만 보는 게스트 grant', () => {
+describe('보기만 하는 게스트 grant', () => {
   const GUEST9 = 'c79af8a1-186a-4157-be4c-2bebfbde4a8d';
   const AI_2026_PUBLIC = '253534a5-913a-4891-a019-f9643ccea0a7';
   const base = `/admin/surveys/${AI_2026_PUBLIC}/operations`;
   const overview = `${base}/overview`;
 
-  it('등록된 계정이 그 설문 grant 를 가질 때만 응답 현황 전용이다', () => {
+  it('등록된 계정이 그 설문 grant 를 가질 때만 보기 전용이다', () => {
     vi.stubEnv('GUEST_SURVEY_GRANTS', `${GUEST9}:${AI_2026_PUBLIC},${GUEST9}:other-survey`);
-    expect(getOverviewOnlySurveyIds(GUEST9)).toEqual([AI_2026_PUBLIC]);
-    expect(isOverviewOnlyGuest(GUEST9, AI_2026_PUBLIC)).toBe(true);
-    expect(isOverviewOnlyGuest(GUEST9, 'other-survey')).toBe(false);
-    expect(isOverviewOnlyGuest('guest-other', AI_2026_PUBLIC)).toBe(false);
+    expect(getViewOnlySurveyIds(GUEST9)).toEqual([AI_2026_PUBLIC]);
+    expect(isViewOnlyGuest(GUEST9, AI_2026_PUBLIC)).toBe(true);
+    expect(isViewOnlyGuest(GUEST9, 'other-survey')).toBe(false);
+    expect(isViewOnlyGuest('guest-other', AI_2026_PUBLIC)).toBe(false);
 
     vi.stubEnv('GUEST_SURVEY_GRANTS', `${GUEST9}:other-survey`);
-    expect(getOverviewOnlySurveyIds(GUEST9)).toEqual([]);
+    expect(getViewOnlySurveyIds(GUEST9)).toEqual([]);
   });
 
-  it('응답 현황 밖의 콘솔 화면과 설문 보기는 응답 현황으로 돌려보낸다', () => {
+  it('응답 현황·응답 내역 목록 밖의 콘솔 화면과 설문 보기는 응답 현황으로 돌려보낸다', () => {
     const grants = [AI_2026_PUBLIC, 'survey-b'];
     const only = [AI_2026_PUBLIC];
     expect(guestPathRedirect(overview, grants, only)).toBeNull();
     expect(guestPathRedirect(`${overview}/anything`, grants, only)).toBeNull();
+    expect(guestPathRedirect(`${base}/profiles`, grants, only)).toBeNull();
     for (const sub of [
       '',
-      '/profiles',
       '/profiles/r1/edit',
+      '/profiles/columns',
       '/report',
       '/contacts',
       '/contacts/abc',

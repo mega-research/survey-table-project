@@ -75,6 +75,8 @@ interface Props {
   hasContacts: boolean;
   /** 게스트 세션 — 행 액션에서 admin 전용 메뉴(삭제·초기화·복원)를 숨긴다. */
   isGuest: boolean;
+  /** 보기만 하는 게스트 — 편집 열(수정·삭제·초기화 메뉴)을 통째로 뺀다. */
+  viewOnly?: boolean;
   /** 표시 컬럼 스킴 — visibleProfileColumns 결과 (order 순, hidden 제외). */
   columnScheme: ProfileColumnDef[];
   /** contactTargetId → columnKey → 복호화 평문. 표시 스킴의 pii.* 키만 채워진다. */
@@ -131,6 +133,7 @@ export function ProfilesTable({
   view,
   hasContacts,
   isGuest,
+  viewOnly = false,
   columnScheme,
   piiByTarget,
 }: Props) {
@@ -322,8 +325,12 @@ export function ProfilesTable({
       }
     };
 
+    const dataColumns = columnScheme
+      .map(buildColumn)
+      .filter((c): c is ColumnDef<DisplayRow> => c !== null);
+    if (viewOnly) return dataColumns;
     return [
-      ...columnScheme.map(buildColumn).filter((c): c is ColumnDef<DisplayRow> => c !== null),
+      ...dataColumns,
       {
         id: 'actions',
         header: '편집',
@@ -340,7 +347,7 @@ export function ProfilesTable({
         meta: meta('center', false),
       },
     ];
-  }, [surveyId, view, hasContacts, isGuest, columnScheme, piiByTarget]);
+  }, [surveyId, view, hasContacts, isGuest, viewOnly, columnScheme, piiByTarget]);
 
   // TanStack Table useReactTable은 React Compiler 비호환 API라 국소 예외로 둔다.
   // eslint-disable-next-line react-hooks/incompatible-library

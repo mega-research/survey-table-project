@@ -16,8 +16,8 @@ interface OperationsTabStripProps {
   surveyId: string;
   /** 게스트 세션 — 쿼터 탭을 숨긴다. */
   isGuest: boolean;
-  /** 응답 현황만 보는 게스트 — 「실사 현황 > 응답 현황」 하나만 낸다. */
-  overviewOnly?: boolean;
+  /** 보기만 하는 게스트 — 「실사 현황」(응답 현황·응답 내역)만 낸다. */
+  viewOnly?: boolean;
   /** 조사표가 붙은 설문인가 — 문항 수요 탭은 이때만 낸다. */
   hasSurveyDocument?: boolean;
 }
@@ -31,14 +31,14 @@ interface OperationsTabStripProps {
  * - "메일" trigger → `템플릿` / `단체 발송` / `비용 정산` 드롭다운 (수신거부자는 단체 발송 페이지 하단 세그먼트)
  * - "쿼터" 는 단일 페이지 링크 (`/operations/quota`)
  * - "문항 수요" 는 조사표가 붙은 설문에서만 나타난다 — 다른 설문에서는 쓸 일이 없는 탭이다
- * - 응답 현황만 보는 게스트(`overviewOnly`)에게는 「실사 현황 > 응답 현황」 하나만 낸다
+ * - 보기만 하는 게스트(`viewOnly`)에게는 「실사 현황」(응답 현황·응답 내역)만 낸다
  * - shadcn NavigationMenu primitive 가 hover/click/키보드 표준을 처리하며
  *   Trigger 의 ChevronDown 이 내장돼 있어 caret 마크업은 별도로 그리지 않는다.
  */
 export function OperationsTabStrip({
   surveyId,
   isGuest,
-  overviewOnly = false,
+  viewOnly = false,
   hasSurveyDocument = false,
 }: OperationsTabStripProps) {
   const pathname = usePathname() ?? '';
@@ -109,15 +109,13 @@ export function OperationsTabStrip({
               <SubLink href={overviewHref} active={isOverviewActive}>
                 응답 현황
               </SubLink>
-              {!overviewOnly && (
-                <SubLink href={profilesHref} active={isProfilesActive}>
-                  응답 내역
-                </SubLink>
-              )}
+              <SubLink href={profilesHref} active={isProfilesActive}>
+                응답 내역
+              </SubLink>
             </NavigationMenuContent>
           </NavigationMenuItem>
 
-          {!overviewOnly && (
+          {!viewOnly && (
             <>
               <NavigationMenuItem>
                 <Link

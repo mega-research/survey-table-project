@@ -5,7 +5,7 @@ import { createServerClient } from '@supabase/ssr';
 import {
   GUEST_FORCE_LOGOUT_PATH,
   getGuestSurveyIds,
-  getOverviewOnlySurveyIds,
+  getViewOnlySurveyIds,
   guestPathRedirect,
 } from '@/lib/auth/guest-grants';
 
@@ -68,7 +68,7 @@ export async function updateSession(request: NextRequest) {
         const dest = guestPathRedirect(
           request.nextUrl.pathname,
           guestSurveyIds,
-          getOverviewOnlySurveyIds(user.id),
+          getViewOnlySurveyIds(user.id),
         );
         if (dest) {
           const url = request.nextUrl.clone();

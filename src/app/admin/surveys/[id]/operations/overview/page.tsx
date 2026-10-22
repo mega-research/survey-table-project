@@ -9,7 +9,7 @@ import { KpiRow } from '@/features/operations/kpi-row';
 import { PageDwellDistribution } from '@/features/operations/page-dwell-distribution';
 import { QuotaStatusPanel } from '@/features/operations/quota/quota-status-panel';
 import { ResponseTimeStats } from '@/features/operations/response-time-stats';
-import { isGuestViewer, isOverviewOnlyViewer } from '@/lib/auth/guest-viewer';
+import { isGuestViewer, isViewOnlyViewer } from '@/lib/auth/guest-viewer';
 import { getOperationsDataScope } from '@/server/data-scope';
 import {
   aggregateDaily,
@@ -95,10 +95,10 @@ export default async function OperationsOverviewPage({
 
   // hour 모드 진입 시 date 미지정이면 응답이 있는 가장 최근 일자, 응답 자체가 없으면 KST 오늘로
   // fallback. 어댑터가 effectiveDate 없는 hour 모드에서 throw 하지 않도록 보장.
-  const [scope, isGuest, overviewOnly] = await Promise.all([
+  const [scope, isGuest, viewOnly] = await Promise.all([
     getOperationsDataScope(surveyId),
     isGuestViewer(),
-    isOverviewOnlyViewer(surveyId),
+    isViewOnlyViewer(surveyId),
   ]);
   const availableDates = await aggregateDailyAvailableDates(surveyId, scope);
   const latestAvailable =
@@ -122,11 +122,11 @@ export default async function OperationsOverviewPage({
       mode,
       ...(effectiveDate !== undefined ? { hourModeDate: effectiveDate } : {}),
     }),
-    // 응답 현황만 보는 게스트에게 감추는 카드 — 그리지 않으므로 집계도 하지 않는다.
-    overviewOnly ? null : getDailyStats(surveyId, scope),
-    overviewOnly ? null : getResponseTime(surveyId, scope),
-    overviewOnly ? null : getDropFunnel(surveyId, scope),
-    overviewOnly ? null : getPageDwell(surveyId, scope),
+    // 보기만 하는 게스트에게 감추는 카드 — 그리지 않으므로 집계도 하지 않는다.
+    viewOnly ? null : getDailyStats(surveyId, scope),
+    viewOnly ? null : getResponseTime(surveyId, scope),
+    viewOnly ? null : getDropFunnel(surveyId, scope),
+    viewOnly ? null : getPageDwell(surveyId, scope),
     // 테스트 모드에서도 테스트 응답 기준으로 집계해 보여준다(표시 전용 — 집행은 실응답만).
     getQuotaStatus(surveyId, scope),
     getSurveyById(surveyId),
@@ -138,7 +138,7 @@ export default async function OperationsOverviewPage({
         <div>
           <h2 className="text-xl font-bold text-gray-900">응답 현황</h2>
           <p className="text-sm text-slate-500">
-            {overviewOnly
+            {viewOnly
               ? '응답자 진행 현황 · 일자별 추이'
               : '응답자 진행 현황 · 일자별 추이 · 응답시간 통계 · 이탈 위치 분석'}
           </p>
@@ -169,7 +169,7 @@ export default async function OperationsOverviewPage({
       {pageDwell && <PageDwellDistribution data={pageDwell} pageOffset={dwellOffset} />}
 
       {/* 응답자 문의사항 (백엔드 미구현 — 슬라이스 1 범위 외) */}
-      {!overviewOnly && <InquiriesEmptyCard />}
+      {!viewOnly && <InquiriesEmptyCard />}
     </main>
   );
 }

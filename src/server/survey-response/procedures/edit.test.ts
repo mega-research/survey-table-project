@@ -207,6 +207,32 @@ describe('surveyResponse.edit procedures', () => {
     expect(svc.saveAdminEdit).not.toHaveBeenCalled();
   });
 
+  it('보기만 하는 게스트는 자기 grant 설문이어도 saveAdminEdit 가 FORBIDDEN', async () => {
+    const guest9 = 'c79af8a1-186a-4157-be4c-2bebfbde4a8d';
+    const viewOnlySurvey = '253534a5-913a-4891-a019-f9643ccea0a7';
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `${guest9}:${viewOnlySurvey}`);
+    const client = createRouterClient(
+      { edit },
+      {
+        context: {
+          db: {} as never,
+          supabase: {} as never,
+          user: { id: guest9, email: 'g9@b.com' },
+        },
+      },
+    );
+    await expect(
+      client.edit.saveAdminEdit({
+        surveyId: viewOnlySurvey,
+        responseId: RESPONSE_ID,
+        questionResponses: { q1: 'a' },
+        versionId: null,
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(svc.saveAdminEdit).not.toHaveBeenCalled();
+  });
+
   it('versionId 를 service 입력으로 그대로 전달한다', async () => {
     vi.mocked(svc.saveAdminEdit).mockResolvedValue({ ok: true } as never);
     const client = createRouterClient({ edit }, { context: authedContext() });

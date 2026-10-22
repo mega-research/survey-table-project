@@ -1,7 +1,7 @@
 import { cache } from 'react';
 
 import { requireAuth } from '@/lib/auth';
-import { isGuestUser, isOverviewOnlyGuest } from '@/lib/auth/guest-grants';
+import { isGuestUser, isViewOnlyGuest } from '@/lib/auth/guest-grants';
 
 /**
  * 현재 세션이 설문 단위 게스트(grant 보유자)인지 판정하는 서버 전용 헬퍼.
@@ -26,13 +26,13 @@ async function loadIsGuestViewer(): Promise<boolean> {
 export const isGuestViewer = cache(loadIsGuestViewer);
 
 /**
- * 현재 세션이 이 설문에서 응답 현황만 보는 게스트인지 판정한다(guest-grants 의
- * OVERVIEW_ONLY_GUEST_GRANTS). 탭·헤더 버튼·응답 현황 카드의 서버 렌더 분기용이고,
+ * 현재 세션이 이 설문에서 보기만 하는 게스트인지 판정한다(guest-grants 의
+ * VIEW_ONLY_GUEST_GRANTS). 탭·헤더 버튼·응답 현황 카드·응답 내역 행 메뉴의 서버 렌더 분기용이고,
  * 다른 화면 경로 차단은 미들웨어(guestPathRedirect)가 맡는다.
  */
-async function loadIsOverviewOnlyViewer(surveyId: string): Promise<boolean> {
+async function loadIsViewOnlyViewer(surveyId: string): Promise<boolean> {
   const user = await requireAuth();
-  return isOverviewOnlyGuest(user.id, surveyId);
+  return isViewOnlyGuest(user.id, surveyId);
 }
 
-export const isOverviewOnlyViewer = cache(loadIsOverviewOnlyViewer);
+export const isViewOnlyViewer = cache(loadIsViewOnlyViewer);
