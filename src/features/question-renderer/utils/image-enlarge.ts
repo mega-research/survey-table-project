@@ -44,3 +44,44 @@ export function canEnlargeImage(input: {
     natural.height * scale - rendered.height >= PIXEL_TOLERANCE;
   return shrunk || cropped;
 }
+
+/** 화면 위 사각형 — 같은 좌표계(getBoundingClientRect)로 잰 값 */
+export interface ImageBox {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+/** 본문 이미지 돋보기 지름 — 표 이미지 배지(size-7)와 같다 */
+export const ENLARGE_BADGE_SIZE = 28;
+/** 사진 바깥에 둘 때 사진과의 틈 */
+const BADGE_GAP = 4;
+/** 사진 안에 둘 때 모서리에서 띄우는 거리 — 순위형 보기 돋보기(top-1.5 right-1.5)와 같다 */
+const BADGE_INSET = 6;
+
+/**
+ * 본문(안내문·설명) 이미지의 돋보기 자리 — 늘 사진의 오른쪽 위다. 사진 오른쪽에 돋보기가 들어갈 자리가
+ * 남으면 사진 바깥 오른쪽, 위 끝에 맞춰 둔다 — 작게 가운데 놓인 로고 같은 자극물을 가리지 않는다. 자리가
+ * 없으면(폭을 꽉 채운 사진) 순위형 보기 돋보기처럼 사진 안 우상단에 둔다. 아래쪽을 쓰지 않는 것은 본문
+ * 이미지 바로 밑에 글이 붙는 경우가 많고, 가로로 긴 띠 그림은 설명 글자가 아래쪽에 몰려서다.
+ *
+ * 입력과 결과는 같은 좌표계다. 부르는 쪽이 돋보기를 띄우는 상자의 원점을 빼서 쓴다.
+ */
+export function placeEnlargeBadge(
+  image: ImageBox,
+  container: ImageBox,
+): { left: number; top: number; outside: boolean } {
+  if (container.right - image.right >= ENLARGE_BADGE_SIZE + BADGE_GAP) {
+    return {
+      left: image.right + BADGE_GAP,
+      top: image.top,
+      outside: true,
+    };
+  }
+  return {
+    left: image.right - ENLARGE_BADGE_SIZE - BADGE_INSET,
+    top: image.top + BADGE_INSET,
+    outside: false,
+  };
+}

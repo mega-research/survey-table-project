@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { canEnlargeImage } from './image-enlarge';
+import { canEnlargeImage, placeEnlargeBadge } from './image-enlarge';
 
 describe('canEnlargeImage — 원본 전체가 화면에 다 보이지 않는(줄었거나 잘린) 이미지인가', () => {
   it('원본과 같은 크기로 그려지면 크게 보기가 붙지 않는다', () => {
@@ -88,5 +88,29 @@ describe('canEnlargeImage — 원본 전체가 화면에 다 보이지 않는(�
         fit: 'contain',
       }),
     ).toBe(false);
+  });
+});
+
+describe('placeEnlargeBadge — 본문 이미지 돋보기 자리', () => {
+  const container = { left: 0, top: 0, right: 360, bottom: 800 };
+
+  it('오른쪽에 자리가 있으면 사진 바깥 오른쪽, 위 끝에 맞춘다', () => {
+    // 가운데 놓인 작은 로고 — 오른쪽에 120px 남는다
+    const image = { left: 120, top: 100, right: 240, bottom: 220 };
+
+    expect(placeEnlargeBadge(image, container)).toEqual({ left: 244, top: 100, outside: true });
+  });
+
+  it('오른쪽 자리가 돋보기 폭과 틈을 합친 것보다 좁으면 사진 안 우상단으로 들어간다', () => {
+    // 폭을 꽉 채운 사진 — 본문 상자 안쪽 여백 24px 만 남는다
+    const image = { left: 24, top: 100, right: 336, bottom: 180 };
+
+    expect(placeEnlargeBadge(image, container)).toEqual({ left: 302, top: 106, outside: false });
+  });
+
+  it('돋보기 폭과 틈을 합친 자리가 딱 남으면 바깥에 둔다', () => {
+    const image = { left: 0, top: 0, right: 328, bottom: 100 };
+
+    expect(placeEnlargeBadge(image, container).outside).toBe(true);
   });
 });

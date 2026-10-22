@@ -36,4 +36,21 @@ describe('설명 본문 이미지 — 이미지 크게 보기', () => {
 
     expect(await screen.findByRole('dialog', { name: '이미지 크게 보기' })).toBeInTheDocument();
   });
+
+  it('설명 이미지에도 돋보기가 붙고 돋보기를 눌러도 열린다', async () => {
+    restoreMatchMedia = stubMatchMedia({ mobile: true, hover: false });
+    const { container } = render(
+      <RichDescription
+        html={'<p><img src="https://cdn.example.com/map.png" alt="지역 구분도"></p>'}
+      />,
+    );
+    loadImageWithSize(container.querySelector('img') as HTMLImageElement, {
+      natural: { width: 1600, height: 1200 },
+      rendered: { width: 343, height: 257 },
+    });
+
+    fireEvent.click(container.querySelector('[data-enlarge-badge]') as HTMLElement);
+
+    expect(await screen.findByRole('dialog', { name: '이미지 크게 보기' })).toBeInTheDocument();
+  });
 });

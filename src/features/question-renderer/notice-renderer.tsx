@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 import { Label } from '@/components/ui/label';
 import { sanitizeRichHtml } from '@/lib/sanitize';
@@ -48,6 +48,9 @@ export function NoticeRenderer({
   const html = sanitizeRichHtml(content);
   const panelRef = useRef<HTMLDivElement>(null);
   const imageEnlarge = useRichTextImageEnlarge(panelRef, html);
+  // 본문 객체를 고정한다 — 새 객체면 React 가 다시 그릴 때마다 본문을 통째로 다시 넣어, 크게 보기
+  // 표식을 붙인 이미지가 표식 없는 새 이미지로 바뀐다(돋보기 자리·크게 보기 상태가 바뀌어도 다시 그린다)
+  const innerHtml = useMemo(() => ({ __html: html }), [html]);
 
   const handleAcknowledgmentChange = (checked: boolean) => {
     setAcknowledged(checked);
@@ -65,26 +68,29 @@ export function NoticeRenderer({
 
   return (
     <div className="space-y-4">
-      {/* Rich Text Content Display */}
-      <div
-        ref={panelRef}
-        {...imageEnlarge.enlargeProps}
-        data-notice-panel
-        // max-md word-break normal: 전역 keep-all(어절 보존)이 좁은 화면의 긴 문단에서
-        // 줄 끝 빈 공간을 크게 남겨, 공지 본문은 모바일에서만 글자 단위 줄바꿈을 허용한다.
-        // (justify 분산 정렬은 문단 인라인 text-align 에 밀려 무효 — 시도 후 기각)
-        className={`tiptap-mobile-tame prose prose-sm min-w-0 max-w-none ${panelClass} max-md:[word-break:normal] md:overflow-x-auto [&_a:not(.notice-file-attachment)]:[overflow-wrap:anywhere] [&_img]:inline-block [&_img]:align-top [&_p]:min-h-[1.6em] [&_p]:break-words [&_table]:my-4 md:[&_table]:!w-auto [&_table]:max-w-full [&_table]:table-auto [&_table]:border-collapse [&_table]:border [&_table]:border-gray-300 [&_table_p]:m-0 [&_table_td]:box-border [&_table_td]:overflow-hidden [&_table_td]:border [&_table_td]:border-gray-300 [&_table_td]:px-3 [&_table_td]:py-2 [&_table_td]:align-top [&_table_td]:break-words [&_table_th]:box-border [&_table_th]:overflow-hidden [&_table_th]:border [&_table_th]:border-gray-300 [&_table_th]:bg-transparent [&_table_th]:px-3 [&_table_th]:py-2 [&_table_th]:align-top [&_table_th]:break-words [&_table_th]:font-normal [&_a.notice-file-attachment]:no-underline [&_a.notice-file-attachment]:text-gray-700 [&_a.notice-file-attachment]:inline-flex [&_a.notice-file-attachment]:items-center [&_a.notice-file-attachment]:bg-gray-100 [&_a.notice-file-attachment_.notice-file-attachment-label]:text-gray-800 [&_a.notice-file-attachment_.notice-file-attachment-meta]:text-gray-500 ${RICH_TEXT_ENLARGE_CLASS}`}
-        dangerouslySetInnerHTML={{ __html: html }}
-        style={{
-          // TipTap 스타일 재정의
-          fontSize: '14px',
-          lineHeight: '1.6',
-          WebkitOverflowScrolling: 'touch',
-          ...(customBg
-            ? { backgroundColor: customBg, borderColor: deriveBorderColor(customBg) }
-            : {}),
-        }}
-      />
+      {/* Rich Text Content Display — 터치 기기 돋보기가 본문 상자 기준으로 뜨도록 relative 로 감싼다 */}
+      <div className="relative">
+        <div
+          ref={panelRef}
+          {...imageEnlarge.enlargeProps}
+          data-notice-panel
+          // max-md word-break normal: 전역 keep-all(어절 보존)이 좁은 화면의 긴 문단에서
+          // 줄 끝 빈 공간을 크게 남겨, 공지 본문은 모바일에서만 글자 단위 줄바꿈을 허용한다.
+          // (justify 분산 정렬은 문단 인라인 text-align 에 밀려 무효 — 시도 후 기각)
+          className={`tiptap-mobile-tame prose prose-sm max-w-none min-w-0 ${panelClass} max-md:[word-break:normal] md:overflow-x-auto [&_a.notice-file-attachment]:inline-flex [&_a.notice-file-attachment]:items-center [&_a.notice-file-attachment]:bg-gray-100 [&_a.notice-file-attachment]:text-gray-700 [&_a.notice-file-attachment]:no-underline [&_a.notice-file-attachment_.notice-file-attachment-label]:text-gray-800 [&_a.notice-file-attachment_.notice-file-attachment-meta]:text-gray-500 [&_a:not(.notice-file-attachment)]:[overflow-wrap:anywhere] [&_img]:inline-block [&_img]:align-top [&_p]:min-h-[1.6em] [&_p]:break-words [&_table]:my-4 [&_table]:max-w-full [&_table]:table-auto [&_table]:border-collapse [&_table]:border [&_table]:border-gray-300 md:[&_table]:!w-auto [&_table_p]:m-0 [&_table_td]:box-border [&_table_td]:overflow-hidden [&_table_td]:border [&_table_td]:border-gray-300 [&_table_td]:px-3 [&_table_td]:py-2 [&_table_td]:align-top [&_table_td]:break-words [&_table_th]:box-border [&_table_th]:overflow-hidden [&_table_th]:border [&_table_th]:border-gray-300 [&_table_th]:bg-transparent [&_table_th]:px-3 [&_table_th]:py-2 [&_table_th]:align-top [&_table_th]:font-normal [&_table_th]:break-words ${RICH_TEXT_ENLARGE_CLASS}`}
+          dangerouslySetInnerHTML={innerHtml}
+          style={{
+            // TipTap 스타일 재정의
+            fontSize: '14px',
+            lineHeight: '1.6',
+            WebkitOverflowScrolling: 'touch',
+            ...(customBg
+              ? { backgroundColor: customBg, borderColor: deriveBorderColor(customBg) }
+              : {}),
+          }}
+        />
+        {imageEnlarge.badges}
+      </div>
       {imageEnlarge.overlay}
 
       {/* Acknowledgment Checkbox */}
