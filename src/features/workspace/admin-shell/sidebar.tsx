@@ -47,8 +47,7 @@ export function Sidebar({ user, memberships, collapsed, onToggle }: SidebarProps
 
   return (
     <aside
-      // 화면 높이에 붙여 둔다 — 셸의 flex 행이 본문 높이로 늘어나면 하단 프로필이 긴 목록 끝까지 밀려난다.
-      className="sticky top-0 flex h-screen shrink-0 flex-col gap-2 self-start bg-[#0D1B4C] p-4 pt-[18px]"
+      className="flex h-full flex-col gap-2 bg-[#0D1B4C] p-4 pt-[18px]"
       style={{ width: collapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH }}
     >
       <div className={cn('flex items-center', collapsed ? 'flex-col gap-2' : 'justify-between')}>

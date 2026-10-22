@@ -108,13 +108,17 @@ export function AdminShell({ user, memberships, teams, initialScope, children }:
   return (
     <WorkScopeContext.Provider value={contextValue}>
       <div className="flex min-h-screen">
+        {/* 사이드바 자리는 화면 높이에 붙여 둔다 — 본문 높이를 따라 늘어나면 하단 프로필이 긴 목록 끝까지
+            밀려난다. 본문만 스크롤하는 셸로 바꾸지 않은 이유: 미리보기 응답 흐름이 창 스크롤(window.scrollTo)에 기댄다. */}
         {!sidebarHidden && (
-          <Sidebar
-            user={user}
-            memberships={memberships}
-            collapsed={collapsed}
-            onToggle={toggleCollapsed}
-          />
+          <div className="sticky top-0 h-screen shrink-0 self-start">
+            <Sidebar
+              user={user}
+              memberships={memberships}
+              collapsed={collapsed}
+              onToggle={toggleCollapsed}
+            />
+          </div>
         )}
         <main className="min-w-0 flex-1 bg-[#F9FAFB]">{children}</main>
       </div>
