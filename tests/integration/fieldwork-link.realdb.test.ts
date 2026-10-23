@@ -24,7 +24,7 @@
  */
 import { createRouterClient } from '@orpc/server';
 import { eq } from 'drizzle-orm';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { db } from '@/db';
 import {
@@ -58,6 +58,16 @@ import {
   LINK_OPEN_SCOPED_PATHS,
   SCOPED_INPUTS,
 } from '@tests/helpers/scoped-surface-inputs';
+
+// 이 브라우저가 「테스트 데이터 보기」를 켠 상태 — 담당 연구원은 테스트 모드가 켜진 설문에서 테스트 파티션을
+// 본다(쿠키가 없으면 전역 플래그가 켜져 있어도 실데이터다 — server/data-scope). 링크 세션 쿠키는 이 목이 아니라
+// 테스트가 만든 Headers(cookieHeaders)로 넘기므로 영향이 없다 — 쿠키가 켜져 있어도 링크 주체는 real 이어야 한다.
+vi.mock('next/headers', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('next/headers')>()),
+  cookies: async () => ({
+    get: (name: string) => (name.startsWith('ops-test-view-') ? { name, value: '1' } : undefined),
+  }),
+}));
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
