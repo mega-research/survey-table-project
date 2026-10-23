@@ -1,15 +1,20 @@
-import { describe, it, expect } from 'vitest';
-import { PgDialect } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import { describe, expect, it } from 'vitest';
 
 import {
+  FILTER_NONE_VALUE,
+  FILTER_NOT_NONE_VALUE,
+  HEADER_FILTER_VALUE_SEPARATOR as SEP,
+} from '@/lib/operations/filter-shared';
+
+import {
+  PROFILES_EXTRA_CANDIDATES,
+  type ProfilesClauseCols,
   buildProfilesFilterSql,
   parseProfilesClausesFromUrl,
   parseProfilesHeaderFiltersFromUrl,
-  PROFILES_EXTRA_CANDIDATES,
-  type ProfilesClauseCols,
 } from './profiles-filters';
-import { HEADER_FILTER_VALUE_SEPARATOR as SEP } from '@/lib/operations/filter-shared';
 import type { ColumnCandidate } from './progress-filters';
 
 const candidates: ColumnCandidate[] = [
@@ -30,7 +35,18 @@ const COLS: ProfilesClauseCols = {
   contactAttrs: sql`"numbered"."contact_attrs"`,
   contactTargetId: sql`"numbered"."contact_target_id"`,
   entryParams: sql`"numbered"."entry_params"`,
+  answers: sql`"numbered"."question_responses"`,
 };
+
+/** 응답값 열이 보이는 설문 — 페이지가 표시 중이고 암호화 저장이 아닌 응답값 열만 후보로 올린다. */
+const COMPANY = 'answer.q-1.cell-company';
+const OPINION = 'answer.q-2';
+const answerCandidates: ColumnCandidate[] = [
+  ...candidates,
+  { source: COMPANY, label: '(1) 기업명' },
+  { source: OPINION, label: '의견' },
+  { source: 'answer.q-3', label: '숨긴 열', hidden: true },
+];
 
 /** 이어 넘길 값 열이 보이는 설문 — 페이지가 표시 중인 entry 열을 후보로 올린다. */
 const entryCandidates: ColumnCandidate[] = [
@@ -103,21 +119,88 @@ describe('parseProfilesClausesFromUrl — 검색바 다중 조건', () => {
   });
 
   it('전체 전개에 보이는 이어 넘길 값 열만 부분일치로 들어간다', () => {
-    const clauses = parseProfilesClausesFromUrl('system.all', '68e901de', undefined, entryCandidates);
+    const clauses = parseProfilesClausesFromUrl(
+      'system.all',
+      '68e901de',
+      undefined,
+      entryCandidates,
+    );
     const subs = clauses[0]?.condition.subConditions ?? [];
     expect(subs).toContainEqual({ source: 'entry.euid', mode: 'text', value: '68e901de' });
     expect(subs.some((s) => s.source === 'entry.pid')).toBe(false);
     const plain = parseProfilesClausesFromUrl('system.all', '68e901de', undefined, candidates);
-    expect((plain[0]?.condition.subConditions ?? []).some((s) => s.source.startsWith('entry.'))).toBe(
-      false,
-    );
+    expect(
+      (plain[0]?.condition.subConditions ?? []).some((s) => s.source.startsWith('entry.')),
+    ).toBe(false);
   });
 
   it('이어 넘길 값 열을 골라 찾으면 부분일치 절 — 후보에 없거나 숨긴 열은 버린다', () => {
-    const clauses = parseProfilesClausesFromUrl('entry.euid', ' 59431873 ', undefined, entryCandidates);
-    expect(clauses[0]?.condition).toEqual({ source: 'entry.euid', mode: 'text', value: '59431873' });
+    const clauses = parseProfilesClausesFromUrl(
+      'entry.euid',
+      ' 59431873 ',
+      undefined,
+      entryCandidates,
+    );
+    expect(clauses[0]?.condition).toEqual({
+      source: 'entry.euid',
+      mode: 'text',
+      value: '59431873',
+    });
     expect(parseProfilesClausesFromUrl('entry.pid', 'x', undefined, entryCandidates)).toEqual([]);
     expect(parseProfilesClausesFromUrl('entry.euid', 'x', undefined, candidates)).toEqual([]);
+  });
+});
+
+describe('응답값 열 검색', () => {
+  it('검색바에서 응답값 열을 골라 찾으면 부분일치 절 — 후보에 없거나 숨긴 열은 버린다', () => {
+    const clauses = parseProfilesClausesFromUrl(COMPANY, ' 메가 ', undefined, answerCandidates);
+    expect(clauses[0]?.condition).toEqual({ source: COMPANY, mode: 'text', value: '메가' });
+    expect(parseProfilesClausesFromUrl('answer.q-3', 'x', undefined, answerCandidates)).toEqual([]);
+    expect(parseProfilesClausesFromUrl(COMPANY, 'x', undefined, candidates)).toEqual([]);
+  });
+
+  it('전체 검색에 보이는 응답값 열이 부분일치로 들어간다', () => {
+    const clauses = parseProfilesClausesFromUrl('system.all', '메가', undefined, answerCandidates);
+    const subs = clauses[0]?.condition.subConditions ?? [];
+    expect(subs).toContainEqual({ source: COMPANY, mode: 'text', value: '메가' });
+    expect(subs).toContainEqual({ source: OPINION, mode: 'text', value: '메가' });
+    expect(subs.some((s) => s.source === 'answer.q-3')).toBe(false);
+  });
+
+  it('헤더 깔때기는 부분일치와 값 없음·값 있음 토글을 받는다', () => {
+    expect(
+      parseProfilesHeaderFiltersFromUrl(COMPANY, 'text', '메가', answerCandidates)[0]?.condition,
+    ).toEqual({ source: COMPANY, mode: 'text', value: '메가' });
+    expect(
+      parseProfilesHeaderFiltersFromUrl(COMPANY, 'in', FILTER_NONE_VALUE, answerCandidates)[0]
+        ?.condition,
+    ).toMatchObject({ mode: 'in', includeNull: true });
+    expect(
+      parseProfilesHeaderFiltersFromUrl(COMPANY, 'in', FILTER_NOT_NONE_VALUE, answerCandidates)[0]
+        ?.condition,
+    ).toMatchObject({ mode: 'in', excludeNull: true });
+    expect(parseProfilesHeaderFiltersFromUrl(COMPANY, 'in', 'A', answerCandidates)).toEqual([]);
+  });
+
+  it('표 칸은 문항 -> 칸 글자, 문항 전체는 문항 글자를 본다', () => {
+    const cell = dialect.sqlToQuery(
+      buildProfilesFilterSql(
+        parseProfilesClausesFromUrl(COMPANY, '메가_리서치', undefined, answerCandidates),
+        COLS,
+      ),
+    );
+    expect(cell.sql).toContain('("numbered"."question_responses" -> $1 ->> $2) ILIKE');
+    expect(cell.params).toEqual(['q-1', 'cell-company', '메가\\_리서치']);
+
+    const whole = dialect.sqlToQuery(
+      buildProfilesFilterSql(
+        parseProfilesHeaderFiltersFromUrl(OPINION, 'in', FILTER_NONE_VALUE, answerCandidates),
+        COLS,
+      ),
+    );
+    expect(whole.sql).toContain(
+      `COALESCE(btrim(("numbered"."question_responses" ->> $1)), '') = ''`,
+    );
   });
 });
 
@@ -138,19 +221,19 @@ describe('parseProfilesHeaderFiltersFromUrl — 헤더 깔때기', () => {
   });
 
   it('attrs in / pii exact 는 공용 파서에 위임된다', () => {
-    const attrs = parseProfilesHeaderFiltersFromUrl(
-      'attrs.전시회명',
-      'in',
-      `A${SEP}B`,
-      candidates,
-    );
+    const attrs = parseProfilesHeaderFiltersFromUrl('attrs.전시회명', 'in', `A${SEP}B`, candidates);
     expect(attrs[0]?.condition).toMatchObject({ mode: 'in', values: ['A', 'B'] });
   });
 });
 
 describe('buildProfilesFilterSql — 응답 내역 절 SQL', () => {
   it('이어 넘길 값 절은 entryParams jsonb 의 이름 칸을 부분일치로 본다', () => {
-    const clauses = parseProfilesClausesFromUrl('entry.euid', '5943_1873', undefined, entryCandidates);
+    const clauses = parseProfilesClausesFromUrl(
+      'entry.euid',
+      '5943_1873',
+      undefined,
+      entryCandidates,
+    );
     const query = dialect.sqlToQuery(buildProfilesFilterSql(clauses, COLS));
     expect(query.sql).toContain('"numbered"."entry_params"->>$1 ILIKE');
     expect(query.params).toEqual(['euid', '5943\\_1873']);
@@ -158,7 +241,12 @@ describe('buildProfilesFilterSql — 응답 내역 절 SQL', () => {
 
   it('idx/browser/status 는 numbered 컬럼 참조로 렌더된다', () => {
     const clauses = [
-      ...parseProfilesClausesFromUrl(['idx', 'browser'], ['1-5', 'Chrome'], ['', 'AND'], candidates),
+      ...parseProfilesClausesFromUrl(
+        ['idx', 'browser'],
+        ['1-5', 'Chrome'],
+        ['', 'AND'],
+        candidates,
+      ),
       {
         op: 'AND' as const,
         condition: { source: 'status', mode: 'in' as const, value: '', values: ['drop'] },

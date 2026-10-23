@@ -95,6 +95,8 @@ export async function listResponsesForProfiles(
       ipHash: surveyResponses.ipHash,
       // 이어 넘길 값(패널 회원 ID 등) — 표의 entry.* 열과 검색 절이 함께 본다.
       entryParams: sql<unknown>`${surveyResponses.metadata}->'entryParams'`.as('entry_params'),
+      // 응답값 열(answer.*) 검색 절이 본다 — 목록 행 모양에는 싣지 않는다.
+      questionResponses: surveyResponses.questionResponses,
       isTest: surveyResponses.isTest,
       groupValue: contactTargets.groupValue,
       contactResid: contactTargets.resid,
@@ -171,6 +173,7 @@ export async function listResponsesForProfiles(
         contactAttrs: sql`${numbered.contactAttrs}`,
         contactTargetId: sql`${numbered.contactTargetId}`,
         entryParams: sql`${numbered.entryParams}`,
+        answers: sql`${numbered.questionResponses}`,
       }),
     );
   }

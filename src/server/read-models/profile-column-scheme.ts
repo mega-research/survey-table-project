@@ -11,6 +11,7 @@ import { answerColumnKey } from '@/lib/operations/profile-columns-format';
 import { normalizeQuestions } from '@/lib/question';
 import { hydrateQuestionsForSpss } from '@/lib/spss/hydrate-questions';
 import { normalizePassParamNames } from '@/lib/survey/end-redirect';
+import { collectPiiCellIds } from '@/lib/survey/pii-cells';
 import type { ProfileColumnScheme } from '@/shared/contracts/operations';
 import type { ProfileAnswerSource } from '@/shared/contracts/operations-io';
 import { tableInputCellLabels } from '@/utils/table-input-cell-labels';
@@ -60,11 +61,15 @@ export const getProfileAnswerSources = cache(
     // 표 칸 이름 — 양식형 표는 행 이름이 비어 있어 내보내기 라벨(「 - 년도1」)로는 칸을 알아볼 수
     // 없다. 같은 행 앞 글자 칸(「(1) 기업명」)으로 부른다.
     const cellLabels = new Map<string, string>();
+    // 개인정보 암호화 — 문항 단위(단답형·장문형)와 표 입력 칸 단위(응답 저장 경로와 같은 플래그).
+    const encryptedQuestionIds = new Set(rows.filter((r) => r.piiEncrypted).map((r) => r.id));
+    const encryptedCellIds = new Set<string>();
     for (const q of prepared) {
       if (q.type !== 'table') continue;
       for (const [cellId, label] of tableInputCellLabels(q.tableRowsData ?? [])) {
         cellLabels.set(cellId, label);
       }
+      for (const cellId of collectPiiCellIds(q.tableRowsData)) encryptedCellIds.add(cellId);
     }
     const sources: ProfileAnswerSource[] = [];
     for (const col of generateSPSSColumns(prepared)) {
@@ -74,6 +79,7 @@ export const getProfileAnswerSources = cache(
           varName: col.spssVarName,
           questionTitle: col.questionText,
           cellLabel: null,
+          encrypted: encryptedQuestionIds.has(col.questionId),
         });
       } else if (col.type === 'table-cell' && col.tableCellType === 'input' && col.tableCellId) {
         sources.push({
@@ -81,6 +87,7 @@ export const getProfileAnswerSources = cache(
           varName: col.spssVarName,
           questionTitle: col.questionText,
           cellLabel: cellLabels.get(col.tableCellId) ?? (col.optionLabel || null),
+          encrypted: encryptedCellIds.has(col.tableCellId),
         });
       }
     }

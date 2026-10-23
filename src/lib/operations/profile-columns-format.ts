@@ -4,12 +4,13 @@ import type {
   NormalizedContactColumnScheme,
   RawExportContactColumn,
 } from '@/lib/operations/contacts-format';
+import { FILTER_SOURCE } from '@/lib/operations/filter-shared';
 import type { ProfileColumnDef, ProfileColumnScheme } from '@/shared/contracts/operations';
 
 const ATTRS_PREFIX = 'attrs.';
 const PII_PREFIX = 'pii.';
 const ENTRY_PREFIX = 'entry.';
-const ANSWER_PREFIX = 'answer.';
+const ANSWER_PREFIX = FILTER_SOURCE.ANSWER_PREFIX;
 
 /**
  * 응답값 열 키 — 문항 하나의 응답(`answer.<문항 id>`) 또는 표 문항의 칸 하나

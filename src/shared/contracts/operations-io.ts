@@ -13,8 +13,13 @@ export interface ProfileAnswerSource {
   /** 내보내기 변수명 — 지금 구조로 만든 이름이라 문항코드·행이 바뀌면 같이 바뀐다 */
   varName: string;
   questionTitle: string;
-  /** 표 칸이면 「행 - 열」, 문항 전체면 null */
+  /** 표 칸이면 같은 행 앞 글자 칸 이름(없으면 「행 - 열」), 문항 전체면 null */
   cellLabel: string | null;
+  /**
+   * 개인정보로 암호화해 저장하는 문항·칸 — 목록에는 복호화해 보이지만 저장값이 암호문이라
+   * 검색·깔때기 필터를 걸 수 없다.
+   */
+  encrypted: boolean;
 }
 
 // RSC 가 SQL 로 뽑아 클라이언트 표에 props 로 넘기는 모양.

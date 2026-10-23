@@ -102,6 +102,9 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
       new Set(answerSources.map((s) => s.key)),
     ),
   );
+  const filterableAnswerKeys = new Set(
+    answerSources.filter((s) => !s.encrypted).map((s) => s.key),
+  );
   // 전체(system.all) 는 컨택 유무와 무관하게 상시 노출 — 컨택 없는 설문에서도
   // 브라우저 부분일치 전개(파서 훅)로 유효하다.
   const columnCandidates = [
@@ -110,6 +113,10 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
     // 이어 넘길 값(euid 등)은 표에 보이는 열만 — 숨긴 열의 매칭은 결과를 설명할 수 없다.
     ...displayColumns
       .filter((c) => entryKeyOf(c.key) !== null)
+      .map((c) => ({ source: c.key, label: c.label })),
+    // 응답값 열도 표에 보이는 것만 — 암호화 저장 칸은 암호문이라 검색할 수 없어 뺀다.
+    ...displayColumns
+      .filter((c) => filterableAnswerKeys.has(c.key))
       .map((c) => ({ source: c.key, label: c.label })),
     ...buildColumnCandidates(contactScheme).filter(
       (c) =>
@@ -263,6 +270,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
               columnScheme={displayColumns}
               piiByTarget={piiByTarget}
               answerValues={answerValues}
+              filterableAnswerKeys={[...filterableAnswerKeys]}
             />
           )}
         </CardContent>
