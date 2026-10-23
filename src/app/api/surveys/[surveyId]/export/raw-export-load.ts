@@ -80,8 +80,11 @@ export type RawExportLoadResult =
   | ({ kind: 'ok'; rows: RawExportResponseRow[] } & RawExportPopulationCount)
   | ({ kind: 'too_many' } & RawExportPopulationCount);
 
-/** raw 모수 술어 — 삭제·테스트 제외 전 상태 (진행중·이탈 포함, 상태 컬럼으로 구분). */
-function rawResponseWhere(surveyId: string, scope: OperationsDataScope) {
+/**
+ * raw 모수 술어 — 삭제·테스트 제외 전 상태 (진행중·이탈 포함, 상태 컬럼으로 구분).
+ * 분할 미리보기(split-preview)의 시트별 응답 수도 이 모수로 센다 — 받은 파일과 같아야 한다.
+ */
+export function rawResponseWhere(surveyId: string, scope: OperationsDataScope) {
   return and(
     eq(surveyResponses.surveyId, surveyId),
     notDeletedResponse,

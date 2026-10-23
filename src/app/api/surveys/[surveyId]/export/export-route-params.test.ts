@@ -61,6 +61,7 @@ vi.mock('./raw-export-load', () => ({
   MAX_EXPORT_RESPONSES: 10000,
   loadRawExportRows: loadRawExportRowsMock,
   countRawExportPopulation: countRawExportPopulationMock,
+  rawResponseWhere: vi.fn(() => undefined),
   // .sps 경로는 이 스위트가 보지 않지만, 모듈에 있는 export 를 빠뜨리면 그 경로를
   // 건드리는 순간 "mock 에 없는 export" 로 엉뚱하게 깨진다.
   loadUsedRepeatCounts: vi.fn(async () => new Map<string, number>()),

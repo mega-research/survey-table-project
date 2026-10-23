@@ -186,6 +186,25 @@ describe('테스트 모드 최종 읽기 경계', () => {
     selectWhereArgs.forEach(expectTestOnly);
   });
 
+  it('split preview 는 시트별 응답 수를 Raw 파일과 같은 모수로 센다', async () => {
+    // 분할 파일의 시트에는 Raw 와 같은 행(진행중·이탈 포함)이 들어간다. 미리보기만 완료 응답을
+    // 세면 다이얼로그의 시트별 수가 받은 파일과 어긋난다.
+    const raw = await exportGet(
+      new NextRequest(`http://localhost/api/surveys/${surveyId}/export?type=raw`),
+      { params: Promise.resolve({ surveyId }) },
+    );
+    const preview = await splitPreviewGet(
+      new NextRequest(
+        `http://localhost/api/surveys/${surveyId}/export/split-preview?basis=basis`,
+      ),
+      { params: Promise.resolve({ surveyId }) },
+    );
+    expect([raw.status, preview.status]).toEqual([200, 200]);
+    expect(responseWhereArgs).toHaveLength(2);
+    const [rawWhere, previewWhere] = responseWhereArgs.map((w) => dialect.sqlToQuery(w as never));
+    expect(previewWhere).toEqual(rawWhere);
+  });
+
   it('raw export 는 한도 초과 시 응답 페이로드를 물화하지 않고 413 을 반환한다', async () => {
     // raw 경로의 첫 select(count 선가드)가 한도 초과를 보고하도록 1회 오버라이드.
     // JSONB 전체를 findMany 로 당기기 전에 차단되는지가 검증 대상이다.
