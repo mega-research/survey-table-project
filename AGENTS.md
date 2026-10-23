@@ -864,6 +864,7 @@ pnpm worker:sentry-jandi:dev     # Sentry→잔디 알림 워커 로컬
 pnpm worker:sentry-jandi:deploy  # 워커 배포 (Cloudflare)
 ```
 
+> `scripts/` 바로 아래는 공유(추적)하는 스크립트, `scripts/private/` 는 공유하지 않는 일회성 스크립트(gitignore)다 — `package.json` 명령·CI·문서가 부르는 스크립트는 `scripts/` 바로 아래에 둘 것. `survey:backup` 이 부르는 `scripts/private/backup-survey.ts` 는 이미 없는 `src/data` 를 import 해 지금 동작하지 않는다.
 > `pnpm db:generate` / `pnpm db:push` 는 정의는 살아 있으나 **사용 금지** — 마이그레이션은 수동 SQL 관행이다(주의사항 7).
 
 ---

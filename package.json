@@ -22,7 +22,7 @@
     "db:setup-test": "bash scripts/setup-test-db.sh",
     "db:drift": "node scripts/db-drift.mjs",
     "db:size": "node scripts/db-size-report.mjs",
-    "survey:backup": "tsx scripts/backup-survey.ts",
+    "survey:backup": "tsx scripts/private/backup-survey.ts",
     "survey:restore": "tsx scripts/restore-survey-from-backup.ts",
     "spss:migrate": "tsx scripts/migrate-spss-fields.ts",
     "spss:migrate:live": "DRY_RUN=false tsx scripts/migrate-spss-fields.ts",
