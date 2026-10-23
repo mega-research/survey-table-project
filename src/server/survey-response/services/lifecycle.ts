@@ -2,9 +2,9 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import 'server-only';
 
 import { db } from '@/db';
-import { surveyResponses, surveyVersions } from '@/db/schema';
+import { responseMigrationHistory, surveyResponses, surveyVersions } from '@/db/schema';
 import { loadVersionSnapshot } from '@/server/read-models/version-snapshot';
-import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
+import { decryptQuestionResponses, withoutEncryptedAnswers } from '@/lib/crypto/response-pii';
 import { findContactByInviteToken } from '@/server/read-models/invite-lookup';
 import { logger } from '@/lib/logger';
 import { normalizeQuestions } from '@/lib/question/normalize';
@@ -80,9 +80,15 @@ function resumeTargetVersionId(
  * 주의: questionResponses 는 통 교체다. 재개는 페이지 로드 직후라 이 세션의 draft 와
  * 경합하지 않지만, 타 탭 draft 가 SELECT~UPDATE 사이에 끼면 그 배치는 유실될 수 있는
  * 잔여 window 다 (WHERE version_id 낙관 가드는 동시 "이관"만 차단).
+ *
+ * 실응답이면 옮기기 전·후 답(암호문은 표식)과 두 버전을 이관 이력 한 줄로 같은 트랜잭션에
+ * 남긴다 — 통 교체로 사라지는 옮기기 전 답을 보관한다(CONTEXT.md 「이관 이력」). 낙관 가드가
+ * 0행이면 쓰지 않으므로 같은 재개가 두 번 와도 한 줄이다. 테스트 응답은 남기지 않는다.
  */
 async function migrateResumedRowIfStale(input: {
   responseId: string;
+  surveyId: string;
+  isTest: boolean;
   rowVersionId: string | null | undefined;
   currentVersionId: string | null | undefined;
   storedResponses: Record<string, unknown>;
@@ -94,6 +100,7 @@ async function migrateResumedRowIfStale(input: {
   if (rowVersionId == null || currentVersionId == null || rowVersionId === currentVersionId) {
     return null;
   }
+  const fromVersionId = rowVersionId;
 
   const snap = await loadVersionSnapshot(currentVersionId);
   // 여기서는 snapshotQuestions 를 쓰지 않는다 — 구조가 깨졌을 때 빈 배열로 접으면
@@ -113,23 +120,37 @@ async function migrateResumedRowIfStale(input: {
   const changedIds = changedQuestionIds(previous?.fingerprints ?? null, snap);
   const affectedQuestionIds = [...new Set([...survival.affectedQuestionIds, ...changedIds])];
 
-  const [updated] = await db
-    .update(surveyResponses)
-    .set({
-      versionId: currentVersionId,
-      // jsonb 컬럼 — 객체 그대로 바인딩 (JSON.stringify 금지: 이중 인코딩)
-      questionResponses: survival.survivingResponses,
-      metadata: sql`jsonb_set(
-        COALESCE(${surveyResponses.metadata}, '{}'::jsonb),
-        '{migratedFromVersionId}',
-        COALESCE(${surveyResponses.metadata}->'migratedFromVersionId', to_jsonb(${rowVersionId}::text)),
-        true
-      )`,
-      lastActivityAt: now,
-      ...(reviveFromDrop ? { status: 'in_progress' } : {}),
-    })
-    .where(and(eq(surveyResponses.id, responseId), eq(surveyResponses.versionId, rowVersionId)))
-    .returning({ id: surveyResponses.id });
+  const updated = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .update(surveyResponses)
+      .set({
+        versionId: currentVersionId,
+        // jsonb 컬럼 — 객체 그대로 바인딩 (JSON.stringify 금지: 이중 인코딩)
+        questionResponses: survival.survivingResponses,
+        metadata: sql`jsonb_set(
+          COALESCE(${surveyResponses.metadata}, '{}'::jsonb),
+          '{migratedFromVersionId}',
+          COALESCE(${surveyResponses.metadata}->'migratedFromVersionId', to_jsonb(${fromVersionId}::text)),
+          true
+        )`,
+        lastActivityAt: now,
+        ...(reviveFromDrop ? { status: 'in_progress' } : {}),
+      })
+      .where(and(eq(surveyResponses.id, responseId), eq(surveyResponses.versionId, fromVersionId)))
+      .returning({ id: surveyResponses.id });
+    if (row && !input.isTest) {
+      await tx.insert(responseMigrationHistory).values({
+        responseId,
+        surveyId: input.surveyId,
+        fromVersionId,
+        toVersionId: currentVersionId,
+        answersBefore: withoutEncryptedAnswers(storedResponses),
+        answersAfter: withoutEncryptedAnswers(survival.survivingResponses),
+        actor: 'respondent',
+      });
+    }
+    return row;
+  });
   if (!updated) return null;
 
   return {
@@ -403,6 +424,8 @@ export async function resumeOrCreateResponse(
             ? null
             : await migrateResumedRowIfStale({
                 responseId: existingByContact.id,
+                surveyId,
+                isTest: existingByContact.isTest,
                 rowVersionId: existingByContact.versionId,
                 currentVersionId: targetVersionId,
                 storedResponses: existingByContact.questionResponses ?? {},
@@ -466,6 +489,8 @@ export async function resumeOrCreateResponse(
           const migration = !versionMatches
             ? await migrateResumedRowIfStale({
                 responseId: existingByContact.id,
+                surveyId,
+                isTest: existingByContact.isTest,
                 rowVersionId: existingByContact.versionId,
                 currentVersionId: targetVersionId,
                 storedResponses: existingByContact.questionResponses ?? {},
@@ -558,6 +583,8 @@ export async function resumeOrCreateResponse(
     // 응답 버전 이관 — 구버전 행이면 현재 버전으로 재고정 (실패·불필요 시 null → 기존 동작)
     const migration = await migrateResumedRowIfStale({
       responseId: existing.id,
+      surveyId,
+      isTest: existing.isTest,
       rowVersionId: existing.versionId,
       // 테스트 응답(행 또는 유효한 테스트 링크)은 지금 테스트 버전으로 이어 간다.
       currentVersionId: resumeTargetVersionId(flags, existing.isTest || isTestSession),

@@ -17,6 +17,8 @@ import {
   encryptResponsesForStorage,
   encryptTableCellValues,
   isEncryptedAnswerValue,
+  MIGRATION_HISTORY_PII_MARKER,
+  withoutEncryptedAnswers,
 } from '@/lib/crypto/response-pii';
 
 describe('encryptAnswerValue / decryptAnswerValue', () => {
@@ -127,5 +129,35 @@ describe('표 input 셀 단위 암호화 (셀 piiEncrypted)', () => {
     expect(isEncryptedAnswerValue(cellOnly['c1'])).toBe(true);
     expect(cellOnly['c2']).toBe('서울');
     expect(encryptAnswerForQuestion('평문', { piiEncrypted: false, piiCellIds: [] })).toBe('평문');
+  });
+});
+
+describe('withoutEncryptedAnswers — 이관 이력에 담을 답에서 암호문을 걷는다', () => {
+  it('최상위 암호문과 표 칸 안 암호문만 표식으로 바꾸고 나머지는 그대로 둔다', () => {
+    const cipher = encryptAnswerValue('홍길동') as string;
+    const cellCipher = encryptAnswerValue('010-1234-5678') as string;
+    const input = {
+      'q-name': cipher,
+      'q-radio': '2',
+      'q-check': ['a', 'b'],
+      'q-table': { c1: cellCipher, c2: '서울', c3: ['x'] },
+      __optTexts__: { 'q-radio': { o2: '기타' } },
+    };
+
+    expect(withoutEncryptedAnswers(input)).toEqual({
+      'q-name': MIGRATION_HISTORY_PII_MARKER,
+      'q-radio': '2',
+      'q-check': ['a', 'b'],
+      'q-table': { c1: MIGRATION_HISTORY_PII_MARKER, c2: '서울', c3: ['x'] },
+      __optTexts__: { 'q-radio': { o2: '기타' } },
+    });
+    // 원본은 건드리지 않는다
+    expect(input['q-name']).toBe(cipher);
+  });
+
+  it('표식은 암호문 접두사와 겹치지 않는다 — 다시 걸러도 그대로다', () => {
+    expect(isEncryptedAnswerValue(MIGRATION_HISTORY_PII_MARKER)).toBe(false);
+    const once = withoutEncryptedAnswers({ q: encryptAnswerValue('x') });
+    expect(withoutEncryptedAnswers(once)).toEqual(once);
   });
 });

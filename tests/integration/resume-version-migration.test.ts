@@ -10,12 +10,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // - 영향받은 질문 ID 목록을 복원 payload 에 담는다.
 // 버전 일치·versionId 미연결(레거시)·현재 스냅샷 훼손 시에는 기존 동작 그대로다.
 
-const { selectQueue, selectMock, updateSetCalls, updateReturningMock } = vi.hoisted(() => ({
-  selectQueue: [] as unknown[][],
-  selectMock: vi.fn(),
-  updateSetCalls: [] as Record<string, unknown>[],
-  updateReturningMock: vi.fn(),
-}));
+const { selectQueue, selectMock, updateSetCalls, updateReturningMock, historyValues } = vi.hoisted(
+  () => ({
+    selectQueue: [] as unknown[][],
+    selectMock: vi.fn(),
+    updateSetCalls: [] as Record<string, unknown>[],
+    updateReturningMock: vi.fn(),
+    // 이관 이력 INSERT — 이관 UPDATE 와 같은 트랜잭션에서 쓴다.
+    historyValues: vi.fn(async (_row: Record<string, unknown>) => undefined),
+  }),
+);
 
 vi.mock('@/db', () => {
   selectMock.mockImplementation(() => ({
@@ -25,22 +29,31 @@ vi.mock('@/db', () => {
       })),
     })),
   }));
+  const update = vi.fn(() => ({
+    set: vi.fn((arg: Record<string, unknown>) => {
+      updateSetCalls.push(arg);
+      return {
+        where: vi.fn(() => ({
+          returning: vi.fn(() => updateReturningMock()),
+          then: (resolve: (v: unknown) => unknown) => resolve(undefined),
+        })),
+      };
+    }),
+  }));
+  const insert = vi.fn(() => ({ values: historyValues }));
   return {
     db: {
       select: selectMock,
-      update: vi.fn(() => ({
-        set: vi.fn((arg: Record<string, unknown>) => {
-          updateSetCalls.push(arg);
-          return {
-            where: vi.fn(() => ({
-              returning: vi.fn(() => updateReturningMock()),
-              then: (resolve: (v: unknown) => unknown) => resolve(undefined),
-            })),
-          };
-        }),
-      })),
+      update,
+      transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) =>
+        cb({ select: selectMock, update, insert }),
+      ),
     },
   };
+});
+
+beforeEach(() => {
+  historyValues.mockClear();
 });
 
 vi.mock('@/server/read-models/survey-control', () => ({
@@ -223,6 +236,44 @@ describe('resumeOrCreateResponse — 익명 재개 이관', () => {
       questionResponses: { 'q-radio': 'ghost-value', 'q-text': '유지되는 답' },
     });
     expect(result).not.toHaveProperty('affectedQuestionIds');
+    // 옮기지 못했으면 이관 이력도 남기지 않는다
+    expect(historyValues).not.toHaveBeenCalled();
+  });
+
+  it('실응답을 옮기면 옮기기 전·후 답과 두 버전을 이관 이력 한 줄로 남긴다', async () => {
+    selectQueue.push([ROW_BASE], [{ snapshot: CURRENT_SNAPSHOT }]);
+
+    await resume();
+
+    expect(historyValues).toHaveBeenCalledTimes(1);
+    expect(historyValues.mock.calls[0]?.[0]).toEqual({
+      responseId: 'response-1',
+      surveyId: 'survey-1',
+      fromVersionId: 'v-old',
+      toVersionId: 'v-current',
+      answersBefore: { 'q-radio': 'ghost-value', 'q-text': '유지되는 답' },
+      answersAfter: { 'q-text': '유지되는 답' },
+      actor: 'respondent',
+    });
+  });
+
+  it('이관 이력에는 암호문을 담지 않고 표식만 남긴다', async () => {
+    selectQueue.push(
+      [{ ...ROW_BASE, questionResponses: { 'q-text': 'v1:암호문', 'q-radio': '1' } }],
+      [{ snapshot: CURRENT_SNAPSHOT }],
+    );
+
+    await resume();
+
+    const row = historyValues.mock.calls[0]?.[0];
+    expect(row?.['answersBefore']).toEqual({
+      'q-text': '[개인정보 — 이력에 담지 않음]',
+      'q-radio': '1',
+    });
+    expect(row?.['answersAfter']).toEqual({
+      'q-text': '[개인정보 — 이력에 담지 않음]',
+      'q-radio': '1',
+    });
   });
 });
 
@@ -376,6 +427,15 @@ describe('resumeOrCreateResponse — 대상자 테스트 재개 이관 (2026-10-
 
     await expect(resumeTestTarget()).resolves.toBeNull();
     expect(migrationSet()).toBeUndefined();
+  });
+
+  it('테스트 응답을 옮길 때는 이관 이력을 남기지 않는다', async () => {
+    selectQueue.push([TEST_ROW], [{ snapshot: CURRENT_SNAPSHOT }]);
+
+    await resumeTestTarget();
+
+    expect(migrationSet()?.['versionId']).toBe('v-current');
+    expect(historyValues).not.toHaveBeenCalled();
   });
 
   it('종결 상태는 버전이 달라도 이관하지 않는다', async () => {

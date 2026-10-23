@@ -5,11 +5,12 @@ import { db } from '@/db';
 import {
   contactTargets,
   responseEditLogs,
+  responseMigrationHistory,
   surveyResponses,
   surveys,
 } from '@/db/schema';
 import { SurveyOwnershipError } from '@/lib/auth/require-survey-ownership';
-import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
+import { decryptQuestionResponses, withoutEncryptedAnswers } from '@/lib/crypto/response-pii';
 import { logger } from '@/lib/logger';
 import { readBrowserTestView, resolveWriteScopeIsTest } from '@/server/data-scope';
 import { buildChangedQuestions, diffQuestionResponses } from '@/lib/operations/response-edit-diff';
@@ -44,23 +45,17 @@ export class ResponseEditError extends Error {
   }
 }
 
-/** 이관 시 metadata 갱신 sql 조각 — adminEditRollback 1회 백업 (+ 출처 버전 기록) */
-function buildMigrationMetadataSql(rollback: {
-  versionId: string | null;
-  questionResponses: unknown;
-  savedAt: string;
-}) {
-  const withRollback = sql`jsonb_set(
-    COALESCE(${surveyResponses.metadata}, '{}'::jsonb),
-    '{adminEditRollback}',
-    COALESCE(${surveyResponses.metadata}->'adminEditRollback', ${JSON.stringify(rollback)}::jsonb),
-    true
-  )`;
-  if (rollback.versionId === null) return withRollback;
+/**
+ * 이관 시 metadata 갱신 sql 조각 — 출처 버전 기록(최초값 보존). 출처를 모르면(레거시 null) 쓸 것이 없다.
+ * 옮기기 전 답은 metadata 가 아니라 이관 이력(response_migration_history)에 남긴다 — 예전에는
+ * metadata.adminEditRollback 에 첫 이관 한 번만 암호문째 남겼다(0143 이 이력으로 옮기고 지운다).
+ */
+function buildMigrationMetadataSql(fromVersionId: string | null) {
+  if (fromVersionId === null) return null;
   return sql`jsonb_set(
-    ${withRollback},
+    COALESCE(${surveyResponses.metadata}, '{}'::jsonb),
     '{migratedFromVersionId}',
-    COALESCE(${surveyResponses.metadata}->'migratedFromVersionId', to_jsonb(${rollback.versionId}::text)),
+    COALESCE(${surveyResponses.metadata}->'migratedFromVersionId', to_jsonb(${fromVersionId}::text)),
     true
   )`;
 }
@@ -256,13 +251,18 @@ export async function saveAdminEdit(
 
   // metadata 갱신 조각 — 이관 백업(1회)과 초과 표식을 한 조각으로 합친다. 둘 다 기존 키를
   // 보존하는 jsonb 병합이라 통째 대입이 없다.
-  const migrationMetadataSql = migrating
-    ? buildMigrationMetadataSql({
-        versionId: existing.versionId,
-        questionResponses: existing.questionResponses ?? {},
-        savedAt: now.toISOString(),
-      })
-    : null;
+  const migrationMetadataSql = migrating ? buildMigrationMetadataSql(existing.versionId) : null;
+  // 이관 이력 — 실응답의 구버전 이관이면 옮기기 전 버전·답(DB 저장값, 암호문은 표식)을 저장 전에 잡아 둔다.
+  // 테스트 응답은 남기지 않는다(CONTEXT.md 「이관 이력」).
+  const migrationHistoryBefore =
+    migrating && !existing.isTest
+      ? {
+          fromVersionId: existing.versionId,
+          answersBefore: withoutEncryptedAnswers(
+            (existing.questionResponses ?? {}) as Record<string, unknown>,
+          ),
+        }
+      : null;
   const metadataSql = quotaOverflow
     ? sql`${migrationMetadataSql ?? sql`COALESCE(${surveyResponses.metadata}, '{}'::jsonb)`} || '{"quotaOverflow":true}'::jsonb`
     : migrationMetadataSql;
@@ -296,10 +296,9 @@ export async function saveAdminEdit(
         // 이탈 응답 완료 전환 + 자격미달 양방향 재판정 (위 블록 참조).
         // 그 밖의 상태(in_progress·quotaful_out·bad)는 보존된다.
         ...terminalStatusSet,
-        // 구버전 응답 이관 (스펙 결정 5) — versionId 재고정 + 원본 1회 백업.
-        // adminEditRollback/migratedFromVersionId 는 COALESCE 로 최초 이관 값을 보존한다
-        // (재수정해도 원본 유지). 백업의 questionResponses 는 DB 암호문 그대로 —
-        // 평문 PII 를 metadata 에 남기지 않는다.
+        // 구버전 응답 이관 (스펙 결정 5) — versionId 재고정 + 출처 버전 기록.
+        // migratedFromVersionId 는 COALESCE 로 최초 이관 값을 보존한다(재수정해도 원본 유지).
+        // 옮기기 전 답은 아래 이관 이력에 남긴다.
         ...(migrating ? { versionId: input.versionId } : {}),
         ...(metadataSql ? { metadata: metadataSql } : {}),
       })
@@ -329,6 +328,21 @@ export async function saveAdminEdit(
       throw new ResponseEditError(
         current && current.deletedAt === null ? 'status_conflict' : 'response_deleted',
       );
+    }
+
+    // 이관 이력 한 줄 — UPDATE 가 1행일 때만 여기 온다(0행은 위에서 throw).
+    if (migrationHistoryBefore) {
+      await tx.insert(responseMigrationHistory).values({
+        responseId,
+        surveyId,
+        fromVersionId: migrationHistoryBefore.fromVersionId,
+        toVersionId: input.versionId,
+        answersBefore: migrationHistoryBefore.answersBefore,
+        answersAfter: withoutEncryptedAnswers(storedResponses),
+        actor: 'admin',
+        editedBy: editor.id,
+        editorEmail: editor.email,
+      });
     }
 
     if (changedQuestions.length > 0) {

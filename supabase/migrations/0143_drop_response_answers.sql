@@ -1,4 +1,5 @@
--- 0142: 문항별 응답 사본 response_answers 제거 + survey_responses 중복 인덱스 정리. (2026-10-23)
+-- 0143: 문항별 응답 사본 response_answers 제거 + survey_responses 중복 인덱스 정리
+--       + 옛 관리자 수정 백업(metadata.adminEditRollback)을 이관 이력(0142)으로 옮기고 지운다. (2026-10-23)
 --
 -- response_answers 는 survey_responses.question_responses 를 문항 하나 = 한 행으로 한 번 더 저장한
 -- 사본이었다. 읽는 곳(분석 화면)은 모두 원본과 같은 JSONB 모양으로 되돌려 썼고, SQL 필터·집계에
@@ -14,6 +15,14 @@
 -- 인덱스: 프로덕션에만 있던(레포 마이그레이션에 없는) 중복 둘은 0038 의 부분 인덱스와 같은 일을
 -- 한다 — 빈 DB 재생에는 없으므로 IF EXISTS. idx_survey_responses_completed(0004)는 사용 0회이고
 -- idx_survey_responses_active_survey_completed 가 그 일을 한다.
+--
+-- adminEditRollback: 관리자 수정 이관이 첫 이관 직전 답 한 벌을 metadata 에 남기던 백업이다. 읽는
+-- 코드가 없었고, 파기 스윕이 metadata 를 보지 않아 보관기한이 지난 암호문이 남아 있었다(프로덕션 47행 중
+-- 16행). 실응답의 백업은 이관 이력 한 줄(actor='admin', 옮겨 간 버전·옮긴 뒤 답은 모름 → NULL,
+-- 시각은 백업의 savedAt)로 옮기고 암호문은 표식으로 바꾼다 — 앱의 withoutEncryptedAnswers 와 같은
+-- 깊이(최상위 값 + 표 칸). 테스트 응답 백업은 옮기지 않고 지우기만 한다. 키를 지우는 문장이 같은
+-- 트랜잭션이라 다시 실행해도 중복이 생기지 않는다. 배포 뒤에 두는 이유: 배포 전에 옮기면 구버전 앱이
+-- 그 사이 새 백업을 쓴다.
 
 BEGIN;
 
@@ -129,5 +138,60 @@ DROP TABLE IF EXISTS response_answers;
 DROP INDEX IF EXISTS idx_responses_survey_device;
 DROP INDEX IF EXISTS idx_responses_survey_fpip;
 DROP INDEX IF EXISTS idx_survey_responses_completed;
+
+INSERT INTO public.response_migration_history
+  (response_id, survey_id, from_version_id, to_version_id, answers_before, answers_after, actor, created_at)
+SELECT
+  r.id,
+  r.survey_id,
+  (SELECT v.id FROM public.survey_versions v
+     WHERE v.id::text = r.metadata->'adminEditRollback'->>'versionId'),
+  NULL,
+  (
+    SELECT COALESCE(
+      jsonb_object_agg(
+        e.key,
+        CASE
+          WHEN jsonb_typeof(e.value) = 'string'
+           AND (e.value #>> '{}') ~ '^v[0-9]+:'
+          THEN to_jsonb('[개인정보 — 이력에 담지 않음]'::text)
+          WHEN jsonb_typeof(e.value) = 'object'
+          THEN (
+            SELECT COALESCE(
+              jsonb_object_agg(
+                c.key,
+                CASE
+                  WHEN jsonb_typeof(c.value) = 'string'
+                   AND (c.value #>> '{}') ~ '^v[0-9]+:'
+                  THEN to_jsonb('[개인정보 — 이력에 담지 않음]'::text)
+                  ELSE c.value
+                END
+              ),
+              '{}'::jsonb
+            )
+            FROM jsonb_each(e.value) AS c(key, value)
+          )
+          ELSE e.value
+        END
+      ),
+      '{}'::jsonb
+    )
+    FROM jsonb_each(r.metadata->'adminEditRollback'->'questionResponses') AS e(key, value)
+  ),
+  NULL,
+  'admin',
+  CASE
+    WHEN (r.metadata->'adminEditRollback'->>'savedAt') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T'
+    THEN (r.metadata->'adminEditRollback'->>'savedAt')::timestamptz
+    ELSE now()
+  END
+FROM public.survey_responses r
+WHERE r.is_test = false
+  AND r.metadata ? 'adminEditRollback'
+  AND jsonb_typeof(r.metadata->'adminEditRollback'->'questionResponses') = 'object';
+
+UPDATE public.survey_responses
+SET metadata = metadata - 'adminEditRollback'
+WHERE metadata ? 'adminEditRollback';
 
 COMMIT;

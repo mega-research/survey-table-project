@@ -331,7 +331,7 @@ export async function completeResponse(
     }
     // metadata 에 이번 완료로 새로 얹을 키만 모은다 (exposedQuestionIds/exposedRowIds/quotaOverflow).
     // 아래 UPDATE 는 이 값을 객체 리터럴로 통째 대입하지 않고 jsonb `||` 병합으로 반영한다 —
-    // 관리자 수정이 남긴 adminEditRollback/migratedFromVersionId, draftSeq 등 기존 키가
+    // 관리자 수정이 남긴 migratedFromVersionId, draftSeq 등 기존 키가
     // in_progress 재진입 완료 시 이 UPDATE 에 지워지는 걸 막기 위함 (whole-branch 리뷰 I-1).
     const newMetadataKeys: Record<string, unknown> = {
       ...(data?.exposedQuestionIds ? { exposedQuestionIds: data.exposedQuestionIds } : {}),

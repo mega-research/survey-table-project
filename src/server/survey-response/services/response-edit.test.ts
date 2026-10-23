@@ -2,6 +2,7 @@ import { Param } from 'drizzle-orm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { db } from '@/db';
+import { responseMigrationHistory } from '@/db/schema';
 
 import { saveAdminEdit } from './response-edit';
 
@@ -78,6 +79,8 @@ const h = vi.hoisted(() => ({
   // 트랜잭션 안 UPDATE .set() 에 실제로 넘어간 payload 캡처 — versionId 이관/메타데이터
   // sql 조각 검증에 사용한다 (Object.assign 이후엔 원본 payload 형태를 잃으므로 별도 보관).
   lastSetPayload: null as Record<string, unknown> | null,
+  // 트랜잭션 안 INSERT — (표, 값) 쌍. 이관 이력과 편집 이력을 표로 가른다.
+  inserts: [] as Array<{ table: unknown; values: Record<string, unknown> }>,
 }));
 
 vi.mock('@/db', () => ({
@@ -136,7 +139,11 @@ vi.mock('@/db', () => ({
             };
           }),
         })),
-        insert: vi.fn(() => ({ values: vi.fn(async () => undefined) })),
+        insert: vi.fn((table: unknown) => ({
+          values: vi.fn(async (values: Record<string, unknown>) => {
+            h.inserts.push({ table, values });
+          }),
+        })),
       };
       return cb(tx);
     }),
@@ -148,8 +155,8 @@ const RESPONSE_ID = '22222222-2222-4222-8222-222222222222';
 const EDITOR = { id: 'admin-1', email: 'a@b.com' };
 
 // metadata sql 조각(jsonb_set(...) 중첩 템플릿) 안에 박힌 리터럴 텍스트를 전부 모아
-// 이어붙인다 — 실 SQL 을 실행하지 않고도 '{adminEditRollback}' 같은 키 리터럴과
-// JSON.stringify 로 넣은 백업 payload 문자열의 존재 여부를 문자열 포함 검사로 확인한다.
+// 이어붙인다 — 실 SQL 을 실행하지 않고도 '{migratedFromVersionId}' 같은 키 리터럴의
+// 존재 여부를 문자열 포함 검사로 확인한다.
 function collectStrings(node: unknown, out: string[] = [], seen = new Set<unknown>()): string[] {
   if (node == null) return out;
   if (typeof node === 'string') {
@@ -169,7 +176,7 @@ function collectStrings(node: unknown, out: string[] = [], seen = new Set<unknow
     return out;
   }
   // drizzle sql`` 템플릿의 리터럴 텍스트 조각은 StringChunk.value(문자열 배열)에 담긴다
-  // (queryChunks 를 갖지 않음) — Param 과 별도로 처리해야 '{adminEditRollback}' 같은
+  // (queryChunks 를 갖지 않음) — Param 과 별도로 처리해야 '{migratedFromVersionId}' 같은
   // 템플릿 리터럴 텍스트를 놓치지 않는다.
   const chunkValue = (node as { value?: unknown }).value;
   if (Array.isArray(chunkValue)) {
@@ -344,11 +351,16 @@ describe('saveAdminEdit 이탈 응답 완료 전환', () => {
   });
 });
 
+function migrationHistoryRows() {
+  return h.inserts.filter((i) => i.table === responseMigrationHistory).map((i) => i.values);
+}
+
 describe('버전 가드와 이관', () => {
   beforeEach(() => {
     h.surveys.length = 0;
     h.responses.length = 0;
     h.lastSetPayload = null;
+    h.inserts.length = 0;
     vi.clearAllMocks();
   });
 
@@ -382,7 +394,7 @@ describe('버전 가드와 이관', () => {
     expect(db.transaction).not.toHaveBeenCalled();
   });
 
-  it('구버전 응답 저장 시 versionId 이관 + adminEditRollback 백업을 기록한다', async () => {
+  it('구버전 응답 저장 시 versionId 이관 + 출처 버전 기록 + 이관 이력 한 줄을 남긴다', async () => {
     h.surveys.push({ id: SURVEY_ID, testModeEnabled: false, currentVersionId: 'v84' });
     pushResponse({ versionId: 'v81', questionResponses: { q1: '원본값' } });
 
@@ -402,8 +414,41 @@ describe('버전 가드와 이관', () => {
     const payload = h.lastSetPayload!;
     expect(payload['versionId']).toBe('v84');
     const metadataText = collectStrings(payload['metadata']).join('\n');
-    expect(metadataText).toContain('adminEditRollback');
+    // 옛 1회 백업(adminEditRollback)은 이관 이력이 대신한다 — 더 쓰지 않는다
+    expect(metadataText).not.toContain('adminEditRollback');
     expect(metadataText).toContain('migratedFromVersionId');
+    expect(migrationHistoryRows()).toEqual([
+      {
+        responseId: RESPONSE_ID,
+        surveyId: SURVEY_ID,
+        fromVersionId: 'v81',
+        toVersionId: 'v84',
+        answersBefore: { q1: '원본값' },
+        answersAfter: { q1: '수정값' },
+        actor: 'admin',
+        editedBy: EDITOR.id,
+        editorEmail: EDITOR.email,
+      },
+    ]);
+  });
+
+  it('테스트 응답의 관리자 수정 이관은 이관 이력을 남기지 않는다', async () => {
+    h.surveys.push({ id: SURVEY_ID, testModeEnabled: true, currentVersionId: 'v84' });
+    pushResponse({ versionId: 'v81', isTest: true, questionResponses: { q1: '원본값' } });
+
+    await saveAdminEdit(
+      {
+        surveyId: SURVEY_ID,
+        responseId: RESPONSE_ID,
+        questionResponses: { q1: '수정값' },
+        versionId: 'v84',
+      },
+      EDITOR,
+      false,
+    );
+
+    expect(h.lastSetPayload?.['versionId']).toBe('v84');
+    expect(migrationHistoryRows()).toEqual([]);
   });
 
   it('응답 버전이 이미 최신이면 이관·백업 없이 기존 동작 그대로다', async () => {
@@ -426,6 +471,7 @@ describe('버전 가드와 이관', () => {
     const payload = h.lastSetPayload!;
     expect(payload).not.toHaveProperty('versionId');
     expect(payload).not.toHaveProperty('metadata');
+    expect(migrationHistoryRows()).toEqual([]);
   });
 
   it('레거시 versionId null 응답도 최신 버전으로 이관한다', async () => {
@@ -447,12 +493,12 @@ describe('버전 가드와 이관', () => {
 
     const payload = h.lastSetPayload!;
     expect(payload['versionId']).toBe('v84');
-    const metadataText = collectStrings(payload['metadata']).join('\n');
-    expect(metadataText).toContain('adminEditRollback');
-    // 백업의 원본 versionId 는 null 로 남고, 출처 버전 기록(migratedFromVersionId)은
-    // to_jsonb(null::text) 로 통째 NULL 이 되는 걸 피하려 분기 자체를 뺀다.
-    expect(metadataText).toContain('"versionId":null');
-    expect(metadataText).not.toContain('migratedFromVersionId');
+    // 출처 버전 기록(migratedFromVersionId)은 to_jsonb(null::text) 로 통째 NULL 이 되는 걸
+    // 피하려 쓰지 않는다 — 출처를 모르면 metadata 를 건드릴 것이 없다.
+    expect(payload).not.toHaveProperty('metadata');
+    expect(migrationHistoryRows()).toEqual([
+      expect.objectContaining({ fromVersionId: null, toVersionId: 'v84', actor: 'admin' }),
+    ]);
   });
 
   it('미배포 설문은 versionId null 입력으로 기존 동작을 유지한다', async () => {

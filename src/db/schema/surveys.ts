@@ -508,6 +508,40 @@ export const responseEditLogs = pgTable('response_edit_logs', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
+// 이관 이력 — 배포 응답 하나가 버전을 옮겨 갈 때마다 한 줄 (CONTEXT.md 「이관 이력」, 0142).
+// 응답자 재개 이관·관리자 수정 이관이 이관과 같은 트랜잭션에서 쓴다. 실응답만 남긴다.
+// 답 두 벌은 암호문을 표식으로 바꾼 사본이다(withoutEncryptedAnswers) — 파기 스윕 대상이 아니다.
+// 가리키는 버전의 스냅샷은 정리하지 않는다(version-retention).
+export const responseMigrationHistory = pgTable(
+  'response_migration_history',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    responseId: uuid('response_id')
+      .notNull()
+      .references(() => surveyResponses.id, { onDelete: 'cascade' }),
+    surveyId: uuid('survey_id')
+      .notNull()
+      .references(() => surveys.id, { onDelete: 'cascade' }),
+    fromVersionId: uuid('from_version_id').references(() => surveyVersions.id, {
+      onDelete: 'set null',
+    }),
+    // 옛 관리자 수정 백업(adminEditRollback)에서 옮긴 줄은 옮겨 간 버전을 모른다 — NULL.
+    toVersionId: uuid('to_version_id').references(() => surveyVersions.id, {
+      onDelete: 'set null',
+    }),
+    answersBefore: jsonb('answers_before').$type<Record<string, unknown>>().notNull(),
+    // 옮긴 직후의 답. 옛 백업에서 옮긴 줄은 NULL.
+    answersAfter: jsonb('answers_after').$type<Record<string, unknown>>(),
+    actor: text('actor').$type<'respondent' | 'admin'>().notNull(),
+    editedBy: text('edited_by'),
+    editorEmail: text('editor_email'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    check('response_migration_history_actor_check', sql`${table.actor} in ('respondent', 'admin')`),
+  ],
+);
+
 // 질문 보관함 테이블
 export const savedQuestions = pgTable('saved_questions', {
   id: uuid('id').primaryKey().defaultRandom(),
