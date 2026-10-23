@@ -17,6 +17,7 @@ import {
   assertAnonymousTestSession,
   assertTestTargetAttemptOwner,
 } from '@/server/survey-response/services/test-target-attempt';
+import { ensureTestVersion } from '@/server/workflows/test-version';
 
 // 이 브라우저가 「테스트 데이터 보기」를 켠 상태 — 전역 테스트 모드가 켜지면 콘솔이 테스트 파티션을 본다.
 // (쿠키가 없으면 전역 플래그가 켜져 있어도 실데이터다 — server/data-scope)
@@ -502,11 +503,16 @@ run('대상자 테스트 완료와 새 attempt reset 경쟁', () => {
     });
 
     try {
+      // 테스터가 들어올 때 이미 테스트 버전이 있다(진입이 맞춘다). 없이 시작하면 완료 요청이 저장 전
+      // 테스트 버전 맞추기(ensureTestVersion)에서 surveys 행을 고치려다 — 새 attempt 가 survey → target
+      // 순서로 이미 잡은 — 설문 행 잠금에 먼저 걸려, 이 테스트가 보려는 target 잠금 경쟁까지 오지 않는다.
+      const testVersion = await ensureTestVersion(surveyId);
+      if (!testVersion) throw new Error('테스트 버전을 만들지 못했습니다');
       await db.execute(sql`
         INSERT INTO survey_responses (
-          id,survey_id,question_responses,is_test,contact_target_id,session_id,status,is_completed
+          id,survey_id,question_responses,is_test,contact_target_id,session_id,status,is_completed,version_id
         ) VALUES (
-          ${responseId},${surveyId},'{}'::jsonb,true,${targetId},'stale-session','in_progress',false
+          ${responseId},${surveyId},'{}'::jsonb,true,${targetId},'stale-session','in_progress',false,${testVersion.versionId}
         )
       `);
       await db.execute(
