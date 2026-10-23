@@ -27,7 +27,7 @@ import { PERSISTED_ROOT_SIDECAR_KEYS } from './response-sidecars';
  * 조건을 푼다. 호출부(응답 확정·Raw 내보내기)는 `createAnswerEvalCtx` 로 뷰마다 인용값을 다시
  * 계산하는 출처를 넘긴다.
  *
- * 저장 경계 중 응답 확정(완료 제출·빈 complete·관리자 수정)과 Raw 내보내기의 마지막 그물만 쓴다.
+ * 답할 수 있는 범위(`answerable-scope`)가 부르는 한 단계다 — 응답 확정과 Raw 내보내기는 그 module 을 쓴다.
  * 응답 화면은 즉시 지우지 않고, 초안·구간 저장에도 걸지 않는다 — 부분 패치라 경로를 정하는 상류
  * 답이 없어 멀쩡한 답을 지운다(주의사항 14). server-only 의존 금지.
  */
@@ -57,10 +57,10 @@ export interface ReachedAnswers {
   /** 숨은 문항·경로 밖 문항의 답과 사이드카 항목을 뺀 응답. 지울 것이 없으면 입력 참조. */
   responses: Record<string, unknown>;
   /**
-   * 남은 문항 — 표시되고, 경로를 확정했으면 경로 위인 문항. 계산 칸을 새로 채울 대상이다.
+   * 범위 안 문항 — 표시되고, 경로를 확정했으면 경로 위인 문항(「답할 수 있는 범위」). 계산 칸을 새로 채울 대상이다.
    * 어느 페이지에도 들지 않는 문항은 응답 화면에 그려지지 않으므로 넣지 않는다.
    */
-  reachedQuestionIds: Set<string>;
+  inScopeQuestionIds: Set<string>;
   /** 경로 밖 strip 을 건너뛴 사유. null 이면 경로를 확정해 적용했다. */
   pathSkipped: AnswerPathSkip | null;
 }
@@ -142,7 +142,7 @@ export function stripUnreachedQuestionValues(
     resolveVisibleQuestionIds(questions, view, groups, ctxFor(view));
 
   const skip = staticSkipReason(options);
-  if (skip) return { responses: current, reachedQuestionIds: visibleOf(current), pathSkipped: skip };
+  if (skip) return { responses: current, inScopeQuestionIds: visibleOf(current), pathSkipped: skip };
 
   const steps = buildRenderSteps(questions, groupList);
   const inSteps = new Set(steps.flatMap((step) => step.items.map((item) => item.question.id)));
@@ -166,7 +166,7 @@ export function stripUnreachedQuestionValues(
           ? null
           : 'last-step-off-path';
       if (reason) {
-        return { responses: current, reachedQuestionIds: visibleOf(current), pathSkipped: reason };
+        return { responses: current, inScopeQuestionIds: visibleOf(current), pathSkipped: reason };
       }
     }
 
@@ -174,11 +174,11 @@ export function stripUnreachedQuestionValues(
     for (const id of inSteps) if (!traversed.has(id)) offPath.add(id);
     const next = dropQuestionAnswers(current, offPath);
     if (next === current) {
-      return { responses: current, reachedQuestionIds: traversed, pathSkipped: null };
+      return { responses: current, inScopeQuestionIds: traversed, pathSkipped: null };
     }
     current = stripHidden(next);
   }
   // 도달 불가 — 바퀴마다 문항이 하나 이상 지워지므로 문항 수 안에 수렴한다. 방어적으로 마지막 상태.
   const traversed = collectTraversedQuestionIds(steps, current, questions, groups, ctxFor(current));
-  return { responses: current, reachedQuestionIds: traversed, pathSkipped: null };
+  return { responses: current, inScopeQuestionIds: traversed, pathSkipped: null };
 }

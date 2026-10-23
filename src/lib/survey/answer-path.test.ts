@@ -64,7 +64,7 @@ describe('stripUnreachedQuestionValues — 경로 밖 문항', () => {
 
     expect(result.responses).toEqual({ q1: 'skip', q3: 'a' });
     expect(result.pathSkipped).toBeNull();
-    expect([...result.reachedQuestionIds].sort()).toEqual(['q1', 'q3']);
+    expect([...result.inScopeQuestionIds].sort()).toEqual(['q1', 'q3']);
   });
 
   it('건너뛴 페이지에 남은 자격미달 보기도 지운다', () => {
@@ -75,14 +75,14 @@ describe('stripUnreachedQuestionValues — 경로 밖 문항', () => {
   it('end 로 끝난 뒤쪽 페이지의 답을 지운다', () => {
     const result = strip(SKIP_SURVEY, { q1: 'stay', q2: 'out', q3: 'a' });
     expect(result.responses).toEqual({ q1: 'stay', q2: 'out' });
-    expect([...result.reachedQuestionIds].sort()).toEqual(['q1', 'q2']);
+    expect([...result.inScopeQuestionIds].sort()).toEqual(['q1', 'q2']);
   });
 
   it('아직 가지 않은 뒤쪽 경로 페이지(진행 중)는 지우지 않는다', () => {
     const input = { q1: 'stay' };
     const result = strip(SKIP_SURVEY, input);
     expect(result.responses).toBe(input);
-    expect([...result.reachedQuestionIds].sort()).toEqual(['q1', 'q2', 'q3']);
+    expect([...result.inScopeQuestionIds].sort()).toEqual(['q1', 'q2', 'q3']);
 
     // 앞에서 미리 적어 둔 뒤 페이지 답도 경로 위라 그대로다
     const ahead = { q1: 'stay', q3: 'b' };
@@ -161,14 +161,14 @@ describe('stripUnreachedQuestionValues — 경로 밖 문항', () => {
     ];
     const result = strip(questions, { q1: 'no', q2: 'x' });
     expect(result.responses).toEqual({ q1: 'no' });
-    expect([...result.reachedQuestionIds]).toEqual(['q1']);
+    expect([...result.inScopeQuestionIds]).toEqual(['q1']);
   });
 
   it('어느 페이지에도 들지 않는 문항(없는 그룹 소속)은 판정할 수 없어 남긴다', () => {
     const questions = [...SKIP_SURVEY, Q('q-orphan', 9, { groupId: 'gone' })];
     const result = strip(questions, { q1: 'skip', q2: 'in', 'q-orphan': 'x' });
     expect(result.responses).toEqual({ q1: 'skip', 'q-orphan': 'x' });
-    expect(result.reachedQuestionIds.has('q-orphan')).toBe(false);
+    expect(result.inScopeQuestionIds.has('q-orphan')).toBe(false);
   });
 });
 
@@ -233,7 +233,7 @@ describe('stripUnreachedQuestionValues — 경로를 확정할 수 없으면 건
     expect(result.responses).toBe(input);
     expect(result.pathSkipped).toBe('shuffle');
     // 남은 문항은 표시 조건 기준으로만 센다
-    expect([...result.reachedQuestionIds].sort()).toEqual(['q1', 'q2', 'q3']);
+    expect([...result.inScopeQuestionIds].sort()).toEqual(['q1', 'q2', 'q3']);
   });
 
   it('문항 섞기 설문도 숨은 문항 strip 은 그대로 한다', () => {
@@ -346,6 +346,6 @@ describe('응답 화면 경로 ↔ 서버 경로', () => {
     expect(new Set(Object.keys(result.responses))).toEqual(
       new Set(Object.keys(responses).filter((id) => clientPath.has(id))),
     );
-    expect(result.reachedQuestionIds).toEqual(clientPath);
+    expect(result.inScopeQuestionIds).toEqual(clientPath);
   });
 });

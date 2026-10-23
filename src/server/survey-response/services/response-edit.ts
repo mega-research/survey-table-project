@@ -199,7 +199,7 @@ export async function saveAdminEdit(
     contactTargetId: existing.contactTargetId,
     responseId,
   });
-  const finalized = finalizeAnswers(material, questionResponses, { skipHiddenStrip: migrating });
+  const finalized = finalizeAnswers(material, questionResponses, { pruneHidden: !migrating });
   const finalResponses = finalized.plain;
 
   // 변경 질문 확정 (audit 용) — 이전 값 ↔ 확정 평문. 확정은 스냅샷의 calc 셀을 전부 다시 계산하므로

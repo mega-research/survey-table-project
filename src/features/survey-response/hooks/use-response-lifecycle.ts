@@ -319,7 +319,7 @@ export function useResponseLifecycle({
         contactAttrs,
       };
       return withCalcValues(answers, ctx, {
-        reachedQuestionIds: new Set(visibleQuestions.map((q) => q.id)),
+        inScopeQuestionIds: new Set(visibleQuestions.map((q) => q.id)),
       });
     },
     [questions, responses, loadedSurvey?.lookups, contactAttrs, visibleQuestions],

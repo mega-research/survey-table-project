@@ -4,22 +4,15 @@ import { EMPTY_PII_TARGETS, isEncryptedAnswerValue } from '@/lib/crypto/response
 import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 import type { Question } from '@/types/survey';
 
-import {
-  QUOTE_CONDITION_QUESTIONS,
-  QUOTE_CONTACT_ATTRS,
-  quoteFromOptionResponses,
-  quoteFromOtherTextResponses,
-} from '../../../../tests/helpers/answer-quote-condition-survey';
-
 import { type FinalizationMaterial, finalizeAnswers } from './answer-finalization';
 
 vi.mock('@/db', () => ({ db: {} }));
 
 /**
- * 응답 확정 — 순서·조합 계약.
+ * 응답 확정 — 답할 수 있는 범위 위에 얹는 단계(계산 칸 · 등록 사이드카 · 자격미달 · 암호화)의 계약.
  *
- * 세 저장 경로(complete 페이로드·빈 complete·관리자 수정)가 각자 들고 있던 순서 검사를 이 한 벌로
- * 옮겼다. 호출부 테스트는 "확정 결과를 저장하는가"만 본다.
+ * 범위 판정 자체(숨은 문항 · 경로 밖 · 게이팅 · 응답 인용값 · 이관)는 lib/survey/answerable-scope.test 가
+ * 본다. 호출부 테스트는 "확정 결과를 저장하는가"만 본다.
  */
 
 const hiddenByCtrl = (id: string, extra: Partial<Question> = {}): Question =>
@@ -163,10 +156,7 @@ function material(
 ): FinalizationMaterial {
   return {
     snapshot: { questions } as unknown as SurveyVersionSnapshot,
-    questions,
-    groups: [],
-    lookups: [],
-    contactAttrs: {},
+    scope: { questions, groups: [], lookups: [], settings: null, contactAttrs: {} },
     piiTargets: EMPTY_PII_TARGETS,
     responseId: 'resp-1',
     ...overrides,
@@ -174,7 +164,7 @@ function material(
 }
 
 describe('finalizeAnswers — 순서와 조합', () => {
-  it('숨은 문항 strip → 게이팅 strip → calc 재계산 순서로 확정한다', () => {
+  it('범위로 좁힌 뒤 calc 을 다시 계산한다 — 지워진 값 기준', () => {
     const { plain, changed } = finalizeAnswers(material(ORDER_QUESTIONS), {
       'q-ctrl': 'no',
       'q-gate': { gate_ctrl: '', gate_val: '7' },
@@ -190,16 +180,6 @@ describe('finalizeAnswers — 순서와 조합', () => {
     expect(changed).toBe(true);
   });
 
-  it('표시 조건만 있는 설문도 숨은 문항 값을 지운다', () => {
-    const { plain, changed } = finalizeAnswers(material([CTRL, hiddenByCtrl('q-hid')]), {
-      'q-ctrl': 'no',
-      'q-hid': '숨기 전에 적은 값',
-    });
-
-    expect(plain).toEqual({ 'q-ctrl': 'no' });
-    expect(changed).toBe(true);
-  });
-
   it('할 일이 없으면 받은 객체를 그대로 돌려주고 changed 가 거짓이다', () => {
     const input = { 'q-ctrl': 'yes', 'q-hid': '보이는 값' };
     const result = finalizeAnswers(material([CTRL, hiddenByCtrl('q-hid')]), input);
@@ -208,7 +188,7 @@ describe('finalizeAnswers — 순서와 조합', () => {
     expect(result.changed).toBe(false);
   });
 
-  it('skipHiddenStrip 이면 숨은 문항은 남기고 게이팅·calc 은 그대로 돈다', () => {
+  it('pruneHidden: false 면 숨은 문항은 남기고 게이팅·calc 은 그대로 돈다 — 구버전 이관', () => {
     const { plain } = finalizeAnswers(
       material(ORDER_QUESTIONS),
       {
@@ -217,7 +197,7 @@ describe('finalizeAnswers — 순서와 조합', () => {
         'q-hid': { hid_val: '100' },
         'q-calc': { calc_out: '999' },
       },
-      { skipHiddenStrip: true },
+      { pruneHidden: false },
     );
 
     expect(plain['q-hid']).toEqual({ hid_val: '100' });
@@ -225,11 +205,12 @@ describe('finalizeAnswers — 순서와 조합', () => {
     expect((plain['q-calc'] as Record<string, unknown>)['calc_out']).toBe('100');
   });
 
-  it('스냅샷이 없으면 확정 단계를 건너뛰고 판정은 null — 암호화는 한다', () => {
+  it('범위 재료가 없으면(스냅샷 없음·구조 깨짐) 확정 단계를 건너뛰고 판정은 null — 암호화는 한다', () => {
     const input = { 'q-ctrl': 'no', 'q-hid': '값', 'q-pii': '010-1234-5678' };
     const result = finalizeAnswers(
       material([], {
         snapshot: null,
+        scope: null,
         piiTargets: { questionIds: new Set(['q-pii']), cellIds: new Map() },
       }),
       input,
@@ -431,106 +412,5 @@ describe('finalizeAnswers — 경로 밖 문항', () => {
 
     expect(result.plain).toEqual({ 'q-ctrl': 'no' });
     expect(result.changed).toBe(false);
-  });
-
-  it('문항 섞기 설문은 경로 밖 strip 을 건너뛴다', () => {
-    const snapshot = {
-      questions: ROUTE_QUESTIONS,
-      settings: { shuffleQuestions: true },
-    } as unknown as SurveyVersionSnapshot;
-    const result = finalizeAnswers(material(ROUTE_QUESTIONS, { snapshot }), {
-      'q-route': 'skip',
-      'q-mid': 'mid-in',
-      'q-last': '답',
-    });
-
-    expect(result.plain['q-mid']).toBe('mid-in');
-  });
-
-  it('구버전 이관(skipHiddenStrip)이면 경로 밖 답도 남긴다', () => {
-    const result = finalizeAnswers(
-      material(ROUTE_QUESTIONS),
-      { 'q-route': 'skip', 'q-mid': 'mid-in', 'q-last': '답' },
-      { skipHiddenStrip: true },
-    );
-
-    expect(result.plain['q-mid']).toBe('mid-in');
-  });
-
-  it('기록된 마지막 페이지가 계산한 경로 밖이면 건너뛴다', () => {
-    const result = finalizeAnswers(
-      material(ROUTE_QUESTIONS),
-      { 'q-route': 'skip', 'q-mid': 'mid-in', 'q-last': '답' },
-      { lastStepId: 'page:q-mid' },
-    );
-
-    expect(result.plain['q-mid']).toBe('mid-in');
-  });
-});
-
-/**
- * 응답 인용값을 읽는 조건 — 응답 화면은 `{ ...명단 값, ...응답 인용값 }` 으로 조건을 푼다.
- * 명단 `지역=서울` 위에 인용값 `부산` 이 얹혀 「부산 전용」 열·행·문항이 보이고 입력됐다.
- * 확정도 같은 컨텍스트로 풀어야 그 답을 지우지 않는다.
- */
-describe('finalizeAnswers — 응답 인용값을 읽는 조건', () => {
-  const quoteMaterial = (questions: Question[] = QUOTE_CONDITION_QUESTIONS) =>
-    material(questions, { contactAttrs: QUOTE_CONTACT_ATTRS });
-
-  it('보기 문구 인용값으로 보이는 열·행·문항의 답을 지우지 않는다', () => {
-    const input = quoteFromOptionResponses();
-    const result = finalizeAnswers(quoteMaterial(), input);
-
-    expect(result.plain).toEqual(input);
-    expect(result.changed).toBe(false);
-  });
-
-  it('기타 상세 기재로 만든 인용값도 같다 — 재료는 루트 __optTexts__ 사이드카다', () => {
-    const input = quoteFromOtherTextResponses();
-    const result = finalizeAnswers(quoteMaterial(), input);
-
-    expect(result.plain['q-tbl']).toEqual(input['q-tbl']);
-    expect(result.plain['q-dep']).toBe('부산 문항 답');
-    expect(result.plain['__optTexts__']).toEqual({ 'q-src': { 'opt-etc': '부산' } });
-  });
-
-  it('인용값의 출처 문항이 숨어 지워지면 인용값을 다시 계산해 그 값을 읽던 답도 지운다', () => {
-    // 화면은 출처 문항 답을 지운 뒤 다시 그리며 인용값을 새 응답으로 계산한다 — 인용값이 비어
-    // 「부산 전용」이 숨고 그 답도 지워진다. 처음 인용값으로 고정하면 남는다.
-    const gate = {
-      id: 'q-gate',
-      type: 'radio',
-      title: '부산 질문 여부',
-      order: -1,
-      options: [
-        { id: 'opt-y', label: '예', value: 'yes' },
-        { id: 'opt-n', label: '아니오', value: 'no' },
-      ],
-    } as unknown as Question;
-    const [src, tbl, dep] = QUOTE_CONDITION_QUESTIONS;
-    const gatedSrc = {
-      ...src!,
-      displayCondition: {
-        logicType: 'AND',
-        conditions: [
-          {
-            id: 'src-c1',
-            enabled: true,
-            logicType: 'AND',
-            conditionType: 'value-match',
-            sourceQuestionId: 'q-gate',
-            requiredValues: ['yes'],
-          },
-        ],
-      },
-    } as Question;
-    const result = finalizeAnswers(quoteMaterial([gate, gatedSrc, tbl!, dep!]), {
-      'q-gate': 'no',
-      ...quoteFromOptionResponses(),
-    });
-
-    expect(result.plain['q-src']).toBeUndefined();
-    expect(result.plain['q-dep']).toBeUndefined();
-    expect(result.plain['q-tbl']).toEqual({ 'c-all-a': '1' });
   });
 });
