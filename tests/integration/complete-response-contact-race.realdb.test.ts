@@ -8,24 +8,9 @@ import { deleteContactTarget } from '@/server/contacts/services/contact-targets'
 import { hardResetResponse } from '@/server/survey-response/services/response-manage';
 import { completeResponse } from '@/server/survey-response/services/response-completion';
 
-const run = process.env['RUN_REALDB'] === '1' ? describe : describe.skip;
+import { backendPid, waitForLockWaitersBehind } from '../helpers/lock-waiters';
 
-async function waitForTargetLockWaiters(minimum: number): Promise<void> {
-  const deadline = Date.now() + 2_000;
-  while (Date.now() < deadline) {
-    const rows = await db.execute<{ waiting: number }>(sql`
-      SELECT count(*)::int AS waiting
-      FROM pg_stat_activity
-      WHERE pid <> pg_backend_pid()
-        AND datname = current_database()
-        AND wait_event_type = 'Lock'
-        AND query ILIKE '%contact_targets%'
-    `);
-    if ((rows[0]?.waiting ?? 0) >= minimum) return;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  throw new Error(`contact_targets lock waiter ${minimum}개를 관찰하지 못했습니다`);
-}
+const run = process.env['RUN_REALDB'] === '1' ? describe : describe.skip;
 
 async function settleWithin(
   promises: readonly Promise<unknown>[],
@@ -76,13 +61,14 @@ async function createActualLinkedResponse(label: string): Promise<{
   return { surveyId, targetId, responseId };
 }
 
+/** 대상 행을 쥔 트랜잭션. `locked` 는 그 트랜잭션의 백엔드 pid — 이 잠금 뒤에 줄 선 요청만 센다. */
 function createTargetBlocker(targetId: string): {
-  locked: Promise<void>;
+  locked: Promise<number>;
   release: () => void;
   done: Promise<void>;
 } {
-  let markLocked!: () => void;
-  const locked = new Promise<void>((resolve) => {
+  let markLocked!: (pid: number) => void;
+  const locked = new Promise<number>((resolve) => {
     markLocked = resolve;
   });
   let release!: () => void;
@@ -95,7 +81,7 @@ function createTargetBlocker(targetId: string): {
       .from(contactTargets)
       .where(eq(contactTargets.id, targetId))
       .for('update');
-    markLocked();
+    markLocked(await backendPid(tx));
     await released;
   });
   return { locked, release, done };
@@ -108,11 +94,11 @@ run('실제 대상자 응답 완료와 관리 작업 경쟁', () => {
     );
     const blocker = createTargetBlocker(targetId);
     try {
-      await blocker.locked;
+      const holder = await blocker.locked;
       const deletion = deleteContactTarget({ surveyId, id: targetId }, false);
-      await waitForTargetLockWaiters(1);
+      await waitForLockWaitersBehind(holder, 1, '관리 작업이 대상 잠금 뒤에 줄 서지 않았습니다');
       const completion = completeResponse({ responseId });
-      await waitForTargetLockWaiters(2);
+      await waitForLockWaitersBehind(holder, 2, '완료가 대상 잠금 뒤에 줄 서지 않았습니다');
       blocker.release();
 
       const outcomes = await settleWithin([completion, deletion] as const);
@@ -165,11 +151,11 @@ run('실제 대상자 응답 완료와 관리 작업 경쟁', () => {
     );
     const blocker = createTargetBlocker(targetId);
     try {
-      await blocker.locked;
+      const holder = await blocker.locked;
       const reset = hardResetResponse({ surveyId, responseId });
-      await waitForTargetLockWaiters(1);
+      await waitForLockWaitersBehind(holder, 1, '관리 작업이 대상 잠금 뒤에 줄 서지 않았습니다');
       const completion = completeResponse({ responseId });
-      await waitForTargetLockWaiters(2);
+      await waitForLockWaitersBehind(holder, 2, '완료가 대상 잠금 뒤에 줄 서지 않았습니다');
       blocker.release();
 
       const outcomes = await settleWithin([completion, reset] as const);

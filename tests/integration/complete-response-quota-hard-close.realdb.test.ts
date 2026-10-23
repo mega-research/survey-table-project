@@ -16,6 +16,8 @@ import type { QuotaConfig } from '@/shared/contracts/quota';
 import type { QuestionData, SurveyVersionSnapshot } from '@/shared/contracts/survey';
 import { completeResponse } from '@/server/survey-response/services/response-completion';
 
+import { backendPid, waitForLockWaitersBehind } from '../helpers/lock-waiters';
+
 const isLocalDb =
   (process.env['DATABASE_URL'] ?? '').includes('127.0.0.1') ||
   (process.env['DATABASE_URL'] ?? '').includes('localhost');
@@ -130,9 +132,10 @@ async function loadRows(responseIds: string[]) {
  * 셀 잠금을 미리 쥔 차단 트랜잭션 — 두 제출이 같은 잠금을 기다리게 만들어 "동시" 를 우연이 아니라
  * 구조로 만든다. 코드에서 잠금이 빠지면 두 제출이 대기하지 않고 각자 완료돼 빨간불이 난다.
  */
+/** 셀 advisory 잠금을 쥔 트랜잭션. `locked` 는 그 백엔드 pid — 이 잠금 뒤에 줄 선 제출만 센다. */
 function createCellLockBlocker(surveyId: string, cellKey: string) {
-  let markLocked!: () => void;
-  const locked = new Promise<void>((resolve) => {
+  let markLocked!: (pid: number) => void;
+  const locked = new Promise<number>((resolve) => {
     markLocked = resolve;
   });
   let release!: () => void;
@@ -141,27 +144,10 @@ function createCellLockBlocker(surveyId: string, cellKey: string) {
   });
   const done = db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${surveyId}), hashtext(${cellKey}))`);
-    markLocked();
+    markLocked(await backendPid(tx));
     await released;
   });
   return { locked, release, done };
-}
-
-async function waitForAdvisoryWaiters(minimum: number): Promise<void> {
-  const deadline = Date.now() + 3_000;
-  while (Date.now() < deadline) {
-    const rows = await db.execute<{ waiting: number }>(sql`
-      SELECT count(*)::int AS waiting
-      FROM pg_stat_activity
-      WHERE pid <> pg_backend_pid()
-        AND datname = current_database()
-        AND wait_event_type = 'Lock'
-        AND wait_event = 'advisory'
-    `);
-    if ((rows[0]?.waiting ?? 0) >= minimum) return;
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  throw new Error(`셀 잠금 대기자 ${minimum}개를 관찰하지 못했습니다 — 제출 경로에 잠금이 없다`);
 }
 
 describe.skipIf(!isLocalDb)('쿼터 진행 중 마감 — 실DB 경합', () => {
@@ -179,14 +165,18 @@ describe.skipIf(!isLocalDb)('쿼터 진행 중 마감 — 실DB 경합', () => {
 
     // 셀 키는 카테고리 id 를 이은 문자열(cellKeyOf) — 이 플랜은 차원 하나라 'cat-m'.
     const blocker = createCellLockBlocker(surveyId, 'cat-m');
-    await blocker.locked;
+    const holder = await blocker.locked;
     const submissions = Promise.all([
       completeResponse({ responseId: a, data: { questionResponses: { [GATE_QID]: '남' } } }),
       completeResponse({ responseId: b, data: { questionResponses: { [GATE_QID]: '남' } } }),
     ]);
     let results: Awaited<typeof submissions>;
     try {
-      await waitForAdvisoryWaiters(2);
+      await waitForLockWaitersBehind(
+        holder,
+        2,
+        '셀 잠금 대기자 2개를 관찰하지 못했습니다 — 제출 경로에 잠금이 없다',
+      );
     } finally {
       blocker.release();
       results = await submissions;
@@ -267,8 +257,8 @@ describe.skipIf(!isLocalDb)('쿼터 진행 중 마감 — 실DB 경합', () => {
       .where(sql`${surveyResponses.id} = ${r}`);
 
     // 응답 행 잠금을 쥔 draft 트랜잭션 — 완료가 행 잠금에서 기다리는 것을 본 뒤 답을 바꿔 커밋한다
-    let markLocked!: () => void;
-    const locked = new Promise<void>((resolve) => {
+    let markLocked!: (pid: number) => void;
+    const locked = new Promise<number>((resolve) => {
       markLocked = resolve;
     });
     let release!: () => void;
@@ -277,18 +267,18 @@ describe.skipIf(!isLocalDb)('쿼터 진행 중 마감 — 실DB 경합', () => {
     });
     const draft = db.transaction(async (tx) => {
       await tx.execute(sql`select id from survey_responses where id = ${r} for update`);
-      markLocked();
+      markLocked(await backendPid(tx));
       await released;
       await tx
         .update(surveyResponses)
         .set({ questionResponses: { [GATE_QID]: '여' } })
         .where(sql`${surveyResponses.id} = ${r}`);
     });
-    await locked;
+    const holder = await locked;
     const completion = completeResponse({ responseId: r });
     let result: Awaited<typeof completion>;
     try {
-      await waitForRowLockWaiter();
+      await waitForLockWaitersBehind(holder, 1, '응답 행 잠금 대기자를 관찰하지 못했습니다');
     } finally {
       release();
       await draft;
@@ -306,20 +296,3 @@ describe.skipIf(!isLocalDb)('쿼터 진행 중 마감 — 실DB 경합', () => {
   });
 });
 
-/** 다른 연결이 행 잠금(튜플·트랜잭션 id)을 기다리는 것을 볼 때까지 */
-async function waitForRowLockWaiter(): Promise<void> {
-  const deadline = Date.now() + 3_000;
-  while (Date.now() < deadline) {
-    const rows = await db.execute<{ waiting: number }>(sql`
-      SELECT count(*)::int AS waiting
-      FROM pg_stat_activity
-      WHERE pid <> pg_backend_pid()
-        AND datname = current_database()
-        AND wait_event_type = 'Lock'
-        AND wait_event IN ('transactionid', 'tuple')
-    `);
-    if ((rows[0]?.waiting ?? 0) >= 1) return;
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  throw new Error('응답 행 잠금 대기자를 관찰하지 못했습니다');
-}

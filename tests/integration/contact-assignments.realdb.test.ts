@@ -62,6 +62,8 @@ import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 
 import { resolvedFilterForTest } from '../helpers/resolved-contact-filter';
 
+import { backendPid, waitForLockWaitersBehind } from '../helpers/lock-waiters';
+
 // 이 브라우저의 「테스트 데이터 보기」 쿠키 — 켜고 끄며 파티션을 오간다 (server/data-scope).
 const cookieState = vi.hoisted(() => ({ testView: false }));
 vi.mock('next/headers', () => ({
@@ -630,31 +632,24 @@ run('컨택원 배정 (real local DB)', () => {
       const tHoldsT2 = new Promise<void>((resolve) => {
         releaseT = resolve;
       });
-      let tLocked!: () => void;
-      const tReady = new Promise<void>((resolve) => {
+      let tLocked!: (pid: number) => void;
+      const tReady = new Promise<number>((resolve) => {
         tLocked = resolve;
       });
       const other = db.transaction(async (tx) => {
         // 데드락 판정은 먼저 기다리기 시작한 교체 적용 쪽에서 나게 한다(이쪽은 늦게 판정).
         await tx.execute(sql`SET LOCAL deadlock_timeout = '10s'`);
         await tx.execute(sql`SELECT id FROM contact_targets WHERE id = ${t2!} FOR UPDATE`);
-        tLocked();
+        tLocked(await backendPid(tx));
         await tHoldsT2;
         // 교체 적용이 대상 1 을 쥔 채 대상 2 를 기다리는 동안, T 가 대상 1 을 바꾸려 한다 → 교착.
         await tx.execute(sql`UPDATE contact_targets SET memo = 'T' WHERE id = ${t1!}`);
       });
-      await tReady;
+      const tHolder = await tReady;
 
       const applying = applyAssignment({ surveyId, assignmentId: owner.id, clauses });
-      // 교체 적용이 행 잠금을 기다리기 시작할 때까지 본다.
-      for (let i = 0; i < 100; i++) {
-        const waiting = await db.execute(sql`
-          SELECT count(*)::int AS n FROM pg_stat_activity
-          WHERE wait_event_type = 'Lock' AND query ILIKE 'update "contact_targets"%'
-        `);
-        if (Number((waiting as unknown as Array<{ n: number }>)[0]?.n ?? 0) > 0) break;
-        await new Promise((r) => setTimeout(r, 20));
-      }
+      // 교체 적용이 T 가 쥔 대상 2 를 기다리기 시작할 때까지 본다.
+      await waitForLockWaitersBehind(tHolder, 1, '교체 적용이 대상 2 잠금 뒤에 줄 서지 않았습니다');
       releaseT();
 
       await other;
