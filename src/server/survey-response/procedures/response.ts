@@ -71,7 +71,7 @@ const saveDraft = draftRateLimited
 const createWithFirstAnswer = rateLimited
   .input(CreateResponseWithFirstAnswerInput)
   .output(FirstAnswerResultSchema)
-  .handler(({ input }) => entry.createResponseWithFirstAnswer(input));
+  .handler(({ input }) => entry.createResponseWithFirstAnswer(input).catch(mapTestVersionPruned));
 
 /**
  * 답변 없는 빈 응답 행 생성(pub). notice-only 등 silent data loss 방지 fallback.
@@ -79,7 +79,7 @@ const createWithFirstAnswer = rateLimited
 const createBlank = rateLimited
   .input(CreateBlankResponseInput)
   .output(FirstAnswerResultSchema)
-  .handler(({ input }) => entry.createBlankResponse(input));
+  .handler(({ input }) => entry.createBlankResponse(input).catch(mapTestVersionPruned));
 
 /**
  * 응답 완료(pub). 응답 원본(JSONB) 저장, prefill 재검증, 컨택 매칭 후처리.

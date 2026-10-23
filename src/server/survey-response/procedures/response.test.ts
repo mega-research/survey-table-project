@@ -72,6 +72,39 @@ describe('surveyResponse.response procedures', () => {
     ).rejects.toMatchObject(expected);
   });
 
+  it('응답 생성 경로도 같은 거부로 접는다 (createWithFirstAnswer·createBlank)', async () => {
+    // 같은 세션의 옛 테스트 행을 물려받아 첫 답을 머지할 때 스냅샷이 비워져 있으면 생성 경로에서도
+    // 같은 에러가 난다. 접지 않으면 500 이 되고 응답 화면은 안내 없이 멈춘다.
+    const { TestResponseVersionPrunedError } = await import('../services/response-version-snapshot');
+    vi.mocked(entry.createResponseWithFirstAnswer).mockRejectedValue(
+      new TestResponseVersionPrunedError(),
+    );
+    vi.mocked(entry.createBlankResponse).mockRejectedValue(new TestResponseVersionPrunedError());
+    const client = createRouterClient({ response }, { context: anonContext() });
+    const expected = { code: 'TEST_VERSION_REPUBLISHED', status: 409 };
+
+    await expect(
+      client.response.createWithFirstAnswer({
+        surveyId: SURVEY_ID,
+        sessionId: 'sess-1',
+        versionId: VERSION_ID,
+        questionId: QUESTION_ID,
+        value: 'answer',
+        currentStepId: 'group:abc',
+        clientSignals: CLIENT_SIGNALS,
+      }),
+    ).rejects.toMatchObject(expected);
+    await expect(
+      client.response.createBlank({
+        surveyId: SURVEY_ID,
+        sessionId: 'sess-1',
+        versionId: VERSION_ID,
+        currentStepId: 'group:abc',
+        clientSignals: CLIENT_SIGNALS,
+      }),
+    ).rejects.toMatchObject(expected);
+  });
+
   it('그 밖의 서비스 에러는 그대로 흘려보낸다', async () => {
     vi.mocked(draft.saveDraftResponse).mockRejectedValue(new Error('db down'));
     const client = createRouterClient({ response }, { context: anonContext() });

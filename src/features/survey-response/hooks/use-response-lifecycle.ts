@@ -619,6 +619,10 @@ export function useResponseLifecycle({
             return id;
           })
           .catch(async (err) => {
+            // 옛 테스트 행을 물려받았는데 그 테스트 버전 스냅샷이 비워졌다 — 초안·제출과 같은 안내.
+            if (handleTestVersionRepublishedError({ err, setDuplicateStatus })) {
+              return null;
+            }
             if (
               await handleInvalidTestLinkMutationError({
                 err,
