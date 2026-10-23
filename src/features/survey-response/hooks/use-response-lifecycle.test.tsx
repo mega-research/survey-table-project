@@ -4,7 +4,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useResponseLifecycle } from '@/features/survey-response/hooks/use-response-lifecycle';
-import type { RenderStep } from '@/utils/group-ordering';
+import { buildRenderSteps, type RenderStep } from '@/utils/group-ordering';
 import type { Question, QuestionGroup, Survey } from '@/types/survey';
 import type { BranchEvalCtx } from '@/utils/branch-logic';
 
@@ -97,6 +97,7 @@ function baseArgs(over: Partial<Parameters<typeof useResponseLifecycle>[0]> = {}
     isRecovering: false,
     recoveredDraftSeq: undefined as number | undefined,
     isQuestionAnswered: vi.fn(() => true),
+    isQuestionRequired: vi.fn((q: Question) => q.required),
     visibleProgressRef,
     setHighlightQuestionIds: vi.fn(),
     setDuplicateStatus: vi.fn(),
@@ -476,6 +477,37 @@ describe('useResponseLifecycle - handleSubmit', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('필수 판정은 화면이 넘겨준 술어를 쓴다 — 쿼터 게이트·그룹 필수 문항도 제출 전에 막는다', async () => {
+    // 「다음」은 question.required 에 쿼터 게이트·그룹별 필수까지 보는데, 제출의 최종 검사는
+    // question.required 만 봐서 재개 등으로 앞 페이지 검사를 건너뛴 응답이 그 문항을 비운 채 완료됐다.
+    const gate = {
+      id: 'q-gate',
+      type: 'radio',
+      title: '쿼터 게이트',
+      required: false,
+      order: 0,
+      options: [],
+    } as unknown as Question;
+    const steps = buildRenderSteps([gate], []);
+    const args = baseArgs({
+      currentResponseId: 'r1',
+      questions: [gate],
+      visibleQuestions: [gate],
+      steps,
+      currentStep: steps[0]!,
+      isQuestionAnswered: vi.fn(() => false),
+      isQuestionRequired: vi.fn((q: Question) => q.id === 'q-gate'),
+    });
+    const { result } = renderHook(() => useResponseLifecycle(args));
+
+    await act(async () => {
+      await result.current.handleSubmit();
+    });
+
+    expect(complete).not.toHaveBeenCalled();
+    expect(args.setHighlightQuestionIds).toHaveBeenCalledWith(new Set(['q-gate']));
   });
 
   it('currentResponseId 가 null 이면 blank fallback INSERT 후 complete 한다', async () => {

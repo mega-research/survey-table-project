@@ -1427,6 +1427,7 @@ function SurveyResponseFlowActive({
       isRecovering,
       recoveredDraftSeq,
       isQuestionAnswered,
+      isQuestionRequired,
       optionTextsByQuestion: effectiveOptionTextsByQuestion,
       visibleProgressRef,
       setHighlightQuestionIds,
