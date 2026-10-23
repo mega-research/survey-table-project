@@ -3,7 +3,11 @@ import 'server-only';
 
 import { db } from '@/db';
 import { surveyVersions, surveys } from '@/db/schema';
-import type { SurveyEndRedirects } from '@/shared/contracts/survey';
+import {
+  pinnedVersionId,
+  type SurveyEndRedirects,
+  type VersionPins,
+} from '@/shared/contracts/survey';
 
 import { completeResponseDenial, newResponseDenial } from '../domain/acceptance';
 import type { BlockReason } from '../domain/duplicate';
@@ -26,6 +30,8 @@ export type SurveyGateRow = {
   requireInviteToken: boolean;
   // #24 버전 무결성: 클라 제공 versionId 의 "현재 활성" 판정에 사용.
   currentVersionId: string | null;
+  // 지금 테스트 버전(0141) — 테스트 응답의 고정 목적지. 없으면 테스트 응답도 배포본.
+  testVersionId: string | null;
   // 설문 중단·테스트 모드 (isValidTestToken 판정 + paused 게이트에 사용).
   isPaused: boolean;
   testModeEnabled: boolean;
@@ -111,6 +117,7 @@ export async function loadSurveyGateRow(surveyId: string): Promise<SurveyGateRow
       isPublic: true,
       requireInviteToken: true,
       currentVersionId: true,
+      testVersionId: true,
       isPaused: true,
       testModeEnabled: true,
       testToken: true,
@@ -142,9 +149,9 @@ export async function loadVersionGateRow(versionId: string | null | undefined): 
  * - versionId 가 있으면 그 행이 반드시 동일 surveyId 에 속해야 한다. 미존재/타 설문 소속은
  *   version_mismatch 로 거부한다 — 타 설문 versionId 주입으로 응답이 엉뚱한 스냅샷에
  *   바인딩되는 것을 차단한다(불변).
- * - 같은 설문 소속이 확인된 구버전(비published 비활성 — 배포 전에 열어둔 탭)은 거부하지 않고
- *   현재 버전(currentVersionId)으로 재핀한다. 재핀 목적지가 없으면(currentVersionId=null)
- *   기존대로 version_not_active 거부.
+ * - 같은 설문 소속이 확인된 다른 버전(배포 전에 열어둔 탭 · 테스트 중 바뀐 테스트 버전)은 거부하지
+ *   않고 목적지로 재핀한다 — 테스트 응답은 지금 테스트 버전(`testVersionId`), 실응답은 현재 배포본.
+ *   재핀 목적지가 없으면 기존대로 version_not_active 거부.
  *
  * 재핀 시 version gate row 는 현재 버전 행으로 다시 조회하지 않는다 — 설문이 published 면
  * assertSurveyAcceptingResponses 의 status 검사(surveyPublished)로 통과하고, 설문 자체가
@@ -156,7 +163,8 @@ export async function loadVersionGateRow(versionId: string | null | undefined): 
 export async function loadValidatedVersionGateRow(
   surveyId: string,
   versionId: string | null | undefined,
-  currentVersionId: string | null,
+  pins: VersionPins,
+  options: { isTest: boolean } = { isTest: false },
 ): Promise<{ version: VersionGateRow; effectiveVersionId: string | null }> {
   if (!versionId) return { version: null, effectiveVersionId: null };
   const row = await db.query.surveyVersions.findFirst({
@@ -167,15 +175,18 @@ export async function loadValidatedVersionGateRow(
   if (!row || row.surveyId !== surveyId) {
     throw new SurveyNotAcceptingResponsesError('version_mismatch');
   }
-  // 유효성: published 이거나 설문의 현재 활성 버전(currentVersionId)이면 그대로 사용.
-  const isPublished = row.status === 'published';
-  const isCurrent = currentVersionId != null && currentVersionId === versionId;
-  if (!isPublished && !isCurrent) {
-    // 무중단 갈아타기: 소속이 확인된 구버전이면 현재 버전으로 재핀. 목적지가 없으면 기존 거부.
-    if (currentVersionId == null) {
+  // 고정 목적지 — 테스트 응답은 지금 테스트 버전, 실응답은 현재 배포본(shared/contracts/survey 의 pinnedVersionId).
+  const target = pinnedVersionId(pins, options.isTest);
+  // 유효성: 목적지 버전이거나, 실응답이 보낸 published 버전이면 그대로 사용. 테스트 버전 행은
+  // 실응답이 보내도 유효하지 않다 — 테스트 링크로 연 탭의 버전 id 가 실응답으로 새면 안 된다.
+  const isTarget = target != null && target === versionId;
+  const isPublishedForReal = !options.isTest && row.status === 'published';
+  if (!isTarget && !isPublishedForReal) {
+    // 무중단 갈아타기: 소속이 확인된 다른 버전이면 목적지로 재핀. 목적지가 없으면 기존 거부.
+    if (target == null) {
       throw new SurveyNotAcceptingResponsesError('version_not_active');
     }
-    return { version: { status: row.status }, effectiveVersionId: currentVersionId };
+    return { version: { status: row.status }, effectiveVersionId: target };
   }
   return { version: { status: row.status }, effectiveVersionId: versionId };
 }

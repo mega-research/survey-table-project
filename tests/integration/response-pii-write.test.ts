@@ -22,7 +22,6 @@ const {
   computeSignalsMock,
   checkTrackAMock,
   checkTrackBMock,
-  replaceResponseAnswersMock,
 } = vi.hoisted(() => ({
   responseFindFirstMock: vi.fn(),
   surveyFindFirstMock: vi.fn(),
@@ -47,7 +46,6 @@ const {
   computeSignalsMock: vi.fn(),
   checkTrackAMock: vi.fn(),
   checkTrackBMock: vi.fn(),
-  replaceResponseAnswersMock: vi.fn(async (..._a: unknown[]) => undefined),
 }));
 
 function makeUpdateChain() {
@@ -131,12 +129,12 @@ vi.mock('@/server/survey-response/services/check', () => ({
   checkTrackA: (...a: unknown[]) => checkTrackAMock(...a),
   checkTrackB: (...a: unknown[]) => checkTrackBMock(...a),
 }));
-
-// completeResponse / saveAdminEdit 이 공유하는 정규화 저장 — 전달된 맵의 암호화 여부를 검증한다.
-vi.mock('@/server/survey-response/services/response-answers', () => ({
-  replaceResponseAnswers: (...a: unknown[]) => replaceResponseAnswersMock(...a),
+// 쿼터 마감 다시 열기 판정은 실DB 테스트(quota-closed-reopen.realdb)가 맡는다 — 여기서는 자리가 없는 경우로 고정.
+vi.mock('@/server/survey-response/services/quota-reopen', () => ({
+  reopenQuotaClosedResponse: vi.fn().mockResolvedValue(false),
 }));
 
+// completeResponse / saveAdminEdit 이 공유하는 정규화 저장 — 전달된 맵의 암호화 여부를 검증한다.
 /**
  * db.update(...).set(v) 에 전달되는 v 는 drizzle sql`` 청크(SQL/StringChunk/Param/Column)를
  * 값으로 갖는 객체다. Column/Table 인스턴스는 서로를 순환 참조하므로 JSON.stringify 가
@@ -636,27 +634,6 @@ describe('completeResponse — PII 문항만 선별 암호화', () => {
     expect(JSON.stringify(storedMap)).not.toContain(PII_PLAINTEXT);
   });
 
-  it('replaceResponseAnswers 도 동일하게 암호화된 맵을 받는다', async () => {
-    const { completeResponse } = await import(
-      '@/server/survey-response/services/response-completion'
-    );
-    await completeResponse({
-      responseId: RESPONSE_ID,
-      data: {
-        questionResponses: {
-          [QUESTION_ID]: PII_PLAINTEXT,
-          [PLAIN_QUESTION_ID]: '평문 답변',
-        },
-      },
-    });
-
-    expect(replaceResponseAnswersMock).toHaveBeenCalledTimes(1);
-    const answersMap = replaceResponseAnswersMock.mock.calls[0]![3] as Record<string, unknown>;
-    expect(String(answersMap[QUESTION_ID])).toMatch(/^v\d+:/);
-    expect(answersMap[PLAIN_QUESTION_ID]).toBe('평문 답변');
-    expect(JSON.stringify(answersMap)).not.toContain(PII_PLAINTEXT);
-  });
-
   // 회귀 가드: loadPiiQuestionIds 가 보내는 쿼리 텍스트에 UNION + live pii_encrypted 조각이
   // 실수로 빠지지 않았는지만 확인한다. mock 은 SQL 을 실행하지 않으므로 "스냅샷에 없어도
   // 라이브 플래그로 잡힌다"는 실제 합집합 동작 자체는 이 테스트로 검증되지 않는다(실DB 영역).
@@ -927,9 +904,6 @@ describe('completeResponse — 저장값(암호문) 기준 바이트 필터', ()
     // 이 경로의 의미론은 silent drop — 완료 자체는 성공하고 초과 키만 사라진다.
     expect(QUESTION_ID in storedMap).toBe(false);
     expect(storedMap[PLAIN_QUESTION_ID]).toBe('평문 답변');
-    expect(replaceResponseAnswersMock).toHaveBeenCalledTimes(1);
-    const answersMap = replaceResponseAnswersMock.mock.calls[0]![3] as Record<string, unknown>;
-    expect(QUESTION_ID in answersMap).toBe(false);
   });
 
   it('비PII 문항의 같은 평문 220KB 는 종전대로 저장된다', async () => {
@@ -992,7 +966,6 @@ describe('saveAdminEdit — 크기 가드 (종전에는 가드가 전무했다)'
       ),
     ).rejects.toMatchObject({ reason: 'answer_value_too_large' });
     expect(updateSetLogMock).not.toHaveBeenCalled();
-    expect(replaceResponseAnswersMock).not.toHaveBeenCalled();
   });
 
   it('PII 문항은 평문이 상한 이하여도 암호문이 넘으면 거부한다', async () => {
@@ -1137,12 +1110,6 @@ describe('saveAdminEdit — 복호화 diff 안정성 + 재암호화 저장', () 
     expect(String(setArg.questionResponses[QUESTION_ID])).toMatch(/^v\d+:/);
     expect(setArg.questionResponses[PLAIN_QUESTION_ID]).toBe('수정된 답변');
     expect(JSON.stringify(setArg.questionResponses)).not.toContain(PII_PLAINTEXT);
-
-    // replaceResponseAnswers 도 암호화된 맵을 받는다.
-    expect(replaceResponseAnswersMock).toHaveBeenCalledTimes(1);
-    const answersMap = replaceResponseAnswersMock.mock.calls[0]![3] as Record<string, unknown>;
-    expect(String(answersMap[QUESTION_ID])).toMatch(/^v\d+:/);
-    expect(answersMap[PLAIN_QUESTION_ID]).toBe('수정된 답변');
   });
 });
 
@@ -1225,11 +1192,6 @@ describe('saveAdminEdit — calc 셀 서버 재계산 (Task 13)', () => {
     expect(stored[SOURCE_CELL_ID]).toBe('10');
     // 서버 재계산 값 — 클라가 보낸 stale '5' 가 아니라 새 source 기준 '10' 이어야 한다.
     expect(stored[CALC_CELL_ID]).toBe('10');
-
-    // response_answers 정규화 저장에도 동일하게 재계산된 값이 들어간다.
-    const answersMap = replaceResponseAnswersMock.mock.calls[0]![3] as Record<string, unknown>;
-    const storedAnswers = answersMap[CALC_QUESTION_ID] as Record<string, unknown>;
-    expect(storedAnswers[CALC_CELL_ID]).toBe('10');
   });
 
   it('버전 스냅샷을 못 얻으면(versionId=null) 재계산을 건너뛰고 제출값을 그대로 저장한다 (fail-safe)', async () => {

@@ -16,7 +16,6 @@ import {
 } from '@/shared/contracts/survey-response';
 
 import type { CompleteResponseInput, CompleteResponseResult } from '../domain/response';
-import { replaceResponseAnswers } from './response-answers';
 import {
   assertResponseCompletable,
   loadSurveyGateRow,
@@ -30,6 +29,11 @@ import {
   resolveQuotaTargetCell,
 } from '@/server/read-models/quota-cell';
 import { finalizeAnswers, loadFinalizationMaterial } from './answer-finalization';
+import {
+  isVersionSnapshotPruned,
+  syncTestVersionBeforeWrite,
+  TestResponseVersionPrunedError,
+} from './response-version-snapshot';
 import {
   detectQuotaOverflow,
   dropOversizedStoredValues,
@@ -105,6 +109,9 @@ export async function completeResponse(
     },
   });
   if (gateRow) {
+    // 테스트 응답이면 테스트 버전을 지금 저장본에 맞춘다 — 바뀌었으면 아래 정제(페이로드)와 빈 complete
+    // 확인이 안내로 접는다.
+    await syncTestVersionBeforeWrite({ id: responseId, ...gateRow });
     const survey = await loadSurveyGateRow(gateRow.surveyId);
     const version = await loadVersionGateRow(gateRow.versionId);
     const completedCount = await countCompletedResponses(gateRow.surveyId);
@@ -166,6 +173,12 @@ export async function completeResponse(
         responseId,
       })
     : null;
+  // 스냅샷이 비워진 버전의 테스트 응답 — 테스트 중 저장본이 바뀌어 새 테스트 버전이 생겼다. 페이로드
+  // 경로는 sanitizeSubmittedResponses 가 같은 안내로 접고, 빈 complete 는 여기서 접는다 — 확정을 건너뛰고
+  // 완료되면 화면에서 본 구조와 다른 응답이 남는다(CONTEXT.md 「테스트 버전」).
+  if (gateRow?.isTest && gateRow.versionId && !material?.snapshot) {
+    if (await isVersionSnapshotPruned(gateRow.versionId)) throw new TestResponseVersionPrunedError();
+  }
 
   let screenedOut = false;
   // 페이로드 경로의 저장값 — 아래 쿼터 판정은 평문(validatedResponses)으로 하고, 저장 직전에 갈아 끼운다.
@@ -279,8 +292,6 @@ export async function completeResponse(
     // 저장된 행이라 새 주입 표면이 아니고, 복호화→재암호화 왕복은 크기를 되돌릴 뿐이다. 여기서
     // drop 하면 이미 수집된 답변을 완료 시점에 조용히 잃는다.
     let storedRecalcResponses: Record<string, unknown> | undefined;
-    // response_answers 정규화 재료 — JSONB 를 다시 쓰지 않아도 확정된 맵으로 정규화한다.
-    let storedFinalized: Record<string, unknown> | undefined;
     // 스냅샷이 없으면 확정할 것이 없다(fail-safe) — 쿼터 셀을 저장분으로 다시 분류할 때만 읽는다.
     if (!validatedResponses && material && (material.snapshot || hardCloseFromStored)) {
       const [locked] = await tx
@@ -297,7 +308,6 @@ export async function completeResponse(
         { lastStepId: gateRow?.currentStepId ?? null },
       );
       const judgedResponses = finalized.plain;
-      storedFinalized = finalized.stored;
       if (finalized.changed) storedRecalcResponses = finalized.stored;
       screenedOut = finalized.screenedOut ?? false;
       // 빈 complete 의 하드 차단 — 잠금 아래 최종 평문으로 셀을 다시 분류한다. 자격미달이면 셀을
@@ -321,7 +331,7 @@ export async function completeResponse(
     }
     // metadata 에 이번 완료로 새로 얹을 키만 모은다 (exposedQuestionIds/exposedRowIds/quotaOverflow).
     // 아래 UPDATE 는 이 값을 객체 리터럴로 통째 대입하지 않고 jsonb `||` 병합으로 반영한다 —
-    // 관리자 수정이 남긴 adminEditRollback/migratedFromVersionId, draftSeq 등 기존 키가
+    // 관리자 수정이 남긴 migratedFromVersionId, draftSeq 등 기존 키가
     // in_progress 재진입 완료 시 이 UPDATE 에 지워지는 걸 막기 위함 (whole-branch 리뷰 I-1).
     const newMetadataKeys: Record<string, unknown> = {
       ...(data?.exposedQuestionIds ? { exposedQuestionIds: data.exposedQuestionIds } : {}),
@@ -329,7 +339,7 @@ export async function completeResponse(
       // soft quota: 초과 완료 식별 플래그 (위 detectQuotaOverflow 판정 결과)
       ...(quotaOverflow ? { quotaOverflow: true } : {}),
     };
-    // 1. 기존 JSONB 방식 저장 + 운영 현황 추적 컬럼 갱신
+    // 응답 원본(JSONB) 저장 + 운영 현황 추적 컬럼 갱신
     const [updated] = await tx
       .update(surveyResponses)
       .set({
@@ -420,7 +430,6 @@ export async function completeResponse(
                 isNull(surveyResponses.deletedAt),
               ),
             );
-          await replaceResponseAnswers(tx, responseId, existing.surveyId, validatedResponses);
         }
       } else {
         // 행이 없거나(삭제/존재 안 함) 종결 상태(screened_out 등)면 완료 처리를 거부한다.
@@ -440,13 +449,6 @@ export async function completeResponse(
           .update(surveyResponses)
           .set({ totalSeconds: activeSeconds })
           .where(eq(surveyResponses.id, responseId));
-      }
-
-      // 2. response_answers 정규화 저장 (replaceResponseAnswers — saveAdminEdit 과 공유)
-      // 빈 complete 도 확정된 맵으로 정규화한다 — JSONB 를 다시 쓰지 않은(바뀐 것 없는) 경우에도.
-      const normalizedSource = validatedResponses ?? storedFinalized;
-      if (normalizedSource && Object.keys(normalizedSource).length > 0) {
-        await replaceResponseAnswers(tx, responseId, updated.surveyId, normalizedSource);
       }
     }
 

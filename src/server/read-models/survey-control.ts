@@ -10,6 +10,8 @@ export interface SurveyControlFlags {
   testModeEnabled: boolean;
   testToken: string | null;
   currentVersionId: string | null;
+  /** 지금 테스트 버전(0141) — 테스트 응답의 재개 이관 목적지. 없으면 배포본. */
+  testVersionId: string | null;
 }
 
 /** 운영 제어 플래그 조회 — 스냅샷 밖 라이브 컬럼이므로 항상 surveys 행에서 읽는다. */
@@ -22,6 +24,7 @@ export async function getSurveyControlFlags(surveyId: string): Promise<SurveyCon
       testModeEnabled: true,
       testToken: true,
       currentVersionId: true,
+      testVersionId: true,
     },
   });
   return row ?? null;

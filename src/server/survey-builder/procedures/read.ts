@@ -8,8 +8,6 @@ import {
   AllTagsOutput,
   ExportStringOutput,
   ResponseIdInput,
-  ResponsesWithAnswersInput,
-  ResponsesWithAnswersOutput,
   SlugAvailableInput,
   SlugAvailableOutput,
   SurveyIdInput,
@@ -125,15 +123,6 @@ const responseById = authed
     return responseSvc.getResponseById(input.responseId, input.surveyId);
   });
 
-/** 버전별 완료 응답 + response_answers 어댑터 변환. */
-const responsesWithAnswers = authed
-  .input(ResponsesWithAnswersInput)
-  .output(ResponsesWithAnswersOutput)
-  .handler(async ({ context, input }) => {
-    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'responses.view');
-    return responseSvc.getResponsesWithAnswers(input);
-  });
-
 /** 설문 버전 목록(projection). */
 const surveyVersions = authed
   .input(SurveyIdInput)
@@ -189,7 +178,6 @@ export const read = {
   responsesBySurvey,
   completedResponses,
   responseById,
-  responsesWithAnswers,
   surveyVersions,
   exportJson,
   exportCsv,

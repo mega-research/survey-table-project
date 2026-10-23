@@ -24,6 +24,7 @@ import type {
   QuestionData,
   SurveyEndRedirects,
   SurveyResponseHeaderConfig,
+  SurveyVersionFingerprints,
   SurveyVersionSnapshot,
 } from '@/shared/contracts/survey';
 import type {
@@ -155,6 +156,9 @@ export const surveys = pgTable(
     //    「발행된 적 있는가」는 이 컬럼이 아니라 currentVersionId 로 묻는다.
     status: text('status').notNull().default('draft'),
     currentVersionId: uuid('current_version_id'), // 현재 활성 배포 버전
+    // 지금 테스트 버전 (0141) — 테스트 링크·대상자·관리자 미리보기가 보는 저장본 스냅샷.
+    // survey_versions.status = 'test' 행. 저장본이 바뀌면 새 행을 가리킨다(server/survey-builder/services/test-version).
+    testVersionId: uuid('test_version_id'),
 
     // soft delete
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -544,12 +548,16 @@ export const surveyVersions = pgTable(
       .references(() => surveys.id, { onDelete: 'cascade' }),
 
     versionNumber: integer('version_number').notNull(),
-    // 'published' | 'superseded'. 'closed' 는 여기서도 **미구현 어휘**다(쓰는 경로 없음).
+    // 'published' | 'superseded' | 'test'. 'closed' 는 여기서도 **미구현 어휘**다(쓰는 경로 없음).
+    // 'test' 는 테스트 버전(0141) — version_number 가 음수이고 배포 목록·번호·정리에서 뺀다.
     status: text('status').notNull().default('published'),
 
     // 배포 시점의 전체 설문 구조 (불변 — 수정 금지).
     // NULL = 버전 보존 정책으로 정리됨 (2026-07-31 spec). 읽는 쪽은 NULL 을 다뤄야 한다.
     snapshot: jsonb('snapshot').$type<SurveyVersionSnapshot>(),
+
+    // 테스트 버전 지문 { revision, questions, groups } (0141) — snapshot 을 비워도 남긴다. 배포 버전은 NULL.
+    fingerprints: jsonb('fingerprints').$type<SurveyVersionFingerprints>(),
 
     changeNote: text('change_note'),
     publishedAt: timestamp('published_at', { withTimezone: true }).defaultNow().notNull(),
@@ -599,24 +607,39 @@ export const responseEditLogs = pgTable('response_edit_logs', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
-// 정규화된 응답 테이블
-export const responseAnswers = pgTable('response_answers', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  responseId: uuid('response_id')
-    .notNull()
-    .references(() => surveyResponses.id, { onDelete: 'cascade' }),
-  questionId: uuid('question_id').notNull(),
-
-  // 값 저장 (타입별 분리)
-  textValue: text('text_value'),
-  arrayValue: jsonb('array_value').$type<string[]>(),
-  objectValue: jsonb('object_value').$type<Record<string, unknown>>(),
-
-  // 역정규화 (빠른 필터링)
-  questionType: text('question_type').notNull(),
-
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
+// 이관 이력 — 배포 응답 하나가 버전을 옮겨 갈 때마다 한 줄 (CONTEXT.md 「이관 이력」, 0142).
+// 응답자 재개 이관·관리자 수정 이관이 이관과 같은 트랜잭션에서 쓴다. 실응답만 남긴다.
+// 답 두 벌은 암호문을 표식으로 바꾼 사본이다(withoutEncryptedAnswers) — 파기 스윕 대상이 아니다.
+// 가리키는 버전의 스냅샷은 정리하지 않는다(version-retention).
+export const responseMigrationHistory = pgTable(
+  'response_migration_history',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    responseId: uuid('response_id')
+      .notNull()
+      .references(() => surveyResponses.id, { onDelete: 'cascade' }),
+    surveyId: uuid('survey_id')
+      .notNull()
+      .references(() => surveys.id, { onDelete: 'cascade' }),
+    fromVersionId: uuid('from_version_id').references(() => surveyVersions.id, {
+      onDelete: 'set null',
+    }),
+    // 옛 관리자 수정 백업(adminEditRollback)에서 옮긴 줄은 옮겨 간 버전을 모른다 — NULL.
+    toVersionId: uuid('to_version_id').references(() => surveyVersions.id, {
+      onDelete: 'set null',
+    }),
+    answersBefore: jsonb('answers_before').$type<Record<string, unknown>>().notNull(),
+    // 옮긴 직후의 답. 옛 백업에서 옮긴 줄은 NULL.
+    answersAfter: jsonb('answers_after').$type<Record<string, unknown>>(),
+    actor: text('actor').$type<'respondent' | 'admin'>().notNull(),
+    editedBy: text('edited_by'),
+    editorEmail: text('editor_email'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    check('response_migration_history_actor_check', sql`${table.actor} in ('respondent', 'admin')`),
+  ],
+);
 
 // 질문 보관함 테이블
 export const savedQuestions = pgTable('saved_questions', {
@@ -726,7 +749,7 @@ export const questionGroupsRelations = relations(questionGroups, ({ one, many })
   questions: many(questions),
 }));
 
-export const surveyResponsesRelations = relations(surveyResponses, ({ one, many }) => ({
+export const surveyResponsesRelations = relations(surveyResponses, ({ one }) => ({
   survey: one(surveys, {
     fields: [surveyResponses.surveyId],
     references: [surveys.id],
@@ -735,7 +758,6 @@ export const surveyResponsesRelations = relations(surveyResponses, ({ one, many 
     fields: [surveyResponses.versionId],
     references: [surveyVersions.id],
   }),
-  answers: many(responseAnswers),
 }));
 
 export const surveyVersionsRelations = relations(surveyVersions, ({ one, many }) => ({
@@ -744,13 +766,6 @@ export const surveyVersionsRelations = relations(surveyVersions, ({ one, many })
     references: [surveys.id],
   }),
   responses: many(surveyResponses),
-}));
-
-export const responseAnswersRelations = relations(responseAnswers, ({ one }) => ({
-  response: one(surveyResponses, {
-    fields: [responseAnswers.responseId],
-    references: [surveyResponses.id],
-  }),
 }));
 
 // ========================
@@ -782,8 +797,6 @@ export type NewQuestionCategory = typeof questionCategories.$inferInsert;
 export type SurveyVersion = typeof surveyVersions.$inferSelect;
 export type NewSurveyVersion = typeof surveyVersions.$inferInsert;
 
-export type ResponseAnswer = typeof responseAnswers.$inferSelect;
-export type NewResponseAnswer = typeof responseAnswers.$inferInsert;
 
 export type ResponseEditLog = typeof responseEditLogs.$inferSelect;
 export type NewResponseEditLog = typeof responseEditLogs.$inferInsert;

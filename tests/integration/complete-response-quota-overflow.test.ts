@@ -81,10 +81,6 @@ vi.mock('@/db', () => {
   return { db };
 });
 
-vi.mock('@/server/survey-response/services/response-answers', () => ({
-  replaceResponseAnswers: vi.fn(() => Promise.resolve(undefined)),
-}));
-
 vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }));
@@ -206,13 +202,13 @@ describe('completeResponse — soft quota 초과 플래그', () => {
   });
 
   it('metadata 는 통짜 객체 대입이 아니라 기존 값 보존 병합으로 반영한다 (whole-branch 리뷰 I-1)', async () => {
-    // in_progress 재진입 완료 시나리오 — 관리자 수정이 남긴 adminEditRollback/
+    // in_progress 재진입 완료 시나리오 — 관리자 수정이 남긴
     // migratedFromVersionId, draftSeq 등 기존 metadata 키가 이 UPDATE 에 지워지면 안 된다.
     // 이 테스트는 mock db 라 실제 jsonb 컬럼 병합 결과까지는 검증할 수 없으므로,
     // 대신 UPDATE set 이 plain object 리터럴이 아니라 COALESCE(metadata, ...) || 새키
     // 형태의 raw sql 조각(드리즐 SQL 객체 = queryChunks 보유)인지로 병합 의도를 검증한다 —
     // plain object 대입이었다면 이 조각은 기존 컬럼값을 전혀 참조하지 않아 DB 레벨에서
-    // adminEditRollback 등 기존 키가 통째로 사라진다.
+    // migratedFromVersionId 등 기존 키가 통째로 사라진다.
     queueSelects([{ [GATE_QID]: '남' }, { [GATE_QID]: '남' }]);
 
     const { completeResponse } =

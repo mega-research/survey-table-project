@@ -396,11 +396,6 @@ describe('remapResponseValue', () => {
     });
   });
 
-  it('response_answers 의 __array 컨테이너도 동일하게 치환한다', () => {
-    const result = remapResponseValue({ __array: ['옵션1', { rank: 1, optionValue: '10' }] }, questionSpec);
-    expect(result).toEqual({ value: { __array: ['1', { rank: 1, optionValue: '9' }] }, count: 2 });
-  });
-
   it('기타 옵션 객체 응답의 selectedValue 를 치환한다', () => {
     const result = remapResponseValue(
       { selectedValue: '옵션1', otherValue: '직접입력', hasOther: true },

@@ -1,6 +1,6 @@
 /**
- * 보존 규칙 SQL 실DB 검증 (2026-07-31 spec 10 + ADR-0014 이관 출처 보호).
- * 규칙: keep = 현재 발행본 OR 살아있는 비테스트 응답 보유 OR 이관 출처로 참조됨
+ * 보존 규칙 SQL 실DB 검증 (2026-07-31 spec 10 + ADR-0014 이관 출처 보호 + 2026-10-23 휴지통·이관 이력).
+ * 규칙: keep = 현재 발행본 OR 비테스트 응답 보유(휴지통 포함) OR 이관 출처로 참조됨 OR 이관 이력이 가리킴
  *
  * 실행: pnpm test:integration (로컬 supabase 54322 + 0070 마이그레이션 적용 필요)
  */
@@ -8,7 +8,7 @@ import { eq } from 'drizzle-orm';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
-import { surveyResponses, surveys, surveyVersions } from '@/db/schema';
+import { responseMigrationHistory, surveyResponses, surveys, surveyVersions } from '@/db/schema';
 import { findPrunableVersionIds } from '@/server/survey-builder/services/versioning/version-retention-sql';
 
 const isLocalDb =
@@ -26,7 +26,7 @@ describe.skipIf(!isLocalDb)('findPrunableVersionIds 실DB', () => {
     await db.delete(surveys).where(eq(surveys.id, surveyId));
   });
 
-  it('현재 발행본과 살아있는 비테스트 응답 보유 버전만 보존한다', async () => {
+  it('현재 발행본 · 비테스트 응답(휴지통 포함) · 이관 출처 · 이관 이력이 붙잡는 버전을 보존한다', async () => {
     await db.insert(surveys).values({
       id: surveyId,
       title: '보존 규칙 실DB 테스트',
@@ -47,11 +47,16 @@ describe.skipIf(!isLocalDb)('findPrunableVersionIds 실DB', () => {
     const vCurrent = await mkVersion(1, 'published');
     const vRealResponse = await mkVersion(2, 'superseded');
     const vTestOnly = await mkVersion(3, 'superseded');
-    const vNoResponse = await mkVersion(4, 'superseded');
+    const vTrashOnly = await mkVersion(4, 'superseded');
     // 재핀으로 version_id 참조를 잃었지만 이관 출처로 참조되는 버전 (ADR-0014)
     const vMigratedSource = await mkVersion(5, 'superseded');
-    // 이관 출처 참조가 soft-delete 응답뿐인 버전 — 보존 근거로 치지 않는다
+    // 이관 출처 참조가 휴지통 응답뿐인 버전 — 되살릴 수 있으므로 보존한다
     const vMigratedDeleted = await mkVersion(6, 'superseded');
+    // 이관 이력이 옮기기 전·후로 가리키는 버전
+    const vHistoryFrom = await mkVersion(7, 'superseded');
+    const vHistoryTo = await mkVersion(8, 'superseded');
+    // 아무것도 붙잡지 않는 버전
+    const vNothing = await mkVersion(9, 'superseded');
 
     await db.update(surveys).set({ currentVersionId: vCurrent }).where(eq(surveys.id, surveyId));
 
@@ -60,10 +65,10 @@ describe.skipIf(!isLocalDb)('findPrunableVersionIds 실DB', () => {
       { surveyId, versionId: vRealResponse, questionResponses: {}, isTest: false },
       // 테스트 응답 — 보존 근거로 치지 않는다
       { surveyId, versionId: vTestOnly, questionResponses: {}, isTest: true },
-      // soft-delete 된 비테스트 응답 — 보존 근거로 치지 않는다
+      // 휴지통에 있는 비테스트 응답 — 되살릴 수 있으므로 보존 근거가 된다
       {
         surveyId,
-        versionId: vNoResponse,
+        versionId: vTrashOnly,
         questionResponses: {},
         isTest: false,
         deletedAt: new Date(),
@@ -76,7 +81,7 @@ describe.skipIf(!isLocalDb)('findPrunableVersionIds 실DB', () => {
         isTest: false,
         metadata: { migratedFromVersionId: vMigratedSource },
       },
-      // 이관 출처 참조가 있지만 soft-delete 된 응답 — 보존 근거로 치지 않는다
+      // 이관 출처 참조가 있는 휴지통 응답 — 보존 근거가 된다
       {
         surveyId,
         versionId: vCurrent,
@@ -87,12 +92,35 @@ describe.skipIf(!isLocalDb)('findPrunableVersionIds 실DB', () => {
       },
     ]);
 
+    const [historyOwner] = await db
+      .insert(surveyResponses)
+      .values({ surveyId, versionId: vCurrent, questionResponses: {}, isTest: false })
+      .returning({ id: surveyResponses.id });
+    if (!historyOwner) throw new Error('응답 생성 실패');
+    await db.insert(responseMigrationHistory).values({
+      responseId: historyOwner.id,
+      surveyId,
+      fromVersionId: vHistoryFrom,
+      toVersionId: vHistoryTo,
+      answersBefore: {},
+      answersAfter: {},
+      actor: 'respondent',
+    });
+
     const prunable = await findPrunableVersionIds(db, { surveyId });
 
-    expect(prunable.sort()).toEqual([vTestOnly, vNoResponse, vMigratedDeleted].sort());
-    expect(prunable).not.toContain(vCurrent);
-    expect(prunable).not.toContain(vRealResponse);
-    // 이관 출처로 참조되는 버전은 versionId 참조가 없어도 보존한다
-    expect(prunable).not.toContain(vMigratedSource);
+    // 테스트 응답만 있는 버전과 아무것도 붙잡지 않는 버전만 정리 대상이다
+    expect(prunable.sort()).toEqual([vTestOnly, vNothing].sort());
+    for (const kept of [
+      vCurrent,
+      vRealResponse,
+      vTrashOnly,
+      vMigratedSource,
+      vMigratedDeleted,
+      vHistoryFrom,
+      vHistoryTo,
+    ]) {
+      expect(prunable).not.toContain(kept);
+    }
   });
 });

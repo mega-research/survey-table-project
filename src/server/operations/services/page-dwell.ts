@@ -3,7 +3,7 @@ import 'server-only';
 import { sql } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { loadCurrentVersionSnapshot } from '@/server/read-models/version-snapshot';
+import { loadPinnedVersionSnapshot } from '@/server/read-models/version-snapshot';
 
 import {
   buildCanonicalSteps,
@@ -23,7 +23,7 @@ const TRIM = 0.025;
  * 단일 설문의 페이지별 체류시간 분포를 반환한다 (서버 전용).
  *
  * 처리 단계:
- *   A) surveys.currentVersionId → surveyVersions.snapshot 로드 + 캐노니컬 step 빌드.
+ *   A) 이 파티션이 보는 버전(실 = currentVersionId, 테스트 = testVersionId) 스냅샷 로드 + 캐노니컬 step 빌드.
  *   B) SQL window function 으로 stepId 별 trimmed 통계 직접 산출.
  *      - LATERAL jsonb_array_elements 로 pageVisits 펼침.
  *      - leftAt > enteredAt 필터로 미완료/잘못된 visit 제외.
@@ -45,7 +45,7 @@ export async function getPageDwell(
 ): Promise<DwellOutput> {
   const isTest = testFlagForScope(scope);
   // ── A) snapshot 로드 + 캐노니컬 step ─────────────────────────────────────
-  const snapshot = await loadCurrentVersionSnapshot(surveyId);
+  const snapshot = await loadPinnedVersionSnapshot(surveyId, isTest);
   if (!snapshot) return EMPTY_OUTPUT;
 
   const steps = buildCanonicalSteps(snapshot);

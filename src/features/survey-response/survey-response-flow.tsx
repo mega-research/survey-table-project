@@ -1815,7 +1815,12 @@ function SurveyResponseFlowActive({
   const hasResponses = Object.keys(responses).length > 0;
   // popstate 시점의 최신 stepHistory/handlePrevious 를 읽는다 — deps 에 넣으면 stepHistory/steps
   // 변경마다 리스너가 재등록되고 pushState 가드가 재평가되므로 effect event 로 분리한다.
-  const onPopState = useEffectEvent(() => {
+  const onPopState = useEffectEvent((event: PopStateEvent) => {
+    // 지금 페이지의 칸으로 돌아온 뒤로 가기는 페이지 위에 쌓인 칸(이미지 크게 보기)을 걷은 것이다 —
+    // 페이지를 넘기지 않는다. 이 effect 는 같은 스텝 칸을 이어 쌓지 않으므로 페이지 이동에서는
+    // 돌아온 칸의 스텝이 늘 지금과 다르다.
+    const state = event.state as { stepIndex?: number } | null;
+    if (state?.stepIndex === currentStepIndex) return;
     if (stepHistory.length > 0) {
       handlePrevious();
     }
@@ -1831,7 +1836,7 @@ function SurveyResponseFlowActive({
       window.history.pushState({ stepIndex: currentStepIndex }, '');
     }
 
-    const handlePopState = () => onPopState();
+    const handlePopState = (event: PopStateEvent) => onPopState(event);
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);

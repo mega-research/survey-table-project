@@ -5,6 +5,7 @@ import { and, asc, count, eq, inArray, notExists, sql, type SQL } from 'drizzle-
 import { db } from '@/db';
 import { contactTargets, surveyResponses, surveyVersions } from '@/db/schema';
 import { completedResponse, notDeletedResponse } from '@/server/response-filters';
+import { loadRespondentContactAttrsMany } from '@/server/read-models/respondent-contact-attrs';
 import { getQuestionGroupsBySurvey } from '@/server/read-models/survey-structure';
 import {
   loadChangeConfirmQuestionIds,
@@ -20,11 +21,12 @@ import {
   testFlagForScope,
   type OperationsDataScope,
 } from '@/server/data-scope';
+import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 import type { Question } from '@/types/survey';
 
+import { type AnswerableScopeMaterial, scopeMaterialFromSnapshot } from '@/lib/survey/answerable-scope';
 import { buildQuestionMetaMap, buildStepLabelMap } from '@/lib/analytics/raw-export-helpers';
 import {
-  type ExportStripContext,
   buildContactValues,
   buildNonRespondentRow,
   mergePriorAnswersIntoResponses,
@@ -247,13 +249,18 @@ function hasResidualCiphertext(answers: Record<string, unknown>): boolean {
 }
 
 /**
- * strip 대상 행별 평가 재료 — **그 응답이 수집된 버전**의 스냅샷 + 컨택 attrs.
+ * strip 대상 행별 범위 재료 — **그 응답이 수집된 버전**의 스냅샷 + 응답 화면과 같은 명단 값.
  * 최신 버전으로 판정하면 나중에 좁아진 조건이 이미 수집된 답을 소급해 지운다
  * (어드민 수정이 `migrating` 을 제외하는 것과 같은 이유). 스냅샷이 prune 됐거나
- * questions 가 배열이 아니면 그 행은 컨텍스트를 안 만들어 원본 그대로 내보낸다.
- * 대상이 없으면 버전 조회 자체를 하지 않는다.
+ * questions 가 배열이 아니면 그 행은 재료를 안 만들어 원본 그대로 내보낸다.
+ * 대상이 없으면 버전·명단 조회 자체를 하지 않는다.
  *
- * **attrs 는 응답 시점이 아니라 현재 값이다 — 알고 받아들인 한계다(2026-09-09 결정).**
+ * 명단 값은 응답 확정과 같은 `loadRespondentContactAttrs` 규칙의 일괄판이다 — attrs 위에 개인정보 열의
+ * 복호화 값을 응답 화면 서식으로 얹는다. attrs 만 쓰면 개인정보 열을 읽는 조건이 「없는 열」로 보이는
+ * 쪽으로 풀려 화면에서 숨은 문항의 값이 파일에 실린다. 복호화한 값은 판정에만 쓰고 파일에 싣지 않는다
+ * (명단 열 출력은 별도 `loadContactValues`).
+ *
+ * **명단 값은 응답 시점이 아니라 현재 값이다 — 알고 받아들인 한계다(2026-09-09 결정).**
  * `contact_targets.attrs` 는 현재 값 한 벌뿐이고 이력이 없어 응답 시점 attrs 를 되살릴
  * 방법이 없다. 그래서 명단을 재업로드해 attrs 가 바뀌면, 응답 당시에는 보였던 문항의 답이
  * 지금 기준으로는 숨은 것이 되어 내보내기에서 빠질 수 있다.
@@ -264,42 +271,31 @@ function hasResidualCiphertext(answers: Record<string, unknown>): boolean {
  * attrs 조건이 걸린 문항을 통째로 제외하는 안은 검토 후 미채택 — 이 설문 형식에서는
  * 이월 판정 문항 대부분이 attrs 조건이라 걸러내기 자체가 무력해진다.
  */
-async function loadStripContexts(
+async function loadScopeMaterials(
   candidates: readonly StripCandidate[],
-  contactMap: ReadonlyMap<string, ContactRef>,
-): Promise<Map<string, ExportStripContext>> {
-  const out = new Map<string, ExportStripContext>();
+): Promise<Map<string, AnswerableScopeMaterial>> {
+  const out = new Map<string, AnswerableScopeMaterial>();
   if (candidates.length === 0) return out;
 
   const versionIds = [...new Set(candidates.map((r) => r.versionId as string))];
-  const versionRows = await db.query.surveyVersions.findMany({
-    where: inArray(surveyVersions.id, versionIds),
-    columns: { id: true, snapshot: true },
-  });
-  const snapshotById = new Map(versionRows.map((v) => [v.id, v.snapshot]));
+  const contactIds = [
+    ...new Set(candidates.map((r) => r.contactTargetId).filter((v): v is string => !!v)),
+  ];
+  const [versionRows, attrsByContact] = await Promise.all([
+    db.query.surveyVersions.findMany({
+      where: inArray(surveyVersions.id, versionIds),
+      columns: { id: true, snapshot: true },
+    }),
+    loadRespondentContactAttrsMany(contactIds),
+  ]);
+  const snapshotById = new Map(
+    versionRows.map((v) => [v.id, v.snapshot as SurveyVersionSnapshot | null]),
+  );
 
   for (const r of candidates) {
-    const snap = snapshotById.get(r.versionId as string) as
-      | { questions?: unknown; groups?: unknown; lookups?: unknown; settings?: unknown }
-      | null
-      | undefined;
-    if (!snap || !Array.isArray(snap.questions)) continue;
-    const attrs = r.contactTargetId ? contactMap.get(r.contactTargetId)?.attrs : undefined;
-    out.set(r.id, {
-      questions: snap.questions as ExportStripContext['questions'],
-      groups: Array.isArray(snap.groups)
-        ? (snap.groups as ExportStripContext['groups'])
-        : undefined,
-      lookups: Array.isArray(snap.lookups)
-        ? (snap.lookups as ExportStripContext['lookups'])
-        : undefined,
-      contactAttrs: attrs,
-      // 문항 섞기 여부 — 켜진 버전은 경로 밖 strip 을 건너뛴다.
-      settings:
-        snap.settings && typeof snap.settings === 'object'
-          ? (snap.settings as ExportStripContext['settings'])
-          : undefined,
-    });
+    const contactAttrs = r.contactTargetId ? (attrsByContact.get(r.contactTargetId) ?? {}) : {};
+    const material = scopeMaterialFromSnapshot(snapshotById.get(r.versionId as string), contactAttrs);
+    if (material) out.set(r.id, material);
   }
   return out;
 }
@@ -344,11 +340,8 @@ export async function loadRawExportRows(
   const contactColumns = options.contactColumns ?? [];
   const withContactColumns = contactColumns.length > 0;
 
-  // 숨은 문항 판정은 attrs 를 보는 조건(`attr` 피연산자)을 풀어야 한다 — attrs 없이 판정하면
-  // 그 조건이 통째로 뒤집혀 멀쩡한 답이 지워진다. 그래서 명단 열이 꺼져 있어도 strip 대상에
-  // 컨택이 붙어 있으면 attrs 를 읽는다. 대상이 없으면 쿼리는 도입 전과 같다.
-  // 복호화를 먼저 한다 — strip 후보 판정이 "복호화가 안 풀린 값이 남았는가"를 봐야 하고,
-  // 그 판정이 attrs 를 읽을지(withAttrs) 를 정하기 때문이다. 복호화는 컨택과 무관하다.
+  // 복호화를 먼저 한다 — strip 후보 판정이 "복호화가 안 풀린 값이 남았는가"를 봐야 한다.
+  // 판정용 명단 값(개인정보 열 포함)은 후보의 조사 대상만 loadScopeMaterials 가 따로 읽는다.
   const decryptedById = new Map<string, Record<string, unknown>>(
     rawResponses.map((r) => [
       r.id,
@@ -360,7 +353,6 @@ export async function loadRawExportRows(
   const candidates = stripCandidates(rawResponses).filter(
     (r) => !hasResidualCiphertext(decryptedById.get(r.id) ?? {}),
   );
-  const withAttrs = withContactColumns || candidates.some((r) => r.contactTargetId !== null);
 
   const contactIds = rawResponses
     .map((r) => r.contactTargetId)
@@ -368,7 +360,7 @@ export async function loadRawExportRows(
   const contactMap = new Map<string, ContactRef>();
   if (contactIds.length > 0) {
     const targets = await fetchContactRefs(inArray(contactTargets.id, contactIds), {
-      withAttrs,
+      withAttrs: withContactColumns,
       orderByResid: false,
     });
     for (const t of targets) contactMap.set(t.id, t);
@@ -388,7 +380,7 @@ export async function loadRawExportRows(
     ? await loadContactValues([...contactMap.values(), ...nonRespondents], contactColumns)
     : null;
 
-  const stripContexts = await loadStripContexts(candidates, contactMap);
+  const scopeMaterials = await loadScopeMaterials(candidates);
 
   const responseRows: RawExportResponseRow[] = rawResponses.map((r) => {
     const c = r.contactTargetId ? contactMap.get(r.contactTargetId) : undefined;
@@ -412,7 +404,7 @@ export async function loadRawExportRows(
   });
 
   // 숨은 문항 값은 내보내는 값에서만 뺀다 — DB 는 건드리지 않는다.
-  const strippedRows = stripHiddenFromExportRows(responseRows, stripContexts);
+  const strippedRows = stripHiddenFromExportRows(responseRows, scopeMaterials);
 
   // 이월 응답 합치기 — 숨은 문항 strip **뒤**다. 이월값은 이번 조사표의 조건과 무관하게
   // 싣기로 했으므로(다이얼로그 설명 참조) strip 이 이월값을 보면 안 된다.

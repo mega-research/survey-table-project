@@ -9,6 +9,7 @@ import {
   surveyVersions,
   surveys,
 } from '@/db/schema';
+import { logger } from '@/lib/logger';
 import { normalizeQuestions } from '@/lib/question';
 import { buildQuotaGate } from '@/lib/quota/quota-gate-build';
 import { getR2PublicUrl } from '@/lib/r2-env';
@@ -57,6 +58,7 @@ import type {
   SurveyIdRow,
   SurveyListResult,
 } from '../domain/survey-read';
+import { ensureTestVersion } from '@/server/workflows/test-version';
 
 // 이 service 는 actions/query-actions 의 requireAuth 를 제거한다.
 // 관리(빌더) 경로는 procedure 의 authed 미들웨어가 인증을 대체하고,
@@ -293,7 +295,11 @@ export async function buildDocumentView(
 // 응답 페이지용 설문 조회 (배포 버전 스냅샷 우선, fallback 기존 방식)
 export async function getSurveyForResponse(
   input: SurveyForResponseInput,
-  options: { requirePublished?: boolean } = {},
+  options: {
+    requirePublished?: boolean;
+    /** 관리자 미리보기 — 테스트 세션이 아니어도 저장본(테스트 버전)을 본다. */
+    useTestVersion?: boolean;
+  } = {},
 ): Promise<SurveyForResponseResult> {
   const { surveyId } = input;
   const survey = await getSurveyById(surveyId);
@@ -357,97 +363,108 @@ export async function getSurveyForResponse(
     endRedirects: survey.endRedirects ?? null,
   };
 
-  // 배포된 버전이 있으면 스냅샷 기반으로 반환
-  if (survey.currentVersionId) {
-    const version = await db.query.surveyVersions.findFirst({
-      where: eq(surveyVersions.id, survey.currentVersionId),
+  // 테스트 세션과 관리자 미리보기는 저장본으로 만든 테스트 버전을 본다(CONTEXT.md 「테스트 버전」).
+  // 실응답 · 공개 미리보기 · 무효 테스트 토큰은 배포본이다. 테스트 버전을 못 만들면 막지 않고
+  // 배포본으로 떨어진다.
+  let version: { id: string; snapshot: unknown } | null = null;
+  if (options.useTestVersion || testSession === 'valid') {
+    const test = await ensureTestVersion(surveyId).catch((err: unknown) => {
+      logger.warn({ err, surveyId }, '[test-version] 테스트 버전을 만들지 못해 배포본으로 보인다');
+      return null;
     });
-
-    if (version && version.snapshot) {
-      const snapshot = version.snapshot as {
-        title: string;
-        description?: string;
-        questions: QuestionType[];
-        groups: QuestionGroup[];
-        settings: {
-          isPublic: boolean;
-          allowMultipleResponses: boolean;
-          showProgressBar: boolean;
-          shuffleQuestions: boolean;
-          requireLogin: boolean;
-          endDate?: string;
-          maxResponses?: number;
-          thankYouMessage: string;
-          // 자격미달 종료 문구 — freeze 값. 이 필드 도입 이전 발행본은 undefined = 완료 문구 폴백(현재 행으로 덮지 않는다).
-          screenedOutMessage?: string | null;
-          // publish 시점 freeze 값. 이전 publish 본은 undefined → 현재 surveys 행으로 fallback.
-          requireInviteToken?: boolean;
-          forceWideLayout?: boolean;
-          responseHeader?: SurveyType['settings']['responseHeader'];
-        };
-        // T17 이후 snapshot 에 포함. 이전 publish 본은 undefined → DB 의 현재 lookups 로 fallback.
-        lookups?: SurveyType['lookups'];
-        // 발행 시점에 얼린 영역 앵커. 이 필드 도입 이전 발행본은 undefined = 앵커 없음.
-        anchors?: SurveyAnchorSnapshot[];
+    if (test) version = { id: test.versionId, snapshot: test.snapshot };
+  }
+  // 배포된 버전이 있으면 스냅샷 기반으로 반환
+  if (!version && survey.currentVersionId) {
+    version =
+      (await db.query.surveyVersions.findFirst({
+        where: eq(surveyVersions.id, survey.currentVersionId),
+      })) ?? null;
+  }
+  if (version && version.snapshot) {
+    const snapshot = version.snapshot as {
+      title: string;
+      description?: string;
+      questions: QuestionType[];
+      groups: QuestionGroup[];
+      settings: {
+        isPublic: boolean;
+        allowMultipleResponses: boolean;
+        showProgressBar: boolean;
+        shuffleQuestions: boolean;
+        requireLogin: boolean;
+        endDate?: string;
+        maxResponses?: number;
+        thankYouMessage: string;
+        // 자격미달 종료 문구 — freeze 값. 이 필드 도입 이전 발행본은 undefined = 완료 문구 폴백(현재 행으로 덮지 않는다).
+        screenedOutMessage?: string | null;
+        // publish 시점 freeze 값. 이전 publish 본은 undefined → 현재 surveys 행으로 fallback.
+        requireInviteToken?: boolean;
+        forceWideLayout?: boolean;
+        responseHeader?: SurveyType['settings']['responseHeader'];
       };
+      // T17 이후 snapshot 에 포함. 이전 publish 본은 undefined → DB 의 현재 lookups 로 fallback.
+      lookups?: SurveyType['lookups'];
+      // 발행 시점에 얼린 영역 앵커. 이 필드 도입 이전 발행본은 undefined = 앵커 없음.
+      anchors?: SurveyAnchorSnapshot[];
+    };
 
-      // endDate 는 snapshot 에서 string 으로 보관되므로 spread 전에 분리해 Date 로 재구성한다
-      // (base spread 가 string endDate 를 끌고오면 string | Date 로 충돌).
-      const { endDate: snapshotEndDate, ...snapshotSettingsRest } = snapshot.settings;
-      const surveyData: SurveyType = {
-        id: survey.id,
-        title: snapshot.title,
-        ...(snapshot.description != null ? { description: snapshot.description } : {}),
-        ...(survey.slug != null ? { slug: survey.slug } : {}),
-        ...(survey.privateToken != null ? { privateToken: survey.privateToken } : {}),
-        groups: snapshot.groups,
-        // survey_versions 스냅샷 읽기 경계(공개 응답자 경로): 세대별 키셋이 다른 질문을
-        // 정규화(보존 모드)로 수렴 — 무변형 passthrough, 알 수 없는 형태만 관측 로그.
-        // 이후 table 셀 코드 복원 불변식은 동일하게 유지한다.
-        questions: normalizeQuestions(snapshot.questions).map((q) => {
-          if (q.type === 'table' && q.tableRowsData && q.tableColumns) {
-            return {
-              ...q,
-              tableRowsData: generateAllCellCodes(
-                q.questionCode,
-                q.title,
-                q.tableColumns,
-                q.tableRowsData,
-              ),
-            };
-          }
-          return q;
-        }),
-        settings: {
-          ...snapshotSettingsRest,
-          ...(snapshotEndDate ? { endDate: new Date(snapshotEndDate) } : {}),
-          // snapshot 기반 원칙: published 응답 페이지는 freeze 된 snapshot 값을 따른다.
-          // 빌더 draft 의 invite-token 토글이 live 응답 페이지에 새지 않도록 현재 surveys 행으로
-          // 덮어쓰지 않는다. snapshot 에 값이 없는 이전 publish 본만 현재 행으로 fallback.
-          requireInviteToken: snapshot.settings.requireInviteToken ?? survey.requireInviteToken,
-          // snapshot 기반 원칙 동일: freeze 값 우선, 없는 이전 publish 본만 현재 행으로 fallback.
-          forceWideLayout: snapshot.settings.forceWideLayout ?? survey.forceWideLayout,
-          // snapshot 기반 원칙 동일: published 응답 페이지는 freeze 된 snapshot 값을 따른다.
-          // 값이 없는 이전 publish 본은 현재 surveys 행이 아니라 새 기본형으로 fallback.
-          responseHeader: normalizeResponseHeaderConfig(snapshot.settings.responseHeader),
-        },
-        lookups: snapshot.lookups ?? survey.lookups ?? [],
-        ...(survey.contactColumns != null ? { contactColumns: survey.contactColumns } : {}),
-        quotaGate: buildQuotaGate(survey.quotaConfig),
-        // 문의 이메일만 스냅샷 원칙 밖이다(티켓 20) — 미설정이면 **현재** 소유자로 해석한다.
-        // 스냅샷에 굳히면 소유권 이전이 응답 화면에 영영 반영되지 않고, 설정값이 있으면
-        // 그것이 답이라 조회 자체를 하지 않는다(지연 평가).
-        contactEmail: survey.contactEmail ?? (await getSurveyOwnerEmail(surveyId)),
-        createdAt: survey.createdAt,
-        updatedAt: survey.updatedAt,
-      };
+    // endDate 는 snapshot 에서 string 으로 보관되므로 spread 전에 분리해 Date 로 재구성한다
+    // (base spread 가 string endDate 를 끌고오면 string | Date 로 충돌).
+    const { endDate: snapshotEndDate, ...snapshotSettingsRest } = snapshot.settings;
+    const surveyData: SurveyType = {
+      id: survey.id,
+      title: snapshot.title,
+      ...(snapshot.description != null ? { description: snapshot.description } : {}),
+      ...(survey.slug != null ? { slug: survey.slug } : {}),
+      ...(survey.privateToken != null ? { privateToken: survey.privateToken } : {}),
+      groups: snapshot.groups,
+      // survey_versions 스냅샷 읽기 경계(공개 응답자 경로): 세대별 키셋이 다른 질문을
+      // 정규화(보존 모드)로 수렴 — 무변형 passthrough, 알 수 없는 형태만 관측 로그.
+      // 이후 table 셀 코드 복원 불변식은 동일하게 유지한다.
+      questions: normalizeQuestions(snapshot.questions).map((q) => {
+        if (q.type === 'table' && q.tableRowsData && q.tableColumns) {
+          return {
+            ...q,
+            tableRowsData: generateAllCellCodes(
+              q.questionCode,
+              q.title,
+              q.tableColumns,
+              q.tableRowsData,
+            ),
+          };
+        }
+        return q;
+      }),
+      settings: {
+        ...snapshotSettingsRest,
+        ...(snapshotEndDate ? { endDate: new Date(snapshotEndDate) } : {}),
+        // snapshot 기반 원칙: published 응답 페이지는 freeze 된 snapshot 값을 따른다.
+        // 빌더 draft 의 invite-token 토글이 live 응답 페이지에 새지 않도록 현재 surveys 행으로
+        // 덮어쓰지 않는다. snapshot 에 값이 없는 이전 publish 본만 현재 행으로 fallback.
+        requireInviteToken: snapshot.settings.requireInviteToken ?? survey.requireInviteToken,
+        // snapshot 기반 원칙 동일: freeze 값 우선, 없는 이전 publish 본만 현재 행으로 fallback.
+        forceWideLayout: snapshot.settings.forceWideLayout ?? survey.forceWideLayout,
+        // snapshot 기반 원칙 동일: published 응답 페이지는 freeze 된 snapshot 값을 따른다.
+        // 값이 없는 이전 publish 본은 현재 surveys 행이 아니라 새 기본형으로 fallback.
+        responseHeader: normalizeResponseHeaderConfig(snapshot.settings.responseHeader),
+      },
+      lookups: snapshot.lookups ?? survey.lookups ?? [],
+      ...(survey.contactColumns != null ? { contactColumns: survey.contactColumns } : {}),
+      quotaGate: buildQuotaGate(survey.quotaConfig),
+      // 문의 이메일만 스냅샷 원칙 밖이다(티켓 20) — 미설정이면 **현재** 소유자로 해석한다.
+      // 스냅샷에 굳히면 소유권 이전이 응답 화면에 영영 반영되지 않고, 설정값이 있으면
+      // 그것이 답이라 조회 자체를 하지 않는다(지연 평가).
+      contactEmail: survey.contactEmail ?? (await getSurveyOwnerEmail(surveyId)),
+      createdAt: survey.createdAt,
+      updatedAt: survey.updatedAt,
+    };
 
-      // 앵커는 얼린 값만 쓴다 — 라이브 앵커를 옮겨도 진행 중인 응답의 페이지 구성이
-      // 변하지 않는 것이 이 한 줄에 걸려 있다.
-      const documentView = await buildDocumentView(surveyId, snapshot.anchors ?? []);
+    // 앵커는 얼린 값만 쓴다 — 라이브 앵커를 옮겨도 진행 중인 응답의 페이지 구성이
+    // 변하지 않는 것이 이 한 줄에 걸려 있다.
+    const documentView = await buildDocumentView(surveyId, snapshot.anchors ?? []);
 
-      return { survey: surveyData, versionId: version.id, control, documentView };
-    }
+    return { survey: surveyData, versionId: version.id, control, documentView };
   }
 
   if (options.requirePublished) return null;

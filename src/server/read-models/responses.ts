@@ -1,10 +1,10 @@
 import 'server-only';
 
-import { and, count, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { responseAnswers, surveyResponses, surveyVersions } from '@/db/schema';
-import { answersToQuestionResponses } from '@/lib/analytics/response-adapter';
+import { TEST_VERSION_STATUS } from '@/shared/contracts/survey';
+import { surveyResponses, surveyVersions } from '@/db/schema';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { notDeletedResponse, notTestResponse } from '@/server/response-filters';
 import { openResponseStatusValues } from '@/shared/contracts/survey-response';
@@ -95,46 +95,27 @@ export async function getResponseCountsGroupedBySurvey(surveyIds?: readonly stri
   return map;
 }
 
-// 버전별 완료된 응답 조회 (response_answers JOIN + 어댑터 변환)
-export async function getResponsesWithAnswers(
-  surveyId: string,
-  versionId?: string | null,
-) {
-  // 버전 필터 조건 구성
-  const conditions = [
-    eq(surveyResponses.surveyId, surveyId),
-    eq(surveyResponses.isCompleted, true),
-    notDeletedResponse,
-    notTestResponse,
-  ];
-
-  if (versionId) {
-    conditions.push(eq(surveyResponses.versionId, versionId));
-  }
-
+// 분석 모수 — 완료 실응답(휴지통 제외)을 응답 원본(question_responses)에서 복호화해 돌려준다.
+// 원본에는 루트 사이드카·지금 없는 문항의 키도 섞여 있지만 분석기는 문항 id 로만 값을 찾는다
+// (analyzer-extra-keys.test). 문항별 사본 response_answers 는 2026-10-23 에 걷어냈다.
+export async function getCompletedResponsesForAnalysis(surveyId: string) {
   const responses = await db.query.surveyResponses.findMany({
-    where: and(...conditions),
-    with: {
-      answers: true,
-    },
+    where: and(
+      eq(surveyResponses.surveyId, surveyId),
+      eq(surveyResponses.isCompleted, true),
+      notDeletedResponse,
+      notTestResponse,
+    ),
     orderBy: [desc(surveyResponses.completedAt)],
   });
 
-  // response_answers가 있으면 어댑터로 변환, 없으면 기존 JSONB 사용
-  return responses.map((r) => {
-    const answers = (r as typeof r & { answers?: typeof responseAnswers.$inferSelect[] }).answers;
-    const merged =
-      answers && answers.length > 0
-        ? { ...r, questionResponses: answersToQuestionResponses(answers) }
-        : r;
-    return {
-      ...merged,
-      questionResponses: decryptQuestionResponses(
-        (merged.questionResponses ?? {}) as Record<string, unknown>,
-        { responseId: r.id },
-      ),
-    };
-  });
+  return responses.map((r) => ({
+    ...r,
+    questionResponses: decryptQuestionResponses(
+      (r.questionResponses ?? {}) as Record<string, unknown>,
+      { responseId: r.id },
+    ),
+  }));
 }
 
 // 설문의 버전 목록 조회
@@ -143,6 +124,8 @@ export async function getSurveyVersions(surveyId: string) {
     where: and(
       eq(surveyVersions.surveyId, surveyId),
       isNull(surveyVersions.deletedAt),
+      // 테스트 버전(0141)은 배포 이력이 아니다 — 목록에 내지 않는다.
+      ne(surveyVersions.status, TEST_VERSION_STATUS),
     ),
     orderBy: [desc(surveyVersions.versionNumber)],
     columns: {

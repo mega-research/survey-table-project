@@ -300,11 +300,6 @@ const SURFACES: Record<string, SurfaceSpec> = {
     capability: 'responses.view',
     input: { surveyId: S, responseId: C },
   },
-  'surveyBuilder.read.responsesWithAnswers': {
-    gate: 'rpc',
-    capability: 'responses.view',
-    input: { surveyId: S },
-  },
   'surveyBuilder.read.surveyVersions': {
     gate: 'rpc',
     capability: 'survey.view',

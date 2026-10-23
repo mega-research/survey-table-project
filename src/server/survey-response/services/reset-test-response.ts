@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import 'server-only';
 
 import type { DbTransaction } from '@/db';
-import { responseAnswers, responseEditLogs, surveyResponses } from '@/db/schema';
+import { responseEditLogs, surveyResponses } from '@/db/schema';
 import type { PageVisit } from '@/shared/contracts/survey-response';
 
 /**
@@ -80,6 +80,5 @@ export async function resetTestResponseRow(
       sessionId: fields.sessionId,
     })
     .where(eq(surveyResponses.id, responseId));
-  await tx.delete(responseAnswers).where(eq(responseAnswers.responseId, responseId));
   await tx.delete(responseEditLogs).where(eq(responseEditLogs.responseId, responseId));
 }

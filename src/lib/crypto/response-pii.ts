@@ -25,6 +25,35 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** 이관 이력에 담지 않은 개인정보 자리의 표식 — 「값이 있었다」만 남긴다. */
+export const MIGRATION_HISTORY_PII_MARKER = '[개인정보 — 이력에 담지 않음]';
+
+/**
+ * 이관 이력에 담을 답 — 암호문을 표식으로 바꾼 사본. 깊이는 파기 스윕과 같다(최상위 값 + 표 칸).
+ * 이력은 사본이라 담아 두면 파기 경로가 하나 더 필요해지므로 처음부터 담지 않는다
+ * (CONTEXT.md 「이관 이력」).
+ */
+export function withoutEncryptedAnswers(
+  responses: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(responses)) {
+    if (isEncryptedAnswerValue(value)) {
+      out[key] = MIGRATION_HISTORY_PII_MARKER;
+    } else if (isPlainObject(value)) {
+      out[key] = Object.fromEntries(
+        Object.entries(value).map(([cellId, cellValue]) => [
+          cellId,
+          isEncryptedAnswerValue(cellValue) ? MIGRATION_HISTORY_PII_MARKER : cellValue,
+        ]),
+      );
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
 /**
  * 암호화 대상 — 질문 단위(값 전체) + 표 input 셀 단위(questionId → cellId 집합).
  * 스냅샷 ∪ 라이브 플래그 합집합으로 만들어진다 (response.service loadPiiTargets).

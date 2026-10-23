@@ -20,18 +20,11 @@ import 'dotenv/config';
 import { eq } from 'drizzle-orm';
 
 import { db } from '@/db';
-import {
-  questions,
-  responseAnswers,
-  surveyResponses,
-  surveyVersions,
-  surveys,
-} from '@/db/schema';
+import { surveyResponses, surveyVersions, surveys } from '@/db/schema';
 import type { PageVisit } from '@/shared/contracts/survey-response';
 import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 import { generateFakeSurveyResponse, truncateFakeResponses } from '@/lib/fake-data-generator';
 import { parseBrowser } from '@/lib/operations/parse-ua';
-import { normalizeToAnswers } from '@/server/survey-response/services/response-normalizer';
 import type { Survey as SurveyClientType } from '@/types/survey';
 
 // === 분포 상수 ===
@@ -197,13 +190,7 @@ async function main() {
     console.warn('⚠ snapshot has no groups or table questions — page_visits will be empty');
   }
 
-  // 2. response_answers 정규화에 필요한 질문 메타
-  const surveyQuestions = await db
-    .select({ id: questions.id, type: questions.type })
-    .from(questions)
-    .where(eq(questions.surveyId, surveyId));
-
-  // 3. fake-data-generator 가 기대하는 Survey 형태로 빌드
+  // 2. fake-data-generator 가 기대하는 Survey 형태로 빌드
   //    (snapshot 의 questions/groups 가 client 의 Question/QuestionGroup 과 호환됨 — branch-logic 입력 형태와 동일.)
   const surveyForGenerator = {
     id: survey.id,
@@ -216,7 +203,7 @@ async function main() {
     updatedAt: survey.updatedAt,
   } as unknown as SurveyClientType;
 
-  // 4. 30건 레코드 빌드
+  // 3. 30건 레코드 빌드
   type SeedRecord = typeof surveyResponses.$inferInsert & {
     questionResponses: Record<string, unknown>;
   };
@@ -293,55 +280,16 @@ async function main() {
     });
   }
 
-  // 5. INSERT
+  // 4. INSERT
   const toInsert = records.map(({ _status, ...rest }) => rest);
   const inserted = await db
     .insert(surveyResponses)
     .values(toInsert)
     .returning({ id: surveyResponses.id });
 
-  // 6. response_answers 정규화 (completed + drop 모두 포함)
-  // drop 응답도 적재해야 drop-funnel 어댑터가 lastQuestionId 를 올바르게 읽을 수 있다.
-  const orderedQuestionIds = (snapshot.questions as Array<{ id: string }>).map((q) => q.id);
-  const questionOrder = new Map(orderedQuestionIds.map((id, idx) => [id, idx]));
-
-  let normalizedRows = 0;
-  for (let i = 0; i < records.length; i++) {
-    const rec = records[i];
-    const ins = inserted[i];
-    if (!rec || !ins) continue;
-    const normalized = normalizeToAnswers(
-      ins.id,
-      rec.questionResponses,
-      surveyQuestions,
-    );
-    if (normalized.length === 0) continue;
-
-    // snapshot.questions 순서로 정렬 후 startedAt ~ lastActivityAt 사이에 균등 점진 배치.
-    // 이렇게 하면 drop 의 last created_at 이 마지막으로 답한 question 을 가리키게 된다.
-    normalized.sort((a, b) => {
-      const ai = questionOrder.get(a.questionId) ?? 999999;
-      const bi = questionOrder.get(b.questionId) ?? 999999;
-      return ai - bi;
-    });
-
-    const startMs = rec.startedAt!.getTime();
-    const endMs = rec.lastActivityAt!.getTime();
-    const span = (endMs - startMs) / Math.max(1, normalized.length);
-
-    const withTimestamps = normalized.map((ra, idx) => ({
-      ...ra,
-      createdAt: new Date(startMs + (idx + 1) * span),
-    }));
-
-    await db.insert(responseAnswers).values(withTimestamps);
-    normalizedRows += withTimestamps.length;
-  }
-
   console.log(`✓ inserted ${inserted.length} mock responses for survey ${surveyId}`);
   console.log(`  - completed: ${records.filter((r) => r._status === 'completed').length}`);
   console.log(`  - drop:      ${records.filter((r) => r._status === 'drop').length}`);
-  console.log(`  - response_answers rows: ${normalizedRows}`);
   console.log(`  - steps in snapshot: ${steps.length}`);
   process.exit(0);
 }

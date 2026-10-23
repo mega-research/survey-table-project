@@ -3,6 +3,8 @@ import 'server-only';
 
 import { db } from '@/db';
 import { surveyVersions } from '@/db/schema';
+import { logger } from '@/lib/logger';
+import { ensureTestVersion } from '@/server/workflows/test-version';
 
 /**
  * 응답이 묶인 버전의 스냅샷 상태 — 저장 거부의 원인을 가르고, 테스트 응답이면 안내로 접는다.
@@ -41,11 +43,39 @@ export class QuestionNotInResponseVersionError extends Error implements SentryCo
   }
 }
 
-/** 테스트 응답이 묶인 버전의 스냅샷이 재발행 정리로 비워졌다 — procedure 가 안내 코드로 접는다. */
+/**
+ * 테스트 응답이 묶인 버전의 스냅샷이 비워졌다 — 테스트 중 저장본이 바뀌어 새 테스트 버전이 생겼거나
+ * (CONTEXT.md 「테스트 버전」), 이 기능 이전 응답이 묶인 배포본이 재발행 정리로 비워졌다.
+ * procedure 가 안내 코드로 접고, 새로고침하면 재개 이관이 새 버전으로 옮겨 바뀐 곳부터 이어 간다.
+ */
 export class TestResponseVersionPrunedError extends Error {
   constructor() {
-    super('테스트 도중 설문이 다시 발행되었습니다. 새로고침 후 다시 시작해주세요.');
+    super('설문이 수정되었습니다. 새로고침하면 바뀐 곳부터 이어집니다.');
     this.name = 'TestResponseVersionPrunedError';
+  }
+}
+
+/**
+ * 테스트 응답을 저장하기 전에 테스트 버전을 지금 저장본에 맞춘다 — 빌더에서 저장만 해도 진행 중인 테스터의
+ * 다음 저장이 멈추게(배포했을 때와 같다, CONTEXT.md 「테스트 버전」). 저장본이 바뀌었으면 새 테스트 버전이
+ * 생기며 이 응답이 묶인 옛 테스트 버전의 스냅샷이 비워지고, 이어지는 소속 검증 · 빈 complete 확인이 그것을
+ * 안내(TestResponseVersionPrunedError)로 접는다. 저장본이 그대로면 쓰기 없이 끝난다.
+ * 실응답은 건너뛴다. 만들기에 실패하면 경고만 남기고 지금 테스트 버전으로 저장을 이어 간다 — 테스트
+ * 화면 진입(getSurveyForResponse)의 폴백과 같은 방향.
+ */
+export async function syncTestVersionBeforeWrite(row: {
+  id: string;
+  surveyId: string;
+  isTest: boolean;
+}): Promise<void> {
+  if (!row.isTest) return;
+  try {
+    await ensureTestVersion(row.surveyId);
+  } catch (err) {
+    logger.warn(
+      { err, surveyId: row.surveyId, responseId: row.id },
+      '[test-version] 테스트 응답 저장 전 테스트 버전을 맞추지 못했다 — 지금 테스트 버전으로 저장',
+    );
   }
 }
 

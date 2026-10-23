@@ -21,6 +21,34 @@ import type {
 import type { SurveyAnchorSnapshot } from './survey-document';
 
 // 버전 스냅샷 타입
+/** 테스트 버전 행의 `survey_versions.status` 값 (0141). 버전 목록 · 배포 번호 · 정리에서 뺀다. */
+export const TEST_VERSION_STATUS = 'test';
+
+/** 설문이 가리키는 두 버전 — 현재 배포본과 지금 테스트 버전(0141). */
+export interface VersionPins {
+  currentVersionId: string | null;
+  testVersionId: string | null;
+}
+
+/**
+ * 테스트 응답과 실응답이 각자 보는 버전 — 테스트 응답은 지금 테스트 버전(CONTEXT.md 「테스트 버전」,
+ * 아직 없으면 배포본), 실응답은 현재 배포본. 응답 생성 · 테스트 대상자 회차 · 재개 이관 · 관리자 응답
+ * 수정 · 응답자 명단 값 · 테스트 파티션 집계가 같은 규칙을 쓴다 — 테스트는 테스트 버전에만 있다.
+ */
+export function pinnedVersionId(pins: VersionPins, isTest: boolean): string | null {
+  return (isTest ? (pins.testVersionId ?? pins.currentVersionId) : pins.currentVersionId) ?? null;
+}
+
+/**
+ * 테스트 버전 지문 (`survey_versions.fingerprints`, 0141) — 스냅샷 전체 리비전과 문항·그룹 지문(순서 제외).
+ * 계산은 lib/survey/test-version-fingerprint. snapshot 을 비워도 남겨 다음 테스트 버전과 비교한다.
+ */
+export interface SurveyVersionFingerprints {
+  revision: string;
+  questions: Record<string, string>;
+  groups: Record<string, string>;
+}
+
 export interface SurveyVersionSnapshot {
   title: string;
   description?: string;

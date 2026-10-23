@@ -103,14 +103,6 @@ interface ResponseRow {
   question_responses: unknown;
 }
 
-interface AnswerRow {
-  id: string;
-  question_id: string;
-  text_value: string | null;
-  array_value: unknown;
-  object_value: unknown;
-}
-
 function toSource(row: QuestionRow): QuestionOptionSource {
   return {
     id: row.id,
@@ -484,48 +476,6 @@ async function main(): Promise<void> {
         updateJsonbColumn(tx, 'survey_responses', 'question_responses', id, value),
       );
 
-      // ── 7. 쓰기: response_answers ──
-      const targetQuestionIds = [...responseSpecs.keys()];
-      let answerRows: AnswerRow[] = [];
-      if (targetQuestionIds.length > 0) {
-        // survey_responses 와 동일하게 soft-delete 응답의 정규화 행도 포함한다.
-        answerRows = await tx<AnswerRow[]>`
-          select a.id, a.question_id, a.text_value, a.array_value, a.object_value
-          from response_answers a
-          join survey_responses r on r.id = a.response_id
-          where a.question_id in ${tx(targetQuestionIds)}
-        `;
-      }
-
-      const answerWrites: Array<{ id: string; column: string; value: unknown }> = [];
-      let answerValueCount = 0;
-      for (const answer of answerRows) {
-        const spec = responseSpecs.get(answer.question_id);
-        if (!spec) continue;
-
-        const text = remapResponseValue(answer.text_value, spec);
-        if (text.count > 0) {
-          answerWrites.push({ id: answer.id, column: 'text_value', value: text.value });
-          answerValueCount += text.count;
-        }
-        const array = remapResponseValue(answer.array_value, spec);
-        if (array.count > 0) {
-          answerWrites.push({ id: answer.id, column: 'array_value', value: array.value });
-          answerValueCount += array.count;
-        }
-        const object = remapResponseValue(answer.object_value, spec);
-        if (object.count > 0) {
-          answerWrites.push({ id: answer.id, column: 'object_value', value: object.value });
-          answerValueCount += object.count;
-        }
-      }
-      await inChunks(answerWrites, ({ id, column, value }) => {
-        if (column === 'text_value') {
-          return tx`update response_answers set text_value = ${value as string} where id = ${id}`;
-        }
-        return updateJsonbColumn(tx, 'response_answers', column, id, value);
-      });
-
       console.log('=== 4. 리매핑 대상 ===');
       console.log(`  questions 쓰기 대상: ${writtenQuestionIds.length}행`);
       console.log(`  표시조건 값 치환 (questions/행/열): ${questionConditionCount}건`);
@@ -537,9 +487,6 @@ async function main(): Promise<void> {
           `조건 ${snapshotConditionCount} / 게이팅 ${snapshotGatingCount} / 폴백 충돌 ${snapshotOptionConflictCount})`,
       );
       console.log(`  survey_responses: ${responseWrites.length}행 / 응답값 ${responseValueCount}건`);
-      console.log(
-        `  response_answers: ${answerWrites.length}컬럼 쓰기 / 값 ${answerValueCount}건 (스캔 ${answerRows.length}행)`,
-      );
       console.log('');
 
       console.log('=== 4-1. 스냅샷 value 폴백 매칭 상세 (옵션 id 가 현행과 다른 옛 세대 사본) ===');
@@ -622,22 +569,11 @@ async function main(): Promise<void> {
         `;
         for (const row of bad) typeProblems.push(`survey_responses.question_responses id=${row.id} typeof=${row.t}`);
       }
-      const answerIds = [...new Set(answerWrites.map((w) => w.id))];
-      if (answerIds.length > 0) {
-        const bad = await tx<{ id: string; col: string; t: string | null }[]>`
-          select id, 'array_value' as col, jsonb_typeof(array_value) as t from response_answers
-            where id in ${tx(answerIds)} and array_value is not null and jsonb_typeof(array_value) <> 'array'
-          union all
-          select id, 'object_value', jsonb_typeof(object_value) from response_answers
-            where id in ${tx(answerIds)} and object_value is not null and jsonb_typeof(object_value) <> 'object'
-        `;
-        for (const row of bad) typeProblems.push(`response_answers.${row.col} id=${row.id} typeof=${row.t}`);
-      }
       if (typeProblems.length === 0) {
         console.log(
           `  통과 — 쓰기 대상 전 컬럼이 기대 jsonb 타입 유지 (questions ${writtenQuestionIds.length}행 / ` +
             `question_groups ${groupWrites.length}행 / survey_versions ${versionWrites.length}행 / ` +
-            `survey_responses ${responseWrites.length}행 / response_answers ${answerIds.length}행)`,
+            `survey_responses ${responseWrites.length}행)`,
         );
       } else {
         failed = true;
@@ -728,7 +664,7 @@ async function main(): Promise<void> {
  */
 function updateJsonbColumn(
   tx: postgres.TransactionSql,
-  table: 'questions' | 'question_groups' | 'survey_versions' | 'survey_responses' | 'response_answers',
+  table: 'questions' | 'question_groups' | 'survey_versions' | 'survey_responses',
   column: string,
   id: string,
   value: unknown,

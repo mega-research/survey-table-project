@@ -25,7 +25,7 @@ import type { ListProfilesResult } from '@/server/operations/services/profiles';
 //
 // response-manage.service / response-edit.service 는 다음에 의존한다:
 //   - @/db  : drizzle client (query, update, delete, insert, transaction)
-//   - @/db/schema : surveyResponses, contactTargets, surveys, responseAnswers, questions
+//   - @/db/schema : surveyResponses, contactTargets, surveys, questions
 //   - next/cache : revalidatePath (소비처에서만 호출 — service 는 미사용이나 안전망 mock)
 //
 // service 는 인증을 더 이상 내부에서 하지 않는다(관문은 procedure 몫). 존재 확인
@@ -68,12 +68,6 @@ type ContactTargetRow = {
   respondedAt: Date | null;
 };
 
-type ResponseAnswerRow = {
-  id: string;
-  responseId: string;
-  questionId: string;
-};
-
 type SurveyRow = {
   id: string;
   title: string;
@@ -82,12 +76,14 @@ type SurveyRow = {
 const h = vi.hoisted(() => {
   const responseStore = new Map<string, SurveyResponseRow>();
   const contactStore = new Map<string, ContactTargetRow>();
-  const answerStore = new Map<string, ResponseAnswerRow>();
   const surveyStore = new Map<string, SurveyRow>();
   const questionStore = new Map<string, QuestionRow>();
 
-  return { responseStore, contactStore, answerStore, surveyStore, questionStore };
+  return { responseStore, contactStore, surveyStore, questionStore };
 });
+
+// 테스트 응답 저장 전 테스트 버전 맞추기 — 이 파일의 관심사가 아니다(실DB 는 test-version-response).
+vi.mock('@/server/workflows/test-version', () => ({ ensureTestVersion: vi.fn(async () => null) }));
 
 vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
@@ -195,40 +191,19 @@ vi.mock('@/db', () => {
       })),
     })),
     delete: vi.fn((table: { __table: string }) => ({
-      where: vi.fn(async (cond: (row: SurveyResponseRow | ResponseAnswerRow) => boolean) => {
+      where: vi.fn(async (cond: (row: SurveyResponseRow) => boolean) => {
         if (table.__table === 'surveyResponses') {
           for (const [id, row] of h.responseStore.entries()) {
-            if ((cond as (r: SurveyResponseRow) => boolean)(row)) {
+            if (cond(row)) {
               h.responseStore.delete(id);
-              // cascade: response_answers
-              for (const [aid, ans] of h.answerStore.entries()) {
-                if (ans.responseId === row.id) h.answerStore.delete(aid);
-              }
-            }
-          }
-        }
-        if (table.__table === 'responseAnswers') {
-          for (const [id, row] of h.answerStore.entries()) {
-            if ((cond as (r: ResponseAnswerRow) => boolean)(row)) {
-              h.answerStore.delete(id);
             }
           }
         }
       }),
     })),
-    insert: vi.fn((table: { __table: string }) => ({
-      values: vi.fn(async (rows: Array<Record<string, unknown>>) => {
-        if (table.__table === 'responseAnswers') {
-          for (const row of rows) {
-            const aid = `${row['responseId']}-${row['questionId']}-${h.answerStore.size}`;
-            h.answerStore.set(aid, {
-              id: aid,
-              responseId: row['responseId'] as string,
-              questionId: row['questionId'] as string,
-            });
-          }
-        }
-      }),
+    // 응답 편집 이력(response_edit_logs) INSERT — 이 스위트는 내용을 보지 않는다.
+    insert: vi.fn((_table: { __table: string }) => ({
+      values: vi.fn(async (_rows: Array<Record<string, unknown>>) => undefined),
     })),
     transaction: vi.fn(async (fn: (tx: typeof dbObj) => Promise<unknown>) => fn(dbObj)),
   };
@@ -300,7 +275,6 @@ vi.mock('@/db/schema', () => {
     surveyResponses: makeTableProxy('surveyResponses'),
     contactTargets: makeTableProxy('contactTargets'),
     surveys: makeTableProxy('surveys'),
-    responseAnswers: makeTableProxy('responseAnswers'),
     questions: makeTableProxy('questions'),
     surveyVersions: makeTableProxy('surveyVersions'),
     responseEditLogs: makeTableProxy('responseEditLogs'),
@@ -325,7 +299,6 @@ function createTestSurvey() {
 function createTestResponse(
   surveyId: string,
   opts?: {
-    withAnswers?: boolean;
     questionResponses?: Record<string, unknown>;
     completedAt?: Date | null;
     startedAt?: Date;
@@ -349,14 +322,6 @@ function createTestResponse(
     deletedAt: null,
     contactTargetId: null,
   });
-  if (opts?.withAnswers) {
-    const answerId = genId('answer');
-    h.answerStore.set(answerId, {
-      id: answerId,
-      responseId,
-      questionId: genId('q'),
-    });
-  }
   return responseId;
 }
 
@@ -381,7 +346,6 @@ describe('profiles-row-actions', () => {
   beforeEach(() => {
     h.responseStore.clear();
     h.contactStore.clear();
-    h.answerStore.clear();
     h.surveyStore.clear();
     h.questionStore.clear();
     idCounter = 0;
@@ -443,27 +407,15 @@ describe('profiles-row-actions', () => {
   // ─────────────────────────────────────────────────────────────
 
   describe('hardResetResponse', () => {
-    it('응답 행을 삭제하고 response_answers 도 cascade 제거된다', async () => {
+    it('응답 행을 삭제한다', async () => {
       const surveyId = createTestSurvey();
-      const responseId = createTestResponse(surveyId, { withAnswers: true });
-
-      // 답변이 1건 있는지 확인
-      const answersBefore = Array.from(h.answerStore.values()).filter(
-        (a) => a.responseId === responseId,
-      );
-      expect(answersBefore).toHaveLength(1);
+      const responseId = createTestResponse(surveyId);
 
       const result = await hardResetResponse({ surveyId, responseId });
       expect(result).toEqual({ ok: true });
 
       // 응답 행 삭제 확인
       expect(h.responseStore.get(responseId)).toBeUndefined();
-
-      // cascade 답변 삭제 확인
-      const answersAfter = Array.from(h.answerStore.values()).filter(
-        (a) => a.responseId === responseId,
-      );
-      expect(answersAfter).toHaveLength(0);
     });
 
     it('contact_targets.responseId 와 respondedAt 을 null 로 초기화한다', async () => {
@@ -723,45 +675,6 @@ describe('profiles-row-actions', () => {
           false,
         ),
       ).rejects.toMatchObject({ reason: 'response_deleted' });
-    });
-
-    it('response_answers 를 새 응답으로 재기록한다 (옛 답 제거 + 새 답 INSERT)', async () => {
-      const surveyId = createTestSurvey();
-      const oldQid = createTestQuestion(surveyId, 'text');
-      const newQid = createTestQuestion(surveyId, 'text');
-      const responseId = createTestResponse(surveyId, {
-        questionResponses: { [oldQid]: 'OLD_ANS' },
-      });
-      // 기존 답변 행 한 건 추가 (oldQid)
-      const seedAnswerId = genId('answer');
-      h.answerStore.set(seedAnswerId, {
-        id: seedAnswerId,
-        responseId,
-        questionId: oldQid,
-      });
-      expect(
-        Array.from(h.answerStore.values()).filter((a) => a.responseId === responseId),
-      ).toHaveLength(1);
-
-      await saveAdminEdit(
-        {
-          surveyId,
-          responseId,
-          questionResponses: { [newQid]: 'NEW_ANS' },
-          versionId: null,
-        },
-        { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
-        false,
-      );
-
-      const remaining = Array.from(h.answerStore.values()).filter(
-        (a) => a.responseId === responseId,
-      );
-      // 옛 행은 사라지고 새 행 한 건이 남는다
-      expect(remaining).toHaveLength(1);
-      const remaining0 = remaining[0];
-      if (!remaining0) throw new Error('remaining[0] 없음');
-      expect(remaining0.questionId).toBe(newQid);
     });
 
     it('존재하지 않는 응답은 response_not_found throw', async () => {

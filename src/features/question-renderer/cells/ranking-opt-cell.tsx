@@ -6,6 +6,7 @@ import { CellText } from '@/features/question-renderer/cell-text';
 import { cn } from '@/lib/utils';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 
+import { RankingOptionImage } from '../ranking-option-image';
 import type { InteractiveCellProps, PreviewCellProps } from './types';
 
 /**
@@ -18,14 +19,7 @@ export const RankingOptCell = React.memo(function RankingOptCell({
 }: InteractiveCellProps | PreviewCellProps) {
   return (
     <div className="flex w-full flex-col gap-1">
-      {cell.imageUrl && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={cell.imageUrl}
-          alt={cell.content || cell.rankingLabel || '순위 옵션 이미지'}
-          className="h-20 w-full rounded object-cover"
-        />
-      )}
+      <RankingOptionImage cell={cell} className="h-20" />
 
       {cell.videoUrl && !cell.imageUrl && (
         <div className="truncate text-xs text-gray-500">🎬 {cell.videoUrl}</div>

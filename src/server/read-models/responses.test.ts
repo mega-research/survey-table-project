@@ -4,14 +4,26 @@ const groupBy = vi.fn();
 const where = vi.fn(() => ({ groupBy }));
 const from = vi.fn(() => ({ where }));
 const dbSelect = vi.fn((_selection: unknown) => ({ from }));
+const findMany = vi.fn();
 
 vi.mock('@/db', () => ({
   db: {
     select: (selection: unknown) => dbSelect(selection),
+    query: { surveyResponses: { findMany: (args: unknown) => findMany(args) } },
   },
 }));
 
-import { getResponseCountsGroupedBySurvey } from './responses';
+vi.mock('@/lib/crypto/response-pii', () => ({
+  decryptQuestionResponses: (responses: Record<string, unknown>) =>
+    Object.fromEntries(
+      Object.entries(responses).map(([k, v]) => [
+        k,
+        typeof v === 'string' && v.startsWith('v1:') ? `평문(${v.slice(3)})` : v,
+      ]),
+    ),
+}));
+
+import { getCompletedResponsesForAnalysis, getResponseCountsGroupedBySurvey } from './responses';
 
 describe('getResponseCountsGroupedBySurvey', () => {
   beforeEach(() => {
@@ -43,5 +55,37 @@ describe('getResponseCountsGroupedBySurvey', () => {
         ['survey-2', { total: 2, completed: 1 }],
       ]),
     );
+  });
+});
+
+describe('getCompletedResponsesForAnalysis', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('응답 원본(question_responses)을 복호화해 그대로 돌려준다 — 문항별 사본을 조인하지 않는다', async () => {
+    findMany.mockResolvedValue([
+      {
+        id: 'r1',
+        isCompleted: true,
+        questionResponses: { 'q-name': 'v1:홍길동', 'q-radio': '2', __optTexts__: { 'q-radio': {} } },
+      },
+    ]);
+
+    const result = await getCompletedResponsesForAnalysis('survey-1');
+
+    expect(findMany).toHaveBeenCalledTimes(1);
+    expect(findMany.mock.calls[0]?.[0]).not.toHaveProperty('with');
+    expect(result).toEqual([
+      {
+        id: 'r1',
+        isCompleted: true,
+        questionResponses: {
+          'q-name': '평문(홍길동)',
+          'q-radio': '2',
+          __optTexts__: { 'q-radio': {} },
+        },
+      },
+    ]);
   });
 });

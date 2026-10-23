@@ -632,8 +632,7 @@ function remapArrayItems(items: unknown[], map: ValueMap): { value: unknown[]; c
 }
 
 /**
- * 한 질문의 응답 값을 리매핑한다. question_responses[qid] 와 response_answers 의
- * text_value/array_value/object_value 가 같은 값 공간이라 같은 로직을 공유한다.
+ * 한 질문의 응답 값(question_responses[qid])을 리매핑한다.
  *
  * table 질문 객체(`{ cellId: value }`)는 cellMaps 에 등재된 키만 치환한다 —
  * input 셀 자유 텍스트가 같은 객체에 섞여 있으므로 셀 타입 기반 필터가 필수다.
@@ -662,15 +661,6 @@ export function remapResponseValue(value: unknown, spec: QuestionResponseSpec): 
     return mapped === undefined
       ? { value, count: 0 }
       : { value: { ...value, selectedValue: mapped }, count: 1 };
-  }
-
-  // response_answers.object_value 의 배열 래핑 컨테이너
-  if (Array.isArray(value['__array'])) {
-    if (!questionMap || questionMap.size === 0) return { value, count: 0 };
-    const remapped = remapArrayItems(value['__array'] as unknown[], questionMap);
-    return remapped.count > 0
-      ? { value: { ...value, __array: remapped.value }, count: remapped.count }
-      : { value, count: 0 };
   }
 
   if (!cellMaps || cellMaps.size === 0) return { value, count: 0 };

@@ -75,6 +75,11 @@ export const FILTER_SOURCE = {
   CONTACT_OWNER: 'system.contact_owner',
   ATTRS_PREFIX: 'attrs.',
   PII_PREFIX: 'pii.',
+  /**
+   * 응답 내역 응답값 열 — `answer.<문항 id>[.<칸 id>]`(profile-columns-format 의 answerColumnKey).
+   * 응답 JSONB 를 부분일치로 본다. 암호화 저장 칸은 후보에 오르지 않는다.
+   */
+  ANSWER_PREFIX: 'answer.',
 } as const;
 
 /**
@@ -294,6 +299,8 @@ export function placeholderFor(
   if (source === FILTER_SOURCE.ALL) return '전체 검색 (암호화 컬럼은 전문 일치)';
   if (source === FILTER_SOURCE.RESID) return '예: 1-30, 45 · 엑셀 열 붙여넣기';
   if (source.startsWith(FILTER_SOURCE.PII_PREFIX)) return '정확한 값 입력 (부분 검색 불가)';
+  // 응답 내역 응답값 열(answer.<문항 id>[.<칸 id>]) — 번호 범위·목록 붙여넣기 없이 부분일치만.
+  if (source.startsWith(FILTER_SOURCE.ANSWER_PREFIX)) return '검색어 (일부만 입력해도 찾습니다)';
   return attrsLabel;
 }
 

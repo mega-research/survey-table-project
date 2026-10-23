@@ -57,7 +57,7 @@ export function AdminResponseEditor({
       </div>
       {migratedFromOldVersion && (
         <div className="border-b border-blue-200 bg-blue-50 px-6 py-3 text-sm text-blue-900">
-          구버전 형식으로 작성된 응답입니다. 최신 배포 형식으로 수정 중이며, 구조가 달라진
+          구버전 형식으로 작성된 응답입니다. 최신 형식(테스트 응답은 저장한 내용)으로 수정 중이며, 구조가 달라진
           답변은 비워져 있습니다. 저장하면 이 응답은 최신 버전으로 이관됩니다.
         </div>
       )}

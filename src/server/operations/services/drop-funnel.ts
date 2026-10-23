@@ -3,7 +3,7 @@ import 'server-only';
 import { sql } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { loadCurrentVersionSnapshot } from '@/server/read-models/version-snapshot';
+import { loadPinnedVersionSnapshot } from '@/server/read-models/version-snapshot';
 
 import {
   formatDropFunnel,
@@ -20,18 +20,17 @@ const EMPTY_OUTPUT: DropFunnelOutput = { bars: [], totalDrops: 0 };
  * 단일 설문의 Drop funnel 데이터를 반환한다 (서버 전용).
  *
  * 처리 단계:
- *   A) surveys.currentVersionId → surveyVersions.snapshot 에서 캐노니컬 step 추출.
+ *   A) 이 파티션이 보는 버전(실 = currentVersionId, 테스트 = testVersionId) 스냅샷에서 캐노니컬 step 추출.
  *      page-dwell 과 동일한 buildCanonicalSteps → stepId 체계 일치.
  *   B) SQL 로 drop 세션의 *마지막 pageVisit stepId* 별 COUNT 집계.
- *      - response_answers 는 응답 완료 시에만 채워져 drop(미완료)은 비어있다.
- *        그래서 마지막 pageVisit(`page_visits -> -1 ->> 'stepId'`)을 이탈 위치로 귀속한다.
+ *      - drop(미완료) 세션은 마지막으로 답한 문항을 알 수 없어, 마지막 pageVisit(`page_visits -> -1 ->> 'stepId'`)을 이탈 위치로 귀속한다.
  *        firstVisit 이 항상 currentStepId 로 생성되므로 drop 도 거의 항상 pageVisit ≥1개를 가진다.
  *      - exposedQuestionIds 필터는 제거. 귀속 신호가 "답변→도달 페이지"로 바뀌어 전제가 사라졌다
  *        (미도달 페이지는 애초에 pageVisit 이 없으므로 거짓 귀속 위험이 없다).
  *   C) JS 측에서 validStepIds 비교로 legacy 분류 → formatDropFunnel 에 위임.
  *
  * Edge case:
- *   - currentVersionId 없음 / snapshot 비어있음 → 빈 결과.
+ *   - 볼 버전 없음 / snapshot 비어있음 → 빈 결과.
  *   - drop 세션 0건이어도 formatDropFunnel 이 빈 bars 를 반환.
  *
  */
@@ -40,8 +39,8 @@ export async function getDropFunnel(
   scope: OperationsDataScope,
 ): Promise<DropFunnelOutput> {
   const isTest = testFlagForScope(scope);
-  // ── A) 현재 published snapshot 로드 + 캐노니컬 step ──────────────────────────
-  const snapshot = await loadCurrentVersionSnapshot(surveyId);
+  // ── A) 이 파티션이 보는 snapshot 로드 + 캐노니컬 step ────────────────────────
+  const snapshot = await loadPinnedVersionSnapshot(surveyId, isTest);
   // 위치 목록 = 캐노니컬 step (page-dwell와 동일 stepId 체계). FunnelQuestion.id에 stepId를 담는다.
   const steps = snapshot ? buildCanonicalSteps(snapshot) : [];
   const questions: FunnelQuestion[] = steps.map((s) => ({

@@ -9,6 +9,7 @@ import type { BlockReason } from '../domain/duplicate';
 import { extractDraftSeq } from '../domain/draft-seq';
 import { decideResponseReuse } from '../domain/lifecycle';
 import type { SurveyResponse } from '../domain/response';
+import { reopenQuotaClosedResponse } from './quota-reopen';
 import {
   type TestResponseResetFields,
   resetTestResponseRow,
@@ -97,6 +98,10 @@ export async function reviveDroppedResponse(responseId: string): Promise<boolean
  * - restart: 테스트 세션 한정 — 종결된 행을 제자리에서 초기화해 처음부터 다시 응답
  * - blocked: 차단 사유 반환 (호출부가 500 대신 안내 화면으로 응답)
  *
+ * 쿼터 마감 행은 판정 전에 다시 열기를 시도한다 — 목표가 늘어 자리가 생겼으면 drop 으로
+ * 되돌려 revive 로 잇는다(남긴 답 보존). 재개(resumeOrCreateResponse)가 이미 열었으면 이 경로에
+ * 오지 않고, 재개 때는 가득 찼다가 첫 답 저장 사이에 자리가 생긴 경우를 여기서 받는다.
+ *
  * `testRestart` 인자가 곧 "유효 테스트 세션임"의 증거이자 초기화 payload 다.
  * 넘기는 호출부는 insertAnonymousTestResponse 하나뿐이고, 그 함수는 정의상
  * `isAnonymousTest && testToken` 분기에서만 호출된다 — 실응답 경로
@@ -108,7 +113,13 @@ export async function settleReuseCandidate(
   candidate: ReuseCandidate,
   testRestart?: TestResponseResetFields,
 ): Promise<{ ok: true; row: ReuseCandidate } | { ok: false; reason: BlockReason }> {
-  const decision = decideResponseReuse(candidate.status, {
+  const status =
+    candidate.status === 'quotaful_out' &&
+    testRestart == null &&
+    (await reopenQuotaClosedResponse(candidate.id))
+      ? 'drop'
+      : candidate.status;
+  const decision = decideResponseReuse(status, {
     hasContact: candidate.contactTargetId != null,
     isTestSession: testRestart != null,
   });

@@ -67,10 +67,6 @@ vi.mock('@/db', () => {
   return { db };
 });
 
-vi.mock('@/server/survey-response/services/response-answers', () => ({
-  replaceResponseAnswers: vi.fn(async () => undefined),
-}));
-
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
 const SURVEY_ID = '00000000-0000-4000-8000-000000000001';

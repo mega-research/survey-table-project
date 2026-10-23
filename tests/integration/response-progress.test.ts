@@ -74,10 +74,6 @@ vi.mock('@/db', () => {
   return { db: chainable };
 });
 
-vi.mock('@/server/survey-response/services/response-answers', () => ({
-  replaceResponseAnswers: vi.fn(async () => undefined),
-}));
-
 vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }));
@@ -291,11 +287,6 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
     // 트랜잭션 진입 후 동시 삭제가 이겨 isNull(deletedAt) 가드에 걸려 0행.
     updateReturningMock.mockResolvedValue([]);
 
-    const { replaceResponseAnswers } = await import(
-      '@/server/survey-response/services/response-answers'
-    );
-    vi.mocked(replaceResponseAnswers).mockClear();
-
     const { saveAdminEdit } = await import('@/server/survey-response/services/response-edit');
     await expect(
       saveAdminEdit(
@@ -304,8 +295,5 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
         false,
       ),
     ).rejects.toMatchObject({ reason: 'response_deleted' });
-
-    // 경합에서 졌으면 정규화 응답 재작성은 하지 않아야 한다 (롤백 의도).
-    expect(replaceResponseAnswers).not.toHaveBeenCalled();
   });
 });

@@ -8,7 +8,7 @@ import { ArrowLeft, BarChart3, ExternalLink, Pencil } from 'lucide-react';
 import { AnalyticsDashboardClient } from '@/features/analytics';
 import { ExportDataModal } from '@/features/analytics/export-data-modal';
 import { Button } from '@/components/ui/button';
-import { getResponsesWithAnswers, getSurveyVersions } from '@/server/read-models/responses';
+import { getCompletedResponsesForAnalysis, getSurveyVersions } from '@/server/read-models/responses';
 import { getSurveyWithDetails } from '@/server/survey-builder/services/survey-read';
 import { assertSurveyCapabilityPage } from '@/server/page-survey-access';
 import { requireAdminPage } from '@/lib/auth/require-admin-page';
@@ -22,7 +22,7 @@ interface AdminAnalyticsPageProps {
  * 함께 지나므로 cache 로 요청당 판정을 1회로 줄인다.
  *
  * `/analytics/[surveyId]` 와 같은 이유로 **responses.view 도 요구한다** — 이 페이지도
- * `getResponsesWithAnswers` 로 복호화된 원문 응답과 응답자 추적 필드를 클라이언트 props 로
+ * `getCompletedResponsesForAnalysis` 로 복호화된 원문 응답과 응답자 추적 필드를 클라이언트 props 로
  * 직렬화한다. 분석 화면이 둘이라 한쪽만 조이면 다른 쪽이 그대로 뒷문이 된다.
  */
 const assertAnalyticsPageAccess = cache(async (surveyId: string): Promise<void> => {
@@ -37,10 +37,10 @@ export default async function AdminSurveyAnalyticsPage({ params }: AdminAnalytic
   // RSC 도 export procedure 와 같은 판정을 받는다 — 이 페이지는 복호화된 응답을 렌더한다.
   await assertAnalyticsPageAccess(id);
 
-  // 설문 및 응답 데이터 조회 (response_answers 우선, JSONB fallback)
+  // 설문 및 완료 응답 조회
   const [survey, responses, versions] = await Promise.all([
     getSurveyWithDetails(id),
-    getResponsesWithAnswers(id),
+    getCompletedResponsesForAnalysis(id),
     getSurveyVersions(id),
   ]);
 

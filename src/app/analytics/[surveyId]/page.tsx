@@ -7,7 +7,7 @@ import { ArrowLeft, Settings } from 'lucide-react';
 
 import { AnalyticsDashboardClient } from '@/features/analytics';
 import { Button } from '@/components/ui/button';
-import { getResponsesWithAnswers, getSurveyVersions } from '@/server/read-models/responses';
+import { getCompletedResponsesForAnalysis, getSurveyVersions } from '@/server/read-models/responses';
 import { getSurveyWithDetails } from '@/server/survey-builder/services/survey-read';
 import { assertSurveyCapabilityPage } from '@/server/page-survey-access';
 import { requireAdminPage } from '@/lib/auth/require-admin-page';
@@ -20,7 +20,7 @@ interface AnalyticsPageProps {
  * 없는 설문과 타 팀 설문을 같은 notFound 로 접는다(티켓 09). 본문과 generateMetadata 가
  * 함께 지나므로 cache 로 요청당 판정을 1회로 줄인다.
  *
- * **analytics.view 만으로는 열리지 않는다** — 이 페이지는 `getResponsesWithAnswers` 로
+ * **analytics.view 만으로는 열리지 않는다** — 이 페이지는 `getCompletedResponsesForAnalysis` 로
  * 복호화된 원문 응답과 응답 행 전체(contactTargetId·sessionId·ipHash·fpHash·deviceId·
  * userAgent·metadata)를 읽어 클라이언트 컴포넌트 props 로 직렬화한다. 즉 RSC payload 에
  * 응답 원문과 응답자 추적 데이터가 그대로 실린다. 매트릭스가 팀원에게 `responses.view` 를
@@ -42,10 +42,10 @@ export default async function SurveyAnalyticsPage({ params }: AnalyticsPageProps
   // RSC 도 export procedure 와 같은 판정을 받는다 — 이 페이지는 복호화된 응답을 렌더한다.
   await assertAnalyticsPageAccess(surveyId);
 
-  // 설문 및 응답 데이터 조회 (response_answers 우선, JSONB fallback)
+  // 설문 및 완료 응답 조회
   const [survey, responses, versions] = await Promise.all([
     getSurveyWithDetails(surveyId),
-    getResponsesWithAnswers(surveyId),
+    getCompletedResponsesForAnalysis(surveyId),
     getSurveyVersions(surveyId),
   ]);
 

@@ -398,7 +398,7 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
           </div>
 
           <div className="flex items-center space-x-3">
-            {/* 운영 콘솔과 동일한 DB 테스트 모드 토글 — 테스트 링크는 마지막 발행본 기준 */}
+            {/* 운영 콘솔과 동일한 DB 테스트 모드 토글 — 테스트 링크는 저장본(테스트 버전) 기준 */}
             {surveyId && <TestModeControl surveyId={surveyId} />}
             <Button variant="outline" size="sm" onClick={handleSaveSurvey}>
               <Save className="mr-2 h-4 w-4" />

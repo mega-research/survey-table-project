@@ -86,7 +86,7 @@ describe('withCalcValues', () => {
   });
 });
 
-describe('withCalcValues — 채울 문항 한정 (reachedQuestionIds)', () => {
+describe('withCalcValues — 채울 문항 한정 (inScopeQuestionIds)', () => {
   const ctxOf = (questions: Question[], responses: Record<string, unknown>) => ({
     questions,
     responses,
@@ -99,7 +99,7 @@ describe('withCalcValues — 채울 문항 한정 (reachedQuestionIds)', () => {
     const q2 = calcTable('q2', 'q1');
     const responses = { q1: { 'q1-a': '5' } };
     const out = withCalcValues(responses, ctxOf([q1, q2], responses), {
-      reachedQuestionIds: new Set(['q1']),
+      inScopeQuestionIds: new Set(['q1']),
     });
     expect((out['q1'] as Record<string, unknown>)['q1-c']).toBe('5');
     expect(out).not.toHaveProperty('q2');
@@ -110,7 +110,7 @@ describe('withCalcValues — 채울 문항 한정 (reachedQuestionIds)', () => {
     const q2 = calcTable('q2', 'q1');
     const responses = { q1: { 'q1-a': '5' }, q2: { 'q2-a': '1', 'q2-c': '999' } };
     const out = withCalcValues(responses, ctxOf([q1, q2], responses), {
-      reachedQuestionIds: new Set(['q1']),
+      inScopeQuestionIds: new Set(['q1']),
     });
     expect((out['q2'] as Record<string, unknown>)['q2-c']).toBe('5');
   });
@@ -120,7 +120,7 @@ describe('withCalcValues — 채울 문항 한정 (reachedQuestionIds)', () => {
     const q2 = calcTable('q2', 'q1');
     const responses = { q1: { 'q1-a': '7' } };
     const out = withCalcValues({}, ctxOf([q1, q2], responses), {
-      reachedQuestionIds: new Set(['q2']),
+      inScopeQuestionIds: new Set(['q2']),
     });
     expect((out['q2'] as Record<string, unknown>)['q2-c']).toBe('7');
   });

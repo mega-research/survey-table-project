@@ -213,7 +213,7 @@ export function evaluateCellFormula(
  * 표시용은 항상 파생 계산이고, 이 함수는 저장 경계(draft flush / complete / beacon /
  * 운영자 수정)에서만 불린다 — 키스트로크마다 쓰지 않는다.
  *
- * `reachedQuestionIds` 를 주면 **그 문항에만 계산값을 새로 만든다** — 숨은 문항·가 보지 않은 문항에
+ * `inScopeQuestionIds` 를 주면 **그 문항에만 계산값을 새로 만든다** — 숨은 문항·가 보지 않은 문항에
  * 계산값이 들어가 Raw 에서 답한 것처럼 보이던 것을 막는다(응답 확정은 표시 + 경로 위, 응답 화면
  * 저장은 표시 조건 기준을 넘긴다). 이미 값이 있는 문항은 집합 밖이어도 다시 계산한다 — 남아 있는
  * 값이 수식 결과와 달라지지 않게(관리자 수정의 구버전 이관처럼 숨은 문항 값을 일부러 남기는 경로).
@@ -222,9 +222,9 @@ export function evaluateCellFormula(
 export function withCalcValues(
   payloadAnswers: Record<string, unknown>,
   ctx: FormulaEvalCtx,
-  options: { reachedQuestionIds?: ReadonlySet<string> } = {},
+  options: { inScopeQuestionIds?: ReadonlySet<string> } = {},
 ): Record<string, unknown> {
-  const { reachedQuestionIds } = options;
+  const { inScopeQuestionIds } = options;
   // 평가는 ctx.responses 위에 payload 를 병합한 최신 상태 기준이어야 한다.
   // 이탈 beacon/flush 가 상태 렌더보다 먼저 실행되면 최신 입력이 payload 에만 있는데,
   // ctx 만으로 평가하면 계산값이 한 박자 전 응답 기준으로 저장된다.
@@ -250,7 +250,7 @@ export function withCalcValues(
     if (calcCells.length === 0) continue;
 
     const merged = mergedResponses[q.id];
-    if (reachedQuestionIds && !reachedQuestionIds.has(q.id) && merged === undefined) continue;
+    if (inScopeQuestionIds && !inScopeQuestionIds.has(q.id) && merged === undefined) continue;
     const base = {
       ...(merged && typeof merged === 'object' && !Array.isArray(merged)
         ? (merged as Record<string, unknown>)

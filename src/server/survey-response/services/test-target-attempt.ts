@@ -3,6 +3,7 @@ import 'server-only';
 
 import type { DbTransaction } from '@/db';
 import { contactTargets, surveyResponses, surveys, testResponseAttempts } from '@/db/schema';
+import { pinnedVersionId } from '@/shared/contracts/survey';
 import { resetTestResponseRow } from './reset-test-response';
 import { type PageVisit, isOpenResponseStatus } from '@/shared/contracts/survey-response';
 import type { TestAttemptIdentity } from '@/shared/types/test-attempt';
@@ -99,7 +100,11 @@ export async function acquireTestTargetResponse(
   input: AcquireTestTargetResponseInput,
 ): Promise<{ responseId: string; reset: boolean; versionId: string | null }> {
   const [survey] = await tx
-    .select({ id: surveys.id, currentVersionId: surveys.currentVersionId })
+    .select({
+      id: surveys.id,
+      currentVersionId: surveys.currentVersionId,
+      testVersionId: surveys.testVersionId,
+    })
     .from(surveys)
     .where(and(eq(surveys.id, input.surveyId), eq(surveys.testModeEnabled, true)))
     .for('share')
@@ -107,6 +112,8 @@ export async function acquireTestTargetResponse(
   if (!survey) {
     throw new Error('테스트 링크가 더 이상 유효하지 않습니다');
   }
+  // 테스트 대상자 응답의 고정 목적지 — 지금 테스트 버전(shared/contracts/survey 의 pinnedVersionId). 아직 없으면 배포본.
+  const pinVersionId = pinnedVersionId(survey, true);
   const [liveTarget] = await tx
     .select({ id: contactTargets.id })
     .from(contactTargets)
@@ -162,7 +169,7 @@ export async function acquireTestTargetResponse(
         surveyId: input.surveyId,
         contactTargetId: input.contactTargetId,
         sessionId: input.sessionId,
-        versionId: survey.currentVersionId,
+        versionId: pinVersionId,
         questionResponses: {},
         isCompleted: false,
         status: 'in_progress',
@@ -204,14 +211,14 @@ export async function acquireTestTargetResponse(
   // 여기서는 버전이 같다. 여기 걸리는 것은 이관이 안 된 경우(스냅샷 훼손·경합)와 재발행 전에
   // 열어 둔 화면(priorAttempt — 초기화 대신 다시 열라고 거부한다)뿐이다.
   const reset =
-    !isResumableTestStatus(response.status) || response.versionId !== survey.currentVersionId;
+    !isResumableTestStatus(response.status) || response.versionId !== pinVersionId;
   // 중도 이탈 행을 이어받는 경우 — 답은 그대로 두고 status 만 되살린다.
   const revive = !reset && response.status === 'drop';
   if (reset) {
     if (priorAttempt) {
       throw new Error('새로 연 테스트 화면에서 다시 입력해주세요');
     }
-    await resetTestTargetResponse(tx, response.id, input, survey.currentVersionId);
+    await resetTestTargetResponse(tx, response.id, input, pinVersionId);
   }
 
   const now = new Date();
@@ -251,9 +258,9 @@ export async function acquireTestTargetResponse(
     .where(eq(contactTargets.id, input.contactTargetId));
 
   // 행에 기록된 실제 versionId 를 함께 돌려준다. 이 lane 은 버전 게이트를 타지 않고
-  // 언제나 현재 버전에 핀하므로(신규 INSERT·reset 모두 currentVersionId, reset 이 아니면
+  // 언제나 테스트 버전(없으면 현재 배포본)에 핀하므로(신규 INSERT·reset 모두 같은 값, reset 이 아니면
   // 애초에 값이 같다) 클라이언트가 자기가 알던 버전과 비교해 재핀을 감지할 수 있다.
-  return { responseId: response.id, reset, versionId: survey.currentVersionId };
+  return { responseId: response.id, reset, versionId: pinVersionId };
 }
 
 interface TestResponseWritableRow {

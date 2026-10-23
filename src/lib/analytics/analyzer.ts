@@ -820,10 +820,13 @@ export function analyzeSurvey(
     }))
     .sort((a, b) => a.date.localeCompare(b.date));
 
-  // 평균 완료 시간
+  // 평균 완료 시간 — 실제로 응답한 시간(totalSeconds, 페이지 체류 합)이 있으면 그것으로 잰다.
+  // 시작~완료 시각 차이는 이탈·쿼터마감 뒤 며칠 만에 이어 낸 응답의 공백까지 넣어 평균을 부풀린다.
+  // 운영 콘솔 응답 시간·Raw 소요시간과 같은 기준이다. 값이 없는 옛 응답만 시각 차이로 폴백한다.
   const completionTimes = completedResponses
     .filter((r) => r.completedAt)
     .map((r) => {
+      if (r.totalSeconds != null && r.totalSeconds > 0) return r.totalSeconds / 60;
       const start = new Date(r.startedAt).getTime();
       const end = new Date(r.completedAt!).getTime();
       return (end - start) / (1000 * 60);

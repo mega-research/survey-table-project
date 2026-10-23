@@ -145,7 +145,7 @@ surveys                    # 설문 설정
 ├── lookups (JSONB)               # 설문에 복사된 LUT 사본 목록
 ├── contactResultCodes (JSONB)    # 결과코드 사용자 정의
 ├── progressColumns (JSONB)       # 진척률 표 컬럼 픽커
-├── profileColumns (JSONB)        # 응답 내역 표 컬럼 픽커
+├── profileColumns (JSONB)        # 응답 내역 표 컬럼 픽커 — 열 키 sys.·attrs.·pii.·entry.·answer.<문항 id>[.<칸 id>](응답값 열, 2026-10-23: 단답형·장문형·표 입력 칸을 변수명으로 찾아 추가, 저장은 id, 쪽 행만 JSONB 에서 꺼내 암호문은 복호화, 정렬 없음. 검색바·전체 검색·머리 깔때기는 부분일치와 값 없음/있음(profiles-filters 의 answerTextSql), 암호화 저장 칸은 후보에서 빠진다. 후보 read-models/profile-column-scheme 의 getProfileAnswerSources, 값 server/operations/services/profile-answer-values)
 ├── quotaConfig (JSONB)           # 쿼터 플랜 (NULL = 쿼터 없음) — 라이브 컬럼
 ├── isPaused, pausedMessage       # 응답 일시중지 — 라이브 컬럼
 ├── testModeEnabled, testToken    # 테스트 환경 (테스트 링크가 산다). 콘솔이 테스트 파티션을 보는 건 브라우저 쿠키까지 켠 곳만 — src/server/AGENTS.md 「테스트 모드」
@@ -160,6 +160,7 @@ surveys                    # 설문 설정
 │                                 #   전이는 published ⇄ closed 뿐(operations.control.setClosed, survey.edit) + 재발행이 published 로 되돌린다.
 │                                 #   isPaused 와 독립이다. 스냅샷 밖 라이브 컬럼처럼 즉시 반영된다
 ├── currentVersionId              # 현재 활성 배포 버전
+├── testVersionId                 # 지금 테스트 버전 (0141) — 테스트 링크·대상자·관리자 미리보기가 보는 저장본 스냅샷. 아래 "테스트 모드"
 ├── teamId                        # 소유 팀 (0116, nullable — 배치 대기면 NULL)
 ├── visibility                    # team | invite_only — invite_only 는 **소유 팀 팀원에게만** 숨김
 ├── ownerUserId, createdBy        # 소유자·작성자 (0116, 2단계 배포 중이라 아직 nullable)
@@ -239,9 +240,11 @@ test_response_attempts     # 테스트 응답 회차 (초기화·재응답 추�
 └── UNIQUE partial(responseId) WHERE status='active'
 
 survey_versions            # 설문 버전 스냅샷 (불변)
-├── id, surveyId, versionNumber
-├── status                        # 'published' | 'superseded' ('closed' 미구현)
-├── snapshot (JSONB)              # 배포 시점 전체 설문 구조 (prune 시 NULL 가능)
+├── id, surveyId, versionNumber   # 테스트 버전은 음수 번호(배포 번호 max+1 과 겹치지 않게)
+├── status                        # 'published' | 'superseded' | 'test'(테스트 버전, 0141 — 버전 목록·배포 번호에서 뺀다) ('closed' 미구현)
+├── snapshot (JSONB)              # 배포 시점 전체 설문 구조 (prune 시 NULL 가능 — 직전 테스트 버전은 새 테스트 버전을 만들 때 바로 비운다).
+│                                 #   비우지 않는 버전: 지금 배포본·테스트 버전 · 실응답(휴지통 포함)이 가리킴 · 이관 출처 · 이관 이력 from/to (version-retention, 2026-10-23)
+├── fingerprints (JSONB)          # 테스트 버전 지문 {revision, questions, groups} (0141) — snapshot 을 비워도 남긴다. 배포 버전은 NULL
 ├── changeNote, publishedAt, closedAt, prunedAt, deletedAt
 └── createdAt
 
@@ -253,10 +256,11 @@ response_edit_logs         # 관리자 응답 편집 이력
 ├── changedQuestions (JSONB), changedCount
 └── createdAt
 
-response_answers           # 정규화된 응답 (빠른 필터링)
-├── id, responseId, questionId
-├── textValue, arrayValue (JSONB), objectValue (JSONB)
-├── questionType (역정규화)
+response_migration_history # 이관 이력 — 배포 응답이 버전을 옮길 때마다 한 줄 (0142, 실응답만, CONTEXT.md 「이관 이력」)
+├── id, responseId (cascade), surveyId (cascade)
+├── fromVersionId, toVersionId    # SET NULL. 여기 걸린 버전은 스냅샷을 비우지 않는다
+├── answersBefore, answersAfter (JSONB)  # 옮기기 전·후 답 — 암호문은 「[개인정보 — 이력에 담지 않음]」 표식
+├── actor ('respondent' | 'admin' CHECK), editedBy, editorEmail
 └── createdAt
 
 saved_questions            # 질문 보관함
@@ -420,8 +424,8 @@ r2_key_refs                # 파생 참조 인덱스 (사전 필터일 뿐 삭�
 surveys (1) ─┬─ (N) survey_documents ── (N) survey_document_anchors
              ├─ (N) question_groups ── parentGroupId (self-ref)
              ├─ (N) questions
-             ├─ (N) survey_responses ─┬─ (N) response_answers
-             │                        ├─ (N) response_edit_logs
+             ├─ (N) survey_responses ─┬─ (N) response_edit_logs
+             │                        ├─ (N) response_migration_history
              │                        ├─ (N) test_response_attempts
              │                        └─ (1) contact_targets [optional 매칭]
              ├─ (N) survey_versions ── (N) survey_responses [versionId]

@@ -5,18 +5,19 @@ import { db } from '@/db';
 import {
   contactTargets,
   responseEditLogs,
+  responseMigrationHistory,
   surveyResponses,
   surveys,
 } from '@/db/schema';
 import { SurveyAccessError, type ActorAttribution } from '@/server/survey-access';
-import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
+import { decryptQuestionResponses, withoutEncryptedAnswers } from '@/lib/crypto/response-pii';
 import { logger } from '@/lib/logger';
 import { readBrowserTestView, resolveWriteScopeIsTest } from '@/server/data-scope';
 import { buildChangedQuestions, diffQuestionResponses } from '@/lib/operations/response-edit-diff';
+import { pinnedVersionId } from '@/shared/contracts/survey';
 import { calculateProgressPct, getProgressSnapshot } from './response-progress';
 
 import type { SaveAdminEditInput } from '../domain/response-edit';
-import { replaceResponseAnswers } from './response-answers';
 import { finalizeAnswers, loadFinalizationMaterial } from './answer-finalization';
 import { assertAnswerValueSize, detectQuotaOverflow } from './submitted-answers';
 
@@ -42,23 +43,17 @@ export class ResponseEditError extends Error {
   }
 }
 
-/** 이관 시 metadata 갱신 sql 조각 — adminEditRollback 1회 백업 (+ 출처 버전 기록) */
-function buildMigrationMetadataSql(rollback: {
-  versionId: string | null;
-  questionResponses: unknown;
-  savedAt: string;
-}) {
-  const withRollback = sql`jsonb_set(
-    COALESCE(${surveyResponses.metadata}, '{}'::jsonb),
-    '{adminEditRollback}',
-    COALESCE(${surveyResponses.metadata}->'adminEditRollback', ${JSON.stringify(rollback)}::jsonb),
-    true
-  )`;
-  if (rollback.versionId === null) return withRollback;
+/**
+ * 이관 시 metadata 갱신 sql 조각 — 출처 버전 기록(최초값 보존). 출처를 모르면(레거시 null) 쓸 것이 없다.
+ * 옮기기 전 답은 metadata 가 아니라 이관 이력(response_migration_history)에 남긴다 — 예전에는
+ * metadata.adminEditRollback 에 첫 이관 한 번만 암호문째 남겼다(0143 이 이력으로 옮기고 지운다).
+ */
+function buildMigrationMetadataSql(fromVersionId: string | null) {
+  if (fromVersionId === null) return null;
   return sql`jsonb_set(
-    ${withRollback},
+    COALESCE(${surveyResponses.metadata}, '{}'::jsonb),
     '{migratedFromVersionId}',
-    COALESCE(${surveyResponses.metadata}->'migratedFromVersionId', to_jsonb(${rollback.versionId}::text)),
+    COALESCE(${surveyResponses.metadata}->'migratedFromVersionId', to_jsonb(${fromVersionId}::text)),
     true
   )`;
 }
@@ -66,7 +61,7 @@ function buildMigrationMetadataSql(rollback: {
 /**
  * 어드민 응답 수정 저장.
  *
- * - questionResponses (JSONB) 와 response_answers 정규화 행을 일괄 갱신.
+ * - questionResponses (JSONB) 를 갱신한다.
  * - startedAt / totalSeconds 는 명시적으로 set 하지 않아 보존됨.
  *   예외 1 (2026-08-11): 이탈(drop) 응답은 저장 시 completed 로 전환한다 — drop 은 sweep 이
  *   비활동으로 자동 부여한 상태라 응답자 확정 종결이 아니고, 운영자가 수정 화면에서 채워
@@ -119,16 +114,9 @@ export async function saveAdminEdit(
   // 아니다: testModeEnabled(쓰기 파티션)·currentVersionId(낙관 버전 가드)도 함께 읽는다.
   const ownerRow = await db.query.surveys.findFirst({
     where: eq(surveys.id, surveyId),
-    columns: { id: true, testModeEnabled: true, currentVersionId: true },
+    columns: { id: true, testModeEnabled: true, currentVersionId: true, testVersionId: true },
   });
   if (!ownerRow) throw new SurveyAccessError('not_found');
-
-  // 낙관 버전 가드 (스펙 결정 4) — 클라이언트가 렌더한 버전이 저장 시점의 현재 배포
-  // 버전과 다르면 저장을 거부한다. 입력 구조와 저장 버전의 불일치를 원천 차단하는 게
-  // 목적이므로, 입력값 보존 없이 새로고침 재진입을 요구한다.
-  if (input.versionId !== (ownerRow.currentVersionId ?? null)) {
-    throw new ResponseEditError('version_conflict');
-  }
 
   const isTest = resolveWriteScopeIsTest(
     ownerRow.testModeEnabled,
@@ -148,7 +136,16 @@ export async function saveAdminEdit(
     throw new ResponseEditError('response_deleted');
   }
 
-  // 이번 저장이 기준으로 삼는 버전 — 렌더 버전(=현재 배포 버전). 미배포 설문(null)만
+  // 낙관 버전 가드 (스펙 결정 4) — 클라이언트가 렌더한 버전이 저장 시점에 이 응답이 볼 버전과 다르면
+  // 저장을 거부한다. 실응답은 현재 배포본, 테스트 응답은 지금 테스트 버전이다(pinnedVersionId —
+  // 테스트는 테스트 버전에만 있다). 입력 구조와 저장 버전의 불일치를 원천 차단하는 게 목적이므로,
+  // 입력값 보존 없이 새로고침 재진입을 요구한다.
+  if (input.versionId !== pinnedVersionId(ownerRow, existing.isTest)) {
+    throw new ResponseEditError('version_conflict');
+  }
+
+  // 이번 저장이 기준으로 삼는 버전 — 렌더 버전(실응답은 현재 배포본, 테스트 응답은 지금 테스트 버전).
+  // 미배포 설문(null)만
   // 응답 자신의 버전으로 폴백해 기존 동작을 유지한다.
   const effectiveVersionId = input.versionId ?? existing.versionId;
   const migrating = input.versionId !== null && existing.versionId !== input.versionId;
@@ -209,7 +206,7 @@ export async function saveAdminEdit(
     contactTargetId: existing.contactTargetId,
     responseId,
   });
-  const finalized = finalizeAnswers(material, questionResponses, { skipHiddenStrip: migrating });
+  const finalized = finalizeAnswers(material, questionResponses, { pruneHidden: !migrating });
   const finalResponses = finalized.plain;
 
   // 변경 질문 확정 (audit 용) — 이전 값 ↔ 확정 평문. 확정은 스냅샷의 calc 셀을 전부 다시 계산하므로
@@ -264,13 +261,18 @@ export async function saveAdminEdit(
 
   // metadata 갱신 조각 — 이관 백업(1회)과 초과 표식을 한 조각으로 합친다. 둘 다 기존 키를
   // 보존하는 jsonb 병합이라 통째 대입이 없다.
-  const migrationMetadataSql = migrating
-    ? buildMigrationMetadataSql({
-        versionId: existing.versionId,
-        questionResponses: existing.questionResponses ?? {},
-        savedAt: now.toISOString(),
-      })
-    : null;
+  const migrationMetadataSql = migrating ? buildMigrationMetadataSql(existing.versionId) : null;
+  // 이관 이력 — 실응답의 구버전 이관이면 옮기기 전 버전·답(DB 저장값, 암호문은 표식)을 저장 전에 잡아 둔다.
+  // 테스트 응답은 남기지 않는다(CONTEXT.md 「이관 이력」).
+  const migrationHistoryBefore =
+    migrating && !existing.isTest
+      ? {
+          fromVersionId: existing.versionId,
+          answersBefore: withoutEncryptedAnswers(
+            (existing.questionResponses ?? {}) as Record<string, unknown>,
+          ),
+        }
+      : null;
   const metadataSql = quotaOverflow
     ? sql`${migrationMetadataSql ?? sql`COALESCE(${surveyResponses.metadata}, '{}'::jsonb)`} || '{"quotaOverflow":true}'::jsonb`
     : migrationMetadataSql;
@@ -304,10 +306,9 @@ export async function saveAdminEdit(
         // 이탈 응답 완료 전환 + 자격미달 양방향 재판정 (위 블록 참조).
         // 그 밖의 상태(in_progress·quotaful_out·bad)는 보존된다.
         ...terminalStatusSet,
-        // 구버전 응답 이관 (스펙 결정 5) — versionId 재고정 + 원본 1회 백업.
-        // adminEditRollback/migratedFromVersionId 는 COALESCE 로 최초 이관 값을 보존한다
-        // (재수정해도 원본 유지). 백업의 questionResponses 는 DB 암호문 그대로 —
-        // 평문 PII 를 metadata 에 남기지 않는다.
+        // 구버전 응답 이관 (스펙 결정 5) — versionId 재고정 + 출처 버전 기록.
+        // migratedFromVersionId 는 COALESCE 로 최초 이관 값을 보존한다(재수정해도 원본 유지).
+        // 옮기기 전 답은 아래 이관 이력에 남긴다.
         ...(migrating ? { versionId: input.versionId } : {}),
         ...(metadataSql ? { metadata: metadataSql } : {}),
       })
@@ -339,7 +340,21 @@ export async function saveAdminEdit(
       );
     }
 
-    await replaceResponseAnswers(tx, responseId, surveyId, storedResponses);
+    // 이관 이력 한 줄 — UPDATE 가 1행일 때만 여기 온다(0행은 위에서 throw).
+    if (migrationHistoryBefore) {
+      await tx.insert(responseMigrationHistory).values({
+        responseId,
+        surveyId,
+        fromVersionId: migrationHistoryBefore.fromVersionId,
+        toVersionId: input.versionId,
+        answersBefore: migrationHistoryBefore.answersBefore,
+        answersAfter: withoutEncryptedAnswers(storedResponses),
+        actor: 'admin',
+        // 외주 링크(ADR-0027)가 옮긴 줄은 계정이 없어 비어 있다 — 이력 표에는 링크 칸이 없다.
+        editedBy: editor.attribution.accountUserId,
+        editorEmail: editor.email,
+      });
+    }
 
     if (changedQuestions.length > 0) {
       await tx.insert(responseEditLogs).values({

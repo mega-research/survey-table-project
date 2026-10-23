@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 import type { TableCell } from '@/types/survey';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 
+import { RankingOptionImage } from '../ranking-option-image';
 import { getYouTubeEmbedUrl } from '../table-cell-renderers';
 import { CellContentLayout } from './cell-content-layout';
 import { CellOptionsContainer } from './cell-options-container';
@@ -262,14 +263,7 @@ export const PreviewCell = React.memo(function PreviewCell({
       // 랭킹 옵션 소스 셀 — 읽기 전용으로 이미지 + 라벨 표시
       return (
         <div className="flex flex-col gap-1">
-          {cell.imageUrl && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={cell.imageUrl}
-              alt={cell.content || cell.rankingLabel || '순위 옵션'}
-              className="h-16 w-full rounded object-cover"
-            />
-          )}
+          <RankingOptionImage cell={cell} className="h-16" />
           {cell.content && (
             <div
               className={cn(

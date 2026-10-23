@@ -6,7 +6,7 @@
 
 ## 운영 집계와 파티션
 
-운영 집계는 `server/operations/services` 에서 SQL 집계로 수행 (aggregate + format + wrapper 패턴 — 공유 format 짝은 `lib/operations/*-format.ts`, UI 도 소비하므로 lib 이 정답). 정확한 통계는 `question_responses` JSONB 기준 (response_answers는 saveResponse/saveAdminEdit 에서만 채워짐).
+운영 집계는 `server/operations/services` 에서 SQL 집계로 수행 (aggregate + format + wrapper 패턴 — 공유 format 짝은 `lib/operations/*-format.ts`, UI 도 소비하므로 lib 이 정답). 응답값의 정본은 `question_responses` JSONB 하나다 — 문항별 사본 `response_answers` 는 2026-10-23 에 걷어냈다(0143, 읽는 곳이 모두 JSONB 모양으로 되돌려 썼고 SQL 필터에 쓴 곳이 없었다). 문항·변수 단위 통계 표가 필요해지면 이중 쓰기가 아니라 원본에서 다시 만들 수 있는 파생 표로 설계할 것.
 콘솔 조회·쓰기는 `loadOperationsDataScope`가 결정한 실/테스트 파티션(`is_test`)에 갇힌다. 엑셀·SPSS export 라우트도 같은 스코프를 탄다. 신규 집계 쿼리는 스코프 필터를 빠뜨리지 말 것.
 
 ---

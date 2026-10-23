@@ -86,6 +86,7 @@ import { TableChoiceGroupScaleBar } from './choice-group-scale-bar';
 import { GatingTableCellsProvider } from './cells/gating-table-cells-context';
 import { OptionTextBelowTableHost } from './cells/option-text-placement-context';
 import { DynamicRowSelectorModal } from './dynamic-row-selector-modal';
+import { TableImageEnlargeProvider } from './table-image-enlarge';
 import { MobileRowGroupCards } from './mobile-row-group-cards';
 import { MobileRowWiseOriginalSheet, RowTileSection } from './mobile-row-wise-original-sheet';
 import {
@@ -563,7 +564,25 @@ function useMergedResponseChange(
   );
 }
 
-export const InteractiveTableResponse = React.memo(function InteractiveTableResponse({
+/** 응답 화면의 표 — 이미지 셀에 크게 보기를 켠다(CONTEXT.md 「이미지 크게 보기」) */
+export const InteractiveTableResponse = React.memo(function InteractiveTableResponse(
+  props: InteractiveTableResponseProps,
+) {
+  return (
+    <TableImageEnlargeProvider
+      columns={props.columns ?? EMPTY_COLUMNS}
+      headerGrid={props.tableHeaderGrid}
+      rows={props.rows ?? EMPTY_ROWS}
+    >
+      <InteractiveTableResponseBody {...props} />
+    </TableImageEnlargeProvider>
+  );
+});
+
+const EMPTY_COLUMNS: TableColumn[] = [];
+const EMPTY_ROWS: TableRow[] = [];
+
+function InteractiveTableResponseBody({
   questionId,
   tableTitle,
   columns = [],
@@ -1597,4 +1616,4 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
       </GatingTableCellsProvider>
     </ChoiceGroupsProvider>
   );
-});
+}

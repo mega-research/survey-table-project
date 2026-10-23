@@ -30,6 +30,7 @@ import {
 import {
   classifyQuestionMembershipError,
   QuestionNotInResponseVersionError,
+  syncTestVersionBeforeWrite,
 } from './response-version-snapshot';
 import {
   assertAnswerValueSize,
@@ -210,6 +211,8 @@ export async function updateQuestionResponse(
 
   // #5 변조 가드 2: 응답 행 조회 — versionId/surveyId 로 questionId 소속을 검증한다.
   const responseRow = await loadResponseRowForMutation(responseId);
+  // 테스트 응답이면 테스트 버전을 지금 저장본에 맞춘다 — 바뀌었으면 아래 소속 검증이 안내로 접힌다.
+  await syncTestVersionBeforeWrite(responseRow);
 
   // #5 변조 가드 3: questionId 가 해당 응답의 versionId 스냅샷(또는 surveyId 의 questions)에
   // 존재해야 한다. 미존재면 거부 — 임의 키 JSONB 주입 차단.

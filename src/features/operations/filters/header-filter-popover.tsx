@@ -44,7 +44,7 @@ import { client } from '@/shared/lib/rpc';
 
 interface Props {
   surveyId: string;
-  /** attrs.* | pii.* | system.contact_result | system.web | fixedOptions 지정 source */
+  /** attrs.* | pii.* | answer.* | system.contact_result | system.web | fixedOptions 지정 source */
   source: string;
   label: string;
   piiType?: PiiFieldType;
@@ -74,12 +74,13 @@ interface Props {
   resetParams?: string[];
 }
 
-type Kind = 'attrs' | 'pii' | 'result' | 'web' | 'fixed';
+type Kind = 'attrs' | 'pii' | 'answer' | 'result' | 'web' | 'fixed';
 
 function kindOf(source: string, hasFixedOptions: boolean): Kind | null {
   if (hasFixedOptions) return 'fixed';
   if (source.startsWith(FILTER_SOURCE.ATTRS_PREFIX)) return 'attrs';
   if (source.startsWith(FILTER_SOURCE.PII_PREFIX)) return 'pii';
+  if (source.startsWith(FILTER_SOURCE.ANSWER_PREFIX)) return 'answer';
   if (source === FILTER_SOURCE.CONTACT_RESULT) return 'result';
   if (source === FILTER_SOURCE.WEB) return 'web';
   return null;
@@ -91,6 +92,7 @@ function kindOf(source: string, hasFixedOptions: boolean): Kind | null {
  * - attrs 저카디널리티: distinct 체크박스 (컬럼 내 OR)
  * - attrs 고카디널리티(truncated): 부분검색 입력 폴백
  * - pii: 전문 일치 입력 (blind index — distinct 열거 불가)
+ * - answer(응답 내역 응답값 열): 부분검색 입력 — 응답자가 적은 글자라 고유값이 많다
  * - system.contact_result / system.web: 고정 옵션 체크박스
  *
  * 적용 시 빌더(col/q/op) 필터가 활성이면 경고 다이얼로그 후 빌더 조건을 폐기한다
@@ -142,7 +144,8 @@ export function HeaderFilterPopover({
     kind === 'web' ||
     kind === 'fixed' ||
     (kind === 'attrs' && data != null && !data.truncated);
-  const isTextKind = kind === 'pii' || (kind === 'attrs' && data?.truncated === true);
+  const isTextKind =
+    kind === 'pii' || kind === 'answer' || (kind === 'attrs' && data?.truncated === true);
 
   const checkboxOptions: Array<{ value: string; optionLabel: string }> =
     kind === 'fixed'

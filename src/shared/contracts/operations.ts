@@ -30,6 +30,8 @@ export interface ProfileColumnDef {
    * - `sys.<id>`: 시스템 컬럼 (idx/resid/group/platform/browser/status/startedAt/completedAt/totalSeconds/ipHash)
    * - `attrs.<key>`: 컨택 attrs 값
    * - `pii.<key>`: 컨택 PII (목록 렌더 시 복호화 표시)
+   * - `entry.<name>`: 들어온 링크로 받은 이어 넘길 값
+   * - `answer.<questionId>[.<cellId>]`: 응답값 — 단답형·장문형 문항 또는 표 입력 칸
    */
   key: string;
   /** 표 헤더 라벨 (사용자 편집 가능). 컨택리스트 라벨과 별도. */

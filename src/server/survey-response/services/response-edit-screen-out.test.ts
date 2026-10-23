@@ -46,10 +46,8 @@ const h = vi.hoisted(() => ({
   // 조회와 UPDATE 사이에 다른 요청이 바꿔 놓은 DB 의 현재 상태(경합 재현용). null 이면 조회 값 그대로.
   concurrentStatus: null as string | null,
   concurrentlyDeleted: false,
-}));
-
-vi.mock('./response-answers', () => ({
-  replaceResponseAnswers: vi.fn(async () => undefined),
+  // 응답 편집 이력 INSERT — 거부된 저장이 아무것도 쓰지 않았는지 본다.
+  txInsert: vi.fn((_table: unknown) => ({ values: vi.fn(async () => undefined) })),
 }));
 
 vi.mock('./submitted-answers', async (importOriginal) => ({
@@ -134,7 +132,7 @@ vi.mock('@/db', async (importOriginal) => ({
             };
           }),
         })),
-        insert: vi.fn(() => ({ values: vi.fn(async () => undefined) })),
+        insert: (table: unknown) => h.txInsert(table),
         // 0행일 때의 원인 판별 재조회
         select: vi.fn(() => ({
           from: vi.fn(() => ({
@@ -222,13 +220,12 @@ describe('saveAdminEdit — 종결 상태 쓰기의 동시성 가드', () => {
   // completed·screened_out 을 다시 덮어쓰던 경합. 재응답 허용이 지운 completedAt·컨택 완료
   // 링크는 돌아오지 않아 상태와 연결이 어긋난다.
   it('조회 뒤 상태가 바뀌었으면 status_conflict 로 거부하고 아무것도 쓰지 않는다', async () => {
-    const { replaceResponseAnswers } = await import('./response-answers');
-    vi.mocked(replaceResponseAnswers).mockClear();
+    h.txInsert.mockClear();
     seed({ status: 'completed', questionResponses: { 'q-screen': 'ok' } });
     h.concurrentStatus = 'in_progress';
 
     await expect(save({ 'q-screen': 'bad' })).rejects.toMatchObject({ reason: 'status_conflict' });
-    expect(replaceResponseAnswers).not.toHaveBeenCalled();
+    expect(h.txInsert).not.toHaveBeenCalled();
   });
 
   it('0행의 원인이 동시 삭제면 종전대로 response_deleted 다', async () => {

@@ -5,7 +5,6 @@ import { describe, expect, it } from 'vitest';
  *
  * DB 연결 없이 타입 레벨에서 스키마 정의가 올바른지 검증합니다.
  * - survey_versions 테이블 정의 존재
- * - response_answers 테이블 정의 존재
  * - surveys 테이블에 status, currentVersionId, deletedAt 컬럼
  * - survey_responses 테이블에 versionId 컬럼
  */
@@ -30,27 +29,6 @@ describe('survey_versions 테이블 정의', () => {
     expect(table.publishedAt).toBeDefined();
     expect(table.closedAt).toBeDefined();
     expect(table.deletedAt).toBeDefined();
-    expect(table.createdAt).toBeDefined();
-  });
-});
-
-describe('response_answers 테이블 정의', () => {
-  it('responseAnswers 테이블이 export 되어야 함', async () => {
-    const schema = await import('@/db/schema/surveys');
-    expect(schema.responseAnswers).toBeDefined();
-  });
-
-  it('필수 컬럼들이 정의되어야 함', async () => {
-    const schema = await import('@/db/schema/surveys');
-    const table = schema.responseAnswers;
-
-    expect(table.id).toBeDefined();
-    expect(table.responseId).toBeDefined();
-    expect(table.questionId).toBeDefined();
-    expect(table.textValue).toBeDefined();
-    expect(table.arrayValue).toBeDefined();
-    expect(table.objectValue).toBeDefined();
-    expect(table.questionType).toBeDefined();
     expect(table.createdAt).toBeDefined();
   });
 });
@@ -84,10 +62,5 @@ describe('타입 정의', () => {
     const types = await import('@/db/schema/surveys');
     // 런타임에서는 테이블 객체가 존재하면 타입도 추론 가능
     expect(types.surveyVersions).toBeDefined();
-  });
-
-  it('ResponseAnswer 타입이 export 되어야 함', async () => {
-    const types = await import('@/db/schema/surveys');
-    expect(types.responseAnswers).toBeDefined();
   });
 });

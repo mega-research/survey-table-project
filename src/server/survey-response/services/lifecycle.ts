@@ -2,15 +2,20 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import 'server-only';
 
 import { db } from '@/db';
-import { surveyResponses } from '@/db/schema';
+import { responseMigrationHistory, surveyResponses, surveyVersions } from '@/db/schema';
 import { loadVersionSnapshot } from '@/server/read-models/version-snapshot';
-import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
+import { decryptQuestionResponses, withoutEncryptedAnswers } from '@/lib/crypto/response-pii';
 import { findContactByInviteToken } from '@/server/read-models/invite-lookup';
 import { logger } from '@/lib/logger';
 import { normalizeQuestions } from '@/lib/question/normalize';
 import { toFlatQuestion } from '@/lib/question/variants';
-import { getSurveyControlFlags, isValidTestToken } from '@/server/read-models/survey-control';
+import {
+  getSurveyControlFlags,
+  isValidTestToken,
+  type SurveyControlFlags,
+} from '@/server/read-models/survey-control';
 import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
+import { changedQuestionIds } from '@/lib/survey/test-version-fingerprint';
 import {
   isResumableTestStatus,
   lockAndAssertResponseMutation,
@@ -19,6 +24,7 @@ import {
   isConcludedResponseStatus,
   isOpenResponseStatus,
 } from '@/shared/contracts/survey-response';
+import { pinnedVersionId } from '@/shared/contracts/survey';
 
 import { ongoingResponseDenial } from '../domain/acceptance';
 import type {
@@ -29,6 +35,7 @@ import type {
   ResumeOrCreateResponseOutput,
 } from '../domain/lifecycle';
 import { extractDraftSeq } from '../domain/draft-seq';
+import { reopenQuotaClosedResponse } from './quota-reopen';
 import { SurveyNotAcceptingResponsesError } from './response-gate';
 
 // ========================
@@ -48,6 +55,17 @@ interface ResumedRowMigration {
 }
 
 /**
+ * 이 응답이 이어 갈 버전 — 테스트 응답은 지금 테스트 버전(CONTEXT.md 「테스트 버전」, 없으면 배포본),
+ * 실응답은 배포본. 플래그를 못 읽었으면 undefined(이관하지 않는다 — 종전 fail-open).
+ */
+function resumeTargetVersionId(
+  flags: SurveyControlFlags | null | undefined,
+  isTest: boolean,
+): string | null | undefined {
+  return flags ? pinnedVersionId(flags, isTest) : undefined;
+}
+
+/**
  * 응답 버전 이관 (response version migration, ADR-0014) — 재개 시점의 versionId 재고정.
  *
  * 구버전에 고정된 미완료 응답을 현재 발행 버전으로 재고정하고, 기존 답변을
@@ -62,9 +80,15 @@ interface ResumedRowMigration {
  * 주의: questionResponses 는 통 교체다. 재개는 페이지 로드 직후라 이 세션의 draft 와
  * 경합하지 않지만, 타 탭 draft 가 SELECT~UPDATE 사이에 끼면 그 배치는 유실될 수 있는
  * 잔여 window 다 (WHERE version_id 낙관 가드는 동시 "이관"만 차단).
+ *
+ * 실응답이면 옮기기 전·후 답(암호문은 표식)과 두 버전을 이관 이력 한 줄로 같은 트랜잭션에
+ * 남긴다 — 통 교체로 사라지는 옮기기 전 답을 보관한다(CONTEXT.md 「이관 이력」). 낙관 가드가
+ * 0행이면 쓰지 않으므로 같은 재개가 두 번 와도 한 줄이다. 테스트 응답은 남기지 않는다.
  */
 async function migrateResumedRowIfStale(input: {
   responseId: string;
+  surveyId: string;
+  isTest: boolean;
   rowVersionId: string | null | undefined;
   currentVersionId: string | null | undefined;
   storedResponses: Record<string, unknown>;
@@ -76,6 +100,7 @@ async function migrateResumedRowIfStale(input: {
   if (rowVersionId == null || currentVersionId == null || rowVersionId === currentVersionId) {
     return null;
   }
+  const fromVersionId = rowVersionId;
 
   const snap = await loadVersionSnapshot(currentVersionId);
   // 여기서는 snapshotQuestions 를 쓰지 않는다 — 구조가 깨졌을 때 빈 배열로 접으면
@@ -84,29 +109,53 @@ async function migrateResumedRowIfStale(input: {
 
   const questions = normalizeQuestions(snap.questions, 'preserve').map(toFlatQuestion);
   const survival = applyStructuralSurvival(storedResponses, questions);
+  // 테스트 버전끼리 옮길 때는 답이 남아도 정의가 바뀐 문항(문구·조건 포함)·새 문항·설정이 바뀐 그룹의
+  // 문항까지 데려갈 곳에 넣는다 — 고친 곳을 바로 확인하게. 지문은 테스트 버전에만 있어 실응답 이관은
+  // 종전과 같다(CONTEXT.md 「테스트 버전」).
+  const [previous] = await db
+    .select({ fingerprints: surveyVersions.fingerprints })
+    .from(surveyVersions)
+    .where(eq(surveyVersions.id, rowVersionId))
+    .limit(1);
+  const changedIds = changedQuestionIds(previous?.fingerprints ?? null, snap);
+  const affectedQuestionIds = [...new Set([...survival.affectedQuestionIds, ...changedIds])];
 
-  const [updated] = await db
-    .update(surveyResponses)
-    .set({
-      versionId: currentVersionId,
-      // jsonb 컬럼 — 객체 그대로 바인딩 (JSON.stringify 금지: 이중 인코딩)
-      questionResponses: survival.survivingResponses,
-      metadata: sql`jsonb_set(
-        COALESCE(${surveyResponses.metadata}, '{}'::jsonb),
-        '{migratedFromVersionId}',
-        COALESCE(${surveyResponses.metadata}->'migratedFromVersionId', to_jsonb(${rowVersionId}::text)),
-        true
-      )`,
-      lastActivityAt: now,
-      ...(reviveFromDrop ? { status: 'in_progress' } : {}),
-    })
-    .where(and(eq(surveyResponses.id, responseId), eq(surveyResponses.versionId, rowVersionId)))
-    .returning({ id: surveyResponses.id });
+  const updated = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .update(surveyResponses)
+      .set({
+        versionId: currentVersionId,
+        // jsonb 컬럼 — 객체 그대로 바인딩 (JSON.stringify 금지: 이중 인코딩)
+        questionResponses: survival.survivingResponses,
+        metadata: sql`jsonb_set(
+          COALESCE(${surveyResponses.metadata}, '{}'::jsonb),
+          '{migratedFromVersionId}',
+          COALESCE(${surveyResponses.metadata}->'migratedFromVersionId', to_jsonb(${fromVersionId}::text)),
+          true
+        )`,
+        lastActivityAt: now,
+        ...(reviveFromDrop ? { status: 'in_progress' } : {}),
+      })
+      .where(and(eq(surveyResponses.id, responseId), eq(surveyResponses.versionId, fromVersionId)))
+      .returning({ id: surveyResponses.id });
+    if (row && !input.isTest) {
+      await tx.insert(responseMigrationHistory).values({
+        responseId,
+        surveyId: input.surveyId,
+        fromVersionId,
+        toVersionId: currentVersionId,
+        answersBefore: withoutEncryptedAnswers(storedResponses),
+        answersAfter: withoutEncryptedAnswers(survival.survivingResponses),
+        actor: 'respondent',
+      });
+    }
+    return row;
+  });
   if (!updated) return null;
 
   return {
     survivingResponses: survival.survivingResponses,
-    affectedQuestionIds: survival.affectedQuestionIds,
+    affectedQuestionIds,
   };
 }
 
@@ -129,6 +178,22 @@ async function touchOrReviveResponse(
         : { lastActivityAt: opts.now },
     )
     .where(eq(surveyResponses.id, responseId));
+}
+
+/**
+ * 재진입한 쿼터 마감 행 — 목표가 늘어 자리가 생겼으면 drop 으로 되돌리고 바뀐 status 를 돌려준다.
+ * 호출부는 돌려받은 status 로 평소 재개 판정(drop 되살리기)을 이어 간다.
+ *
+ * 설문이 지금 응답을 받지 않으면(중단·종료) 열지 않는다 — 열어 두면 응답자는 어차피 막히고
+ * 상태만 쿼터 마감에서 이탈로 바뀐다.
+ */
+async function reopenQuotaClosedOnResume(
+  row: { id: string; status: string },
+  flags: Awaited<ReturnType<typeof getSurveyControlFlags>>,
+): Promise<string> {
+  if (row.status !== 'quotaful_out') return row.status;
+  if (!flags || ongoingResponseDenial(flags, { isTest: false })) return row.status;
+  return (await reopenQuotaClosedResponse(row.id)) ? 'drop' : row.status;
 }
 
 /**
@@ -278,6 +343,7 @@ export async function recordVisibilitySegment(input: RecordVisibilitySegmentInpu
  * - drop 상태면 in_progress 로 UPDATE + lastActivityAt 갱신
  * - in_progress 면 그대로 (lastActivityAt만 갱신해 stale 방지)
  * - completed/screened_out/quotaful_out/bad 면 그대로 반환 — 호출자가 "이미 끝남" UX 처리
+ * - quotaful_out 이어도 목표가 늘어 그 셀에 자리가 생겼으면 다시 열어 in_progress 로 이어 간다
  *
  * 반환 null 이면 첫 진입 — 호출자는 평소대로 createResponseWithFirstAnswer 흐름.
  *
@@ -350,14 +416,18 @@ export async function resumeOrCreateResponse(
           // (2026-10-20 — 전에는 테스터가 재발행마다 처음부터 다시 했다). 구조 생존 판정이
           // 유령 답을 걸러 낸다. 이관 불능(스냅샷 훼손·경합)이면 복원하지 않고, 행이 구버전에
           // 남아 첫 입력의 acquireTestTargetResponse 가 제자리 초기화한다.
-          const versionMatched = existingByContact.versionId === flags?.currentVersionId;
+          // 테스트 대상자는 지금 테스트 버전으로 이어 간다(CONTEXT.md 「테스트 버전」).
+          const targetVersionId = resumeTargetVersionId(flags, true);
+          const versionMatched = existingByContact.versionId === targetVersionId;
           const reviveFromDrop = existingByContact.status === 'drop';
           const migration = versionMatched
             ? null
             : await migrateResumedRowIfStale({
                 responseId: existingByContact.id,
+                surveyId,
+                isTest: existingByContact.isTest,
                 rowVersionId: existingByContact.versionId,
-                currentVersionId: flags?.currentVersionId,
+                currentVersionId: targetVersionId,
                 storedResponses: existingByContact.questionResponses ?? {},
                 reviveFromDrop,
                 now: new Date(),
@@ -389,9 +459,11 @@ export async function resumeOrCreateResponse(
           return { ...restored, resumed: false };
         }
         const now = new Date();
+        // 쿼터 마감이어도 목표가 늘어 자리가 생겼으면 drop 으로 되돌려 아래 되살리기로 잇는다.
+        const status = await reopenQuotaClosedOnResume(existingByContact, flags);
         // 열림(in_progress·drop) 판정 — contracts 의 isOpenResponseStatus 가 SSOT.
         // 종결·알 수 없는 값은 종전대로 아래 null 로 흘러 첫 답변 경로(decideResponseReuse)가 차단한다.
-        if (isOpenResponseStatus(existingByContact.status)) {
+        if (isOpenResponseStatus(status)) {
           // 중단 모드: 행이 isTest 이거나 유효한 테스트 링크로 재진입한 경우만 예외.
           // 두 면제 갈래를 OR 로 합쳐 domain 의 단일 isTest 면제 규칙에 넘긴다.
           // flags 미조회(설문 삭제 등)는 종전대로 fail-open.
@@ -403,7 +475,7 @@ export async function resumeOrCreateResponse(
           if (contactPausedDenial) {
             throw new SurveyNotAcceptingResponsesError(contactPausedDenial);
           }
-          const reviveFromDrop = existingByContact.status === 'drop';
+          const reviveFromDrop = status === 'drop';
           // 답·스텝 복원 — invite 토큰 소지 = 이어가기 권한 (2026-08-12 제품 결정):
           // 초대 링크는 컨택별 개인 발송이므로 토큰 소지 자체를 소유 증명으로 보고,
           // 다른 기기·시크릿탭 재진입에도 복호화 답과 진행 위치를 복원한다. 링크 유출 시
@@ -412,12 +484,15 @@ export async function resumeOrCreateResponse(
           // - 버전 불일치: 응답 버전 이관으로 현재 버전에 얹어 복원한다. 이관 불능(현재
           //   스냅샷 훼손·경합)이면 복원하지 않는다 — 구버전 답을 신버전 UI 에 그대로
           //   주입하는 유령 답 문제를 되살리지 않기 위함.
-          const versionMatches = existingByContact.versionId === flags?.currentVersionId;
+          const targetVersionId = resumeTargetVersionId(flags, existingByContact.isTest);
+          const versionMatches = existingByContact.versionId === targetVersionId;
           const migration = !versionMatches
             ? await migrateResumedRowIfStale({
                 responseId: existingByContact.id,
+                surveyId,
+                isTest: existingByContact.isTest,
                 rowVersionId: existingByContact.versionId,
-                currentVersionId: flags?.currentVersionId,
+                currentVersionId: targetVersionId,
                 storedResponses: existingByContact.questionResponses ?? {},
                 reviveFromDrop,
                 now,
@@ -490,8 +565,11 @@ export async function resumeOrCreateResponse(
   const now = new Date();
   const draftSeq = extractDraftSeq(existing.metadata);
 
+  // 쿼터 마감이어도 목표가 늘어 자리가 생겼으면 drop 으로 되돌려 아래 되살리기로 잇는다.
+  const status = await reopenQuotaClosedOnResume(existing, flags);
+
   // 열림(in_progress·drop) 판정 — contracts 의 isOpenResponseStatus 가 SSOT.
-  if (isOpenResponseStatus(existing.status)) {
+  if (isOpenResponseStatus(status)) {
     // 중단 모드: 행이 isTest 이거나 유효한 테스트 링크로 재진입한 경우만 예외.
     // 두 면제 갈래를 OR 로 합쳐 domain 의 단일 isTest 면제 규칙에 넘긴다.
     // flags 미조회(설문 삭제 등)는 종전대로 fail-open.
@@ -501,12 +579,15 @@ export async function resumeOrCreateResponse(
     if (sessionPausedDenial) {
       throw new SurveyNotAcceptingResponsesError(sessionPausedDenial);
     }
-    const reviveFromDrop = existing.status === 'drop';
+    const reviveFromDrop = status === 'drop';
     // 응답 버전 이관 — 구버전 행이면 현재 버전으로 재고정 (실패·불필요 시 null → 기존 동작)
     const migration = await migrateResumedRowIfStale({
       responseId: existing.id,
+      surveyId,
+      isTest: existing.isTest,
       rowVersionId: existing.versionId,
-      currentVersionId: flags?.currentVersionId,
+      // 테스트 응답(행 또는 유효한 테스트 링크)은 지금 테스트 버전으로 이어 간다.
+      currentVersionId: resumeTargetVersionId(flags, existing.isTest || isTestSession),
       storedResponses: existing.questionResponses ?? {},
       reviveFromDrop,
       now,

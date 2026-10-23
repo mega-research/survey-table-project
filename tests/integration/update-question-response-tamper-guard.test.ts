@@ -55,10 +55,6 @@ vi.mock('@/db', () => {
   return { db: chainable };
 });
 
-vi.mock('@/server/survey-response/services/response-answers', () => ({
-  replaceResponseAnswers: vi.fn(async () => undefined),
-}));
-
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
 const RESPONSE_ID = 'r1';

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import type { ProfileColumnScheme } from '@/shared/contracts/operations';
 import { normalizeContactColumnScheme } from '@/lib/operations/contacts-format';
 import {
+  answerColumnKey,
+  answerKeyOf,
   entryColumnKey,
   entryKeyOf,
   formatIpHash,
@@ -10,6 +11,7 @@ import {
   selectRawExportContactColumns,
   visibleProfileColumns,
 } from '@/lib/operations/profile-columns-format';
+import type { ProfileColumnScheme } from '@/shared/contracts/operations';
 
 const contactScheme = normalizeContactColumnScheme({
   version: 1,
@@ -111,6 +113,47 @@ describe('hydrateProfileColumns', () => {
       label: '회원 ID',
       order: 0,
     });
+  });
+});
+
+describe('answerColumnKey / answerKeyOf', () => {
+  it('문항 하나와 표 칸 하나를 id 로 가리키고 되읽는다', () => {
+    expect(answerColumnKey('q-1')).toBe('answer.q-1');
+    expect(answerColumnKey('q-1', 'cell_A')).toBe('answer.q-1.cell_A');
+    expect(answerKeyOf('answer.q-1')).toEqual({ questionId: 'q-1', cellId: null });
+    expect(answerKeyOf('answer.q-1.cell_A')).toEqual({ questionId: 'q-1', cellId: 'cell_A' });
+  });
+
+  it('다른 열 키·빈 id 는 응답값 열이 아니다', () => {
+    expect(answerKeyOf('attrs.업체명')).toBeNull();
+    expect(answerKeyOf('answer.')).toBeNull();
+    expect(answerKeyOf('answer.q-1.')).toBeNull();
+  });
+});
+
+describe('hydrateProfileColumns — 응답값 열', () => {
+  const company = answerColumnKey('q-1', 'cell_A');
+  const removed = answerColumnKey('q-gone');
+  const saved: ProfileColumnScheme = {
+    version: 1,
+    columns: [
+      { key: 'sys.idx', label: '순번', order: 0 },
+      { key: company, label: '회사명', order: 99 },
+      { key: removed, label: '지운 문항', order: 100 },
+    ],
+  };
+
+  it('지금 구조에 있는 응답값 열만 저장 순서 자리에 잇는다', () => {
+    const cols = hydrateProfileColumns(contactScheme, saved, [], new Set([company]));
+    expect(cols.at(-1)?.key).toBe(company);
+    expect(cols.find((c) => c.key === company)?.label).toBe('회사명');
+    expect(cols.some((c) => c.key === removed)).toBe(false);
+  });
+
+  it('구조 키를 넘기지 않는 호출부(명단 열만 보는 곳)는 응답값 열을 받지 않는다', () => {
+    const cols = hydrateProfileColumns(contactScheme, saved);
+    expect(cols.some((c) => answerKeyOf(c.key) !== null)).toBe(false);
+    expect(selectRawExportContactColumns(contactScheme, saved)).toEqual([]);
   });
 });
 

@@ -6,10 +6,6 @@ import { saveAdminEdit } from './response-edit';
 // 관리자 응답 수정의 이탈→완료 전환은 쿼터 「진행 중 마감」 하드 차단을 타지 않는다(ADR 0025 —
 // 운영자의 결정을 뒤집지 않는다). 대신 찬 셀이면 기존 초과 표식(metadata.quotaOverflow)만 남긴다.
 
-vi.mock('./response-answers', () => ({
-  replaceResponseAnswers: vi.fn(async () => undefined),
-}));
-
 const h = vi.hoisted(() => ({
   overflow: false,
   responses: [] as Array<Record<string, unknown>>,

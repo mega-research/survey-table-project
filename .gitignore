@@ -51,7 +51,8 @@ claudedocs
 .env.sentry-build-plugin
 
 backups
-scripts
+# 공유하지 않는 일회성 스크립트 — 공유할 스크립트는 scripts/ 바로 아래에 둔다
+scripts/private/
 .serena*.png
 .playwright-mcp
 test-results

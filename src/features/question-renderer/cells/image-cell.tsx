@@ -5,6 +5,8 @@ import React, { useState } from 'react';
 import { Image as ImageIcon } from 'lucide-react';
 
 import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
+import { EnlargeableImage } from '@/features/question-renderer/enlargeable-image';
+import { useTableImageEnlarge } from '@/features/question-renderer/table-image-enlarge';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
@@ -22,6 +24,7 @@ export const ImageCell = React.memo(function ImageCell({
   // content 오버라이드 미지정 시 직접 치환(단일 패스). PreviewCell 이 이미 치환된 캡션을
   // 넘길 때는 override 로 전달하므로 여기서 다시 치환하지 않는다.
   const caption = content ?? substituteTokens(cell.content, attrs, quotes);
+  const enlarge = useTableImageEnlarge(cell.id);
 
   if (!cell.imageUrl) {
     return (
@@ -34,23 +37,25 @@ export const ImageCell = React.memo(function ImageCell({
 
   return (
     <div className="flex flex-col items-center gap-2">
-      <div key={cell.imageUrl}>
-        {failedImageUrl === cell.imageUrl ? (
-          <div className="flex items-center gap-1 text-sm text-red-500">
-            <ImageIcon className="h-4 w-4" />
-            <span>이미지 오류</span>
-          </div>
-        ) : (
-          // eslint-disable-next-line @next/next/no-img-element -- R2 사용자 업로드 이미지(크기 미상), next/image 최적화 비용 회피
-          <img
-            src={cell.imageUrl}
-            alt="셀 이미지"
-            className="h-auto max-h-full w-full rounded object-contain"
-            style={{ maxWidth: '100%', maxHeight: '100%' }}
-            onError={() => setFailedImageUrl(cell.imageUrl ?? null)}
-          />
-        )}
-      </div>
+      {failedImageUrl === cell.imageUrl ? (
+        <div className="flex items-center gap-1 text-sm text-red-500">
+          <ImageIcon className="h-4 w-4" />
+          <span>이미지 오류</span>
+        </div>
+      ) : (
+        <EnlargeableImage
+          key={cell.imageUrl}
+          src={cell.imageUrl}
+          alt="셀 이미지"
+          fit="contain"
+          className="h-auto max-h-full w-full rounded object-contain"
+          style={{ maxWidth: '100%', maxHeight: '100%' }}
+          enabled={enlarge !== null}
+          title={enlarge?.title}
+          subtitle={caption.trim() || undefined}
+          onError={() => setFailedImageUrl(cell.imageUrl ?? null)}
+        />
+      )}
       {caption && (
         <div
           className={cn('mt-2 text-left text-base text-gray-700', getCellTextClassName(cell))}

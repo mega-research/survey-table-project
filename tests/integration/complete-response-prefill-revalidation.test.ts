@@ -100,10 +100,6 @@ vi.mock('@/db', () => {
   return { db };
 });
 
-vi.mock('@/server/survey-response/services/response-answers', () => ({
-  replaceResponseAnswers: vi.fn(async () => undefined),
-}));
-
 vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }));

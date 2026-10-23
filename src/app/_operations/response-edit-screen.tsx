@@ -6,6 +6,8 @@ import { contactTargets, surveys, surveyVersions } from '@/db/schema';
 import type { SurveyAnchorSnapshot } from '@/shared/contracts/survey-document';
 import { buildDocumentView } from '@/server/survey-builder/services/survey-read';
 import { lookupPriorAnswersByContactTarget } from '@/server/contacts/services/contact-prior-answers';
+import { pinnedVersionId } from '@/shared/contracts/survey';
+import { ensureTestVersion } from '@/server/workflows/test-version';
 import { getResponseById } from '@/server/read-models/responses';
 import { loadRespondentContactAttrs } from '@/server/read-models/respondent-contact-attrs';
 import { isResponseExcluded } from '@/server/operations/services/profiles';
@@ -29,8 +31,9 @@ import { AdminResponseEditor } from './admin-response-editor';
  * - getResponseById 로 응답 조회 (soft delete 포함).
  *   - 삭제된 응답이면 안내 화면 (복원 안내).
  *   - 응답 surveyId 가 path 와 다르면 notFound.
- * - 렌더 버전은 항상 현재 배포 버전(surveys.currentVersionId) 스냅샷 — 미배포 설문만
- *   응답 자신의 버전으로 폴백한다(스펙 결정 1). 응답 버전과 렌더 버전이 다르면
+ * - 렌더 버전은 이 응답이 볼 버전 — 실응답은 현재 배포본, 테스트 응답은 지금 테스트 버전(저장본,
+ *   CONTEXT.md 「테스트 버전」 — 테스트는 테스트 버전에만 있다). 그 버전이 없으면 응답 자신의 버전으로
+ *   폴백한다(스펙 결정 1). 응답 버전과 렌더 버전이 다르면
  *   구조 생존 필터(applyStructuralSurvival)로 프리필하고 배너를 띄운다(스펙 결정 2·3).
  *   렌더만으로는 DB 를 바꾸지 않는다 — 실제 이관은 저장 시점에 service 가 수행한다.
  */
@@ -63,13 +66,18 @@ export async function ResponseEditScreen({ surveyId, responseId, basePath, scope
     );
   }
 
-  // 렌더 버전 결정 (스펙 결정 1): 항상 현재 배포 버전 스냅샷. 미배포 설문만 응답
-  // 자신의 버전으로 폴백(기존 동작). 레거시 versionId null 응답도 최신으로 렌더한다.
+  // 테스트 응답은 테스트 버전을 지금 저장본에 맞춘 뒤 그것으로 그린다 — 테스트 화면과 같은 구조.
+  if (response.isTest) await ensureTestVersion(surveyId);
+
+  // 렌더 버전 결정 (스펙 결정 1): 이 응답이 볼 버전(실응답 = 현재 배포본, 테스트 응답 = 지금 테스트
+  // 버전). 그 버전이 없을 때만 응답 자신의 버전으로 폴백(기존 동작). 레거시 versionId null 응답도
+  // 최신으로 렌더한다. 저장도 같은 버전을 요구한다(saveAdminEdit 의 낙관 버전 가드).
   const surveyRow = await db.query.surveys.findFirst({
     where: eq(surveys.id, surveyId),
-    columns: { currentVersionId: true },
+    columns: { currentVersionId: true, testVersionId: true },
   });
-  const renderVersionId = surveyRow?.currentVersionId ?? response.versionId ?? null;
+  const pinnedId = surveyRow ? pinnedVersionId(surveyRow, response.isTest) : null;
+  const renderVersionId = pinnedId ?? response.versionId ?? null;
 
   // 렌더 버전 스냅샷과 contact attrs, negative 제외 여부, 이월 응답을 병렬로 조회.
   const [version, contactRow, excluded, priorAnswers] = await Promise.all([
@@ -105,8 +113,7 @@ export async function ResponseEditScreen({ surveyId, responseId, basePath, scope
 
   // 구버전 응답을 최신 형식으로 열 때: 같은 구조만 프리필, 다른 구조는 비움 (스펙 결정 2).
   // 렌더만으로는 DB 를 바꾸지 않는다 — 저장 시점에 service 가 이관한다.
-  const migratedFromOldVersion =
-    surveyRow?.currentVersionId != null && response.versionId !== surveyRow.currentVersionId;
+  const migratedFromOldVersion = pinnedId != null && response.versionId !== pinnedId;
   let initialResponses = response.questionResponses as Record<string, unknown>;
   if (migratedFromOldVersion) {
     // SurveyVersionSnapshot.questions 는 타입상 필수지만 손상된 스냅샷 행은 방어적으로
@@ -150,7 +157,7 @@ export async function ResponseEditScreen({ surveyId, responseId, basePath, scope
         initialPriorAnswers={priorAnswers}
         documentView={documentView}
         idx={idx}
-        renderedVersionId={surveyRow?.currentVersionId ?? null}
+        renderedVersionId={pinnedId}
         migratedFromOldVersion={migratedFromOldVersion}
       />
     </>

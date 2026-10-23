@@ -254,9 +254,6 @@ export async function detectQuotaOverflow(
   }
 }
 
-// 응답 완료 (JSONB + response_answers 이중 쓰기)
-// 읽기: response_answers 우선 (getResponsesWithAnswers), JSONB fallback
-// JSONB 쓰기는 마이그레이션 완료 + 모든 읽기 경로 전환 후 제거 예정
 /** completeResponse 정제 파이프라인이 공유하는 게이트 행 모양. */
 export type CompleteGateRow = {
   surveyId: string;
@@ -270,8 +267,7 @@ export type CompleteGateRow = {
  *
  * completeResponse 는 data.questionResponses 를 verbatim 저장하므로, 미인증 응답자가
  * (a) 설문에 없는 임의 questionId 수천 개, 또는 (b) 단일 키에 수 MB 값을 주입해 JSONB
- * SSOT 를 오염·팽창시킬 수 있다(response_answers 정규화는 미존재 키를 거르지만 원본
- * JSONB 컬럼은 무방비). 유효 집합에 없는 키와 상한 초과 값을 silent drop 한다
+ * SSOT 를 오염·팽창시킬 수 있다. 유효 집합에 없는 키와 상한 초과 값을 silent drop 한다
  * (가용성 우선 — throw 아님). 이 필터가 prefill 복원보다 먼저다.
  */
 export async function sanitizeSubmittedResponses(

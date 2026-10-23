@@ -39,6 +39,10 @@ function includeFor(ext: 'ts' | 'tsx'): string[] {
 
 export default defineConfig({
   plugins: [react()],
+  // postcss.config.mjs 는 Next 형식(플러그인을 문자열로 적음)이라 Vite 가 읽지 못한다. 컴포넌트가 CSS 를
+  // import 하면(라이트박스 스타일) 테스트가 그 설정을 찾다 깨지므로 빈 설정을 직접 준다 — 테스트는
+  // 스타일을 계산하지 않는다.
+  css: { postcss: { plugins: [] } },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

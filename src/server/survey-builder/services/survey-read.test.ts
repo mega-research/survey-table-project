@@ -80,6 +80,9 @@ function emptyDrizzleSelect() {
   return chain;
 }
 
+// 테스트 버전(저장본 스냅샷) 경로는 실DB 테스트(test-version.realdb)가 본다 — 여기서는 배포본 경로만.
+vi.mock('@/server/workflows/test-version', () => ({ ensureTestVersion: vi.fn(async () => null) }));
+
 vi.mock('@/db', () => ({
   db: {
     select: () => emptyDrizzleSelect(),

@@ -21,7 +21,6 @@ vi.mock('../services/response-read', () => ({
   getResponsesBySurvey: vi.fn(),
   getCompletedResponses: vi.fn(),
   getResponseById: vi.fn(),
-  getResponsesWithAnswers: vi.fn(),
   getSurveyVersions: vi.fn(),
   exportResponsesAsJson: vi.fn(),
   exportResponsesAsCsv: vi.fn(),
@@ -38,7 +37,6 @@ import { read } from './read';
 // UUID 픽스처는 v4 형태로 통일.
 const SURVEY_ID = '11111111-2222-4333-8444-555555555555';
 const RESPONSE_ID = '22222222-3333-4444-8555-666666666666';
-const VERSION_ID = '33333333-4444-4555-8666-777777777777';
 
 function authedContext(): ORPCContext {
   return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false , userType: 'internal'} };
@@ -137,16 +135,6 @@ describe('surveyBuilder.read procedures', () => {
     const res = await client.read.responseById({ responseId: RESPONSE_ID, surveyId: SURVEY_ID });
     expect(responseSvc.getResponseById).toHaveBeenCalledWith(RESPONSE_ID, SURVEY_ID);
     expect((res as { id: string }).id).toBe(RESPONSE_ID);
-  });
-
-  it('responsesWithAnswers는 input 객체를 그대로 위임한다', async () => {
-    vi.mocked(responseSvc.getResponsesWithAnswers).mockResolvedValue([] as never);
-    const client = createRouterClient({ read }, { context: authedContext() });
-    await client.read.responsesWithAnswers({ surveyId: SURVEY_ID, versionId: VERSION_ID });
-    expect(responseSvc.getResponsesWithAnswers).toHaveBeenCalledWith({
-      surveyId: SURVEY_ID,
-      versionId: VERSION_ID,
-    });
   });
 
   it('surveyVersions는 surveyId를 풀어 getSurveyVersions에 위임한다', async () => {
@@ -267,7 +255,6 @@ describe('surveyBuilder.read — capability 관문 (티켓 09)', () => {
     ['responsesBySurvey', 'responses.view', () => ({ surveyId: SURVEY_ID })],
     ['completedResponses', 'responses.view', () => ({ surveyId: SURVEY_ID })],
     ['responseById', 'responses.view', () => ({ responseId: RESPONSE_ID, surveyId: SURVEY_ID })],
-    ['responsesWithAnswers', 'responses.view', () => ({ surveyId: SURVEY_ID })],
     ['exportJson', 'export.download', () => ({ surveyId: SURVEY_ID })],
     ['exportCsv', 'export.download', () => ({ surveyId: SURVEY_ID })],
   ] as const)('%s 는 %s 관문을 지난다', async (name, capability, makeInput) => {

@@ -20,7 +20,7 @@
  *   - 기타(allowTextInput) 옵션 선택 시 __optTexts__ 사이드카에 주관식 텍스트 생성
  *     (제목 키워드 기반 시맨틱 풀 — 실제 제출 payload 와 동일 구조).
  *   - 표 radio/select/input 셀은 보이는 행 전부 채움 (radio 그리드 완답 가정).
- *   - page_visits / totalSeconds / progressPct / response_answers 정규화 포함
+ *   - page_visits / totalSeconds / progressPct 포함
  *     (seed-fieldwork-mock.ts 와 동일 패턴).
  *
  * NOTE: production DB에 직접 적용 금지. dev/staging 시각 검증용.
@@ -28,10 +28,10 @@
 // import 호이스팅 때문에 side-effect import 로 @/db 평가 전에 env 를 주입한다 (seed-fieldwork-mock 과 동일).
 import 'dotenv/config';
 
-import { and, eq, inArray, isNull, like } from 'drizzle-orm';
+import { and, eq, isNull, like } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { questions, responseAnswers, surveyResponses, surveyVersions, surveys } from '@/db/schema';
+import { surveyResponses, surveyVersions, surveys } from '@/db/schema';
 import type { QuotaConfig } from '@/shared/contracts/quota';
 import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 import type { PageVisit } from '@/shared/contracts/survey-response';
@@ -42,7 +42,6 @@ import {
 } from '@/lib/fake-data-generator';
 import { parseBrowser } from '@/lib/operations/parse-ua';
 import { cellKeyOf, tallyAll } from '@/lib/quota/matching';
-import { normalizeToAnswers } from '@/server/survey-response/services/response-normalizer';
 import type { Question, Survey as SurveyClientType } from '@/types/survey';
 
 // === 분포 상수 (total 에 비례 스케일) ===
@@ -287,15 +286,8 @@ async function main() {
   const inProgressCount = Math.round(total * IN_PROGRESS_RATIO);
   const dropCount = total - completedCount - inProgressCount;
 
-  // 0. --reset: 기존 시드 삭제 (response_answers → survey_responses 순, 시드 외 응답은 보존)
+  // 0. --reset: 기존 시드 삭제 (시드 외 응답은 보존)
   if (process.argv.includes('--reset')) {
-    const seedIds = db
-      .select({ id: surveyResponses.id })
-      .from(surveyResponses)
-      .where(
-        and(eq(surveyResponses.surveyId, surveyId), like(surveyResponses.sessionId, 'seed-quota-%')),
-      );
-    await db.delete(responseAnswers).where(inArray(responseAnswers.responseId, seedIds));
     const deleted = await db
       .delete(surveyResponses)
       .where(
@@ -388,13 +380,7 @@ async function main() {
     } as unknown as SurveyClientType;
   }
 
-  // 5. response_answers 정규화용 질문 메타
-  const surveyQuestions = await db
-    .select({ id: questions.id, type: questions.type })
-    .from(questions)
-    .where(eq(questions.surveyId, surveyId));
-
-  // 6. 레코드 빌드
+  // 5. 레코드 빌드
   type SeedRecord = typeof surveyResponses.$inferInsert & {
     questionResponses: Record<string, unknown>;
   };
@@ -516,7 +502,7 @@ async function main() {
     });
   }
 
-  // 7. INSERT (100건 단위 청크)
+  // 6. INSERT (100건 단위 청크)
   const insertedIds: string[] = [];
   for (let i = 0; i < records.length; i += 100) {
     const chunk = records.slice(i, i + 100);
@@ -527,44 +513,10 @@ async function main() {
     insertedIds.push(...inserted.map((r) => r.id));
   }
 
-  // 8. response_answers 정규화 (전 상태 포함 — drop-funnel 이 lastQuestionId 를 읽는다)
-  const questionOrder = new Map(orderedQuestions.map((q, idx) => [q.id, idx]));
-  let answerRows: Array<typeof responseAnswers.$inferInsert> = [];
-  let normalizedRows = 0;
-
-  for (let i = 0; i < records.length; i++) {
-    const rec = records[i];
-    const responseId = insertedIds[i];
-    if (!rec || !responseId) continue;
-    const normalized = normalizeToAnswers(responseId, rec.questionResponses, surveyQuestions);
-    if (normalized.length === 0) continue;
-
-    normalized.sort(
-      (a, b) => (questionOrder.get(a.questionId) ?? 999999) - (questionOrder.get(b.questionId) ?? 999999),
-    );
-    const startMs = (rec.startedAt as Date).getTime();
-    const endMs = (rec.lastActivityAt as Date).getTime();
-    const span = (endMs - startMs) / Math.max(1, normalized.length);
-    answerRows.push(
-      ...normalized.map((ra, idx) => ({ ...ra, createdAt: new Date(startMs + (idx + 1) * span) })),
-    );
-
-    if (answerRows.length >= 500) {
-      await db.insert(responseAnswers).values(answerRows);
-      normalizedRows += answerRows.length;
-      answerRows = [];
-    }
-  }
-  if (answerRows.length > 0) {
-    await db.insert(responseAnswers).values(answerRows);
-    normalizedRows += answerRows.length;
-  }
-
   console.log(`✓ inserted ${insertedIds.length} mock responses for survey ${surveyId}`);
   console.log(`  - completed:   ${completedCount} (마감 셀 ${plan.fullCells} / 부분 충족 셀 ${plan.partialCells} / 무제한 조합 ${plan.unlimited})`);
   console.log(`  - in_progress: ${inProgressCount}`);
   console.log(`  - drop:        ${dropCount}`);
-  console.log(`  - response_answers rows: ${normalizedRows}`);
   process.exit(0);
 }
 
