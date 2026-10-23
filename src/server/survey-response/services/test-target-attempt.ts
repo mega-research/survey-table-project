@@ -3,6 +3,7 @@ import 'server-only';
 
 import type { DbTransaction } from '@/db';
 import { contactTargets, surveyResponses, surveys, testResponseAttempts } from '@/db/schema';
+import { pinnedVersionId } from '../domain/version-pin';
 import { resetTestResponseRow } from './reset-test-response';
 import { type PageVisit, isOpenResponseStatus } from '@/shared/contracts/survey-response';
 import type { TestAttemptIdentity } from '@/shared/types/test-attempt';
@@ -111,8 +112,8 @@ export async function acquireTestTargetResponse(
   if (!survey) {
     throw new Error('테스트 링크가 더 이상 유효하지 않습니다');
   }
-  // 테스트 대상자 응답의 고정 목적지 — 지금 테스트 버전(CONTEXT.md 「테스트 버전」). 아직 없으면 배포본.
-  const pinVersionId = survey.testVersionId ?? survey.currentVersionId;
+  // 테스트 대상자 응답의 고정 목적지 — 지금 테스트 버전(domain/version-pin). 아직 없으면 배포본.
+  const pinVersionId = pinnedVersionId(survey, true);
   const [liveTarget] = await tx
     .select({ id: contactTargets.id })
     .from(contactTargets)

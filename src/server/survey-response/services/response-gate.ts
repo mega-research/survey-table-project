@@ -7,6 +7,7 @@ import type { SurveyEndRedirects } from '@/shared/contracts/survey';
 
 import { completeResponseDenial, newResponseDenial } from '../domain/acceptance';
 import type { BlockReason } from '../domain/duplicate';
+import { pinnedVersionId, type VersionPins } from '../domain/version-pin';
 import { toGateBlockReason } from '../domain/gate-block-reason';
 
 /**
@@ -159,7 +160,7 @@ export async function loadVersionGateRow(versionId: string | null | undefined): 
 export async function loadValidatedVersionGateRow(
   surveyId: string,
   versionId: string | null | undefined,
-  pins: { currentVersionId: string | null; testVersionId?: string | null },
+  pins: VersionPins,
   options: { isTest: boolean } = { isTest: false },
 ): Promise<{ version: VersionGateRow; effectiveVersionId: string | null }> {
   if (!versionId) return { version: null, effectiveVersionId: null };
@@ -171,11 +172,8 @@ export async function loadValidatedVersionGateRow(
   if (!row || row.surveyId !== surveyId) {
     throw new SurveyNotAcceptingResponsesError('version_mismatch');
   }
-  // 고정 목적지 — 테스트 응답은 지금 테스트 버전(CONTEXT.md 「테스트 버전」), 실응답은 현재 배포본.
-  // 테스트 버전이 아직 없으면(이 기능 이전 · 만들기 실패) 테스트 응답도 배포본이다.
-  const target = options.isTest
-    ? (pins.testVersionId ?? pins.currentVersionId)
-    : pins.currentVersionId;
+  // 고정 목적지 — 테스트 응답은 지금 테스트 버전, 실응답은 현재 배포본(domain/version-pin).
+  const target = pinnedVersionId(pins, options.isTest);
   // 유효성: 목적지 버전이거나, 실응답이 보낸 published 버전이면 그대로 사용. 테스트 버전 행은
   // 실응답이 보내도 유효하지 않다 — 테스트 링크로 연 탭의 버전 id 가 실응답으로 새면 안 된다.
   const isTarget = target != null && target === versionId;

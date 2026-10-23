@@ -10,10 +10,9 @@ import type { SurveyVersionFingerprints } from '@/shared/contracts/survey';
  *   데려가는 기준이라, 순서만 바꾼 문항까지 잡으면 뒤 문항이 줄줄이 바뀐 것으로 잡혀 매번 앞으로
  *   끌려간다.
  *
- * 암호학적 해시가 아니다 — 같은 설문의 두 저장본을 가르는 데만 쓴다. 서버·클라이언트 공용 순수 함수.
+ * 암호학적 해시가 아니다 — 같은 설문의 두 저장본을 가르는 데만 쓴다. 테스트 버전 만들기(survey-builder)와
+ * 재개 이관(survey-response) 두 서버 도메인이 쓰는 순수 함수라 lib 에 둔다.
  */
-
-export type StructureFingerprints = SurveyVersionFingerprints;
 
 interface SnapshotLike {
   questions?: unknown;
@@ -60,7 +59,7 @@ function fingerprintItems(value: unknown): Record<string, string> {
 }
 
 /** 스냅샷의 리비전과 문항·그룹 지문. */
-export function buildStructureFingerprints(snapshot: SnapshotLike): StructureFingerprints {
+export function buildStructureFingerprints(snapshot: SnapshotLike): SurveyVersionFingerprints {
   return {
     revision: hash(stableStringify(snapshot)),
     questions: fingerprintItems(snapshot.questions),
@@ -74,7 +73,7 @@ export function buildStructureFingerprints(snapshot: SnapshotLike): StructureFin
  * 직전 지문이 없으면(이 기능 이전에 만든 응답) 아무것도 내지 않는다.
  */
 export function changedQuestionIds(
-  prev: Pick<StructureFingerprints, 'questions' | 'groups'> | null | undefined,
+  prev: Pick<SurveyVersionFingerprints, 'questions' | 'groups'> | null | undefined,
   next: SnapshotLike,
 ): string[] {
   if (!prev) return [];

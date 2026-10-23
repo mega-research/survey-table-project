@@ -26,6 +26,7 @@ import {
 } from '@/shared/contracts/survey-response';
 
 import { ongoingResponseDenial } from '../domain/acceptance';
+import { pinnedVersionId } from '../domain/version-pin';
 import type {
   RecordStepVisitInput,
   RecordStepVisitOutput,
@@ -58,11 +59,10 @@ interface ResumedRowMigration {
  * 실응답은 배포본. 플래그를 못 읽었으면 undefined(이관하지 않는다 — 종전 fail-open).
  */
 function resumeTargetVersionId(
-  flags: Pick<SurveyControlFlags, 'currentVersionId' | 'testVersionId'> | null | undefined,
+  flags: SurveyControlFlags | null | undefined,
   isTest: boolean,
 ): string | null | undefined {
-  if (!flags) return undefined;
-  return isTest ? (flags.testVersionId ?? flags.currentVersionId) : flags.currentVersionId;
+  return flags ? pinnedVersionId(flags, isTest) : undefined;
 }
 
 /**

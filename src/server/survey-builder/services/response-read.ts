@@ -3,6 +3,7 @@ import 'server-only';
 import { and, desc, eq, isNull, ne } from 'drizzle-orm';
 
 import { db } from '@/db';
+import { TEST_VERSION_STATUS } from '@/shared/contracts/survey';
 import { responseAnswers, surveyResponses, surveyVersions } from '@/db/schema';
 import { answersToQuestionResponses } from '@/lib/analytics/response-adapter';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
@@ -126,7 +127,7 @@ export async function getSurveyVersions(surveyId: string) {
       eq(surveyVersions.surveyId, surveyId),
       isNull(surveyVersions.deletedAt),
       // 테스트 버전(0141)은 배포 이력이 아니다 — 목록에 내지 않는다.
-      ne(surveyVersions.status, 'test'),
+      ne(surveyVersions.status, TEST_VERSION_STATUS),
     ),
     orderBy: [desc(surveyVersions.versionNumber)],
     columns: {

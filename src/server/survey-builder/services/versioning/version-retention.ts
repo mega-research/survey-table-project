@@ -14,7 +14,7 @@
  */
 export interface VersionRetentionInput {
   /** surveys.currentVersionId 또는 surveys.testVersionId(지금 테스트 버전, 0141)와 일치하는가 */
-  isCurrentVersion: boolean;
+  isPinnedVersion: boolean;
   /** is_test=false AND deleted_at IS NULL 인 응답 수 */
   liveNonTestResponseCount: number;
   /**
@@ -28,7 +28,7 @@ export interface VersionRetentionInput {
 
 export function isVersionPrunable(input: VersionRetentionInput): boolean {
   if (input.snapshotIsNull) return false;
-  if (input.isCurrentVersion) return false;
+  if (input.isPinnedVersion) return false;
   // 이관 출처로 참조되는 버전은 보존한다 — 스냅샷을 비우면
   // migratedFromVersionId 기록이 빈 껍데기를 가리키게 된다 (ADR-0014).
   if (input.liveMigratedFromReferenceCount !== 0) return false;

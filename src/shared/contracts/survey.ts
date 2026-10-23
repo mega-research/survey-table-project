@@ -25,6 +25,9 @@ import type { SurveyAnchorSnapshot } from './survey-document';
  * 테스트 버전 지문 (`survey_versions.fingerprints`, 0141) — 스냅샷 전체 리비전과 문항·그룹 지문(순서 제외).
  * 계산은 lib/survey/test-version-fingerprint. snapshot 을 비워도 남겨 다음 테스트 버전과 비교한다.
  */
+/** 테스트 버전 행의 `survey_versions.status` 값 (0141). 버전 목록 · 배포 번호 · 정리에서 뺀다. */
+export const TEST_VERSION_STATUS = 'test';
+
 export interface SurveyVersionFingerprints {
   revision: string;
   questions: Record<string, string>;

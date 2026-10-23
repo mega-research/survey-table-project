@@ -35,6 +35,14 @@ export async function pruneVersionSnapshots(
   dbc: R2DbExecutor,
   versionIds: readonly string[],
   reason: string,
+  options: {
+    /**
+     * 등록하지 않을 키 — 같은 트랜잭션에서 방금 기록한 새 스냅샷이 여전히 참조하는 키. 테스트 버전을
+     * 갈아 끼울 때 넘긴다(저장 후 진입마다 이미지 전부가 유예 큐에 올라 「보존됨」 잡음이 되지 않게).
+     * 그 키는 새 스냅샷의 참조 인덱스가 지키므로 등록하지 않아도 고아가 되지 않는다.
+     */
+    keepKeys?: ReadonlySet<string>;
+  } = {},
 ): Promise<PruneVersionsResult> {
   if (versionIds.length === 0) return { pruned: 0, registeredKeys: 0 };
 
@@ -48,7 +56,9 @@ export async function pruneVersionSnapshots(
 
   const keys = new Set<string>();
   for (const row of rows) {
-    for (const key of extractR2KeysFromJsonbValue(row.snapshot)) keys.add(key);
+    for (const key of extractR2KeysFromJsonbValue(row.snapshot)) {
+      if (!options.keepKeys?.has(key)) keys.add(key);
+    }
   }
 
   let registeredKeys = 0;

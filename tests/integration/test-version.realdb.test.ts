@@ -10,8 +10,17 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { afterAll, describe, expect, it } from 'vitest';
 
+import { randomUUID } from 'node:crypto';
+
 import { db } from '@/db';
-import { questions, surveys, surveyVersions } from '@/db/schema';
+import {
+  questions,
+  r2DeletionCandidates,
+  surveyResponses,
+  surveys,
+  surveyVersions,
+} from '@/db/schema';
+import { getSurveyVersions } from '@/server/read-models/responses';
 import { publishSurvey } from '@/server/survey-builder/services/survey-publish';
 import { getSurveyForResponse } from '@/server/survey-builder/services/survey-read';
 import { ensureTestVersion } from '@/server/survey-builder/services/test-version';
@@ -21,6 +30,9 @@ const isLocalDb =
   (process.env['DATABASE_URL'] ?? '').includes('localhost');
 
 const createdSurveyIds: string[] = [];
+const CDN = 'https://cdn-dev.megaresearch.co.kr';
+process.env['CLOUDFLARE_R2_PUBLIC_URL'] ??= CDN;
+const usedKeys: string[] = [];
 
 async function seedSurvey() {
   const [survey] = await db.insert(surveys).values({ title: '테스트 버전 왕복' }).returning();
@@ -57,7 +69,11 @@ async function testVersionIdOf(surveyId: string) {
 
 describe.skipIf(!isLocalDb)('테스트 버전 실DB 왕복', () => {
   afterAll(async () => {
+    if (usedKeys.length > 0) {
+      await db.delete(r2DeletionCandidates).where(inArray(r2DeletionCandidates.key, usedKeys));
+    }
     if (createdSurveyIds.length === 0) return;
+    await db.delete(surveyResponses).where(inArray(surveyResponses.surveyId, createdSurveyIds));
     await db.delete(surveys).where(inArray(surveys.id, createdSurveyIds));
   });
 
@@ -78,9 +94,16 @@ describe.skipIf(!isLocalDb)('테스트 버전 실DB 왕복', () => {
     expect(first?.snapshot.questions.map((q) => q.title)).toEqual(['처음 문구']);
   });
 
-  it('저장본이 바뀌면 새 테스트 버전을 만들고 직전 것의 스냅샷만 비운다 — 지문은 남긴다', async () => {
+  it('저장본이 바뀌면 새 테스트 버전을 만들고 직전 것의 스냅샷만 비운다 — 응답이 가리키면 지문은 남긴다', async () => {
     const { surveyId, questionId } = await seedSurvey();
     const first = await ensureTestVersion(surveyId);
+    await db.insert(surveyResponses).values({
+      surveyId,
+      versionId: first!.versionId,
+      sessionId: `tv-${randomUUID()}`,
+      isTest: true,
+      questionResponses: {},
+    });
 
     await db.update(questions).set({ title: '고친 문구' }).where(eq(questions.id, questionId));
     const second = await ensureTestVersion(surveyId);
@@ -159,6 +182,58 @@ describe.skipIf(!isLocalDb)('테스트 버전 실DB 왕복', () => {
 
     expect(testLink?.versionId).toBe(await testVersionIdOf(surveyId));
     expect(testLink?.versionId).not.toBeNull();
+  });
+
+  it('직전 테스트 버전을 비울 때 새 스냅샷에도 있는 이미지는 유예 삭제에 올리지 않고 빠진 이미지만 올린다', async () => {
+    const { surveyId, questionId } = await seedSurvey();
+    const kept = `survey/image/tv-kept-${randomUUID()}.png`;
+    const dropped = `survey/image/tv-dropped-${randomUUID()}.png`;
+    usedKeys.push(kept, dropped);
+    const img = (key: string) => `<p><img src="${CDN}/${key}"></p>`;
+    await db.update(questions).set({ description: img(kept) }).where(eq(questions.id, questionId));
+    const [second] = await db
+      .insert(questions)
+      .values({ surveyId, type: 'text', title: '두 번째', order: 1, description: img(dropped) })
+      .returning();
+    await ensureTestVersion(surveyId);
+
+    await db.update(questions).set({ description: null }).where(eq(questions.id, second!.id));
+    await ensureTestVersion(surveyId);
+
+    const candidates = await db
+      .select({ key: r2DeletionCandidates.key })
+      .from(r2DeletionCandidates)
+      .where(inArray(r2DeletionCandidates.key, [kept, dropped]));
+    expect(candidates.map((c) => c.key)).toEqual([dropped]);
+  });
+
+  it('아무 응답도 가리키지 않는 옛 테스트 버전 행은 지우고, 응답이 가리키는 행은 지문과 함께 남긴다', async () => {
+    const { surveyId, questionId } = await seedSurvey();
+    const first = await ensureTestVersion(surveyId);
+    await db.insert(surveyResponses).values({
+      surveyId,
+      versionId: first!.versionId,
+      sessionId: `tv-${randomUUID()}`,
+      isTest: true,
+      questionResponses: {},
+    });
+    await db.update(questions).set({ title: '두 번째 문구' }).where(eq(questions.id, questionId));
+    const second = await ensureTestVersion(surveyId);
+    await db.update(questions).set({ title: '세 번째 문구' }).where(eq(questions.id, questionId));
+    const third = await ensureTestVersion(surveyId);
+
+    const ids = (await versionRows(surveyId)).map((r) => r.id).sort();
+    expect(ids).toEqual([first!.versionId, third!.versionId].sort());
+    expect(ids).not.toContain(second!.versionId);
+  });
+
+  it('버전 목록에는 테스트 버전이 나오지 않는다', async () => {
+    const { surveyId } = await seedSurvey();
+    await ensureTestVersion(surveyId);
+    await publishSurvey({ surveyId });
+
+    const listed = await getSurveyVersions(surveyId);
+    expect(listed.map((v) => v.status)).toEqual(['published']);
   });
 
   it('없는 설문이면 null', async () => {

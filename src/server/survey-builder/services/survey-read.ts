@@ -1,18 +1,6 @@
+import { and, asc, desc, eq, ilike, ne } from 'drizzle-orm';
 import 'server-only';
 
-import { buildQuotaGate } from '@/lib/quota/quota-gate-build';
-
-import { and, asc, desc, eq, ilike, ne } from 'drizzle-orm';
-
-import { getResponseCountsGroupedBySurvey } from '@/server/read-models/responses';
-import { getAllTags } from '@/server/read-models/library-taxonomy';
-import {
-  getQuestionGroupsBySurvey,
-  getQuestionsBySurvey,
-  getSurveyById,
-  getSurveyWithDetails,
-  getSurveys,
-} from '@/server/read-models/survey-structure';
 import { db } from '@/db';
 import {
   contactTargets,
@@ -21,32 +9,41 @@ import {
   surveyVersions,
   surveys,
 } from '@/db/schema';
-import type { SurveyAnchorSnapshot } from '@/shared/contracts/survey-document';
-import { getVariableCatalog } from '@/server/read-models/variable-catalog';
-import type { VariableDef } from '@/shared/contracts/template-variables';
-import { normalizeQuestions } from '@/lib/question';
-import { findContactByInviteToken } from '@/server/read-models/invite-lookup';
-import { isValidTestToken } from '@/server/read-models/survey-control';
-import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
-import { getR2PublicUrl } from '@/lib/r2-env';
-import { toAnchorSnapshot } from '@/server/read-models/anchor-row';
-import { isValidUUID } from '@/lib/utils';
 import { logger } from '@/lib/logger';
+import { normalizeQuestions } from '@/lib/question';
+import { buildQuotaGate } from '@/lib/quota/quota-gate-build';
+import { getR2PublicUrl } from '@/lib/r2-env';
+import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
+import { isValidUUID } from '@/lib/utils';
+import { toAnchorSnapshot } from '@/server/read-models/anchor-row';
+import { findContactByInviteToken } from '@/server/read-models/invite-lookup';
+import { getAllTags } from '@/server/read-models/library-taxonomy';
+import { getResponseCountsGroupedBySurvey } from '@/server/read-models/responses';
+import { isValidTestToken } from '@/server/read-models/survey-control';
+import {
+  getQuestionGroupsBySurvey,
+  getQuestionsBySurvey,
+  getSurveyById,
+  getSurveyWithDetails,
+  getSurveys,
+} from '@/server/read-models/survey-structure';
+import { getVariableCatalog } from '@/server/read-models/variable-catalog';
+import type { SurveyAnchorSnapshot } from '@/shared/contracts/survey-document';
+import type { VariableDef } from '@/shared/contracts/template-variables';
 import type { QuestionGroup, Question as QuestionType, Survey as SurveyType } from '@/types/survey';
 import { generateAllCellCodes } from '@/utils/table-cell-code-generator';
 
 import type {
   SlugAvailableInput,
-  SurveyBySlugInput,
   SurveyByPreviewTokenInput,
   SurveyByPrivateTokenInput,
+  SurveyBySlugInput,
   SurveyDocumentView,
   SurveyForResponseInput,
   SurveyForResponseResult,
   SurveyIdRow,
   SurveyListItem,
 } from '../domain/survey-read';
-
 import { ensureTestVersion } from './test-version';
 
 // 이 service 는 actions/query-actions 의 requireAuth 를 제거한다.
@@ -125,9 +122,7 @@ export async function getSurveyListWithCounts(): Promise<SurveyListItem[]> {
 // 슬러그로 설문 조회 (pub — 익명 응답자 진입).
 // 익명 노출 경로이므로 full row 를 반환하지 않고 호출자(use-survey-loader)가 실제 쓰는 id 만
 // 투영한다. testToken/testModeEnabled/isPaused/pausedMessage/privateToken 유출 차단(I-3).
-export async function getSurveyBySlug(
-  input: SurveyBySlugInput,
-): Promise<SurveyIdRow | undefined> {
+export async function getSurveyBySlug(input: SurveyBySlugInput): Promise<SurveyIdRow | undefined> {
   const survey = await db.query.surveys.findFirst({
     where: eq(surveys.slug, input.slug),
     columns: { id: true },
@@ -248,10 +243,7 @@ export async function getSurveyForResponse(
     const tokenIsValid = isValidTestToken(survey, input.testToken);
     const testTarget = tokenIsValid
       ? await db.query.contactTargets.findFirst({
-          where: and(
-            eq(contactTargets.surveyId, surveyId),
-            eq(contactTargets.isTest, true),
-          ),
+          where: and(eq(contactTargets.surveyId, surveyId), eq(contactTargets.isTest, true)),
           columns: { id: true },
         })
       : null;
@@ -294,89 +286,87 @@ export async function getSurveyForResponse(
         where: eq(surveyVersions.id, survey.currentVersionId),
       })) ?? null;
   }
-  {
-    if (version && version.snapshot) {
-      const snapshot = version.snapshot as {
-        title: string;
-        description?: string;
-        questions: QuestionType[];
-        groups: QuestionGroup[];
-        settings: {
-          isPublic: boolean;
-          allowMultipleResponses: boolean;
-          showProgressBar: boolean;
-          shuffleQuestions: boolean;
-          requireLogin: boolean;
-          endDate?: string;
-          maxResponses?: number;
-          thankYouMessage: string;
-          // 자격미달 종료 문구 — freeze 값. 이 필드 도입 이전 발행본은 undefined = 완료 문구 폴백(현재 행으로 덮지 않는다).
-          screenedOutMessage?: string | null;
-          // publish 시점 freeze 값. 이전 publish 본은 undefined → 현재 surveys 행으로 fallback.
-          requireInviteToken?: boolean;
-          forceWideLayout?: boolean;
-          responseHeader?: SurveyType['settings']['responseHeader'];
-        };
-        // T17 이후 snapshot 에 포함. 이전 publish 본은 undefined → DB 의 현재 lookups 로 fallback.
-        lookups?: SurveyType['lookups'];
-        // 발행 시점에 얼린 영역 앵커. 이 필드 도입 이전 발행본은 undefined = 앵커 없음.
-        anchors?: SurveyAnchorSnapshot[];
+  if (version && version.snapshot) {
+    const snapshot = version.snapshot as {
+      title: string;
+      description?: string;
+      questions: QuestionType[];
+      groups: QuestionGroup[];
+      settings: {
+        isPublic: boolean;
+        allowMultipleResponses: boolean;
+        showProgressBar: boolean;
+        shuffleQuestions: boolean;
+        requireLogin: boolean;
+        endDate?: string;
+        maxResponses?: number;
+        thankYouMessage: string;
+        // 자격미달 종료 문구 — freeze 값. 이 필드 도입 이전 발행본은 undefined = 완료 문구 폴백(현재 행으로 덮지 않는다).
+        screenedOutMessage?: string | null;
+        // publish 시점 freeze 값. 이전 publish 본은 undefined → 현재 surveys 행으로 fallback.
+        requireInviteToken?: boolean;
+        forceWideLayout?: boolean;
+        responseHeader?: SurveyType['settings']['responseHeader'];
       };
+      // T17 이후 snapshot 에 포함. 이전 publish 본은 undefined → DB 의 현재 lookups 로 fallback.
+      lookups?: SurveyType['lookups'];
+      // 발행 시점에 얼린 영역 앵커. 이 필드 도입 이전 발행본은 undefined = 앵커 없음.
+      anchors?: SurveyAnchorSnapshot[];
+    };
 
-      // endDate 는 snapshot 에서 string 으로 보관되므로 spread 전에 분리해 Date 로 재구성한다
-      // (base spread 가 string endDate 를 끌고오면 string | Date 로 충돌).
-      const { endDate: snapshotEndDate, ...snapshotSettingsRest } = snapshot.settings;
-      const surveyData: SurveyType = {
-        id: survey.id,
-        title: snapshot.title,
-        ...(snapshot.description != null ? { description: snapshot.description } : {}),
-        ...(survey.slug != null ? { slug: survey.slug } : {}),
-        ...(survey.privateToken != null ? { privateToken: survey.privateToken } : {}),
-        groups: snapshot.groups,
-        // survey_versions 스냅샷 읽기 경계(공개 응답자 경로): 세대별 키셋이 다른 질문을
-        // 정규화(보존 모드)로 수렴 — 무변형 passthrough, 알 수 없는 형태만 관측 로그.
-        // 이후 table 셀 코드 복원 불변식은 동일하게 유지한다.
-        questions: normalizeQuestions(snapshot.questions).map((q) => {
-          if (q.type === 'table' && q.tableRowsData && q.tableColumns) {
-            return {
-              ...q,
-              tableRowsData: generateAllCellCodes(
-                q.questionCode,
-                q.title,
-                q.tableColumns,
-                q.tableRowsData,
-              ),
-            };
-          }
-          return q;
-        }),
-        settings: {
-          ...snapshotSettingsRest,
-          ...(snapshotEndDate ? { endDate: new Date(snapshotEndDate) } : {}),
-          // snapshot 기반 원칙: published 응답 페이지는 freeze 된 snapshot 값을 따른다.
-          // 빌더 draft 의 invite-token 토글이 live 응답 페이지에 새지 않도록 현재 surveys 행으로
-          // 덮어쓰지 않는다. snapshot 에 값이 없는 이전 publish 본만 현재 행으로 fallback.
-          requireInviteToken: snapshot.settings.requireInviteToken ?? survey.requireInviteToken,
-          // snapshot 기반 원칙 동일: freeze 값 우선, 없는 이전 publish 본만 현재 행으로 fallback.
-          forceWideLayout: snapshot.settings.forceWideLayout ?? survey.forceWideLayout,
-          // snapshot 기반 원칙 동일: published 응답 페이지는 freeze 된 snapshot 값을 따른다.
-          // 값이 없는 이전 publish 본은 현재 surveys 행이 아니라 새 기본형으로 fallback.
-          responseHeader: normalizeResponseHeaderConfig(snapshot.settings.responseHeader),
-        },
-        lookups: snapshot.lookups ?? survey.lookups ?? [],
-        ...(survey.contactColumns != null ? { contactColumns: survey.contactColumns } : {}),
-        quotaGate: buildQuotaGate(survey.quotaConfig),
-        contactEmail: survey.contactEmail ?? null,
-        createdAt: survey.createdAt,
-        updatedAt: survey.updatedAt,
-      };
+    // endDate 는 snapshot 에서 string 으로 보관되므로 spread 전에 분리해 Date 로 재구성한다
+    // (base spread 가 string endDate 를 끌고오면 string | Date 로 충돌).
+    const { endDate: snapshotEndDate, ...snapshotSettingsRest } = snapshot.settings;
+    const surveyData: SurveyType = {
+      id: survey.id,
+      title: snapshot.title,
+      ...(snapshot.description != null ? { description: snapshot.description } : {}),
+      ...(survey.slug != null ? { slug: survey.slug } : {}),
+      ...(survey.privateToken != null ? { privateToken: survey.privateToken } : {}),
+      groups: snapshot.groups,
+      // survey_versions 스냅샷 읽기 경계(공개 응답자 경로): 세대별 키셋이 다른 질문을
+      // 정규화(보존 모드)로 수렴 — 무변형 passthrough, 알 수 없는 형태만 관측 로그.
+      // 이후 table 셀 코드 복원 불변식은 동일하게 유지한다.
+      questions: normalizeQuestions(snapshot.questions).map((q) => {
+        if (q.type === 'table' && q.tableRowsData && q.tableColumns) {
+          return {
+            ...q,
+            tableRowsData: generateAllCellCodes(
+              q.questionCode,
+              q.title,
+              q.tableColumns,
+              q.tableRowsData,
+            ),
+          };
+        }
+        return q;
+      }),
+      settings: {
+        ...snapshotSettingsRest,
+        ...(snapshotEndDate ? { endDate: new Date(snapshotEndDate) } : {}),
+        // snapshot 기반 원칙: published 응답 페이지는 freeze 된 snapshot 값을 따른다.
+        // 빌더 draft 의 invite-token 토글이 live 응답 페이지에 새지 않도록 현재 surveys 행으로
+        // 덮어쓰지 않는다. snapshot 에 값이 없는 이전 publish 본만 현재 행으로 fallback.
+        requireInviteToken: snapshot.settings.requireInviteToken ?? survey.requireInviteToken,
+        // snapshot 기반 원칙 동일: freeze 값 우선, 없는 이전 publish 본만 현재 행으로 fallback.
+        forceWideLayout: snapshot.settings.forceWideLayout ?? survey.forceWideLayout,
+        // snapshot 기반 원칙 동일: published 응답 페이지는 freeze 된 snapshot 값을 따른다.
+        // 값이 없는 이전 publish 본은 현재 surveys 행이 아니라 새 기본형으로 fallback.
+        responseHeader: normalizeResponseHeaderConfig(snapshot.settings.responseHeader),
+      },
+      lookups: snapshot.lookups ?? survey.lookups ?? [],
+      ...(survey.contactColumns != null ? { contactColumns: survey.contactColumns } : {}),
+      quotaGate: buildQuotaGate(survey.quotaConfig),
+      contactEmail: survey.contactEmail ?? null,
+      createdAt: survey.createdAt,
+      updatedAt: survey.updatedAt,
+    };
 
-      // 앵커는 얼린 값만 쓴다 — 라이브 앵커를 옮겨도 진행 중인 응답의 페이지 구성이
-      // 변하지 않는 것이 이 한 줄에 걸려 있다.
-      const documentView = await buildDocumentView(surveyId, snapshot.anchors ?? []);
+    // 앵커는 얼린 값만 쓴다 — 라이브 앵커를 옮겨도 진행 중인 응답의 페이지 구성이
+    // 변하지 않는 것이 이 한 줄에 걸려 있다.
+    const documentView = await buildDocumentView(surveyId, snapshot.anchors ?? []);
 
-      return { survey: surveyData, versionId: version.id, control, documentView };
-    }
+    return { survey: surveyData, versionId: version.id, control, documentView };
   }
 
   if (options.requirePublished) return null;

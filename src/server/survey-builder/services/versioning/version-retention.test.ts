@@ -11,7 +11,7 @@ describe('isVersionPrunable', () => {
   it('현재 발행본은 응답이 없어도 보존한다', () => {
     expect(
       isVersionPrunable({
-        isCurrentVersion: true,
+        isPinnedVersion: true,
         liveNonTestResponseCount: 0,
         liveMigratedFromReferenceCount: 0,
         snapshotIsNull: false,
@@ -22,7 +22,7 @@ describe('isVersionPrunable', () => {
   it('살아있는 비테스트 응답이 있으면 보존한다', () => {
     expect(
       isVersionPrunable({
-        isCurrentVersion: false,
+        isPinnedVersion: false,
         liveNonTestResponseCount: 1,
         liveMigratedFromReferenceCount: 0,
         snapshotIsNull: false,
@@ -33,7 +33,7 @@ describe('isVersionPrunable', () => {
   it('현재 발행본이 아니고 살아있는 비테스트 응답이 없으면 정리 대상이다', () => {
     expect(
       isVersionPrunable({
-        isCurrentVersion: false,
+        isPinnedVersion: false,
         liveNonTestResponseCount: 0,
         liveMigratedFromReferenceCount: 0,
         snapshotIsNull: false,
@@ -44,7 +44,7 @@ describe('isVersionPrunable', () => {
   it('이미 정리된 버전은 다시 정리 대상이 아니다', () => {
     expect(
       isVersionPrunable({
-        isCurrentVersion: false,
+        isPinnedVersion: false,
         liveNonTestResponseCount: 0,
         liveMigratedFromReferenceCount: 0,
         snapshotIsNull: true,
@@ -55,7 +55,7 @@ describe('isVersionPrunable', () => {
   it('이관 출처로 참조되는 버전은 응답이 재핀되어도 보존한다 (ADR-0014)', () => {
     expect(
       isVersionPrunable({
-        isCurrentVersion: false,
+        isPinnedVersion: false,
         liveNonTestResponseCount: 0,
         liveMigratedFromReferenceCount: 1,
         snapshotIsNull: false,
@@ -66,7 +66,7 @@ describe('isVersionPrunable', () => {
   it('이관 출처 참조가 여러 건이어도 동일하게 보존한다', () => {
     expect(
       isVersionPrunable({
-        isCurrentVersion: false,
+        isPinnedVersion: false,
         liveNonTestResponseCount: 0,
         liveMigratedFromReferenceCount: 3,
         snapshotIsNull: false,
