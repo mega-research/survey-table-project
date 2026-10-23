@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import 'server-only';
 
 import { type DbOrTx, db } from '@/db';
@@ -36,9 +36,31 @@ export async function appendContactPii(
   if (rows.length === 0) return attrs;
 
   const allowed = options.allowedKeys ? await options.allowedKeys() : null;
+  return mergePiiRows(
+    target.id,
+    attrs,
+    allowed ? rows.filter((row) => allowed.has(row.columnKey)) : rows,
+  );
+}
+
+interface PiiRow {
+  fieldType: string;
+  columnKey: string;
+  cipher: string;
+}
+
+/**
+ * 한 대상의 개인정보 행을 명단 값에 합친다 — 단건·일괄이 같은 규칙을 쓰는 유일한 자리.
+ * 응답 화면 서식으로 바꾸고(사업자번호 하이픈), 복호화에 실패한 열은 빼고(경고 로그), attrs 가 이긴다.
+ */
+function mergePiiRows(
+  contactTargetId: string,
+  attrs: Record<string, string>,
+  rows: readonly PiiRow[],
+): Record<string, string> {
+  if (rows.length === 0) return attrs;
   const pii: Record<string, string> = {};
   for (const row of rows) {
-    if (allowed && !allowed.has(row.columnKey)) continue;
     try {
       const plain = decryptPii(row.cipher);
       pii[row.columnKey] = isPiiFieldType(row.fieldType)
@@ -46,7 +68,7 @@ export async function appendContactPii(
         : plain;
     } catch {
       logger.warn(
-        { contactTargetId: target.id, columnKey: row.columnKey },
+        { contactTargetId, columnKey: row.columnKey },
         'respondent contact pii decrypt failed',
       );
     }
@@ -66,4 +88,47 @@ export async function loadRespondentContactAttrs(
     .limit(1);
   if (!row) return {};
   return appendContactPii(row, {}, executor);
+}
+
+/** 한 번에 묶어 읽는 대상 수 — `inArray` 바인드 파라미터 한계 안쪽(contacts-export 와 같은 크기). */
+const TARGET_CHUNK = 5000;
+
+/**
+ * 여러 조사 대상의 명단 값을 한 번에 읽는다 — 단건 `loadRespondentContactAttrs` 와 대상마다 같은 값이다.
+ * Raw 내보내기 마지막 그물처럼 행이 많은 서버 재평가용. 없는 대상은 결과에 넣지 않는다.
+ */
+export async function loadRespondentContactAttrsMany(
+  contactTargetIds: readonly string[],
+  executor: DbOrTx = db,
+): Promise<Map<string, Record<string, string>>> {
+  const out = new Map<string, Record<string, string>>();
+  const ids = [...new Set(contactTargetIds)];
+  for (let i = 0; i < ids.length; i += TARGET_CHUNK) {
+    const chunk = ids.slice(i, i + TARGET_CHUNK);
+    const [targets, piiRows] = await Promise.all([
+      executor
+        .select({ id: contactTargets.id, attrs: contactTargets.attrs })
+        .from(contactTargets)
+        .where(inArray(contactTargets.id, chunk)),
+      executor
+        .select({
+          contactTargetId: contactPii.contactTargetId,
+          fieldType: contactPii.fieldType,
+          columnKey: contactPii.columnKey,
+          cipher: contactPii.cipher,
+        })
+        .from(contactPii)
+        .where(inArray(contactPii.contactTargetId, chunk)),
+    ]);
+    const rowsByTarget = new Map<string, PiiRow[]>();
+    for (const row of piiRows) {
+      const list = rowsByTarget.get(row.contactTargetId);
+      if (list) list.push(row);
+      else rowsByTarget.set(row.contactTargetId, [row]);
+    }
+    for (const target of targets) {
+      out.set(target.id, mergePiiRows(target.id, target.attrs ?? {}, rowsByTarget.get(target.id) ?? []));
+    }
+  }
+  return out;
 }
