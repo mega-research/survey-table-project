@@ -4,7 +4,6 @@ import {
   cleanupSeed,
   closeSeedDb,
   fetchContactTarget,
-  fetchResponseAnswers,
   fetchResponses,
   seedRespondentSurvey,
 } from './_helpers/seed-survey';
@@ -77,13 +76,6 @@ test('비공개 토큰 진입 응답이 제출되고 저장값이 일치한다',
     expect(table[seed.ids.inputCell]).toBe('42');
     // 표 radio 셀 저장값 = 선택한 radioOption 의 value
     expect(table[seed.ids.radioCell]).toBe('1');
-
-    // 정규화 경로(response_answers) — 시드가 questions rows 를 넣는 이유이기도 하다.
-    const answers = await fetchResponseAnswers(row.id);
-    expect(answers.map((a) => a.questionId).sort()).toEqual(
-      [seed.ids.radioQuestion, seed.ids.textQuestion, seed.ids.tableQuestion].sort(),
-    );
-    expect(answers.find((a) => a.questionId === seed.ids.textQuestion)?.textValue).toBe('자유 서술 응답');
 
     const sidecar = (qr['__optTexts__'] ?? {}) as Record<string, Record<string, string>>;
     expect(sidecar[seed.ids.radioQuestion]?.[seed.ids.otherOption]).toBe('사이드카 e2e 텍스트');

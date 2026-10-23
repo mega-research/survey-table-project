@@ -63,7 +63,7 @@ export const InputCell = React.memo(function InputCell({
   // prefill·빈값 기본치는 응답자의 입력이 아니다 — 쓰기 직전에 호스트에게 알린다.
   const { markSeedWrite } = useResponseSources();
   // prefill 은 attrs 만 치환한다(quotes 를 넘기지 않는다). 이 결과는 onUpdateValue 로 응답에
-  // 저장되는데(questionResponses → response_answers → 엑셀/SPSS export), 응답 인용은
+  // 저장되는데(questionResponses → 엑셀/SPSS export), 응답 인용은
   // "저장되지 않는 파생값"이 불변식이다(utils/answer-quote.ts).
   // 게다가 표 셀 답변은 셀에 piiEncrypted 를 켠 경우에만 암호화되므로, 인용을 허용하면
   // 암호화 단답형의 원문이 인용값을 타고 평문 셀 답변으로 새는 경로가 열린다.

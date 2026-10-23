@@ -17,7 +17,6 @@ import { pinnedVersionId } from '@/shared/contracts/survey';
 import { calculateProgressPct, getProgressSnapshot } from './response-progress';
 
 import type { SaveAdminEditInput } from '../domain/response-edit';
-import { replaceResponseAnswers } from './response-answers';
 import { finalizeAnswers, loadFinalizationMaterial } from './answer-finalization';
 import { assertAnswerValueSize, detectQuotaOverflow } from './submitted-answers';
 
@@ -69,7 +68,7 @@ function buildMigrationMetadataSql(rollback: {
 /**
  * 어드민 응답 수정 저장.
  *
- * - questionResponses (JSONB) 와 response_answers 정규화 행을 일괄 갱신.
+ * - questionResponses (JSONB) 를 갱신한다.
  * - startedAt / totalSeconds 는 명시적으로 set 하지 않아 보존됨.
  *   예외 1 (2026-08-11): 이탈(drop) 응답은 저장 시 completed 로 전환한다 — drop 은 sweep 이
  *   비활동으로 자동 부여한 상태라 응답자 확정 종결이 아니고, 운영자가 수정 화면에서 채워
@@ -331,8 +330,6 @@ export async function saveAdminEdit(
         current && current.deletedAt === null ? 'status_conflict' : 'response_deleted',
       );
     }
-
-    await replaceResponseAnswers(tx, responseId, surveyId, storedResponses);
 
     if (changedQuestions.length > 0) {
       await tx.insert(responseEditLogs).values({

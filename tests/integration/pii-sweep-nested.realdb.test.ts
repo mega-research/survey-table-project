@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
-import { responseAnswers, surveyResponses, surveys } from '@/db/schema';
+import { surveyResponses, surveys } from '@/db/schema';
 
 const run = process.env['RUN_REALDB'] === '1' ? describe : describe.skip;
 
@@ -12,7 +12,7 @@ const MARKER = '[개인정보 파기됨]';
 /**
  * sweep_expired_pii() — 표 input 셀 단위 암호문(한 단계 중첩 객체)도 파기하는지.
  * 0050 은 최상위 string 만 봤다 (질문 단위 PII). 셀 단위 암호화(0085)는 question_responses 의
- * 객체 값 안과 response_answers.object_value 안에 암호문을 두므로 둘 다 파기 대상이어야 한다.
+ * 객체 값 안에 암호문을 두므로 그 안도 파기 대상이어야 한다.
  */
 run('sweep_expired_pii — 표 셀 암호문 파기', () => {
   const surveyIds: string[] = [];
@@ -40,12 +40,6 @@ run('sweep_expired_pii — 표 셀 암호문 파기', () => {
         q3: '평문 답변',
       },
     });
-    await db.insert(responseAnswers).values({
-      responseId,
-      questionId: tableQid,
-      questionType: 'table',
-      objectValue: { c1: 'v1:cell-cipher', c2: '서울' },
-    });
 
     await db.execute(sql`SELECT sweep_expired_pii()`);
 
@@ -58,12 +52,6 @@ run('sweep_expired_pii — 표 셀 암호문 파기', () => {
       [tableQid]: { c1: MARKER, c2: '서울', c3: ['a', 'b'] },
       q3: '평문 답변',
     });
-
-    const [answer] = await db
-      .select({ objectValue: responseAnswers.objectValue })
-      .from(responseAnswers)
-      .where(eq(responseAnswers.responseId, responseId));
-    expect(answer?.objectValue).toEqual({ c1: MARKER, c2: '서울' });
 
     // 멱등 — 재실행해도 변화 없음 (마커는 접두사에 매치되지 않는다)
     await db.execute(sql`SELECT sweep_expired_pii()`);

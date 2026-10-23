@@ -98,6 +98,7 @@
     "0136_contact_assignments",
     "0137_mail_recipient_fallback_pending",
     "0138_survey_end_redirects",
-    "0141_survey_test_version"
+    "0141_survey_test_version",
+    "0142_drop_response_answers"
   ]
 }

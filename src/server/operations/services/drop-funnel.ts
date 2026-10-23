@@ -23,8 +23,7 @@ const EMPTY_OUTPUT: DropFunnelOutput = { bars: [], totalDrops: 0 };
  *   A) 이 파티션이 보는 버전(실 = currentVersionId, 테스트 = testVersionId) 스냅샷에서 캐노니컬 step 추출.
  *      page-dwell 과 동일한 buildCanonicalSteps → stepId 체계 일치.
  *   B) SQL 로 drop 세션의 *마지막 pageVisit stepId* 별 COUNT 집계.
- *      - response_answers 는 응답 완료 시에만 채워져 drop(미완료)은 비어있다.
- *        그래서 마지막 pageVisit(`page_visits -> -1 ->> 'stepId'`)을 이탈 위치로 귀속한다.
+ *      - drop(미완료) 세션은 마지막으로 답한 문항을 알 수 없어, 마지막 pageVisit(`page_visits -> -1 ->> 'stepId'`)을 이탈 위치로 귀속한다.
  *        firstVisit 이 항상 currentStepId 로 생성되므로 drop 도 거의 항상 pageVisit ≥1개를 가진다.
  *      - exposedQuestionIds 필터는 제거. 귀속 신호가 "답변→도달 페이지"로 바뀌어 전제가 사라졌다
  *        (미도달 페이지는 애초에 pageVisit 이 없으므로 거짓 귀속 위험이 없다).

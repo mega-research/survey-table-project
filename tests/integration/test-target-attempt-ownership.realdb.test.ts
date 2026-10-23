@@ -619,10 +619,6 @@ run('대상자 테스트 중도 이탈 행의 이어하기', () => {
         false,${status},${versionId},'step-2'
       )
     `);
-    await db.execute(sql`
-      INSERT INTO response_answers (response_id,question_id,text_value,question_type)
-      VALUES (${responseId},${randomUUID()},'이탈 전 답','text')
-    `);
     await db.execute(sql`UPDATE contact_targets SET response_id=${responseId} WHERE id=${targetId}`);
   }
 
@@ -633,10 +629,8 @@ run('대상자 테스트 중도 이탈 행의 이어하기', () => {
       current_step_id: string | null;
       session_id: string | null;
       version_id: string | null;
-      answers: number;
     }>(sql`
-      SELECT r.status, r.question_responses, r.current_step_id, r.session_id, r.version_id,
-        (SELECT count(*)::int FROM response_answers WHERE response_id=r.id) AS answers
+      SELECT r.status, r.question_responses, r.current_step_id, r.session_id, r.version_id
       FROM survey_responses r WHERE r.id=${responseId}
     `);
     return rows[0];
@@ -685,7 +679,6 @@ run('대상자 테스트 중도 이탈 행의 이어하기', () => {
       // 초기화가 아니므로 이전 스텝과 정규화 답변이 남는다
       current_step_id: 'step-2',
       session_id: 'resumed-session',
-      answers: 1,
     });
   });
 
@@ -737,7 +730,6 @@ run('대상자 테스트 중도 이탈 행의 이어하기', () => {
     expect(await readRow(sameTabResponseId)).toMatchObject({
       status: 'in_progress',
       question_responses: { q1: '이탈 전 답' },
-      answers: 1,
     });
   });
 
@@ -758,7 +750,6 @@ run('대상자 테스트 중도 이탈 행의 이어하기', () => {
       question_responses: {},
       current_step_id: 'step-3',
       version_id: null,
-      answers: 0,
     });
   });
 
@@ -778,7 +769,6 @@ run('대상자 테스트 중도 이탈 행의 이어하기', () => {
       status: 'in_progress',
       question_responses: {},
       current_step_id: 'step-3',
-      answers: 0,
     });
   });
 });
@@ -810,10 +800,6 @@ run('대상자 테스트 응답 재사용과 attempt 소유권', () => {
         true,'completed',now(),'old-step','[{"stepId":"old-step","enteredAt":"2026-07-21T00:00:00.000Z"}]'::jsonb,
         30,100,2,2,'{"exposedQuestionIds":["q1"]}'::jsonb,now()
       )
-    `);
-    await db.execute(sql`
-      INSERT INTO response_answers (response_id,question_id,text_value,question_type)
-      VALUES (${responseId},${randomUUID()},'old','text')
     `);
     await db.execute(sql`
       INSERT INTO response_edit_logs (response_id,survey_id,changed_questions,changed_count)
@@ -875,12 +861,11 @@ run('대상자 테스트 응답 재사용과 attempt 소유권', () => {
       last_edited_at: null,
       session_id: 'first-session',
     });
-    const childCounts = await db.execute<{ answers: number; logs: number }>(sql`
+    const childCounts = await db.execute<{ logs: number }>(sql`
       SELECT
-        (SELECT count(*)::int FROM response_answers WHERE response_id=${responseId}) AS answers,
         (SELECT count(*)::int FROM response_edit_logs WHERE response_id=${responseId}) AS logs
     `);
-    expect(childCounts[0]).toEqual({ answers: 0, logs: 0 });
+    expect(childCounts[0]).toEqual({ logs: 0 });
   });
 
   it('더 늦게 입력을 시작한 attempt가 소유권을 인수하고 이전 attempt는 차단된다', async () => {

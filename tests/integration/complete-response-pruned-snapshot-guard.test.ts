@@ -14,7 +14,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 //
 // db 는 drizzle fluent chain 흉내(complete-response-membership-guard.test.ts 패턴).
 // 스냅샷 경로의 loadValidQuestionIds 는 db.execute(sql) 를 쓰므로 execute 결과도
-// 큐잉한다. 메인 UPDATE 의 .set() 인자와 replaceResponseAnswers 호출을 캡처해
+// 큐잉한다. 메인 UPDATE 의 .set() 인자를 캡처해
 // "유실 대신 에러, 저장 없음"을 검증한다.
 
 const {
@@ -22,13 +22,11 @@ const {
   executeQueue,
   capturedUpdateSets,
   updateReturningMock,
-  replaceResponseAnswersMock,
 } = vi.hoisted(() => ({
   selectTerminalQueue: [] as unknown[][],
   executeQueue: [] as unknown[][],
   capturedUpdateSets: [] as Record<string, unknown>[],
   updateReturningMock: vi.fn(),
-  replaceResponseAnswersMock: vi.fn(),
 }));
 
 vi.mock('@/db', () => {
@@ -122,10 +120,6 @@ vi.mock('@/db', () => {
   return { db };
 });
 
-vi.mock('@/server/survey-response/services/response-answers', () => ({
-  replaceResponseAnswers: vi.fn((...args: unknown[]) => replaceResponseAnswersMock(...args)),
-}));
-
 vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }));
@@ -151,7 +145,6 @@ describe('completeResponse — 프루닝 스냅샷 가드', () => {
     selectTerminalQueue.length = 0;
     executeQueue.length = 0;
     updateReturningMock.mockReset();
-    replaceResponseAnswersMock.mockReset();
     updateReturningMock.mockResolvedValue([
       {
         id: RESPONSE_ID,
@@ -179,9 +172,8 @@ describe('completeResponse — 프루닝 스냅샷 가드', () => {
       }),
     ).rejects.toThrow('스냅샷');
 
-    // 저장 자체가 일어나지 않아야 한다 — questionResponses UPDATE 도, 정규화 반영도 없음
+    // 저장 자체가 일어나지 않아야 한다 — questionResponses UPDATE 가 없음
     expect(capturedUpdateSets.some((s) => s['questionResponses'] !== undefined)).toBe(false);
-    expect(replaceResponseAnswersMock).not.toHaveBeenCalled();
   });
 
   it('버전 행 자체가 사라진 경우도 동일하게 에러로 막는다', async () => {
@@ -201,7 +193,6 @@ describe('completeResponse — 프루닝 스냅샷 가드', () => {
       }),
     ).rejects.toThrow('스냅샷');
 
-    expect(replaceResponseAnswersMock).not.toHaveBeenCalled();
   });
 
   it('non-null 이지만 questions 가 훼손된 스냅샷도 에러로 막는다 (IS NOT NULL 우회 차단)', async () => {
@@ -221,7 +212,6 @@ describe('completeResponse — 프루닝 스냅샷 가드', () => {
       }),
     ).rejects.toThrow('스냅샷');
 
-    expect(replaceResponseAnswersMock).not.toHaveBeenCalled();
   });
 
   it('검증된 빈 questions 배열(질문 0개 설문)은 가드를 통과한다 — 스냅샷 부재와 구분', async () => {
@@ -261,7 +251,6 @@ describe('completeResponse — 프루닝 스냅샷 가드', () => {
     // 기존 draft 저장분 보존의 핵심: questionResponses 를 담은 UPDATE 가 없어야 한다.
     // (이 조건이 깨지면 빈 complete 가 저장분을 덮어쓰는 유실이 부활한다)
     expect(capturedUpdateSets.some((s) => s['questionResponses'] !== undefined)).toBe(false);
-    expect(replaceResponseAnswersMock).not.toHaveBeenCalled();
   });
 
   it('스냅샷이 실존하면 기존 스냅샷 멤버십 경로 그대로 완료된다 (가드 무개입)', async () => {
@@ -285,6 +274,5 @@ describe('completeResponse — 프루닝 스냅샷 가드', () => {
     const qr = mainSet['questionResponses'] as Record<string, unknown>;
     expect(qr[QID]).toBe('정상 응답');
     expect('q-rogue' in qr).toBe(false);
-    expect(replaceResponseAnswersMock).toHaveBeenCalledOnce();
   });
 });

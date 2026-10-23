@@ -107,19 +107,6 @@ export const SurveyResponseArrayOutput = z.custom<SurveyResponse[]>();
 export const SurveyResponseOutput = z.custom<SurveyResponse | null | undefined>();
 
 // ─────────────────────────────────────────────────────────────────────────────
-// responsesWithAnswers (getResponsesWithAnswers)
-// versionId optional. 반환은 SurveyResponse + (response_answers 어댑터 변환된) 배열.
-// ─────────────────────────────────────────────────────────────────────────────
-
-export const ResponsesWithAnswersInput = z.object({
-  surveyId: z.string(),
-  versionId: z.string().nullable().optional(),
-});
-export type ResponsesWithAnswersInput = z.infer<typeof ResponsesWithAnswersInput>;
-// 어댑터로 questionResponses 가 덮어써질 수 있으나 SurveyResponse 와 구조 호환.
-export const ResponsesWithAnswersOutput = z.custom<SurveyResponse[]>();
-
-// ─────────────────────────────────────────────────────────────────────────────
 // surveyVersions (getSurveyVersions) — projection subset
 // ─────────────────────────────────────────────────────────────────────────────
 

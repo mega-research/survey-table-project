@@ -14,8 +14,7 @@ import type { Question, Survey } from '@/types/survey';
  *
  * 스냅샷은 손으로 조립하지 않고 publish 가 쓰는 buildSurveySnapshot 을 그대로 통과시켜
  * 만든다 — 스냅샷 어휘가 바뀌면 이 시드도 같은 커밋에서 함께 깨지는 것이 의도다.
- * 질문 rows 도 함께 넣는 이유는 saveResponse 가 채우는 response_answers 의
- * questionId 참조 때문이다 (응답 페이지 자체는 스냅샷만 읽는다).
+ * 질문 rows 도 함께 넣어 빌더 저장본과 스냅샷을 맞춘다 (응답 페이지 자체는 스냅샷만 읽는다).
  */
 
 // playwright.config 가 process.env 에 확정해 둔 로컬 supabase 테스트 DB(realdb 스위트와 동일).
@@ -203,13 +202,6 @@ export async function fetchResponses(surveyId: string) {
     .where(eq(schema.surveyResponses.surveyId, surveyId));
 }
 
-export async function fetchResponseAnswers(responseId: string) {
-  return db
-    .select()
-    .from(schema.responseAnswers)
-    .where(eq(schema.responseAnswers.responseId, responseId));
-}
-
 export async function fetchContactTarget(contactTargetId: string) {
   const rows = await db
     .select()
@@ -227,7 +219,6 @@ export async function cleanupSeed(surveyId: string): Promise<void> {
   const responseIds = responses.map((r) => r.id);
 
   if (responseIds.length > 0) {
-    await db.delete(schema.responseAnswers).where(inArray(schema.responseAnswers.responseId, responseIds));
     await db
       .delete(schema.testResponseAttempts)
       .where(inArray(schema.testResponseAttempts.responseId, responseIds));

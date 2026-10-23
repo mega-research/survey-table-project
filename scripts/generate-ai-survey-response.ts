@@ -6,14 +6,12 @@
  * - branch-logic 구조를 인라인 복제(shouldDisplayQuestion / getBranchRule)
  * - 시나리오 맵(질문 UUID → 응답값/함수)으로 주요 분기·수치·텍스트 지정
  * - 미정의 질문은 현실감 있는 기본값 (첫 옵션 편향 피해 행별 편차 부여)
- * - survey_responses INSERT 후 response_answers 이중쓰기, 실패 시 수동 롤백
+ * - survey_responses INSERT, 실패 시 수동 롤백
  *
  * 실행: pnpm tsx scripts/generate-ai-survey-response.ts
  */
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
-
-import { normalizeToAnswers } from '@/server/survey-response/services/response-normalizer';
 
 dotenv.config({ path: '.env.local' });
 
@@ -1859,8 +1857,6 @@ async function main() {
   }
   console.log('✔ 삭제 완료\n');
 
-  const meta = questions.map(q => ({ id: q.id, type: q.type }));
-
   // 타임스탬프: 지난 30일 내 분산
   const nowMs = Date.now();
   const DAY = 24 * 60 * 60 * 1000;
@@ -1879,7 +1875,6 @@ async function main() {
   };
 
   const responsePayloads: Record<string, unknown>[] = [];
-  const answerPayloads: Record<string, unknown>[] = [];
 
   // snapshot position map (progress_pct 계산용, 1-based)
   const positionMap = new Map(questions.map((q, idx) => [q.id, idx + 1]));
@@ -1987,18 +1982,6 @@ async function main() {
       page_visits: pageVisits,
     });
 
-    const normalized = normalizeToAnswers(responseId, responses, meta);
-    for (const a of normalized) {
-      answerPayloads.push({
-        response_id: a.responseId,
-        question_id: a.questionId,
-        text_value: a.textValue,
-        array_value: a.arrayValue,
-        object_value: a.objectValue,
-        question_type: a.questionType,
-      });
-    }
-
     // 통계 누적 (프로필 기준 — 부분 응답 포함 전체 분포 확인용)
     stats.exposed_total += exposedIds.length;
     if (P.hasExport) stats.export_yes++; else stats.export_no++;
@@ -2032,21 +2015,7 @@ async function main() {
     }
     for (const r of (data || [])) insertedIds.push(r.id as string);
   }
-  console.log(`✔ survey_responses ${insertedIds.length}건 저장`);
-
-  console.log('💾 response_answers 배치 INSERT...');
-  const ANS_CHUNK = 500;
-  for (let k = 0; k < answerPayloads.length; k += ANS_CHUNK) {
-    const chunk = answerPayloads.slice(k, k + ANS_CHUNK);
-    const { error: ansErr } = await supabase.from('response_answers').insert(chunk);
-    if (ansErr) {
-      console.error(`❌ answers chunk ${k}-${k + chunk.length} 실패:`, ansErr.message);
-      console.log('🔙 survey_responses 롤백...');
-      await supabase.from('survey_responses').delete().in('id', insertedIds);
-      throw ansErr;
-    }
-  }
-  console.log(`✔ response_answers ${answerPayloads.length}건 저장\n`);
+  console.log(`✔ survey_responses ${insertedIds.length}건 저장\n`);
 
   console.log('📊 분포 통계');
   console.log(`  상태    : 완료 ${statusCount.completed} / 진행중 ${statusCount.in_progress} / 일탈 ${statusCount.drop}`);

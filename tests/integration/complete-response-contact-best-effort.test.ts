@@ -94,10 +94,6 @@ vi.mock('@/db', () => {
   };
 });
 
-vi.mock('@/server/survey-response/services/response-answers', () => ({
-  replaceResponseAnswers: vi.fn(async () => undefined),
-}));
-
 describe('completeResponse 실제 대상자 후처리', () => {
   beforeEach(() => {
     resetTransactionState();

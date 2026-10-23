@@ -13,15 +13,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // 통과한 키에 한해서만 prefill 강제 복원을 적용한다.
 //
 // db 는 drizzle fluent chain 흉내. select 종단(.limit / 직접 await 되는 .where)은
-// 호출 순서대로 큐잉된 결과를 돌려주고, 트랜잭션 내부 메인 UPDATE 의 .set() 인자와
-// replaceResponseAnswers 인자를 캡처해 최종 저장값을 검증한다.
+// 호출 순서대로 큐잉된 결과를 돌려주고, 트랜잭션 내부 메인 UPDATE 의 .set() 인자를
+// 캡처해 최종 저장값을 검증한다.
 
-const { selectTerminalQueue, capturedUpdateSets, updateReturningMock, replaceResponseAnswersMock } =
+const { selectTerminalQueue, capturedUpdateSets, updateReturningMock } =
   vi.hoisted(() => ({
     selectTerminalQueue: [] as unknown[][],
     capturedUpdateSets: [] as Record<string, unknown>[],
     updateReturningMock: vi.fn(),
-    replaceResponseAnswersMock: vi.fn(),
   }));
 
 vi.mock('@/db', () => {
@@ -106,10 +105,6 @@ vi.mock('@/db', () => {
   return { db };
 });
 
-vi.mock('@/server/survey-response/services/response-answers', () => ({
-  replaceResponseAnswers: vi.fn((...args: unknown[]) => replaceResponseAnswersMock(...args)),
-}));
-
 vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }));
@@ -162,7 +157,6 @@ describe('completeResponse — JSONB 오염 가드 (멤버십/바이트 필터)'
     capturedUpdateSets.length = 0;
     selectTerminalQueue.length = 0;
     updateReturningMock.mockReset();
-    replaceResponseAnswersMock.mockReset();
     updateReturningMock.mockResolvedValue([
       {
         id: RESPONSE_ID,
@@ -173,7 +167,7 @@ describe('completeResponse — JSONB 오염 가드 (멤버십/바이트 필터)'
     ]);
   });
 
-  it('유효 집합에 없는 questionId 는 JSONB 와 response_answers 양쪽에서 drop 한다', async () => {
+  it('유효 집합에 없는 questionId 는 drop 한다', async () => {
     queueSelects({ validQuestionIds: [VALID_QID], attrs: {} });
 
     const { completeResponse } =
@@ -193,14 +187,6 @@ describe('completeResponse — JSONB 오염 가드 (멤버십/바이트 필터)'
     const qr = lastMainSet()['questionResponses'] as Record<string, unknown>;
     expect(qr[VALID_QID]).toBe('정상 응답');
     expect(ROGUE_QID in qr).toBe(false);
-
-    // response_answers 인자(replaceResponseAnswers 4번째 인자)도 동일하게 필터됨
-    expect(replaceResponseAnswersMock).toHaveBeenCalledOnce();
-    const raCall = replaceResponseAnswersMock.mock.calls[0];
-    if (!raCall) throw new Error('replaceResponseAnswers 호출 없음');
-    const raResponses = raCall[3] as Record<string, unknown>;
-    expect(raResponses[VALID_QID]).toBe('정상 응답');
-    expect(ROGUE_QID in raResponses).toBe(false);
   });
 
   it('단일 키 256KB 초과 값은 그 키만 drop 하고 나머지 정상 키는 보존한다', async () => {

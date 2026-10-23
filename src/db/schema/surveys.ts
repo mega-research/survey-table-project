@@ -508,25 +508,6 @@ export const responseEditLogs = pgTable('response_edit_logs', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
-// 정규화된 응답 테이블
-export const responseAnswers = pgTable('response_answers', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  responseId: uuid('response_id')
-    .notNull()
-    .references(() => surveyResponses.id, { onDelete: 'cascade' }),
-  questionId: uuid('question_id').notNull(),
-
-  // 값 저장 (타입별 분리)
-  textValue: text('text_value'),
-  arrayValue: jsonb('array_value').$type<string[]>(),
-  objectValue: jsonb('object_value').$type<Record<string, unknown>>(),
-
-  // 역정규화 (빠른 필터링)
-  questionType: text('question_type').notNull(),
-
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
-
 // 질문 보관함 테이블
 export const savedQuestions = pgTable('saved_questions', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -635,7 +616,7 @@ export const questionGroupsRelations = relations(questionGroups, ({ one, many })
   questions: many(questions),
 }));
 
-export const surveyResponsesRelations = relations(surveyResponses, ({ one, many }) => ({
+export const surveyResponsesRelations = relations(surveyResponses, ({ one }) => ({
   survey: one(surveys, {
     fields: [surveyResponses.surveyId],
     references: [surveys.id],
@@ -644,7 +625,6 @@ export const surveyResponsesRelations = relations(surveyResponses, ({ one, many 
     fields: [surveyResponses.versionId],
     references: [surveyVersions.id],
   }),
-  answers: many(responseAnswers),
 }));
 
 export const surveyVersionsRelations = relations(surveyVersions, ({ one, many }) => ({
@@ -653,13 +633,6 @@ export const surveyVersionsRelations = relations(surveyVersions, ({ one, many })
     references: [surveys.id],
   }),
   responses: many(surveyResponses),
-}));
-
-export const responseAnswersRelations = relations(responseAnswers, ({ one }) => ({
-  response: one(surveyResponses, {
-    fields: [responseAnswers.responseId],
-    references: [surveyResponses.id],
-  }),
 }));
 
 // ========================
@@ -691,8 +664,6 @@ export type NewQuestionCategory = typeof questionCategories.$inferInsert;
 export type SurveyVersion = typeof surveyVersions.$inferSelect;
 export type NewSurveyVersion = typeof surveyVersions.$inferInsert;
 
-export type ResponseAnswer = typeof responseAnswers.$inferSelect;
-export type NewResponseAnswer = typeof responseAnswers.$inferInsert;
 
 export type ResponseEditLog = typeof responseEditLogs.$inferSelect;
 export type NewResponseEditLog = typeof responseEditLogs.$inferInsert;

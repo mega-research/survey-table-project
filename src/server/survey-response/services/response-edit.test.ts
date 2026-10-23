@@ -13,10 +13,6 @@ vi.mock('next/headers', () => ({
   }),
 }));
 
-vi.mock('./response-answers', () => ({
-  replaceResponseAnswers: vi.fn(async () => undefined),
-}));
-
 // 통 mock 금지(레포 관례) — saveAdminEdit 가 이 모듈에서 assertAnswerValueSize 도 가져오므로
 // 실물을 spread 로 깔고 이 테스트가 고정하려는 것(PII 집합)만 덮는다. 크기 가드는 실동작 유지.
 vi.mock('./submitted-answers', async (importOriginal) => ({

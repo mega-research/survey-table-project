@@ -32,7 +32,6 @@ const {
   selectLimitMock,
   selectThenMock,
   selectForUpdateMock,
-  replaceResponseAnswersMock,
 } = vi.hoisted(() => ({
   responseFindFirstMock: vi.fn(),
   surveyFindFirstMock: vi.fn(),
@@ -43,7 +42,6 @@ const {
   selectLimitMock: vi.fn(),
   selectThenMock: vi.fn(),
   selectForUpdateMock: vi.fn(),
-  replaceResponseAnswersMock: vi.fn(async (..._a: unknown[]) => undefined),
 }));
 
 function makeUpdateChain() {
@@ -102,10 +100,6 @@ vi.mock('@/server/read-models/survey-control', () => ({
 vi.mock('@/server/survey-response/services/response-progress', () => ({
   getProgressSnapshot: vi.fn(async () => ({ positionMap: new Map(), totalQuestions: 0 })),
 }));
-vi.mock('@/server/survey-response/services/response-answers', () => ({
-  replaceResponseAnswers: (...a: unknown[]) => replaceResponseAnswersMock(...a),
-}));
-
 const SURVEY_ID = '00000000-0000-4000-8000-0000000000s1';
 const RESPONSE_ID = '00000000-0000-4000-8000-0000000000r1';
 const VERSION_ID = '00000000-0000-4000-8000-0000000000v2';

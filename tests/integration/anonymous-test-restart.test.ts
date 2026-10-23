@@ -243,8 +243,8 @@ describe('익명 테스트 세션 재진입 — 종결 행 제자리 리셋', ()
       lastEditedAt: null,
       sessionId: SESSION_ID,
     });
-    // 이전 시도의 정규화 응답·수정 로그도 함께 지운다(response_answers, response_edit_logs).
-    expect(resetDeleteTables).toHaveBeenCalledTimes(2);
+    // 이전 시도의 수정 로그도 함께 지운다(response_edit_logs).
+    expect(resetDeleteTables).toHaveBeenCalledTimes(1);
   });
 
   it('screened_out 종결 행도 초기화한다', async () => {

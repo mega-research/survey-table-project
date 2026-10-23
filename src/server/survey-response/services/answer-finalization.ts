@@ -46,7 +46,7 @@ export interface FinalizationMaterial {
 }
 
 export interface AnswerFinalization {
-  /** 확정 평문 — 쿼터 분류·응답 정규화 저장(response_answers)의 재료. */
+  /** 확정 평문 — 쿼터 분류의 재료. */
   plain: Record<string, unknown>;
   /** question_responses 에 그대로 쓸 값(개인정보 문항·셀 암호화). 크기 정책은 호출자 몫이다. */
   stored: Record<string, unknown>;

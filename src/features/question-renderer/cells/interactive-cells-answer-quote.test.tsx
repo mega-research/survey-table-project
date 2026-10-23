@@ -204,7 +204,7 @@ describe('테이블 셀 문구(cell.content) — 응답 인용 치환', () => {
  * 최종 리뷰 I2 — 표 셀 prefill 은 인용값을 저장하지 않는다.
  *
  * defaultValueTemplate 치환 결과는 onUpdateValue 로 응답에 저장된다
- * (questionResponses → response_answers → 엑셀/SPSS export). 응답 인용은 저장되지 않는
+ * (questionResponses → 엑셀/SPSS export). 응답 인용은 저장되지 않는
  * 파생값이 불변식이고, piiEncrypted 는 질문 단위라 표 셀 답변은 암호화 대상이 아니다 —
  * 인용을 허용하면 암호화 단답형의 원문이 평문 셀 답변으로 새는 경로가 열린다.
  */

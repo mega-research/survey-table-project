@@ -5,7 +5,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { surveyResponses } from '@/db/schema';
 import { notDeletedResponse, notTestResponse } from '@/server/response-filters';
-import { getResponsesWithAnswers } from '@/server/read-models/responses';
+import { getCompletedResponsesForAnalysis } from '@/server/read-models/responses';
 import { getSurveyWithDetails } from '@/server/read-models/survey-structure';
 import { analyzeSurvey } from '@/lib/analytics/analyzer';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
@@ -168,7 +168,7 @@ export async function getQuestionStatistics(
 
 /**
  * 전체 설문 분석 (서버 계산).
- * 설문 구조(질문 포함) + 완료 응답(response_answers 조인 변환)을 fetch 한 뒤
+ * 설문 구조(질문 포함) + 완료 응답을 fetch 한 뒤
  * 순수 함수 analyzeSurvey 로 집계한다.
  * 설문이 없으면 throw.
  *
@@ -180,10 +180,10 @@ export async function analyzeSurveyById(surveyId: string): Promise<SurveyAnalyti
   if (!survey) throw new Error('설문을 찾을 수 없습니다.');
 
   // analyzeSurvey 는 완료 응답을 내부에서 isCompleted 필터하지만,
-  // 분모 일관성을 위해 response_answers 조인 변환된 완료 응답을 전달한다.
-  // getResponsesWithAnswers 는 이미 복호화되어 반환되지만, 접두사 감지로 재적용해도
+  // 분모 일관성을 위해 완료 응답만 전달한다.
+  // getCompletedResponsesForAnalysis 는 이미 복호화되어 반환되지만, 접두사 감지로 재적용해도
   // 무해하므로 이 경계에서도 명시적으로 감싼다(호출 경로 변경에 대한 방어).
-  const rawResponses = await getResponsesWithAnswers(surveyId);
+  const rawResponses = await getCompletedResponsesForAnalysis(surveyId);
   const responses = rawResponses.map((r) => ({
     ...r,
     questionResponses: decryptQuestionResponses(

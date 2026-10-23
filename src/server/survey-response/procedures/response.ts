@@ -82,7 +82,7 @@ const createBlank = rateLimited
   .handler(({ input }) => entry.createBlankResponse(input));
 
 /**
- * 응답 완료(pub). JSONB + response_answers 이중 쓰기, prefill 재검증, 컨택 매칭 후처리.
+ * 응답 완료(pub). 응답 원본(JSONB) 저장, prefill 재검증, 컨택 매칭 후처리.
  */
 const complete = rateLimited
   .input(CompleteResponseInput)

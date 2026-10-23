@@ -1,9 +1,8 @@
 /**
  * surveyResponse.response procedure 실 DB 왕복 integration test
  *
- * 목적: procedure -> service -> 실 PostgreSQL 왕복(응답 생성 + 완료 + response_answers
- * 정규화)이 실제로 돈다는 것을 CI에 고정. completeResponse 의 트랜잭션 + progressPct=100
- * + response_answers 정규화 불변식(A)을 실DB에서 검증한다.
+ * 목적: procedure -> service -> 실 PostgreSQL 왕복(응답 생성 + 완료)이 실제로 돈다는 것을
+ * CI에 고정. completeResponse 의 트랜잭션 + progressPct=100 을 실DB에서 검증한다.
  *
  * 실행 조건: DATABASE_URL이 127.0.0.1 또는 localhost를 포함할 때만 동작.
  * prod URL 환경에서는 describe.skipIf로 전체 스킵 -> 일반 pnpm test에서 데이터 오염 없음.
@@ -32,7 +31,6 @@ vi.mock('next/headers', () => ({
 import { db } from '@/db';
 import {
   questions as questionsTable,
-  responseAnswers as responseAnswersTable,
   surveyResponses as surveyResponsesTable,
   surveys as surveysTable,
   surveyVersions as surveyVersionsTable,
@@ -69,13 +67,13 @@ describe.skipIf(!isLocalDb)('surveyResponse.response procedure round-trip (real 
 
   afterAll(async () => {
     for (const id of createdSurveyIds) {
-      // survey 삭제 시 questions/survey_versions/survey_responses/response_answers 는
+      // survey 삭제 시 questions/survey_versions/survey_responses 는
       // FK cascade 로 정리되지만 명시적으로 survey 만 지워도 충분하다.
       await db.delete(surveysTable).where(eq(surveysTable.id, id));
     }
   });
 
-  it('createWithFirstAnswer -> complete 왕복: progressPct=100 + response_answers 정규화가 DB에 반영된다', async () => {
+  it('createWithFirstAnswer -> complete 왕복: progressPct=100 과 응답이 DB에 반영된다', async () => {
     // 1. survey + question + version 선행 insert
     const [survey] = await db
       .insert(surveysTable)
@@ -158,19 +156,5 @@ describe.skipIf(!isLocalDb)('surveyResponse.response procedure round-trip (real 
     expect(row?.status).toBe('completed');
     expect(row?.progressPct).toBe(100);
     expect(row?.questionResponses).toEqual({ [question.id]: '홍길동' });
-
-    // 5. response_answers 정규화 행 검증 (불변식 A — completeResponse 가 채운다)
-    const answers = await db
-      .select({
-        questionId: responseAnswersTable.questionId,
-        textValue: responseAnswersTable.textValue,
-        questionType: responseAnswersTable.questionType,
-      })
-      .from(responseAnswersTable)
-      .where(eq(responseAnswersTable.responseId, responseId));
-    expect(answers.length).toBe(1);
-    expect(answers[0]?.questionId).toBe(question.id);
-    expect(answers[0]?.textValue).toBe('홍길동');
-    expect(answers[0]?.questionType).toBe('text');
   });
 });

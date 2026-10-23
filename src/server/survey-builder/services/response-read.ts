@@ -4,12 +4,9 @@ import { and, desc, eq, isNull, ne } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { TEST_VERSION_STATUS } from '@/shared/contracts/survey';
-import { responseAnswers, surveyResponses, surveyVersions } from '@/db/schema';
-import { answersToQuestionResponses } from '@/lib/analytics/response-adapter';
+import { surveyResponses, surveyVersions } from '@/db/schema';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { notDeletedResponse, notTestResponse } from '@/server/response-filters';
-
-import type { ResponsesWithAnswersInput } from '../domain/survey-read';
 
 // 이 service 는 actions/query-actions 의 requireAuth 를 제거한다(authed 미들웨어가 대체).
 // server/read-models/responses.ts 의 조회·export 로직을 byte 보존으로 흡수한다. notDeletedResponse 필터는
@@ -77,47 +74,6 @@ export async function getResponseById(responseId: string, surveyId: string) {
       { responseId: response.id },
     ),
   };
-}
-
-// 버전별 완료된 응답 조회 (response_answers JOIN + 어댑터 변환)
-export async function getResponsesWithAnswers(input: ResponsesWithAnswersInput) {
-  const { surveyId, versionId } = input;
-
-  // 버전 필터 조건 구성 (테스트 응답 제외 — analytics 모수)
-  const conditions = [
-    eq(surveyResponses.surveyId, surveyId),
-    eq(surveyResponses.isCompleted, true),
-    notDeletedResponse,
-    notTestResponse,
-  ];
-
-  if (versionId) {
-    conditions.push(eq(surveyResponses.versionId, versionId));
-  }
-
-  const responses = await db.query.surveyResponses.findMany({
-    where: and(...conditions),
-    with: {
-      answers: true,
-    },
-    orderBy: [desc(surveyResponses.completedAt)],
-  });
-
-  // response_answers가 있으면 어댑터로 변환, 없으면 기존 JSONB 사용
-  return responses.map((r) => {
-    const answers = (r as typeof r & { answers?: typeof responseAnswers.$inferSelect[] }).answers;
-    const merged =
-      answers && answers.length > 0
-        ? { ...r, questionResponses: answersToQuestionResponses(answers) }
-        : r;
-    return {
-      ...merged,
-      questionResponses: decryptQuestionResponses(
-        (merged.questionResponses ?? {}) as Record<string, unknown>,
-        { responseId: r.id },
-      ),
-    };
-  });
 }
 
 // 설문의 버전 목록 조회

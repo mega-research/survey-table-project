@@ -5,7 +5,7 @@ import { ArrowLeft, Settings } from 'lucide-react';
 
 import { AnalyticsDashboardClient } from '@/features/analytics';
 import { Button } from '@/components/ui/button';
-import { getResponsesWithAnswers, getSurveyVersions } from '@/server/read-models/responses';
+import { getCompletedResponsesForAnalysis, getSurveyVersions } from '@/server/read-models/responses';
 import { getSurveyWithDetails } from '@/server/survey-builder/services/survey-read';
 import { requireAdminPage } from '@/lib/auth/require-admin-page';
 
@@ -19,10 +19,10 @@ export default async function SurveyAnalyticsPage({ params }: AnalyticsPageProps
   // RSC 도 export procedure 와 같은 판정을 받는다 — 이 페이지는 복호화된 응답을 렌더한다.
   await requireAdminPage();
 
-  // 설문 및 응답 데이터 조회 (response_answers 우선, JSONB fallback)
+  // 설문 및 완료 응답 조회
   const [survey, responses, versions] = await Promise.all([
     getSurveyWithDetails(surveyId),
-    getResponsesWithAnswers(surveyId),
+    getCompletedResponsesForAnalysis(surveyId),
     getSurveyVersions(surveyId),
   ]);
 
