@@ -1,4 +1,4 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import 'server-only';
 import type * as z from 'zod';
 
@@ -13,7 +13,10 @@ import {
 import { resolveMidSurveyClosedMessage } from '@/lib/quota/closed-message';
 import type { NormalizedQuotaConfig } from '@/lib/quota/normalize';
 import type { QuotaConfig } from '@/shared/contracts/quota';
-import { isConcludedResponseStatus } from '@/shared/contracts/survey-response';
+import {
+  isConcludedResponseStatus,
+  openResponseStatusValues,
+} from '@/shared/contracts/survey-response';
 
 import type { QuotaCheckResult } from '../domain/quota';
 
@@ -99,8 +102,9 @@ export async function checkQuota(input: {
 }
 
 /**
- * 응답을 quotaful_out 으로 마킹. 반드시 (id + surveyId) 로 스코프하고 in_progress·비삭제 행에만 적용.
- * surveyId 가드는 pub 호출자가 타 설문의 응답을 변조하는 것을 차단하고, in_progress 가드는 종결 상태 덮어쓰기를 막는다.
+ * 응답을 quotaful_out 으로 마킹. 반드시 (id + surveyId) 로 스코프하고 열린 상태(진행중·이탈)·비삭제 행에만 적용.
+ * surveyId 가드는 pub 호출자가 타 설문의 응답을 변조하는 것을 차단하고, 열린 상태 가드는 종결 상태 덮어쓰기를 막는다.
+ * 이탈(drop)도 열린 상태다 — 입력 없이 돌아온 응답자는 초안 저장으로 되살아나지 않은 채 확인이 온다.
  */
 export async function markQuotaFull(responseId: string, surveyId: string): Promise<void> {
   await db
@@ -111,7 +115,7 @@ export async function markQuotaFull(responseId: string, surveyId: string): Promi
         eq(surveyResponses.id, responseId),
         eq(surveyResponses.surveyId, surveyId),
         isNull(surveyResponses.deletedAt),
-        eq(surveyResponses.status, 'in_progress'),
+        inArray(surveyResponses.status, [...openResponseStatusValues]),
       ),
     );
 }
