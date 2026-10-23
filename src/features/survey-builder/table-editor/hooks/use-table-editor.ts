@@ -269,44 +269,37 @@ export function useTableEditor({
     });
   }, []);
 
+  // 지연 알림 예약. 알림 내용은 예약할 때가 아니라 발화할 때의 ref 를 읽는다 — 예약 시점의 배열을
+  // 붙잡아 두면 그 사이의 즉시 알림(행 추가 등)을 뒤늦게 덮어써, 화면과 저장이 갈렸다.
   const pendingChangeRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingArgsRef = useRef<{
-    title: string;
-    cols: TableColumn[];
-    rowsData: TableRow[];
-  } | null>(null);
 
   // 셀 코드 재계산 전용 debounce (updateColumnCode / updateRowCode 용)
   const pendingCellCodeRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // questionCode/questionTitle 변경 시 전체 재계산 debounce
   const pendingQuestionInfoRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const notifyChangeDebounced = useCallback(
-    (title: string, cols: TableColumn[], rowsData: TableRow[]) => {
-      if (pendingChangeRef.current) clearTimeout(pendingChangeRef.current);
-      pendingArgsRef.current = { title, cols, rowsData };
-      pendingChangeRef.current = setTimeout(() => {
-        // dirty ref → React state 일괄 동기화 (label/code 입력 지연 렌더)
-        if (pendingRowsSyncRef.current) {
-          pendingRowsSyncRef.current = false;
-          setCurrentRows(currentRowsRef.current);
-        }
-        if (pendingColumnsSyncRef.current) {
-          pendingColumnsSyncRef.current = false;
-          setCurrentColumns(currentColumnsRef.current);
-        }
-        onTableChangeRef.current({
-          tableTitle: title,
-          tableColumns: cols,
-          tableRowsData: rowsData,
-          tableHeaderGrid: headerGridRef.current ?? null,
-        });
-        pendingChangeRef.current = null;
-        pendingArgsRef.current = null;
-      }, 300);
-    },
-    [],
-  );
+  /** 호출 전에 ref(행·열·제목)를 먼저 써 둘 것 — 발화 시점에 ref 를 그대로 올린다. */
+  const notifyChangeDebounced = useCallback(() => {
+    if (pendingChangeRef.current) clearTimeout(pendingChangeRef.current);
+    pendingChangeRef.current = setTimeout(() => {
+      pendingChangeRef.current = null;
+      // dirty ref → React state 일괄 동기화 (label/code 입력 지연 렌더)
+      if (pendingRowsSyncRef.current) {
+        pendingRowsSyncRef.current = false;
+        setCurrentRows(currentRowsRef.current);
+      }
+      if (pendingColumnsSyncRef.current) {
+        pendingColumnsSyncRef.current = false;
+        setCurrentColumns(currentColumnsRef.current);
+      }
+      onTableChangeRef.current({
+        tableTitle: currentTitleRef.current,
+        tableColumns: currentColumnsRef.current,
+        tableRowsData: currentRowsRef.current,
+        tableHeaderGrid: headerGridRef.current ?? null,
+      });
+    }, 300);
+  }, []);
 
   // 언마운트 시 pending change flush (데이터 손실 방지)
   const flushPendingOnUnmount = useCallback(() => {
@@ -326,15 +319,13 @@ export function useTableEditor({
     // 부모 알림 flush
     if (pendingChangeRef.current) {
       clearTimeout(pendingChangeRef.current);
-      if (pendingArgsRef.current) {
-        const { title, cols, rowsData } = pendingArgsRef.current;
-        onTableChangeRef.current({
-          tableTitle: title,
-          tableColumns: cols,
-          tableRowsData: rowsData,
-          tableHeaderGrid: headerGridRef.current ?? null,
-        });
-      }
+      pendingChangeRef.current = null;
+      onTableChangeRef.current({
+        tableTitle: currentTitleRef.current,
+        tableColumns: currentColumnsRef.current,
+        tableRowsData: currentRowsRef.current,
+        tableHeaderGrid: headerGridRef.current ?? null,
+      });
     }
   }, []);
   useEffect(() => {
@@ -359,7 +350,7 @@ export function useTableEditor({
         currentRowsRef.current,
       );
       commitRows(updatedRows);
-      notifyChangeDebounced(currentTitleRef.current, currentColumnsRef.current, updatedRows);
+      notifyChangeDebounced();
       pendingQuestionInfoRef.current = null;
     }, 300);
     // commitRows/notifyChangeDebounced 는 useCallback([]) 안정 참조 — deps 에 있어도 재발사 없음.
@@ -411,8 +402,9 @@ export function useTableEditor({
 
   const updateTitle = useCallback(
     (title: string) => {
+      currentTitleRef.current = title;
       setCurrentTitle(title);
-      notifyChangeDebounced(title, currentColumnsRef.current, currentRowsRef.current);
+      notifyChangeDebounced();
     },
     [notifyChangeDebounced],
   );
@@ -445,7 +437,7 @@ export function useTableEditor({
       currentRowsRef.current = updatedRows;
       pendingRowsSyncRef.current = false;
       setCurrentRows(updatedRows);
-      notifyChangeDebounced(currentTitleRef.current, currentColumnsRef.current, updatedRows);
+      notifyChangeDebounced();
       pendingCellCodeRef.current = null;
     }, 300);
   }, [notifyChangeDebounced]);
@@ -458,7 +450,7 @@ export function useTableEditor({
       );
       currentColumnsRef.current = updatedColumns;
       pendingColumnsSyncRef.current = true;
-      notifyChangeDebounced(currentTitleRef.current, updatedColumns, currentRowsRef.current);
+      notifyChangeDebounced();
       // 지연: 셀 코드 전체 재계산
       scheduleCellCodeRecalc();
     },
@@ -620,7 +612,7 @@ export function useTableEditor({
       );
       currentColumnsRef.current = updatedColumns;
       pendingColumnsSyncRef.current = true;
-      notifyChangeDebounced(currentTitleRef.current, updatedColumns, currentRowsRef.current);
+      notifyChangeDebounced();
     },
     [notifyChangeDebounced],
   );
@@ -628,12 +620,11 @@ export function useTableEditor({
   // 스타일 변경은 타이핑이 아니므로 debounce 없이 즉시 커밋한다.
   const updateColumnStyle = useCallback(
     (columnIndex: number, style: HeaderBulkStyle) => {
-      // 열 코드 등 label/code debounce가 예약되어 있으면 취소한다.
-      // 취소하지 않으면 나중에 stale cols(값 캡처)가 발화해 방금 적용한 스타일을 덮어쓴다.
+      // 열 코드 등 label/code debounce가 예약되어 있으면 취소한다 — 아래 즉시 알림이 같은
+      // ref 를 실어 보내므로 뒤늦은 중복 알림만 막는다.
       if (pendingChangeRef.current) {
         clearTimeout(pendingChangeRef.current);
         pendingChangeRef.current = null;
-        pendingArgsRef.current = null;
       }
 
       // debounce를 취소해도 ref-only 행 편집은 화면 state까지 즉시 반영해야 한다.
@@ -954,7 +945,7 @@ export function useTableEditor({
       );
       currentRowsRef.current = updatedRows;
       pendingRowsSyncRef.current = true;
-      notifyChangeDebounced(currentTitleRef.current, currentColumnsRef.current, updatedRows);
+      notifyChangeDebounced();
     },
     [notifyChangeDebounced],
   );
@@ -967,7 +958,7 @@ export function useTableEditor({
       );
       currentRowsRef.current = updatedRows;
       pendingRowsSyncRef.current = true;
-      notifyChangeDebounced(currentTitleRef.current, currentColumnsRef.current, updatedRows);
+      notifyChangeDebounced();
       // 지연: 셀 코드 전체 재계산
       scheduleCellCodeRecalc();
     },
@@ -1414,7 +1405,6 @@ export function useTableEditor({
       if (pendingChangeRef.current) {
         clearTimeout(pendingChangeRef.current);
         pendingChangeRef.current = null;
-        pendingArgsRef.current = null;
       }
 
       // debounce를 취소해도 ref-only 행 편집은 화면 state까지 즉시 반영해야 한다.
