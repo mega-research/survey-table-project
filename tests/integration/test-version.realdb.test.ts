@@ -23,7 +23,7 @@ import {
 import { getSurveyVersions } from '@/server/read-models/responses';
 import { publishSurvey } from '@/server/survey-builder/services/survey-publish';
 import { getSurveyForResponse } from '@/server/survey-builder/services/survey-read';
-import { ensureTestVersion } from '@/server/survey-builder/services/test-version';
+import { ensureTestVersion } from '@/server/workflows/test-version';
 
 const isLocalDb =
   (process.env['DATABASE_URL'] ?? '').includes('127.0.0.1') ||

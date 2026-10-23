@@ -3,7 +3,7 @@ import 'server-only';
 
 import { db } from '@/db';
 import { surveyVersions, surveys } from '@/db/schema';
-import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
+import { pinnedVersionId, type SurveyVersionSnapshot } from '@/shared/contracts/survey';
 import type { Question, SurveyLookup } from '@/types/survey';
 
 /**
@@ -28,18 +28,20 @@ export async function loadVersionSnapshot(
 }
 
 /**
- * 설문의 현재 배포 버전 스냅샷. currentVersionId 가 없으면 두 번째 쿼리 없이 null.
+ * 실응답 또는 테스트 응답이 보는 버전의 스냅샷 — 실응답은 현재 배포본, 테스트 응답은 지금 테스트 버전
+ * (없으면 배포본, `pinnedVersionId`). 고정된 버전이 없으면 두 번째 쿼리 없이 null.
  */
-export async function loadCurrentVersionSnapshot(
+export async function loadPinnedVersionSnapshot(
   surveyId: string,
+  isTest: boolean,
 ): Promise<SurveyVersionSnapshot | null> {
   const [row] = await db
-    .select({ currentVersionId: surveys.currentVersionId })
+    .select({ currentVersionId: surveys.currentVersionId, testVersionId: surveys.testVersionId })
     .from(surveys)
     .where(eq(surveys.id, surveyId))
     .limit(1);
 
-  return loadVersionSnapshot(row?.currentVersionId);
+  return loadVersionSnapshot(row ? pinnedVersionId(row, isTest) : null);
 }
 
 /**

@@ -44,7 +44,7 @@ import type {
   SurveyIdRow,
   SurveyListItem,
 } from '../domain/survey-read';
-import { ensureTestVersion } from './test-version';
+import { ensureTestVersion } from '@/server/workflows/test-version';
 
 // 이 service 는 actions/query-actions 의 requireAuth 를 제거한다.
 // 관리(빌더) 경로는 procedure 의 authed 미들웨어가 인증을 대체하고,

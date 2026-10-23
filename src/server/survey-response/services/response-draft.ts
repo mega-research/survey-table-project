@@ -15,7 +15,10 @@ import {
   loadResponseRowForMutation,
 } from './response-answer-write';
 import { SurveyNotAcceptingResponsesError } from './response-gate';
-import { classifyQuestionMembershipError } from './response-version-snapshot';
+import {
+  classifyQuestionMembershipError,
+  syncTestVersionBeforeWrite,
+} from './response-version-snapshot';
 import { assertAnswerValueSize } from './submitted-answers';
 import { lockAndAssertResponseMutation } from './test-target-attempt';
 
@@ -242,6 +245,8 @@ export async function saveDraftResponse(
 
   // #5 변조 가드 2: 응답 행 조회. 배치 전체가 같은 행이라 1회면 충분하다.
   const responseRow = await loadResponseRowForMutation(input.responseId);
+  // 테스트 응답이면 테스트 버전을 지금 저장본에 맞춘다 — 바뀌었으면 아래 소속 검증이 안내로 접힌다.
+  await syncTestVersionBeforeWrite(responseRow);
 
   // #5 변조 가드 3: 소속 검증 + PII 플래그를 questionId 전체에 대해 1회 쿼리로 수집.
   // 거부되면 원인을 가른다 — 재발행으로 스냅샷이 비워진 테스트 응답은 안내로 접힌다.

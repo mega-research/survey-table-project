@@ -18,7 +18,7 @@ const { attrsLimitMock, ownerFindFirstMock, piiRowsMock, selectMock, snapshotMoc
 });
 
 vi.mock('@/server/read-models/version-snapshot', () => ({
-  loadCurrentVersionSnapshot: snapshotMock,
+  loadPinnedVersionSnapshot: snapshotMock,
 }));
 
 vi.mock('@/db', () => ({
@@ -82,7 +82,25 @@ describe('테스트 대상자 공개 진입 판정', () => {
     await expect(
       lookupContactAttrs({ surveyId: SURVEY_ID, inviteToken: INVITE_TOKEN }),
     ).resolves.toEqual({ 기업명: '가나', 사업자등록번호: '123-45-67890' });
-    expect(snapshotMock).toHaveBeenCalledWith(SURVEY_ID);
+    expect(snapshotMock).toHaveBeenCalledWith(SURVEY_ID, false);
+  });
+
+  it('테스트 대상자에게는 테스트 버전(저장본)이 읽는 개인정보 열을 합쳐 보낸다', async () => {
+    mockOwner();
+    attrsLimitMock.mockResolvedValue([
+      { id: 'ct-1', attrs: { 기업명: '가나' }, isTest: true, testModeEnabled: true },
+    ]);
+    piiRowsMock.mockResolvedValue([
+      { fieldType: 'biz_number', columnKey: '사업자등록번호', cipher: encryptPii('1234567890') },
+    ]);
+    snapshotMock.mockResolvedValue({
+      questions: [{ tableRowsData: [{ cells: [{ defaultValueTemplate: '{{사업자등록번호}}' }] }] }],
+    });
+
+    await expect(
+      lookupContactAttrs({ surveyId: SURVEY_ID, inviteToken: INVITE_TOKEN }),
+    ).resolves.toEqual({ 기업명: '가나', 사업자등록번호: '123-45-67890' });
+    expect(snapshotMock).toHaveBeenCalledWith(SURVEY_ID, true);
   });
 
   it('발행본이 없으면 개인정보 열을 하나도 보내지 않는다', async () => {

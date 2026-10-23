@@ -4,19 +4,24 @@ import { and, eq, inArray } from 'drizzle-orm';
 import ExcelJS from 'exceljs';
 
 import { db } from '@/db';
-import { surveyResponses, surveyVersions, surveys } from '@/db/schema';
+import { surveyResponses, surveyVersions } from '@/db/schema';
 import { notDeletedResponse } from '@/server/response-filters';
 import { normalizeQuestions } from '@/lib/question';
 import type { Question, QuestionGroup } from '@/types/survey';
 
 import { buildDemandSummary, type DemandSummaryRow } from '@/lib/operations/demand-summary-format';
-import { responseScopeCondition, type OperationsDataScope } from '@/server/data-scope';
+import {
+  responseScopeCondition,
+  testFlagForScope,
+  type OperationsDataScope,
+} from '@/server/data-scope';
+import { loadPinnedVersionSnapshot } from '@/server/read-models/version-snapshot';
 
 /**
  * 문항 수요조사 집계 — SQL 부. 순수 계산은 접미사 없는 파일(demand-summary.ts)이 갖는다.
  *
- * - 문항 목록은 **발행 스냅샷**에서 읽는다. 응답이 그 구조로 들어왔기 때문이다.
- *   미발행 설문은 집계할 것이 없다.
+ * - 문항 목록은 **이 파티션이 보는 스냅샷**에서 읽는다 — 실데이터는 발행 스냅샷, 테스트 데이터는
+ *   지금 테스트 버전(저장본). 응답이 그 구조로 들어왔기 때문이다. 미발행 설문의 실데이터는 집계할 것이 없다.
  * - 응답은 완료분만, 그리고 **운영 데이터 스코프**(실/테스트 파티션)를 반드시 태운다.
  * - 통계 기준은 `question_responses` JSONB 원본이다 — 정규화 응답 테이블이 아니다
  *   (그 테이블은 saveResponse/saveAdminEdit 에서만 채워진다).
@@ -25,20 +30,8 @@ export async function getDemandSummary(
   surveyId: string,
   scope: OperationsDataScope,
 ): Promise<DemandSummaryRow[]> {
-  const [surveyRow] = await db
-    .select({ currentVersionId: surveys.currentVersionId })
-    .from(surveys)
-    .where(eq(surveys.id, surveyId))
-    .limit(1);
-  if (!surveyRow?.currentVersionId) return [];
-
-  const [versionRow] = await db
-    .select({ snapshot: surveyVersions.snapshot })
-    .from(surveyVersions)
-    .where(eq(surveyVersions.id, surveyRow.currentVersionId))
-    .limit(1);
-
-  const snapshot = versionRow?.snapshot;
+  // 이 파티션이 보는 구조 — 실데이터는 현재 배포본, 테스트 데이터는 지금 테스트 버전.
+  const snapshot = await loadPinnedVersionSnapshot(surveyId, testFlagForScope(scope));
   if (!snapshot) return [];
 
   // 스냅샷 읽기 경계 — 세대별 키셋이 다른 질문을 보존 모드 정규화로 수렴시킨다.

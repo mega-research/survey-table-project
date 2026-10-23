@@ -13,6 +13,7 @@ import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { logger } from '@/lib/logger';
 import { readBrowserTestView, resolveWriteScopeIsTest } from '@/server/data-scope';
 import { buildChangedQuestions, diffQuestionResponses } from '@/lib/operations/response-edit-diff';
+import { pinnedVersionId } from '@/shared/contracts/survey';
 import { calculateProgressPct, getProgressSnapshot } from './response-progress';
 
 import type { SaveAdminEditInput } from '../domain/response-edit';
@@ -109,16 +110,9 @@ export async function saveAdminEdit(
   // testModeEnabled 도 함께 읽어 쓰기 파티션 산정에 재사용 — 별도 쿼리를 추가하지 않는다.
   const ownerRow = await db.query.surveys.findFirst({
     where: eq(surveys.id, surveyId),
-    columns: { id: true, testModeEnabled: true, currentVersionId: true },
+    columns: { id: true, testModeEnabled: true, currentVersionId: true, testVersionId: true },
   });
   if (!ownerRow) throw new SurveyOwnershipError('not_found');
-
-  // 낙관 버전 가드 (스펙 결정 4) — 클라이언트가 렌더한 버전이 저장 시점의 현재 배포
-  // 버전과 다르면 저장을 거부한다. 입력 구조와 저장 버전의 불일치를 원천 차단하는 게
-  // 목적이므로, 입력값 보존 없이 새로고침 재진입을 요구한다.
-  if (input.versionId !== (ownerRow.currentVersionId ?? null)) {
-    throw new ResponseEditError('version_conflict');
-  }
 
   const isTest = resolveWriteScopeIsTest(
     ownerRow.testModeEnabled,
@@ -138,7 +132,16 @@ export async function saveAdminEdit(
     throw new ResponseEditError('response_deleted');
   }
 
-  // 이번 저장이 기준으로 삼는 버전 — 렌더 버전(=현재 배포 버전). 미배포 설문(null)만
+  // 낙관 버전 가드 (스펙 결정 4) — 클라이언트가 렌더한 버전이 저장 시점에 이 응답이 볼 버전과 다르면
+  // 저장을 거부한다. 실응답은 현재 배포본, 테스트 응답은 지금 테스트 버전이다(pinnedVersionId —
+  // 테스트는 테스트 버전에만 있다). 입력 구조와 저장 버전의 불일치를 원천 차단하는 게 목적이므로,
+  // 입력값 보존 없이 새로고침 재진입을 요구한다.
+  if (input.versionId !== pinnedVersionId(ownerRow, existing.isTest)) {
+    throw new ResponseEditError('version_conflict');
+  }
+
+  // 이번 저장이 기준으로 삼는 버전 — 렌더 버전(실응답은 현재 배포본, 테스트 응답은 지금 테스트 버전).
+  // 미배포 설문(null)만
   // 응답 자신의 버전으로 폴백해 기존 동작을 유지한다.
   const effectiveVersionId = input.versionId ?? existing.versionId;
   const migrating = input.versionId !== null && existing.versionId !== input.versionId;

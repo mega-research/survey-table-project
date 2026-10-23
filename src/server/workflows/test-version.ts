@@ -15,15 +15,18 @@ import {
   type SurveyVersionSnapshot,
 } from '@/shared/contracts/survey';
 
-import { buildSurveySnapshot } from './versioning/snapshot-builder';
-import { pruneVersionSnapshots } from './versioning/version-prune';
+import { buildSurveySnapshot } from '@/server/survey-builder/services/versioning/snapshot-builder';
+import { pruneVersionSnapshots } from '@/server/survey-builder/services/versioning/version-prune';
 
 /**
  * 테스트 버전 (CONTEXT.md 「테스트 버전」) — 테스트 링크 · 테스트 대상자 링크 · 관리자 미리보기가 보는,
  * 지금 저장본으로 만든 스냅샷. 저장만으로 끝까지 테스트하고 실응답 링크는 배포본에 둔다.
  *
- * 테스트 화면에 **들어오는 순간** 저장본으로 스냅샷을 만들어 지금 테스트 버전과 리비전을 비교하고,
- * 다르면 새 테스트 버전 행을 만든다(저장 경로마다 장치를 달지 않는다 — 들어오는 자리 한 곳).
+ * 테스트 화면에 들어올 때와 **테스트 응답을 저장할 때마다**(답 저장 · 임시 저장 · 제출) 저장본으로
+ * 스냅샷을 만들어 지금 테스트 버전과 리비전을 비교하고, 다르면 새 테스트 버전 행을 만든다 — 빌더의
+ * 저장 경로(문항 · 그룹 · 참조표 · 조사표 앵커 …)마다 장치를 달지 않고, 테스트 쪽에서 본다.
+ * 그래서 빌더에서 저장만 해도 진행 중인 테스터의 다음 저장이 멈춘다(배포했을 때와 같다).
+ * 빌더(진입)와 응답(저장) 두 도메인이 부르므로 workflows 에 둔다.
  * 행은 배포 스냅샷처럼 불변이고, 새로 만들 때 직전 테스트 버전의 snapshot 을 비운다 — 남는 스냅샷은
  * 최신 하나. 버전 id 가 바뀌는 것만으로 무중단 갈아타기 · 재개 이관 · 「스냅샷이 비워진 버전의 테스트
  * 응답」 안내(테스트 중 저장되면 다음 저장이 멈추고 새로고침하면 바뀐 곳부터 이어진다)가 그대로 돈다.

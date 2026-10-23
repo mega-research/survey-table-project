@@ -32,6 +32,7 @@ import {
 import { finalizeAnswers, loadFinalizationMaterial } from './answer-finalization';
 import {
   isVersionSnapshotPruned,
+  syncTestVersionBeforeWrite,
   TestResponseVersionPrunedError,
 } from './response-version-snapshot';
 import {
@@ -109,6 +110,9 @@ export async function completeResponse(
     },
   });
   if (gateRow) {
+    // 테스트 응답이면 테스트 버전을 지금 저장본에 맞춘다 — 바뀌었으면 아래 정제(페이로드)와 빈 complete
+    // 확인이 안내로 접는다.
+    await syncTestVersionBeforeWrite({ id: responseId, ...gateRow });
     const survey = await loadSurveyGateRow(gateRow.surveyId);
     const version = await loadVersionGateRow(gateRow.versionId);
     const completedCount = await countCompletedResponses(gateRow.surveyId);

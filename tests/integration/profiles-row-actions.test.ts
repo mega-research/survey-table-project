@@ -89,6 +89,9 @@ const h = vi.hoisted(() => {
   return { responseStore, contactStore, answerStore, surveyStore, questionStore };
 });
 
+// 테스트 응답 저장 전 테스트 버전 맞추기 — 이 파일의 관심사가 아니다(실DB 는 test-version-response).
+vi.mock('@/server/workflows/test-version', () => ({ ensureTestVersion: vi.fn(async () => null) }));
+
 vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }));

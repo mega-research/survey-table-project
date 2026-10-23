@@ -3,11 +3,14 @@ import 'server-only';
 
 import { db } from '@/db';
 import { surveyVersions, surveys } from '@/db/schema';
-import type { SurveyEndRedirects } from '@/shared/contracts/survey';
+import {
+  pinnedVersionId,
+  type SurveyEndRedirects,
+  type VersionPins,
+} from '@/shared/contracts/survey';
 
 import { completeResponseDenial, newResponseDenial } from '../domain/acceptance';
 import type { BlockReason } from '../domain/duplicate';
-import { pinnedVersionId, type VersionPins } from '../domain/version-pin';
 import { toGateBlockReason } from '../domain/gate-block-reason';
 
 /**
@@ -172,7 +175,7 @@ export async function loadValidatedVersionGateRow(
   if (!row || row.surveyId !== surveyId) {
     throw new SurveyNotAcceptingResponsesError('version_mismatch');
   }
-  // 고정 목적지 — 테스트 응답은 지금 테스트 버전, 실응답은 현재 배포본(domain/version-pin).
+  // 고정 목적지 — 테스트 응답은 지금 테스트 버전, 실응답은 현재 배포본(shared/contracts/survey 의 pinnedVersionId).
   const target = pinnedVersionId(pins, options.isTest);
   // 유효성: 목적지 버전이거나, 실응답이 보낸 published 버전이면 그대로 사용. 테스트 버전 행은
   // 실응답이 보내도 유효하지 않다 — 테스트 링크로 연 탭의 버전 id 가 실응답으로 새면 안 된다.

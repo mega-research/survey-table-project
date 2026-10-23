@@ -5,6 +5,12 @@ const where = vi.fn(() => ({ limit }));
 const from = vi.fn(() => ({ where }));
 const dbSelect = vi.fn((_selection: unknown) => ({ from }));
 
+// 어느 버전 id 로 스냅샷을 읽었는지만 본다 — 조건식은 값만 남긴다.
+vi.mock('drizzle-orm', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('drizzle-orm')>()),
+  eq: (_column: unknown, value: unknown) => ({ eqValue: value }),
+}));
+
 vi.mock('@/db', () => ({
   db: {
     select: (selection: unknown) => dbSelect(selection),
@@ -14,7 +20,7 @@ vi.mock('@/db', () => ({
 import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 
 import {
-  loadCurrentVersionSnapshot,
+  loadPinnedVersionSnapshot,
   loadVersionSnapshot,
   snapshotLookups,
   snapshotQuestions,
@@ -45,24 +51,36 @@ describe('loadVersionSnapshot', () => {
   });
 });
 
-describe('loadCurrentVersionSnapshot', () => {
+describe('loadPinnedVersionSnapshot', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('현재 배포 버전이 없으면 두 번째 조회 없이 null 을 반환한다', async () => {
-    limit.mockResolvedValueOnce([{ currentVersionId: null }]);
+  it('볼 버전이 없으면 두 번째 조회 없이 null 을 반환한다', async () => {
+    limit.mockResolvedValueOnce([{ currentVersionId: null, testVersionId: null }]);
 
-    await expect(loadCurrentVersionSnapshot('s-1')).resolves.toBeNull();
+    await expect(loadPinnedVersionSnapshot('s-1', false)).resolves.toBeNull();
     expect(dbSelect).toHaveBeenCalledTimes(1);
   });
 
-  it('현재 배포 버전이 있으면 그 버전의 snapshot 을 이어서 조회한다', async () => {
-    limit.mockResolvedValueOnce([{ currentVersionId: 'v-9' }]);
-    limit.mockResolvedValueOnce([{ snapshot: { title: '설문' } }]);
+  it('실데이터는 현재 배포 버전의 snapshot 을 이어서 조회한다', async () => {
+    limit.mockResolvedValueOnce([{ currentVersionId: 'v-9', testVersionId: 'v-test' }]);
+    limit.mockResolvedValueOnce([{ snapshot: { title: '배포본' } }]);
 
-    await expect(loadCurrentVersionSnapshot('s-1')).resolves.toEqual({ title: '설문' });
-    expect(dbSelect).toHaveBeenCalledTimes(2);
+    await expect(loadPinnedVersionSnapshot('s-1', false)).resolves.toEqual({ title: '배포본' });
+    expect(where).toHaveBeenLastCalledWith({ eqValue: 'v-9' });
+  });
+
+  it('테스트 데이터는 지금 테스트 버전의 snapshot 을, 없으면 배포본을 조회한다', async () => {
+    limit.mockResolvedValueOnce([{ currentVersionId: 'v-9', testVersionId: 'v-test' }]);
+    limit.mockResolvedValueOnce([{ snapshot: { title: '저장본' } }]);
+    await expect(loadPinnedVersionSnapshot('s-1', true)).resolves.toEqual({ title: '저장본' });
+    expect(where).toHaveBeenLastCalledWith({ eqValue: 'v-test' });
+
+    limit.mockResolvedValueOnce([{ currentVersionId: 'v-9', testVersionId: null }]);
+    limit.mockResolvedValueOnce([{ snapshot: { title: '배포본' } }]);
+    await expect(loadPinnedVersionSnapshot('s-1', true)).resolves.toEqual({ title: '배포본' });
+    expect(where).toHaveBeenLastCalledWith({ eqValue: 'v-9' });
   });
 });
 

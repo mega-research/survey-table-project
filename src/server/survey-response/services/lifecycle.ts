@@ -24,9 +24,9 @@ import {
   isConcludedResponseStatus,
   isOpenResponseStatus,
 } from '@/shared/contracts/survey-response';
+import { pinnedVersionId } from '@/shared/contracts/survey';
 
 import { ongoingResponseDenial } from '../domain/acceptance';
-import { pinnedVersionId } from '../domain/version-pin';
 import type {
   RecordStepVisitInput,
   RecordStepVisitOutput,
