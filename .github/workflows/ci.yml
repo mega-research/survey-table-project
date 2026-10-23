@@ -8,7 +8,7 @@ on:
 jobs:
   changes:
     name: 변경 범위 판별
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     outputs:
       integration_e2e: ${{ steps.filter.outputs.integration_e2e }}
     steps:
@@ -49,7 +49,7 @@ jobs:
           fi
 
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v5
       # version 고정 + standalone: npm 을 거치지 않고 pnpm 바이너리를 직접 받는다.
@@ -120,7 +120,7 @@ jobs:
   e2e:
     needs: [verify, changes]
     if: needs.changes.outputs.integration_e2e == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v5
       # version 고정 + standalone: npm 을 거치지 않고 pnpm 바이너리를 직접 받는다.

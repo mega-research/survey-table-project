@@ -28,7 +28,6 @@ import {
   planQuestionOptions,
   remapConditionGroup,
   remapQuestionResponses,
-  remapResponseValue,
   remapSnapshot,
   remapTableColumns,
   remapTableRows,
