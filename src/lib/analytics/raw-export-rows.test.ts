@@ -11,14 +11,8 @@ import {
 } from '@/lib/analytics/raw-export-rows';
 import type { RawExportResponseRow } from '@/lib/analytics/raw-workbook';
 import { NOT_RESPONDED_STATUS } from '@/lib/operations/profiles-format';
+import type { AnswerableScopeMaterial } from '@/lib/survey/answerable-scope';
 import type { Question } from '@/types/survey';
-
-import {
-  QUOTE_CONDITION_QUESTIONS,
-  QUOTE_CONTACT_ATTRS,
-  quoteFromOptionResponses,
-  quoteFromOtherTextResponses,
-} from '../../../tests/helpers/answer-quote-condition-survey';
 
 // 조사 대상 4명(resid 1~4) 중 2·4 만 응답했고 1·3 은 미응답. 익명 응답 2건은 시스템ID 가 없다.
 const t1: NonRespondentTarget = { id: 't1', resid: 1, inviteCode: 'c1' };
@@ -97,12 +91,13 @@ describe('sortRowsForContactPopulation', () => {
 });
 
 // ============================================================
-// 숨은 문항 값 걸러내기 — 제출도 어드민 수정도 안 거친 행이 rawdata 로 나갈 때
+// 범위 밖 값 걸러내기 — 제출도 어드민 수정도 안 거친 행이 rawdata 로 나갈 때.
+// 판정 자체(숨은 문항·경로 밖·게이팅·인용값)는 lib/survey/answerable-scope.test 가 본다.
 // ============================================================
 
-/** 스위치 문항 + 그 값이 'yes' 일 때만 보이는 하류 문항. */
-function switchFixture(): Question[] {
-  return [
+/** 스위치 문항 + 그 값이 'yes' 일 때만 보이는 하류 문항. 2페이지에 끝 문항. */
+function switchMaterial(): AnswerableScopeMaterial {
+  const questions: Question[] = [
     { id: 'q-switch', type: 'radio', title: '스위치', required: false, order: 0 },
     {
       id: 'q-dep',
@@ -125,123 +120,80 @@ function switchFixture(): Question[] {
       },
     },
   ];
+  return { questions, groups: [], lookups: [], settings: null, contactAttrs: {} };
 }
 
 describe('stripHiddenFromExportRows', () => {
-  it('컨텍스트가 주어진 행에서 숨은 문항 값을 뺀다', () => {
+  it('재료가 주어진 행은 답할 수 있는 범위로 좁힌다', () => {
     const row = response({
       id: 'r-hidden',
       status: 'in_progress',
       questionResponses: { 'q-switch': 'no', 'q-dep': '숨은 뒤에도 남아 있던 값' },
     });
 
-    const [out] = stripHiddenFromExportRows(
-      [row],
-      new Map([['r-hidden', { questions: switchFixture() }]]),
-    );
+    const [out] = stripHiddenFromExportRows([row], new Map([['r-hidden', switchMaterial()]]));
 
     expect(out?.questionResponses).toEqual({ 'q-switch': 'no' });
   });
 
-  it('컨텍스트가 없는 행은 원본 객체 그대로 통과시킨다', () => {
-    const row = response({
+  it('재료가 없는 행과 지울 것이 없는 행은 원본 객체 그대로 통과시킨다', () => {
+    const done = response({
       id: 'r-done',
       questionResponses: { 'q-switch': 'no', 'q-dep': '완료본이라 손대면 안 되는 값' },
     });
+    const clean = response({ id: 'r-clean', status: 'in_progress', questionResponses: { 'q-switch': 'yes' } });
 
-    const [out] = stripHiddenFromExportRows([row], new Map());
+    const [outDone, outClean] = stripHiddenFromExportRows(
+      [done, clean],
+      new Map([['r-clean', switchMaterial()]]),
+    );
 
-    expect(out).toBe(row);
+    expect(outDone).toBe(done);
+    expect(outClean).toBe(clean);
   });
 
-  it('조건이 컨택 attrs 를 보면 그 attrs 로 판정한다', () => {
-    const questions: Question[] = [
-      {
-        id: 'q-dep',
-        type: 'text',
-        title: '본조사 참여자에게만 보이는 문항',
-        required: false,
-        order: 0,
-        displayCondition: {
-          logicType: 'AND',
-          conditions: [
+  it('응답자가 마지막으로 선 페이지를 범위 판정에 넘긴다 — 경로 밖이면 경로를 믿지 않는다', () => {
+    const material: AnswerableScopeMaterial = {
+      ...switchMaterial(),
+      questions: [
+        {
+          id: 'q-route',
+          type: 'radio',
+          title: '경로',
+          required: false,
+          order: 0,
+          options: [
             {
-              id: 'c1',
-              enabled: true,
-              logicType: 'AND',
-              conditionType: 'expression',
-              sourceQuestionId: 'q-dep',
-              expressionConfig: {
-                clauses: [
-                  {
-                    kind: 'comparison',
-                    comparison: {
-                      op: '==',
-                      left: { kind: 'attr', attrsKey: '25년 조사 방법' },
-                      right: { kind: 'literal', value: '본조사' },
-                    },
-                  },
-                ],
-                joinOps: [],
-              },
+              id: 'o-skip',
+              label: '건너뛰기',
+              value: 'skip',
+              branchRule: { id: 'b1', value: '', action: 'goto', targetQuestionId: 'q-last' },
             },
           ],
         },
-      },
-    ];
-    const row = response({
-      id: 'r-secondary',
-      status: 'in_progress',
-      questionResponses: { 'q-dep': '2차 자료 대상자에게 남은 값' },
+        { id: 'q-mid', type: 'text', title: '중간', required: false, order: 1, pageBreakBefore: true },
+        { id: 'q-last', type: 'text', title: '끝', required: false, order: 2, pageBreakBefore: true },
+      ],
+    };
+    const answers = { 'q-route': 'skip', 'q-mid': '답' };
+    const onPath = response({ id: 'r-on', status: 'drop', questionResponses: answers });
+    const offPath = response({
+      id: 'r-off',
+      status: 'drop',
+      currentStepId: 'page:q-mid',
+      questionResponses: answers,
     });
 
-    const [out] = stripHiddenFromExportRows(
-      [row],
+    const [outOn, outOff] = stripHiddenFromExportRows(
+      [onPath, offPath],
       new Map([
-        ['r-secondary', { questions, contactAttrs: { '25년 조사 방법': '2차 자료' } }],
+        ['r-on', material],
+        ['r-off', material],
       ]),
     );
 
-    expect(out?.questionResponses).toEqual({});
-  });
-
-  it('컨트롤러가 미충족인 비활성 셀 값도 함께 뺀다', () => {
-    // 게이팅 컨트롤러(c-ctrl)가 'yes' 일 때만 c-gated 가 활성. 컨트롤러가 'no' 로 바뀐 뒤
-    // 남은 c-gated 값은 초안 저장이 게이팅 strip 을 안 걸어 DB 에 살아 있다.
-    const questions: Question[] = [
-      {
-        id: 'q-table',
-        type: 'table',
-        title: '게이팅 표',
-        required: false,
-        order: 0,
-        tableColumns: [{ id: 'col1', label: '값' }],
-        tableRowsData: [
-          {
-            id: 'r1',
-            label: '',
-            cells: [
-              { id: 'c-ctrl', type: 'radio', content: '' },
-              {
-                id: 'c-gated',
-                type: 'input',
-                content: '',
-                enabledWhen: { kind: 'option', controllerCellId: 'c-ctrl', values: ['yes'] },
-              },
-            ],
-          },
-        ],
-      },
-    ];
-    const row = response({
-      id: 'r-gated',
-      status: 'in_progress',
-      questionResponses: { 'q-table': { 'c-ctrl': 'no', 'c-gated': '비활성인데 남은 값' } },
-    });
-
-    const [out] = stripHiddenFromExportRows([row], new Map([['r-gated', { questions }]]));
-
-    expect(out?.questionResponses).toEqual({ 'q-table': { 'c-ctrl': 'no' } });
+    expect(outOn?.questionResponses).toEqual({ 'q-route': 'skip' });
+    expect(outOff).toBe(offPath);
   });
 
   it('입력 배열과 행 객체를 변형하지 않는다', () => {
@@ -252,115 +204,10 @@ describe('stripHiddenFromExportRows', () => {
     });
     const input = [row];
 
-    stripHiddenFromExportRows(input, new Map([['r-hidden', { questions: switchFixture() }]]));
+    stripHiddenFromExportRows(input, new Map([['r-hidden', switchMaterial()]]));
 
     expect(input).toEqual([row]);
     expect(row.questionResponses).toEqual({ 'q-switch': 'no', 'q-dep': '값' });
-  });
-});
-
-describe('stripHiddenFromExportRows — 경로 밖 문항', () => {
-  // 1페이지 q-route('skip' → q-last 로 goto) / 2페이지 q-mid / 3페이지 q-last
-  function routeFixture(): Question[] {
-    return [
-      {
-        id: 'q-route',
-        type: 'radio',
-        title: '경로',
-        required: false,
-        order: 0,
-        options: [
-          {
-            id: 'o-skip',
-            label: '건너뛰기',
-            value: 'skip',
-            branchRule: { id: 'b1', value: '', action: 'goto', targetQuestionId: 'q-last' },
-          },
-          { id: 'o-stay', label: '계속', value: 'stay' },
-        ],
-      },
-      { id: 'q-mid', type: 'text', title: '중간', required: false, order: 1, pageBreakBefore: true },
-      { id: 'q-last', type: 'text', title: '끝', required: false, order: 2, pageBreakBefore: true },
-    ];
-  }
-
-  it('건너뛴 페이지의 답을 내보내는 값에서 뺀다', () => {
-    const row = response({
-      id: 'r-skip',
-      status: 'drop',
-      questionResponses: { 'q-route': 'skip', 'q-mid': '전에 적은 답', 'q-last': '답' },
-    });
-
-    const [out] = stripHiddenFromExportRows([row], new Map([['r-skip', { questions: routeFixture() }]]));
-
-    expect(out?.questionResponses).toEqual({ 'q-route': 'skip', 'q-last': '답' });
-    expect(row.questionResponses).toHaveProperty('q-mid');
-  });
-
-  it('진행 중 행이 아직 가지 않은 앞쪽 경로 페이지의 답은 남긴다', () => {
-    const row = response({
-      id: 'r-ongoing',
-      status: 'in_progress',
-      currentStepId: 'page:q-route',
-      questionResponses: { 'q-route': 'stay', 'q-last': '미리 적은 답' },
-    });
-
-    const [out] = stripHiddenFromExportRows(
-      [row],
-      new Map([['r-ongoing', { questions: routeFixture() }]]),
-    );
-
-    expect(out).toBe(row);
-  });
-
-  it('문항 섞기 설문은 건너뛰지 않는다', () => {
-    const row = response({
-      id: 'r-shuffle',
-      status: 'drop',
-      questionResponses: { 'q-route': 'skip', 'q-mid': '답', 'q-last': '답' },
-    });
-
-    const [out] = stripHiddenFromExportRows(
-      [row],
-      new Map([['r-shuffle', { questions: routeFixture(), settings: { shuffleQuestions: true } }]]),
-    );
-
-    expect(out).toBe(row);
-  });
-
-  it('응답자가 마지막으로 선 페이지가 계산한 경로 밖이면 건너뛴다', () => {
-    const row = response({
-      id: 'r-off',
-      status: 'drop',
-      currentStepId: 'page:q-mid',
-      questionResponses: { 'q-route': 'skip', 'q-mid': '답' },
-    });
-
-    const [out] = stripHiddenFromExportRows([row], new Map([['r-off', { questions: routeFixture() }]]));
-
-    expect(out).toBe(row);
-  });
-});
-
-describe('stripHiddenFromExportRows — 응답 인용값을 읽는 조건', () => {
-  // 응답 화면은 명단 값 위에 응답 인용값을 얹어 조건을 푼다 — 명단 `지역=서울`, 인용값 `부산`.
-  it.each([
-    ['보기 문구', quoteFromOptionResponses],
-    ['기타 상세 기재', quoteFromOtherTextResponses],
-  ])('인용값(%s)으로 보이는 열·행·문항의 답을 내보낸다', (_label, payload) => {
-    const row = response({ id: 'r-quote', status: 'in_progress', questionResponses: payload() });
-
-    const [out] = stripHiddenFromExportRows(
-      [row],
-      new Map([
-        [
-          'r-quote',
-          { questions: QUOTE_CONDITION_QUESTIONS, contactAttrs: QUOTE_CONTACT_ATTRS },
-        ],
-      ]),
-    );
-
-    expect(out).toBe(row);
   });
 });
 
