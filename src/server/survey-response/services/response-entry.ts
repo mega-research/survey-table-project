@@ -59,7 +59,7 @@ export async function startResponse(input: StartResponseInput): Promise<SurveyRe
   const { version, effectiveVersionId } = await loadValidatedVersionGateRow(
     surveyId,
     versionId,
-    survey.currentVersionId,
+    survey,
   );
   // startResponse 는 테스트 전용 유지 함수(#402 주석 참조)라 isTest 판정 없이 고정한다.
   assertSurveyAcceptingResponses(survey, version, { contactTargetId: null, isTest: false });
@@ -360,7 +360,8 @@ async function admitAndCreateResponseInner(
   const { version, effectiveVersionId } = await loadValidatedVersionGateRow(
     surveyId,
     versionId,
-    survey.currentVersionId,
+    survey,
+    { isTest },
   );
   assertSurveyAcceptingResponses(survey, version, { contactTargetId, isTest });
 

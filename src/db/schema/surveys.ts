@@ -22,6 +22,7 @@ import type {
   QuestionData,
   SurveyEndRedirects,
   SurveyResponseHeaderConfig,
+  SurveyVersionFingerprints,
   SurveyVersionSnapshot,
 } from '@/shared/contracts/survey';
 import type {
@@ -136,6 +137,9 @@ export const surveys = pgTable(
     // 만들 자리가 아니라 지울지 판단할 자리 — 결정과 근거는 트래커 B-g 참조.
     status: text('status').notNull().default('draft'),
     currentVersionId: uuid('current_version_id'), // 현재 활성 배포 버전
+    // 지금 테스트 버전 (0141) — 테스트 링크·대상자·관리자 미리보기가 보는 저장본 스냅샷.
+    // survey_versions.status = 'test' 행. 저장본이 바뀌면 새 행을 가리킨다(server/survey-builder/services/test-version).
+    testVersionId: uuid('test_version_id'),
 
     // soft delete
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -448,12 +452,16 @@ export const surveyVersions = pgTable(
       .references(() => surveys.id, { onDelete: 'cascade' }),
 
     versionNumber: integer('version_number').notNull(),
-    // 'published' | 'superseded'. 'closed' 는 여기서도 **미구현 어휘**다(쓰는 경로 없음).
+    // 'published' | 'superseded' | 'test'. 'closed' 는 여기서도 **미구현 어휘**다(쓰는 경로 없음).
+    // 'test' 는 테스트 버전(0141) — version_number 가 음수이고 배포 목록·번호·정리에서 뺀다.
     status: text('status').notNull().default('published'),
 
     // 배포 시점의 전체 설문 구조 (불변 — 수정 금지).
     // NULL = 버전 보존 정책으로 정리됨 (2026-07-31 spec). 읽는 쪽은 NULL 을 다뤄야 한다.
     snapshot: jsonb('snapshot').$type<SurveyVersionSnapshot>(),
+
+    // 테스트 버전 지문 { revision, questions, groups } (0141) — snapshot 을 비워도 남긴다. 배포 버전은 NULL.
+    fingerprints: jsonb('fingerprints').$type<SurveyVersionFingerprints>(),
 
     changeNote: text('change_note'),
     publishedAt: timestamp('published_at', { withTimezone: true }).defaultNow().notNull(),

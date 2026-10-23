@@ -2,15 +2,20 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import 'server-only';
 
 import { db } from '@/db';
-import { surveyResponses } from '@/db/schema';
+import { surveyResponses, surveyVersions } from '@/db/schema';
 import { loadVersionSnapshot } from '@/server/read-models/version-snapshot';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { findContactByInviteToken } from '@/server/read-models/invite-lookup';
 import { logger } from '@/lib/logger';
 import { normalizeQuestions } from '@/lib/question/normalize';
 import { toFlatQuestion } from '@/lib/question/variants';
-import { getSurveyControlFlags, isValidTestToken } from '@/server/read-models/survey-control';
+import {
+  getSurveyControlFlags,
+  isValidTestToken,
+  type SurveyControlFlags,
+} from '@/server/read-models/survey-control';
 import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
+import { changedQuestionIds } from '@/lib/survey/test-version-fingerprint';
 import {
   isResumableTestStatus,
   lockAndAssertResponseMutation,
@@ -46,6 +51,18 @@ interface ResumedRowMigration {
   survivingResponses: Record<string, unknown>;
   /** 답이 폐기·부분 제거된 질문 ID — 클라이언트 재개 위치 롤백의 입력 */
   affectedQuestionIds: string[];
+}
+
+/**
+ * 이 응답이 이어 갈 버전 — 테스트 응답은 지금 테스트 버전(CONTEXT.md 「테스트 버전」, 없으면 배포본),
+ * 실응답은 배포본. 플래그를 못 읽었으면 undefined(이관하지 않는다 — 종전 fail-open).
+ */
+function resumeTargetVersionId(
+  flags: Pick<SurveyControlFlags, 'currentVersionId' | 'testVersionId'> | null | undefined,
+  isTest: boolean,
+): string | null | undefined {
+  if (!flags) return undefined;
+  return isTest ? (flags.testVersionId ?? flags.currentVersionId) : flags.currentVersionId;
 }
 
 /**
@@ -85,6 +102,16 @@ async function migrateResumedRowIfStale(input: {
 
   const questions = normalizeQuestions(snap.questions, 'preserve').map(toFlatQuestion);
   const survival = applyStructuralSurvival(storedResponses, questions);
+  // 테스트 버전끼리 옮길 때는 답이 남아도 정의가 바뀐 문항(문구·조건 포함)·새 문항·설정이 바뀐 그룹의
+  // 문항까지 데려갈 곳에 넣는다 — 고친 곳을 바로 확인하게. 지문은 테스트 버전에만 있어 실응답 이관은
+  // 종전과 같다(CONTEXT.md 「테스트 버전」).
+  const [previous] = await db
+    .select({ fingerprints: surveyVersions.fingerprints })
+    .from(surveyVersions)
+    .where(eq(surveyVersions.id, rowVersionId))
+    .limit(1);
+  const changedIds = changedQuestionIds(previous?.fingerprints ?? null, snap);
+  const affectedQuestionIds = [...new Set([...survival.affectedQuestionIds, ...changedIds])];
 
   const [updated] = await db
     .update(surveyResponses)
@@ -107,7 +134,7 @@ async function migrateResumedRowIfStale(input: {
 
   return {
     survivingResponses: survival.survivingResponses,
-    affectedQuestionIds: survival.affectedQuestionIds,
+    affectedQuestionIds,
   };
 }
 
@@ -368,14 +395,16 @@ export async function resumeOrCreateResponse(
           // (2026-10-20 — 전에는 테스터가 재발행마다 처음부터 다시 했다). 구조 생존 판정이
           // 유령 답을 걸러 낸다. 이관 불능(스냅샷 훼손·경합)이면 복원하지 않고, 행이 구버전에
           // 남아 첫 입력의 acquireTestTargetResponse 가 제자리 초기화한다.
-          const versionMatched = existingByContact.versionId === flags?.currentVersionId;
+          // 테스트 대상자는 지금 테스트 버전으로 이어 간다(CONTEXT.md 「테스트 버전」).
+          const targetVersionId = resumeTargetVersionId(flags, true);
+          const versionMatched = existingByContact.versionId === targetVersionId;
           const reviveFromDrop = existingByContact.status === 'drop';
           const migration = versionMatched
             ? null
             : await migrateResumedRowIfStale({
                 responseId: existingByContact.id,
                 rowVersionId: existingByContact.versionId,
-                currentVersionId: flags?.currentVersionId,
+                currentVersionId: targetVersionId,
                 storedResponses: existingByContact.questionResponses ?? {},
                 reviveFromDrop,
                 now: new Date(),
@@ -432,12 +461,13 @@ export async function resumeOrCreateResponse(
           // - 버전 불일치: 응답 버전 이관으로 현재 버전에 얹어 복원한다. 이관 불능(현재
           //   스냅샷 훼손·경합)이면 복원하지 않는다 — 구버전 답을 신버전 UI 에 그대로
           //   주입하는 유령 답 문제를 되살리지 않기 위함.
-          const versionMatches = existingByContact.versionId === flags?.currentVersionId;
+          const targetVersionId = resumeTargetVersionId(flags, existingByContact.isTest);
+          const versionMatches = existingByContact.versionId === targetVersionId;
           const migration = !versionMatches
             ? await migrateResumedRowIfStale({
                 responseId: existingByContact.id,
                 rowVersionId: existingByContact.versionId,
-                currentVersionId: flags?.currentVersionId,
+                currentVersionId: targetVersionId,
                 storedResponses: existingByContact.questionResponses ?? {},
                 reviveFromDrop,
                 now,
@@ -529,7 +559,8 @@ export async function resumeOrCreateResponse(
     const migration = await migrateResumedRowIfStale({
       responseId: existing.id,
       rowVersionId: existing.versionId,
-      currentVersionId: flags?.currentVersionId,
+      // 테스트 응답(행 또는 유효한 테스트 링크)은 지금 테스트 버전으로 이어 간다.
+      currentVersionId: resumeTargetVersionId(flags, existing.isTest || isTestSession),
       storedResponses: existing.questionResponses ?? {},
       reviveFromDrop,
       now,

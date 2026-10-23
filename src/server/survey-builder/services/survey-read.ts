@@ -31,6 +31,7 @@ import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-conf
 import { getR2PublicUrl } from '@/lib/r2-env';
 import { toAnchorSnapshot } from '@/server/read-models/anchor-row';
 import { isValidUUID } from '@/lib/utils';
+import { logger } from '@/lib/logger';
 import type { QuestionGroup, Question as QuestionType, Survey as SurveyType } from '@/types/survey';
 import { generateAllCellCodes } from '@/utils/table-cell-code-generator';
 
@@ -45,6 +46,8 @@ import type {
   SurveyIdRow,
   SurveyListItem,
 } from '../domain/survey-read';
+
+import { ensureTestVersion } from './test-version';
 
 // 이 service 는 actions/query-actions 의 requireAuth 를 제거한다.
 // 관리(빌더) 경로는 procedure 의 authed 미들웨어가 인증을 대체하고,
@@ -216,7 +219,11 @@ export async function buildDocumentView(
 // 응답 페이지용 설문 조회 (배포 버전 스냅샷 우선, fallback 기존 방식)
 export async function getSurveyForResponse(
   input: SurveyForResponseInput,
-  options: { requirePublished?: boolean } = {},
+  options: {
+    requirePublished?: boolean;
+    /** 관리자 미리보기 — 테스트 세션이 아니어도 저장본(테스트 버전)을 본다. */
+    useTestVersion?: boolean;
+  } = {},
 ): Promise<SurveyForResponseResult> {
   const { surveyId } = input;
   const survey = await getSurveyById(surveyId);
@@ -269,12 +276,25 @@ export async function getSurveyForResponse(
     endRedirects: survey.endRedirects ?? null,
   };
 
-  // 배포된 버전이 있으면 스냅샷 기반으로 반환
-  if (survey.currentVersionId) {
-    const version = await db.query.surveyVersions.findFirst({
-      where: eq(surveyVersions.id, survey.currentVersionId),
+  // 테스트 세션과 관리자 미리보기는 저장본으로 만든 테스트 버전을 본다(CONTEXT.md 「테스트 버전」).
+  // 실응답 · 공개 미리보기 · 무효 테스트 토큰은 배포본이다. 테스트 버전을 못 만들면 막지 않고
+  // 배포본으로 떨어진다.
+  let version: { id: string; snapshot: unknown } | null = null;
+  if (options.useTestVersion || testSession === 'valid') {
+    const test = await ensureTestVersion(surveyId).catch((err: unknown) => {
+      logger.warn({ err, surveyId }, '[test-version] 테스트 버전을 만들지 못해 배포본으로 보인다');
+      return null;
     });
-
+    if (test) version = { id: test.versionId, snapshot: test.snapshot };
+  }
+  // 배포된 버전이 있으면 스냅샷 기반으로 반환
+  if (!version && survey.currentVersionId) {
+    version =
+      (await db.query.surveyVersions.findFirst({
+        where: eq(surveyVersions.id, survey.currentVersionId),
+      })) ?? null;
+  }
+  {
     if (version && version.snapshot) {
       const snapshot = version.snapshot as {
         title: string;

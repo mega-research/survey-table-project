@@ -31,6 +31,10 @@ import {
 } from '@/server/read-models/quota-cell';
 import { finalizeAnswers, loadFinalizationMaterial } from './answer-finalization';
 import {
+  isVersionSnapshotPruned,
+  TestResponseVersionPrunedError,
+} from './response-version-snapshot';
+import {
   detectQuotaOverflow,
   dropOversizedStoredValues,
   restorePrefillAnswers,
@@ -166,6 +170,12 @@ export async function completeResponse(
         responseId,
       })
     : null;
+  // 스냅샷이 비워진 버전의 테스트 응답 — 테스트 중 저장본이 바뀌어 새 테스트 버전이 생겼다. 페이로드
+  // 경로는 sanitizeSubmittedResponses 가 같은 안내로 접고, 빈 complete 는 여기서 접는다 — 확정을 건너뛰고
+  // 완료되면 화면에서 본 구조와 다른 응답이 남는다(CONTEXT.md 「테스트 버전」).
+  if (gateRow?.isTest && gateRow.versionId && !material?.snapshot) {
+    if (await isVersionSnapshotPruned(gateRow.versionId)) throw new TestResponseVersionPrunedError();
+  }
 
   let screenedOut = false;
   // 페이로드 경로의 저장값 — 아래 쿼터 판정은 평문(validatedResponses)으로 하고, 저장 직전에 갈아 끼운다.

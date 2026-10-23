@@ -27,7 +27,8 @@ export default async function SurveyPreviewPage({ params }: PageProps) {
   if (!survey || survey.deletedAt) notFound();
 
   const [preview, isGuest] = await Promise.all([
-    getSurveyForResponse({ surveyId }, { requirePublished: true }),
+    // 저장본(테스트 버전)을 본다 — 고친 것을 배포 없이 확인하는 자리. 공개 미리보기는 배포본이다.
+    getSurveyForResponse({ surveyId }, { useTestVersion: true }),
     isGuestViewer(),
   ]);
 
@@ -64,10 +65,10 @@ export default async function SurveyPreviewPage({ params }: PageProps) {
               <Eye className="h-6 w-6 text-blue-500" />
             </div>
             <h1 className="text-xl font-semibold text-gray-900">
-              배포된 설문이 없습니다
+              설문을 불러오지 못했습니다
             </h1>
             <p className="mt-2 text-sm text-gray-500">
-              설문을 배포한 뒤 응답 화면을 확인할 수 있습니다.
+              잠시 뒤 다시 열어 주세요.
             </p>
           </div>
         </section>
@@ -82,7 +83,7 @@ export default async function SurveyPreviewPage({ params }: PageProps) {
           <div className="flex min-w-0 items-center gap-2 text-sm text-blue-900">
             <Eye className="h-4 w-4 shrink-0" />
             <span className="truncate">
-              설문 보기 모드 — 배포된 응답 화면이며 입력 내용은 저장되지 않습니다.
+              설문 보기 모드 — 저장한 내용 기준 응답 화면이며 입력 내용은 저장되지 않습니다.
             </span>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -110,7 +111,7 @@ export default async function SurveyPreviewPage({ params }: PageProps) {
         previewContext={{
           survey: preview.survey,
           versionId: preview.versionId,
-          // 두 미리보기 경로 모두 발행 스냅샷을 읽으므로 앵커도 발행 시점 좌표로 온다
+          // 이 화면은 테스트 버전(저장본) 스냅샷을, 공개 미리보기는 발행 스냅샷을 읽는다 — 앵커도 각자의 시점 좌표다
           documentView: preview.documentView,
         }}
       />

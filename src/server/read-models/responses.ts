@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, count, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { responseAnswers, surveyResponses, surveyVersions } from '@/db/schema';
@@ -109,6 +109,8 @@ export async function getSurveyVersions(surveyId: string) {
     where: and(
       eq(surveyVersions.surveyId, surveyId),
       isNull(surveyVersions.deletedAt),
+      // 테스트 버전(0141)은 배포 이력이 아니다 — 목록에 내지 않는다.
+      ne(surveyVersions.status, 'test'),
     ),
     orderBy: [desc(surveyVersions.versionNumber)],
     columns: {

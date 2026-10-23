@@ -35,10 +35,11 @@ interface MessageDef {
 
 const MESSAGES: Record<NoticeReason, MessageDef> = {
   test_version_republished: {
-    // 테스트 응답 전용 — 실응답은 버전 정리가 보존해 이 사유에 오지 않는다.
-    // 새로고침하면 재개 이관(ADR-0014)이 응답을 현재 버전으로 옮겨 이어서 진행된다.
-    title: '테스트 도중 설문이 다시 발행되었습니다',
-    body: '새로고침 후 다시 시작해주세요.',
+    // 테스트 응답 전용 — 실응답은 버전 정리가 보존해 이 사유에 오지 않는다. 테스트 중 저장본이 바뀌어
+    // 새 테스트 버전이 생기면 옛 테스트 버전 위의 저장이 여기로 온다(CONTEXT.md 「테스트 버전」).
+    // 새로고침하면 재개 이관(ADR-0014)이 새 버전으로 옮기고 바뀐 곳으로 데려간다.
+    title: '설문이 수정되었습니다',
+    body: '새로고침하면 바뀐 곳부터 이어집니다.',
     tone: 'info',
   },
   response_concluded: {

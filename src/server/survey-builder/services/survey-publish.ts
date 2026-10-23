@@ -78,7 +78,8 @@ export async function publishSurvey(input: PublishSurveyInput): Promise<SurveyVe
       orderBy: [desc(surveyVersions.versionNumber)],
       columns: { versionNumber: true },
     });
-    const nextVersionNumber = (latestVersion?.versionNumber ?? 0) + 1;
+    // 테스트 버전은 음수 번호라 배포 번호를 0 이하로 끌어내리지 않게 0 아래를 자른다.
+    const nextVersionNumber = Math.max(latestVersion?.versionNumber ?? 0, 0) + 1;
 
     const versionRows = await tx
       .insert(surveyVersions)

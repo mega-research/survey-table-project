@@ -9,7 +9,7 @@ import type { R2DbExecutor } from '@/server/storage-lifecycle/deletion-queue';
  * 정리 대상 버전 id 목록. version-retention.ts 의 isVersionPrunable 과 같은
  * 규칙을 SQL 로 표현한다 — 규칙 변경 시 양쪽을 함께 바꾼다.
  *
- * prunable = snapshot 있음 AND 현재 발행본 아님
+ * prunable = snapshot 있음 AND 현재 발행본 아님 AND 지금 테스트 버전 아님
  *   AND 살아있는 비테스트 응답 없음 (version_id 참조)
  *   AND 이관 출처 참조 없음 (metadata->>'migratedFromVersionId', ADR-0014)
  *
@@ -30,6 +30,9 @@ export async function findPrunableVersionIds(
         options.surveyId ? eq(surveyVersions.surveyId, options.surveyId) : undefined,
         // 현재 발행본 제외 (currentVersionId 가 NULL 이어도 안전하도록 is distinct from)
         sql`${surveys.currentVersionId} is distinct from ${surveyVersions.id}`,
+        // 지금 테스트 버전 제외 (0141) — 테스트 화면이 보는 저장본 스냅샷이다. 직전 테스트 버전은
+        // 만들 때 이미 비운다(test-version).
+        sql`${surveys.testVersionId} is distinct from ${surveyVersions.id}`,
         // 살아있는 비테스트 응답 보유 제외
         sql`not exists (
           select 1 from ${surveyResponses} r
