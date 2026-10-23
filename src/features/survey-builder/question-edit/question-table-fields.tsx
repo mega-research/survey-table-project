@@ -128,16 +128,10 @@ export function QuestionTableFields({
         {...(isRankingTableSource
           ? {}
           : {
-              onDynamicRowConfigsChange: (configs: DynamicRowGroupConfig[] | undefined) => {
-                setFormData((prev) => {
-                  const next: Partial<Question> = { ...prev };
-                  if (configs !== undefined) {
-                    next.dynamicRowConfigs = configs;
-                  } else {
-                    delete next.dynamicRowConfigs;
-                  }
-                  return next;
-                });
+              // 그룹을 다 지우면 빈 배열이 온다. 키를 지우면 부분 패치 저장이 "미변경"으로 읽어
+              // 지운 그룹이 DB 에 남으므로 받은 값을 그대로 둔다.
+              onDynamicRowConfigsChange: (configs: DynamicRowGroupConfig[]) => {
+                setFormData((prev) => ({ ...prev, dynamicRowConfigs: configs }));
               },
             })}
       />

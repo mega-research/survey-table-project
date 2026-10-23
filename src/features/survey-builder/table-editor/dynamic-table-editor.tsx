@@ -81,7 +81,7 @@ interface DynamicTableEditorProps {
    * 동적 행 그룹 핸들러. 주지 않으면 동적 행 그룹 카드를 그리지 않는다 — 응답 화면이 동적 행을
    * 읽지 않는 표(순위형 내장 표)에서 설정만 받아 두면 저작자는 걸려 있다고 믿는다.
    */
-  onDynamicRowConfigsChange?: (configs: DynamicRowGroupConfig[] | undefined) => void;
+  onDynamicRowConfigsChange?: (configs: DynamicRowGroupConfig[]) => void;
   /**
    * 행·열 조건부 표시 입구를 낼지(기본 true). 순위형 내장 표는 응답 화면이 조건을 읽지 않아 끈다 —
    * 이미 저장된 조건은 건드리지 않는다.
@@ -899,7 +899,9 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
                       onClick={() => {
                         // 그룹 삭제 + 고아 행 정리
                         const updated = dynamicRowConfigs.filter((g) => g.groupId !== group.groupId);
-                        onDynamicRowConfigsChange?.(updated.length > 0 ? updated : undefined);
+                        // 마지막 그룹이어도 빈 배열로 올린다 — undefined 는 저장 경로가 "미변경"으로 읽어
+                        // 지운 그룹이 DB 에 남는다.
+                        onDynamicRowConfigsChange?.(updated);
                         // 해당 그룹에 배정된 행들의 groupId 정리 (각 액션이 commitRows + notifyChange 로 영속)
                         currentRowsRef.current.forEach((row) => {
                           if (row.dynamicGroupId === group.groupId) setDynamicGroupId(row.id, undefined);
