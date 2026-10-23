@@ -19,6 +19,8 @@ import {
 } from '@/server/survey-response/services/test-target-attempt';
 import { ensureTestVersion } from '@/server/workflows/test-version';
 
+import { backendPid, waitForLockWaitersBehind } from '../helpers/lock-waiters';
+
 // 이 브라우저가 「테스트 데이터 보기」를 켠 상태 — 전역 테스트 모드가 켜지면 콘솔이 테스트 파티션을 본다.
 // (쿠키가 없으면 전역 플래그가 켜져 있어도 실데이터다 — server/data-scope)
 vi.mock('next/headers', () => ({
@@ -28,23 +30,6 @@ vi.mock('next/headers', () => ({
 }));
 
 const run = process.env['RUN_REALDB'] === '1' ? describe : describe.skip;
-
-async function waitForDatabaseLock(queryFragment: string, minimumWaiters = 1): Promise<void> {
-  const deadline = Date.now() + 2_000;
-  while (Date.now() < deadline) {
-    const rows = await db.execute<{ waiting: number }>(sql`
-      SELECT count(*)::int AS waiting
-      FROM pg_stat_activity
-      WHERE pid <> pg_backend_pid()
-        AND datname = current_database()
-        AND wait_event_type = 'Lock'
-        AND query ILIKE ${`%${queryFragment}%`}
-    `);
-    if ((rows[0]?.waiting ?? 0) >= minimumWaiters) return;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  throw new Error(`${queryFragment} lock 대기를 관찰하지 못했습니다`);
-}
 
 run('조사대상자 테스트 모드 DB 제약', () => {
   const surveyId = randomUUID();
@@ -397,8 +382,8 @@ run('대상자 테스트 응답의 서버 현재 버전 고정', () => {
     const publishRelease = new Promise<void>((resolve) => {
       releasePublish = resolve;
     });
-    let markPublishLocked!: () => void;
-    const publishLocked = new Promise<void>((resolve) => {
+    let markPublishLocked!: (pid: number) => void;
+    const publishLocked = new Promise<number>((resolve) => {
       markPublishLocked = resolve;
     });
 
@@ -439,10 +424,10 @@ run('대상자 테스트 응답의 서버 현재 버전 고정', () => {
           .update(surveys)
           .set({ currentVersionId: newVersionId })
           .where(eq(surveys.id, surveyId));
-        markPublishLocked();
+        markPublishLocked(await backendPid(tx));
         await publishRelease;
       });
-      await publishLocked;
+      const publishHolder = await publishLocked;
 
       const create = saveTestTargetFirstAnswer({
         surveyId,
@@ -453,7 +438,7 @@ run('대상자 테스트 응답의 서버 현재 버전 고정', () => {
         currentStepId: 'new-current-step',
         attemptId,
       });
-      await waitForDatabaseLock('surveys');
+      await waitForLockWaitersBehind(publishHolder, 1, '첫 답 저장이 설문 잠금 뒤에 줄 서지 않았습니다');
       releasePublish();
 
       await expect(create).resolves.toMatchObject({ responseId });
@@ -497,8 +482,8 @@ run('대상자 테스트 완료와 새 attempt reset 경쟁', () => {
     const targetRelease = new Promise<void>((resolve) => {
       releaseTarget = resolve;
     });
-    let markTargetLocked!: () => void;
-    const targetLocked = new Promise<void>((resolve) => {
+    let markTargetLocked!: (pid: number) => void;
+    const targetLocked = new Promise<number>((resolve) => {
       markTargetLocked = resolve;
     });
 
@@ -529,10 +514,10 @@ run('대상자 테스트 완료와 새 attempt reset 경쟁', () => {
           .from(contactTargets)
           .where(eq(contactTargets.id, targetId))
           .for('update');
-        markTargetLocked();
+        markTargetLocked(await backendPid(tx));
         await targetRelease;
       });
-      await targetLocked;
+      const targetHolder = await targetLocked;
 
       const nextAcquire = db.transaction((tx) =>
         acquireTestTargetResponse(tx, {
@@ -543,13 +528,13 @@ run('대상자 테스트 완료와 새 attempt reset 경쟁', () => {
           currentStepId: 'next-step',
         }),
       );
-      await waitForDatabaseLock('contact_targets');
+      await waitForLockWaitersBehind(targetHolder, 1, '새 attempt 가 대상 잠금 뒤에 줄 서지 않았습니다');
       const staleComplete = completeResponse({
         responseId,
         attemptId: staleAttemptId,
         sessionId: 'stale-session',
       });
-      await waitForDatabaseLock('contact_targets', 2);
+      await waitForLockWaitersBehind(targetHolder, 2, '완료가 대상 잠금 뒤에 줄 서지 않았습니다');
       releaseTarget();
 
       const [acquireResult, completeResult] = await Promise.allSettled([
