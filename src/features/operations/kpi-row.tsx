@@ -10,8 +10,6 @@ interface KpiRowProps {
   counts: StatusCounts;
   /** 쿼터 요약. 쿼터 미설정(getQuotaStatus null)이면 카드 값만 '-'로 표시한다. */
   quota?: QuotaSummary | null;
-  /** 실사 완료 처리 수 — 온라인 완료 없이 완료 결과코드로 마감된 조사 대상 (`getFieldworkCompletedCounts`). */
-  fieldworkCompleted: number;
 }
 
 interface KpiCellSpec {
@@ -26,15 +24,28 @@ interface KpiCellSpec {
    * 'formula'는 전체 셀 전용 — '100%' 표기가 어색하므로 대신 분모 구성식을 안내한다.
    */
   deltaTone?: 'rose' | 'slate' | 'live' | 'hidden' | 'excluded' | 'formula';
+  /** 비율 텍스트에 다는 설명 툴팁 */
+  hint?: string;
 }
 
 const CELLS: KpiCellSpec[] = [
   { label: '전체', field: 'total', deltaTone: 'formula' },
   { label: '진행중', field: 'inProgress', deltaTone: 'live' },
   { label: '완료', field: 'completed', deltaTone: 'slate' },
+  {
+    label: '실사 완료 처리',
+    field: 'fieldworkCompleted',
+    deltaTone: 'slate',
+    hint: '온라인 응답을 마치지 않은 조사 대상 중 완료 결과코드(예: 1.조사완료)가 기록된 수입니다. 이 사람들의 온라인 이탈·불량·쿼터마감 기록은 해당 카드에서 빼고 여기로만 셉니다.',
+  },
   { label: '자격 미달', field: 'screenedOut', deltaTone: 'excluded' },
   { label: '불량', field: 'bad', deltaTone: 'slate' },
-  { label: '이탈', field: 'drop', deltaTone: 'rose' },
+  {
+    label: '이탈',
+    field: 'drop',
+    deltaTone: 'rose',
+    hint: '실사 완료 처리된 조사 대상의 이탈 기록은 빼고 셉니다.',
+  },
 ];
 
 /** 자격 미달 셀 전용 문구 — 카드에는 짧게, 전체 문장은 title 툴팁으로 노출한다. */
@@ -47,7 +58,8 @@ const EXCLUDED_FULL = '자격미달인 사람은 전체응답(분모), 완료(�
  * — 카드 짧은 문구에 식을 쓰면 옆 쿼터 카드의 달성률을 더하는 것처럼 읽혀 툴팁으로 내렸다.
  */
 const FORMULA_SHORT = '진행중·자격미달 제외';
-const FORMULA_FULL = '전체는 종결된 응답의 합계(완료+쿼터마감+불량+이탈)입니다. 진행중·자격미달은 포함되지 않습니다.';
+const FORMULA_FULL =
+  '전체는 완료+실사 완료 처리+쿼터마감+불량+이탈입니다. 진행중·자격미달은 포함되지 않습니다. 실사 완료 처리된 사람의 온라인 기록은 한 번만 셉니다.';
 
 function formatValue(value: number, isEmpty: boolean): string {
   if (isEmpty) return '—';
@@ -75,9 +87,10 @@ interface KpiCellProps {
   value: string;
   delta: string;
   deltaTone: KpiCellSpec['deltaTone'];
+  hint?: string | undefined;
 }
 
-function KpiCell({ label, value, delta, deltaTone }: KpiCellProps) {
+function KpiCell({ label, value, delta, deltaTone, hint }: KpiCellProps) {
   return (
     <Card>
       <CardContent className="px-4 py-3 pt-3">
@@ -96,38 +109,17 @@ function KpiCell({ label, value, delta, deltaTone }: KpiCellProps) {
               <span className="inline-block h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
             )}
             <span
-              className={cn((deltaTone === 'excluded' || deltaTone === 'formula') && 'cursor-help')}
+              className={cn(
+                (deltaTone === 'excluded' || deltaTone === 'formula' || hint) && 'cursor-help',
+              )}
               {...(deltaTone === 'excluded' ? { title: EXCLUDED_FULL } : {})}
               {...(deltaTone === 'formula' ? { title: FORMULA_FULL } : {})}
+              {...(hint ? { title: hint } : {})}
             >
               {delta}
             </span>
           </div>
         )}
-      </CardContent>
-    </Card>
-  );
-}
-
-/**
- * 실사 완료 처리 카드 — 응답 상태 집계가 아니라 조사 대상의 결과코드 집계라 전체(분모)에 들지 않는다.
- * 비율 대신 집계 기준을 짧게 적고 전체 문장은 title 툴팁으로 둔다.
- */
-const FIELDWORK_SHORT = '결과코드 기준';
-const FIELDWORK_FULL =
-  '온라인 응답을 마치지 않은 조사 대상 중 완료 결과코드(예: 1.조사완료)가 기록된 수입니다. 전체·완료에는 포함되지 않습니다.';
-
-function FieldworkKpiCell({ value }: { value: number }) {
-  return (
-    <Card>
-      <CardContent className="px-4 py-3 pt-3">
-        <p className="text-xs text-slate-500">실사 완료 처리</p>
-        <p className="mt-1 text-2xl font-semibold text-slate-900">{numberFormatter.format(value)}</p>
-        <p className="mt-0.5 text-xs text-slate-400">
-          <span className="cursor-help" title={FIELDWORK_FULL}>
-            {FIELDWORK_SHORT}
-          </span>
-        </p>
       </CardContent>
     </Card>
   );
@@ -161,8 +153,8 @@ function QuotaKpiCell({ quota }: { quota?: QuotaSummary | null }) {
 
 /**
  * 운영 현황 콘솔 — A1 KPI Row.
- * 6개 셀(전체 / 진행중 / 완료 / 자격 미달 / 불량 / 이탈) + 실사 완료 처리 카드 + 쿼터 진행 카드를
- * 가로로 나열한다(실사 완료 처리·쿼터는 완료 바로 뒤). 쿼터마감 카운트는 더 이상 단일 셀이 아니라 쿼터 진행 카드(quota.closedCells)에
+ * 7개 셀(전체 / 진행중 / 완료 / 실사 완료 처리 / 자격 미달 / 불량 / 이탈) + 쿼터 진행 카드를
+ * 가로로 나열한다(쿼터는 실사 완료 처리 바로 뒤). 쿼터마감 카운트는 더 이상 단일 셀이 아니라 쿼터 진행 카드(quota.closedCells)에
  * 흡수됐다 — 미설정이면 '-'로 표시하고, 셀별 상세는 QuotaStatusPanel 참조.
  *
  * total === 0 (종결 응답 없음)일 때:
@@ -170,7 +162,7 @@ function QuotaKpiCell({ quota }: { quota?: QuotaSummary | null }) {
  *   - 진행중 셀(deltaTone === 'live')은 in_progress 가시성이 존재 이유라 항상 실수 노출
  *   - 페이지 단위 EmptyState는 상위 컴포지션에서 처리한다 (plan §9).
  */
-export function KpiRow({ counts, quota, fieldworkCompleted }: KpiRowProps) {
+export function KpiRow({ counts, quota }: KpiRowProps) {
   const isEmpty = counts.total === 0;
 
   return (
@@ -188,15 +180,15 @@ export function KpiRow({ counts, quota, fieldworkCompleted }: KpiRowProps) {
             value={formatValue(value, cellIsEmpty)}
             delta={formatDelta(value, counts.total, cell.deltaTone, cellIsEmpty)}
             deltaTone={cell.deltaTone}
+            hint={cell.hint}
           />
         );
 
-        if (cell.field !== 'completed') return kpiCell;
+        if (cell.field !== 'fieldworkCompleted') return kpiCell;
 
         return (
           <Fragment key={cell.field}>
             {kpiCell}
-            <FieldworkKpiCell value={fieldworkCompleted} />
             <QuotaKpiCell quota={quota ?? null} />
           </Fragment>
         );

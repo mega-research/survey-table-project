@@ -19,6 +19,15 @@ vi.mock('@/db', () => ({
   },
 }));
 
+vi.mock('@/server/read-models/result-code-statuses', () => ({
+  getResultCodeStatuses: vi.fn(async () => ({ positive: ['1.조사완료'], negative: [] })),
+}));
+
+vi.mock('@/server/read-models/fieldwork-completions', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/server/read-models/fieldwork-completions')>()),
+  getFieldworkCompletedCounts: vi.fn(async () => new Map([['survey-1', 7]])),
+}));
+
 const dialect = new PgDialect();
 
 describe('aggregateStatus', () => {
@@ -36,5 +45,13 @@ describe('aggregateStatus', () => {
     const query = dialect.sqlToQuery(whereArg as never);
     expect(query.sql).toContain('is_test');
     expect(query.params).toContain(false);
+  });
+
+  it('실사 완료 처리 수를 전체에 더한다', async () => {
+    const { aggregateStatus } = await import('./aggregate-status');
+    const counts = await aggregateStatus('survey-1', 'real');
+
+    expect(counts.fieldworkCompleted).toBe(7);
+    expect(counts.total).toBe(7);
   });
 });

@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { inArray, sql } from 'drizzle-orm';
+import { inArray, sql, type SQL } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveys } from '@/db/schema';
@@ -60,6 +60,34 @@ export async function getFieldworkCompletedCounts(
 
   for (const r of rows) result.set(r.survey_id, Number(r.count));
   return result;
+}
+
+/**
+ * 한 설문 안에서 「이 조사 대상이 실사 완료 처리인가」 SQL 술어 — `getFieldworkCompletedCounts` 와 같은 정의.
+ * 응답 상태 집계(`aggregateStatus`)가 실사 완료 처리된 사람의 이탈·불량·쿼터마감 행을 가려내는 데 쓴다.
+ * 완료 코드가 없는 설문이면 FALSE.
+ */
+export function isFieldworkCompletedSql(
+  contactTargetIdExpr: SQL,
+  positiveCodes: readonly string[],
+  isTest: boolean,
+): SQL {
+  if (positiveCodes.length === 0) return sql`FALSE`;
+  // sql.join — 길이 1 배열이 스칼라로 풀려 ANY 가 22P02 를 내는 drizzle 함정 회피
+  const codeList = sql.join(
+    positiveCodes.map((c) => sql`${c}`),
+    sql`, `,
+  );
+  return sql`(
+    EXISTS (SELECT 1 FROM contact_attempts ca
+             WHERE ca.contact_target_id = ${contactTargetIdExpr}
+               AND ca.result_code IN (${codeList}))
+    AND NOT EXISTS (SELECT 1 FROM survey_responses fw_sr
+                     WHERE fw_sr.contact_target_id = ${contactTargetIdExpr}
+                       AND fw_sr.is_completed = true
+                       AND fw_sr.deleted_at IS NULL
+                       AND fw_sr.is_test = ${isTest})
+  )`;
 }
 
 /** 설문별 완료(positive) 결과코드를 (설문 id, 코드) 쌍으로 편다. 저장 전 설문은 기본 코드셋을 따른다. */

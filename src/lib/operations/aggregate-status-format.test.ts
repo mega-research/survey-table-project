@@ -12,6 +12,7 @@ describe('mapRowsToCounts', () => {
     expect(mapRowsToCounts(rows)).toEqual({
       total: 35,           // ← in_progress 제외 (completed 30 + drop 5)
       completed: 30,
+      fieldworkCompleted: 0,
       inProgress: 10,
       drop: 5,
       screenedOut: 0,
@@ -24,6 +25,7 @@ describe('mapRowsToCounts', () => {
     expect(mapRowsToCounts([])).toEqual({
       total: 0,
       completed: 0,
+      fieldworkCompleted: 0,
       screenedOut: 0,
       quotafulOut: 0,
       bad: 0,
@@ -53,6 +55,7 @@ describe('mapRowsToCounts', () => {
     expect(mapRowsToCounts(rows)).toEqual({
       total: 6, // screened_out(7) 제외 — quotaful_out(4) + bad(2)
       completed: 0,
+      fieldworkCompleted: 0,
       screenedOut: 7,
       quotafulOut: 4,
       bad: 2,
@@ -102,5 +105,21 @@ describe('mapRowsToCounts', () => {
       { status: 'screened_out', count: 5 },
     ];
     expect(mapRowsToCounts(rows).total).toBe(15); // 10 + 3 + 2
+  });
+
+  it('실사 완료 처리 수를 전체에 더하고, 그 사람들의 이탈·불량·쿼터마감 행은 버킷에서 뺀다', () => {
+    const rows = [
+      { status: 'completed', count: 123 },
+      { status: 'drop', count: 12 },
+      { status: 'drop', count: 5, fieldworkCompleted: true },
+      { status: 'in_progress', count: 2 },
+      { status: 'in_progress', count: 3, fieldworkCompleted: true },
+    ];
+    const result = mapRowsToCounts(rows, 82);
+
+    expect(result.fieldworkCompleted).toBe(82);
+    expect(result.drop).toBe(12); // 실사 완료 처리된 5명의 이탈 행은 빠진다
+    expect(result.inProgress).toBe(5); // 진행중은 전체 밖이라 그대로 센다
+    expect(result.total).toBe(217); // 123 + 82 + 12 — 한 사람을 두 번 세지 않는다
   });
 });

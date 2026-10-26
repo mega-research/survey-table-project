@@ -453,6 +453,7 @@ describe('profiles-row-actions', () => {
       const counts: StatusCounts = {
         total: 0,
         completed: 0,
+        fieldworkCompleted: 0,
         screenedOut: 0,
         quotafulOut: 0,
         bad: 0,
