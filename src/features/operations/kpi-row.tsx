@@ -26,6 +26,8 @@ interface KpiCellSpec {
   deltaTone?: 'rose' | 'slate' | 'live' | 'hidden' | 'excluded' | 'formula';
   /** 비율 텍스트에 다는 설명 툴팁 */
   hint?: string;
+  /** 비율 대신 보일 고정 문구 — 실사 완료 처리처럼 비율보다 집계 기준이 중요한 셀 */
+  deltaText?: string;
 }
 
 const CELLS: KpiCellSpec[] = [
@@ -36,6 +38,7 @@ const CELLS: KpiCellSpec[] = [
     label: '실사 완료 처리',
     field: 'fieldworkCompleted',
     deltaTone: 'slate',
+    deltaText: '결과코드 기준',
     hint: '온라인 응답을 마치지 않은 조사 대상 중 완료 결과코드(예: 1.조사완료)가 기록된 수입니다. 이 사람들의 온라인 이탈·불량·쿼터마감 기록은 해당 카드에서 빼고 여기로만 셉니다.',
   },
   { label: '자격 미달', field: 'screenedOut', deltaTone: 'excluded' },
@@ -178,7 +181,7 @@ export function KpiRow({ counts, quota }: KpiRowProps) {
             key={cell.field}
             label={cell.label}
             value={formatValue(value, cellIsEmpty)}
-            delta={formatDelta(value, counts.total, cell.deltaTone, cellIsEmpty)}
+            delta={cell.deltaText ?? formatDelta(value, counts.total, cell.deltaTone, cellIsEmpty)}
             deltaTone={cell.deltaTone}
             hint={cell.hint}
           />
