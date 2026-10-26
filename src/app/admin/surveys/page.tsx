@@ -291,8 +291,8 @@ export default function SurveyListPage() {
                   {survey.title}
                 </h3>
                 <p className="mb-4 text-sm text-gray-500">
-                  전체 응답 {survey.responseCount.toLocaleString('ko-KR')}건 · 완료{' '}
-                  {survey.completedResponseCount.toLocaleString('ko-KR')}건
+                  {`온라인 응답 완료 ${survey.completedResponseCount.toLocaleString('ko-KR')}건`}
+                  {` · 실사 완료 처리 ${survey.fieldworkCompletedCount.toLocaleString('ko-KR')}건`}
                 </p>
 
                 <div className="flex items-center justify-between text-xs text-gray-400">
