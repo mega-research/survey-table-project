@@ -48,6 +48,8 @@ export type SurveyListItem = {
   privateToken: string | null;
   responseCount: number;
   completedResponseCount: number;
+  /** 온라인 완료 없이 완료 결과코드로 마감된 실데이터 조사 대상 수 (`getFieldworkCompletedCounts`) */
+  fieldworkCompletedCount: number;
   createdAt: Date;
   updatedAt: Date;
   isPublic: boolean;

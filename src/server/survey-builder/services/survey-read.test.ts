@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_RESPONSE_HEADER_CONFIG } from '@/lib/survey/response-header-config';
 import { findContactByInviteToken } from '@/server/read-models/invite-lookup';
 import { getResponseCountsGroupedBySurvey } from '@/server/read-models/responses';
+import { getFieldworkCompletedCounts } from '@/server/read-models/fieldwork-completions';
 import * as readModels from '@/server/read-models/survey-structure';
 import { getSurveyWithDetails as getSurveyWithDetailsData } from '@/server/read-models/survey-structure';
 import type { Survey as SurveyType } from '@/types/survey';
@@ -27,6 +28,10 @@ vi.mock('@/server/read-models/survey-structure', async (importOriginal) => ({
 
 vi.mock('@/server/read-models/responses', () => ({
   getResponseCountsGroupedBySurvey: vi.fn(),
+}));
+
+vi.mock('@/server/read-models/fieldwork-completions', () => ({
+  getFieldworkCompletedCounts: vi.fn(),
 }));
 
 const surveysFindFirst = vi.fn();
@@ -143,6 +148,7 @@ describe('survey-read.service getSurveyListWithCounts', () => {
     vi.mocked(getResponseCountsGroupedBySurvey).mockResolvedValue(
       new Map([['survey-1', { total: 5, completed: 3 }]]),
     );
+    vi.mocked(getFieldworkCompletedCounts).mockResolvedValue(new Map([['survey-2', 4]]));
 
     const result = await getSurveyListWithCounts();
 
@@ -161,6 +167,7 @@ describe('survey-read.service getSurveyListWithCounts', () => {
       }),
     );
     expect(getResponseCountsGroupedBySurvey).toHaveBeenCalledWith(['survey-1', 'survey-2']);
+    expect(getFieldworkCompletedCounts).toHaveBeenCalledWith(['survey-1', 'survey-2'], false);
     expect(result).toEqual([
       {
         id: 'survey-1',
@@ -170,6 +177,7 @@ describe('survey-read.service getSurveyListWithCounts', () => {
         privateToken: '11111111-1111-1111-1111-111111111111',
         responseCount: 5,
         completedResponseCount: 3,
+        fieldworkCompletedCount: 0,
         createdAt,
         updatedAt,
         isPublic: true,
@@ -182,6 +190,7 @@ describe('survey-read.service getSurveyListWithCounts', () => {
         privateToken: null,
         responseCount: 0,
         completedResponseCount: 0,
+        fieldworkCompletedCount: 4,
         createdAt,
         updatedAt,
         isPublic: false,

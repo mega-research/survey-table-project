@@ -16,6 +16,7 @@ import { getR2PublicUrl } from '@/lib/r2-env';
 import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
 import { isValidUUID } from '@/lib/utils';
 import { toAnchorSnapshot } from '@/server/read-models/anchor-row';
+import { getFieldworkCompletedCounts } from '@/server/read-models/fieldwork-completions';
 import { findContactByInviteToken } from '@/server/read-models/invite-lookup';
 import { getAllTags } from '@/server/read-models/library-taxonomy';
 import { getResponseCountsGroupedBySurvey } from '@/server/read-models/responses';
@@ -97,9 +98,12 @@ export async function searchSurveys(query: string) {
 // 전체 설문 목록 조회 (요약 정보)
 export async function getSurveyListWithCounts(): Promise<SurveyListItem[]> {
   const surveyList = await getSurveys();
-  const responseCounts = await getResponseCountsGroupedBySurvey(
-    surveyList.map((survey) => survey.id),
-  );
+  const surveyIds = surveyList.map((survey) => survey.id);
+  // 목록은 실데이터만 센다 — 응답 수(notTestResponse)와 같은 파티션.
+  const [responseCounts, fieldworkCounts] = await Promise.all([
+    getResponseCountsGroupedBySurvey(surveyIds),
+    getFieldworkCompletedCounts(surveyIds, false),
+  ]);
 
   return surveyList.map((survey) => ({
     id: survey.id,
@@ -109,6 +113,7 @@ export async function getSurveyListWithCounts(): Promise<SurveyListItem[]> {
     privateToken: survey.privateToken,
     responseCount: responseCounts.get(survey.id)?.total ?? 0,
     completedResponseCount: responseCounts.get(survey.id)?.completed ?? 0,
+    fieldworkCompletedCount: fieldworkCounts.get(survey.id) ?? 0,
     createdAt: survey.createdAt,
     updatedAt: survey.updatedAt,
     isPublic: survey.isPublic,

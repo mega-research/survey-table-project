@@ -10,7 +10,7 @@ import { PageDwellDistribution } from '@/features/operations/page-dwell-distribu
 import { QuotaStatusPanel } from '@/features/operations/quota/quota-status-panel';
 import { ResponseTimeStats } from '@/features/operations/response-time-stats';
 import { isGuestViewer, isViewOnlyViewer } from '@/lib/auth/guest-viewer';
-import { getOperationsDataScope } from '@/server/data-scope';
+import { getOperationsDataScope, testFlagForScope } from '@/server/data-scope';
 import {
   aggregateDaily,
   aggregateDailyAvailableDates,
@@ -21,6 +21,7 @@ import { getDropFunnel } from '@/server/operations/services/drop-funnel';
 import { getPageDwell } from '@/server/operations/services/page-dwell';
 import { getResponseTime } from '@/server/operations/services/response-time';
 import { getQuotaStatus } from '@/server/quota/services/quota-status';
+import { getFieldworkCompletedCounts } from '@/server/read-models/fieldwork-completions';
 import { getSurveyById } from '@/server/survey-builder/services/survey-read';
 
 /**
@@ -114,6 +115,7 @@ export default async function OperationsOverviewPage({
     pageDwell,
     quotaStatus,
     survey,
+    fieldworkCounts,
   ] = await Promise.all([
     aggregateStatus(surveyId, scope),
     aggregateDaily({
@@ -130,6 +132,7 @@ export default async function OperationsOverviewPage({
     // 테스트 모드에서도 테스트 응답 기준으로 집계해 보여준다(표시 전용 — 집행은 실응답만).
     getQuotaStatus(surveyId, scope),
     getSurveyById(surveyId),
+    getFieldworkCompletedCounts([surveyId], testFlagForScope(scope)),
   ]);
 
   return (
@@ -147,7 +150,11 @@ export default async function OperationsOverviewPage({
         {!isGuest && <ExportDataModal surveyId={surveyId} surveyTitle={survey?.title ?? '설문'} />}
       </div>
 
-      <KpiRow counts={statusCounts} quota={quotaStatus?.summary ?? null} />
+      <KpiRow
+        counts={statusCounts}
+        quota={quotaStatus?.summary ?? null}
+        fieldworkCompleted={fieldworkCounts.get(surveyId) ?? 0}
+      />
 
       {/* 플랜이 있으면 셀이 비어 있어도 그린다 — 카드 안에서 "목표 없음" 을 안내한다 */}
       {quotaStatus && <QuotaStatusPanel status={quotaStatus} isTestScope={scope === 'test'} />}

@@ -10,6 +10,8 @@ interface KpiRowProps {
   counts: StatusCounts;
   /** 쿼터 요약. 쿼터 미설정(getQuotaStatus null)이면 카드 값만 '-'로 표시한다. */
   quota?: QuotaSummary | null;
+  /** 실사 완료 처리 수 — 온라인 완료 없이 완료 결과코드로 마감된 조사 대상 (`getFieldworkCompletedCounts`). */
+  fieldworkCompleted: number;
 }
 
 interface KpiCellSpec {
@@ -108,6 +110,30 @@ function KpiCell({ label, value, delta, deltaTone }: KpiCellProps) {
 }
 
 /**
+ * 실사 완료 처리 카드 — 응답 상태 집계가 아니라 조사 대상의 결과코드 집계라 전체(분모)에 들지 않는다.
+ * 비율 대신 집계 기준을 짧게 적고 전체 문장은 title 툴팁으로 둔다.
+ */
+const FIELDWORK_SHORT = '결과코드 기준';
+const FIELDWORK_FULL =
+  '온라인 응답을 마치지 않은 조사 대상 중 완료 결과코드(예: 1.조사완료)가 기록된 수입니다. 전체·완료에는 포함되지 않습니다.';
+
+function FieldworkKpiCell({ value }: { value: number }) {
+  return (
+    <Card>
+      <CardContent className="px-4 py-3 pt-3">
+        <p className="text-xs text-slate-500">실사 완료 처리</p>
+        <p className="mt-1 text-2xl font-semibold text-slate-900">{numberFormatter.format(value)}</p>
+        <p className="mt-0.5 text-xs text-slate-400">
+          <span className="cursor-help" title={FIELDWORK_FULL}>
+            {FIELDWORK_SHORT}
+          </span>
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
  * 쿼터 진행 카드 — 예전 "쿼터마감" 단일 카운트 셀을 대체한다.
  * 완료/목표 총합 대비 % + 마감된 셀 수(closedCells)를 함께 보여줘, 쿼터 전체
  * 진척을 한눈에 파악할 수 있게 한다. 셀 단위 상세는 QuotaStatusPanel 담당.
@@ -135,8 +161,8 @@ function QuotaKpiCell({ quota }: { quota?: QuotaSummary | null }) {
 
 /**
  * 운영 현황 콘솔 — A1 KPI Row.
- * 6개 셀(전체 / 진행중 / 완료 / 자격 미달 / 불량 / 이탈) + 쿼터 진행 카드를
- * 가로로 나열한다. 쿼터마감 카운트는 더 이상 단일 셀이 아니라 쿼터 진행 카드(quota.closedCells)에
+ * 6개 셀(전체 / 진행중 / 완료 / 자격 미달 / 불량 / 이탈) + 실사 완료 처리 카드 + 쿼터 진행 카드를
+ * 가로로 나열한다(실사 완료 처리·쿼터는 완료 바로 뒤). 쿼터마감 카운트는 더 이상 단일 셀이 아니라 쿼터 진행 카드(quota.closedCells)에
  * 흡수됐다 — 미설정이면 '-'로 표시하고, 셀별 상세는 QuotaStatusPanel 참조.
  *
  * total === 0 (종결 응답 없음)일 때:
@@ -144,11 +170,11 @@ function QuotaKpiCell({ quota }: { quota?: QuotaSummary | null }) {
  *   - 진행중 셀(deltaTone === 'live')은 in_progress 가시성이 존재 이유라 항상 실수 노출
  *   - 페이지 단위 EmptyState는 상위 컴포지션에서 처리한다 (plan §9).
  */
-export function KpiRow({ counts, quota }: KpiRowProps) {
+export function KpiRow({ counts, quota, fieldworkCompleted }: KpiRowProps) {
   const isEmpty = counts.total === 0;
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
       {CELLS.map((cell) => {
         const value = counts[cell.field];
         // 진행중·자격 미달·전체 셀은 isEmpty 와 무관하게 부속 텍스트를 유지한다
@@ -170,6 +196,7 @@ export function KpiRow({ counts, quota }: KpiRowProps) {
         return (
           <Fragment key={cell.field}>
             {kpiCell}
+            <FieldworkKpiCell value={fieldworkCompleted} />
             <QuotaKpiCell quota={quota ?? null} />
           </Fragment>
         );
