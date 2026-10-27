@@ -107,16 +107,6 @@ const ADMIN_ONLY: Record<string, readonly string[]> = {
   ],
   // 조사표 앵커 편집기의 라벨
   'question-renderer/utils/anchor-outline.ts': ['(제목 없음)', '그룹 없음'],
-  // 빌더의 형식 이름 · 한국어 조사 — 응답 문장은 사전의 format.* 가 낸다(06)
-  'question-renderer/utils/input-format.ts': [
-    '휴대전화',
-    '전화번호',
-    '사업자번호',
-    '법인번호',
-    '이메일',
-    '는',
-    '은',
-  ],
   // 관리자 응답 수정의 완화 안내
   'survey-response/lib/admin-edit-required-relax.ts': [
     '빈 필수 응답',

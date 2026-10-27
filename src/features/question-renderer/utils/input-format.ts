@@ -204,13 +204,37 @@ export function parseInputFormat(format: InputFormat, raw: string): ParseResult 
   }
 }
 
+/** 형식 이름 — 빌더 선택지(한국어)와 응답 화면 문구가 같은 사전 글자를 쓴다. */
+const FORMAT_LABEL_KEY: Record<InputFormat, SystemStringKey> = {
+  mobile: 'format.label.mobile',
+  phone: 'format.label.phone',
+  biz_number: 'format.label.biz_number',
+  corp_number: 'format.label.corp_number',
+  email: 'format.label.email',
+};
+
+/** 「숫자로 입력해 주세요」 — 한국어 조사(은/는)가 형식 이름마다 달라 형식마다 문장을 둔다. */
+const NOT_A_NUMBER_KEY: Record<InputFormat, SystemStringKey> = {
+  mobile: 'format.notANumber.mobile',
+  phone: 'format.notANumber.phone',
+  biz_number: 'format.notANumber.biz_number',
+  corp_number: 'format.notANumber.corp_number',
+  email: 'format.notANumber.email',
+};
+
+/** 자릿수가 정해진 형식 — 「N자리입니다」(조사 때문에 형식마다 문장). */
+const WRONG_LENGTH_FIXED_KEY: Record<'biz_number' | 'corp_number', SystemStringKey> = {
+  biz_number: 'format.wrongLengthFixed.biz_number',
+  corp_number: 'format.wrongLengthFixed.corp_number',
+};
+
 /** 형식의 화면 이름. 빌더 선택지·응답자 안내 문구가 이 한 곳을 참조한다. */
 export const INPUT_FORMAT_LABEL: Record<InputFormat, string> = {
-  mobile: '휴대전화',
-  phone: '전화번호',
-  biz_number: '사업자번호',
-  corp_number: '법인번호',
-  email: '이메일',
+  mobile: systemText(FORMAT_LABEL_KEY.mobile),
+  phone: systemText(FORMAT_LABEL_KEY.phone),
+  biz_number: systemText(FORMAT_LABEL_KEY.biz_number),
+  corp_number: systemText(FORMAT_LABEL_KEY.corp_number),
+  email: systemText(FORMAT_LABEL_KEY.email),
 };
 
 /**
@@ -231,18 +255,10 @@ export function formatSampleValue(format: InputFormat): string {
 }
 
 /** 자릿수를 말할 수 있는 형식만 — 전화번호는 지역번호·국번에 따라 갈려 자릿수 하나로 못 말한다. */
-const FIXED_LENGTH: Partial<Record<InputFormat, number>> = {
+const FIXED_LENGTH: Record<'biz_number' | 'corp_number', number> = {
   biz_number: 10,
   corp_number: 13,
 };
-
-/** '은/는' 결정 — 앞 글자에 받침이 있으면 '은'. (이메일은 'ㄹ' 받침이라 '이메일은') */
-function topicParticle(label: string): string {
-  const last = label.charCodeAt(label.length - 1);
-  const isHangulSyllable = last >= 0xac00 && last <= 0xd7a3;
-  if (!isHangulSyllable) return '는';
-  return (last - 0xac00) % 28 === 0 ? '는' : '은';
-}
 
 /**
  * 형식별·실패 사유별 기본 안내 문구.
@@ -256,19 +272,13 @@ export function formatFailureMessage(
   reason: FormatFailure,
   locale: SurveyLocale = DEFAULT_SURVEY_LOCALE,
 ): string {
-  // 한국어 형식 이름은 빌더 선택지와 같은 INPUT_FORMAT_LABEL — 사전의 한국어와 같은 글자다.
-  const label =
-    locale === DEFAULT_SURVEY_LOCALE
-      ? INPUT_FORMAT_LABEL[format]
-      : systemText(FORMAT_LABEL_KEY[format], locale);
-  const values = { label, particle: topicParticle(label) };
+  const values = { label: systemText(FORMAT_LABEL_KEY[format], locale) };
   switch (reason) {
     case 'not_a_number':
-      return systemText('format.notANumber', locale, values);
+      return systemText(NOT_A_NUMBER_KEY[format], locale);
     case 'wrong_length': {
-      const length = FIXED_LENGTH[format];
-      if (length !== undefined) {
-        return systemText('format.wrongLengthFixed', locale, { ...values, length });
+      if (format === 'biz_number' || format === 'corp_number') {
+        return systemText(WRONG_LENGTH_FIXED_KEY[format], locale, { length: FIXED_LENGTH[format] });
       }
       return systemText('format.wrongLength', locale, values);
     }
@@ -281,17 +291,10 @@ export function formatFailureMessage(
     case 'malformed':
       return systemText('format.malformed', locale, values);
     case 'non_ascii':
-      return systemText('format.nonAscii', locale, values);
+      // 이메일만 나는 사유다(`parseEmail`)
+      return systemText('format.nonAscii', locale);
   }
 }
-
-const FORMAT_LABEL_KEY: Record<InputFormat, SystemStringKey> = {
-  mobile: 'format.label.mobile',
-  phone: 'format.label.phone',
-  biz_number: 'format.label.biz_number',
-  corp_number: 'format.label.corp_number',
-  email: 'format.label.email',
-};
 
 /**
  * 형식 칸 타이핑 필터 — 번호 형식은 숫자와 하이픈만 통과시킨다(글자·공백·괄호·점은 떨어뜨린다).
