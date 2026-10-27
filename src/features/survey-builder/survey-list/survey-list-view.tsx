@@ -9,8 +9,8 @@ import { useQuery } from '@tanstack/react-query';
 import { Folder, Loader2, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { SYSTEM_SCOPE } from '@/shared/contracts/workspace';
-import { surveyListQueryOptions } from '@/shared/lib/survey-list-queries';
+import { ListPagination } from '@/components/ui/list-pagination';
+import { surveyListQueryOptions, surveyListScopeParam } from '@/shared/lib/survey-list-queries';
 import { useWorkScopeOptional } from '@/shared/lib/work-scope-context';
 
 import { useMoveSurveyToGroup, useSurveyGroups } from '../queries/use-survey-groups';
@@ -28,7 +28,6 @@ import {
 } from './empty-states';
 import { GroupManageModal } from './groups/group-manage-modal';
 import { GroupViewFooterNote, GroupViewHeader } from './groups/group-view-header';
-import { ListPagination } from '@/components/ui/list-pagination';
 import { ListToolbar } from './list-toolbar';
 import { SurveyCard } from './survey-card';
 import {
@@ -56,14 +55,8 @@ export function SurveyListView() {
 
   // 화면이 지목하는 범위 문자열 — 컨텍스트의 해석된 범위에서 출발한다. 첫 렌더부터 실제
   // 범위가 키에 들어가야 "범위 미지정" 키 하나에 여러 팀의 응답이 겹쳐 쓰이지 않는다.
-  const requestedScope =
-    contextScope === null
-      ? null
-      : contextScope.kind === 'system'
-        ? SYSTEM_SCOPE
-        : contextScope.kind === 'team'
-          ? contextScope.teamId
-          : null;
+  // 서버 페이지가 미리 채운 목록도 같은 함수로 키를 만든다 — 여기서 따로 접으면 그 목록이 쓰이지 않는다.
+  const requestedScope = surveyListScopeParam(contextScope);
   const isUnassigned = contextScope?.kind === 'none';
 
   // 휴지통은 슈퍼어드민의 시스템 전체 보기에만 있다(티켓 17). 범위가 바뀌면 스토어도

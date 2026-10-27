@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { surveyKeys, surveyListQueryOptions } from './survey-list-queries';
+import { surveyKeys, surveyListQueryOptions, surveyListScopeParam } from './survey-list-queries';
 
 const listCall = vi.fn();
 
@@ -40,5 +40,19 @@ describe('surveyListQueryOptions', () => {
     surveyListQueryOptions().queryFn();
     // 휴지통 여부는 언제나 명시한다 — 서버 기본값에 기대면 두 모드의 계약이 갈린다(티켓 17).
     expect(listCall).toHaveBeenCalledWith({ scope: null, deleted: false });
+  });
+});
+
+describe('surveyListScopeParam', () => {
+  // 서버 페이지가 미리 채우는 키와 화면이 조회하는 키가 이 함수 하나에서 나온다 — 갈리면
+  // 미리 받은 목록이 쓰이지 않고 첫 진입이 다시 왕복한다.
+  it('팀 범위는 팀 id, 시스템 전체 보기는 예약어로 접는다', () => {
+    expect(surveyListScopeParam({ kind: 'team', teamId: 'team-1' })).toBe('team-1');
+    expect(surveyListScopeParam({ kind: 'system' })).toBe('system');
+  });
+
+  it('범위가 없거나 셸 밖이면 범위를 지목하지 않는다', () => {
+    expect(surveyListScopeParam({ kind: 'none' })).toBeNull();
+    expect(surveyListScopeParam(null)).toBeNull();
   });
 });

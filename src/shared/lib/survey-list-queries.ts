@@ -1,3 +1,5 @@
+import { SYSTEM_SCOPE, type WorkScope } from '@/shared/contracts/workspace';
+
 import { orpc } from './rpc';
 
 /**
@@ -15,6 +17,19 @@ export const surveyKeys = {
   details: () => [...surveyKeys.all, 'detail'] as const,
   detail: (id: string) => [...surveyKeys.details(), id] as const,
 };
+
+/**
+ * 해석된 작업 범위 → 목록 조회가 지목하는 범위 값(곧 쿼리 키).
+ *
+ * 화면(작업 범위 컨텍스트)과 서버 페이지(미리 채우는 목록)가 같은 키를 써야 미리 받은 목록이
+ * 쓰인다 — 각자 접으면 키가 갈려 첫 진입이 한 번 더 왕복한다. 범위가 없거나(팀 미배치)
+ * 셸 밖이면 지목하지 않는다 — 서버가 쿠키·멤버십으로 해석한다.
+ */
+export function surveyListScopeParam(scope: WorkScope | null): string | null {
+  if (scope?.kind === 'system') return SYSTEM_SCOPE;
+  if (scope?.kind === 'team') return scope.teamId;
+  return null;
+}
 
 /**
  * 설문 목록 조회 — 작업 범위로 좁힌 결과 + 고를 수 있는 범위 (티켓 07).
