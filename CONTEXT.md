@@ -343,6 +343,10 @@ _Avoid_: 셀 저장 함수 안의 손 구조 분해 목록, 유형별 정리 키
 _Avoid_: 하위 탭 핸들러 안에서 setter 여럿을 이어 부르기, 저장이 이미 거르는 배타를 화면에서 한 번 더 지우기
 → 정본: `src/features/survey-builder/table-editor/cell-editor/utils/cell-form-transitions.ts` 헤더 · 같은 폴더 `hooks/use-cell-form.ts` 의 `CellFormActions`
 
+**문항 편집 세션 (question edit session)**:
+질문 편집 모달 하나가 열려 있는 동안의 초안 · 확정 · 버리기를 맡는 단위(2026-10-23 설계 합의, 구현 전 — `.scratch/question-edit-session/PRD.md`). 모달 안의 모든 편집(기본 탭 · 표 구조 · 셀 모달 · 표 토글 · 표시 조건 · 이월값 조건)은 세션의 초안 하나에만 쓰고, DB 와 빌더 store 는 **확정** 때 한 번에 바뀐다. 확정은 문항 전체(영속 필드 전부)와 보기 value 리매핑으로 함께 바뀌는 다른 문항·그룹 조건을 한 트랜잭션으로 쓰고, 모달을 열 때 받은 문항 버전(`updated_at`)이 그대로일 때만 쓴다 — 다르면 쓰지 않고 「최신 내용 불러오기 / 내 변경으로 덮어쓰기」를 묻는다. **취소는 셀 편집까지 전부 버린다**(초안이 원본과 다르면 먼저 묻는다). 빌더 store 는 확정된 내용만 담고, 확정한 문항의 변경 표시(`added`·`updated`)는 지운다. 전체 「저장」 버튼(saveDiff)은 이 세션 밖이다.
+_Avoid_: 셀 저장마다 DB 즉시 반영, 부분 패치의 「빠진 키 = 변경 없음」 규칙에 기대는 해제, 모달 취소 롤백 목록, 초안을 store 에 비추기
+
 ### 입력 형식
 
 **표 input 셀의 여러 줄 (multiline input cell)**:

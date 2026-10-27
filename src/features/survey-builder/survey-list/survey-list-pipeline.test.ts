@@ -23,6 +23,7 @@ function item(over: Partial<SurveyListItem> = {}): SurveyListItem {
     privateToken: null,
     responseCount: 0,
     completedResponseCount: 0,
+    fieldworkCompletedCount: 0,
     createdAt: new Date('2026-06-01T00:00:00.000Z'),
     updatedAt: new Date('2026-06-02T00:00:00.000Z'),
     endDate: null,

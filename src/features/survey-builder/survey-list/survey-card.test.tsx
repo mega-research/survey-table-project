@@ -15,6 +15,7 @@ function item(over: Partial<SurveyListItem> = {}): SurveyListItem {
     privateToken: null,
     responseCount: 20,
     completedResponseCount: 12,
+    fieldworkCompletedCount: 0,
     createdAt: new Date('2026-06-01T00:00:00.000Z'),
     updatedAt: new Date('2026-06-02T00:00:00.000Z'),
     endDate: null,
@@ -93,5 +94,17 @@ describe('SurveyCard — 카드 제목 (0140)', () => {
   it('카드 제목이 없으면 설문지 제목을 보인다', () => {
     renderCard(item({ title: '고객 만족도 조사', cardTitle: null }));
     expect(screen.getByText('고객 만족도 조사')).toBeInTheDocument();
+  });
+});
+
+/**
+ * 응답수 줄 — 전체 응답 수를 보고 비어 있는 설문으로 오해하는 일이 잦아 온라인 응답 완료와
+ * 실사 완료 처리 두 숫자만 보인다.
+ */
+describe('SurveyCard — 응답수 줄', () => {
+  it('온라인 응답 완료와 실사 완료 처리 수를 보이고 전체 응답 수는 싣지 않는다', () => {
+    renderCard(item({ responseCount: 20, completedResponseCount: 12, fieldworkCompletedCount: 3 }));
+    expect(screen.getByText(/온라인 응답 완료 12건 · 실사 완료 처리 3건/)).toBeInTheDocument();
+    expect(screen.queryByText(/전체 응답/)).toBeNull();
   });
 });

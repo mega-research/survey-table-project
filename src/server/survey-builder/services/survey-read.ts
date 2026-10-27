@@ -16,6 +16,7 @@ import { getR2PublicUrl } from '@/lib/r2-env';
 import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
 import { isValidUUID } from '@/lib/utils';
 import { toAnchorSnapshot } from '@/server/read-models/anchor-row';
+import { getFieldworkCompletedCounts } from '@/server/read-models/fieldwork-completions';
 import { findContactByInviteToken } from '@/server/read-models/invite-lookup';
 import { getAllTags } from '@/server/read-models/library-taxonomy';
 import {
@@ -41,6 +42,7 @@ import {
   loadAccountAccessSubject,
 } from '@/server/survey-access';
 import { buildSurveyScopeFilter, resolveWorkScopeFor } from '@/server/work-scope';
+import { ensureTestVersion } from '@/server/workflows/test-version';
 import { normalizeSurveyStatus } from '@/shared/contracts/survey-builder-io';
 import type { SurveyAnchorSnapshot } from '@/shared/contracts/survey-document';
 import type { VariableDef } from '@/shared/contracts/template-variables';
@@ -58,7 +60,6 @@ import type {
   SurveyIdRow,
   SurveyListResult,
 } from '../domain/survey-read';
-import { ensureTestVersion } from '@/server/workflows/test-version';
 
 // 이 service 는 actions/query-actions 의 requireAuth 를 제거한다.
 // 관리(빌더) 경로는 procedure 의 authed 미들웨어가 인증을 대체하고,
@@ -137,9 +138,12 @@ export async function getSurveyListWithCounts(
     listSelectableTeams(subject),
     canSeeDeleted ? countDeletedSurveys() : Promise.resolve(null),
   ]);
-  const responseCounts = await getResponseCountsGroupedBySurvey(
-    surveyList.map((survey) => survey.id),
-  );
+  const surveyIds = surveyList.map((survey) => survey.id);
+  // 목록은 실데이터만 센다 — 응답 수(notTestResponse)와 같은 파티션.
+  const [responseCounts, fieldworkCounts] = await Promise.all([
+    getResponseCountsGroupedBySurvey(surveyIds),
+    getFieldworkCompletedCounts(surveyIds, false),
+  ]);
 
   return {
     scope,
@@ -155,6 +159,7 @@ export async function getSurveyListWithCounts(
       privateToken: survey.privateToken,
       responseCount: responseCounts.get(survey.id)?.total ?? 0,
       completedResponseCount: responseCounts.get(survey.id)?.completed ?? 0,
+      fieldworkCompletedCount: fieldworkCounts.get(survey.id) ?? 0,
       createdAt: survey.createdAt,
       updatedAt: survey.updatedAt,
       endDate: survey.endDate,

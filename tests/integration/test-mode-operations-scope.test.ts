@@ -40,6 +40,17 @@ vi.mock('@/db', () => ({
   },
 }));
 
+// aggregateStatus 가 함께 읽는 결과코드·실사 완료 처리 수 — 응답 집계 where 하나만 보이게 갈아 끼운다
+vi.mock('@/server/read-models/result-code-statuses', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/server/read-models/result-code-statuses')>()),
+  getResultCodeStatuses: vi.fn(async () => ({ positive: ['1.조사완료'], negative: [] })),
+}));
+
+vi.mock('@/server/read-models/fieldwork-completions', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/server/read-models/fieldwork-completions')>()),
+  getFieldworkCompletedCounts: vi.fn(async () => new Map()),
+}));
+
 const dialect = new PgDialect();
 
 function whereQuery() {
@@ -75,6 +86,8 @@ describe('운영 응답 범위', () => {
     const query = whereQuery();
     expect(query.sql).toContain('is_test');
     expect(query.params).toContain(true);
+    const { getFieldworkCompletedCounts } = await import('@/server/read-models/fieldwork-completions');
+    expect(getFieldworkCompletedCounts).toHaveBeenLastCalledWith(['survey-1'], true);
   });
 
   it('aggregateStatus는 전달된 real scope의 응답만 집계한다', async () => {
@@ -85,6 +98,8 @@ describe('운영 응답 범위', () => {
     const query = whereQuery();
     expect(query.sql).toContain('is_test');
     expect(query.params).toContain(false);
+    const { getFieldworkCompletedCounts } = await import('@/server/read-models/fieldwork-completions');
+    expect(getFieldworkCompletedCounts).toHaveBeenLastCalledWith(['survey-1'], false);
   });
 
   it.each(SCOPE_CASES)('contacts는 %s scope의 조사대상만 조회한다', async (scope, isTest) => {

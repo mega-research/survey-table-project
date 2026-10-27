@@ -103,7 +103,9 @@ const createWithFirstAnswer = rateLimited
   .input(CreateResponseWithFirstAnswerInput)
   .output(FirstAnswerResultSchema)
   .handler(({ context, input }) =>
-    withProxyAttribution(context, input, () => entry.createResponseWithFirstAnswer(input)),
+    withProxyAttribution(context, input, () =>
+      entry.createResponseWithFirstAnswer(input).catch(mapTestVersionPruned),
+    ),
   );
 
 /**
@@ -113,7 +115,9 @@ const createBlank = rateLimited
   .input(CreateBlankResponseInput)
   .output(FirstAnswerResultSchema)
   .handler(({ context, input }) =>
-    withProxyAttribution(context, input, () => entry.createBlankResponse(input)),
+    withProxyAttribution(context, input, () =>
+      entry.createBlankResponse(input).catch(mapTestVersionPruned),
+    ),
   );
 
 /**

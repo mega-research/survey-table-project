@@ -77,14 +77,17 @@ function modifiedDateSuffix(
   return survey.teamName ? ` · ${survey.teamName} 소유` : '';
 }
 
-/** 응답수 줄 — 시스템 전체 보기에서는 소유 팀/배치 대기를 앞세운다(.pen 6-2). */
+/**
+ * 응답수 줄 — 시스템 전체 보기에서는 소유 팀/배치 대기를 앞세운다(.pen 6-2).
+ *
+ * 전체 응답 수는 싣지 않는다 — 그 숫자를 보고 비어 있는 설문으로 오해하는 일이 잦아 온라인 응답
+ * 완료와 실사 완료 처리 두 숫자만 보인다.
+ */
 function responseLine(survey: SurveyListItem, scope: WorkScope): string {
-  const base = `전체 응답 ${survey.responseCount.toLocaleString('ko-KR')}건 · 완료 ${survey.completedResponseCount.toLocaleString('ko-KR')}건`;
+  const base = `온라인 응답 완료 ${survey.completedResponseCount.toLocaleString('ko-KR')}건 · 실사 완료 처리 ${survey.fieldworkCompletedCount.toLocaleString('ko-KR')}건`;
   if (scope.kind !== 'system') return base;
-  if (survey.assignmentStatus === 'assignment_pending') {
-    return `배치 대기 · 전체 응답 ${survey.responseCount.toLocaleString('ko-KR')}건`;
-  }
-  return `${survey.teamName ?? '—'} · 전체 응답 ${survey.responseCount.toLocaleString('ko-KR')}건`;
+  if (survey.assignmentStatus === 'assignment_pending') return `배치 대기 · ${base}`;
+  return `${survey.teamName ?? '—'} · ${base}`;
 }
 
 /**

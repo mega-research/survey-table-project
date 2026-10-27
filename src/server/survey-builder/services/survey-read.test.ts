@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_RESPONSE_HEADER_CONFIG } from '@/lib/survey/response-header-config';
+import { getFieldworkCompletedCounts } from '@/server/read-models/fieldwork-completions';
 import { findContactByInviteToken } from '@/server/read-models/invite-lookup';
 import {
   getResponseCountsGroupedBySurvey,
@@ -50,6 +51,10 @@ vi.mock('@/server/read-models/team-memberships', () => ({
 
 vi.mock('@/server/read-models/teams', () => ({
   listActiveTeams: vi.fn(),
+}));
+
+vi.mock('@/server/read-models/fieldwork-completions', () => ({
+  getFieldworkCompletedCounts: vi.fn(),
 }));
 
 const surveysFindFirst = vi.fn();
@@ -184,16 +189,18 @@ describe('survey-read.service getSurveyListWithCounts', () => {
     ]);
     vi.mocked(listActiveTeams).mockResolvedValue([]);
     vi.mocked(getResponseCountsGroupedBySurvey).mockResolvedValue(new Map());
+    vi.mocked(getFieldworkCompletedCounts).mockResolvedValue(new Map());
     vi.mocked(getScopedSurveys).mockResolvedValue([]);
     vi.mocked(getDeletedSurveys).mockResolvedValue([]);
     vi.mocked(countDeletedSurveys).mockResolvedValue(0);
   });
 
-  it('해석된 범위로 조회하고 전체/완료 응답 수를 병합한다', async () => {
+  it('해석된 범위로 조회하고 전체/완료 응답 수와 실사 완료 처리 수를 병합한다', async () => {
     vi.mocked(getScopedSurveys).mockResolvedValue([scopedRow()]);
     vi.mocked(getResponseCountsGroupedBySurvey).mockResolvedValue(
       new Map([['survey-1', { total: 5, completed: 3 }]]),
     );
+    vi.mocked(getFieldworkCompletedCounts).mockResolvedValue(new Map([['survey-1', 4]]));
 
     const result = await getSurveyListWithCounts(member, null);
 
@@ -205,6 +212,7 @@ describe('survey-read.service getSurveyListWithCounts', () => {
       leaderTeamIds: [],
     });
     expect(getResponseCountsGroupedBySurvey).toHaveBeenCalledWith(['survey-1']);
+    expect(getFieldworkCompletedCounts).toHaveBeenCalledWith(['survey-1'], false);
     expect(result.scope).toEqual({ kind: 'team', teamId: 'team-1' });
     expect(result.canSeeSystemScope).toBe(false);
     expect(result.surveys).toEqual([
@@ -217,6 +225,7 @@ describe('survey-read.service getSurveyListWithCounts', () => {
         privateToken: '11111111-1111-1111-1111-111111111111',
         responseCount: 5,
         completedResponseCount: 3,
+        fieldworkCompletedCount: 4,
         createdAt,
         updatedAt,
         endDate: null,

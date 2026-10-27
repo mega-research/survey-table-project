@@ -24,15 +24,31 @@ interface KpiCellSpec {
    * 'formula'는 전체 셀 전용 — '100%' 표기가 어색하므로 대신 분모 구성식을 안내한다.
    */
   deltaTone?: 'rose' | 'slate' | 'live' | 'hidden' | 'excluded' | 'formula';
+  /** 비율 텍스트에 다는 설명 툴팁 */
+  hint?: string;
+  /** 비율 대신 보일 고정 문구 — 실사 완료 처리처럼 비율보다 집계 기준이 중요한 셀 */
+  deltaText?: string;
 }
 
 const CELLS: KpiCellSpec[] = [
   { label: '전체', field: 'total', deltaTone: 'formula' },
   { label: '진행중', field: 'inProgress', deltaTone: 'live' },
   { label: '완료', field: 'completed', deltaTone: 'slate' },
+  {
+    label: '실사 완료 처리',
+    field: 'fieldworkCompleted',
+    deltaTone: 'slate',
+    deltaText: '결과코드 기준',
+    hint: '온라인 응답을 마치지 않은 조사 대상 중 완료 결과코드(예: 1.조사완료)가 기록된 수입니다. 이 사람들의 온라인 이탈·불량·쿼터마감 기록은 해당 카드에서 빼고 여기로만 셉니다.',
+  },
   { label: '자격 미달', field: 'screenedOut', deltaTone: 'excluded' },
   { label: '불량', field: 'bad', deltaTone: 'slate' },
-  { label: '이탈', field: 'drop', deltaTone: 'rose' },
+  {
+    label: '이탈',
+    field: 'drop',
+    deltaTone: 'rose',
+    hint: '실사 완료 처리된 조사 대상의 이탈 기록은 빼고 셉니다.',
+  },
 ];
 
 /** 자격 미달 셀 전용 문구 — 카드에는 짧게, 전체 문장은 title 툴팁으로 노출한다. */
@@ -45,7 +61,8 @@ const EXCLUDED_FULL = '자격미달인 사람은 전체응답(분모), 완료(�
  * — 카드 짧은 문구에 식을 쓰면 옆 쿼터 카드의 달성률을 더하는 것처럼 읽혀 툴팁으로 내렸다.
  */
 const FORMULA_SHORT = '진행중·자격미달 제외';
-const FORMULA_FULL = '전체는 종결된 응답의 합계(완료+쿼터마감+불량+이탈)입니다. 진행중·자격미달은 포함되지 않습니다.';
+const FORMULA_FULL =
+  '전체는 완료+실사 완료 처리+쿼터마감+불량+이탈입니다. 진행중·자격미달은 포함되지 않습니다. 실사 완료 처리된 사람의 온라인 기록은 한 번만 셉니다.';
 
 function formatValue(value: number, isEmpty: boolean): string {
   if (isEmpty) return '—';
@@ -73,9 +90,10 @@ interface KpiCellProps {
   value: string;
   delta: string;
   deltaTone: KpiCellSpec['deltaTone'];
+  hint?: string | undefined;
 }
 
-function KpiCell({ label, value, delta, deltaTone }: KpiCellProps) {
+function KpiCell({ label, value, delta, deltaTone, hint }: KpiCellProps) {
   return (
     <Card>
       <CardContent className="px-4 py-3 pt-3">
@@ -94,9 +112,12 @@ function KpiCell({ label, value, delta, deltaTone }: KpiCellProps) {
               <span className="inline-block h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
             )}
             <span
-              className={cn((deltaTone === 'excluded' || deltaTone === 'formula') && 'cursor-help')}
+              className={cn(
+                (deltaTone === 'excluded' || deltaTone === 'formula' || hint) && 'cursor-help',
+              )}
               {...(deltaTone === 'excluded' ? { title: EXCLUDED_FULL } : {})}
               {...(deltaTone === 'formula' ? { title: FORMULA_FULL } : {})}
+              {...(hint ? { title: hint } : {})}
             >
               {delta}
             </span>
@@ -135,8 +156,8 @@ function QuotaKpiCell({ quota }: { quota?: QuotaSummary | null }) {
 
 /**
  * 운영 현황 콘솔 — A1 KPI Row.
- * 6개 셀(전체 / 진행중 / 완료 / 자격 미달 / 불량 / 이탈) + 쿼터 진행 카드를
- * 가로로 나열한다. 쿼터마감 카운트는 더 이상 단일 셀이 아니라 쿼터 진행 카드(quota.closedCells)에
+ * 7개 셀(전체 / 진행중 / 완료 / 실사 완료 처리 / 자격 미달 / 불량 / 이탈) + 쿼터 진행 카드를
+ * 가로로 나열한다(쿼터는 실사 완료 처리 바로 뒤). 쿼터마감 카운트는 더 이상 단일 셀이 아니라 쿼터 진행 카드(quota.closedCells)에
  * 흡수됐다 — 미설정이면 '-'로 표시하고, 셀별 상세는 QuotaStatusPanel 참조.
  *
  * total === 0 (종결 응답 없음)일 때:
@@ -148,7 +169,7 @@ export function KpiRow({ counts, quota }: KpiRowProps) {
   const isEmpty = counts.total === 0;
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
       {CELLS.map((cell) => {
         const value = counts[cell.field];
         // 진행중·자격 미달·전체 셀은 isEmpty 와 무관하게 부속 텍스트를 유지한다
@@ -160,12 +181,13 @@ export function KpiRow({ counts, quota }: KpiRowProps) {
             key={cell.field}
             label={cell.label}
             value={formatValue(value, cellIsEmpty)}
-            delta={formatDelta(value, counts.total, cell.deltaTone, cellIsEmpty)}
+            delta={cell.deltaText ?? formatDelta(value, counts.total, cell.deltaTone, cellIsEmpty)}
             deltaTone={cell.deltaTone}
+            hint={cell.hint}
           />
         );
 
-        if (cell.field !== 'completed') return kpiCell;
+        if (cell.field !== 'fieldworkCompleted') return kpiCell;
 
         return (
           <Fragment key={cell.field}>

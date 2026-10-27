@@ -7,6 +7,7 @@ import type { StatusCounts } from '@/lib/operations/aggregate-status-format';
 const counts: StatusCounts = {
   total: 0,
   completed: 0,
+  fieldworkCompleted: 0,
   screenedOut: 0,
   quotafulOut: 0,
   bad: 0,
@@ -30,6 +31,24 @@ describe('KpiRow', () => {
 
     expect(screen.getByText('완료')).toAppearBefore(screen.getByText('쿼터'));
     expect(screen.getByText('쿼터')).toAppearBefore(screen.getByText('자격 미달'));
+  });
+
+  it('실사 완료 처리 카드를 완료와 쿼터 사이에 두고 비율 대신 결과코드 기준임을 알린다', () => {
+    render(
+      <KpiRow
+        counts={{ ...counts, total: 218, completed: 123, fieldworkCompleted: 83, drop: 12 }}
+        quota={null}
+      />,
+    );
+
+    const label = screen.getByText('실사 완료 처리');
+    const card = label.parentElement as HTMLElement;
+
+    expect(screen.getByText('완료')).toAppearBefore(label);
+    expect(label).toAppearBefore(screen.getByText('쿼터'));
+    expect(within(card).getByText('83')).toBeInTheDocument();
+    expect(within(card).getByText('결과코드 기준')).toHaveAttribute('title');
+    expect(within(card).queryByText('38.1%')).not.toBeInTheDocument();
   });
 
   it('자격 미달 카드는 비율 대신 제외 안내를 보여준다', () => {

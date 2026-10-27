@@ -68,6 +68,24 @@ describe('checkQuota', () => {
     expect(query.params).toContain(false);
   });
 
+  it('이탈(drop) 행도 쿼터마감으로 바꾼다 — 열린 상태 전체가 대상이다', async () => {
+    // 3시간 비활성으로 drop 이 된 응답자가 돌아와 입력 없이 「다음」을 누르면 초안 저장이 일어나지
+    // 않아 행은 drop 인 채로 확인이 온다. drop 은 열린 상태라 판정은 막힘인데, 갱신 가드가
+    // in_progress 만 받으면 화면은 마감 안내인데 행은 drop 으로 남아 콘솔 집계가 어긋난다.
+    mockSurveyFindFirst.mockResolvedValue({
+      quotaConfig: { ...config, cells: [{ categoryIds: ['c-f'], target: 0 }] },
+    });
+    mockResponseFindFirst.mockResolvedValue({ isTest: false, status: 'drop' });
+    const { checkQuota } = await import('./quota');
+
+    const result = await checkQuota({ responseId: 'r1', surveyId: 's1', answers: { q1: 'female' } });
+
+    expect(result.blocked).toBe(true);
+    expect(mockUpdateWhere).toHaveBeenCalledTimes(1);
+    const query = dialect.sqlToQuery(mockUpdateWhere.mock.calls[0]![0] as never);
+    expect(query.params).toEqual(expect.arrayContaining(['in_progress', 'drop']));
+  });
+
   it('현재 응답이 테스트이면 소진 quota를 우회하고 상태를 변경하지 않는다', async () => {
     mockSurveyFindFirst.mockResolvedValue({
       quotaConfig: { ...config, cells: [{ categoryIds: ['c-f'], target: 0 }] },

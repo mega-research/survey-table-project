@@ -51,12 +51,30 @@ vi.mock('@/db', () => {
   };
 });
 
+const { syncTestVersionMock } = vi.hoisted(() => ({ syncTestVersionMock: vi.fn() }));
+vi.mock('@/server/survey-response/services/response-version-snapshot', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/server/survey-response/services/response-version-snapshot')>();
+  return {
+    ...actual,
+    syncTestVersionBeforeWrite: (...a: unknown[]) =>
+      syncTestVersionMock.getMockImplementation()
+        ? syncTestVersionMock(...a)
+        : actual.syncTestVersionBeforeWrite(...(a as Parameters<typeof actual.syncTestVersionBeforeWrite>)),
+  };
+});
+
 vi.mock('@/server/read-models/survey-control', () => ({
   getSurveyControlFlags: (...a: unknown[]) => controlFlagsMock(...a),
   isValidTestToken: vi.fn(),
 }));
 
 const INPUT = { responseId: 'r1', answers: { q1: 'a' } };
+
+// 버전 동기화 대역은 그 테스트에서만 켠다 — 나머지는 실제 함수(실응답이면 아무것도 안 한다)를 탄다.
+beforeEach(() => {
+  syncTestVersionMock.mockReset();
+});
 
 /** in_progress 행 + 소속 검증 통과 + 저장 성공까지 가는 기본 경로를 깔아둔다. */
 function arrangeActiveRow() {
@@ -124,6 +142,25 @@ describe('saveDraftResponseIfActive', () => {
       skipped: 'concluded',
     });
     expect(updateCalledMock).not.toHaveBeenCalled();
+  });
+
+  it('재발행으로 테스트 버전 스냅샷이 비워졌으면 test_version_republished 로 skip 한다', async () => {
+    // 테스트 중 빌더가 저장하면 옛 테스트 버전 위의 이탈 beacon 은 저장될 수 없다. 정상 시나리오라
+    // 500 으로 올리지 않는다.
+    arrangeActiveRow();
+    const { TestResponseVersionPrunedError } = await import(
+      '@/server/survey-response/services/response-version-snapshot'
+    );
+    syncTestVersionMock.mockImplementation(async () => {
+      throw new TestResponseVersionPrunedError();
+    });
+    const { saveDraftResponseIfActive } = await import(
+      '@/server/survey-response/services/response-draft'
+    );
+    expect(await saveDraftResponseIfActive(INPUT)).toEqual({
+      saved: false,
+      skipped: 'test_version_republished',
+    });
   });
 
   it('중단된 설문이면 survey_paused 로 skip 한다', async () => {

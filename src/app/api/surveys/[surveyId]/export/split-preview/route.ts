@@ -1,15 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { surveyResponses, surveys } from '@/db/schema';
-import { completedResponse, notDeletedResponse } from '@/server/response-filters';
-import {
-  loadOperationsDataScope,
-  responseScopeCondition,
-  testFlagForScope,
-} from '@/server/data-scope';
+import { surveys } from '@/db/schema';
+import { loadOperationsDataScope, testFlagForScope } from '@/server/data-scope';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { normalizeQuestions } from '@/lib/question';
 import { requireAuth } from '@/lib/auth';
@@ -22,7 +17,7 @@ import {
   SPLIT_EXCEL_LIMIT,
 } from '@/lib/analytics/split-export';
 import { applyExportRowExclusions } from '@/lib/analytics/export-exclusions';
-import { countRawExportPopulation } from '../raw-export-load';
+import { countRawExportPopulation, rawResponseWhere } from '../raw-export-load';
 import { generateSPSSColumns } from '@/lib/analytics/spss-excel-export';
 import { getSurveyContactStats } from '@/server/operations/services/contact-stats';
 import { loadChangeConfirmQuestionIds } from '@/server/contacts/services/contact-prior-answers';
@@ -93,14 +88,9 @@ async function handleSplitPreview(
       });
     }
 
-    // resp 집계: raw export와 동일 모수 (deleted 제외 + completed만 + 현재 스코프 파티션만)
+    // resp 집계: 분할 파일의 시트에 들어가는 행과 같은 모수(raw 로더의 술어 그대로 — 진행중·이탈 포함)
     const rawResponses = await db.query.surveyResponses.findMany({
-      where: and(
-        eq(surveyResponses.surveyId, surveyId),
-        notDeletedResponse,
-        completedResponse,
-        responseScopeCondition(scope),
-      ),
+      where: rawResponseWhere(surveyId, scope),
       columns: { id: true, questionResponses: true },
     });
     const responses = rawResponses.map((r) => ({

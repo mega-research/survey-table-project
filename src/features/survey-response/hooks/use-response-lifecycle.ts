@@ -152,6 +152,11 @@ interface UseResponseLifecycleArgs {
 
   // 검증 파생값 (컴포넌트 소유)
   isQuestionAnswered: (question: Question) => boolean;
+  /**
+   * 필수 여부 — 「다음」 게이트와 같은 술어(질문 필수 + 쿼터 게이트 + 그룹별 필수).
+   * 제출의 최종 검사가 따로 정하면 앞 페이지 검사를 건너뛴 응답(재개 등)이 그 문항을 비운 채 완료된다.
+   */
+  isQuestionRequired: (question: Question) => boolean;
   /** 질문별 유효 옵션 상세기입. 현재 편집값이 복구/관리자 저장값보다 우선한다. */
   optionTextsByQuestion?: Record<string, Record<string, string>>;
 
@@ -212,8 +217,6 @@ interface UseResponseLifecycleResult {
  * - handleSubmit 의 미응답 필수 하이라이트 분기, admin-edit 위임 분기(6/8), currentResponseId === null
  *   blank fallback INSERT 분기, exposedRowIds 동적 행 계산, complete() 페이로드, try/catch/finally,
  *   localStorage set/remove 타이밍을 라인 단위 그대로 둔다. deps 배열도 원본과 1:1 동일.
- * - isQuestionRequired(= question.required)는 원본에서 비메모 인라인 함수라 deps 에 없으므로
- *   여기서도 module-level 동등 함수로 두고 deps 에 넣지 않는다 (참조 안정성/의미론 동일).
  */
 const NO_ENTRY_PARAMS: Readonly<Record<string, string>> = {};
 
@@ -254,6 +257,7 @@ export function useResponseLifecycle({
   isRecovering,
   recoveredDraftSeq,
   isQuestionAnswered,
+  isQuestionRequired,
   optionTextsByQuestion = {},
   visibleProgressRef,
   setHighlightQuestionIds,
@@ -619,6 +623,10 @@ export function useResponseLifecycle({
             return id;
           })
           .catch(async (err) => {
+            // 옛 테스트 행을 물려받았는데 그 테스트 버전 스냅샷이 비워졌다 — 초안·제출과 같은 안내.
+            if (handleTestVersionRepublishedError({ err, setDuplicateStatus })) {
+              return null;
+            }
             if (
               await handleInvalidTestLinkMutationError({
                 err,
@@ -1086,6 +1094,7 @@ export function useResponseLifecycle({
     isAdminEdit,
     isPreview,
     isQuestionAnswered,
+    isQuestionRequired,
     optionTextsByQuestion,
     loadedSurvey,
     questions,
@@ -1114,8 +1123,3 @@ export function useResponseLifecycle({
   };
 }
 
-// 타입별 응답 충족 판정과 무관한 단순 필수 여부. 원본 컴포넌트의 비메모 인라인 함수와 동등.
-// deps 에 포함되지 않던 함수이므로 module-level 로 둬 참조 안정성을 유지한다.
-function isQuestionRequired(question: Question): boolean {
-  return question.required;
-}

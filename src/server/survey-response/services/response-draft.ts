@@ -18,6 +18,7 @@ import { SurveyNotAcceptingResponsesError } from './response-gate';
 import {
   classifyQuestionMembershipError,
   syncTestVersionBeforeWrite,
+  TestResponseVersionPrunedError,
 } from './response-version-snapshot';
 import { assertAnswerValueSize } from './submitted-answers';
 import { lockAndAssertResponseMutation } from './test-target-attempt';
@@ -319,6 +320,8 @@ export type SaveDraftSkipReason =
   | 'survey_paused'
   | 'answer_value_too_large'
   | 'not_accepting'
+  // 테스트 중 저장본이 바뀌어 옛 테스트 버전 스냅샷이 비워졌다 — 화면은 다음 저장에서 안내를 띄운다.
+  | 'test_version_republished'
   | 'stale';
 
 export type SaveDraftIfActiveResult =
@@ -368,6 +371,9 @@ export async function saveDraftResponseIfActive(
   } catch (err) {
     if (err instanceof SurveyNotAcceptingResponsesError) {
       return { saved: false, skipped: toSkipReason(err.reason) };
+    }
+    if (err instanceof TestResponseVersionPrunedError) {
+      return { saved: false, skipped: 'test_version_republished' };
     }
     // 게이트 통과 후 저장 사이에 행이 종결·삭제됐을 수 있다(제출 직후 탭 닫기 등). 다시
     // 읽어 확인되면 정상 skip 으로 접는다. 에러 메시지 문자열을 파싱하지 않는 이유는 이
