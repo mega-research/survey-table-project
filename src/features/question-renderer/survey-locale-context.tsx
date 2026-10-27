@@ -24,3 +24,11 @@ export function SurveyLocaleProvider({
 export function useSurveyLocale(): SurveyLocale | null {
   return useContext(SurveyLocaleContext);
 }
+
+/**
+ * 한 줄짜리 시스템 글자(검증 문구·입력칸 안내)의 언어 — 미정이면 한국어.
+ * 세 언어를 위아래로 쌓는 것은 전체 화면 안내뿐이다(응답 흐름의 `inlineLocale` 과 같은 규칙).
+ */
+export function useInlineSurveyLocale(): SurveyLocale {
+  return useSurveyLocale() ?? DEFAULT_SURVEY_LOCALE;
+}

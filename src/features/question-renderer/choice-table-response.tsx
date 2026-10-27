@@ -68,6 +68,7 @@ import {
 } from '@/utils/mobile-table-display-mode';
 import { omitKey } from '@/utils/omit-key';
 import { resolveRequiredMessage } from '@/utils/required-message';
+import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
 
 import { ChoiceGroupScaleBar } from './choice-group-scale-bar';
 import { ChoiceTableCellControl } from './choice-table-cell-control';
@@ -178,6 +179,7 @@ function ChoiceTableResponseBody({
   const isMobile = useMobileView();
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
+  const locale = useInlineSurveyLocale();
   // 조건 평가 컨텍스트 — 빠뜨리면 attr/lookup 피연산자가 undefined 로 평가된다.
   const branchEvalCtx = useBranchEvalCtx(allResponses);
   const [activeDynamicGroupId, setActiveDynamicGroupId] = useState<string | null>(null);
@@ -1135,7 +1137,8 @@ function ChoiceTableResponseBody({
           const rawTitle = columnLabel || group.label.trim();
           const title = rawTitle ? substituteTokens(rawTitle, attrs, quotes) : '';
           const unfilled = group.cells.some((c) => unfilledGroupCellIds.has(c.id));
-          const requiredMessage = group.requiredMessage?.trim() || resolveRequiredMessage(question);
+          const requiredMessage =
+            group.requiredMessage?.trim() || resolveRequiredMessage(question, locale);
           const memberIds = new Set(group.cells.map((c) => c.id));
           return (
             <div key={groupId}>

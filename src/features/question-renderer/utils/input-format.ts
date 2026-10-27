@@ -14,6 +14,8 @@
  * 국제번호 라이브러리(libphonenumber 류)는 쓰지 않는다 — 국내 조사에는 과하고 번들만 무겁다.
  */
 import type { InputFormat } from '@/types/input-type';
+import { DEFAULT_SURVEY_LOCALE, type SurveyLocale } from '@/types/survey-locale';
+import { type SystemStringKey, systemText } from '@/utils/system-strings';
 
 export type FormatFailure =
   | 'wrong_length'
@@ -247,29 +249,49 @@ function topicParticle(label: string): string {
  *
  * 문항별 커스터마이즈를 두지 않는다 — 실패 사유가 다섯인데 문구가 하나면 안내가
  * 뭉뚱그려지고, 운영자에게 사유마다 문구를 받게 하면 설정이 다섯 배가 된다.
+ * 문구는 현재 언어(기본 한국어)를 따른다 — 시스템 글자 사전(`utils/system-strings`).
  */
-export function formatFailureMessage(format: InputFormat, reason: FormatFailure): string {
-  const label = INPUT_FORMAT_LABEL[format];
+export function formatFailureMessage(
+  format: InputFormat,
+  reason: FormatFailure,
+  locale: SurveyLocale = DEFAULT_SURVEY_LOCALE,
+): string {
+  // 한국어 형식 이름은 빌더 선택지와 같은 INPUT_FORMAT_LABEL — 사전의 한국어와 같은 글자다.
+  const label =
+    locale === DEFAULT_SURVEY_LOCALE
+      ? INPUT_FORMAT_LABEL[format]
+      : systemText(FORMAT_LABEL_KEY[format], locale);
+  const values = { label, particle: topicParticle(label) };
   switch (reason) {
     case 'not_a_number':
-      return `${label}${topicParticle(label)} 숫자로 입력해 주세요`;
+      return systemText('format.notANumber', locale, values);
     case 'wrong_length': {
       const length = FIXED_LENGTH[format];
-      if (length !== undefined) return `${label}${topicParticle(label)} ${length}자리입니다`;
-      return `${label} 자릿수가 맞지 않습니다`;
+      if (length !== undefined) {
+        return systemText('format.wrongLengthFixed', locale, { ...values, length });
+      }
+      return systemText('format.wrongLength', locale, values);
     }
     case 'unknown_prefix':
       return format === 'mobile'
-        ? '휴대전화 번호가 아닙니다'
-        : '지역번호 또는 휴대전화 식별번호로 시작해야 합니다';
+        ? systemText('format.unknownPrefixMobile', locale)
+        : systemText('format.unknownPrefix', locale);
     case 'checksum_mismatch':
-      return `${label} 확인번호가 맞지 않습니다. 다시 확인해 주세요`;
+      return systemText('format.checksum', locale, values);
     case 'malformed':
-      return `${label} 형식이 아닙니다`;
+      return systemText('format.malformed', locale, values);
     case 'non_ascii':
-      return `${label}은 영문·숫자로만 입력해 주세요`;
+      return systemText('format.nonAscii', locale, values);
   }
 }
+
+const FORMAT_LABEL_KEY: Record<InputFormat, SystemStringKey> = {
+  mobile: 'format.label.mobile',
+  phone: 'format.label.phone',
+  biz_number: 'format.label.biz_number',
+  corp_number: 'format.label.corp_number',
+  email: 'format.label.email',
+};
 
 /**
  * 형식 칸 타이핑 필터 — 번호 형식은 숫자와 하이픈만 통과시킨다(글자·공백·괄호·점은 떨어뜨린다).

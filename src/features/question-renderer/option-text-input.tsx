@@ -24,14 +24,14 @@ import { usePriorAnswers, usePriorHighlight } from '@/features/question-renderer
 import { cn } from '@/lib/utils';
 import { isInputFormat } from '@/types/input-type';
 import type { InputType, NumberFormat, TextValidation } from '@/types/survey';
+import { systemText } from '@/utils/system-strings';
 
+import { useInlineSurveyLocale } from './survey-locale-context';
 import { resolveCellTextQualityViolation } from './utils/cell-text-quality';
 import { formatSampleValue } from './utils/input-format';
 
 // useSyncExternalStore 안정 참조 — 원본이 undefined 를 줄 때 쓰는 고정 빈 맵
 const EMPTY_OPTION_TEXTS: Record<string, string> = {};
-
-const DEFAULT_PLACEHOLDER = '상세 기재';
 
 interface OptionTextInputProps {
   questionId: string;
@@ -109,11 +109,13 @@ export function OptionTextInput({
   useAutoGrowTextarea(textareaRef, rawValue, isMultiline && autoGrow);
   // 숫자 모드 — 입력 셀과 같은 타이핑 규칙(숫자만·콤마 표시·max/소수/허용값 차단).
   // 단위 환산·min 미달은 입력칸 아래 한 줄로 보인다 (input-cell·단답형과 같은 모양).
+  const locale = useInlineSurveyLocale();
   const numeric = useFormattedNumericInput({
     rawValue,
     onRawChange: (v) => setOptionText(questionId, option.id, v),
     numberFormat: option.textInputNumberFormat,
     enabled: isNumberMode,
+    locale,
   });
 
   // 형식 모드 — blur 정돈·위반 문구. 숫자 모드와 배타이므로 훅 둘이 동시에 일하지 않는다.
@@ -146,6 +148,7 @@ export function OptionTextInput({
         rawValue,
         attrs,
         priorOptionText(priorAnswersForFormat, questionId, option.id),
+        locale,
       );
 
   const sharedProps = {
@@ -185,7 +188,8 @@ export function OptionTextInput({
       focus.onBlur();
     },
     placeholder:
-      option.textInputPlaceholder || (format ? formatSampleValue(format) : DEFAULT_PLACEHOLDER),
+      option.textInputPlaceholder ||
+      (format ? formatSampleValue(format) : systemText('input.optionTextPlaceholder', locale)),
     className: cn(className, priorTextCls),
     'data-option-text-target-id': optionTextTargetId(questionId, option.id),
   };

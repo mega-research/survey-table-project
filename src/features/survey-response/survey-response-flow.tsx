@@ -1212,15 +1212,21 @@ function SurveyResponseFlowActive({
     for (const q of currentStepQuestions) {
       // 잠긴 문항은 검증하지 않는다 — 값이 아직 이번 회차 응답이 아니다.
       if (awaitingConfirmationIds.has(q.id)) continue;
-      const issues = collectNumericIssues(q, responses[q.id], {
-        allResponses: responses,
-        allQuestions: questions,
-        optionTexts: effectiveOptionTextsByQuestion[q.id],
-        lookups: loadedSurvey?.lookups ?? [],
-        contactAttrs,
-        // 이월 원본은 형식 검사 면제 판정에만 쓴다 — 손대지 않은 지난 회차 값은 막지 않는다.
-        priorAnswers,
-      });
+      const issues = collectNumericIssues(
+        q,
+        responses[q.id],
+        {
+          allResponses: responses,
+          allQuestions: questions,
+          optionTexts: effectiveOptionTextsByQuestion[q.id],
+          lookups: loadedSurvey?.lookups ?? [],
+          contactAttrs,
+          // 이월 원본은 형식 검사 면제 판정에만 쓴다 — 손대지 않은 지난 회차 값은 막지 않는다.
+          priorAnswers,
+        },
+        // 검증 문구는 한 줄짜리라 미정이면 한국어(inlineLocale 과 같은 규칙)
+        currentLocale ?? DEFAULT_SURVEY_LOCALE,
+      );
       if (issues.length > 0) map.set(q.id, issues);
     }
     return map;
@@ -1233,6 +1239,7 @@ function SurveyResponseFlowActive({
     loadedSurvey?.lookups,
     contactAttrs,
     priorAnswers,
+    currentLocale,
   ]);
   const [numericErrorStepIndex, setNumericErrorStepIndex] = useState<number | null>(null);
   const showNumericErrors = numericErrorStepIndex === currentStepIndex;

@@ -6,7 +6,9 @@
  */
 
 import type { NumberFormat, NumberUnit } from '@/types/survey';
+import { DEFAULT_SURVEY_LOCALE, type SurveyLocale } from '@/types/survey-locale';
 import { isPartialNumericInput, parseNumericInput } from '@/utils/numeric-input';
+import { systemText } from '@/utils/system-strings';
 
 /** 단위 → 배수. percent 는 배수 개념이 없어 null (환산 표시 없음). */
 export const UNIT_MULTIPLIERS: Record<NumberUnit, number | null> = {
@@ -93,17 +95,22 @@ export function canInputAllowedValue(raw: string, allowedValues: number[] | unde
 /**
  * min/max 범위 위반 메시지 — blur 힌트와 "다음"/제출 차단 검증이 공유한다.
  * max 는 타이핑에서 차단되는 게 원칙이지만 emptyDefault 오설정·레거시 응답의 우회 값을 봉합한다.
- * 빈 값·부분 입력은 null (미응답 차단은 required 소관).
+ * 빈 값·부분 입력은 null (미응답 차단은 required 소관). 문구는 현재 언어(기본 한국어)를 따른다.
  */
 export function rangeViolationMessage(
   raw: string,
   format: NumberFormat | null | undefined,
+  locale: SurveyLocale = DEFAULT_SURVEY_LOCALE,
 ): string | null {
   if (!format) return null;
   const n = parseNumericInput(raw);
   if (n === null) return null;
-  if (format.min !== undefined && n < format.min) return `${format.min} 이상 입력해주세요`;
-  if (format.max !== undefined && n > format.max) return `${format.max} 이하로 입력해주세요`;
+  if (format.min !== undefined && n < format.min) {
+    return systemText('validation.range.min', locale, { min: format.min });
+  }
+  if (format.max !== undefined && n > format.max) {
+    return systemText('validation.range.max', locale, { max: format.max });
+  }
   return null;
 }
 

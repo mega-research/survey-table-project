@@ -153,6 +153,29 @@ describe('응답 화면의 현재 언어', () => {
     expect(await screen.findByText('* 请回答必答题')).toBeInTheDocument();
   });
 
+  it('중국어를 고르면 문항의 필수 안내와 이메일 형식 오류가 중국어다', async () => {
+    renderFlow([
+      LANG_QUESTION,
+      { id: 'name', type: 'text', title: '성명', required: true, order: 1 },
+      { id: 'mail', type: 'text', title: '이메일', required: false, order: 2, inputType: 'email' },
+      { id: 'later', type: 'text', title: '다음 페이지', required: false, order: 3, pageBreakBefore: true },
+    ]);
+    await screen.findByText('언어를 선택해 주세요');
+    fireEvent.click(screen.getByText('中文'));
+    // 저작자가 비운 입력칸 안내도 고른 언어다
+    expect(screen.getByPlaceholderText('请输入答案...')).toBeInTheDocument();
+
+    const mail = screen.getByPlaceholderText('name@example.com');
+    fireEvent.change(mail, { target: { value: 'abc' } });
+    fireEvent.blur(mail);
+    fireEvent.click(screen.getByRole('button', { name: /下一步/ }));
+
+    expect(await screen.findByText('请回答此必答题。')).toBeInTheDocument();
+    expect(screen.getAllByText(/电子邮箱格式不正确/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/필수 질문에 답변해주세요/)).toBeNull();
+    expect(screen.queryByText(/이메일 형식이 아닙니다/)).toBeNull();
+  });
+
   it('모바일 하단 내비와 응답 진행도 고른 언어다', async () => {
     mockMatchMedia(true);
     renderFlow(SYSTEM_TEXT_QUESTIONS);

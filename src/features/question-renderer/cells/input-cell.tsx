@@ -17,6 +17,7 @@ import {
   usePriorHighlight,
 } from '@/features/question-renderer/prior-answers-context';
 import { useResponseSources } from '@/features/question-renderer/response-sources';
+import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
 import { resolveCellTextQualityViolation } from '@/features/question-renderer/utils/cell-text-quality';
 import { formatSampleValue } from '@/features/question-renderer/utils/input-format';
 import {
@@ -38,6 +39,7 @@ import { priorAnswerText } from '@/lib/survey/prior-answers';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import { isInputFormat } from '@/types/input-type';
+import { systemText } from '@/utils/system-strings';
 
 import { CellContentLayout } from './cell-content-layout';
 import { FloatingHint } from './floating-hint';
@@ -158,12 +160,14 @@ export const InputCell = React.memo(function InputCell({
     }
   };
 
+  const locale = useInlineSurveyLocale();
   const { displayValue, handleChange, handleFocus, handleBlur, unitReading, rangeViolation } =
     useFormattedNumericInput({
       rawValue: currentValue,
       onRawChange: onUpdateValue,
       numberFormat: cell.numberFormat,
       enabled: isNumberMode,
+      locale,
     });
 
   // 형식 칸의 blur 정돈·위반 문구. 프리필 잠금 칸은 응답자가 못 고치므로 대상이 아니다.
@@ -220,6 +224,7 @@ export const InputCell = React.memo(function InputCell({
         currentValue,
         attrs,
         priorAnswerText(priorAnswersForFormat, questionId, cell.id),
+        locale,
       );
   const hasViolation =
     Boolean(rangeViolation || formatField.violation || qualityViolation) && !isPrefilled;
@@ -277,7 +282,7 @@ export const InputCell = React.memo(function InputCell({
                     {textValue.length}
                   </span>
                   {' / '}
-                  {cell.inputMaxLength}자
+                  {systemText('input.charLimit', locale, { max: cell.inputMaxLength ?? 0 })}
                 </p>
               </div>
             )}
@@ -312,7 +317,7 @@ export const InputCell = React.memo(function InputCell({
               onChange={(e) => onUpdateValue(e.target.value)}
               onFocus={focus.onFocus}
               onBlur={focus.onBlur}
-              placeholder={cell.placeholder || '답변을 입력하세요...'}
+              placeholder={cell.placeholder || systemText('input.placeholder', locale)}
               maxLength={cell.inputMaxLength}
               disabled={isPrefilled}
               data-prefilled={isPrefilled || undefined}
@@ -378,9 +383,10 @@ export const InputCell = React.memo(function InputCell({
                 cell.placeholder ||
                 (format
                   ? formatSampleValue(format)
-                  : isNumberMode
-                    ? '숫자만 입력하세요...'
-                    : '답변을 입력하세요...')
+                  : systemText(
+                      isNumberMode ? 'input.placeholderNumber' : 'input.placeholder',
+                      locale,
+                    ))
               }
               maxLength={cell.inputMaxLength}
               style={fixedWidthStyle}

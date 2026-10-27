@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { ChoiceTableResponse } from '@/features/question-renderer/choice-table-response';
 import { withResolvedMaxSelections } from '@/features/question-renderer/utils/dynamic-selection-limit';
 import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
+import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
 import { useAutoGrowTextarea } from '@/hooks/use-auto-grow-textarea';
 import { useClearDeselectedOptionTexts } from '@/features/question-renderer/hooks/use-clear-deselected-option-texts';
 import { useFieldFocus } from '@/features/question-renderer/hooks/use-field-focus';
@@ -54,7 +55,9 @@ import { resolveTokenPrefill } from '@/features/question-renderer/utils/token-pr
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { type InputFormat, isInputFormat } from '@/types/input-type';
 import { Question, QuestionOption } from '@/types/survey';
+import type { SurveyLocale } from '@/types/survey-locale';
 import { isChoiceTableSource } from '@/utils/choice-source';
+import { systemText } from '@/utils/system-strings';
 import { formatSampleValue } from '@/features/question-renderer/utils/input-format';
 import { effectiveMaxLength, isPlainTextInput } from '@/features/question-renderer/utils/text-quality';
 
@@ -539,6 +542,7 @@ function CheckboxQuestion({
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
   const priorHighlight = usePriorHighlight();
+  const locale = useInlineSurveyLocale();
   const currentValues = useMemo<MultiChoiceResponse>(
     () => (Array.isArray(value) ? (value as MultiChoiceResponse) : []),
     [value],
@@ -683,13 +687,20 @@ function CheckboxQuestion({
           <div className="flex items-center justify-between text-sm">
             <span className="text-gray-600">
               {maxSelections !== undefined && maxSelections > 0
-                ? `${currentCount}/${maxSelections}개 선택됨`
-                : `${currentCount}개 선택됨`}
+                ? systemText('choice.selectedCountOf', locale, {
+                    count: currentCount,
+                    max: maxSelections,
+                  })
+                : systemText('choice.selectedCount', locale, { count: currentCount })}
             </span>
             {isMinNotMet && (
-              <span className="text-orange-600">최소 {minSelections}개 이상 선택해주세요</span>
+              <span className="text-orange-600">
+                {systemText('choice.minSelections', locale, { min: minSelections ?? 0 })}
+              </span>
             )}
-            {isMaxReached && <span className="text-blue-600">최대 선택 개수에 도달했습니다</span>}
+            {isMaxReached && (
+              <span className="text-blue-600">{systemText('choice.maxReached', locale)}</span>
+            )}
           </div>
         </div>
       )}
@@ -710,6 +721,7 @@ function SelectQuestion({
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
   const priorHighlight = usePriorHighlight();
+  const locale = useInlineSurveyLocale();
   // OtherChoiceValue fallback: snapshot 호환 (Phase 7 cleanup 까지 유지)
   const selectedValue = isOtherChoiceValue(value)
     ? value.selectedValue
@@ -765,7 +777,7 @@ function SelectQuestion({
           isPriorChoice(priorHighlight, question.id, selectedValue) ? PRIOR_HIGHLIGHT_TEXT_CLS : ''
         }`}
       >
-        <option value="">선택하세요...</option>
+        <option value="">{systemText('input.selectPlaceholder', locale)}</option>
         {question.options?.map((option: QuestionOption) => (
           <option key={option.id} value={option.value}>
             {substituteTokens(option.label, attrs, quotes)}
@@ -781,7 +793,7 @@ function SelectQuestion({
       {/* other-option 매직 ID 호환 경로 (@deprecated) */}
       {showLegacyOtherInput && (
         <Input
-          placeholder="기타 내용을 입력하세요..."
+          placeholder={systemText('input.otherPlaceholder', locale)}
           value={legacyOtherInput}
           onChange={(e) => handleLegacyOtherInputChange(e.target.value)}
           className="w-full"
@@ -801,9 +813,13 @@ function clampInputRows(rows: number | null | undefined, fallback: number): numb
 }
 
 /** 운영자가 placeholder 를 적지 않았을 때의 기본 문구. 형식 칸은 예시 값이 가장 친절하다. */
-function defaultPlaceholder(isNumberMode: boolean, format: InputFormat | null): string {
+function defaultPlaceholder(
+  isNumberMode: boolean,
+  format: InputFormat | null,
+  locale: SurveyLocale,
+): string {
   if (format) return formatSampleValue(format);
-  return isNumberMode ? '숫자만 입력하세요...' : '답변을 입력하세요...';
+  return systemText(isNumberMode ? 'input.placeholderNumber' : 'input.placeholder', locale);
 }
 
 // 단답형(text) prefill 지원 컴포넌트
@@ -826,9 +842,10 @@ function TextareaResponseInput({
 }) {
   const focus = useFieldFocus();
   const attrs = useContactAttrs();
+  const locale = useInlineSurveyLocale();
   const quality = focus.focused
     ? null
-    : resolveTextQualityViolation(question, value, attrs, priorAnswers);
+    : resolveTextQualityViolation(question, value, attrs, priorAnswers, locale);
   const max = effectiveMaxLength(question.textValidation);
   const text = typeof value === 'string' ? value : '';
   // 줄 수 미지정이면 기존 4줄. 높이 늘리기를 켜면 줄 수가 최소 높이다.
@@ -842,14 +859,14 @@ function TextareaResponseInput({
         ref={textareaRef}
         className={`w-full resize-none rounded-lg border border-gray-300 p-3 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500 ${autoGrow ? 'overflow-hidden' : ''} ${priorHighlightCls}`}
         rows={rows}
-        placeholder={question.placeholder || '답변을 입력하세요...'}
+        placeholder={question.placeholder || systemText('input.placeholder', locale)}
         value={text}
         onChange={(e) => onChange(e.target.value)}
         onFocus={focus.onFocus}
         onBlur={focus.onBlur}
         {...(max !== null ? { maxLength: max } : {})}
       />
-      {max !== null && <TextLengthCounter current={text.length} max={max} />}
+      {max !== null && <TextLengthCounter current={text.length} max={max} locale={locale} />}
       {quality && (
         <p className="mt-1 px-1 text-xs text-red-500" data-testid="text-quality-violation">
           * {quality.message}
@@ -860,13 +877,21 @@ function TextareaResponseInput({
 }
 
 /** 「현재 / 최대자」 글자 수 표시 — 표 input 셀과 같은 모양. 상한에 닿으면 붉게. */
-function TextLengthCounter({ current, max }: { current: number; max: number }) {
+function TextLengthCounter({
+  current,
+  max,
+  locale,
+}: {
+  current: number;
+  max: number;
+  locale: SurveyLocale;
+}) {
   return (
     <div className="mt-1 flex justify-end px-1" data-testid="text-length-counter">
       <p className="text-xs text-gray-500">
         <span className={current >= max ? 'font-medium text-red-500' : ''}>{current}</span>
         {' / '}
-        {max}자
+        {systemText('input.charLimit', locale, { max })}
       </p>
     </div>
   );
@@ -895,9 +920,10 @@ function TextResponseInput({
   // 문구는 포커스가 빠진 뒤에만(형식 검사와 같은 규칙 — 한글 조합 중 자모에 반응하지 않게).
   const { answers: priorAnswersForQuality } = usePriorAnswers();
   const focus = useFieldFocus();
+  const locale = useInlineSurveyLocale();
   const qualityViolation = focus.focused
     ? null
-    : resolveTextQualityViolation(question, currentValue, attrs, priorAnswersForQuality);
+    : resolveTextQualityViolation(question, currentValue, attrs, priorAnswersForQuality, locale);
   // 입력 상한 — 표 input 셀의 inputMaxLength 와 같은 하드 캡 + 글자 수 표시. 평문 모드에서만.
   const maxLength =
     isPlainTextInput(question) && !isPrefilled ? effectiveMaxLength(question.textValidation) : null;
@@ -920,6 +946,7 @@ function TextResponseInput({
       onRawChange: onChange,
       numberFormat: question.numberFormat,
       enabled: isNumberMode,
+      locale,
     });
 
   // 형식 칸의 blur 정돈·위반 문구. 프리필 잠금 칸은 응답자가 못 고치므로 대상이 아니고,
@@ -981,7 +1008,7 @@ function TextResponseInput({
         <textarea
           ref={textareaRef}
           rows={multilineRows}
-          placeholder={question.placeholder || defaultPlaceholder(false, null)}
+          placeholder={question.placeholder || defaultPlaceholder(false, null, locale)}
           value={isPrefilled ? prefilledValue : currentValue}
           onChange={(e) => onChange(e.target.value)}
           onFocus={focus.onFocus}
@@ -995,7 +1022,7 @@ function TextResponseInput({
         <Input
           type="text"
           inputMode={isNumberMode ? 'decimal' : formatField.inputMode}
-          placeholder={question.placeholder || defaultPlaceholder(isNumberMode, format)}
+          placeholder={question.placeholder || defaultPlaceholder(isNumberMode, format, locale)}
           value={isPrefilled ? prefilledValue : displayValue}
           onChange={format ? formatField.handleChange : handleChange}
           onFocus={() => {
@@ -1014,7 +1041,9 @@ function TextResponseInput({
           {...(maxLength !== null ? { maxLength } : {})}
         />
       )}
-      {maxLength !== null && <TextLengthCounter current={currentValue.length} max={maxLength} />}
+      {maxLength !== null && (
+        <TextLengthCounter current={currentValue.length} max={maxLength} locale={locale} />
+      )}
       {(unitReading || rangeViolation || formatField.violation || qualityViolation) &&
         !isPrefilled && (
           <div className="mt-1 space-y-0.5 px-1">
