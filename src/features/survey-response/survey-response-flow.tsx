@@ -108,6 +108,10 @@ import { withCalcValues } from '@/lib/survey/cell-formula';
 import type { FormulaEvalCtx } from '@/lib/survey/cell-formula';
 import { ContactAttrsProvider } from '@/features/question-renderer/contact-attrs-context';
 import { SurveyLocaleProvider } from '@/features/question-renderer/survey-locale-context';
+import {
+  resolveHeaderDescriptions,
+  resolveHeaderTitle,
+} from '@/features/survey-response/lib/localized-survey-texts';
 import { FormulaEvalProvider } from '@/features/question-renderer/formula-context';
 import {
   type NumericIssue,
@@ -1924,7 +1928,7 @@ function SurveyResponseFlowActive({
   // 완료 화면
   if (isCompleted) {
     // 종료 결과에 따라 제목·문구가 갈린다 — 자격미달은 「설문 종료」+ 자격미달 종료 문구(폴백: 완료 문구)
-    const screen = resolveCompletionScreen(loadedSurvey.settings, completionOutcome);
+    const screen = resolveCompletionScreen(loadedSurvey.settings, completionOutcome, currentLocale);
     return (
       <SurveyCompletedScreen
         title={isPreview ? '설문 확인 완료' : screen.title}
@@ -2044,8 +2048,16 @@ function SurveyResponseFlowActive({
                 }
                 header={
                   <SurveyResponseHeader
-                    title={loadedSurvey.title}
-                    description={loadedSurvey.description}
+                    title={resolveHeaderTitle(
+                      loadedSurvey.title,
+                      loadedSurvey.settings.localizedMessages,
+                      currentLocale,
+                    )}
+                    description={resolveHeaderDescriptions(
+                      loadedSurvey.description ?? '',
+                      loadedSurvey.settings.localizedMessages,
+                      currentLocale,
+                    )}
                     responseHeader={loadedSurvey.settings.responseHeader}
                     showBranding={currentVisibleStepNumber <= 1}
                   />

@@ -2,6 +2,7 @@ import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 import type { QuotaGate } from '@/shared/contracts/quota';
 import type {
   GroupNameDesign,
+  LocalizedSurveyTexts,
   SurveyEndRedirects,
   SurveyResponseHeaderConfig,
 } from '@/shared/contracts/survey';
@@ -1042,6 +1043,8 @@ export interface SurveySettings {
   thankYouMessage: string;
   // 자격미달 종료 문구 — 종료 결과가 screened_out 일 때 완료 화면 문구. 비어 있으면 thankYouMessage 로 폴백 (0110)
   screenedOutMessage?: string | null;
+  // 언어별 설문 글자 — 제목·설명·완료·자격미달의 다른 언어판. 빈 칸은 한국어 폴백 (0145, CONTEXT.md 「다국어 설문」)
+  localizedMessages?: LocalizedSurveyTexts | null;
   // 컨택 attrs 토큰 — invite token 강제 (0022 마이그레이션)
   requireInviteToken?: boolean;
   // 화면 너비 — true 면 응답 페이지 컨테이너를 표 유무와 무관하게 항상 넓게(max-w-7xl).

@@ -9,7 +9,14 @@ export const SURVEY_LOCALES = ['ko', 'zh', 'en'] as const;
 export type SurveyLocale = (typeof SURVEY_LOCALES)[number];
 
 /** 다국어 설문이 아니거나 언어 컨텍스트 밖이면 이 언어다 — 기존 화면 글자가 그대로 나온다. */
-export const DEFAULT_SURVEY_LOCALE: SurveyLocale = 'ko';
+export const DEFAULT_SURVEY_LOCALE = 'ko' satisfies SurveyLocale;
+
+/** 기본 언어 밖 언어 — 언어별 설문 글자(`localizedMessages`)에 칸이 있는 언어들. */
+export type TranslatedSurveyLocale = Exclude<SurveyLocale, typeof DEFAULT_SURVEY_LOCALE>;
+
+export const TRANSLATED_SURVEY_LOCALES = SURVEY_LOCALES.filter(
+  (l): l is TranslatedSurveyLocale => l !== DEFAULT_SURVEY_LOCALE,
+);
 
 /** 언어 이름 — 각 언어로 적는다(고르는 사람이 읽을 수 있게). */
 export const SURVEY_LOCALE_LABELS: Record<SurveyLocale, string> = {

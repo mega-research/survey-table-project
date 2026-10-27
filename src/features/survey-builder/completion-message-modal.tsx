@@ -10,6 +10,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  LocalizedTextFields,
+  useHasLanguageQuestion,
+} from '@/features/survey-builder/localized-text-fields';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import {
   type EndRedirectUrlKey,
@@ -59,10 +63,15 @@ export function CompletionMessageModal() {
     (s) => s.currentSurvey.settings.screenedOutMessage ?? '',
   );
   const endRedirects = useSurveyBuilderStore((s) => s.currentSurvey.settings.endRedirects);
+  const localizedMessages = useSurveyBuilderStore(
+    (s) => s.currentSurvey.settings.localizedMessages ?? null,
+  );
+  const hasLanguageQuestion = useHasLanguageQuestion();
   const updateSurveySettings = useSurveyBuilderStore((s) => s.updateSurveySettings);
 
   const [draftMessage, setDraftMessage] = useState(thankYouMessage);
   const [draftScreenedOut, setDraftScreenedOut] = useState(screenedOutMessage);
+  const [draftLocalized, setDraftLocalized] = useState(localizedMessages);
   const [draftRedirects, setDraftRedirects] = useState(() => toRedirectDraft(endRedirects));
   const [draftPassParams, setDraftPassParams] = useState(() => toPassParamsDraft(endRedirects));
   const parsedPassParams = parsePassParamNames(draftPassParams);
@@ -76,6 +85,7 @@ export function CompletionMessageModal() {
       // 열릴 때마다 최신 store 기준으로 재시드 — 이전 초안(취소로 폐기된 편집분 포함)은 버린다
       setDraftMessage(thankYouMessage);
       setDraftScreenedOut(screenedOutMessage);
+      setDraftLocalized(localizedMessages);
       setDraftRedirects(toRedirectDraft(endRedirects));
       setDraftPassParams(toPassParamsDraft(endRedirects));
     }
@@ -93,6 +103,7 @@ export function CompletionMessageModal() {
       thankYouMessage: draftMessage,
       // 비우면 null — 완료 문구로 폴백한다(CONTEXT.md 「자격미달 종료 문구」)
       screenedOutMessage: draftScreenedOut.trim() === '' ? null : draftScreenedOut,
+      localizedMessages: draftLocalized,
     });
     setOpen(false);
   };
@@ -136,6 +147,15 @@ export function CompletionMessageModal() {
             <p className="text-xs text-gray-400">
               응답을 마친 참여자에게 보여지는 완료 화면의 문구입니다.
             </p>
+            {hasLanguageQuestion && (
+              <LocalizedTextFields
+                field="thankYou"
+                label="종료 멘트"
+                texts={draftLocalized}
+                onChange={setDraftLocalized}
+                multiline
+              />
+            )}
           </div>
 
           <div className="space-y-2">
@@ -152,6 +172,15 @@ export function CompletionMessageModal() {
               분기 규칙의 「설문 종료 · 자격 미달」로 끝난 참여자에게 보여지는 문구입니다. 비워 두면
               위 종료 멘트가 그대로 나옵니다. 제목은 「설문 종료」로 바뀝니다.
             </p>
+            {hasLanguageQuestion && (
+              <LocalizedTextFields
+                field="screenedOut"
+                label="자격 미달 종료 멘트"
+                texts={draftLocalized}
+                onChange={setDraftLocalized}
+                multiline
+              />
+            )}
           </div>
 
           <div className="space-y-2">

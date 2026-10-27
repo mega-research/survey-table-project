@@ -411,17 +411,22 @@ export function normalizeResponseHeaderConfig(
   return migrateV1ResponseHeader(normalizeV1ResponseHeaderConfig(config));
 }
 
+/** 제목 길이 — 여러 줄(다국어 설문의 언어별 제목 쌓기)이면 가장 긴 줄. 줄마다 따로 흐르기 때문이다. */
+function longestLineLength(title: string): number {
+  return Math.max(0, ...title.split('\n').map((line) => line.trim().length));
+}
+
 export function resolveHeaderTitlePx(config: NormalizedResponseHeaderConfig, title: string): number {
   if (config.titlePx !== null) return config.titlePx;
   const base = HEADER_TITLE_PX[config.titleScale];
-  const len = title.length;
+  const len = longestLineLength(title);
   const shrink = len > 40 ? 0.72 : len > 26 ? 0.85 : 1; // 긴 제목은 자동 축소해 두 줄로 흐르게 한다
   return Math.round(base * shrink);
 }
 
 export function resolveMobileHeaderTitlePx(config: NormalizedResponseHeaderConfig, title: string): number {
   if (config.titlePx !== null) return Math.min(27, Math.max(17, Math.round(config.titlePx * 0.62)));
-  const len = title.trim().length;
+  const len = longestLineLength(title);
   // 모바일 제목: 약 2줄이면 27px, 3줄 이상 길수록 단계적으로 축소 (글자수로 줄 수 근사)
   return len > 54 ? 20 : len > 40 ? 23 : 27;
 }

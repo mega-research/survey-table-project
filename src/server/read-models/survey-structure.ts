@@ -276,6 +276,7 @@ export async function getSurveyWithDetails(surveyId: string): Promise<SurveyType
         : {}),
       thankYouMessage: survey.thankYouMessage,
       screenedOutMessage: survey.screenedOutMessage ?? null,
+      localizedMessages: survey.localizedMessages ?? null,
       requireInviteToken: survey.requireInviteToken,
       forceWideLayout: survey.forceWideLayout,
       priorWaveLabel: survey.priorWaveLabel,

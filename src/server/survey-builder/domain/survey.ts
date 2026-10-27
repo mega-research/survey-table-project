@@ -77,6 +77,7 @@ export const UpdateSurveyDataSchema = z.custom<
     maxResponses: number | null;
     thankYouMessage: string;
     screenedOutMessage?: string | null;
+    localizedMessages?: NonNullable<SurveyType['settings']['localizedMessages']> | null;
     responseHeader: SurveyType['settings']['responseHeader'];
   }>
 >();

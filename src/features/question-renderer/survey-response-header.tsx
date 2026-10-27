@@ -22,8 +22,10 @@ import { cn, isEmptyHtml } from '@/lib/utils';
 import type { SurveyResponseHeaderConfig } from '@/shared/contracts/survey';
 
 interface SurveyResponseHeaderProps {
+  /** 줄바꿈(\n)으로 여러 줄일 수 있다 — 다국어 설문에서 언어를 고르기 전 언어별 제목을 쌓는다 */
   title: string;
-  description?: string | null | undefined;
+  /** 문단 여럿이면 차례로 그린다 — 다국어 설문에서 언어를 고르기 전 언어별 설명을 보인다 */
+  description?: string | readonly string[] | null | undefined;
   responseHeader?: SurveyResponseHeaderConfig | null | undefined;
   /** 로고/문구 밴드 노출 여부. 인트로(첫 스텝)에서만 true (기존 계약 유지) */
   showBranding?: boolean;
@@ -41,6 +43,9 @@ export function SurveyResponseHeader({
   device = 'auto',
 }: SurveyResponseHeaderProps) {
   const config = normalizeResponseHeaderConfig(responseHeader);
+  const descriptions = (typeof description === 'string' ? [description] : (description ?? [])).filter(
+    (text) => !isEmptyHtml(text),
+  );
 
   // 비-첫페이지: 로고·문구 블록만 제거하고 제목 밴드는 1페이지와 동일한 스타일로 유지한다.
   // 1페이지는 로고·문구가 세로 지지대 역할을 하지만 컴팩트 헤더는 제목뿐이라
@@ -74,17 +79,18 @@ export function SurveyResponseHeader({
       ) : (
         mobile
       )}
-      {!isEmptyHtml(description) && (
+      {descriptions.map((text) => (
         <p
+          key={text}
           className={cn(
             'text-base text-gray-600 md:text-sm',
             config.titleTextAlign === 'center' && 'mx-auto max-w-3xl text-center',
             config.titleTextAlign === 'right' && 'text-right',
           )}
         >
-          {description}
+          {text}
         </p>
-      )}
+      ))}
     </div>
   );
 }
@@ -166,7 +172,7 @@ function ComposedHeaderMobile({
             style={{ backgroundColor: config.bandBg, textAlign: config.titleTextAlign }}
           >
             <h1
-              className="leading-[1.3] font-extrabold [text-wrap:pretty] break-keep text-[#141414]"
+              className="leading-[1.3] font-extrabold whitespace-pre-line [text-wrap:pretty] break-keep text-[#141414]"
               style={{ fontSize: titlePx, letterSpacing: '-0.4px' }}
             >
               {title}
@@ -207,7 +213,7 @@ function ComposedHeaderMobile({
         {above}
         <div className="flex items-center justify-between gap-3">
           <h1
-            className="min-w-0 flex-1 text-xl leading-[1.3] font-extrabold break-keep text-[#141414]"
+            className="min-w-0 flex-1 text-xl leading-[1.3] font-extrabold whitespace-pre-line break-keep text-[#141414]"
             style={{ letterSpacing: '-0.5px' }}
           >
             {title}
@@ -262,7 +268,7 @@ function ComposedHeaderMobile({
         }}
       >
         <h1
-          className="leading-[1.35] font-extrabold [text-wrap:balance] break-keep text-[#141414]"
+          className="leading-[1.35] font-extrabold whitespace-pre-line [text-wrap:balance] break-keep text-[#141414]"
           style={{ fontSize: titlePx, letterSpacing: '-0.4px' }}
         >
           {title}
@@ -490,7 +496,7 @@ function TitleBandText({
       {/* 기존 테스트·a11y 관례: 설문 제목은 heading (v1 TitleBlock h1 계승) */}
       <h1
         className={cn(
-          'font-semibold break-keep text-[#141414]',
+          'font-semibold whitespace-pre-line break-keep text-[#141414]',
           inline ? 'leading-[1.3] [text-wrap:pretty]' : 'leading-[1.25] [text-wrap:balance]',
         )}
         style={{ fontSize: titlePx, letterSpacing: '-0.5px' }}

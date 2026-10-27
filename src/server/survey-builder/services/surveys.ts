@@ -59,6 +59,7 @@ export async function ensureSurveyInDb(
     requireLogin: input.settings.requireLogin ?? false,
     thankYouMessage: input.settings.thankYouMessage ?? '응답해주셔서 감사합니다!',
     screenedOutMessage: input.settings.screenedOutMessage ?? null,
+    localizedMessages: input.settings.localizedMessages ?? null,
     responseHeader: (await promoteSurveyResponseHeader(input.settings.responseHeader)) ?? null,
   });
 
@@ -80,6 +81,7 @@ export async function createSurvey(data: CreateSurveyInput): Promise<SurveyRow> 
     maxResponses: data.settings?.maxResponses ?? null,
     thankYouMessage: data.settings?.thankYouMessage ?? '응답해주셔서 감사합니다!',
     screenedOutMessage: data.settings?.screenedOutMessage ?? null,
+    localizedMessages: data.settings?.localizedMessages ?? null,
     responseHeader: (await promoteSurveyResponseHeader(data.settings?.responseHeader)) ?? null,
   };
 
@@ -224,6 +226,7 @@ export async function duplicateSurvey(
         maxResponses: original.maxResponses,
         thankYouMessage: original.thankYouMessage,
         screenedOutMessage: original.screenedOutMessage,
+        localizedMessages: original.localizedMessages ?? null,
         endRedirects: original.endRedirects ?? null,
         responseHeader: original.responseHeader ?? null,
         // LUT 사본은 질문(옵션 소스·조건)이 id 로 참조하므로 함께 복사해야 복제본이 깨지지 않는다.

@@ -245,6 +245,11 @@ describe('제목 px 계산', () => {
     expect(resolveMobileHeaderTitlePx(base, '가'.repeat(60))).toBe(20);
     expect(resolveMobileHeaderTitlePx({ ...base, titlePx: 40 }, '가')).toBe(25);
   });
+  it('여러 줄 제목(언어별 제목 쌓기)은 가장 긴 줄로 잰다 — 합계 길이로 줄이지 않는다', () => {
+    const stacked = ['가'.repeat(20), '가'.repeat(20), '가'.repeat(20)].join('\n');
+    expect(resolveHeaderTitlePx(base, stacked)).toBe(HEADER_TITLE_PX.md);
+    expect(resolveMobileHeaderTitlePx(base, stacked)).toBe(27);
+  });
 });
 
 describe('헤더 크기 상수', () => {

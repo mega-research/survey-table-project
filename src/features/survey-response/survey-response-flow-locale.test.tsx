@@ -13,7 +13,10 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
 
-function buildSurvey(questions: Question[]): Survey {
+function buildSurvey(
+  questions: Question[],
+  localizedMessages: Survey['settings']['localizedMessages'] = null,
+): Survey {
   return {
     id: 'lang-survey',
     title: '다국어 설문',
@@ -29,6 +32,7 @@ function buildSurvey(questions: Question[]): Survey {
       requireLogin: false,
       thankYouMessage: '감사합니다.',
       requireInviteToken: false,
+      localizedMessages,
     },
     lookups: [],
     createdAt: new Date('2026-10-27T00:00:00.000Z'),
@@ -49,12 +53,15 @@ const LANG_QUESTION: Question = {
   ],
 };
 
-function renderFlow(questions: Question[]) {
+function renderFlow(
+  questions: Question[],
+  localizedMessages: Survey['settings']['localizedMessages'] = null,
+) {
   return render(
     <SurveyResponseFlow
       mode="preview"
       surveyIdentifier="preview-lang-survey"
-      previewContext={{ survey: buildSurvey(questions), versionId: 'version-1' }}
+      previewContext={{ survey: buildSurvey(questions, localizedMessages), versionId: 'version-1' }}
     />,
   );
 }
@@ -89,5 +96,19 @@ describe('응답 화면의 현재 언어', () => {
     ]);
     await screen.findByText('첫 질문');
     expect(container.querySelector('[lang]')?.getAttribute('lang')).toBe('ko');
+  });
+
+  it('언어별 제목 — 고르기 전에는 세 언어 제목을 쌓고, 고르면 그 언어 제목이다', async () => {
+    const { container } = renderFlow([LANG_QUESTION], {
+      zh: { title: '绩效评估调查' },
+      en: { title: 'Performance Evaluation Survey' },
+    });
+    await screen.findByText('언어를 선택해 주세요');
+    const headings = () => [...container.querySelectorAll('h1')].map((h) => h.textContent);
+    expect(headings()).toContain('다국어 설문\n绩效评估调查\nPerformance Evaluation Survey');
+
+    fireEvent.click(screen.getByText('中文'));
+    expect(headings()).toContain('绩效评估调查');
+    expect(headings()).not.toContain('다국어 설문');
   });
 });

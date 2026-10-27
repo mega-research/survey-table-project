@@ -136,6 +136,16 @@ describe('buildSurveySnapshot', () => {
     expect(snapshot.settings.screenedOutMessage).toBe('본 조사 대상자가 아닙니다.');
   });
 
+  it('언어별 설문 글자를 스냅샷 settings 에 얼린다 (CONTEXT.md 「다국어 설문」)', () => {
+    const localizedMessages = { zh: { title: '绩效评估调查', thankYou: '非常感谢。' } };
+    const snapshot = buildSurveySnapshot({
+      ...mockSurvey,
+      settings: { ...mockSurvey.settings, localizedMessages },
+    });
+    expect(snapshot.settings.localizedMessages).toEqual(localizedMessages);
+    expect(buildSurveySnapshot(mockSurvey).settings.localizedMessages).toBeNull();
+  });
+
   it('forceWideLayout=true 를 스냅샷 settings 에 보존', () => {
     const surveyWithWideLayout: Survey = {
       ...mockSurvey,
