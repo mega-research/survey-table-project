@@ -7,10 +7,6 @@ import { localizedField } from './localized-survey-texts';
 /** 응답이 끝난 방식 — CONTEXT.md 「종료 결과」. 쿼터마감은 별도 차단 화면이라 여기 없다. */
 export type CompletionOutcome = 'completed' | 'screened_out';
 
-/** 한국어 제목 — 다른 언어는 시스템 글자 사전(`completion.*`)이 낸다. */
-export const SCREENED_OUT_TITLE = systemText('completion.screenedOutTitle');
-export const COMPLETED_TITLE = systemText('completion.title');
-
 /**
  * 종료 결과에 맞는 완료 화면 제목·문구.
  * 자격미달은 「자격미달 종료 문구」를 쓰되 비어 있으면 완료 문구로 폴백한다 — 기존 설문은

@@ -27,6 +27,7 @@ import {
 import { cn, generateId } from '@/lib/utils';
 import { client } from '@/shared/lib/rpc';
 import type { Question } from '@/types/survey';
+import { systemText } from '@/utils/system-strings';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 
 import {
@@ -127,12 +128,10 @@ function KeywordsInput({
 const EMPTY: QuotaConfig = { enabled: false, dimensions: [], cells: [], closedMessage: null };
 
 /**
- * 응답자 화면 실제 폴백과 동기화 — `already-responded-view.tsx` `MESSAGES.quota_closed.body`
- * 와 동일 문구. 미리보기가 실제 응답 페이지에서 보게 될 문구와 어긋나지 않도록 상수로 공유(값 복제,
- * 컴포넌트 간 직접 import는 하지 않음 — survey-response 쪽은 이 파일을 모른다).
+ * 응답자 화면의 실제 폴백(`already-responded-view.tsx` `MESSAGES.quota_closed`)과 같은 사전 문장 —
+ * 미리보기가 응답 페이지에서 보게 될 한국어 문구와 어긋나지 않는다. 관리자 화면이라 한국어다.
  */
-const QUOTA_CLOSED_FALLBACK =
-  '해당 조건의 모집이 완료되어 더 이상 참여하실 수 없습니다. 참여해 주셔서 감사합니다.';
+const QUOTA_CLOSED_FALLBACK = systemText('default.quotaClosed');
 
 
 /** 문항 유형 → 조건 kind. 단답 숫자는 numeric, radio/select는 choice. 그 외는 지원 안 함(null). */

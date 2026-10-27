@@ -100,8 +100,6 @@ function isShortUnitRepetition(chars: string[]): boolean {
   return false;
 }
 
-export const MEANINGLESS_TEXT_MESSAGE = systemText('validation.text.meaningless');
-
 export function minLengthMessage(
   minLength: number,
   current: number,
