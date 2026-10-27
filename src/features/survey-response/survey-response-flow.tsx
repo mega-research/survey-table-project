@@ -32,6 +32,10 @@ import { useDuplicateGuard } from '@/features/survey-response/hooks/use-duplicat
 import { useKeyboardOpen } from '@/features/survey-response/hooks/use-keyboard-open';
 import { useResponseLifecycle } from '@/features/survey-response/hooks/use-response-lifecycle';
 import { useResponseTelemetry } from '@/features/survey-response/hooks/use-response-telemetry';
+import {
+  type LanguageAdvance,
+  useLanguagePage,
+} from '@/features/survey-response/hooks/use-language-page';
 import { useSessionRecovery } from '@/features/survey-response/hooks/use-session-recovery';
 import { useSurveyLoader } from '@/features/survey-response/hooks/use-survey-loader';
 import { InviteRequiredScreen } from '@/features/survey-response/invite-required-screen';
@@ -75,11 +79,7 @@ import {
   resolveEndRedirectUrl,
 } from '@/lib/survey/end-redirect';
 import { resolvePriorWaveLabel } from '@/lib/survey/prior-answers';
-import {
-  findLanguageQuestion,
-  isLanguageOnlyPage,
-  resolveCurrentLocale,
-} from '@/utils/survey-language';
+import { resolveCurrentLocale } from '@/utils/survey-language';
 import { systemText } from '@/utils/system-strings';
 import { PriorAnswersProvider } from '@/features/question-renderer/prior-answers-context';
 import { isChoiceGroupTableQuestion } from '@/lib/survey/choice-selection';
@@ -607,9 +607,12 @@ function SurveyResponseFlowActive({
     () => resolveCurrentLocale(questions, groups, responses),
     [questions, groups, responses],
   );
-  // 콜백 안(쿼터 마감 문구)에서 읽는 현재 언어 — 의존성을 늘리지 않는다
-  const currentLocaleRef = useRef(currentLocale);
-  useSyncLatestRef(currentLocaleRef, currentLocale);
+  // 시스템 글자(버튼·검증 문구·안내 화면)의 언어. 관리자 응답 수정은 관리자 화면이라 한국어
+  // 그대로다(PRD 「시스템 글자 사전」) — 내용 언어(`lang`·언어별 제목)는 응답자가 고른 언어 그대로.
+  const systemLocale = isAdminEdit ? DEFAULT_SURVEY_LOCALE : currentLocale;
+  // 콜백 안(쿼터 마감 문구·저장 실패 토스트)에서 읽는 시스템 글자 언어 — 의존성을 늘리지 않는다
+  const systemLocaleRef = useRef(systemLocale);
+  useSyncLatestRef(systemLocaleRef, systemLocale);
 
   // 응답 인용 — {{{이름}}} 채널로 소비되는 파생값. 저장하지 않는다.
   const answerQuotes = useMemo(
@@ -759,28 +762,6 @@ function SurveyResponseFlowActive({
         : [],
     [currentStep, responses, questions, groups, evalCtx],
   );
-
-  /**
-   * 언어 페이지 (PRD 「언어 선택 페이지」) — 보이는 문항이 언어 문항 하나뿐인 페이지. 「다음」·
-   * 하단 내비·진행률을 그리지 않고, 보기를 누르면 「다음」과 같은 경로로 넘어간다
-   * (아래 `handlePageResponse`). 그래서 현재 언어가 미정인 시스템 글자는 이 페이지에 나오지 않는다.
-   */
-  const languageQuestion = useMemo(
-    () => findLanguageQuestion(questions, groups),
-    [questions, groups],
-  );
-  const isLanguagePage = isLanguageOnlyPage(currentStepQuestions, languageQuestion);
-  // 언어 문항이 있는 페이지 — 「언어 변경」이 데려가는 곳. 그 페이지 위에서는 링크를 보이지 않는다.
-  const languageStepIndex = useMemo(
-    () =>
-      languageQuestion
-        ? steps.findIndex((step) =>
-            step.items.some((item) => item.question.id === languageQuestion.id),
-          )
-        : -1,
-    [steps, languageQuestion],
-  );
-  const showLanguageSwitch = languageStepIndex !== -1 && languageStepIndex !== currentStepIndex;
 
   /**
    * 아직 변동 여부를 밝히지 않아 입력이 잠겨 있는 문항(추적조사).
@@ -1257,7 +1238,7 @@ function SurveyResponseFlowActive({
           priorAnswers,
         },
         // 검증 문구는 한 줄짜리라 미정이면 한국어(inlineLocale 과 같은 규칙)
-        currentLocale ?? DEFAULT_SURVEY_LOCALE,
+        systemLocale ?? DEFAULT_SURVEY_LOCALE,
       );
       if (issues.length > 0) map.set(q.id, issues);
     }
@@ -1271,7 +1252,7 @@ function SurveyResponseFlowActive({
     loadedSurvey?.lookups,
     contactAttrs,
     priorAnswers,
-    currentLocale,
+    systemLocale,
   ]);
   const [numericErrorStepIndex, setNumericErrorStepIndex] = useState<number | null>(null);
   const showNumericErrors = numericErrorStepIndex === currentStepIndex;
@@ -1501,7 +1482,7 @@ function SurveyResponseFlowActive({
       setDuplicateStatus,
       setPausedMessage: setRefetchedPausedMessage,
       setQuotaClosedMessage,
-      localeRef: currentLocaleRef,
+      localeRef: systemLocaleRef,
       setInviteIsInvalid,
       setIsSubmitting,
       setCurrentStepIndex,
@@ -1525,35 +1506,6 @@ function SurveyResponseFlowActive({
       });
     },
     [handleResponse, setHighlightQuestionIds],
-  );
-
-  /**
-   * 언어 페이지의 자동 넘김 요청 — 요청한 페이지 번호와 순번. 보기를 누른 그 이벤트 안에서 곧장
-   * `handleNext` 를 부르면 아직 답이 반영되지 않은 화면으로 필수 판정·분기를 해 막힌다.
-   * 그래서 요청만 남기고, 답이 반영된 렌더 뒤에 아래 effect 가 「다음」과 같은 경로로 넘긴다.
-   * 한 렌더 안의 연타는 마지막 요청 하나로 접히고, 넘어간 뒤 늦게 도착한 요청(다른 페이지 번호)은
-   * 버린다. 처리 중(쿼터 첫 판정 대기)에 다시 누르면 `handleNext` 의 기존 가드가 막는다.
-   */
-  const [languageAdvanceRequest, setLanguageAdvanceRequest] = useState<{
-    stepIndex: number;
-    seq: number;
-  } | null>(null);
-  const handledLanguageAdvanceSeqRef = useRef(0);
-  const handlePageResponse = useCallback(
-    (questionId: string, value: unknown) => {
-      if (!isLanguagePage || questionId !== languageQuestion?.id) {
-        handleStepResponse(questionId, value);
-        return;
-      }
-      // 이미 고른 보기를 다시 누르면 radio 는 선택을 푼다(null). 언어 페이지에서는 풀지 않고
-      // 고른 언어 그대로 넘어간다 — 「언어 변경」으로 돌아와 같은 언어를 다시 누른 경우다.
-      if (value !== null && value !== undefined) handleStepResponse(questionId, value);
-      setLanguageAdvanceRequest((prev) => ({
-        stepIndex: currentStepIndex,
-        seq: (prev?.seq ?? 0) + 1,
-      }));
-    },
-    [isLanguagePage, languageQuestion, handleStepResponse, currentStepIndex],
   );
 
   // 기타/상세 기재(store.optionTexts)를 draft 파이프라인에 동기화한다.
@@ -1688,7 +1640,12 @@ function SurveyResponseFlowActive({
     );
   };
 
-  const handleNext = async () => {
+  /**
+   * 「다음」. 언어 페이지의 자동 넘김(`useLanguagePage`)은 `languageAdvance` 를 함께 넘긴다 —
+   * 방문 기록을 고쳐 쌓고, 쿼터 첫 판정을 기다리는 사이 응답자가 다시 골랐으면 낡은 답으로 넘기지
+   * 않고 지금 답으로 다시 넘긴다.
+   */
+  const runNext = async (languageAdvance: LanguageAdvance | null) => {
     blurActiveInput();
     const unansweredCurrent = currentStepQuestions.filter(
       (q) => !awaitingConfirmationIds.has(q.id) && isQuestionRequired(q) && !isQuestionAnswered(q),
@@ -1853,7 +1810,7 @@ function SurveyResponseFlowActive({
           setQuotaClosedMessage(
             midSurveyClosedBody(
               res.midSurveyClosedMessage ?? res.closedMessage,
-              currentLocaleRef.current,
+              systemLocaleRef.current,
             ),
           );
           setDuplicateStatus({ kind: 'blocked', reason: 'quota_closed' });
@@ -1875,6 +1832,13 @@ function SurveyResponseFlowActive({
       // 쿼터 판정(응답당 최대 1회)만은 기다린다 — 낙관 전환하면 마감 응답자에게
       // 다음 문항을 보여줬다가 차단 화면으로 갈아치우는 어색한 상태가 생긴다.
       const res = await quotaPromise;
+      if (languageAdvance?.isSuperseded()) {
+        // 판정은 낡은 답(이전에 고른 언어)으로 받았다 — 버리고 지금 답으로 다시 판정·넘김한다.
+        // 서버가 이미 마감으로 기록했다면 다시 받은 판정도 마감이다(재호출 멱등).
+        quotaCheckedRef.current = false;
+        languageAdvance.retry();
+        return;
+      }
       if (res?.blocked) {
         setQuotaClosedMessage(res.closedMessage);
         setDuplicateStatus({ kind: 'blocked', reason: 'quota_closed' });
@@ -1882,7 +1846,8 @@ function SurveyResponseFlowActive({
       }
     }
 
-    setStepHistory((prev) => [...prev, currentStepIndex]);
+    const rebaseHistory = languageAdvance?.rebaseHistory;
+    setStepHistory((prev) => [...(rebaseHistory ? rebaseHistory(prev) : prev), currentStepIndex]);
 
     if (nextIndex === -1) {
       quotaRecheckStaleRef.current = true;
@@ -1892,6 +1857,7 @@ function SurveyResponseFlowActive({
 
     setCurrentStepIndex(nextIndex);
   };
+  const handleNext = () => runNext(null);
 
   const handlePrevious = useCallback(() => {
     if (stepHistory.length === 0) return;
@@ -1908,32 +1874,26 @@ function SurveyResponseFlowActive({
     }
   }, [stepHistory, steps]);
 
-  /**
-   * 「언어 변경」 — 언어 페이지로 간다. 「다음」과 같은 페이지 이동이라 지금 페이지를 방문 기록에
-   * 쌓고(「이전」·브라우저 뒤로 가기가 돌아올 곳), 이 페이지 변경분은 백그라운드로 저장한다.
-   * 답은 건드리지 않는다 — 다른 언어를 고르면 이전 언어 묶음이 숨으며 숨은 문항 규칙대로 지워진다.
-   */
-  const goToLanguagePage = () => {
-    if (!showLanguageSwitch) return;
-    blurActiveInput();
-    void flushPendingAnswersInBackground();
-    setStepHistory((prev) => [...prev, currentStepIndex]);
-    setCurrentStepIndex(languageStepIndex);
-  };
-
-  const advanceFromLanguagePage = useEffectEvent(() => {
-    void handleNext();
-  });
-  useEffect(() => {
-    if (!languageAdvanceRequest) return;
-    if (handledLanguageAdvanceSeqRef.current === languageAdvanceRequest.seq) return;
-    handledLanguageAdvanceSeqRef.current = languageAdvanceRequest.seq;
-    if (languageAdvanceRequest.stepIndex !== currentStepIndex) return;
-    // 「다음」과 같은 경로를 답이 커밋된 뒤에 태우려는 것이라 effect 밖에 둘 자리가 없다 —
-    // 렌더 중에는 저장·이동 부수 효과를 낼 수 없고, 누른 이벤트 안에서는 답이 아직 없다.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    advanceFromLanguagePage();
-  }, [languageAdvanceRequest, currentStepIndex]);
+  const { isLanguagePage, showLanguageSwitch, handlePageResponse, goToLanguagePage } =
+    useLanguagePage({
+      enabled: !isAdminEdit,
+      questions,
+      groups,
+      steps,
+      responses,
+      currentStepIndex,
+      currentStepQuestions,
+      handleStepResponse,
+      setCurrentStepIndex,
+      setStepHistory,
+      onLeavePage: () => {
+        blurActiveInput();
+        void flushPendingAnswersInBackground();
+      },
+      onAdvance: (advance) => {
+        void runNext(advance);
+      },
+    });
 
   // 브라우저 뒤로가기 → 이전 step 이동
   const hasResponses = Object.keys(responses).length > 0;
@@ -1983,7 +1943,7 @@ function SurveyResponseFlowActive({
   // 테스트·미리보기만 완료 화면 아래에 갈 주소를 보인다. 실응답은 아래에서 이동 중 화면으로 바꾼다.
   const endRedirectFooter =
     endRedirectUrl && !redirectsNow ? (
-      <EndRedirectNotice url={endRedirectUrl} locale={currentLocale} />
+      <EndRedirectNotice url={endRedirectUrl} locale={systemLocale} />
     ) : null;
   useEffect(() => {
     // replace — 뒤로 가기로 우리 종료 화면에 돌아와 같은 주소로 다시 튕기지 않게 한다
@@ -2006,14 +1966,14 @@ function SurveyResponseFlowActive({
   // 종료 후 이동 — 완료·쿼터 마감 화면을 그리지 않고 곧장 이동 중 화면. 완료 카드가 패널 종료
   // 페이지가 열리기 전 잠깐 비치면 응답자가 거기서 창을 닫는다(이동은 위 effect 가 건다).
   if (redirectsNow && endRedirectUrl) {
-    return <EndRedirectingScreen url={endRedirectUrl} locale={currentLocale} />;
+    return <EndRedirectingScreen url={endRedirectUrl} locale={systemLocale} />;
   }
 
   // 중복 검사 진행 중
   if (duplicateStatus.kind === 'checking') {
     return (
       <div className="text-muted-foreground mx-auto flex min-h-screen items-center justify-center text-sm">
-        <SystemText k="screen.checking" locale={currentLocale} />
+        <SystemText k="screen.checking" locale={systemLocale} />
       </div>
     );
   }
@@ -2021,14 +1981,14 @@ function SurveyResponseFlowActive({
   // 중복 응답 차단 화면
   if (duplicateStatus.kind === 'blocked') {
     if (duplicateStatus.reason === 'invalid_test_token') {
-      return <InvalidTestLinkScreen locale={currentLocale} />;
+      return <InvalidTestLinkScreen locale={systemLocale} />;
     }
     // 응답 행을 읽은 재진입(이어가기·다른 화면에서 완료)이면 그 답의 언어 하나, 응답 행 없이
     // 막힌 진입(이미 응답함 등)은 미정이라 세 언어를 함께 보인다.
     return (
       <AlreadyRespondedView
         reason={duplicateStatus.reason}
-        locale={currentLocale}
+        locale={systemLocale}
         surveyTitle={
           loadedSurvey
             ? resolveHeaderTitle(
@@ -2059,7 +2019,7 @@ function SurveyResponseFlowActive({
   if (isCompleted) {
     // 종료 결과에 따라 제목·문구가 갈린다 — 자격미달은 「설문 종료」+ 자격미달 종료 문구(폴백: 완료 문구)
     // 완료 뒤에는 언어가 정해져 있다 — 미정이면 한국어
-    const completionLocale = currentLocale ?? DEFAULT_SURVEY_LOCALE;
+    const completionLocale = systemLocale ?? DEFAULT_SURVEY_LOCALE;
     const screen = resolveCompletionScreen(loadedSurvey.settings, completionOutcome, completionLocale);
     return (
       <SurveyCompletedScreen
@@ -2083,7 +2043,7 @@ function SurveyResponseFlowActive({
   // 화면은 면제한다 — 운영자가 좁은 창에서 응답을 고치는 일을 막을 이유가 없다.
   // 쿼터·자격미달·초대·미리보기에는 모드 분기를 만들지 않는다.
   if (isDocumentSurvey && isTooNarrowForSplit && !isAdminEdit) {
-    return <DesktopOnlyScreen locale={currentLocale} />;
+    return <DesktopOnlyScreen locale={systemLocale} />;
   }
 
   // 표가 그려지는 페이지는 표 총폭 기준 분기(718px 초과 → 1280px, 이하 → 896px), 아니면 896px (2026-07-27)
@@ -2103,7 +2063,7 @@ function SurveyResponseFlowActive({
   //
   // 한 줄짜리 시스템 글자는 현재 언어로, 미정이면 한국어다 — 언어 페이지는 언어 문항 하나뿐이라
   // 버튼이 없고(04), 미정 상태에서 세 언어를 쌓는 것은 전체 화면 안내뿐이다.
-  const inlineLocale = currentLocale ?? DEFAULT_SURVEY_LOCALE;
+  const inlineLocale = systemLocale ?? DEFAULT_SURVEY_LOCALE;
   const submitLabel = systemText('nav.next', inlineLocale);
   const submittingLabel = systemText('nav.submitting', inlineLocale);
 
@@ -2180,7 +2140,7 @@ function SurveyResponseFlowActive({
           open={showUnmodifiedChangedDialog}
           questionTitles={unmodifiedChangedQuestions.map((q) => q.title)}
           waveLabel={resolvePriorWaveLabel(control?.priorWaveLabel)}
-          locale={currentLocale ?? DEFAULT_SURVEY_LOCALE}
+          locale={systemLocale ?? DEFAULT_SURVEY_LOCALE}
           onCancel={() => setShowUnmodifiedChangedDialog(false)}
           onConfirm={() => {
             setShowUnmodifiedChangedDialog(false);
@@ -2189,12 +2149,12 @@ function SurveyResponseFlowActive({
           }}
         />
         <FormulaEvalProvider value={formulaCtx}>
-          <SurveyLocaleProvider locale={currentLocale}>
+          <SurveyLocaleProvider locale={systemLocale}>
             {/* display:contents — 배치를 바꾸지 않고 lang 만 싣는다. 미정이면 달지 않는다 */}
             <div lang={currentLocale ?? undefined} className="contents">
               <SurveyResponseLayout
                 containerMaxWidth={containerMaxWidth}
-                reserveBottomNavSpace={isMobile && !isLanguagePage}
+                reserveBottomNavSpace={isMobile && (!isLanguagePage || hasPreviousDisplayable)}
                 documentPane={
                   isSplit && documentView ? (
                     <ResponseDocumentPane
@@ -2229,8 +2189,10 @@ function SurveyResponseFlowActive({
                 }
                 progress={progressBand}
                 bottomNav={
-                  isMobile && !isLanguagePage ? (
+                  // 언어 페이지는 「언어 변경」으로 와서 돌아갈 곳이 있을 때만 「이전」 하나
+                  isMobile && (!isLanguagePage || hasPreviousDisplayable) ? (
                     <MobileBottomNav
+                      previousOnly={isLanguagePage}
                       locale={inlineLocale}
                       keyboardOpen={keyboardOpen}
                       currentStepNumber={currentVisibleStepNumber}

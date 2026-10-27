@@ -18,6 +18,11 @@ interface MobileBottomNavProps {
   submittingLabel?: string;
   onPrevious: () => void;
   onNext: () => void;
+  /**
+   * 「이전」만 — 「언어 변경」으로 온 언어 페이지(PRD 「언어 선택 페이지」). 보기를 누르면
+   * 넘어가므로 「다음」과 쪽수가 없고, 돌아갈 곳만 남긴다.
+   */
+  previousOnly?: boolean;
 }
 
 const primaryButtonCls =
@@ -42,6 +47,7 @@ export function MobileBottomNav({
   submittingLabel,
   onPrevious,
   onNext,
+  previousOnly = false,
 }: MobileBottomNavProps) {
   const nextLabel = systemText('nav.next', locale);
   return (
@@ -61,24 +67,28 @@ export function MobileBottomNav({
           {systemText('nav.previous', locale)}
         </button>
 
-        {/* 쪽수만 — 필수 미충족 안내는 문항 아래 검증 안내가 맡는다(하단 바의 「필수 질문」
+        {previousOnly ? null : (
+          <>
+            {/* 쪽수만 — 필수 미충족 안내는 문항 아래 검증 안내가 맡는다(하단 바의 「필수 질문」
             소표시는 2026-09-15 에 뺐다: 어느 문항인지 알려주지 않는 중복 신호였다). */}
-        <span className="text-sm font-medium text-gray-900">
-          {currentStepNumber || 1} / {Math.max(totalStepCount, 1)}
-        </span>
+            <span className="text-sm font-medium text-gray-900">
+              {currentStepNumber || 1} / {Math.max(totalStepCount, 1)}
+            </span>
 
-        {isLastStep ? (
-          <button onClick={onNext} disabled={isSubmitting} className={primaryButtonCls}>
-            {isSubmitting
-              ? (submittingLabel ?? systemText('nav.submitting', locale))
-              : (submitLabel ?? nextLabel)}
-            {!isSubmitting && <ChevronRight className="h-4 w-4" />}
-          </button>
-        ) : (
-          <button onClick={onNext} disabled={isSubmitting} className={primaryButtonCls}>
-            {nextLabel}
-            <ChevronRight className="h-4 w-4" />
-          </button>
+            {isLastStep ? (
+              <button onClick={onNext} disabled={isSubmitting} className={primaryButtonCls}>
+                {isSubmitting
+                  ? (submittingLabel ?? systemText('nav.submitting', locale))
+                  : (submitLabel ?? nextLabel)}
+                {!isSubmitting && <ChevronRight className="h-4 w-4" />}
+              </button>
+            ) : (
+              <button onClick={onNext} disabled={isSubmitting} className={primaryButtonCls}>
+                {nextLabel}
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>
