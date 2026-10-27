@@ -83,6 +83,21 @@ describe('useFormattedNumericInput', () => {
     expect(onRawChange).toHaveBeenCalledTimes(2);
   });
 
+  it('읽기는 현재 언어를 따른다 — 중국어 万·亿, 영어 million', () => {
+    const read = (locale: 'zh' | 'en', unitSuffix: string) =>
+      renderHook(() =>
+        useFormattedNumericInput({
+          rawValue: '1111111',
+          onRawChange: vi.fn(),
+          numberFormat: { unit: 'one', unitSuffix },
+          enabled: true,
+          locale,
+        }),
+      ).result.current.unitReading;
+    expect(read('zh', '元')).toBe('111万1111元');
+    expect(read('en', 'USD')).toBe('1.11 million USD');
+  });
+
   it('환산 표시와 min 힌트 — min 힌트는 포커스 중 숨기고 blur 후 표시', () => {
     const { result } = renderHook(() =>
       useFormattedNumericInput({

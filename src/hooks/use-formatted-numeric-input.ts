@@ -15,7 +15,7 @@ import {
   canInputAllowedValue,
   exceedsDecimalPlaces,
   exceedsMax,
-  formatKoreanUnitReading,
+  formatUnitReading,
   formatWithComma,
   rangeViolationMessage,
   stripComma,
@@ -92,7 +92,7 @@ export function useFormattedNumericInput({
   );
 
   const unitReading = enabled
-    ? formatKoreanUnitReading(rawValue, numberFormat?.unit, numberFormat?.unitSuffix)
+    ? formatUnitReading(rawValue, numberFormat?.unit, numberFormat?.unitSuffix, locale)
     : null;
 
   // 범위 힌트 — 포커스 중 숨김. min 은 이 힌트가 1차 피드백이고,
