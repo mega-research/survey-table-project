@@ -17,7 +17,7 @@ import { type RenderStep, findStepIndexOfQuestion, stepIdOf } from '@/utils/grou
 import { client } from '@/shared/lib/rpc';
 import type { TestAttemptIdentity } from '@/shared/types/test-attempt';
 import type { Question, QuestionGroup, Survey } from '@/types/survey';
-import { DEFAULT_SURVEY_LOCALE, type SurveyLocale } from '@/types/survey-locale';
+import { type SurveyLocale, toInlineLocale } from '@/types/survey-locale';
 import { systemText } from '@/utils/system-strings';
 import type { BranchEvalCtx } from '@/utils/branch-logic';
 import {
@@ -404,7 +404,7 @@ export function useResponseLifecycle({
         // 다음 재시도는 더 큰 seq 로 나가 통과한다.
         console.error('응답 임시 저장 오류: 서버가 stale seq 로 판정해 적용하지 않음');
         if (!background) {
-          toast.error(systemText('toast.draftSaveFailed', localeRef?.current ?? DEFAULT_SURVEY_LOCALE));
+          toast.error(systemText('toast.draftSaveFailed', toInlineLocale(localeRef?.current)));
         }
         return false;
       }
@@ -455,7 +455,7 @@ export function useResponseLifecycle({
       }
       console.error('응답 임시 저장 오류:', err);
       if (!background) {
-        toast.error(systemText('toast.draftSaveFailed', localeRef?.current ?? DEFAULT_SURVEY_LOCALE));
+        toast.error(systemText('toast.draftSaveFailed', toInlineLocale(localeRef?.current)));
       }
       return false;
     }
@@ -1018,7 +1018,7 @@ export function useResponseLifecycle({
             // 쿼터 「진행 중 마감」 하드 차단 — 답변은 저장됐고 상태만 쿼터마감. 완료 화면 대신
             // 기존 쿼터 마감 화면에 진행 중 마감 문구(서버가 폴백 적용, null 이면 사과 톤 기본)를 띄운다.
             setQuotaClosedMessage?.(
-              midSurveyClosedBody(completed.closedMessage, localeRef?.current ?? undefined),
+              midSurveyClosedBody(completed.closedMessage, toInlineLocale(localeRef?.current)),
             );
             setDuplicateStatus({ kind: 'blocked', reason: 'quota_closed' });
             return;
@@ -1077,7 +1077,7 @@ export function useResponseLifecycle({
         return;
       }
       console.error('응답 제출 오류:', error);
-      toast.error(systemText('toast.submitFailed', localeRef?.current ?? DEFAULT_SURVEY_LOCALE));
+      toast.error(systemText('toast.submitFailed', toInlineLocale(localeRef?.current)));
     } finally {
       setIsSubmitting(false);
     }

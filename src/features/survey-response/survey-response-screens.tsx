@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { formatLocalDateTime } from '@/lib/date-formatters';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { DEFAULT_SURVEY_LOCALE, type SurveyLocale } from '@/types/survey-locale';
+import { DEFAULT_SURVEY_LOCALE, type SurveyLocale, toInlineLocale } from '@/types/survey-locale';
 import type { SystemStringKey } from '@/utils/system-strings';
 
 import { SystemText } from './system-text';
@@ -266,7 +266,7 @@ export function EndRedirectingScreen({
   locale?: ScreenLocale;
 }) {
   // 한 문장 안에 링크가 끼므로 미정이면 한국어 — 이 화면은 응답을 마친 뒤라 언어가 정해져 있다
-  const lineLocale = locale ?? DEFAULT_SURVEY_LOCALE;
+  const lineLocale = toInlineLocale(locale);
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-gray-50 px-4 text-center">
       <Loader2 className="h-8 w-8 animate-spin text-blue-500" aria-hidden />

@@ -2,7 +2,7 @@
 
 import { type ReactNode, createContext, useContext } from 'react';
 
-import { DEFAULT_SURVEY_LOCALE, type SurveyLocale } from '@/types/survey-locale';
+import { DEFAULT_SURVEY_LOCALE, type SurveyLocale, toInlineLocale } from '@/types/survey-locale';
 
 /**
  * 응답 화면의 현재 언어 (CONTEXT.md 「언어 문항」). 언어 문항의 답에서 파생한 값을 응답 화면과
@@ -30,5 +30,5 @@ export function useSurveyLocale(): SurveyLocale | null {
  * 세 언어를 위아래로 쌓는 것은 전체 화면 안내뿐이다(응답 흐름의 `inlineLocale` 과 같은 규칙).
  */
 export function useInlineSurveyLocale(): SurveyLocale {
-  return useSurveyLocale() ?? DEFAULT_SURVEY_LOCALE;
+  return toInlineLocale(useSurveyLocale());
 }

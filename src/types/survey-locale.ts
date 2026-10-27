@@ -25,6 +25,14 @@ export const SURVEY_LOCALE_LABELS: Record<SurveyLocale, string> = {
   en: 'English',
 };
 
+/**
+ * 한 줄짜리 시스템 글자(버튼·검증 문구·토스트)의 언어 — 미정(`null`)이면 한국어.
+ * 세 언어를 위아래로 쌓는 것은 전체 화면 안내뿐이다(CONTEXT.md 「다국어 설문」).
+ */
+export function toInlineLocale(locale: SurveyLocale | null | undefined): SurveyLocale {
+  return locale ?? DEFAULT_SURVEY_LOCALE;
+}
+
 export function isSurveyLocale(value: unknown): value is SurveyLocale {
   return typeof value === 'string' && (SURVEY_LOCALES as readonly string[]).includes(value);
 }

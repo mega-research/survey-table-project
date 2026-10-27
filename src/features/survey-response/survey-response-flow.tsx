@@ -138,7 +138,7 @@ import type { ResponseEntrySeed } from '@/shared/contracts/survey-builder-io';
 import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 import { client } from '@/shared/lib/rpc';
 import type { Question, QuestionGroup, Survey } from '@/types/survey';
-import { DEFAULT_SURVEY_LOCALE, type SurveyLocale } from '@/types/survey-locale';
+import { DEFAULT_SURVEY_LOCALE, type SurveyLocale, toInlineLocale } from '@/types/survey-locale';
 import { responsesToLookupShape } from '@/utils/branch-eval';
 import {
   type BranchEvalCtx,
@@ -1238,7 +1238,7 @@ function SurveyResponseFlowActive({
           priorAnswers,
         },
         // 검증 문구는 한 줄짜리라 미정이면 한국어(inlineLocale 과 같은 규칙)
-        systemLocale ?? DEFAULT_SURVEY_LOCALE,
+        toInlineLocale(systemLocale),
       );
       if (issues.length > 0) map.set(q.id, issues);
     }
@@ -2019,7 +2019,7 @@ function SurveyResponseFlowActive({
   if (isCompleted) {
     // 종료 결과에 따라 제목·문구가 갈린다 — 자격미달은 「설문 종료」+ 자격미달 종료 문구(폴백: 완료 문구)
     // 완료 뒤에는 언어가 정해져 있다 — 미정이면 한국어
-    const completionLocale = systemLocale ?? DEFAULT_SURVEY_LOCALE;
+    const completionLocale = toInlineLocale(systemLocale);
     const screen = resolveCompletionScreen(loadedSurvey.settings, completionOutcome, completionLocale);
     return (
       <SurveyCompletedScreen
@@ -2063,7 +2063,7 @@ function SurveyResponseFlowActive({
   //
   // 한 줄짜리 시스템 글자는 현재 언어로, 미정이면 한국어다 — 언어 페이지는 언어 문항 하나뿐이라
   // 버튼이 없고(04), 미정 상태에서 세 언어를 쌓는 것은 전체 화면 안내뿐이다.
-  const inlineLocale = systemLocale ?? DEFAULT_SURVEY_LOCALE;
+  const inlineLocale = toInlineLocale(systemLocale);
   const submitLabel = systemText('nav.next', inlineLocale);
   const submittingLabel = systemText('nav.submitting', inlineLocale);
 
@@ -2140,7 +2140,7 @@ function SurveyResponseFlowActive({
           open={showUnmodifiedChangedDialog}
           questionTitles={unmodifiedChangedQuestions.map((q) => q.title)}
           waveLabel={resolvePriorWaveLabel(control?.priorWaveLabel)}
-          locale={systemLocale ?? DEFAULT_SURVEY_LOCALE}
+          locale={toInlineLocale(systemLocale)}
           onCancel={() => setShowUnmodifiedChangedDialog(false)}
           onConfirm={() => {
             setShowUnmodifiedChangedDialog(false);
