@@ -505,6 +505,17 @@ body {
 /* Apple 스타일 스무스 스크롤 */
 html {
   scroll-behavior: smooth;
+  /* 세로 스크롤바 자리를 늘 비워 둔다 — 스크롤바가 보이는 환경(마우스 연결 macOS·Windows)에서
+     내용 길이에 따라 스크롤바가 생기고 빠지면 본문 폭이 15px 안팎 바뀌어, 카드가 적은 그룹과
+     많은 그룹의 목록 폭이 달라 보였다. */
+  scrollbar-gutter: stable;
+}
+
+/* 위 gutter 와 짝 — Radix 의 스크롤 잠금(react-remove-scroll-bar)은 사라질 스크롤바 폭만큼
+   body 에 margin-right 를 더하는데, gutter 가 이미 그 자리를 잡고 있어 모달을 열 때마다
+   본문이 한 번 더 좁아진다. 보정 margin 만 걷는다(선택자 우선순위로 !important 를 이긴다). */
+html body[data-scroll-locked] {
+  margin-right: 0 !important;
 }
 
 /* 인쇄 시 테이블 sticky 해제 — 종이에서는 의미 없음 */
