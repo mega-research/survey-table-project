@@ -24,6 +24,7 @@ import { db } from '@/db';
 import {
   contactPii as contactPiiTable,
   contactTargets as contactTargetsTable,
+  surveyResponses as responsesTable,
   surveys as surveysTable,
   surveyVersions as versionsTable,
   teamMembers as teamMembersTable,
@@ -31,6 +32,7 @@ import {
   users as usersTable,
 } from '@/db/schema';
 import type { ORPCContext } from '@/server/context';
+import { listClientResponses } from '@/server/operations/services/client-responses';
 import {
   type ClientLinkTabs,
   clientLinkTabValues,
@@ -439,6 +441,117 @@ describe.skipIf(!isLocalDb)('클라이언트 링크 콘솔 (real local DB)', () 
       expect(serialized).not.toContain('ciphertext-not-read-by-list');
       expect(serialized).not.toContain(stored?.inviteToken ?? 'no-token');
       expect(serialized).not.toContain(targetId);
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // ⑥ 응답 내역 — 보기 전용 투영 (.scratch/client-link-response-list 티켓 03)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  describe('응답 내역', () => {
+    // 클라이언트에게 가면 안 되는 값 — 직렬화 결과에 문자열로도 없어야 한다.
+    const SECRET_IP = 'iphash-not-for-client';
+    const SECRET_EUID = 'euid-not-chosen-column';
+    const SECRET_ATTR = '고르지않은기관명';
+    let targetId = '';
+    let responseIds: string[] = [];
+
+    beforeEach(async () => {
+      if (!isLocalDb) return;
+      targetId = crypto.randomUUID();
+      await db.insert(contactTargetsTable).values({
+        id: targetId,
+        surveyId,
+        resid: 1,
+        isTest: false,
+        inviteCode: targetId.slice(0, 8),
+        attrs: { 기관명: SECRET_ATTR },
+      });
+      const completed = crypto.randomUUID();
+      const dropped = crypto.randomUUID();
+      const deleted = crypto.randomUUID();
+      const test = crypto.randomUUID();
+      responseIds = [completed, dropped, deleted, test];
+      const base = { surveyId, questionResponses: {} };
+      await db.insert(responsesTable).values([
+        {
+          ...base,
+          id: completed,
+          sessionId: crypto.randomUUID(),
+          status: 'completed',
+          isCompleted: true,
+          contactTargetId: targetId,
+          ipHash: SECRET_IP,
+          metadata: { entryParams: { euid: SECRET_EUID } },
+          startedAt: new Date('2026-10-26T12:00:00Z'),
+          completedAt: new Date('2026-10-26T12:47:00Z'),
+          totalSeconds: 2820,
+        },
+        {
+          ...base,
+          id: dropped,
+          sessionId: crypto.randomUUID(),
+          status: 'drop',
+          visibleStepIndex: 3,
+          visibleStepTotal: 33,
+          startedAt: new Date('2026-10-26T13:00:00Z'),
+        },
+        {
+          ...base,
+          id: deleted,
+          sessionId: crypto.randomUUID(),
+          status: 'completed',
+          isCompleted: true,
+          deletedAt: new Date(),
+        },
+        { ...base, id: test, sessionId: crypto.randomUUID(), status: 'completed', isTest: true },
+      ]);
+    });
+
+    it('칩이 꺼져 있으면 응답 내역 주소는 notFound 다 — 새 링크는 꺼진 채 시작한다', async () => {
+      const { token } = await issueAndEnter();
+      await expect(assertClientLinkPageAccess(token, 'responses')).rejects.toThrow(
+        'NEXT_NOT_FOUND',
+      );
+    });
+
+    it('켜면 기본 열만 싣고, 응답 id·조사 대상 id·IP 해시·고르지 않은 값은 오지 않는다', async () => {
+      const { token } = await issueAndEnter();
+      await admin.accessLinks.setClientTab({ surveyId, tab: 'responses', enabled: true });
+      const viewer = await assertClientLinkPageAccess(token, 'responses');
+
+      // 화면이 하는 것과 같은 호출이다 — 관문이 돌려준 설문 id 로 읽는다.
+      const page = await listClientResponses(viewer.surveyId, {});
+      const serialized = JSON.stringify(page);
+
+      expect(page.columns).toEqual(['순번', '상태', '시작일시', '종료일시', '소요시간']);
+      // 삭제된 응답·테스트 응답은 없다 — 실 파티션의 살아 있는 응답 둘.
+      expect(page.total).toBe(2);
+      expect(page.rows).toHaveLength(2);
+      for (const id of responseIds) expect(serialized).not.toContain(id);
+      expect(serialized).not.toContain(targetId);
+      expect(serialized).not.toContain(SECRET_IP);
+      expect(serialized).not.toContain(SECRET_EUID);
+      expect(serialized).not.toContain(SECRET_ATTR);
+    });
+
+    it('상태 칸은 내부와 같은 알약이다 — 이탈 위치가 함께 온다', async () => {
+      const page = await listClientResponses(surveyId, {});
+      const statuses = page.rows.map((row) => row.cells[1]);
+      expect(statuses).toContainEqual({ kind: 'status', label: '완료', tone: 'green' });
+      expect(statuses).toContainEqual(
+        expect.objectContaining({ kind: 'status', label: '이탈', sub: expect.stringContaining('3/33') }),
+      );
+    });
+
+    it('상태로 좁힌다 — 휴지통 보기는 없다', async () => {
+      const completed = await listClientResponses(surveyId, { status: 'completed' });
+      expect(completed.total).toBe(1);
+      expect(completed.status).toBe('completed');
+      // 삭제된 응답을 보는 값은 전체로 접는다 — 복원 권한이 없는 사람의 보기가 아니다.
+      const deleted = await listClientResponses(surveyId, { status: 'deleted' });
+      expect(deleted.status).toBe('all');
+      expect(deleted.total).toBe(2);
     });
   });
 });

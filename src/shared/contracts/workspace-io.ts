@@ -708,6 +708,39 @@ export interface GuestContactsPage {
   pageSize: number;
 }
 
+/**
+ * 클라이언트 링크의 응답 내역 한 칸 (`.scratch/client-link-response-list` 티켓 03).
+ *
+ * 조사 대상 표와 같은 계약이다 — **표시 값만 싣는다.** 상태 칸만 모양이 다른 것은 내부 응답
+ * 내역과 같은 알약(색 + 진행 위치 「4/33(61) · Q1」)을 그려야 해서다. 진행 위치는 문구로만 온다 —
+ * 그 문구를 만든 페이지 id·문항 id 는 싣지 않는다.
+ */
+export type ClientResponseCell =
+  | { kind: 'text'; text: string | null }
+  | {
+      kind: 'status';
+      label: string;
+      tone: 'green' | 'blue' | 'gray' | 'amber' | 'red';
+      sub?: string;
+    };
+
+/** 표 한 줄 — 응답 id 가 없다. 줄의 이름은 접수 순번이다(행 key 로도 쓴다). */
+export interface ClientResponseRow {
+  idx: number;
+  cells: ClientResponseCell[];
+}
+
+export interface ClientResponsesPage {
+  /** 표 머리 — 내부 응답 내역의 열 라벨을 그대로 쓴다. */
+  columns: string[];
+  rows: ClientResponseRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  /** 해석된 상태 필터 — 주소의 값이 어휘 밖이거나 휴지통이면 `all` 로 접힌 값이다. */
+  status: string;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 소유권 이전 · 승계 (.pen FLOW 4-4·9-3, 티켓 19)
 // ─────────────────────────────────────────────────────────────────────────────

@@ -119,6 +119,30 @@ describe('클라이언트 링크 콘솔 셸', () => {
     expect(screen.queryByText('메가허브')).not.toBeInTheDocument();
   });
 
+  it('응답 내역 칩을 켜면 응답 현황 바로 뒤에 응답 내역 탭이 선다', async () => {
+    gate.assert.mockResolvedValue({
+      surveyId: 'survey-1',
+      tabs: { ...DEFAULT_CLIENT_LINK_TABS, progressReport: true, responses: true },
+    });
+    header.load.mockResolvedValue({
+      surveyId: 'survey-1',
+      title: '고객사 열람 조사',
+      publishedAt: null,
+      endDate: null,
+      lifecycle: 'running',
+    });
+
+    await renderLayout();
+
+    const tabs = screen.getByRole('navigation', { name: '현황 메뉴' });
+    const labels = [...tabs.querySelectorAll('a')].map((a) => a.textContent);
+    expect(labels).toEqual(['응답 현황', '응답 내역', '진척 보고']);
+    expect(screen.getByRole('link', { name: '응답 내역' })).toHaveAttribute(
+      'href',
+      `/client/${TOKEN}/responses`,
+    );
+  });
+
   it('설문 보기 칩이 꺼져 있으면 화면 머리에 「설문 보기」가 없다', async () => {
     gate.assert.mockResolvedValue({
       surveyId: 'survey-1',

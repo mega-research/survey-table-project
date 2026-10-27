@@ -1,5 +1,6 @@
 import { formatLocalDate } from '@/lib/date-formatters';
 import {
+  CLIENT_LINK_TAB_LABEL,
   type ClientLinkTabs,
   SURVEY_GUEST_TAB_LABEL,
   type SurveyGuestTab,
@@ -99,13 +100,33 @@ export function guestConsoleEntryHref(base: string, tabs: SurveyGuestTabs): stri
  */
 export const CLIENT_EMPTY_SEGMENT = 'empty';
 
+/** 클라이언트 링크의 응답 내역 — 게스트 계정 콘솔에는 없는 탭이다. */
+export const CLIENT_RESPONSES_SEGMENT = 'responses';
+
+/**
+ * 클라이언트 링크의 탭 줄 — 게스트 탭에 응답 내역을 더한다. 응답 내역은 **응답 현황 바로 뒤**다
+ * (내부 콘솔 「실사 현황」 탭의 응답 현황 · 응답 내역 순서). 설문 보기는 화면 머리의 버튼이고
+ * 상세 통계는 응답 현황 안의 표시 설정이라 탭 줄에 서지 않는다.
+ */
+export function allowedClientTabs(tabs: ClientLinkTabs): GuestTabLink[] {
+  const links = allowedGuestTabs(tabs);
+  if (!tabs.responses) return links;
+  const responses = {
+    segment: CLIENT_RESPONSES_SEGMENT,
+    label: CLIENT_LINK_TAB_LABEL.responses,
+  };
+  const at = tabs.overview ? 1 : 0;
+  return [...links.slice(0, at), responses, ...links.slice(at)];
+}
+
 /**
  * 클라이언트 링크의 착지 주소 — 허용된 첫 탭, 없으면 설문 보기(켜져 있을 때만), 그것도
  * 없으면 빈 안내. 게스트 계정 입구(`guestConsoleEntryHref`)는 설문 보기가 칩이 아니라 늘 미리보기다.
  */
 export function clientConsoleEntryHref(base: string, tabs: ClientLinkTabs): string {
   const segment =
-    firstGuestTabSegment(tabs) ?? (tabs.preview ? GUEST_PREVIEW_SEGMENT : CLIENT_EMPTY_SEGMENT);
+    allowedClientTabs(tabs)[0]?.segment ??
+    (tabs.preview ? GUEST_PREVIEW_SEGMENT : CLIENT_EMPTY_SEGMENT);
   return guestConsoleHref(base, segment);
 }
 

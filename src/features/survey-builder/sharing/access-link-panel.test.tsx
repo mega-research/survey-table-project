@@ -175,6 +175,20 @@ describe('AccessLinkPanel', () => {
     expect(screen.getByRole('checkbox', { name: '쿼터 현황' })).toBeEnabled();
   });
 
+  it('응답 내역 칩이 서고 새 링크에서는 꺼져 있다 — 누르면 켜기로 나간다', async () => {
+    state.data = linkState('client');
+    const user = userEvent.setup();
+    render(<AccessLinkPanel surveyId="s-1" kind="client" />);
+
+    const chip = screen.getByRole('checkbox', { name: '응답 내역' });
+    expect(chip).not.toBeChecked();
+    await user.click(chip);
+
+    await waitFor(() =>
+      expect(setTab).toHaveBeenCalledWith({ surveyId: 's-1', tab: 'responses', enabled: true }),
+    );
+  });
+
   it('발급 전에는 탭 칩이 없다 — 저장할 링크가 없다', () => {
     state.data = { link: null, canManage: true };
     render(<AccessLinkPanel surveyId="s-1" kind="client" />);

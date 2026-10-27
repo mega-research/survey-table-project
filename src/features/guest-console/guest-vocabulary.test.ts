@@ -9,6 +9,7 @@ import {
 } from '@/shared/contracts/workspace';
 
 import {
+  allowedClientTabs,
   allowedGuestTabs,
   CLIENT_EMPTY_SEGMENT,
   clientConsoleEntryHref,
@@ -137,9 +138,31 @@ describe('clientConsoleEntryHref — 클라이언트 링크의 착지점', () =>
     );
   });
 
+  it('응답 내역만 켜져 있으면 그리로 간다', () => {
+    expect(clientConsoleEntryHref('/client/tok', { ...none, responses: true })).toBe(
+      '/client/tok/responses',
+    );
+  });
+
   it('상세 통계는 탭이 아니다 — 그것만 켜져 있어도 착지점이 되지 않는다', () => {
     expect(clientConsoleEntryHref('/client/tok', { ...none, overviewDetail: true })).toBe(
       `/client/tok/${CLIENT_EMPTY_SEGMENT}`,
     );
+  });
+});
+
+describe('allowedClientTabs — 클라이언트 링크의 탭 줄', () => {
+  it('응답 내역은 응답 현황 바로 뒤에 선다 — 내부 콘솔의 실사 현황과 같은 순서', () => {
+    expect(
+      allowedClientTabs({ ...DEFAULT_CLIENT_LINK_TABS, quota: true, responses: true }).map(
+        (link) => link.segment,
+      ),
+    ).toEqual(['overview', 'responses', 'quota']);
+  });
+
+  it('설문 보기·상세 통계는 탭 줄에 서지 않는다', () => {
+    expect(allowedClientTabs(DEFAULT_CLIENT_LINK_TABS)).toEqual([
+      { segment: 'overview', label: '응답 현황' },
+    ]);
   });
 });

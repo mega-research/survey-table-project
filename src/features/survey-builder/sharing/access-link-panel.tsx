@@ -306,12 +306,6 @@ export function AccessLinkPanel({ surveyId, kind }: AccessLinkPanelProps) {
 }
 
 /**
- * 아직 화면에 잇지 않은 칩 — 응답 내역(티켓 03, `.scratch/client-link-response-list`). 어휘는
- * 먼저 섰지만 켜도 클라이언트 화면이 그대로라 칩을 그리지 않는다. 그 티켓이 화면을 이으면서 뺀다.
- */
-const PENDING_CHIPS: ReadonlySet<ClientLinkTab> = new Set(['responses']);
-
-/**
  * 다른 칩에 딸린 칩 — 부모가 꺼져 있으면 잠근다. 상세 통계는 응답 현황 화면 안의 카드라 응답
  * 현황이 닫혀 있으면 켜도 보이는 곳이 없다. **값은 지우지 않는다** — 부모를 다시 켜면 연구원이
  * 두었던 대로 돌아온다(잠근 칩도 지금 값을 체크로 보인다).
@@ -335,7 +329,7 @@ function ClientTabChips({
 }) {
   return (
     <div className="flex flex-wrap gap-1.5">
-      {clientLinkTabValues.filter((tab) => !PENDING_CHIPS.has(tab)).map((tab) => {
+      {clientLinkTabValues.map((tab) => {
         const active = tabs[tab];
         const parent = CHIP_PARENT[tab];
         const orphaned = parent !== undefined && !tabs[parent];

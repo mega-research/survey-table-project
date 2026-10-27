@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 
 import { GuestTabStrip } from '@/features/guest-console/guest-tab-strip';
 import {
+  allowedClientTabs,
   GUEST_PREVIEW_SEGMENT,
   GUEST_SURVEY_LIFECYCLE_LABEL,
   guestConsoleHref,
@@ -90,7 +91,7 @@ export default async function ClientLinkConsoleLayout({ params, children }: Prop
         // 쿼터 현황 칩이 켜져 있어도 쿼터가 없는 설문에서는 탭을 세우지 않는다 — 눌러도 빈
         // 안내뿐이다(외주 링크 콘솔과 같은 규칙). 감추는 것은 **탭 줄뿐**이고 화이트리스트와
         // 관문은 그대로다: 연구원이 쿼터를 설정하면 칩을 다시 만지지 않아도 탭이 선다.
-        tabs={{ ...tabs, quota: tabs.quota && hasQuota }}
+        links={allowedClientTabs({ ...tabs, quota: tabs.quota && hasQuota })}
         meta={`${guestPeriodLabel(header.publishedAt, header.endDate)} · ${GUEST_SURVEY_LIFECYCLE_LABEL[header.lifecycle]}`}
       />
       {children}
