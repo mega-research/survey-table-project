@@ -6,6 +6,10 @@ import Lightbox from 'yet-another-react-lightbox';
 import Zoom from 'yet-another-react-lightbox/plugins/zoom';
 import 'yet-another-react-lightbox/styles.css';
 
+import { systemText } from '@/utils/system-strings';
+
+import { useInlineSurveyLocale } from './survey-locale-context';
+
 import type { ImageSize } from './utils/image-enlarge';
 
 /**
@@ -89,6 +93,7 @@ export default function ImageEnlargeViewer({
   onClose,
 }: ImageEnlargeViewerProps) {
   const requestClose = useHistoryBackedClose(onClose);
+  const locale = useInlineSurveyLocale();
   return (
     <Lightbox
       open
@@ -104,10 +109,10 @@ export default function ImageEnlargeViewer({
         disableSwipeNavigation: true,
       }}
       labels={{
-        Lightbox: '이미지 크게 보기',
-        Close: '닫기',
-        'Zoom in': '확대',
-        'Zoom out': '축소',
+        Lightbox: systemText('media.viewerTitle', locale),
+        Close: systemText('common.close', locale),
+        'Zoom in': systemText('media.zoomIn', locale),
+        'Zoom out': systemText('media.zoomOut', locale),
       }}
       render={{
         buttonPrev: () => null,

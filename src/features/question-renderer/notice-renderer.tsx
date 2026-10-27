@@ -4,8 +4,10 @@ import { useMemo, useRef, useState } from 'react';
 
 import { Label } from '@/components/ui/label';
 import { sanitizeRichHtml } from '@/lib/sanitize';
+import { systemText } from '@/utils/system-strings';
 
 import { RICH_TEXT_ENLARGE_CLASS, useRichTextImageEnlarge } from './rich-text-image-enlarge';
+import { useInlineSurveyLocale } from './survey-locale-context';
 
 interface NoticeRendererProps {
   content: string;
@@ -48,6 +50,7 @@ export function NoticeRenderer({
   const html = sanitizeRichHtml(content);
   const panelRef = useRef<HTMLDivElement>(null);
   const imageEnlarge = useRichTextImageEnlarge(panelRef, html);
+  const locale = useInlineSurveyLocale();
   // 본문 객체를 고정한다 — 새 객체면 React 가 다시 그릴 때마다 본문을 통째로 다시 넣어, 크게 보기
   // 표식을 붙인 이미지가 표식 없는 새 이미지로 바뀐다(돋보기 자리·크게 보기 상태가 바뀌어도 다시 그린다)
   const innerHtml = useMemo(() => ({ __html: html }), [html]);
@@ -108,14 +111,14 @@ export function NoticeRenderer({
             htmlFor="acknowledgment-check"
             className="flex-1 cursor-pointer text-sm font-medium text-gray-900"
           >
-            위 내용을 읽고 이해했습니다.
+            {systemText('notice.acknowledge', locale)}
           </Label>
         </div>
       )}
 
       {requiresAcknowledgment && !acknowledged && (
         <div className="rounded bg-red-50 p-2 text-xs text-red-600">
-          ⚠️ 위 내용을 확인하고 체크해주세요.
+          ⚠️ {systemText('notice.acknowledgeRequired', locale)}
         </div>
       )}
     </div>

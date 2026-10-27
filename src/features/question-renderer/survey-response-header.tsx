@@ -20,6 +20,9 @@ import type {
 } from '@/lib/survey/response-header-config';
 import { cn, isEmptyHtml } from '@/lib/utils';
 import type { SurveyResponseHeaderConfig } from '@/shared/contracts/survey';
+import { systemText } from '@/utils/system-strings';
+
+import { useInlineSurveyLocale } from './survey-locale-context';
 
 interface SurveyResponseHeaderProps {
   /** 줄바꿈(\n)으로 여러 줄일 수 있다 — 다국어 설문에서 언어를 고르기 전 언어별 제목을 쌓는다 */
@@ -281,11 +284,12 @@ function ComposedHeaderMobile({
 }
 
 function MobileNoticeCard({ block }: { block: NormalizedHeaderNoticeBlock }) {
+  const locale = useInlineSurveyLocale();
   return (
     <details data-testid="header-notice-card" className="group rounded-lg border border-[#d7dae0]">
       <summary className="flex min-h-[44px] cursor-pointer list-none items-center justify-between gap-2.5 px-3.5 py-3 [&::-webkit-details-marker]:hidden">
         <div className="text-sm leading-[1.4] font-bold break-keep text-gray-700">
-          {block.title.trim() || '통계법 제33조(비밀의 보호)'}
+          {block.title.trim() || systemText('header.defaultNoticeTitle', locale)}
         </div>
         <div className="h-2 w-2 flex-none -translate-y-0.5 rotate-45 border-r-2 border-b-2 border-gray-500 transition-transform group-open:translate-y-0 group-open:rotate-[135deg]" />
       </summary>
@@ -550,7 +554,8 @@ function HeaderImageBlock({
   heightPx: number;
   mobile?: boolean;
 }) {
-  const defaultAlt = block.type === 'mark' ? '국가통계 마크' : '설문 로고';
+  const locale = useInlineSurveyLocale();
+  const defaultAlt = systemText(block.type === 'mark' ? 'header.markAlt' : 'header.logoAlt', locale);
   const lineStyle: CSSProperties =
     block.frame === 'line'
       ? {

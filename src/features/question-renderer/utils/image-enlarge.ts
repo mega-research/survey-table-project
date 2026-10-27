@@ -6,6 +6,8 @@
  * 같은 이미지라도 데스크톱에서는 원래 크기, 모바일에서는 줄어 있을 수 있어 그려진 크기는 화면마다
  * 다시 잰다. 이 함수는 잰 값만 받는다.
  */
+import { DEFAULT_SURVEY_LOCALE, type SurveyLocale } from '@/types/survey-locale';
+import { systemText } from '@/utils/system-strings';
 
 export interface ImageSize {
   width: number;
@@ -15,9 +17,17 @@ export interface ImageSize {
 /** 이미지를 상자에 맞추는 방식 — 줄여 넣기(전체 보임) / 잘라 채우기(넘치는 쪽이 잘림) */
 export type ImageFit = 'contain' | 'cover';
 
-/** 크게 보기를 여는 버튼의 이름 — 버튼 이름이 대체 텍스트를 덮으므로 원래 설명을 앞에 남긴다 */
-export function enlargeTriggerLabel(alt: string): string {
-  return `${alt.trim() || '이미지'} 크게 보기`;
+/**
+ * 크게 보기를 여는 버튼의 이름 — 버튼 이름이 대체 텍스트를 덮으므로 원래 설명을 남긴다.
+ * 대체 텍스트는 저작자 글자라 번역하지 않고, 둘러싼 말만 현재 언어다.
+ */
+export function enlargeTriggerLabel(
+  alt: string,
+  locale: SurveyLocale = DEFAULT_SURVEY_LOCALE,
+): string {
+  return systemText('media.enlarge', locale, {
+    alt: alt.trim() || systemText('media.imageFallbackAlt', locale),
+  });
 }
 
 /** 반 픽셀 미만의 차이는 반올림 오차로 본다 — 1px 줄어든 이미지는 잡고 소수점 측정값은 흘린다 */

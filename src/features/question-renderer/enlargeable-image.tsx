@@ -16,6 +16,7 @@ import { Maximize2, ZoomIn } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 import type { ImageEnlargeViewerProps } from './image-enlarge-viewer';
+import { useInlineSurveyLocale } from './survey-locale-context';
 import {
   type ImageFit,
   type ImageSize,
@@ -77,7 +78,7 @@ export function EnlargeableImage({
   const [open, setOpen] = useState(false);
   const canOpen = enabled && enlargeable;
   const opensFromImage = canOpen && trigger === 'image';
-  const triggerLabel = enlargeTriggerLabel(alt);
+  const triggerLabel = enlargeTriggerLabel(alt, useInlineSurveyLocale());
 
   const measure = useCallback(() => {
     const img = imgRef.current;
