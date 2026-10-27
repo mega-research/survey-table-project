@@ -2180,6 +2180,7 @@ function SurveyResponseFlowActive({
           open={showUnmodifiedChangedDialog}
           questionTitles={unmodifiedChangedQuestions.map((q) => q.title)}
           waveLabel={resolvePriorWaveLabel(control?.priorWaveLabel)}
+          locale={currentLocale ?? DEFAULT_SURVEY_LOCALE}
           onCancel={() => setShowUnmodifiedChangedDialog(false)}
           onConfirm={() => {
             setShowUnmodifiedChangedDialog(false);

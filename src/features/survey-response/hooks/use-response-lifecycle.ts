@@ -17,7 +17,8 @@ import { type RenderStep, findStepIndexOfQuestion, stepIdOf } from '@/utils/grou
 import { client } from '@/shared/lib/rpc';
 import type { TestAttemptIdentity } from '@/shared/types/test-attempt';
 import type { Question, QuestionGroup, Survey } from '@/types/survey';
-import type { SurveyLocale } from '@/types/survey-locale';
+import { DEFAULT_SURVEY_LOCALE, type SurveyLocale } from '@/types/survey-locale';
+import { systemText } from '@/utils/system-strings';
 import type { BranchEvalCtx } from '@/utils/branch-logic';
 import {
   collectTraversedQuestionIds,
@@ -403,7 +404,7 @@ export function useResponseLifecycle({
         // 다음 재시도는 더 큰 seq 로 나가 통과한다.
         console.error('응답 임시 저장 오류: 서버가 stale seq 로 판정해 적용하지 않음');
         if (!background) {
-          toast.error('응답 임시 저장에 실패했습니다. 잠시 후 다시 시도해주세요.');
+          toast.error(systemText('toast.draftSaveFailed', localeRef?.current ?? DEFAULT_SURVEY_LOCALE));
         }
         return false;
       }
@@ -454,7 +455,7 @@ export function useResponseLifecycle({
       }
       console.error('응답 임시 저장 오류:', err);
       if (!background) {
-        toast.error('응답 임시 저장에 실패했습니다. 잠시 후 다시 시도해주세요.');
+        toast.error(systemText('toast.draftSaveFailed', localeRef?.current ?? DEFAULT_SURVEY_LOCALE));
       }
       return false;
     }
@@ -1076,7 +1077,7 @@ export function useResponseLifecycle({
         return;
       }
       console.error('응답 제출 오류:', error);
-      toast.error('응답 제출 중 오류가 발생했습니다. 다시 시도해주세요.');
+      toast.error(systemText('toast.submitFailed', localeRef?.current ?? DEFAULT_SURVEY_LOCALE));
     } finally {
       setIsSubmitting(false);
     }
