@@ -13,13 +13,13 @@ export interface DrilldownStatus {
   completed: number;
   total: number;
   /** 진행 줄의 단위 — 입력 칸 · 항목(행) · 선택. 화면 글자는 현재 언어로 사전이 정한다(`UNIT_KEY`). */
-  unit: '칸' | '개 항목' | '개 선택';
+  unit: 'cells' | 'items' | 'selections';
 }
 
 const UNIT_KEY = {
-  칸: 'drilldown.unit.cells',
-  '개 항목': 'drilldown.unit.items',
-  '개 선택': 'drilldown.unit.selections',
+  cells: 'drilldown.unit.cells',
+  items: 'drilldown.unit.items',
+  selections: 'drilldown.unit.selections',
 } as const satisfies Record<DrilldownStatus['unit'], SystemStringKey>;
 
 interface MobileDrilldownShellProps {
@@ -217,7 +217,7 @@ export function MobileDrilldownShell({
       ? // 선택형(choice) 테이블은 셀이 입력 칸이 아니라 선택지다 — "입력 6칸"으로 쓰면
         // 그룹당 1개만 고르면 되는 rad 그룹에서 6개를 다 채워야 하는 것처럼 읽힌다
         systemText(
-          status.unit === '개 선택' ? 'drilldown.matrixChoices' : 'drilldown.matrixInputs',
+          status.unit === 'selections' ? 'drilldown.matrixChoices' : 'drilldown.matrixInputs',
           locale,
           { inputs, total: section.totalInputs },
         )

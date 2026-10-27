@@ -57,7 +57,8 @@ interface UseSessionRecoveryResult {
   /** recovery effect 가 resumeOrCreateResponse 를 await 하는 동안 true. handleResponse INSERT 가드(I-1)에서 참조. */
   isRecovering: boolean;
   /** 회복 토스트 메시지 (drop → in_progress 회복 시에만 set). */
-  resumeMessage: string | null;
+  /** 이어가기 안내를 띄우는가 — 문장은 화면이 현재 언어로 그린다 */
+  showResumeNotice: boolean;
   /** 토스트 dismiss. <ResumeToast> 가 자체 마운트 4초 타이머에서 호출한다. */
   dismissResume: () => void;
   /** 재응답 허용 세션 — 상단에 "끝까지 제출해야 완료 반영" 배너를 상시 표시. */
@@ -67,14 +68,14 @@ interface UseSessionRecoveryResult {
 /**
  * 운영 현황 콘솔(T6): localStorage 기반 응답 회복 훅.
  *
- * survey-response-flow.tsx 의 응답 회복 useEffect + isRecovering/resumeMessage state 를 이관했다.
+ * survey-response-flow.tsx 의 응답 회복 useEffect + isRecovering/showResumeNotice state 를 이관했다.
  *
  * 동작 핵심:
  * - 일반 응답은 localStorage session으로 기존 응답값과 진행 행을 회복하고 show segment를 유지한다.
  * - 대상자 테스트는 key가 없어도 현재 session으로 읽기 전용 resume를 수행하고 답만 복원한다.
  * - target resume만으로는 쓰기 소유권이나 telemetry를 열지 않는다.
  * - 토스트 자동 dismiss 는 이 훅이 아니라 <ResumeToast> 가 자체 마운트 4초 타이머로 처리한다.
- *   (과거: 여기서 resumeMessage set 시점에 4초 타이머를 걸어, 로딩/중복확인 early-return 화면이
+ *   (과거: 여기서 showResumeNotice set 시점에 4초 타이머를 걸어, 로딩/중복확인 early-return 화면이
  *    떠 있는 동안 4초가 소진돼 메인 콘텐츠가 보일 땐 토스트가 이미 사라져 있었다.)
  */
 export function useSessionRecovery({
@@ -100,7 +101,7 @@ export function useSessionRecovery({
   // recovery effect 가 resumeOrCreateResponse 를 await 하는 동안 true.
   // handleResponse 의 INSERT 가드에서 참조해 recovery 완료 전 신규 INSERT 발사를 차단한다 (I-1).
   const [isRecovering, setIsRecovering] = useState(false);
-  const [resumeMessage, setResumeMessage] = useState<string | null>(null);
+  const [showResumeNotice, setShowResumeNotice] = useState(false);
   const [reeditNotice, setReeditNotice] = useState(false);
   type ResumeResult = Awaited<ReturnType<typeof client.surveyResponse.lifecycle.resume>>;
   const pendingResumeRequestsRef = useRef(new Map<string, Promise<ResumeResult>>());
@@ -230,7 +231,7 @@ export function useSessionRecovery({
         if (!isTargetTestSession) sendVisibilitySegment(result.id, 'show');
         // 회복된 경우(drop → in_progress)만 토스트
         if (result.resumed) {
-          setResumeMessage('이전 응답을 이어서 진행합니다');
+          setShowResumeNotice(true);
         }
         // 재응답 허용 세션 — 토스트와 달리 사라지지 않는 상단 배너로 안내한다.
         if (result.reeditPending) setReeditNotice(true);
@@ -294,7 +295,7 @@ export function useSessionRecovery({
 
   // 토스트 dismiss 는 <ResumeToast> 가 자체 마운트 시점부터 4초 타이머로 호출한다.
   // 안정 참조라 ResumeToast 의 마운트 전용 effect deps 에서 안전하게 제외된다.
-  const dismissResume = useCallback(() => setResumeMessage(null), []);
+  const dismissResume = useCallback(() => setShowResumeNotice(false), []);
 
-  return { isRecovering, resumeMessage, dismissResume, reeditNotice };
+  return { isRecovering, showResumeNotice, dismissResume, reeditNotice };
 }

@@ -604,7 +604,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
       <MobileDrilldownShell
         sections={sections}
         leafNavigation="always"
-        overallStatus={{ completed: completedRows, total: answerableRows.length, unit: '개 항목' }}
+        overallStatus={{ completed: completedRows, total: answerableRows.length, unit: 'items' }}
         getSectionStatus={(section) => {
           // 계산 전용 행은 카운트 대상이 아니다 (분자·분모 모두 제외)
           const countable = section.leaves.filter((leaf) => leaf.inputCellIds.length > 0);
@@ -619,13 +619,13 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
                 : false;
             }).length,
             total: countable.length,
-            unit: '개 항목',
+            unit: 'items',
           };
         }}
         getLeafStatus={(leaf) => {
           // 계산 전용 행은 완료 개념이 없다 — total 0 이면 shell 이 카운트 뱃지를 숨긴다
           if (leaf.inputCellIds.length === 0) {
-            return { completed: 0, total: 0, unit: '개 항목' };
+            return { completed: 0, total: 0, unit: 'items' };
           }
           const row = navigationRowById.get(leaf.rowId);
           return {
@@ -638,7 +638,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
                 ? 1
                 : 0,
             total: 1,
-            unit: '개 항목',
+            unit: 'items',
           };
         }}
         renderLeafDetail={renderOriginalRowDetail}
@@ -656,16 +656,16 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
     <MobileDrilldownShell
       sections={sections}
       leafNavigation="matrix-only"
-      overallStatus={{ completed: totalFilled, total: totalInputs, unit: '칸' }}
+      overallStatus={{ completed: totalFilled, total: totalInputs, unit: 'cells' }}
       getSectionStatus={(section) => ({
         completed: secFilled(section),
         total: section.totalInputs,
-        unit: '칸',
+        unit: 'cells',
       })}
       getLeafStatus={(leaf) => ({
         completed: leafFilled(leaf),
         total: leaf.inputCellIds.length,
-        unit: '칸',
+        unit: 'cells',
       })}
       renderLegacySection={renderScalarOrListSection}
       renderLeafDetail={renderMatrixLeafDetail}

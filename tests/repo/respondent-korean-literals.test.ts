@@ -13,7 +13,9 @@ import { describe, expect, it } from 'vitest';
  * 목록이 실제와 어긋나지 않게 한다.
  *
  * 판정은 문법 트리로 한다 — 주석은 트리에 없고, `console.*`·`logger.*`·`new Error(…)` 인자는 건너뛴다.
- * 문자열·템플릿 조각·JSX 글자 중 한글이 든 것만 앞뒤 공백을 걷어 비교한다.
+ * 문자열·템플릿·JSX 글자 중 한글이 든 것만 앞뒤 공백을 걷어 비교한다. 템플릿은 조각으로 쪼개지 않고
+ * 끼운 값 자리를 `${}` 로 적은 한 문장으로 본다 — 「개」 같은 한 글자 조각을 목록에 두면 같은 파일의
+ * 새 문장이 그 조각을 빌려 빠져나간다.
  */
 
 const ROOTS = ['src/features/question-renderer', 'src/features/survey-response'];
@@ -37,8 +39,8 @@ const AUTHORING_GAPS: Record<string, readonly string[]> = {
   'question-renderer/cells/video-cell.tsx': ['동영상 없음'],
   'question-renderer/choice-table-response.tsx': ['(라벨 없음)'],
   // 행·그룹 라벨을 비웠을 때의 「그룹 N」「항목 N」
-  'question-renderer/hooks/use-row-groups.ts': ['그룹', '항목'],
-  'question-renderer/mobile-row-card.tsx': ['항목'],
+  'question-renderer/hooks/use-row-groups.ts': ['그룹 ${}', '항목 ${}'],
+  'question-renderer/mobile-row-card.tsx': ['항목 ${}'],
   'question-renderer/interactive-table-response.tsx': ['테이블 질문이 구성되지 않았습니다'],
   'question-renderer/ranking-question.tsx': [
     '설명 테이블에 "순위 옵션" 셀이 없습니다. 빌더에서 옵션으로 쓸 셀의 타입을 "순위 옵션"으로 설정하세요.',
@@ -61,23 +63,14 @@ const AUTHORING_GAPS: Record<string, readonly string[]> = {
 
 /** 화면에 그대로 나가지 않는 표식·비교 값 — 화면 글자는 사전이 현재 언어로 바꿔 그린다. */
 const MARKERS: Record<string, readonly string[]> = {
-  // 진행 줄 단위의 타입 값 — 화면 글자는 `UNIT_KEY` 가 사전 키로 바꾼다
-  'question-renderer/choice-table-drilldown.tsx': ['개 선택'],
-  'question-renderer/mobile-drilldown-shell.tsx': ['칸', '개 항목', '개 선택'],
-  'question-renderer/mobile-table-drilldown.tsx': ['개 항목', '칸'],
   // 저작자 라벨의 「… 단위」 짝 판정
   'question-renderer/utils/mobile-card-options.ts': ['단위'],
   // 저작자 검증 문구의 자리표시자 이름(저작자가 한국어로 적는다)
   'survey-response/lib/numeric-validation.ts': ['{현재값}', '{기준값}'],
   // 서버 오류 문장과의 비교
   'survey-response/hooks/use-duplicate-guard.ts': ['테스트 링크가 더 이상 유효하지 않습니다'],
-  // 켜졌는지만 보는 표식 — 토스트는 현재 언어 사전 문장으로 그린다(05)
-  'survey-response/hooks/use-session-recovery.ts': ['이전 응답을 이어서 진행합니다'],
-  'survey-response/survey-response-flow.tsx': [
-    '설문이 업데이트되어 최신 버전으로 이어집니다',
-    // 언어 바꾸기 버튼 — 이미 세 언어다
-    '언어 변경 · 语言 · Language',
-  ],
+  // 언어 바꾸기 버튼 — 이미 세 언어다
+  'survey-response/survey-response-flow.tsx': ['언어 변경 · 语言 · Language'],
 };
 
 /** 빌더·관리자 화면만 보는 문장 — 관리자 화면은 한국어로 둔다. */
@@ -88,8 +81,7 @@ const ADMIN_ONLY: Record<string, readonly string[]> = {
     '묶을 행을 하나 이상 지정해야 합니다.',
     '표에 없는 행이 지정되었습니다.',
     '묶음은 붙어 있는 행이어야 합니다.',
-    '처음 보이는 행 수는 1 이상',
-    '이하여야 합니다 — 묶음 행 수보다 작아야 열 행이 남습니다.',
+    '처음 보이는 행 수는 1 이상 ${} 이하여야 합니다 — 묶음 행 수보다 작아야 열 행이 남습니다.',
     '행 반복 블록의 행은 묶음에 넣을 수 없습니다.',
     '동적 행 그룹에 속한 행은 묶음에 넣을 수 없습니다.',
     '표시 조건이 걸린 행은 묶음에 넣을 수 없습니다.',
@@ -97,22 +89,18 @@ const ADMIN_ONLY: Record<string, readonly string[]> = {
   ],
   // 표 분류의 진단 사유(디버그)
   'question-renderer/utils/classify-table.ts': [
-    '값 열',
-    '개를 행마다 채움',
-    '입력 1칸이 값 열',
-    '개를 colspan 병합',
+    '값 열 ${}개를 행마다 채움',
+    '입력 1칸이 값 열 ${}개를 colspan 병합',
     '값 열 1개 · 단독 입력',
-    '값 열 1개 · 반복 항목',
-    '개',
+    '값 열 1개 · 반복 항목 ${}개',
   ],
   // 조사표 앵커 편집기의 라벨
   'question-renderer/utils/anchor-outline.ts': ['(제목 없음)', '그룹 없음'],
   // 관리자 응답 수정의 완화 안내
   'survey-response/lib/admin-edit-required-relax.ts': [
-    '빈 필수 응답',
-    '개',
-    '형식·품질 조건에 맞지 않는 값',
-    "— '다음 →' 한 번 더 누르면 그대로 넘어갑니다",
+    '빈 필수 응답 ${}개',
+    '형식·품질 조건에 맞지 않는 값 ${}개',
+    "${} — '다음 →' 한 번 더 누르면 그대로 넘어갑니다",
   ],
   // 조사표 열기 실패 진단 — 운영자가 원인(저장소 CORS)을 찾는 문장
   'question-renderer/pdf-page-view.tsx': [
@@ -177,14 +165,15 @@ function hangulLiterals(path: string): Set<string> {
   const found = new Set<string>();
   const visit = (node: ts.Node) => {
     if (isSkippedCall(node, source)) return;
-    if (
-      ts.isStringLiteral(node) ||
-      ts.isNoSubstitutionTemplateLiteral(node) ||
-      ts.isTemplateHead(node) ||
-      ts.isTemplateMiddle(node) ||
-      ts.isTemplateTail(node) ||
-      ts.isJsxText(node)
-    ) {
+    if (ts.isTemplateExpression(node)) {
+      const text = [node.head.text, ...node.templateSpans.map((span) => `\${}${span.literal.text}`)]
+        .join('')
+        .trim();
+      if (HANGUL.test(text)) found.add(text);
+      node.templateSpans.forEach((span) => visit(span.expression));
+      return;
+    }
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) || ts.isJsxText(node)) {
       const text = node.text.trim();
       if (HANGUL.test(text)) found.add(text);
     }

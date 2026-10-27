@@ -176,13 +176,13 @@ export function ChoiceTableDrilldown({
       return {
         completed: cells.filter((cell) => selectedIdSet.has(cell.id)).length,
         total: cells.length,
-        unit: '개 선택',
+        unit: 'selections',
       };
     }
     const keys = new Set(cells.map((cell) => groupKeyByCellId.get(cell.id) ?? DEFAULT_GROUP_KEY));
     let completed = 0;
     for (const key of keys) if (answeredGroupKeys.has(key)) completed += 1;
-    return { completed, total: keys.size, unit: '개 선택' };
+    return { completed, total: keys.size, unit: 'selections' };
   };
 
   const getLeafStatus = (leaf: ClassifiedLeaf): DrilldownStatus =>
@@ -208,7 +208,7 @@ export function ChoiceTableDrilldown({
     ? {
         completed: Math.min(cellBasedOverall.completed, minSelections),
         total: minSelections,
-        unit: '개 선택',
+        unit: 'selections',
       }
     : cellBasedOverall;
 

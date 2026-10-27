@@ -570,7 +570,8 @@ function SurveyResponseFlowActive({
   const [refetchedPausedMessage, setRefetchedPausedMessage] = useState<string | null>(null);
   // 무중단 갈아타기(티켓 04) 안내 문구 — 서버가 응답 행을 현재 버전으로 재핀한 것을 감지해
   // 최신 스냅샷 재취득이 끝난 뒤 한 줄 표시한다 (resume 토스트와 동일 패턴).
-  const [rebaseMessage, setRebaseMessage] = useState<string | null>(null);
+  // 버전 이관 안내를 띄우는가 — 문장은 화면이 현재 언어로 그린다
+  const [showRebaseNotice, setShowRebaseNotice] = useState(false);
 
   const keyboardOpen = useKeyboardOpen();
 
@@ -1089,10 +1090,10 @@ function SurveyResponseFlowActive({
   const [recoveredDraftSeq, setRecoveredDraftSeq] = useState<number | undefined>(undefined);
 
   // 운영 현황 콘솔(T6): localStorage 기반 응답 회복 + 회복 토스트 자동 dismiss.
-  // 회복 effect + dismiss effect 와 isRecovering/resumeMessage state 를
+  // 회복 effect + dismiss effect 와 isRecovering/showResumeNotice state 를
   // useSessionRecovery 로 추출 (두 effect 등록 순서·deps 동일, 세터 전용이라 훅이 소유).
   // isRecovering 은 handleResponse 의 INSERT 가드(I-1)에서 참조한다.
-  const { isRecovering, resumeMessage, dismissResume, reeditNotice } = useSessionRecovery({
+  const { isRecovering, showResumeNotice, dismissResume, reeditNotice } = useSessionRecovery({
     // 이월 응답 프리필 판정이 끝나기 전에 회복이 응답값을 세팅하면, 뒤늦은 프리필이
     // 저장된 답을 지난 회차 값으로 되돌린다 — 프리필이 정착한 뒤에만 회복을 연다.
     enabled: !isCompleted && prefillSettled,
@@ -1432,7 +1433,7 @@ function SurveyResponseFlowActive({
       setResponses(
         (prev) => applyStructuralSurvival(prev, refetched.survey.questions).survivingResponses,
       );
-      setRebaseMessage('설문이 업데이트되어 최신 버전으로 이어집니다');
+      setShowRebaseNotice(true);
     })();
   }, [refetchSnapshot, setResponses]);
 
@@ -2222,16 +2223,16 @@ function SurveyResponseFlowActive({
                   </div>
                 )}
                 {/* 두 안내는 문장이 하나씩이라 켜졌는지만 보고 현재 언어로 그린다 */}
-                {resumeMessage && (
+                {showResumeNotice && (
                   <ResumeToast
                     message={systemText('flow.resumed', inlineLocale)}
                     onDismiss={dismissResume}
                   />
                 )}
-                {rebaseMessage && (
+                {showRebaseNotice && (
                   <ResumeToast
                     message={systemText('flow.versionRebased', inlineLocale)}
-                    onDismiss={() => setRebaseMessage(null)}
+                    onDismiss={() => setShowRebaseNotice(false)}
                   />
                 )}
                 {inviteIsInvalid && (
