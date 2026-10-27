@@ -72,12 +72,16 @@ export default async function AdminLayout({ children }: { children: React.ReactN
  * (.pen FLOW 6-1 노트). 목록 procedure 도 같은 코어를 지나므로 셸과 데이터가 어긋나지 않는다.
  */
 async function InternalShell({ user, children }: { user: AuthUser; children: React.ReactNode }) {
-  const memberships = await getActiveTeamMemberships(user.id);
-  const teams = user.isSuperadmin
-    ? await listActiveTeams()
-    : memberships.map((m) => ({ id: m.teamId, name: m.teamName, kind: m.teamKind }));
+  // 슈퍼어드민의 팀 목록은 소속과 무관하다 — 차례로 기다리면 첫 화면마다 DB 왕복이 하나 더 얹힌다.
+  const [memberships, allTeams, cookieStore] = await Promise.all([
+    getActiveTeamMemberships(user.id),
+    user.isSuperadmin ? listActiveTeams() : Promise.resolve(null),
+    cookies(),
+  ]);
+  const teams =
+    allTeams ?? memberships.map((m) => ({ id: m.teamId, name: m.teamName, kind: m.teamKind }));
 
-  const requestedScope = (await cookies()).get(WORK_SCOPE_COOKIE)?.value ?? null;
+  const requestedScope = cookieStore.get(WORK_SCOPE_COOKIE)?.value ?? null;
   const subject = {
     userId: user.id,
     isSuperadmin: user.isSuperadmin,
