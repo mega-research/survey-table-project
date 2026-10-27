@@ -31,7 +31,12 @@ describe('표 셀 현재 언어', () => {
   it('中文 — 체크박스 칸의 선택 개수·최소 안내가 중국어다', () => {
     render(
       <SurveyLocaleProvider locale="zh">
-        <CheckboxCell cell={checkboxCell} cellResponse={['1']} onUpdateValue={vi.fn()} questionId="q1" />
+        <CheckboxCell
+          cell={checkboxCell}
+          cellResponse={['1']}
+          onUpdateValue={vi.fn()}
+          questionId="q1"
+        />
       </SurveyLocaleProvider>,
     );
     expect(screen.getByText('已选 1/3 项')).toBeInTheDocument();
@@ -69,7 +74,12 @@ describe('표 셀 현재 언어', () => {
   });
 
   it('English — 동영상 링크 오류와 읽기 전용 입력칸 안내가 영어다', () => {
-    const video = { id: 'v1', type: 'video', content: '', videoUrl: 'https://x.test/a' } as TableCell;
+    const video = {
+      id: 'v1',
+      type: 'video',
+      content: '',
+      videoUrl: 'https://x.test/a',
+    } as TableCell;
     const input = { id: 'i1', type: 'input', content: '', inputMaxLength: 20 } as TableCell;
     render(
       <SurveyLocaleProvider locale="en">

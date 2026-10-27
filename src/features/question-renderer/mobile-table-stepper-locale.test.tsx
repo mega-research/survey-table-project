@@ -4,13 +4,13 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@/features/question-renderer/mobile-row-card', () => ({
-  MobileRowCard: ({ row }: { row: { id: string } }) => <div data-testid={`row-card-${row.id}`} />,
-}));
-
 import { MobileTableStepper } from '@/features/question-renderer/mobile-table-stepper';
 import { SurveyLocaleProvider } from '@/features/question-renderer/survey-locale-context';
 import type { TableColumn, TableRow } from '@/types/survey';
+
+vi.mock('@/features/question-renderer/mobile-row-card', () => ({
+  MobileRowCard: ({ row }: { row: { id: string } }) => <div data-testid={`row-card-${row.id}`} />,
+}));
 
 const visibleColumns: TableColumn[] = [
   { id: 'c0', label: 'Item' },
