@@ -74,6 +74,7 @@ import {
   resolveEndRedirectUrl,
 } from '@/lib/survey/end-redirect';
 import { resolvePriorWaveLabel } from '@/lib/survey/prior-answers';
+import { resolveCurrentLocale } from '@/utils/survey-language';
 import { PriorAnswersProvider } from '@/features/question-renderer/prior-answers-context';
 import { isChoiceGroupTableQuestion } from '@/lib/survey/choice-selection';
 import { normalizeFormatValues } from './lib/format-normalize';
@@ -106,6 +107,7 @@ import {
 import { withCalcValues } from '@/lib/survey/cell-formula';
 import type { FormulaEvalCtx } from '@/lib/survey/cell-formula';
 import { ContactAttrsProvider } from '@/features/question-renderer/contact-attrs-context';
+import { SurveyLocaleProvider } from '@/features/question-renderer/survey-locale-context';
 import { FormulaEvalProvider } from '@/features/question-renderer/formula-context';
 import {
   type NumericIssue,
@@ -572,6 +574,12 @@ function SurveyResponseFlowActive({
   // 현재 설문의 질문들
   const questions = useMemo(() => loadedSurvey?.questions || [], [loadedSurvey]);
   const groups = useMemo(() => loadedSurvey?.groups || [], [loadedSurvey]);
+
+  // 현재 언어 (CONTEXT.md 「언어 문항」) — 언어 문항의 답에서 파생한다. 저장하지 않는다.
+  const currentLocale = useMemo(
+    () => resolveCurrentLocale(questions, groups, responses),
+    [questions, groups, responses],
+  );
 
   // 응답 인용 — {{{이름}}} 채널로 소비되는 파생값. 저장하지 않는다.
   const answerQuotes = useMemo(
@@ -2012,169 +2020,174 @@ function SurveyResponseFlowActive({
           }}
         />
         <FormulaEvalProvider value={formulaCtx}>
-          <SurveyResponseLayout
-            containerMaxWidth={containerMaxWidth}
-            reserveBottomNavSpace={isMobile}
-            documentPane={
-              isSplit && documentView ? (
-                <ResponseDocumentPane
-                  url={documentView.url}
-                  pageCount={documentView.pageCount}
-                  anchors={documentView.anchors}
-                  focus={anchorFocus}
-                  labelOf={anchorLabelOf}
-                  onOwnerSelect={handleAnchorOwnerSelect}
-                />
-              ) : undefined
-            }
-            chrome={
-              /* 봇 방어 허니팟 — 화면에 안 보이는 입력. 봇이 채우면 서버가 차단 */
-              <HoneypotField ref={honeypotRef} />
-            }
-            header={
-              <SurveyResponseHeader
-                title={loadedSurvey.title}
-                description={loadedSurvey.description}
-                responseHeader={loadedSurvey.settings.responseHeader}
-                showBranding={currentVisibleStepNumber <= 1}
-              />
-            }
-            progress={progressBand}
-            bottomNav={
-              isMobile ? (
-                <MobileBottomNav
-                  keyboardOpen={keyboardOpen}
-                  currentStepNumber={currentVisibleStepNumber}
-                  totalStepCount={totalVisibleStepCount}
-                  hasPrevious={hasPreviousDisplayable}
-                  isLastStep={isLastVisibleStep}
-                  isSubmitting={isSubmitting}
-                  submitLabel={submitLabel}
-                  submittingLabel={submittingLabel}
-                  onPrevious={handlePrevious}
-                  onNext={handleNext}
-                />
-              ) : undefined
-            }
-          >
-            {reeditNotice && (
-              <div
-                role="status"
-                className="mb-4 flex items-start gap-2 rounded border border-blue-300 bg-blue-50 px-3 py-2 text-sm text-blue-900"
+          <SurveyLocaleProvider locale={currentLocale}>
+            {/* display:contents — 배치를 바꾸지 않고 lang 만 싣는다. 미정이면 달지 않는다 */}
+            <div lang={currentLocale ?? undefined} className="contents">
+              <SurveyResponseLayout
+                containerMaxWidth={containerMaxWidth}
+                reserveBottomNavSpace={isMobile}
+                documentPane={
+                  isSplit && documentView ? (
+                    <ResponseDocumentPane
+                      url={documentView.url}
+                      pageCount={documentView.pageCount}
+                      anchors={documentView.anchors}
+                      focus={anchorFocus}
+                      labelOf={anchorLabelOf}
+                      onOwnerSelect={handleAnchorOwnerSelect}
+                    />
+                  ) : undefined
+                }
+                chrome={
+                  /* 봇 방어 허니팟 — 화면에 안 보이는 입력. 봇이 채우면 서버가 차단 */
+                  <HoneypotField ref={honeypotRef} />
+                }
+                header={
+                  <SurveyResponseHeader
+                    title={loadedSurvey.title}
+                    description={loadedSurvey.description}
+                    responseHeader={loadedSurvey.settings.responseHeader}
+                    showBranding={currentVisibleStepNumber <= 1}
+                  />
+                }
+                progress={progressBand}
+                bottomNav={
+                  isMobile ? (
+                    <MobileBottomNav
+                      keyboardOpen={keyboardOpen}
+                      currentStepNumber={currentVisibleStepNumber}
+                      totalStepCount={totalVisibleStepCount}
+                      hasPrevious={hasPreviousDisplayable}
+                      isLastStep={isLastVisibleStep}
+                      isSubmitting={isSubmitting}
+                      submitLabel={submitLabel}
+                      submittingLabel={submittingLabel}
+                      onPrevious={handlePrevious}
+                      onNext={handleNext}
+                    />
+                  ) : undefined
+                }
               >
-                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                <div>
-                  재응답이 허용된 설문입니다. 답변을 수정한 뒤 <strong>끝까지 진행해 제출</strong>
-                  해야 완료로 반영됩니다. 제출하지 않고 나가면 완료 처리되지 않습니다.
-                </div>
-              </div>
-            )}
-            {resumeMessage && <ResumeToast message={resumeMessage} onDismiss={dismissResume} />}
-            {rebaseMessage && (
-              <ResumeToast message={rebaseMessage} onDismiss={() => setRebaseMessage(null)} />
-            )}
-            {inviteIsInvalid && (
-              <div
-                role="alert"
-                className="mb-4 flex items-start gap-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
-              >
-                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                <div>초대 링크가 유효하지 않아 익명 응답으로 진행됩니다.</div>
-              </div>
-            )}
-            {isSplit ? (
-              /* 분할 화면의 오른쪽 — 조사표와 눈을 오가야 해서 한 문항이 한 줄이다.
-             전용 질문 유형이 아니라 그리는 방식만 다르다 (데이터는 평범한 radio). */
-              <DemandChecklist
-                items={currentStep.items.filter((item) =>
-                  currentStepQuestions.some((q) => q.id === item.question.id),
+                {reeditNotice && (
+                  <div
+                    role="status"
+                    className="mb-4 flex items-start gap-2 rounded border border-blue-300 bg-blue-50 px-3 py-2 text-sm text-blue-900"
+                  >
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <div>
+                      재응답이 허용된 설문입니다. 답변을 수정한 뒤 <strong>끝까지 진행해 제출</strong>
+                      해야 완료로 반영됩니다. 제출하지 않고 나가면 완료 처리되지 않습니다.
+                    </div>
+                  </div>
                 )}
-                groups={groups}
-                responses={responses}
-                questions={questions}
-                onResponse={handleResponse}
-                highlightQuestionIds={highlightQuestionIds}
-                requiredMessageQuestionIds={requiredMessageQuestionIds}
-                changeConfirmMessageQuestionIds={changeConfirmMessageQuestionIds}
-                numericIssues={visibleNumericIssues}
-                onQuestionFocus={selectAnchorQuestion}
-                onGroupSelect={selectAnchorGroup}
-                activeGroupId={activeAnchorGroupId}
-                focusedQuestionId={anchorSelection?.kind === 'question' ? anchorSelection.id : null}
-              />
-            ) : (
-              <PageStepView
-                step={currentStep}
-                responses={responses}
-                questions={questions}
-                groups={groups}
-                evalCtx={evalCtx}
-                onResponse={handleStepResponse}
-                highlightQuestionIds={highlightQuestionIds}
-                requiredMessageQuestionIds={requiredMessageQuestionIds}
-                changeConfirmMessageQuestionIds={changeConfirmMessageQuestionIds}
-                numericIssues={visibleNumericIssues}
-              />
-            )}
-
-            {/* 데스크톱 네비게이션 */}
-            <div className="mt-8 hidden items-center justify-between md:flex">
-              <Button variant="outline" onClick={handlePrevious} disabled={!hasPreviousDisplayable}>
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                이전
-              </Button>
-
-              {/* 가운데 슬롯 — admin-edit 경고 1회 상태에선 빈 필수 통과 안내가 우선한다.
-              상단 배너는 시야에서 벗어나 인지되지 않아(2026-08-14) 버튼 사이로 이동. */}
-              <div
-                className="px-4 text-sm text-gray-500"
-                role={showAdminRelaxWarning ? 'alert' : undefined}
-              >
-                {showAdminRelaxWarning && adminStepClassification ? (
-                  <span className="flex flex-wrap items-center justify-center gap-2 text-amber-700">
-                    <span>{buildAdminRelaxWarningMessage(adminStepClassification)}</span>
-                    {adminFirstRelaxTarget && (
-                      <button
-                        type="button"
-                        className="shrink-0 rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs text-amber-900 hover:bg-amber-100"
-                        onClick={() => {
-                          const { questionId: targetQuestionId, issue: targetIssue } =
-                            adminFirstRelaxTarget;
-                          scrollToIssue({
-                            questionId: targetQuestionId,
-                            detailTargetIds: targetIssue?.detailTargetIds,
-                            cellInstanceIds: buildRowWiseCellInstanceIds(
-                              questions.find((q) => q.id === targetQuestionId)?.tableRowsData,
-                              targetIssue?.cellIds,
-                            ),
-                            cellIds: targetIssue?.cellIds,
-                          });
-                        }}
-                      >
-                        위치로 이동
-                      </button>
+                {resumeMessage && <ResumeToast message={resumeMessage} onDismiss={dismissResume} />}
+                {rebaseMessage && (
+                  <ResumeToast message={rebaseMessage} onDismiss={() => setRebaseMessage(null)} />
+                )}
+                {inviteIsInvalid && (
+                  <div
+                    role="alert"
+                    className="mb-4 flex items-start gap-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+                  >
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <div>초대 링크가 유효하지 않아 익명 응답으로 진행됩니다.</div>
+                  </div>
+                )}
+                {isSplit ? (
+                  /* 분할 화면의 오른쪽 — 조사표와 눈을 오가야 해서 한 문항이 한 줄이다.
+                 전용 질문 유형이 아니라 그리는 방식만 다르다 (데이터는 평범한 radio). */
+                  <DemandChecklist
+                    items={currentStep.items.filter((item) =>
+                      currentStepQuestions.some((q) => q.id === item.question.id),
                     )}
-                  </span>
+                    groups={groups}
+                    responses={responses}
+                    questions={questions}
+                    onResponse={handleResponse}
+                    highlightQuestionIds={highlightQuestionIds}
+                    requiredMessageQuestionIds={requiredMessageQuestionIds}
+                    changeConfirmMessageQuestionIds={changeConfirmMessageQuestionIds}
+                    numericIssues={visibleNumericIssues}
+                    onQuestionFocus={selectAnchorQuestion}
+                    onGroupSelect={selectAnchorGroup}
+                    activeGroupId={activeAnchorGroupId}
+                    focusedQuestionId={anchorSelection?.kind === 'question' ? anchorSelection.id : null}
+                  />
                 ) : (
-                  showRequiredNotice && (
-                    <span className="text-red-500">* 필수 질문에 답변해주세요</span>
-                  )
+                  <PageStepView
+                    step={currentStep}
+                    responses={responses}
+                    questions={questions}
+                    groups={groups}
+                    evalCtx={evalCtx}
+                    onResponse={handleStepResponse}
+                    highlightQuestionIds={highlightQuestionIds}
+                    requiredMessageQuestionIds={requiredMessageQuestionIds}
+                    changeConfirmMessageQuestionIds={changeConfirmMessageQuestionIds}
+                    numericIssues={visibleNumericIssues}
+                  />
                 )}
-              </div>
 
-              {isLastVisibleStep ? (
-                <Button onClick={handleNext} disabled={isSubmitting}>
-                  {isSubmitting ? submittingLabel : submitLabel}
-                  {!isSubmitting && <ArrowRight className="ml-2 h-4 w-4" />}
-                </Button>
-              ) : (
-                <Button onClick={handleNext}>
-                  다음
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              )}
+                {/* 데스크톱 네비게이션 */}
+                <div className="mt-8 hidden items-center justify-between md:flex">
+                  <Button variant="outline" onClick={handlePrevious} disabled={!hasPreviousDisplayable}>
+                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    이전
+                  </Button>
+
+                  {/* 가운데 슬롯 — admin-edit 경고 1회 상태에선 빈 필수 통과 안내가 우선한다.
+                  상단 배너는 시야에서 벗어나 인지되지 않아(2026-08-14) 버튼 사이로 이동. */}
+                  <div
+                    className="px-4 text-sm text-gray-500"
+                    role={showAdminRelaxWarning ? 'alert' : undefined}
+                  >
+                    {showAdminRelaxWarning && adminStepClassification ? (
+                      <span className="flex flex-wrap items-center justify-center gap-2 text-amber-700">
+                        <span>{buildAdminRelaxWarningMessage(adminStepClassification)}</span>
+                        {adminFirstRelaxTarget && (
+                          <button
+                            type="button"
+                            className="shrink-0 rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs text-amber-900 hover:bg-amber-100"
+                            onClick={() => {
+                              const { questionId: targetQuestionId, issue: targetIssue } =
+                                adminFirstRelaxTarget;
+                              scrollToIssue({
+                                questionId: targetQuestionId,
+                                detailTargetIds: targetIssue?.detailTargetIds,
+                                cellInstanceIds: buildRowWiseCellInstanceIds(
+                                  questions.find((q) => q.id === targetQuestionId)?.tableRowsData,
+                                  targetIssue?.cellIds,
+                                ),
+                                cellIds: targetIssue?.cellIds,
+                              });
+                            }}
+                          >
+                            위치로 이동
+                          </button>
+                        )}
+                      </span>
+                    ) : (
+                      showRequiredNotice && (
+                        <span className="text-red-500">* 필수 질문에 답변해주세요</span>
+                      )
+                    )}
+                  </div>
+
+                  {isLastVisibleStep ? (
+                    <Button onClick={handleNext} disabled={isSubmitting}>
+                      {isSubmitting ? submittingLabel : submitLabel}
+                      {!isSubmitting && <ArrowRight className="ml-2 h-4 w-4" />}
+                    </Button>
+                  ) : (
+                    <Button onClick={handleNext}>
+                      다음
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              </SurveyResponseLayout>
             </div>
-          </SurveyResponseLayout>
+          </SurveyLocaleProvider>
         </FormulaEvalProvider>
       </PriorAnswersProvider>
     </ContactAttrsProvider>

@@ -96,3 +96,17 @@ describe('mapQuestionRow — 영속 필드 전수 매핑', () => {
     expect(uncovered).toEqual([]);
   });
 });
+
+describe('mapQuestionRow — 보기 필드 보존', () => {
+  it('언어 보기의 locale 이 옵션 코드 복원을 지나도 남는다 (CONTEXT.md 「언어 문항」)', () => {
+    const mapped = mapQuestionRow({
+      ...SENTINEL_ROW,
+      type: 'radio',
+      options: [
+        { id: 'o1', label: '한국어', value: '1', locale: 'ko' },
+        { id: 'o2', label: '中文', value: '2', locale: 'zh' },
+      ],
+    } as never);
+    expect(mapped.options?.map((o) => o.locale)).toEqual(['ko', 'zh']);
+  });
+});

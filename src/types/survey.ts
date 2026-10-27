@@ -7,6 +7,7 @@ import type {
 } from '@/shared/contracts/survey';
 import type { InputType } from '@/types/input-type';
 import type { MobileTableDisplayMode } from '@/types/mobile-table-display';
+import type { SurveyLocale } from '@/types/survey-locale';
 
 // 타입 정의만 그대로 되내보낸다 — 정의는 각각 한 곳뿐이라 드리프트가 생길 수 없고,
 // 소비자 대부분이 Question·QuestionGroup 과 같은 문장에서 함께 받는다.
@@ -360,6 +361,11 @@ export interface QuestionOption {
    * 고르면 이것이 풀린다. 「없음 · 해당 없음 · 모름」류. 라디오에서는 의미 없어 빌더가 노출하지 않는다.
    */
   exclusiveChoice?: boolean;
+  /**
+   * 언어 보기 (CONTEXT.md 「언어 문항」) — radio 문항의 보기에 붙으면 그 문항이 언어 문항이 되고,
+   * 응답자가 이 보기를 고르면 현재 언어가 이 값이 된다. 다른 유형의 보기에서는 의미 없다.
+   */
+  locale?: SurveyLocale;
   /** @deprecated Phase 7 cleanup 에서 제거. allowTextInput 사용. */
   hasOther?: boolean;
   // 조건부 분기

@@ -25,9 +25,15 @@ import { OptionLabelTextarea } from '@/features/survey-builder/option-label-text
 import { OptionTextSettingsEditor } from '@/features/survey-builder/option-text-settings-editor';
 import { AnswerQuoteTextField } from '@/features/survey-builder/answer-quote-fields';
 import { BranchRuleEditor } from '@/features/survey-builder/branch-rule-editor';
+import {
+  LANGUAGE_QUESTION_WARNING_MESSAGES,
+  diagnoseLanguageQuestion,
+} from '@/features/survey-builder/lib/language-question-diagnostics';
+import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import { cn } from '@/lib/utils';
 import { generateOptionCode } from '@/utils/option-code-generator';
 import type { Question, QuestionOption } from '@/types/survey';
+import { SURVEY_LOCALES, SURVEY_LOCALE_LABELS, isSurveyLocale } from '@/types/survey-locale';
 
 interface QuestionOptionsFieldsProps {
   question: Question;
@@ -77,6 +83,13 @@ export function QuestionOptionsFields({
   updateOption,
   removeOption,
 }: QuestionOptionsFieldsProps) {
+  const groups = useSurveyBuilderStore((s) => s.currentSurvey.groups);
+  // 진단은 저장 전 폼 값(보기·쪽 나눔)을 반영한 문항으로 본다.
+  const languageWarnings = diagnoseLanguageQuestion({
+    questionId,
+    questions: questions.map((q) => (q.id === questionId ? { ...q, ...formData } : q)),
+    groups: groups ?? [],
+  });
   return (
     <>
   {needsOptions && (
@@ -137,6 +150,15 @@ export function QuestionOptionsFields({
       {validationErrors['options'] && (
         <p className="text-sm text-red-500">{validationErrors['options']}</p>
       )}
+      {languageWarnings.map((warning) => (
+        <p
+          key={warning}
+          className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800"
+          role="status"
+        >
+          {LANGUAGE_QUESTION_WARNING_MESSAGES[warning]}
+        </p>
+      ))}
 
       {/* 응답 페이지에서 옵션 배치 방식 (select 는 드롭다운이라 의미 없어 숨김) */}
       {question.type !== 'select' && (
@@ -174,6 +196,7 @@ export function QuestionOptionsFields({
                 questions={questions}
                 questionId={questionId}
                 isCheckboxQuestion={question.type === 'checkbox'}
+                isRadioQuestion={question.type === 'radio'}
               />
             ))}
           </div>
@@ -215,6 +238,8 @@ interface SortableOptionItemProps {
   questionId: string;
   /** 체크박스 문항일 때만 「단독 선택 보기」 토글을 보인다 (라디오는 의미 없음) */
   isCheckboxQuestion: boolean;
+  /** 라디오 문항일 때만 「언어」 선택을 보인다 — 언어 문항은 radio 뿐이다 */
+  isRadioQuestion: boolean;
 }
 
 function SortableOptionItem({
@@ -230,6 +255,7 @@ function SortableOptionItem({
   questions,
   questionId,
   isCheckboxQuestion,
+  isRadioQuestion,
 }: SortableOptionItemProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: option.id,
@@ -295,6 +321,30 @@ function SortableOptionItem({
               }
               className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
             />
+          </label>
+        )}
+
+        {/* 언어 보기 (CONTEXT.md 「언어 문항」) — 하나라도 고르면 이 문항이 언어 문항이 된다. 「없음」은 키를 지운다 */}
+        {isRadioQuestion && (
+          <label className="flex shrink-0 flex-col items-center gap-0.5">
+            <span className="text-[10px] text-gray-400">언어</span>
+            <select
+              aria-label="보기 언어"
+              value={option.locale ?? ''}
+              onChange={(e) =>
+                isSurveyLocale(e.target.value)
+                  ? updateOption(option.id, { locale: e.target.value })
+                  : updateOption(option.id, {}, ['locale'])
+              }
+              className="h-8 rounded-md border border-gray-300 px-1 text-xs"
+            >
+              <option value="">없음</option>
+              {SURVEY_LOCALES.map((locale) => (
+                <option key={locale} value={locale}>
+                  {SURVEY_LOCALE_LABELS[locale]}
+                </option>
+              ))}
+            </select>
           </label>
         )}
 
