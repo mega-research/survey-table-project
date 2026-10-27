@@ -1,6 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
-import { isMidSurveyCloseActive, resolveMidSurveyClosedMessage } from './closed-message';
+import {
+  QUOTA_MID_SURVEY_CLOSED_FALLBACK,
+  isMidSurveyCloseActive,
+  midSurveyClosedBody,
+  resolveMidSurveyClosedMessage,
+} from './closed-message';
+
+describe('midSurveyClosedBody', () => {
+  it('서버 문구가 있으면 그대로, 없으면 현재 언어의 기본 문구다', () => {
+    expect(midSurveyClosedBody('마감입니다', 'zh')).toBe('마감입니다');
+    expect(midSurveyClosedBody(null)).toBe(QUOTA_MID_SURVEY_CLOSED_FALLBACK);
+    expect(midSurveyClosedBody('  ', 'zh')).toMatch(/^非常抱歉/);
+  });
+});
 
 describe('resolveMidSurveyClosedMessage', () => {
   it('진행 중 마감 문구가 있으면 그것을 쓴다', () => {

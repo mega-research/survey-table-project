@@ -72,4 +72,9 @@ describe('resolveCompletionScreen — 언어별 문구 (CONTEXT.md 「다국어 
     const zhThanksOnly = { ...localized, localizedMessages: { zh: { thankYou: '非常感谢。' } } };
     expect(resolveCompletionScreen(zhThanksOnly, 'screened_out', 'zh').message).toBe('非常感谢。');
   });
+
+  it('제목은 현재 언어의 시스템 문장이다', () => {
+    expect(resolveCompletionScreen(settings, 'completed', 'zh').title).toBe('作答完成！');
+    expect(resolveCompletionScreen(settings, 'screened_out', 'en').title).toBe('Survey ended');
+  });
 });
