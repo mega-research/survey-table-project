@@ -306,11 +306,17 @@ export function AccessLinkPanel({ surveyId, kind }: AccessLinkPanelProps) {
 }
 
 /**
- * 아직 화면에 잇지 않은 칩 — 상세 통계(티켓 02)·응답 내역(티켓 03,
- * `.scratch/client-link-response-list`). 어휘는 먼저 섰지만 켜도 클라이언트 화면이 그대로라
- * 칩을 그리지 않는다. 그 티켓이 화면을 이으면서 여기서 하나씩 뺀다.
+ * 아직 화면에 잇지 않은 칩 — 응답 내역(티켓 03, `.scratch/client-link-response-list`). 어휘는
+ * 먼저 섰지만 켜도 클라이언트 화면이 그대로라 칩을 그리지 않는다. 그 티켓이 화면을 이으면서 뺀다.
  */
-const PENDING_CHIPS: ReadonlySet<ClientLinkTab> = new Set(['overviewDetail', 'responses']);
+const PENDING_CHIPS: ReadonlySet<ClientLinkTab> = new Set(['responses']);
+
+/**
+ * 다른 칩에 딸린 칩 — 부모가 꺼져 있으면 잠근다. 상세 통계는 응답 현황 화면 안의 카드라 응답
+ * 현황이 닫혀 있으면 켜도 보이는 곳이 없다. **값은 지우지 않는다** — 부모를 다시 켜면 연구원이
+ * 두었던 대로 돌아온다(잠근 칩도 지금 값을 체크로 보인다).
+ */
+const CHIP_PARENT: Partial<Record<ClientLinkTab, ClientLinkTab>> = { overviewDetail: 'overview' };
 
 /**
  * 클라이언트 링크의 화면 칩 — 게스트 넷에 설문 보기·상세 통계·응답 내역을 더한 어휘다.
@@ -331,13 +337,18 @@ function ClientTabChips({
     <div className="flex flex-wrap gap-1.5">
       {clientLinkTabValues.filter((tab) => !PENDING_CHIPS.has(tab)).map((tab) => {
         const active = tabs[tab];
+        const parent = CHIP_PARENT[tab];
+        const orphaned = parent !== undefined && !tabs[parent];
         return (
           <button
             key={tab}
             type="button"
             role="checkbox"
             aria-checked={active}
-            disabled={disabled}
+            disabled={disabled || orphaned}
+            title={
+              orphaned && parent ? `${CLIENT_LINK_TAB_LABEL[parent]} 칩을 켜야 보입니다` : undefined
+            }
             onClick={() => onToggle(tab)}
             className={cn(
               'flex h-[26px] items-center gap-1 rounded-full border px-2.5 text-[11px] font-medium transition-colors disabled:opacity-50',

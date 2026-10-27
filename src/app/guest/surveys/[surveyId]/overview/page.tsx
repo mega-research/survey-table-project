@@ -25,6 +25,8 @@ export default async function GuestOverviewPage({ params, searchParams }: Props)
     <ClientOverviewScreen
       surveyId={surveyId}
       showQuota={tabs.quota}
+      // 게스트 계정에는 상세 통계 칩이 없다 — 칩 이전과 같이 전부 그린다(철거 대상이라 넓히지 않는다).
+      showDetail
       searchParams={await searchParams}
     />
   );

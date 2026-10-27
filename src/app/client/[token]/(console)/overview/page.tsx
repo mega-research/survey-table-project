@@ -26,6 +26,8 @@ export default async function ClientLinkOverviewPage({ params, searchParams }: P
       surveyId={surveyId}
       // 쿼터 칸은 쿼터 탭이 열렸을 때만 — 탭을 닫았는데 현황 화면에서 같은 숫자가 보이면 안 된다.
       showQuota={tabs.quota}
+      // 상세 통계 칩 — 끄면 KPI·일자별 추이만 남는다(리멤버 패널처럼 숫자를 덜 넘겨야 하는 조사).
+      showDetail={tabs.overviewDetail}
       searchParams={await searchParams}
     />
   );

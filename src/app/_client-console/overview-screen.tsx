@@ -34,6 +34,14 @@ interface Props {
    * 통째로 받으면 「쿼터 칸에 필요한 것은 쿼터 탭 하나」라는 사실이 시그니처에서 사라진다.
    */
   showQuota: boolean;
+  /**
+   * 상세 카드 넷(일자별 통계표·응답시간·이탈 위치·페이지 체류시간)을 그릴 것인가 — 클라이언트
+   * 링크의 「상세 통계」 칩. 게스트 계정 입구는 그 칩이 없어 언제나 true 를 넘긴다.
+   *
+   * 쿼터 칸과 같은 규칙이다: 끄면 카드만 감추지 않고 **집계도 하지 않는다**. 숫자를 덜 보이려는
+   * 칩이라 그리지 않을 숫자를 RSC 가 계산해 들고 있을 이유도 없다.
+   */
+  showDetail: boolean;
   searchParams: ClientOverviewSearchParams;
 }
 
@@ -54,7 +62,7 @@ interface Props {
  * 운영 콘솔 overview 와 **같은 위젯**을 같은 서비스 위에 얹는다 — 스펙이 「대시보드 통째」라
  * 적었고, 게스트용 축약본을 따로 만들면 두 화면의 숫자가 갈릴 때 어느 쪽이 맞는지 알 수 없다.
  *
- * 빠지는 것 셋이 이 화면의 정의다.
+ * 빠지는 것 셋이 이 화면의 정의다(상세 통계 칩이 꺼지면 상세 카드 넷이 더 빠진다 — `showDetail`).
  *  - **엑셀 내보내기 버튼**: 게스트에게 export 는 항상 차단이다(스펙 §5). 화면에 없고
  *    서버(`export.download` 미보유)에서도 막힌다.
  *  - **쿼터**: 현황판도 KPI 의 쿼터 칸도 「쿼터 현황」 탭이 켜졌을 때만 채운다. 그 칸은
@@ -63,7 +71,12 @@ interface Props {
  *    현황판 자체는 이 화면에 없다 — 그것은 쿼터 탭의 내용이다.
  *  - **응답자 문의 카드**: 백엔드가 없는 자리표시자다(운영 콘솔의 InquiriesEmptyCard).
  */
-export async function ClientOverviewScreen({ surveyId, showQuota, searchParams }: Props) {
+export async function ClientOverviewScreen({
+  surveyId,
+  showQuota,
+  showDetail,
+  searchParams,
+}: Props) {
   const {
     mode = 'day',
     date,
@@ -87,10 +100,11 @@ export async function ClientOverviewScreen({ surveyId, showQuota, searchParams }
         mode,
         ...(effectiveDate !== undefined ? { hourModeDate: effectiveDate } : {}),
       }),
-      getDailyStats(surveyId, EXTERNAL_VIEWER_DATA_SCOPE),
-      getResponseTime(surveyId, EXTERNAL_VIEWER_DATA_SCOPE),
-      getDropFunnel(surveyId, EXTERNAL_VIEWER_DATA_SCOPE),
-      getPageDwell(surveyId, EXTERNAL_VIEWER_DATA_SCOPE),
+      // 상세 통계 칩이 꺼져 있으면 넷 다 읽지 않는다.
+      showDetail ? getDailyStats(surveyId, EXTERNAL_VIEWER_DATA_SCOPE) : null,
+      showDetail ? getResponseTime(surveyId, EXTERNAL_VIEWER_DATA_SCOPE) : null,
+      showDetail ? getDropFunnel(surveyId, EXTERNAL_VIEWER_DATA_SCOPE) : null,
+      showDetail ? getPageDwell(surveyId, EXTERNAL_VIEWER_DATA_SCOPE) : null,
       // 쿼터 탭이 꺼져 있으면 조회 자체를 하지 않는다 — 쓰지 않을 값을 읽지 않는다.
       showQuota ? getQuotaStatus(surveyId, EXTERNAL_VIEWER_DATA_SCOPE) : null,
     ]);
@@ -100,7 +114,9 @@ export async function ClientOverviewScreen({ surveyId, showQuota, searchParams }
       <div>
         <h2 className="text-xl font-bold text-gray-900">응답 현황</h2>
         <p className="text-sm text-slate-500">
-          응답자 진행 현황 · 일자별 추이 · 응답시간 통계 · 이탈 위치 분석
+          {showDetail
+            ? '응답자 진행 현황 · 일자별 추이 · 응답시간 통계 · 이탈 위치 분석'
+            : '응답자 진행 현황 · 일자별 추이'}
         </p>
       </div>
 
@@ -114,10 +130,10 @@ export async function ClientOverviewScreen({ surveyId, showQuota, searchParams }
         weekOffset={weekOffset}
       />
 
-      <DailyStatsTable data={dailyStats} />
-      <ResponseTimeStats data={responseTime} />
-      <DropFunnel data={dropFunnel} />
-      <PageDwellDistribution data={pageDwell} pageOffset={dwellOffset} />
+      {dailyStats !== null && <DailyStatsTable data={dailyStats} />}
+      {responseTime !== null && <ResponseTimeStats data={responseTime} />}
+      {dropFunnel !== null && <DropFunnel data={dropFunnel} />}
+      {pageDwell !== null && <PageDwellDistribution data={pageDwell} pageOffset={dwellOffset} />}
     </main>
   );
 }

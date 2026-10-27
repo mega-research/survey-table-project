@@ -147,6 +147,34 @@ describe('AccessLinkPanel', () => {
     expect(screen.queryByText(/언제나 열립니다/)).toBeNull();
   });
 
+  it('상세 통계 칩이 서고, 누르면 그 칩만 저장한다', async () => {
+    state.data = linkState('client');
+    const user = userEvent.setup();
+    render(<AccessLinkPanel surveyId="s-1" kind="client" />);
+
+    const chip = screen.getByRole('checkbox', { name: '상세 통계' });
+    expect(chip).toBeChecked();
+    await user.click(chip);
+
+    await waitFor(() => expect(setTab).toHaveBeenCalledTimes(1));
+    expect(setTab).toHaveBeenCalledWith({ surveyId: 's-1', tab: 'overviewDetail', enabled: false });
+  });
+
+  /**
+   * 상세 통계는 응답 현황에 딸린 칩이다 — 응답 현황이 꺼져 있으면 켜도 보이는 곳이 없다.
+   * 값은 지우지 않는다: 응답 현황을 다시 켜면 연구원이 두었던 대로 돌아온다.
+   */
+  it('응답 현황이 꺼져 있으면 상세 통계 칩이 잠기고 값은 그대로 보인다', () => {
+    const base = linkState('client');
+    state.data = { ...base, link: { ...base.link, clientTabs: { ...TABS, overview: false } } };
+    render(<AccessLinkPanel surveyId="s-1" kind="client" />);
+
+    const chip = screen.getByRole('checkbox', { name: '상세 통계' });
+    expect(chip).toBeDisabled();
+    expect(chip).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: '쿼터 현황' })).toBeEnabled();
+  });
+
   it('발급 전에는 탭 칩이 없다 — 저장할 링크가 없다', () => {
     state.data = { link: null, canManage: true };
     render(<AccessLinkPanel surveyId="s-1" kind="client" />);
