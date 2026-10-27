@@ -5,8 +5,8 @@ import {
   useQuestionResponseSelector,
   useResponseSources,
 } from '@/features/question-renderer/response-sources';
+import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
 import {
-  DEFAULT_ROW_REPEAT_ADD_LABEL,
   cellIdsOfBundlesBeyond,
   deriveOpenRepeatCount,
   hiddenRepeatRowIds,
@@ -14,6 +14,7 @@ import {
   structuralRepeatCount,
 } from '@/lib/question/row-repeat';
 import type { RowRepeatConfig, TableRow } from '@/types/survey';
+import { systemText } from '@/utils/system-strings';
 
 /**
  * 행 반복 가시성 — 구조에 이미 펼쳐진 벌 중 몇 벌을 보일지 정한다.
@@ -64,6 +65,8 @@ export function useRowRepeat({
     selectQuestionResponse,
   );
   const [sessionOpenCount, setSessionOpenCount] = useState(0);
+  // 저작자가 이름을 비웠을 때의 기본 버튼 이름 — 현재 언어(다국어가 아니면 「행 추가」 그대로)
+  const defaultAddLabel = systemText('table.addRow', useInlineSurveyLocale());
 
   const currentResponse = useMemo(() => {
     if (source) {
@@ -117,7 +120,7 @@ export function useRowRepeat({
     hiddenRowIds,
     canAdd: isActive && openCount < maxCount,
     canRemove: isActive && openCount > 1,
-    addLabel: rowRepeatConfig?.addLabel?.trim() || DEFAULT_ROW_REPEAT_ADD_LABEL,
+    addLabel: rowRepeatConfig?.addLabel?.trim() || defaultAddLabel,
     addBundle,
     removeBundle,
   };

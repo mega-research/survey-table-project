@@ -5,8 +5,8 @@ import {
   useQuestionResponseSelector,
   useResponseSources,
 } from '@/features/question-renderer/response-sources';
+import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
 import {
-  DEFAULT_STAGED_ROWS_ADD_LABEL,
   cellIdsOfStagedRowAt,
   deriveOpenStagedCount,
   hiddenStagedRowIds,
@@ -14,6 +14,7 @@ import {
   stagedRowCount,
 } from '@/features/question-renderer/utils/staged-rows';
 import type { StagedRowsConfig, TableRow } from '@/types/survey';
+import { systemText } from '@/utils/system-strings';
 
 /**
  * 행 차례로 열기 가시성 — 저작된 행 묶음 중 몇 행을 보일지 정한다.
@@ -68,6 +69,8 @@ export function useStagedRows({
     selectQuestionResponse,
   );
   const [sessionOpenCount, setSessionOpenCount] = useState(0);
+  // 저작자가 이름을 비웠을 때의 기본 버튼 이름 — 현재 언어(다국어가 아니면 「행 추가」 그대로)
+  const defaultAddLabel = systemText('table.addRow', useInlineSurveyLocale());
 
   const currentResponse = useMemo(() => {
     if (source) {
@@ -126,7 +129,7 @@ export function useStagedRows({
     hiddenRowIds,
     canAdd: isActive && openCount < maxCount,
     canRemove: isActive && openCount > initialCount,
-    addLabel: stagedRowsConfig?.addLabel?.trim() || DEFAULT_STAGED_ROWS_ADD_LABEL,
+    addLabel: stagedRowsConfig?.addLabel?.trim() || defaultAddLabel,
     addRow,
     removeRow,
   };

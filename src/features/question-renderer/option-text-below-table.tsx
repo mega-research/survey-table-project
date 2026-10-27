@@ -17,8 +17,10 @@ import {
 } from '@/features/question-renderer/utils/option-text-below-table';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import type { HeaderCell, TableColumn, TableRow } from '@/types/survey';
+import { systemText } from '@/utils/system-strings';
 
 import { OptionTextInput } from './option-text-input';
+import { useInlineSurveyLocale } from './survey-locale-context';
 
 interface OptionTextBelowTableProps {
   questionId: string;
@@ -46,6 +48,7 @@ export function OptionTextBelowTable({
 }: OptionTextBelowTableProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
+  const locale = useInlineSurveyLocale();
   const { questionResponses: source } = useResponseSources();
   const candidates = useMemo(
     () => collectBelowTableCandidates({ columns, headerGrid, displayRows }),
@@ -71,7 +74,7 @@ export function OptionTextBelowTable({
           labelParts
             .map((part) => substituteTokens(part, attrs, quotes).trim())
             .filter(Boolean)
-            .join(' · ') || '상세 기재';
+            .join(' · ') || systemText('input.optionTextPlaceholder', locale);
         return (
           <OptionTextInput
             key={`${cell.id}:${option.id}`}

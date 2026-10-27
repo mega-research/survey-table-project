@@ -14,6 +14,7 @@ import { useScrollLeftSync } from '@/features/question-renderer/hooks/use-scroll
 import { useTablePerf } from '@/features/question-renderer/hooks/use-table-perf';
 import { useResponseSources } from '@/features/question-renderer/response-sources';
 import { scrollToIssue } from '@/features/question-renderer/scroll-to-issue';
+import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
 import {
   DEFAULT_TABLE_ANSWERABLE_CELL_TYPES,
   decideDrilldown,
@@ -64,6 +65,7 @@ import {
   shouldDisplayRow,
 } from '@/utils/branch-logic';
 import { getCellBackgroundStyle, getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
+import { systemText } from '@/utils/system-strings';
 import {
   type CellOutlineEdges,
   buildChoiceGroupOutline,
@@ -132,6 +134,7 @@ const RowRepeatControls = React.memo(function RowRepeatControls({
   onAdd,
   onRemove,
 }: RowRepeatControlsProps) {
+  const locale = useInlineSurveyLocale();
   return (
     <div className="mt-3 flex flex-wrap items-center gap-2">
       <button
@@ -150,11 +153,13 @@ const RowRepeatControls = React.memo(function RowRepeatControls({
           className="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
         >
           <Minus className="h-4 w-4" />
-          마지막 줄 삭제
+          {systemText('table.removeLastRow', locale)}
         </button>
       )}
       {!canAdd && (
-        <span className="text-xs text-gray-500">최대 {maxCount}개까지 추가할 수 있습니다.</span>
+        <span className="text-xs text-gray-500">
+          {systemText('table.maxRowsReached', locale, { max: maxCount })}
+        </span>
       )}
     </div>
   );
@@ -190,10 +195,11 @@ const StagedRowsControlRow = React.memo(function StagedRowsControlRow({
   gridRow,
   columnStart,
 }: StagedRowsControlRowProps) {
+  const locale = useInlineSurveyLocale();
   return (
     <div
       role="group"
-      aria-label="행 추가·삭제"
+      aria-label={systemText('table.rowControls', locale)}
       className="border-r border-b border-gray-400 bg-white"
       style={{ gridColumn: `${columnStart} / -1`, gridRow }}
     >
@@ -233,6 +239,7 @@ const SelectorRow = React.memo(function SelectorRow({
   isExpanded,
   onToggleExpand,
 }: SelectorRowProps) {
+  const locale = useInlineSurveyLocale();
   // buttonAlign은 가로 스크롤에서 항상 보이도록 좌측 sticky로 통일한다.
   return (
     <div
@@ -248,7 +255,7 @@ const SelectorRow = React.memo(function SelectorRow({
               e.stopPropagation();
               onToggleExpand(groupId);
             }}
-            aria-label={isExpanded ? '접기' : '펼치기'}
+            aria-label={systemText(isExpanded ? 'table.collapse' : 'table.expand', locale)}
           >
             <ChevronDown
               className={cn('h-4 w-4 transition-transform', isExpanded ? '' : '-rotate-90')}
@@ -262,7 +269,9 @@ const SelectorRow = React.memo(function SelectorRow({
           onClick={() => onSelect(groupId)}
         >
           <ListChecks className="h-3.5 w-3.5 shrink-0 text-gray-500" />
-          <span className="text-sm font-medium text-gray-700">{label || '항목 선택'}</span>
+          <span className="text-sm font-medium text-gray-700">
+            {label || systemText('table.selectItems', locale)}
+          </span>
           {selectedCount > 0 && (
             <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-gray-200 px-1.5 text-xs font-semibold text-gray-700">
               {selectedCount}
@@ -621,6 +630,7 @@ function InteractiveTableResponseBody({
     containerRef: tableContainerRef,
   });
   const isMobileView = useMobileView();
+  const locale = useInlineSurveyLocale();
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
   const mobileMode = resolveMobileTableDisplayMode({
@@ -1365,10 +1375,12 @@ function InteractiveTableResponseBody({
           >
             <ListChecks className="h-4 w-4 shrink-0 text-gray-500" />
             <span className="flex-1 text-sm font-medium text-gray-700">
-              {config.label || '항목 선택'}
+              {config.label || systemText('table.selectItems', locale)}
             </span>
             <span className="text-xs text-gray-500">
-              {groupSelectedCountMap.get(groupId) ?? 0}개 선택
+              {systemText('table.selectedCount', locale, {
+                count: groupSelectedCountMap.get(groupId) ?? 0,
+              })}
             </span>
             <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />
           </button>
