@@ -18,6 +18,7 @@ import {
   MOBILE_TABLE_COMPLETION_TYPES,
   projectMobileOriginalRow,
 } from '@/features/question-renderer/utils/mobile-original-row';
+import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
 import { resolveMobileCellLabel } from '@/features/question-renderer/utils/split-display-cells';
 import {
   buildRadioGroupBuckets,
@@ -29,6 +30,7 @@ import { collectTableChoiceSelection } from '@/lib/survey/choice-selection';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
+import { systemText } from '@/utils/system-strings';
 import {
   excludeMobileDrilldownRepeatedRows,
   getMobileDrilldownRepeatedBodyRowIds,
@@ -96,6 +98,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
 }: MobileTableDrilldownProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
+  const locale = useInlineSurveyLocale();
   const repeatHeaderRange = useMemo(
     () =>
       resolveMobileDrilldownRepeatHeaderRange({
@@ -394,7 +397,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
   const renderScalarOrListSection = (section: ClassifiedSection) => (
     <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
       <div className="border-b bg-gray-50/80 px-4 py-3 text-sm font-semibold text-gray-700">
-        {section.label || '입력'}
+        {section.label || systemText('drilldown.inputFallback', locale)}
       </div>
       <div className="divide-y divide-gray-100 px-3 py-1">
         {section.leaves.map((leaf) => {

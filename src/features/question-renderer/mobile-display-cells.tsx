@@ -6,12 +6,14 @@ import { ChevronDown } from 'lucide-react';
 
 import { CellText, resolveCellTextHtml } from './cell-text';
 import { EnlargeableImage } from './enlargeable-image';
+import { useInlineSurveyLocale } from './survey-locale-context';
 import { useTableImageEnlarge } from './table-image-enlarge';
 import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { TableCell } from '@/types/survey';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
+import { systemText } from '@/utils/system-strings';
 import { splitMobileDisplayCells } from '@/features/question-renderer/utils/split-display-cells';
 
 /** text/image/video 표시 셀 1개의 읽기 전용 콘텐츠 */
@@ -19,6 +21,7 @@ export function DisplayCellContent({ cell }: { cell: TableCell }) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
   const enlarge = useTableImageEnlarge(cell.id);
+  const locale = useInlineSurveyLocale();
 
   if (cell.type === 'image' && cell.imageUrl) {
     return (
@@ -43,7 +46,7 @@ export function DisplayCellContent({ cell }: { cell: TableCell }) {
         rel="noreferrer"
         className="text-sm font-medium text-blue-600 underline"
       >
-        동영상 보기
+        {systemText('media.watchVideo', locale)}
       </a>
     );
   }
@@ -80,6 +83,7 @@ export function MobileDisplayCells({
 }) {
   const { inline, collapsed } = splitMobileDisplayCells(cells);
   const [open, setOpen] = useState(false);
+  const locale = useInlineSurveyLocale();
 
   if (inline.length === 0 && collapsed.length === 0) return null;
 
@@ -96,7 +100,7 @@ export function MobileDisplayCells({
             onClick={() => setOpen((value) => !value)}
             className="inline-flex items-center gap-1 text-sm font-medium text-gray-500 transition-colors hover:text-gray-700"
           >
-            자세히
+            {systemText('mobile.details', locale)}
             <ChevronDown className={cn('h-4 w-4 transition-transform', open && 'rotate-180')} />
           </button>
           {open && (
