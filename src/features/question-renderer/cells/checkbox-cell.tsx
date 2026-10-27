@@ -14,8 +14,10 @@ import {
   isPriorChoice,
   matchesPriorChoice,
 } from '@/features/question-renderer/utils/prior-answer-highlight';
+import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import type { CheckboxOption } from '@/types/survey';
+import { systemText } from '@/utils/system-strings';
 
 import { CellOptionsContainer } from './cell-options-container';
 import { useOptionTextMovedBelowTable } from './option-text-placement-context';
@@ -35,6 +37,7 @@ export const CheckboxCell = React.memo(function CheckboxCell({
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
   const priorHighlight = usePriorHighlight();
+  const locale = useInlineSurveyLocale();
   const textInputBelowTable = useOptionTextMovedBelowTable(cell);
   const isPriorOption = (optionKey: string) =>
     priorChoiceValue !== undefined
@@ -90,11 +93,20 @@ export const CheckboxCell = React.memo(function CheckboxCell({
         <div className="flex items-center justify-between text-xs">
           <span className="text-gray-600">
             {maxSelections !== undefined && maxSelections > 0
-              ? `${currentCount}/${maxSelections}개 선택됨`
-              : `${currentCount}개 선택됨`}
+              ? systemText('choice.selectedCountOf', locale, {
+                  count: currentCount,
+                  max: maxSelections,
+                })
+              : systemText('choice.selectedCount', locale, { count: currentCount })}
           </span>
-          {isMinNotMet && <span className="text-orange-600">최소 {minSelections}개 이상</span>}
-          {isMaxReached && <span className="text-blue-600">최대 도달</span>}
+          {isMinNotMet && (
+            <span className="text-orange-600">
+              {systemText('cell.minSelections', locale, { min: minSelections })}
+            </span>
+          )}
+          {isMaxReached && (
+            <span className="text-blue-600">{systemText('cell.maxReached', locale)}</span>
+          )}
         </div>
       </div>
     ) : null;

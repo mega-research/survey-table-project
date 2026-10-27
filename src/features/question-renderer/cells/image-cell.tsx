@@ -6,10 +6,12 @@ import { Image as ImageIcon } from 'lucide-react';
 
 import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import { EnlargeableImage } from '@/features/question-renderer/enlargeable-image';
+import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
 import { useTableImageEnlarge } from '@/features/question-renderer/table-image-enlarge';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
+import { systemText } from '@/utils/system-strings';
 
 import type { InteractiveCellProps, PreviewCellProps } from './types';
 
@@ -25,6 +27,7 @@ export const ImageCell = React.memo(function ImageCell({
   // 넘길 때는 override 로 전달하므로 여기서 다시 치환하지 않는다.
   const caption = content ?? substituteTokens(cell.content, attrs, quotes);
   const enlarge = useTableImageEnlarge(cell.id);
+  const locale = useInlineSurveyLocale();
 
   if (!cell.imageUrl) {
     return (
@@ -40,13 +43,13 @@ export const ImageCell = React.memo(function ImageCell({
       {failedImageUrl === cell.imageUrl ? (
         <div className="flex items-center gap-1 text-sm text-red-500">
           <ImageIcon className="h-4 w-4" />
-          <span>이미지 오류</span>
+          <span>{systemText('media.imageError', locale)}</span>
         </div>
       ) : (
         <EnlargeableImage
           key={cell.imageUrl}
           src={cell.imageUrl}
-          alt="셀 이미지"
+          alt={systemText('media.cellImageAlt', locale)}
           fit="contain"
           className="h-auto max-h-full w-full rounded object-contain"
           style={{ maxWidth: '100%', maxHeight: '100%' }}
