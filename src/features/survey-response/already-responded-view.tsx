@@ -8,6 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
 
 import type { BlockReason } from '@/lib/duplicate-detection/types';
 import { cn } from '@/lib/utils';
+import { DEFAULT_PAUSED_MESSAGE } from '@/shared/lib/survey-control';
 import { DEFAULT_SURVEY_LOCALE, type SurveyLocale } from '@/types/survey-locale';
 import type { SystemStringKey } from '@/utils/system-strings';
 
@@ -97,6 +98,18 @@ const MESSAGES: Record<NoticeReason, MessageDef> = {
   },
 };
 
+/**
+ * 운영자 문구 — 비면 시스템 기본 문구(현재 언어)로 폴백한다. 운영 콘솔의 중단 다이얼로그는
+ * 한국어 기본 문구를 미리 채워 그대로 저장하므로, 중단 문구가 그 기본 문구와 같으면 운영자가 쓴
+ * 글이 아니라 기본값으로 보고 비운다 — 다국어 설문에서 고른 언어의 기본 문구가 나오게.
+ * 한국어 화면은 같은 글자가 같은 자리에 나와 달라지지 않는다.
+ */
+function resolveCustomBody(reason: NoticeReason, customBody: string | null | undefined) {
+  if (!customBody || !customBody.trim()) return null;
+  if (reason === 'survey_paused' && customBody.trim() === DEFAULT_PAUSED_MESSAGE) return null;
+  return customBody;
+}
+
 export function AlreadyRespondedView({
   reason,
   surveyTitle,
@@ -108,7 +121,7 @@ export function AlreadyRespondedView({
   const msg = MESSAGES[reason];
   const Icon = msg.tone === 'error' ? AlertCircle : CheckCircle2;
   const iconColor = msg.tone === 'error' ? 'text-red-500' : 'text-blue-500';
-  const customText = customBody && customBody.trim() ? customBody : null;
+  const customText = resolveCustomBody(reason, customBody);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50">
