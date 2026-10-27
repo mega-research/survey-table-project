@@ -26,9 +26,11 @@ import {
   isPriorText,
 } from '@/features/question-renderer/utils/prior-answer-highlight';
 import { usePriorHighlight } from '@/features/question-renderer/prior-answers-context';
+import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import { Question, QuestionGroup } from '@/types/survey';
+import { systemText } from '@/utils/system-strings';
 
 type ResponsesMap = Record<string, unknown>;
 
@@ -227,6 +229,7 @@ function BlockCard({
   focusedQuestionId: string | null;
   pairs: OpinionPairs;
 }) {
+  const locale = useInlineSurveyLocale();
   const judgements = useMemo(
     () =>
       block.items
@@ -270,8 +273,11 @@ function BlockCard({
             </span>
             <span className="shrink-0 text-[11px] text-gray-500">
               {judgements.length > 0
-                ? `${judgements.length}문항 · ${answeredCount} 응답`
-                : `${block.items.length}문항`}
+                ? systemText('demand.blockCount', locale, {
+                    count: judgements.length,
+                    answered: answeredCount,
+                  })
+                : systemText('demand.itemCount', locale, { count: block.items.length })}
             </span>
           </span>
         </div>
@@ -327,8 +333,6 @@ function BlockCard({
   );
 }
 
-/** 세 번째 버튼의 이름. 판정이 아니라 서술 칸을 여닫는 토글이지만 화면은 그대로다. */
-const OPINION_TOGGLE_LABEL = '의견 (자유기재)';
 
 function JudgementRow({
   question,
@@ -362,6 +366,7 @@ function JudgementRow({
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
   const priorHighlight = usePriorHighlight();
+  const locale = useInlineSurveyLocale();
 
   // 조사표 사각형과 같은 규칙 — 엑셀 라벨이 있으면 그것, 없으면 문항코드.
   const shortCode = questionShortCode(question);
@@ -432,7 +437,8 @@ function JudgementRow({
           {/* 판정 버튼이 아니라 서술 칸 토글이다. 글이 있으면 켜진 색으로 남는다. */}
           {opinionQuestion && (
             <Seg
-              label={OPINION_TOGGLE_LABEL}
+              // 세 번째 버튼 — 판정이 아니라 서술 칸을 여닫는 토글이지만 화면은 그대로다
+              label={systemText('demand.opinionToggle', locale)}
               on={hasNote || opened}
               tone="opinion"
               invalid={false}
@@ -455,7 +461,7 @@ function JudgementRow({
             onFocus={() => (typing.current = true)}
             onBlur={() => (typing.current = false)}
             rows={3}
-            placeholder="이 문항에 대한 의견을 자유롭게 적어 주십시오"
+            placeholder={systemText('demand.opinionPlaceholder', locale)}
             className={cn(
               'w-full rounded-md border border-gray-300 p-2 text-[12px] outline-none focus:border-blue-500',
               isPriorText(priorHighlight, opinionQuestion.id, note) && PRIOR_HIGHLIGHT_TEXT_CLS,

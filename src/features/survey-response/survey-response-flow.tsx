@@ -2352,7 +2352,7 @@ function SurveyResponseFlowActive({
                               });
                             }}
                           >
-                            위치로 이동
+                            {systemText('validation.goToLocation', inlineLocale)}
                           </button>
                         )}
                       </span>
