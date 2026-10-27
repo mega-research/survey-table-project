@@ -24,9 +24,11 @@ import {
   isPriorRankingText,
 } from '@/features/question-renderer/utils/prior-answer-highlight';
 import { usePriorHighlight } from '@/features/question-renderer/prior-answers-context';
+import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { QuestionOption, RankingAnswer } from '@/types/survey';
+import { systemText } from '@/utils/system-strings';
 import {
   RANKING_HORIZONTAL_ITEM_WIDTH,
   RANKING_OTHER_VALUE,
@@ -87,6 +89,7 @@ export function RankingDropdownStack({
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
   const priorHighlight = usePriorHighlight();
+  const locale = useInlineSurveyLocale();
 
   const answerAt = (rank: number) => answers.find((a) => a.rank === rank);
   const selectedValueAt = (rank: number) => answerAt(rank)?.optionValue ?? '';
@@ -164,11 +167,15 @@ export function RankingDropdownStack({
       if (!currentValue) return null;
       if (currentValue === RANKING_OTHER_VALUE) {
         return (
-          <OptionTextRow key={`detail-${rank}`} label="기타" compact={compact}>
+          <OptionTextRow
+            key={`detail-${rank}`}
+            label={systemText('ranking.other', locale)}
+            compact={compact}
+          >
             <input
               type="text"
-              placeholder="기타 내용 입력..."
-              aria-label={`${rank}순위 기타 상세 기재`}
+              placeholder={systemText('ranking.otherPlaceholder', locale)}
+              aria-label={systemText('ranking.otherDetailAria', locale, { rank })}
               name={`ranking-other-${rank}`}
               autoComplete="off"
               value={otherTextAt(rank)}
@@ -200,13 +207,18 @@ export function RankingDropdownStack({
       return (
         <OptionTextRow
           key={`detail-${rank}`}
-          label={substituteTokens(selectedOpt.label, attrs, quotes).trim() || '상세 기재'}
+          label={
+            substituteTokens(selectedOpt.label, attrs, quotes).trim() ||
+            systemText('input.optionTextPlaceholder', locale)
+          }
           compact={compact}
         >
           <input
             type="text"
-            placeholder={selectedOpt.textInputPlaceholder || '상세 기재'}
-            aria-label={`${rank}순위 상세 기재`}
+            placeholder={
+              selectedOpt.textInputPlaceholder || systemText('input.optionTextPlaceholder', locale)
+            }
+            aria-label={systemText('ranking.detailAria', locale, { rank })}
             name={`ranking-text-${rank}`}
             autoComplete="off"
             value={optionTextAt(rank)}
@@ -276,7 +288,9 @@ export function RankingDropdownStack({
               className={cn(selectCls, priorCls)}
               style={isHorizontal ? { width: RANKING_HORIZONTAL_ITEM_WIDTH } : undefined}
             >
-              <option value="">{compact ? '선택하세요' : '선택하세요...'}</option>
+              <option value="">
+                {systemText(compact ? 'input.selectShort' : 'input.selectPlaceholder', locale)}
+              </option>
               {options.map((opt) => (
                 <option
                   key={opt.id}
@@ -291,7 +305,9 @@ export function RankingDropdownStack({
                   {substituteTokens(opt.label, attrs, quotes)}
                 </option>
               ))}
-              {allowOther && <option value={RANKING_OTHER_VALUE}>기타 (직접 입력)</option>}
+              {allowOther && (
+                <option value={RANKING_OTHER_VALUE}>{systemText('ranking.otherDirect', locale)}</option>
+              )}
             </select>
           );
 
@@ -310,7 +326,7 @@ export function RankingDropdownStack({
             <Select value={currentValue} onValueChange={(v) => handleSelect(rank, v)}>
               <SelectTrigger
                 id={inputIdScope ? `${inputIdScope}-${rank}` : undefined}
-                aria-label={`${rank}순위 선택`}
+                aria-label={systemText('ranking.selectRank', locale, { rank })}
                 aria-invalid={ariaInvalid || undefined}
                 aria-describedby={ariaDescribedBy}
                 className={cn(
@@ -326,7 +342,7 @@ export function RankingDropdownStack({
                 )}
                 style={{ ...triggerWidthStyle, ...selectedStyle }}
               >
-                <SelectValue placeholder="선택하세요..." />
+                <SelectValue placeholder={systemText('input.selectPlaceholder', locale)} />
               </SelectTrigger>
               {/* Radix SelectContent 는 max-h(가용 높이) + overflow-y-auto + 스크롤 버튼 내장.
                 높이는 320px(max-h-80)로 캡해 컴팩트하게, 너비는 트리거 너비에 고정해
@@ -348,7 +364,7 @@ export function RankingDropdownStack({
                 ))}
                 {allowOther && (
                   <SelectItem value={RANKING_OTHER_VALUE} className={itemCls}>
-                    기타 (직접 입력)
+                    {systemText('ranking.otherDirect', locale)}
                   </SelectItem>
                 )}
               </SelectContent>
@@ -366,7 +382,7 @@ export function RankingDropdownStack({
                 isMobile && 'w-full min-w-0',
               )}
             >
-              <span className={rankLabelCls}>{rank}순위</span>
+              <span className={rankLabelCls}>{systemText('ranking.rank', locale, { rank })}</span>
               {selectEl}
             </div>
           );

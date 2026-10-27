@@ -4,6 +4,7 @@ import { type ReactNode, useMemo, useState } from 'react';
 
 import { buildRankingMobileSections, RankingMobileSectionItem } from '@/features/question-renderer/utils/ranking-mobile-sections';
 import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
+import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
 import { TablePreview } from '@/features/question-renderer/table-preview';
 import { useMobileView } from '@/hooks/use-media-query';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
@@ -25,6 +26,7 @@ import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 import { rankOfOption } from './utils/ranking-click';
 import { parseRankingAnswers, RANKING_OTHER_VALUE } from '@/utils/ranking-shared';
 import { resolveRankingOptions, resolveRankingOptionsFromCells } from '@/utils/ranking-source';
+import { systemText } from '@/utils/system-strings';
 
 import { CellText, resolveCellTextHtml } from './cell-text';
 import { RankingDropdownStack } from './cells/ranking-dropdown-stack';
@@ -198,6 +200,7 @@ function RankingQuestionBody({ question, value, onChange }: RankingQuestionProps
   const isMobile = useMobileView();
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
+  const locale = useInlineSurveyLocale();
   const isTableSource = config?.optionsSource === 'table';
 
   // 그룹 여부: 테이블 소스에서만 그룹이 존재 가능하다
@@ -311,7 +314,7 @@ function RankingQuestionBody({ question, value, onChange }: RankingQuestionProps
         />
         {positions < requestedPositions && (
           <p className="text-sm text-gray-500">
-            선택지가 {rawOptions.length}개라 최대 {positions}순위까지 입력할 수 있습니다.
+            {systemText('ranking.limitHint', locale, { count: rawOptions.length, positions: positions })}
           </p>
         )}
       </div>
@@ -393,7 +396,7 @@ function RankingQuestionBody({ question, value, onChange }: RankingQuestionProps
               />
               {scope.positions < requestedPositions && (
                 <p className="text-sm text-gray-500">
-                  선택지가 {scope.options.length}개라 최대 {scope.positions}순위까지 입력할 수 있습니다.
+                  {systemText('ranking.limitHint', locale, { count: scope.options.length, positions: scope.positions })}
                 </p>
               )}
             </div>
@@ -428,7 +431,7 @@ function RankingQuestionBody({ question, value, onChange }: RankingQuestionProps
             {fullNoticeKey === scope.key && <RankingFullNotice positions={scope.positions} />}
             {scope.positions < requestedPositions && (
               <p className="text-sm text-gray-500">
-                선택지가 {scope.options.length}개라 최대 {scope.positions}순위까지 입력할 수 있습니다.
+                {systemText('ranking.limitHint', locale, { count: scope.options.length, positions: scope.positions })}
               </p>
             )}
           </div>
@@ -574,6 +577,7 @@ function RankingDropdown({
   const config = question.rankingConfig;
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
+  const locale = useInlineSurveyLocale();
 
   const embeddedTable = hasEmbeddedTable ? (
     isMobile ? (
@@ -640,7 +644,7 @@ function RankingDropdown({
               />
               {groupPositions < requestedPositions && (
                 <p className="text-sm text-gray-500">
-                  선택지가 {groupOptions.length}개라 최대 {groupPositions}순위까지 입력할 수 있습니다.
+                  {systemText('ranking.limitHint', locale, { count: groupOptions.length, positions: groupPositions })}
                 </p>
               )}
             </div>
@@ -666,7 +670,7 @@ function RankingDropdown({
       />
       {positions < requestedPositions && (
         <p className="text-sm text-gray-500">
-          선택지가 {rawOptions.length}개라 최대 {positions}순위까지 입력할 수 있습니다.
+          {systemText('ranking.limitHint', locale, { count: rawOptions.length, positions: positions })}
         </p>
       )}
       {embeddedTable ?? (

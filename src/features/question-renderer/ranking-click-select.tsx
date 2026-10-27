@@ -10,12 +10,14 @@ import {
   PRIOR_HIGHLIGHT_TEXT_CLS,
 } from '@/features/question-renderer/utils/prior-answer-highlight';
 import { usePriorHighlight } from '@/features/question-renderer/prior-answers-context';
+import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
 import { useMobileView } from '@/hooks/use-media-query';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { QuestionOption, RankingAnswer } from '@/types/survey';
 import { rankOfOption, toggleRankingOption } from './utils/ranking-click';
 import { RANKING_OTHER_VALUE } from '@/utils/ranking-shared';
+import { systemText } from '@/utils/system-strings';
 
 import { OPTION_TEXT_BARE_INPUT_CLS, OptionTextRow } from './option-text-row';
 import {
@@ -117,6 +119,7 @@ export function RankingSummaryBar({
   cellId,
 }: RankingSummaryBarProps) {
   const priorHighlight = usePriorHighlight();
+  const locale = useInlineSurveyLocale();
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
       {Array.from({ length: positions }, (_, i) => i + 1).map((rank) => {
@@ -127,9 +130,9 @@ export function RankingSummaryBar({
           isPriorRanking(priorHighlight, questionId, rank, entry.optionValue, cellId);
         return (
           <div key={rank} className="flex items-center gap-1.5 text-sm text-gray-700">
-            <span className="font-medium">{rank}순위</span>
+            <span className="font-medium">{systemText('ranking.rank', locale, { rank })}</span>
             <span
-              aria-label={`${rank}순위 선택`}
+              aria-label={systemText('ranking.selectRank', locale, { rank })}
               data-testid={`ranking-summary-${rank}`}
               className={cn(
                 'inline-flex h-8 min-w-10 items-center justify-center rounded-md border px-2 text-sm font-semibold tabular-nums',
@@ -150,7 +153,7 @@ export function RankingSummaryBar({
         disabled={answers.length === 0}
         className="ml-auto rounded-md border border-blue-500 bg-white px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50 disabled:cursor-not-allowed disabled:border-gray-300 disabled:text-gray-400 disabled:hover:bg-white"
       >
-        순위초기화
+        {systemText('ranking.reset', locale)}
       </button>
     </div>
   );
@@ -158,9 +161,10 @@ export function RankingSummaryBar({
 
 /** 순위가 다 찼는데 다른 보기를 눌렀을 때의 안내. */
 export function RankingFullNotice({ positions }: { positions: number }) {
+  const locale = useInlineSurveyLocale();
   return (
     <p role="status" className="text-sm text-amber-700">
-      {positions}순위까지 모두 선택했습니다. 바꾸려면 선택한 보기를 다시 누르거나 순위를 초기화하세요.
+      {systemText('ranking.allRanked', locale, { positions })}
     </p>
   );
 }
@@ -168,6 +172,7 @@ export function RankingFullNotice({ positions }: { positions: number }) {
 /** 보기 앞의 순위 배지. 미선택이면 빈 네모(자리만 잡는다). */
 export function RankingRankBadge({ rank, prior }: { rank: number | undefined; prior?: boolean }) {
   const selected = rank !== undefined;
+  const locale = useInlineSurveyLocale();
   return (
     <span
       aria-hidden={!selected}
@@ -180,7 +185,7 @@ export function RankingRankBadge({ rank, prior }: { rank: number | undefined; pr
           : 'w-6 border border-gray-300 bg-white text-transparent',
       )}
     >
-      {selected ? `${rank}순위` : ''}
+      {selected ? systemText('ranking.rank', locale, { rank }) : ''}
     </span>
   );
 }
@@ -220,6 +225,7 @@ export function RankingOptionTextInput({
   label,
 }: RankingOptionTextInputProps) {
   const priorHighlight = usePriorHighlight();
+  const locale = useInlineSurveyLocale();
   const field = rankingTextField(option);
   if (field === null || rank === undefined) return null;
   const isOther = field === 'otherText';
@@ -228,12 +234,24 @@ export function RankingOptionTextInput({
     questionId !== undefined &&
     isPriorRankingText(priorHighlight, questionId, rank, field, text, cellId);
   return (
-    <OptionTextRow label={isOther ? '기타' : label.trim() || '상세 기재'}>
+    <OptionTextRow
+      label={
+        isOther
+          ? systemText('ranking.other', locale)
+          : label.trim() || systemText('input.optionTextPlaceholder', locale)
+      }
+    >
       <input
         type="text"
         value={text}
-        placeholder={isOther ? '기타 내용 입력...' : option.textInputPlaceholder || '상세 기재'}
-        aria-label={`${rank}순위 ${isOther ? '기타 ' : ''}상세 기재`}
+        placeholder={
+          isOther
+            ? systemText('ranking.otherPlaceholder', locale)
+            : option.textInputPlaceholder || systemText('input.optionTextPlaceholder', locale)
+        }
+        aria-label={systemText(isOther ? 'ranking.otherDetailAria' : 'ranking.detailAria', locale, {
+          rank,
+        })}
         name={`ranking-${isOther ? 'other' : 'text'}-${option.id}`}
         autoComplete="off"
         onChange={(e) =>
@@ -400,11 +418,10 @@ export interface RankingClickListProps {
   cellId?: string | undefined;
 }
 
-const RANKING_OTHER_OPTION: QuestionOption = {
-  id: RANKING_OTHER_VALUE,
-  value: RANKING_OTHER_VALUE,
-  label: '기타 (직접 입력)',
-};
+/** 질문 레벨 '기타 (직접 입력)' 합성 보기 — 라벨은 현재 언어. */
+function rankingOtherOption(label: string): QuestionOption {
+  return { id: RANKING_OTHER_VALUE, value: RANKING_OTHER_VALUE, label };
+}
 
 /** 보기 표의 격자 클래스/스타일 — 응답 UI 와 빌더 미리보기가 같은 모양을 쓴다. */
 function rankingGridLayout(columns: number | undefined): {
@@ -442,7 +459,10 @@ export function RankingClickList({
 }: RankingClickListProps) {
   const handle = useRankingClick({ answers, positions, onChange });
   const isMobile = useMobileView();
-  const rows = allowOther ? [...options, RANKING_OTHER_OPTION] : options;
+  const locale = useInlineSurveyLocale();
+  const rows = allowOther
+    ? [...options, rankingOtherOption(systemText('ranking.otherDirect', locale))]
+    : options;
   const effectiveColumns = isMobile
     ? resolveMobileOptionsColumns(
         mobileColumns,
@@ -465,7 +485,10 @@ export function RankingClickList({
         cellId={cellId}
       />
       {handle.fullNotice && <RankingFullNotice positions={positions} />}
-      <div role="group" aria-label="순위 보기" className={layout.className} style={layoutStyle}>
+      <div
+        role="group"
+        aria-label={systemText('ranking.optionsGroup', locale)}
+        className={layout.className} style={layoutStyle}>
         {rows.map((opt) => (
           <RankingOptionFace
             key={opt.id}
