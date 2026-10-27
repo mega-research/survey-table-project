@@ -1,5 +1,6 @@
 import { formatLocalDate } from '@/lib/date-formatters';
 import {
+  type ClientLinkTabs,
   SURVEY_GUEST_TAB_LABEL,
   type SurveyGuestTab,
   type SurveyGuestTabs,
@@ -88,6 +89,24 @@ export function guestConsoleHref(base: string, segment: string): string {
  */
 export function guestConsoleEntryHref(base: string, tabs: SurveyGuestTabs): string {
   return guestConsoleHref(base, firstGuestTabSegment(tabs) ?? GUEST_PREVIEW_SEGMENT);
+}
+
+/**
+ * 클라이언트 링크 콘솔의 「열린 화면이 없습니다」 안내 — 설문 보기까지 꺼진 링크의 착지점.
+ *
+ * 설문 보기가 칩이 된 뒤로는 탭을 전부 끈 링크에 갈 곳이 없을 수 있다. 미리보기로 보내면
+ * 404 이고, 클라이언트는 「링크가 죽었다」로 읽는다 — 셸 안에서 그 사실을 말한다.
+ */
+export const CLIENT_EMPTY_SEGMENT = 'empty';
+
+/**
+ * 클라이언트 링크의 착지 주소 — 허용된 첫 탭, 없으면 설문 보기(켜져 있을 때만), 그것도
+ * 없으면 빈 안내. 게스트 계정 입구(`guestConsoleEntryHref`)는 설문 보기가 칩이 아니라 늘 미리보기다.
+ */
+export function clientConsoleEntryHref(base: string, tabs: ClientLinkTabs): string {
+  const segment =
+    firstGuestTabSegment(tabs) ?? (tabs.preview ? GUEST_PREVIEW_SEGMENT : CLIENT_EMPTY_SEGMENT);
+  return guestConsoleHref(base, segment);
 }
 
 /**

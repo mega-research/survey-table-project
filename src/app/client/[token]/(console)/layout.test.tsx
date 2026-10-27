@@ -1,6 +1,10 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
+import { DEFAULT_CLIENT_LINK_TABS } from '@/shared/contracts/workspace';
+
+import ClientLinkConsoleLayout from './layout';
+
 // 이 셸의 얼굴은 운영 콘솔과 한 벌이다 — 화면 머리는 `OperationsPageHeader`, 탭 줄은 같은
 // 모양의 `GuestTabStrip`. 여기서 보는 것은 **링크 입구가 넣는 값**이다 — 탭이 자기 주소 아래로
 // 가는가, 내부 콘솔에만 있어야 할 것(목록·편집·제어·로그아웃)이 없는가.
@@ -33,8 +37,6 @@ vi.mock('@/server/quota/services/quota-status', () => ({
 
 vi.mock('@/shared/lib/rpc', () => ({ client: {} }));
 
-import ClientLinkConsoleLayout from './layout';
-
 async function renderLayout() {
   const element = await ClientLinkConsoleLayout({
     children: <p>본문</p>,
@@ -47,7 +49,13 @@ describe('클라이언트 링크 콘솔 셸', () => {
   it('화면 머리에 조사 이름이 서고 탭이 자기 주소 아래로 간다', async () => {
     gate.assert.mockResolvedValue({
       surveyId: 'survey-1',
-      tabs: { overview: true, progressReport: true, contactsMasked: false, quota: false },
+      tabs: {
+        ...DEFAULT_CLIENT_LINK_TABS,
+        overview: true,
+        progressReport: true,
+        contactsMasked: false,
+        quota: false,
+      },
     });
     header.load.mockResolvedValue({
       surveyId: 'survey-1',
@@ -78,7 +86,13 @@ describe('클라이언트 링크 콘솔 셸', () => {
   it('화면 머리에 서는 것은 새로고침·설문 보기·나가기 셋뿐이다', async () => {
     gate.assert.mockResolvedValue({
       surveyId: 'survey-1',
-      tabs: { overview: true, progressReport: false, contactsMasked: false, quota: false },
+      tabs: {
+        ...DEFAULT_CLIENT_LINK_TABS,
+        overview: true,
+        progressReport: false,
+        contactsMasked: false,
+        quota: false,
+      },
     });
     header.load.mockResolvedValue({
       surveyId: 'survey-1',
@@ -105,10 +119,35 @@ describe('클라이언트 링크 콘솔 셸', () => {
     expect(screen.queryByText('메가허브')).not.toBeInTheDocument();
   });
 
+  it('설문 보기 칩이 꺼져 있으면 화면 머리에 「설문 보기」가 없다', async () => {
+    gate.assert.mockResolvedValue({
+      surveyId: 'survey-1',
+      tabs: { ...DEFAULT_CLIENT_LINK_TABS, preview: false },
+    });
+    header.load.mockResolvedValue({
+      surveyId: 'survey-1',
+      title: '고객사 열람 조사',
+      publishedAt: null,
+      endDate: null,
+      lifecycle: 'running',
+    });
+
+    await renderLayout();
+
+    expect(screen.queryByRole('link', { name: /설문 보기/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /나가기/ })).toBeInTheDocument();
+  });
+
   it('밖으로 나가는 링크가 없다 — 링크는 설문 하나만 연다', async () => {
     gate.assert.mockResolvedValue({
       surveyId: 'survey-1',
-      tabs: { overview: true, progressReport: true, contactsMasked: true, quota: true },
+      tabs: {
+        ...DEFAULT_CLIENT_LINK_TABS,
+        overview: true,
+        progressReport: true,
+        contactsMasked: true,
+        quota: true,
+      },
     });
     header.load.mockResolvedValue({
       surveyId: 'survey-1',
@@ -130,7 +169,13 @@ describe('클라이언트 링크 콘솔 셸', () => {
   it('쿼터 현황 칩이 켜져 있어도 쿼터가 없는 설문이면 탭을 세우지 않는다', async () => {
     gate.assert.mockResolvedValue({
       surveyId: 'survey-1',
-      tabs: { overview: true, progressReport: false, contactsMasked: false, quota: true },
+      tabs: {
+        ...DEFAULT_CLIENT_LINK_TABS,
+        overview: true,
+        progressReport: false,
+        contactsMasked: false,
+        quota: true,
+      },
     });
     header.load.mockResolvedValue({
       surveyId: 'survey-1',
@@ -159,7 +204,13 @@ describe('클라이언트 링크 콘솔 셸', () => {
     gate.assert.mockClear();
     gate.assert.mockResolvedValue({
       surveyId: 'survey-1',
-      tabs: { overview: false, progressReport: false, contactsMasked: false, quota: false },
+      tabs: {
+        ...DEFAULT_CLIENT_LINK_TABS,
+        overview: false,
+        progressReport: false,
+        contactsMasked: false,
+        quota: false,
+      },
     });
     header.load.mockResolvedValue({
       surveyId: 'survey-1',
@@ -177,7 +228,13 @@ describe('클라이언트 링크 콘솔 셸', () => {
   it('관문을 지난 뒤 머리를 읽지 못하면 notFound 다 — 그 사이 설문이 닫혔다', async () => {
     gate.assert.mockResolvedValue({
       surveyId: 'survey-1',
-      tabs: { overview: true, progressReport: false, contactsMasked: false, quota: false },
+      tabs: {
+        ...DEFAULT_CLIENT_LINK_TABS,
+        overview: true,
+        progressReport: false,
+        contactsMasked: false,
+        quota: false,
+      },
     });
     header.load.mockResolvedValue(null);
     await expect(renderLayout()).rejects.toThrow('NEXT_NOT_FOUND');

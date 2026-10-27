@@ -15,6 +15,7 @@ import {
 import type { FieldworkRole, UserType } from '@/shared/contracts/auth';
 import {
   type AccessLinkKind,
+  type ClientLinkTabs,
   NO_SURVEY_GUEST_TABS,
   normalizeSurveyGuestTabs,
   surveyCapabilityValues,
@@ -96,7 +97,7 @@ export type LinkAccessSubject = {
  */
 export type LinkKindFacet =
   | { linkKind: Extract<AccessLinkKind, 'fieldwork'> }
-  | { linkKind: Extract<AccessLinkKind, 'client'>; clientTabs: SurveyGuestTabs };
+  | { linkKind: Extract<AccessLinkKind, 'client'>; clientTabs: ClientLinkTabs };
 
 /** 판정이 보는 요청의 임자 — 계정 또는 외주 실사 링크. */
 export type SurveyAccessSubject = AccountAccessSubject | LinkAccessSubject;

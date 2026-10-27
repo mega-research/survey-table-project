@@ -290,6 +290,80 @@ export function normalizeSurveyGuestTabs(raw: unknown): SurveyGuestTabs {
 }
 
 /**
+ * 클라이언트 링크의 화면 칩 (ADR-0029, `.scratch/client-link-response-list`).
+ *
+ * 옛 게스트 계정 어휘(`SurveyGuestTabs`)에 셋을 더한 **별개 어휘**다. 게스트 쪽에 더하지 않은
+ * 이유는 그 어휘를 쓰는 `/guest` 콘솔이 입구가 닫힌 철거 대상이라서다 — 같은 어휘면 새 칸이
+ * 거기에도 생겨 화면을 함께 고쳐야 한다. 넷을 그대로 품으므로 게스트 탭을 받는 화면 조각
+ * (탭 줄·착지 규칙)에는 이 값을 그대로 넘길 수 있다.
+ *
+ *  - `preview` — 설문 보기. 끄면 화면 머리의 버튼과 미리보기 주소가 함께 닫힌다.
+ *  - `overviewDetail` — 응답 현황의 상세 카드(일자별 표·응답시간·이탈 위치·체류시간).
+ *    탭이 아니라 응답 현황에 딸린 표시 설정이다 — 페이지 관문이 묻지 않는다.
+ *  - `responses` — 응답 내역(보기 전용, 서버 투영).
+ */
+export interface ClientLinkTabs extends SurveyGuestTabs {
+  preview: boolean;
+  overviewDetail: boolean;
+  responses: boolean;
+}
+
+/** 칩 순서의 정본 — 공유 설정의 클라이언트 블록이 이 순서로 그린다. */
+export const clientLinkTabValues = [
+  'overview',
+  'overviewDetail',
+  'progressReport',
+  'contactsMasked',
+  'quota',
+  'responses',
+  'preview',
+] as const satisfies ReadonlyArray<keyof ClientLinkTabs>;
+export type ClientLinkTab = (typeof clientLinkTabValues)[number];
+
+export const CLIENT_LINK_TAB_LABEL: Record<ClientLinkTab, string> = {
+  ...SURVEY_GUEST_TAB_LABEL,
+  overviewDetail: '상세 통계',
+  responses: '응답 내역',
+  preview: '설문 보기',
+};
+
+/**
+ * 새 링크의 기본값 — 응답 현황 · 상세 통계 · 설문 보기.
+ *
+ * 설문 보기와 상세 통계가 켜진 채 시작하는 것은 이 칩이 생기기 전의 동작을 그대로 잇기
+ * 위해서다(2026-10-27 결정). 응답 내역은 새로 여는 데이터라 명시로만 열린다.
+ */
+export const DEFAULT_CLIENT_LINK_TABS: ClientLinkTabs = {
+  ...DEFAULT_SURVEY_GUEST_TABS,
+  overviewDetail: true,
+  responses: false,
+  preview: true,
+};
+
+/** 아무 칩도 켜지지 않은 상태. */
+export const NO_CLIENT_LINK_TABS: ClientLinkTabs = {
+  ...NO_SURVEY_GUEST_TABS,
+  overviewDetail: false,
+  responses: false,
+  preview: false,
+};
+
+/**
+ * JSONB 컬럼 값 → 클라이언트 링크 칩 (로더 정규화). 규칙은 게스트 쪽과 같다 — 컬럼이 비어
+ * 있으면 기본값, **객체인데 키가 없으면 false**. 그래서 칩이 생기기 전의 행은 0144 가 설문
+ * 보기·상세 통계를 채워 둔다(채우지 않으면 두 칸이 조용히 꺼진다).
+ */
+export function normalizeClientLinkTabs(raw: unknown): ClientLinkTabs {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { ...DEFAULT_CLIENT_LINK_TABS };
+  }
+  const source = raw as Record<string, unknown>;
+  const tabs = { ...NO_CLIENT_LINK_TABS };
+  for (const tab of clientLinkTabValues) tabs[tab] = source[tab] === true;
+  return tabs;
+}
+
+/**
  * 참여자를 **제외**할 수 있는가 — 화면과 서버가 함께 보는 술어 (스펙 §7·§11-5).
  *
  * 추가는 접근 가능한 내부인 누구나 할 수 있지만 제외는 소유자·소유 팀 팀장·슈퍼어드민뿐이다.

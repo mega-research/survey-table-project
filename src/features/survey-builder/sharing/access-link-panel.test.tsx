@@ -27,7 +27,15 @@ vi.mock('../queries/use-survey-access-link', () => ({
 
 import { AccessLinkPanel } from './access-link-panel';
 
-const TABS = { overview: true, progressReport: false, contactsMasked: false, quota: false };
+const TABS = {
+  overview: true,
+  progressReport: false,
+  contactsMasked: false,
+  quota: false,
+  preview: true,
+  overviewDetail: true,
+  responses: false,
+};
 
 function linkState(kind: AccessLinkKind, over: Partial<SurveyAccessLinkOutput> = {}) {
   return {
@@ -118,6 +126,25 @@ describe('AccessLinkPanel', () => {
     await waitFor(() =>
       expect(setTab).toHaveBeenCalledWith({ surveyId: 's-1', tab: 'overview', enabled: false }),
     );
+  });
+
+  it('설문 보기도 칩이다 — 켜져 있으면 체크로 보이고, 누르면 그 칩만 끄기로 나간다', async () => {
+    state.data = linkState('client');
+    const user = userEvent.setup();
+    render(<AccessLinkPanel surveyId="s-1" kind="client" />);
+
+    const chip = screen.getByRole('checkbox', { name: '설문 보기' });
+    expect(chip).toBeChecked();
+    await user.click(chip);
+
+    await waitFor(() => expect(setTab).toHaveBeenCalledTimes(1));
+    expect(setTab).toHaveBeenCalledWith({ surveyId: 's-1', tab: 'preview', enabled: false });
+  });
+
+  it('「설문 미리보기는 언제나 열립니다」라고 말하지 않는다 — 이제 칩으로 닫힌다', () => {
+    state.data = linkState('client');
+    render(<AccessLinkPanel surveyId="s-1" kind="client" />);
+    expect(screen.queryByText(/언제나 열립니다/)).toBeNull();
   });
 
   it('발급 전에는 탭 칩이 없다 — 저장할 링크가 없다', () => {

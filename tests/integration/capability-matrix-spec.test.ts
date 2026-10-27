@@ -150,7 +150,16 @@ const COLUMNS = {
       linkId: 'link-2',
       surveyId: SURVEY_ID,
       linkKind: 'client',
-      clientTabs: { overview: true, progressReport: true, contactsMasked: true, quota: true },
+      // 칩을 전부 켠 링크 — 응답 내역까지 켜도 이 열은 두 칸이다(칩은 capability 가 아니다).
+      clientTabs: {
+        overview: true,
+        progressReport: true,
+        contactsMasked: true,
+        quota: true,
+        preview: true,
+        overviewDetail: true,
+        responses: true,
+      },
     },
     participation: null,
   },

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  DEFAULT_CLIENT_LINK_TABS,
   DEFAULT_SURVEY_GUEST_TABS,
   NO_SURVEY_GUEST_TABS,
   SURVEY_GUEST_TAB_LABEL,
@@ -9,6 +10,8 @@ import {
 
 import {
   allowedGuestTabs,
+  CLIENT_EMPTY_SEGMENT,
+  clientConsoleEntryHref,
   firstGuestTabSegment,
   GUEST_TAB_SEGMENT,
   guestAccountSurveyBase,
@@ -102,5 +105,41 @@ describe('주소 조립 — 접두는 주입받는다', () => {
       guestConsoleEntryHref('/client/tok', { ...NO_SURVEY_GUEST_TABS, quota: true }),
     ).toBe('/client/tok/quota');
     expect(guestConsoleEntryHref('/client/tok', NO_SURVEY_GUEST_TABS)).toBe('/client/tok/preview');
+  });
+});
+
+describe('clientConsoleEntryHref — 클라이언트 링크의 착지점', () => {
+  const none = {
+    ...DEFAULT_CLIENT_LINK_TABS,
+    overview: false,
+    overviewDetail: false,
+    preview: false,
+  };
+
+  it('허용된 첫 탭이 먼저다', () => {
+    expect(clientConsoleEntryHref('/client/tok', DEFAULT_CLIENT_LINK_TABS)).toBe(
+      '/client/tok/overview',
+    );
+    expect(clientConsoleEntryHref('/client/tok', { ...none, quota: true })).toBe(
+      '/client/tok/quota',
+    );
+  });
+
+  it('탭이 없으면 설문 보기 — 켜져 있을 때만', () => {
+    expect(clientConsoleEntryHref('/client/tok', { ...none, preview: true })).toBe(
+      '/client/tok/preview',
+    );
+  });
+
+  it('설문 보기도 꺼져 있으면 빈 안내 — 404 로 보내지 않는다', () => {
+    expect(clientConsoleEntryHref('/client/tok', none)).toBe(
+      `/client/tok/${CLIENT_EMPTY_SEGMENT}`,
+    );
+  });
+
+  it('상세 통계는 탭이 아니다 — 그것만 켜져 있어도 착지점이 되지 않는다', () => {
+    expect(clientConsoleEntryHref('/client/tok', { ...none, overviewDetail: true })).toBe(
+      `/client/tok/${CLIENT_EMPTY_SEGMENT}`,
+    );
   });
 });

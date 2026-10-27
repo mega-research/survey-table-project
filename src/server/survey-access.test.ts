@@ -635,8 +635,23 @@ describe('resolveSurveyCapabilities — 외주 실사 링크', () => {
  * **열**(둘뿐이다), **닫히는 조건**(중단에 닫히지 않는다), **탭 축**(연구원이 고른 화면만 연다).
  */
 describe('resolveSurveyCapabilities — 클라이언트 링크', () => {
-  const ALL_TABS = { overview: true, progressReport: true, contactsMasked: true, quota: true };
-  const OVERVIEW_ONLY = { overview: true, progressReport: false, contactsMasked: false, quota: false };
+  // 칩 일곱을 전부 켠 링크 — 응답 내역까지 켜도 capability 는 그대로여야 한다.
+  const ALL_TABS = {
+    overview: true,
+    progressReport: true,
+    contactsMasked: true,
+    quota: true,
+    preview: true,
+    overviewDetail: true,
+    responses: true,
+  };
+  const OVERVIEW_ONLY = {
+    ...ALL_TABS,
+    progressReport: false,
+    contactsMasked: false,
+    quota: false,
+    responses: false,
+  };
   const clientLink = (clientTabs = OVERVIEW_ONLY): LinkAccessSubject => ({
     kind: 'link',
     linkId: 'link-2',

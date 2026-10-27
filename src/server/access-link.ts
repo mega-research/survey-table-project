@@ -17,9 +17,9 @@ import {
 } from '@/lib/auth/access-link-session';
 import {
   type AccessLinkKind,
-  normalizeSurveyGuestTabs,
+  type ClientLinkTabs,
+  normalizeClientLinkTabs,
   type SurveyAssignmentStatus,
-  type SurveyGuestTabs,
 } from '@/shared/contracts/workspace';
 
 import { type LinkActor, surveyClosedColumn } from './survey-access';
@@ -70,7 +70,7 @@ interface LinkRow {
   passwordCipher: string;
   passwordUpdatedAt: Date;
   /** 클라이언트 링크의 탭 화이트리스트(원본) — 주체에 실을 때 정규화한다. 외주 링크는 NULL. */
-  clientTabs: SurveyGuestTabs | null;
+  clientTabs: ClientLinkTabs | null;
   /** 링크 종료 시각 — 종료된 행은 계보로 남는다(0126 부분 UNIQUE). */
   closedAt: Date | null;
   /** 설문 중단 — 링크의 만료일을 대신한다(ADR-0026). 재개하면 같은 주소로 다시 열린다. */
@@ -132,7 +132,7 @@ async function loadLinkRow(kind: AccessLinkKind, token: string): Promise<LinkRow
 function toLinkActor(row: LinkRow): LinkActor {
   const base = { kind: 'link' as const, linkId: row.linkId, surveyId: row.surveyId };
   return row.kind === 'client'
-    ? { ...base, linkKind: 'client', clientTabs: normalizeSurveyGuestTabs(row.clientTabs) }
+    ? { ...base, linkKind: 'client', clientTabs: normalizeClientLinkTabs(row.clientTabs) }
     : { ...base, linkKind: 'fieldwork' };
 }
 
@@ -323,7 +323,7 @@ export async function resolveAccessLinkEntry(
  * 접속된 상태에는 탭이 실린다 — 입구가 「허용된 첫 화면」으로 보내는 재료다.
  */
 export type ClientLinkEntry =
-  | { kind: 'authenticated'; tabs: SurveyGuestTabs }
+  | { kind: 'authenticated'; tabs: ClientLinkTabs }
   | { kind: 'password' }
   | { kind: 'closed' };
 
@@ -335,7 +335,7 @@ export async function resolveClientLinkEntry(
   if (!row) return { kind: 'password' };
   if (isClosed(row)) return { kind: 'closed' };
   return evaluateSession(row, token, headers).ok
-    ? { kind: 'authenticated', tabs: normalizeSurveyGuestTabs(row.clientTabs) }
+    ? { kind: 'authenticated', tabs: normalizeClientLinkTabs(row.clientTabs) }
     : { kind: 'password' };
 }
 

@@ -41,7 +41,8 @@ interface Props {
  *
  * 탭 줄만 따로다(`GuestTabStrip`). 탭을 여는 축이 capability 가 아니라 연구원이 켠 화이트리스트
  * 라서 운영 콘솔의 탭 스트립을 그대로 쓸 수 없다 — 모양은 같고 판정만 이쪽 것이다. 설문
- * 미리보기는 탭이 아니라 화면 머리의 「설문 보기」가 연다(운영 콘솔과 같은 자리). 쿼터 현황 탭은
+ * 미리보기는 탭이 아니라 화면 머리의 「설문 보기」가 연다(운영 콘솔과 같은 자리) — 그 칩이
+ * 꺼져 있으면 버튼을 그리지 않는다(주소는 관문이 막는다). 쿼터 현황 탭은
  * 칩이 켜져 있어도 **쿼터가 있는 설문에서만** 선다.
  *
  * 목록·홈으로 가는 길이 없다 — 링크는 설문 하나만 연다. 조사 기간과 진행 상태는 탭 줄 오른쪽에
@@ -78,7 +79,10 @@ export default async function ClientLinkConsoleLayout({ params, children }: Prop
         surveyTitle={header.title}
         capabilities={NO_EDIT_CAPABILITIES}
         internalShell={false}
-        previewHref={guestConsoleHref(basePath, GUEST_PREVIEW_SEGMENT)}
+        // 넘기지 않으면 화면 머리가 「설문 보기」를 그리지 않는다(internalShell=false 의 계약).
+        {...(tabs.preview
+          ? { previewHref: guestConsoleHref(basePath, GUEST_PREVIEW_SEGMENT) }
+          : {})}
         trailing={<ClientLinkSignOutButton token={token} />}
       />
       <GuestTabStrip

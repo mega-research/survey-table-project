@@ -31,7 +31,12 @@ import {
   users as usersTable,
 } from '@/db/schema';
 import type { ORPCContext } from '@/server/context';
-import { surveyGuestTabValues, type SurveyGuestTabs } from '@/shared/contracts/workspace';
+import {
+  type ClientLinkTabs,
+  clientLinkTabValues,
+  DEFAULT_CLIENT_LINK_TABS,
+  NO_CLIENT_LINK_TABS,
+} from '@/shared/contracts/workspace';
 
 const requestState = vi.hoisted(() => ({ headers: new Headers() }));
 
@@ -62,12 +67,8 @@ const OWNER_ID = crypto.randomUUID();
 const TEAM_ID = crypto.randomUUID();
 const PASSWORD = 'ClientPw2026';
 
-const OVERVIEW_ONLY: SurveyGuestTabs = {
-  overview: true,
-  progressReport: false,
-  contactsMasked: false,
-  quota: false,
-};
+/** 새 링크의 칩 — 응답 현황 · 상세 통계 · 설문 보기. */
+const NEW_LINK_TABS: ClientLinkTabs = DEFAULT_CLIENT_LINK_TABS;
 
 let surveyId = '';
 
@@ -125,8 +126,8 @@ async function seedSurvey(title: string): Promise<string> {
  * 저장 표면은 칩 하나씩만 받는다(낡은 화면의 저장이 남의 변경을 되돌리지 않게). 여기서는
  * 「이 구성일 때 무엇이 열리는가」를 묻는 것이 목적이라 네 칩을 차례로 맞춘다.
  */
-async function setTabs(target: SurveyGuestTabs): Promise<void> {
-  for (const tab of surveyGuestTabValues) {
+async function setTabs(target: ClientLinkTabs): Promise<void> {
+  for (const tab of clientLinkTabValues) {
     await admin.accessLinks.setClientTab({ surveyId, tab, enabled: target[tab] });
   }
 }
@@ -186,7 +187,7 @@ describe.skipIf(!isLocalDb)('클라이언트 링크 콘솔 (real local DB)', () 
       // 설문 id 는 주소가 아니라 링크 행에서 나온다 — 화면이 다른 설문을 지목할 길이 없다.
       await expect(assertClientLinkPageAccess(token, 'overview')).resolves.toEqual({
         surveyId,
-        tabs: OVERVIEW_ONLY,
+        tabs: NEW_LINK_TABS,
       });
     });
 
@@ -198,13 +199,36 @@ describe.skipIf(!isLocalDb)('클라이언트 링크 콘솔 (real local DB)', () 
       },
     );
 
-    it('설문지 미리보기는 화이트리스트 밖이라 언제나 열린다 — 탭을 전부 꺼도', async () => {
+    it('설문 보기는 새 링크에서 켜져 있다 — 현황 탭을 전부 꺼도', async () => {
       const { token } = await issueAndEnter();
-      await setTabs({ overview: false, progressReport: false, contactsMasked: false, quota: false });
-      await expect(assertClientLinkPageAccess(token)).resolves.toMatchObject({ surveyId });
+      await setTabs({ ...NO_CLIENT_LINK_TABS, preview: true });
+      await expect(assertClientLinkPageAccess(token, 'preview')).resolves.toMatchObject({
+        surveyId,
+      });
       await expect(assertClientLinkPageAccess(token, 'overview')).rejects.toThrow(
         'NEXT_NOT_FOUND',
       );
+    });
+
+    it('설문 보기 칩을 끄면 미리보기 주소가 notFound 다 — 버튼만 감추지 않는다', async () => {
+      const { token } = await issueAndEnter();
+      await admin.accessLinks.setClientTab({ surveyId, tab: 'preview', enabled: false });
+      await expect(assertClientLinkPageAccess(token, 'preview')).rejects.toThrow(
+        'NEXT_NOT_FOUND',
+      );
+      // 다른 칩은 그대로다 — 칩 하나만 바뀐다.
+      await expect(assertClientLinkPageAccess(token, 'overview')).resolves.toMatchObject({
+        tabs: { ...NEW_LINK_TABS, preview: false },
+      });
+    });
+
+    it('칩이 전부 꺼져도 셸(탭 없는 관문)은 열린다 — 빈 안내를 그릴 자리다', async () => {
+      const { token } = await issueAndEnter();
+      await setTabs(NO_CLIENT_LINK_TABS);
+      await expect(assertClientLinkPageAccess(token)).resolves.toEqual({
+        surveyId,
+        tabs: NO_CLIENT_LINK_TABS,
+      });
     });
 
     /**

@@ -9,10 +9,10 @@ import { buildClientLinkUrl, buildFieldworkLinkUrl } from '@/lib/survey-url';
 import { cn } from '@/lib/utils';
 import {
   type AccessLinkKind,
-  SURVEY_GUEST_TAB_LABEL,
-  type SurveyGuestTab,
-  type SurveyGuestTabs,
-  surveyGuestTabValues,
+  CLIENT_LINK_TAB_LABEL,
+  type ClientLinkTab,
+  type ClientLinkTabs,
+  clientLinkTabValues,
 } from '@/shared/contracts/workspace';
 
 import {
@@ -254,7 +254,7 @@ export function AccessLinkPanel({ surveyId, kind }: AccessLinkPanelProps) {
             }}
           />
           <p className="text-[11px] leading-[1.45] text-[#9CA3AF]">
-            설문 미리보기는 언제나 열립니다. 바꾼 내용은 클라이언트의 다음 화면부터 반영됩니다.
+            바꾼 내용은 클라이언트의 다음 화면부터 반영됩니다.
           </p>
         </div>
       )}
@@ -306,9 +306,16 @@ export function AccessLinkPanel({ surveyId, kind }: AccessLinkPanelProps) {
 }
 
 /**
- * 클라이언트 링크의 탭 칩 — 게스트 계정 블록의 칩과 같은 어휘·같은 순서다.
+ * 아직 화면에 잇지 않은 칩 — 상세 통계(티켓 02)·응답 내역(티켓 03,
+ * `.scratch/client-link-response-list`). 어휘는 먼저 섰지만 켜도 클라이언트 화면이 그대로라
+ * 칩을 그리지 않는다. 그 티켓이 화면을 이으면서 여기서 하나씩 뺀다.
+ */
+const PENDING_CHIPS: ReadonlySet<ClientLinkTab> = new Set(['overviewDetail', 'responses']);
+
+/**
+ * 클라이언트 링크의 화면 칩 — 게스트 넷에 설문 보기·상세 통계·응답 내역을 더한 어휘다.
  *
- * 어휘 순서는 `surveyGuestTabValues` 가 정한다. 화면이 자기 배열을 들면 탭이 늘었을 때 계약에는
+ * 순서는 `clientLinkTabValues` 가 정한다. 화면이 자기 배열을 들면 칩이 늘었을 때 계약에는
  * 있는데 안 그려지는 값이 생긴다.
  */
 function ClientTabChips({
@@ -316,13 +323,13 @@ function ClientTabChips({
   disabled,
   onToggle,
 }: {
-  tabs: SurveyGuestTabs;
+  tabs: ClientLinkTabs;
   disabled: boolean;
-  onToggle: (tab: SurveyGuestTab) => void;
+  onToggle: (tab: ClientLinkTab) => void;
 }) {
   return (
     <div className="flex flex-wrap gap-1.5">
-      {surveyGuestTabValues.map((tab) => {
+      {clientLinkTabValues.filter((tab) => !PENDING_CHIPS.has(tab)).map((tab) => {
         const active = tabs[tab];
         return (
           <button
@@ -340,7 +347,7 @@ function ClientTabChips({
             )}
           >
             {active && <Check className="h-3 w-3" />}
-            {SURVEY_GUEST_TAB_LABEL[tab]}
+            {CLIENT_LINK_TAB_LABEL[tab]}
           </button>
         );
       })}

@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 
 import { Lock } from 'lucide-react';
 
-import { guestConsoleEntryHref } from '@/features/guest-console/guest-vocabulary';
+import { clientConsoleEntryHref } from '@/features/guest-console/guest-vocabulary';
 import { clientLinkPath } from '@/lib/survey-url';
 import { resolveClientLinkEntry } from '@/server/access-link';
 
@@ -27,7 +27,8 @@ import { ClientLinkPasswordForm } from './password-form';
  *    보이는 정보다. **설문 중단은 닫힘이 아니다** — 클라이언트는 응답이 멈춘 뒤에 결과를 본다.
  *  - **그 밖 전부** — 비밀번호 화면. 없는 토큰도, 외주 실사 링크의 토큰도 여기로 온다.
  *
- * 이미 접속한 세션은 **허용된 첫 화면**으로 보낸다(없으면 설문 미리보기).
+ * 이미 접속한 세션은 **허용된 첫 화면**으로 보낸다 — 없으면 설문 보기(칩이 켜져 있을 때),
+ * 그것도 없으면 셸 안의 「열린 화면이 없습니다」.
  */
 interface PageProps {
   params: Promise<{ token: string }>;
@@ -40,7 +41,7 @@ export default async function ClientLinkEntryPage({ params }: PageProps) {
   const entry = await resolveClientLinkEntry(token, await headers());
 
   if (entry.kind === 'authenticated') {
-    redirect(guestConsoleEntryHref(clientLinkPath(token), entry.tabs));
+    redirect(clientConsoleEntryHref(clientLinkPath(token), entry.tabs));
   }
 
   return (

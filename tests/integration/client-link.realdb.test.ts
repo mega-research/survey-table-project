@@ -18,11 +18,15 @@
  *  ⑦ 공존과 파티션 — 한 브라우저의 여러 세션이 섞이지 않고, 테스트 모드와 무관하게 real 이다.
  */
 import { createRouterClient } from '@orpc/server';
-import { eq } from 'drizzle-orm';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { db } from '@/db';
 import {
+  surveyAccessLinks as surveyAccessLinksTable,
   surveys as surveysTable,
   teamMembers as teamMembersTable,
   teams as teamsTable,
@@ -42,7 +46,13 @@ import { setClosed } from '@/server/operations/services/control';
 import { router } from '@/server/router';
 import { loadSurveyAccess } from '@/server/survey-access';
 import { accessLinks } from '@/server/workspace/procedures/access-links';
-import { surveyGuestTabValues, type SurveyGuestTabs } from '@/shared/contracts/workspace';
+import {
+  type ClientLinkTabs,
+  clientLinkTabValues,
+  DEFAULT_CLIENT_LINK_TABS,
+  NO_CLIENT_LINK_TABS,
+  normalizeClientLinkTabs,
+} from '@/shared/contracts/workspace';
 import { SCOPED_INPUTS, SCOPED_PATHS } from '@tests/helpers/scoped-surface-inputs';
 
 // 이 브라우저가 「테스트 데이터 보기」를 켠 상태 — 담당 연구원은 테스트 모드가 켜진 설문에서 테스트 파티션을
@@ -63,7 +73,8 @@ const TEAM_ID = crypto.randomUUID();
 const SURVEY_TITLE = '고객사 비공개 조사';
 const PASSWORD = 'ClientPw2026';
 
-const OVERVIEW_ONLY = { overview: true, progressReport: false, contactsMasked: false, quota: false };
+/** 새 링크의 칩 — 응답 현황 · 상세 통계 · 설문 보기. */
+const NEW_LINK_TABS: ClientLinkTabs = DEFAULT_CLIENT_LINK_TABS;
 
 let surveyId = '';
 
@@ -94,8 +105,8 @@ function cookieHeaders(...cookies: Array<{ name: string; value: string }>): Head
  * 저장 표면은 칩 하나씩만 받는다(낡은 화면의 저장이 남의 변경을 되돌리지 않게). 여기서는
  * 「이 구성일 때 무엇이 열리는가」를 묻는 것이 목적이라 네 칩을 차례로 맞춘다.
  */
-async function setTabs(target: SurveyGuestTabs): Promise<void> {
-  for (const tab of surveyGuestTabValues) {
+async function setTabs(target: ClientLinkTabs): Promise<void> {
+  for (const tab of clientLinkTabValues) {
     await admin.accessLinks.setClientTab({ surveyId, tab, enabled: target[tab] });
   }
 }
@@ -163,7 +174,7 @@ describe.skipIf(!isLocalDb)('클라이언트 링크 세션 (real local DB)', () 
         linkId,
         surveyId,
         linkKind: 'client',
-        clientTabs: OVERVIEW_ONLY,
+        clientTabs: NEW_LINK_TABS,
       },
     });
   });
@@ -189,7 +200,7 @@ describe.skipIf(!isLocalDb)('클라이언트 링크 세션 (real local DB)', () 
 
     const access = await loadSurveyAccess(resolved.actor, surveyId);
     expect([...access.capabilities].sort()).toEqual(['operations.view', 'survey.view']);
-    expect(access.guestTabs).toEqual(OVERVIEW_ONLY);
+    expect(access.guestTabs).toEqual(NEW_LINK_TABS);
   });
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -217,7 +228,7 @@ describe.skipIf(!isLocalDb)('클라이언트 링크 세션 (real local DB)', () 
     const { token, cookie } = await issueAndSignIn();
     expect(await resolveClientLinkEntry(token, cookieHeaders(cookie))).toEqual({
       kind: 'authenticated',
-      tabs: OVERVIEW_ONLY,
+      tabs: NEW_LINK_TABS,
     });
   });
 
@@ -411,20 +422,20 @@ describe.skipIf(!isLocalDb)('클라이언트 링크 세션 (real local DB)', () 
   it('연구원이 탭을 바꾸면 같은 쿠키의 다음 요청부터 반영된다', async () => {
     const { token, cookie } = await issueAndSignIn();
     const headers = cookieHeaders(cookie);
-    const widened = { overview: true, progressReport: true, contactsMasked: false, quota: true };
+    const widened = { ...NEW_LINK_TABS, progressReport: true, quota: true };
 
     await setTabs(widened);
     const afterWiden = await resolveClientLinkActor(token, headers);
     if (!afterWiden.ok) throw new Error('세션이 서지 않았다');
     expect((await loadSurveyAccess(afterWiden.actor, surveyId)).guestTabs).toEqual(widened);
 
-    const narrowed = { overview: false, progressReport: false, contactsMasked: false, quota: false };
+    const narrowed = NO_CLIENT_LINK_TABS;
     await setTabs(narrowed);
     const afterNarrow = await resolveClientLinkActor(token, headers);
     if (!afterNarrow.ok) throw new Error('세션이 서지 않았다');
     const access = await loadSurveyAccess(afterNarrow.actor, surveyId);
     expect(access.guestTabs).toEqual(narrowed);
-    // 탭을 전부 꺼도 capability 는 그대로다 — 미리보기는 화이트리스트 밖이다.
+    // 칩을 전부 꺼도 capability 는 그대로다 — 칩은 capability 가 아니라 별도 축이다.
     expect([...access.capabilities].sort()).toEqual(['operations.view', 'survey.view']);
   });
 
@@ -525,5 +536,57 @@ describe.skipIf(!isLocalDb)('클라이언트 링크 세션 (real local DB)', () 
         userType: 'internal',
       }),
     ).toBe('test');
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // ⑧ 칩 셋 (.scratch/client-link-response-list 티켓 01)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  it('설문 보기 칩 하나를 끄면 그 칩만 바뀌고 선 세션은 끊기지 않는다', async () => {
+    const { token, cookie } = await issueAndSignIn();
+    const view = await admin.accessLinks.setClientTab({ surveyId, tab: 'preview', enabled: false });
+    expect(view.clientTabs).toEqual({ ...NEW_LINK_TABS, preview: false });
+
+    const resolved = await resolveClientLinkActor(token, cookieHeaders(cookie));
+    if (!resolved.ok) throw new Error('세션이 끊겼다');
+    expect(resolved.actor).toMatchObject({ clientTabs: { ...NEW_LINK_TABS, preview: false } });
+  });
+
+  /**
+   * 칩이 생기기 전에 저장된 행은 네 키뿐이다. 정규화가 「키 없음 = false」라 그대로 두면 설문
+   * 보기·상세 통계가 조용히 꺼진다 — 0144 가 두 키를 켜 둔다. 이미 끈 값은 덮지 않는다.
+   */
+  it('0144 가 칩 이전의 행에 설문 보기·상세 통계를 켜 두고, 끈 값은 덮지 않는다', async () => {
+    const { linkId } = await issueAndSignIn();
+    const legacy = { overview: true, progressReport: false, contactsMasked: true, quota: false };
+    await db
+      .update(surveyAccessLinksTable)
+      .set({ clientTabs: legacy as never })
+      .where(eq(surveyAccessLinksTable.id, linkId));
+
+    const migration = readFileSync(
+      join(process.cwd(), 'supabase/migrations/0144_client_link_tabs_backfill.sql'),
+      'utf8',
+    );
+    await db.execute(sql.raw(migration));
+    const [after] = await db
+      .select({ clientTabs: surveyAccessLinksTable.clientTabs })
+      .from(surveyAccessLinksTable)
+      .where(eq(surveyAccessLinksTable.id, linkId));
+    expect(normalizeClientLinkTabs(after?.clientTabs)).toEqual({
+      ...legacy,
+      preview: true,
+      overviewDetail: true,
+      responses: false,
+    });
+
+    // 연구원이 끈 설문 보기는 다시 돌려도 꺼진 채다(재적용 안전).
+    await admin.accessLinks.setClientTab({ surveyId, tab: 'preview', enabled: false });
+    await db.execute(sql.raw(migration));
+    const [again] = await db
+      .select({ clientTabs: surveyAccessLinksTable.clientTabs })
+      .from(surveyAccessLinksTable)
+      .where(eq(surveyAccessLinksTable.id, linkId));
+    expect(normalizeClientLinkTabs(again?.clientTabs).preview).toBe(false);
   });
 });

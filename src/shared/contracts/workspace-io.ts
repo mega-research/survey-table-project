@@ -5,6 +5,7 @@ import * as z from 'zod';
 
 import { fieldworkRoleValues, userStatusValues } from './auth';
 import {
+  type ClientLinkTabs,
   type SurveyGuestTabs,
   accessLinkKindValues,
   fieldworkOrgStatusValues,
@@ -557,6 +558,13 @@ export const SurveyGuestTabsSchema = z.object({
   quota: z.boolean(),
 }) satisfies z.ZodType<SurveyGuestTabs>;
 
+/** 클라이언트 링크 칩의 경계 모양 — 게스트 넷 + 설문 보기·상세 통계·응답 내역. */
+export const ClientLinkTabsSchema = SurveyGuestTabsSchema.extend({
+  preview: z.boolean(),
+  overviewDetail: z.boolean(),
+  responses: z.boolean(),
+}) satisfies z.ZodType<ClientLinkTabs>;
+
 /** 공유 모달의 게스트 행 (.pen 4-2 클라이언트 블록). */
 export const SurveyGuestItem = z.object({
   userId: z.uuid(),
@@ -1054,7 +1062,7 @@ export const AccessLinkView = z.object({
    * 갈라 두는 이유는 「탭이 전부 꺼진 클라이언트 링크」와 「탭 개념이 없는 링크」가 다른
    * 화면이기 때문이다.
    */
-  clientTabs: SurveyGuestTabsSchema.nullable(),
+  clientTabs: ClientLinkTabsSchema.nullable(),
   /** 마지막으로 비밀번호를 바꾼 시각 — 「언제 바꿨는지」를 화면이 보여 준다. */
   passwordUpdatedAt: z.date(),
   createdAt: z.date(),

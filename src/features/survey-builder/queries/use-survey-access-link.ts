@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import type { AccessLinkKind, SurveyGuestTab } from '@/shared/contracts/workspace';
+import type { AccessLinkKind, ClientLinkTab } from '@/shared/contracts/workspace';
 import { client, orpc } from '@/shared/lib/rpc';
 import { surveyKeys } from '@/shared/lib/survey-list-queries';
 
@@ -73,11 +73,11 @@ export function useCloseAccessLink() {
 /**
  * 클라이언트 링크의 현황 탭 저장 (ADR-0029) — 종류를 받지 않는다. 탭은 클라이언트 링크의 축이다.
  *
- * 네 값을 통째로 보낸다. 칩 하나만 보내면 두 사람이 다른 칩을 동시에 누를 때 한쪽의 저장이
- * 다른 쪽을 옛 값으로 되돌린다.
+ * 누른 칩과 그 값만 보낸다. 통째로 보내면 이 화면이 낡았을 때 다른 사람이 방금 끈 칩을
+ * 되살린다 — 나머지 칩은 서버가 잠근 행에서 읽는다(`setClientLinkTab`).
  */
 export function useSetClientLinkTab() {
-  return useLinkMutation((input: { surveyId: string; tab: SurveyGuestTab; enabled: boolean }) =>
+  return useLinkMutation((input: { surveyId: string; tab: ClientLinkTab; enabled: boolean }) =>
     client.workspace.accessLinks.setClientTab(input),
   );
 }

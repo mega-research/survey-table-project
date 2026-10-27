@@ -5,7 +5,7 @@ import {
   ACCESS_LINK_TOKEN_MAX_LENGTH,
   ACCESS_LINK_TOKEN_MIN_LENGTH,
   accessLinkKindValues,
-  surveyGuestTabValues,
+  clientLinkTabValues,
 } from '@/shared/contracts/workspace';
 
 /**
@@ -141,7 +141,7 @@ export type ResetAccessLinkPasswordInput = z.infer<typeof ResetAccessLinkPasswor
  */
 export const SetClientLinkTabInput = z.object({
   surveyId: z.uuid(),
-  tab: z.enum(surveyGuestTabValues),
+  tab: z.enum(clientLinkTabValues),
   enabled: z.boolean(),
 });
 export type SetClientLinkTabInput = z.infer<typeof SetClientLinkTabInput>;

@@ -41,7 +41,7 @@ import {
   readFieldworkLinkSessions,
 } from '@/lib/auth/access-link-session';
 import type { ORPCContext } from '@/server/context';
-import { accessLinkKindValues } from '@/shared/contracts/workspace';
+import { accessLinkKindValues, DEFAULT_CLIENT_LINK_TABS } from '@/shared/contracts/workspace';
 import {
   authenticateAccessLink,
   resolveAccessLinkEntry,
@@ -212,7 +212,8 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
   // 서비스의 WHERE 에 종류가 빠지면 목 위에서는 무엇이든 초록이라 실제 행으로 본다.
 
   describe('종류별 발급', () => {
-    const OVERVIEW_ONLY = { overview: true, progressReport: false, contactsMasked: false, quota: false };
+    // 새 링크의 칩 — 응답 현황 · 상세 통계 · 설문 보기(칩 셋 이전의 동작을 잇는다).
+    const NEW_LINK_TABS = DEFAULT_CLIENT_LINK_TABS;
 
     it('한 설문에 두 종류가 함께 서고 주소가 서로 다르다', async () => {
       const fieldwork = await client.accessLinks.issue({ surveyId, kind: 'fieldwork' });
@@ -237,10 +238,10 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
       await expect(client.accessLinks.issue({ surveyId, kind: 'fieldwork' })).resolves.toBeDefined();
     });
 
-    it('새 클라이언트 링크는 응답 현황 하나만 열린 채로 선다', async () => {
+    it('새 클라이언트 링크는 응답 현황·상세 통계·설문 보기만 열린 채로 선다', async () => {
       const { link } = await client.accessLinks.issue({ surveyId, kind: 'client' });
-      // 조사 대상(마스킹)과 쿼터가 모르는 사이 나가지 않는다 — 넓히는 것은 따로 하는 일이다.
-      expect(link.clientTabs).toEqual(OVERVIEW_ONLY);
+      // 조사 대상(마스킹)·쿼터·응답 내역이 모르는 사이 나가지 않는다 — 넓히는 것은 따로 하는 일이다.
+      expect(link.clientTabs).toEqual(NEW_LINK_TABS);
       // 컬럼은 비어 있다 — 기본값은 읽는 쪽이 접는다(어휘가 늘어도 옛 링크가 새 탭을 얻지 않는다).
       const [row] = await db
         .select({ clientTabs: linksTable.clientTabs })
@@ -257,7 +258,7 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
     it('탭 저장이 왕복하고 다른 종류의 링크를 건드리지 않는다', async () => {
       const fieldwork = await client.accessLinks.issue({ surveyId, kind: 'fieldwork' });
       await client.accessLinks.issue({ surveyId, kind: 'client' });
-      const tabs = { overview: true, progressReport: true, contactsMasked: false, quota: true };
+      const tabs = { ...NEW_LINK_TABS, progressReport: true, quota: true };
 
       await client.accessLinks.setClientTab({ surveyId, tab: 'progressReport', enabled: true });
       const saved = await client.accessLinks.setClientTab({ surveyId, tab: 'quota', enabled: true });
@@ -288,12 +289,7 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
       await client.accessLinks.setClientTab({ surveyId, tab: 'contactsMasked', enabled: false }); // A
       const afterB = await client.accessLinks.setClientTab({ surveyId, tab: 'quota', enabled: true }); // B
 
-      expect(afterB.clientTabs).toEqual({
-        overview: true,
-        progressReport: false,
-        contactsMasked: false,
-        quota: true,
-      });
+      expect(afterB.clientTabs).toEqual({ ...NEW_LINK_TABS, contactsMasked: false, quota: true });
     });
 
     it('서로 다른 칩의 동시 저장이 둘 다 남는다', async () => {
@@ -307,6 +303,7 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
           client.accessLinks.setClientTab({ surveyId, tab: 'quota', enabled: true }),
         ]);
         expect((await client.accessLinks.get({ surveyId, kind: 'client' })).link?.clientTabs).toEqual({
+          ...NEW_LINK_TABS,
           overview: false,
           progressReport: true,
           contactsMasked: true,
@@ -321,16 +318,11 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
     });
 
     it('탭을 한 번도 저장하지 않은 링크에서 칩 하나를 켜도 기본 탭이 남는다', async () => {
-      // 컬럼이 비어 있으면 기본값(응답 현황만)이다. 빈 자리에 칩 하나만 적으면 나머지 키가
-      // 없는 객체가 되고, 정규화가 그것을 false 로 읽어 응답 현황이 조용히 꺼진다.
+      // 컬럼이 비어 있으면 기본값이다. 빈 자리에 칩 하나만 적으면 나머지 키가 없는 객체가
+      // 되고, 정규화가 그것을 false 로 읽어 응답 현황·설문 보기가 조용히 꺼진다.
       await client.accessLinks.issue({ surveyId, kind: 'client' });
       const saved = await client.accessLinks.setClientTab({ surveyId, tab: 'quota', enabled: true });
-      expect(saved.clientTabs).toEqual({
-        overview: true,
-        progressReport: false,
-        contactsMasked: false,
-        quota: true,
-      });
+      expect(saved.clientTabs).toEqual({ ...NEW_LINK_TABS, quota: true });
     });
 
     it('어휘 밖의 탭은 경계에서 거부된다', async () => {
@@ -642,7 +634,7 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
     });
 
     it('외주 링크에는 탭을 저장할 수 없다 — 탭은 클라이언트 링크의 축이다', async () => {
-      const tabs = { overview: true, progressReport: false, contactsMasked: false, quota: false };
+      const tabs = DEFAULT_CLIENT_LINK_TABS;
       expect(
         await violationOf(() =>
           db.insert(linksTable).values(linkValues({ kind: 'fieldwork', clientTabs: tabs })),

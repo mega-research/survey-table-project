@@ -8,9 +8,9 @@ import { decryptSharedSecret, encryptSharedSecret } from '@/lib/crypto/aes';
 import { isUniqueViolation } from '@/lib/pg-error';
 import {
   type AccessLinkKind,
-  normalizeSurveyGuestTabs,
-  type SurveyGuestTab,
-  type SurveyGuestTabs,
+  type ClientLinkTab,
+  type ClientLinkTabs,
+  normalizeClientLinkTabs,
 } from '@/shared/contracts/workspace';
 import type { AccessLinkView } from '@/shared/contracts/workspace-io';
 
@@ -55,7 +55,7 @@ function toView(row: {
   id: string;
   kind: AccessLinkKind;
   token: string;
-  clientTabs: SurveyGuestTabs | null;
+  clientTabs: ClientLinkTabs | null;
   passwordUpdatedAt: Date;
   createdAt: Date;
 }): AccessLinkView {
@@ -63,7 +63,7 @@ function toView(row: {
     id: row.id,
     kind: row.kind,
     token: row.token,
-    clientTabs: row.kind === 'client' ? normalizeSurveyGuestTabs(row.clientTabs) : null,
+    clientTabs: row.kind === 'client' ? normalizeClientLinkTabs(row.clientTabs) : null,
     passwordUpdatedAt: row.passwordUpdatedAt,
     createdAt: row.createdAt,
   };
@@ -188,7 +188,7 @@ export async function resetAccessLinkPassword(input: {
  */
 export async function setClientLinkTab(input: {
   surveyId: string;
-  tab: SurveyGuestTab;
+  tab: ClientLinkTab;
   enabled: boolean;
 }): Promise<AccessLinkView> {
   return db.transaction(async (tx) => {
@@ -199,8 +199,8 @@ export async function setClientLinkTab(input: {
       .for('update');
     if (!current) throw new AccessLinkNotFoundError();
 
-    const clientTabs: SurveyGuestTabs = {
-      ...normalizeSurveyGuestTabs(current.clientTabs),
+    const clientTabs: ClientLinkTabs = {
+      ...normalizeClientLinkTabs(current.clientTabs),
       [input.tab]: input.enabled,
     };
     const [row] = await tx

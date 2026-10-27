@@ -4,7 +4,7 @@ import { headers } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 
 import { clientLinkPath } from '@/lib/survey-url';
-import type { SurveyGuestTab, SurveyGuestTabs } from '@/shared/contracts/workspace';
+import type { ClientLinkTab, ClientLinkTabs } from '@/shared/contracts/workspace';
 
 import { resolveClientLinkActor } from './access-link';
 import { loadSurveyAccess, SurveyAccessError } from './survey-access';
@@ -29,8 +29,9 @@ import { loadSurveyAccess, SurveyAccessError } from './survey-access';
  *    있지 않다」 하나다. **사유를 갈라 말하지 않는다** — 주소를 바꿔 넣어 보는 것으로 연구원이
  *    무엇을 켜고 껐는지가 확인되면 안 된다.
  *
- * `tab` 을 생략하면 탭 축을 묻지 않는다. 설문지 미리보기와 화면 머리(레이아웃)가 그 경우다 —
- * 미리보기는 화이트리스트 밖이라 링크가 열려 있으면 언제나 열린다.
+ * `tab` 을 생략하면 탭 축을 묻지 않는다. 화면 머리(레이아웃)와 「열린 화면이 없습니다」 안내가
+ * 그 경우다. **설문 보기도 칩이다**(`preview`) — 미리보기 페이지는 그 칩으로 묻는다. 예전에는
+ * 화이트리스트 밖이라 언제나 열렸는데, 설문지를 보이지 않아야 하는 조사(리멤버 패널)가 생겼다.
  *
  * **탭은 매 요청 링크 행에서 온다**(세션 판정이 읽어 주체에 싣는다). 쿠키에 없으므로 연구원이
  * 탭을 끄면 클라이언트의 다음 화면 이동에서 그 탭이 닫힌다.
@@ -41,13 +42,13 @@ import { loadSurveyAccess, SurveyAccessError } from './survey-access';
 export interface ClientLinkPageViewer {
   /** 이 링크가 여는 설문 — 화면은 이 값만 쓴다(주소에서 읽지 않는다). */
   surveyId: string;
-  /** 지금 열려 있는 탭 — 탭 바가 그대로 그린다. */
-  tabs: SurveyGuestTabs;
+  /** 지금 켜진 칩 — 탭 바·화면 머리·응답 현황 본문이 그대로 그린다. */
+  tabs: ClientLinkTabs;
 }
 
 export async function assertClientLinkPageAccess(
   token: string,
-  tab?: SurveyGuestTab,
+  tab?: ClientLinkTab,
 ): Promise<ClientLinkPageViewer> {
   const session = await resolveClientLinkActor(token, await headers());
   // 사유 셋(unknown·closed·unauthenticated)이 모두 입구로 모인다 — 그 화면이 이미 「닫힘」과
@@ -65,10 +66,12 @@ export async function assertClientLinkPageAccess(
   }
 
   if (!access.capabilities.has('operations.view')) notFound();
-  // 클라이언트 주체라 탭 축은 반드시 채워져 있다 — 방어적으로 다시 접는다. null 을 「전부
-  // 열림」으로 읽는 실수가 가장 넓게 새는 자리다.
-  const tabs = access.guestTabs;
-  if (!tabs) notFound();
+  // 칩은 주체가 든 값을 읽는다 — 판정 코어의 `guestTabs` 는 게스트 넷만 아는 모양이라 칩 셋이
+  // 타입에서 빠진다. 값은 같다: 코어가 클라이언트 주체에게 돌려주는 것이 바로 이 객체다
+  // (capability 가 비면 위에서 이미 막혔다). 종류는 입구가 WHERE 로 못 박았지만 방어적으로
+  // 다시 접는다 — 탭이 없는 주체를 「전부 열림」으로 읽는 실수가 가장 넓게 새는 자리다.
+  if (session.actor.linkKind !== 'client') notFound();
+  const tabs = session.actor.clientTabs;
   if (tab !== undefined && !tabs[tab]) notFound();
 
   return { surveyId: session.actor.surveyId, tabs };

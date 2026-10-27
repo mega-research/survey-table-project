@@ -12,6 +12,7 @@ import {
 
 import type {
   AccessLinkKind,
+  ClientLinkTabs,
   FieldworkOrgStatus,
   SurveyGuestTabs,
   SurveyParticipantAccessLevel,
@@ -245,9 +246,10 @@ export const surveyAccessLinks = pgTable(
     /**
      * 클라이언트 링크의 현황 탭 화이트리스트 — **`kind='client'` 전용**(0134 CHECK 가 외주
      * 링크에서 NULL 을 강제한다). NULL 이면 기본값(응답 현황 하나)이고, 읽는 쪽은
-     * `normalizeSurveyGuestTabs` 로 접는다 — 참여 행의 `guest_tabs` 와 같은 어휘다.
+     * `normalizeClientLinkTabs` 로 접는다 — 참여 행의 `guest_tabs` 넷에 칩 셋(설문 보기·상세 통계·
+     * 응답 내역)을 더한 어휘다.
      */
-    clientTabs: jsonb('client_tabs').$type<SurveyGuestTabs>(),
+    clientTabs: jsonb('client_tabs').$type<ClientLinkTabs>(),
     createdBy: uuid('created_by')
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),
