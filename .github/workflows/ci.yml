@@ -60,11 +60,11 @@ jobs:
         with:
           version: 11.8.0
           standalone: true
-      # 패치까지 고정: '22' 는 러너에 캐시된 옛 22.x 를 그대로 쓸 수 있다.
-      # 22.23.4 = 2026-10-21 Node 보안 릴리스(Brotli RCE·TLS 검증 우회 등).
+      # 패치까지 고정: '24' 는 러너에 캐시된 옛 24.x 를 그대로 쓸 수 있다.
+      # 24.22.1 = 2026-10-21 Node 보안 릴리스(Brotli RCE·TLS 검증 우회 등).
       - uses: actions/setup-node@v5
         with:
-          node-version: 22.23.4
+          node-version: 24.22.1
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       # 공급망 위생 게이트: high/critical 신규 취약점이 들어오면 CI 를 막는다.
@@ -131,11 +131,11 @@ jobs:
         with:
           version: 11.8.0
           standalone: true
-      # 패치까지 고정: '22' 는 러너에 캐시된 옛 22.x 를 그대로 쓸 수 있다.
-      # 22.23.4 = 2026-10-21 Node 보안 릴리스(Brotli RCE·TLS 검증 우회 등).
+      # 패치까지 고정: '24' 는 러너에 캐시된 옛 24.x 를 그대로 쓸 수 있다.
+      # 24.22.1 = 2026-10-21 Node 보안 릴리스(Brotli RCE·TLS 검증 우회 등).
       - uses: actions/setup-node@v5
         with:
-          node-version: 22.23.4
+          node-version: 24.22.1
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - uses: supabase/setup-cli@v3
