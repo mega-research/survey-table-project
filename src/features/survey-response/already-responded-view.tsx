@@ -7,8 +7,11 @@ import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 
 import type { BlockReason } from '@/lib/duplicate-detection/types';
-import { DEFAULT_PAUSED_MESSAGE } from '@/shared/lib/survey-control';
 import { cn } from '@/lib/utils';
+import { DEFAULT_SURVEY_LOCALE, type SurveyLocale } from '@/types/survey-locale';
+import type { SystemStringKey } from '@/utils/system-strings';
+
+import { SystemText } from './system-text';
 
 /**
  * 세션 도중 이 응답이 (다른 화면 또는 재시도로) 이미 완료된 것을 발견했을 때의 안내 —
@@ -24,12 +27,17 @@ interface Props {
   customBody?: string | null;
   /** 카드 맨 아래 — 종료 후 이동 안내(EndRedirectNotice) 자리. */
   footer?: ReactNode;
+  /**
+   * 시스템 문장의 언어 (CONTEXT.md 「다국어 설문」). 미정(`null`)이면 세 언어를 함께 보인다 —
+   * 응답 행이 없어 언어 문항의 답을 읽지 못한 재진입. 저작자 문구(customBody)·설문 제목은 그대로.
+   */
+  locale?: SurveyLocale | null;
 }
 
 interface MessageDef {
   /** null = 제목 없이 body만 크게 표시 (quota_closed — 커스텀 문구가 주인공). */
-  title: string | null;
-  body: string;
+  title: SystemStringKey | null;
+  body: SystemStringKey;
   tone: 'error' | 'info';
 }
 
@@ -38,53 +46,53 @@ const MESSAGES: Record<NoticeReason, MessageDef> = {
     // 테스트 응답 전용 — 실응답은 버전 정리가 보존해 이 사유에 오지 않는다. 테스트 중 저장본이 바뀌어
     // 새 테스트 버전이 생기면 옛 테스트 버전 위의 저장이 여기로 온다(CONTEXT.md 「테스트 버전」).
     // 새로고침하면 재개 이관(ADR-0014)이 새 버전으로 옮기고 바뀐 곳으로 데려간다.
-    title: '설문이 수정되었습니다',
-    body: '새로고침하면 바뀐 곳부터 이어집니다.',
+    title: 'notice.testVersionRepublished.title',
+    body: 'notice.testVersionRepublished.body',
     tone: 'info',
   },
   response_concluded: {
-    title: '이미 완료된 설문입니다',
-    body: '이 응답은 이미 제출이 완료되었습니다. 참여해 주셔서 감사합니다.',
+    title: 'notice.responseConcluded.title',
+    body: 'notice.responseConcluded.body',
     tone: 'info',
   },
   invalid_token: {
-    title: '잘못된 초대 링크입니다',
-    body: '이 링크는 유효하지 않거나 만료되었습니다. 운영자에게 문의해 주세요.',
+    title: 'notice.invalidToken.title',
+    body: 'notice.invalidToken.body',
     tone: 'error',
   },
   token_already_used: {
-    title: '이미 응답하신 설문입니다',
-    body: '이 초대 링크로는 이미 응답이 제출되었습니다. 중복 응답은 허용되지 않습니다.',
+    title: 'notice.alreadyResponded.title',
+    body: 'notice.tokenAlreadyUsed.body',
     tone: 'info',
   },
   device_already_responded: {
-    title: '이미 응답하신 설문입니다',
-    body: '이 기기에서 이 설문에 응답한 기록이 있습니다. 한 분당 한 번만 응답 가능합니다.',
+    title: 'notice.alreadyResponded.title',
+    body: 'notice.deviceAlreadyResponded.body',
     tone: 'info',
   },
   quota_closed: {
     // 기본 제목 멘트 없이 운영자가 입력한 마감 안내 문구만 표시 (2026-07-02 운영 피드백).
     title: null,
-    body: '해당 조건의 모집이 완료되어 더 이상 참여하실 수 없습니다. 참여해 주셔서 감사합니다.',
+    body: 'default.quotaClosed',
     tone: 'info',
   },
   survey_paused: {
     // quota_closed 와 동일하게 제목 없이 운영자가 입력한 중단 문구(customBody)만 크게 표시.
     // customBody 미전달 시 기본 중단 문구로 폴백.
     title: null,
-    body: DEFAULT_PAUSED_MESSAGE,
+    body: 'default.paused',
     tone: 'info',
   },
   invalid_test_token: {
-    title: '테스트 링크가 유효하지 않습니다',
-    body: '테스트 모드가 꺼져 있거나 링크가 잘못되었습니다. 운영 콘솔에서 테스트 링크를 다시 복사해 주세요.',
+    title: 'notice.invalidTestToken.title',
+    body: 'notice.invalidTestToken.body',
     tone: 'error',
   },
   not_accepting: {
     // 미배포·마감·정원·버전 불일치를 하나로 접은 사유. 응답자에게 내부 상태를 세분해
     // 알리지 않는다 — 어느 쪽이든 지금 응답할 수 없다는 사실은 같다.
-    title: '지금은 응답을 받고 있지 않습니다',
-    body: '이 설문은 현재 응답을 받지 않습니다. 링크가 맞는지 확인하시거나 운영자에게 문의해 주세요.',
+    title: 'notice.notAccepting.title',
+    body: 'notice.notAccepting.body',
     tone: 'info',
   },
 };
@@ -95,11 +103,12 @@ export function AlreadyRespondedView({
   contactEmail,
   customBody,
   footer,
+  locale = DEFAULT_SURVEY_LOCALE,
 }: Props) {
   const msg = MESSAGES[reason];
   const Icon = msg.tone === 'error' ? AlertCircle : CheckCircle2;
   const iconColor = msg.tone === 'error' ? 'text-red-500' : 'text-blue-500';
-  const body = customBody && customBody.trim() ? customBody : msg.body;
+  const customText = customBody && customBody.trim() ? customBody : null;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50">
@@ -113,9 +122,14 @@ export function AlreadyRespondedView({
           ) : (
             <Icon className={`mx-auto mb-4 h-12 w-12 ${iconColor}`} />
           )}
-          {msg.title && <h2 className="mb-2 text-xl font-semibold text-gray-900">{msg.title}</h2>}
+          {msg.title && (
+            <h2 className="mb-2 text-xl font-semibold text-gray-900">
+              <SystemText k={msg.title} locale={locale} />
+            </h2>
+          )}
+          {/* 다국어 설문의 미정 제목은 언어마다 한 줄 — 줄바꿈을 살린다 */}
           {surveyTitle && msg.title !== null && (
-            <p className="mb-3 text-sm text-gray-500">{surveyTitle}</p>
+            <p className="mb-3 text-sm whitespace-pre-line text-gray-500">{surveyTitle}</p>
           )}
           <p
             className={cn(
@@ -123,11 +137,13 @@ export function AlreadyRespondedView({
               msg.title ? 'text-gray-600' : 'text-lg leading-relaxed text-gray-800',
             )}
           >
-            {body}
+            {customText ?? <SystemText k={msg.body} locale={locale} />}
           </p>
           {contactEmail && (
             <div className="mt-6 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
-              <p className="text-gray-500">문의 이메일</p>
+              <p className="text-gray-500">
+                <SystemText k="notice.contactEmail" locale={locale} />
+              </p>
               <p className="mt-1 font-medium break-all text-gray-900">{contactEmail}</p>
             </div>
           )}

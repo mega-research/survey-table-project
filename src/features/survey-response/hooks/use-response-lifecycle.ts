@@ -17,6 +17,7 @@ import { type RenderStep, findStepIndexOfQuestion, stepIdOf } from '@/utils/grou
 import { client } from '@/shared/lib/rpc';
 import type { TestAttemptIdentity } from '@/shared/types/test-attempt';
 import type { Question, QuestionGroup, Survey } from '@/types/survey';
+import type { SurveyLocale } from '@/types/survey-locale';
 import type { BranchEvalCtx } from '@/utils/branch-logic';
 import {
   collectTraversedQuestionIds,
@@ -168,6 +169,8 @@ interface UseResponseLifecycleArgs {
   setPausedMessage?: Dispatch<SetStateAction<string | null>>;
   /** 제출이 쿼터 진행 중 마감에 막혔을 때 마감 화면에 띄울 문구 (quota_closed 차단 화면이 읽는다). */
   setQuotaClosedMessage?: Dispatch<SetStateAction<string | null>>;
+  /** 현재 언어(CONTEXT.md 「다국어 설문」) — 마감 기본 문구의 언어. 없으면 한국어. */
+  localeRef?: RefObject<SurveyLocale | null>;
   setInviteIsInvalid: Dispatch<SetStateAction<boolean>>;
   setIsSubmitting: Dispatch<SetStateAction<boolean>>;
   setCurrentStepIndex: Dispatch<SetStateAction<number>>;
@@ -264,6 +267,7 @@ export function useResponseLifecycle({
   setDuplicateStatus,
   setPausedMessage,
   setQuotaClosedMessage,
+  localeRef,
   setInviteIsInvalid,
   setIsSubmitting,
   setCurrentStepIndex,
@@ -1012,7 +1016,9 @@ export function useResponseLifecycle({
           if (completed.kind === 'quota_closed') {
             // 쿼터 「진행 중 마감」 하드 차단 — 답변은 저장됐고 상태만 쿼터마감. 완료 화면 대신
             // 기존 쿼터 마감 화면에 진행 중 마감 문구(서버가 폴백 적용, null 이면 사과 톤 기본)를 띄운다.
-            setQuotaClosedMessage?.(midSurveyClosedBody(completed.closedMessage));
+            setQuotaClosedMessage?.(
+              midSurveyClosedBody(completed.closedMessage, localeRef?.current ?? undefined),
+            );
             setDuplicateStatus({ kind: 'blocked', reason: 'quota_closed' });
             return;
           }

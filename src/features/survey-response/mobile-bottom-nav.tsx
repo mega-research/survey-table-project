@@ -2,7 +2,12 @@
 
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
+import { DEFAULT_SURVEY_LOCALE, type SurveyLocale } from '@/types/survey-locale';
+import { systemText } from '@/utils/system-strings';
+
 interface MobileBottomNavProps {
+  /** 버튼 글자의 언어 — 다국어 설문의 현재 언어(미정이면 호출부가 한국어로 넘긴다). */
+  locale?: SurveyLocale;
   keyboardOpen: boolean;
   currentStepNumber: number;
   totalStepCount: number;
@@ -26,17 +31,19 @@ const primaryButtonCls =
  * - MobileTableStepper의 row 내부 네비와 병존 (행 이동 vs 스텝 이동 역할 분리).
  */
 export function MobileBottomNav({
+  locale = DEFAULT_SURVEY_LOCALE,
   keyboardOpen,
   currentStepNumber,
   totalStepCount,
   hasPrevious,
   isLastStep,
   isSubmitting,
-  submitLabel = '다음',
-  submittingLabel = '처리 중...',
+  submitLabel,
+  submittingLabel,
   onPrevious,
   onNext,
 }: MobileBottomNavProps) {
+  const nextLabel = systemText('nav.next', locale);
   return (
     <div
       className={`fixed inset-x-0 bottom-0 z-50 border-t border-gray-200 bg-white shadow-[0_-2px_10px_rgba(0,0,0,0.05)] transition-transform duration-200 md:hidden ${
@@ -51,7 +58,7 @@ export function MobileBottomNav({
           className="flex items-center gap-1 rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 active:scale-[0.98] disabled:pointer-events-none disabled:text-gray-300"
         >
           <ChevronLeft className="h-4 w-4" />
-          이전
+          {systemText('nav.previous', locale)}
         </button>
 
         {/* 쪽수만 — 필수 미충족 안내는 문항 아래 검증 안내가 맡는다(하단 바의 「필수 질문」
@@ -62,12 +69,14 @@ export function MobileBottomNav({
 
         {isLastStep ? (
           <button onClick={onNext} disabled={isSubmitting} className={primaryButtonCls}>
-            {isSubmitting ? submittingLabel : submitLabel}
+            {isSubmitting
+              ? (submittingLabel ?? systemText('nav.submitting', locale))
+              : (submitLabel ?? nextLabel)}
             {!isSubmitting && <ChevronRight className="h-4 w-4" />}
           </button>
         ) : (
           <button onClick={onNext} disabled={isSubmitting} className={primaryButtonCls}>
-            다음
+            {nextLabel}
             <ChevronRight className="h-4 w-4" />
           </button>
         )}
