@@ -45,8 +45,16 @@ import { useGatingTableCells } from './gating-table-cells-context';
 import { LookupSearchSuggestions } from './lookup-search-suggestions';
 import type { InteractiveCellProps } from './types';
 
-/** 텍스트 입력 셀 (인터랙티브) */
-export const InputCell = React.memo(function InputCell({
+/**
+ * 텍스트 입력 셀 (인터랙티브)
+ *
+ * `React.memo` 로 감싸지 않는다. React 19.2.3 은 memo·forwardRef 컴포넌트의 `useEffectEvent` 를
+ * 다시 그려도 새 함수로 갈아끼우지 않아(커밋 단계가 일반 함수 컴포넌트만 갱신한다) 아래 프리필·
+ * 빈값 기본치 이벤트가 처음 그린 때의 `cellResponse`(undefined)를 계속 읽었다 — 응답자가 고친
+ * 「응답자가 고칠 수 있게」 칸이 고칠 때마다 명단 값으로 되돌아갔다(2026-10-27 발견). 유일한
+ * 부모 `CellRouter` 가 memo 라 여기서 다시 감쌀 이득도 없다.
+ */
+export function InputCell({
   cell,
   cellResponse,
   onUpdateValue,
@@ -446,4 +454,4 @@ export const InputCell = React.memo(function InputCell({
       )}
     </div>
   );
-});
+}

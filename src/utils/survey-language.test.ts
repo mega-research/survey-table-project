@@ -4,6 +4,7 @@ import type { Question, QuestionCondition, QuestionGroup, QuestionOption } from 
 
 import {
   findLanguageQuestion,
+  isLanguageOnlyPage,
   resolveCurrentLocale,
   resolveLanguageSetLocales,
 } from './survey-language';
@@ -193,5 +194,24 @@ describe('resolveLanguageSetLocales', () => {
       G('g', { displayCondition: { conditions: [langMatch(['1'])], logicType: 'AND' } }),
     ];
     expect(resolveLanguageSetLocales([Q('x', 1, { groupId: 'g' })], groups).size).toBe(0);
+  });
+});
+
+describe('isLanguageOnlyPage', () => {
+  const lang = Q('lang', 1, { options: LANG_OPTIONS });
+  const other = Q('q1', 2, { type: 'text' });
+
+  it('보이는 문항이 언어 문항 하나뿐이면 언어 페이지다', () => {
+    expect(isLanguageOnlyPage([lang], lang)).toBe(true);
+  });
+
+  it('다른 문항이 같은 페이지에 보이면 언어 페이지가 아니다', () => {
+    expect(isLanguageOnlyPage([lang, other], lang)).toBe(false);
+  });
+
+  it('언어 문항이 없는 페이지·다국어가 아닌 설문은 언어 페이지가 아니다', () => {
+    expect(isLanguageOnlyPage([other], lang)).toBe(false);
+    expect(isLanguageOnlyPage([lang], null)).toBe(false);
+    expect(isLanguageOnlyPage([], lang)).toBe(false);
   });
 });

@@ -46,6 +46,22 @@ export function findLanguageQuestion(
   return null;
 }
 
+/**
+ * 언어 페이지 — 지금 페이지에 **보이는** 문항이 언어 문항 하나뿐인가. 그 페이지는 「다음」 없이
+ * 보기를 누르면 넘어간다(PRD 「언어 선택 페이지」). 다른 문항이 같은 페이지에 보이면 종전대로다.
+ * 조건으로 숨은 문항은 응답자가 보지 않으므로 세지 않는다 — 호출측이 보이는 문항만 넘긴다.
+ */
+export function isLanguageOnlyPage(
+  visibleQuestions: readonly Question[],
+  languageQuestion: Question | null,
+): boolean {
+  return (
+    languageQuestion !== null &&
+    visibleQuestions.length === 1 &&
+    visibleQuestions[0]?.id === languageQuestion.id
+  );
+}
+
 /** radio 응답에서 고른 값 — 문자열, 또는 기타 상세기재가 붙은 `{ selectedValue }` 래핑. */
 function readSelectedValue(response: unknown): string | null {
   if (typeof response === 'string') return response === '' ? null : response;
