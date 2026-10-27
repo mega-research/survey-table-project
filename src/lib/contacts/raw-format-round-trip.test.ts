@@ -255,7 +255,8 @@ const questions: Question[] = [
     id: 'q-repeat',
     type: 'table',
     title: '성과 목록',
-    questionCode: 'Q10',
+    // 보기 표(Q10)와 겹치지 않게 — 서로 다른 문항의 같은 변수명은 되읽기에서 모호하다
+    questionCode: 'Q12',
     order: 9,
     required: false,
     tableColumns: [

@@ -21,6 +21,7 @@ import { applyExportRowExclusions } from '@/lib/analytics/export-exclusions';
 import {
   MAX_EXPORT_RESPONSES,
   buildRawExportContext,
+  loadLanguageSetLocales,
   loadRawExportRows,
   loadUsedRepeatCounts,
   type RawExportLoadOptions,
@@ -138,6 +139,9 @@ async function handleExport(
       hydrateQuestionsForSpss(normalizeQuestions(surveyData.questions)),
     );
 
+    // 공유 변수명(ADR 0034) — 언어 묶음끼리 같은 변수명을 한 열로. 모든 형식이 같은 맵을 쓴다.
+    const languageSetLocales = await loadLanguageSetLocales(surveyId, hydratedQuestions);
+
     // 패널 회원 ID 등 이어 넘길 값 열 — 현재 설정 기준(설정에서 지우면 열도 빠진다, 값은 DB 에 남는다).
     // 설정이 없는 설문은 키 자체를 싣지 않아 옵션 모양이 도입 전과 같다.
     const entryParamNames = normalizePassParamNames(surveyData.endRedirects?.passParams);
@@ -148,6 +152,8 @@ async function handleExport(
       // 「이월값 불러오기」를 끈 문항 판정 — 현재 빌더 설정 기준
       questions: hydratedQuestions,
       ...(entryParamNames.length > 0 ? { entryParamNames } : {}),
+      // 다국어 설문만 키를 싣는다 — 그 밖의 설문은 옵션 모양이 도입 전과 같다.
+      ...(languageSetLocales.size > 0 ? { languageSetLocales } : {}),
     };
 
     // 2. 응답 데이터 조회 (sav 전용 공용 블록)
@@ -213,6 +219,7 @@ async function handleExport(
       const syntax = generateMrsetsSyntax(
         generateSPSSColumns(hydratedQuestions, {
           changeConfirmQuestionIds,
+          languageSetLocales,
           ...(usedRepeatCounts.size > 0 ? { usedRepeatCounts } : {}),
         }),
         hydratedQuestions,
@@ -318,7 +325,7 @@ async function handleExport(
       const savBuffer = await generateSavBuffer(
         hydratedQuestions,
         responses as unknown as SurveySubmission[],
-        { changeConfirmQuestionIds },
+        { changeConfirmQuestionIds, languageSetLocales },
       );
       return new NextResponse(new Uint8Array(savBuffer), {
         headers: {

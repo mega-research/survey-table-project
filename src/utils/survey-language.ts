@@ -88,7 +88,7 @@ function ownLanguageSetLocale(
   const conditions = (group.displayCondition?.conditions ?? []).filter((c) => c.enabled !== false);
   const [condition] = conditions;
   if (conditions.length !== 1 || !condition) return null;
-  if (condition.conditionType !== 'value-match') return null;
+  if (condition.conditionType !== 'value-match' || condition.logicType === 'NOT') return null;
   if (condition.sourceQuestionId !== languageQuestion.id) return null;
   const values = condition.requiredValues ?? [];
   if (values.length === 0) return null;

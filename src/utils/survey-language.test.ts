@@ -169,6 +169,15 @@ describe('resolveLanguageSetLocales', () => {
     );
   });
 
+  it('조건 하나에 NOT 이 붙어도 언어 묶음이 아니다', () => {
+    const groups = [
+      G('not-zh', {
+        displayCondition: { conditions: [langMatch(['2'], { logicType: 'NOT' })], logicType: 'AND' },
+      }),
+    ];
+    expect(resolveLanguageSetLocales([lang, Q('n1', 1, { groupId: 'not-zh' })], groups).size).toBe(0);
+  });
+
   it('꺼 둔 조건은 세지 않는다', () => {
     const disabled = { ...langMatch(['2']), sourceQuestionId: 'q9', enabled: false };
     const groups = [

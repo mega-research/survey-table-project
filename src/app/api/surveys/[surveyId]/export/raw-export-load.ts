@@ -6,7 +6,7 @@ import { db } from '@/db';
 import { contactTargets, surveyResponses, surveyVersions } from '@/db/schema';
 import { completedResponse, notDeletedResponse } from '@/server/response-filters';
 import { loadRespondentContactAttrsMany } from '@/server/read-models/respondent-contact-attrs';
-import { getQuestionGroupsBySurvey } from '@/server/read-models/survey-structure';
+import { getQuestionGroupsBySurvey, mapGroupRow } from '@/server/read-models/survey-structure';
 import {
   loadChangeConfirmQuestionIds,
   loadPriorAnswersByContactTargets,
@@ -23,6 +23,8 @@ import {
 } from '@/server/data-scope';
 import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 import type { Question } from '@/types/survey';
+import type { SurveyLocale } from '@/types/survey-locale';
+import { resolveLanguageSetLocales } from '@/utils/survey-language';
 
 import { type AnswerableScopeMaterial, scopeMaterialFromSnapshot } from '@/lib/survey/answerable-scope';
 import { buildQuestionMetaMap, buildStepLabelMap } from '@/lib/analytics/raw-export-helpers';
@@ -52,6 +54,8 @@ export interface RawExportContextOptions {
   contactColumns?: readonly RawExportContactColumn[];
   /** 이어 넘길 값 열 — 종료 후 이동 주소 설정의 passParams. 없으면 열이 없다. */
   entryParamNames?: readonly string[];
+  /** 문항 id → 언어 묶음의 언어 — 공유 변수명을 한 열로 합친다(`loadLanguageSetLocales`). */
+  languageSetLocales?: ReadonlyMap<string, SurveyLocale>;
 }
 
 export interface RawExportLoadOptions extends RawExportContextOptions {
@@ -488,7 +492,23 @@ export async function buildRawExportContext(
     changeConfirmQuestionIds,
     ...(options.contactColumns ? { contactColumns: options.contactColumns } : {}),
     ...(options.entryParamNames?.length ? { entryParamNames: options.entryParamNames } : {}),
+    ...(options.languageSetLocales?.size
+      ? { languageSetLocales: options.languageSetLocales }
+      : {}),
   };
+}
+
+/**
+ * 문항 id → 언어 묶음의 언어 — 공유 변수명(ADR 0034)을 한 열로 합치는 판정 재료.
+ * 모든 내보내기 형식(Raw·분할·.sav·.sps·분할 미리보기)이 같은 맵을 넘겨야 변수 집합이 같다.
+ * 다국어 설문이 아니면 빈 맵이라 열 구성이 그대로다.
+ */
+export async function loadLanguageSetLocales(
+  surveyId: string,
+  questions: readonly Question[],
+): Promise<Map<string, SurveyLocale>> {
+  const groups = await getQuestionGroupsBySurvey(surveyId);
+  return resolveLanguageSetLocales(questions, groups.map(mapGroupRow));
 }
 
 // ============================================================

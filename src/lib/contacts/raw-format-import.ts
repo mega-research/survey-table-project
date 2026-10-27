@@ -104,7 +104,7 @@ export interface RawFormatImportResult {
   unknownVarNames: string[];
   /** 규칙상 되읽지 않는 열 (변동 확인·공지 동의) */
   skippedByRuleVarNames: string[];
-  /** 아직 되돌릴 수 없는 열 종류라 건너뛴 열 */
+  /** 아직 되돌릴 수 없는 열 종류라 건너뛴 열 — 여러 문항이 같은 변수명을 쓰는 열(공유 변수명)도 여기 */
   unsupportedVarNames: string[];
 }
 
@@ -553,6 +553,19 @@ function invertQuestion(
 export function buildRawFormatRecords(input: RawFormatImportInput): RawFormatImportResult {
   const questionById = new Map(input.questions.map((q) => [q.id, q]));
   const columnByVarName = new Map(input.columns.map((c) => [c.spssVarName, c]));
+  // 공유 변수명(ADR 0034)처럼 한 이름이 **여러 문항**의 열이면 어느 문항의 값인지 알 수 없다 —
+  // 마지막 열이 조용히 이기게 두지 않고 되읽지 않은 열로 보고한다. 같은 문항 안에서 이름이
+  // 겹치는 열(변동 확인 등)은 종전대로 둔다.
+  // 이름 비교는 SPSS 처럼 대소문자를 가리지 않는다.
+  const columnsByUpperName = new Map<string, SPSSExportColumn[]>();
+  for (const c of input.columns) {
+    const key = c.spssVarName.toUpperCase();
+    columnsByUpperName.set(key, [...(columnsByUpperName.get(key) ?? []), c]);
+  }
+  const ambiguousColumns = (varName: string): SPSSExportColumn[] | null => {
+    const cols = columnsByUpperName.get(varName.toUpperCase()) ?? [];
+    return new Set(cols.map((c) => c.questionId)).size > 1 ? cols : null;
+  };
 
   const varRow = input.headerRows[RAW_FORMAT_HEADER_ROWS - 1] ?? [];
   const mapped: Array<{ columnIndex: number; column: SPSSExportColumn; question: Question }> = [];
@@ -564,6 +577,13 @@ export function buildRawFormatRecords(input: RawFormatImportInput): RawFormatImp
     const varName = text.trim();
     // 메타 열은 1~3행 세로 병합이라 3행이 비어 있다. 변수 열이 아니므로 보고하지 않는다.
     if (!varName) return;
+    const ambiguous = ambiguousColumns(varName);
+    if (ambiguous) {
+      // 규칙상 되읽지 않는 종류(변동 확인 등)면 모호해도 그 분류로 보고한다.
+      if (ambiguous.every((c) => SKIP_BY_RULE_TYPES.has(c.type))) skippedByRuleVarNames.push(varName);
+      else unsupportedVarNames.push(varName);
+      return;
+    }
     const column = columnByVarName.get(varName);
     if (!column) {
       unknownVarNames.push(varName);

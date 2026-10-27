@@ -153,7 +153,37 @@ export function buildMrsetEntries(
     });
   }
 
-  return entries;
+  return coalesceSameNameEntries(entries);
+}
+
+/**
+ * 이름이 같은 세트를 하나로 모은다 (대소문자 무시). 공유 변수명(ADR 0034)에서 한 언어판에만 있는
+ * 보기 열은 그 언어판 문항에 남아 같은 이름의 세트를 하나 더 만들기 때문이다 — 그대로 두면
+ * `/MCGROUP NAME=` 이 두 번 나와 문법이 깨진다. 라벨은 먼저 나온 세트(대표 언어판) 것, 변수와
+ * 카테고리는 합집합이다. 다국어가 아닌 설문은 변수명 게이트 때문에 세트 이름이 겹칠 수 없어 그대로다.
+ */
+function coalesceSameNameEntries(entries: MrsetEntry[]): MrsetEntry[] {
+  const byName = new Map<string, MrsetEntry>();
+  for (const entry of entries) {
+    const key = entry.name.toUpperCase();
+    const existing = byName.get(key);
+    if (!existing) {
+      byName.set(key, entry);
+      continue;
+    }
+    const variables = [...existing.variables];
+    for (const v of entry.variables) if (!variables.includes(v)) variables.push(v);
+    const categories = [...existing.categories];
+    for (const c of entry.categories) {
+      if (!categories.some((e) => e.value === c.value)) categories.push(c);
+    }
+    byName.set(key, {
+      ...existing,
+      variables,
+      categories: categories.sort((a, b) => a.value - b.value),
+    });
+  }
+  return [...byName.values()];
 }
 
 export function buildMrsetNameMap(

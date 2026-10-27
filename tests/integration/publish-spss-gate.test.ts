@@ -82,4 +82,64 @@ describe('publishSurvey — SPSS 변수명 게이트', () => {
     // SpssVarNameError가 아닌 일반 에러 → 게이트는 통과
     expect(db.transaction).toHaveBeenCalled();
   });
+
+  describe('공유 변수명 (CONTEXT.md 「공유 변수명」, ADR 0034)', () => {
+    const LANG: Partial<Question> = {
+      id: 'lang',
+      type: 'radio',
+      questionCode: 'LANG',
+      isCustomSpssVarName: true,
+      options: [
+        { id: 'o-ko', label: '한국어', value: '1', locale: 'ko' },
+        { id: 'o-zh', label: '中文', value: '2', locale: 'zh' },
+      ],
+    };
+    const shared = (id: string, groupId: string): Partial<Question> => ({
+      id,
+      groupId,
+      type: 'text',
+      questionCode: 'Q1',
+      isCustomSpssVarName: true,
+    });
+    const languageGroup = (id: string, value: string, order: number) => ({
+      id,
+      surveyId: SURVEY_ID,
+      name: id,
+      order,
+      displayCondition: {
+        logicType: 'AND',
+        conditions: [
+          {
+            id: `c-${id}`,
+            sourceQuestionId: 'lang',
+            conditionType: 'value-match',
+            requiredValues: [value],
+            logicType: 'AND',
+          },
+        ],
+      },
+    });
+    const withGroups = (questions: Partial<Question>[]): Survey => ({
+      ...makeSurvey(questions),
+      groups: [languageGroup('g-ko', '1', 1), languageGroup('g-zh', '2', 2)],
+    }) as unknown as Survey;
+
+    it('서로 다른 언어 묶음의 같은 변수명은 게이트를 통과한다', async () => {
+      vi.mocked(getSurveyWithDetails).mockResolvedValue(
+        withGroups([LANG, shared('ko-q1', 'g-ko'), shared('zh-q1', 'g-zh')]),
+      );
+      const { db } = await import('@/db');
+      vi.mocked(db.transaction).mockRejectedValue(new Error('db-stub'));
+
+      await expect(publishSurvey({ surveyId: SURVEY_ID })).rejects.toThrow('db-stub');
+    });
+
+    it('같은 언어 묶음 안의 같은 변수명은 여전히 막힌다', async () => {
+      vi.mocked(getSurveyWithDetails).mockResolvedValue(
+        withGroups([LANG, shared('ko-q1', 'g-ko'), shared('ko-q1b', 'g-ko'), shared('zh-q1', 'g-zh')]),
+      );
+
+      await expect(publishSurvey({ surveyId: SURVEY_ID })).rejects.toSatisfy(isSpssVarNameError);
+    });
+  });
 });

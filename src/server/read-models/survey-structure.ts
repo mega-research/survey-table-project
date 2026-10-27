@@ -65,6 +65,29 @@ export async function getQuestionGroupsBySurvey(surveyId: string) {
   return groups;
 }
 
+type QuestionGroupRow = Awaited<ReturnType<typeof getQuestionGroupsBySurvey>>[number];
+
+/** DB 행 → 클라이언트 QuestionGroup 변환 — nullable 컬럼은 키를 싣지 않는다. */
+export function mapGroupRow(g: QuestionGroupRow): QuestionGroup {
+  return {
+    id: g.id,
+    surveyId: g.surveyId,
+    name: g.name,
+    ...(g.description != null ? { description: g.description } : {}),
+    order: g.order,
+    ...(g.parentGroupId != null ? { parentGroupId: g.parentGroupId } : {}),
+    ...(g.color != null ? { color: g.color } : {}),
+    ...(g.collapsed != null ? { collapsed: g.collapsed } : {}),
+    ...(g.hideName != null ? { hideName: g.hideName } : {}),
+    ...(g.nameDesign != null
+      ? { nameDesign: g.nameDesign as NonNullable<QuestionGroup['nameDesign']> }
+      : {}),
+    ...(g.displayCondition != null
+      ? { displayCondition: g.displayCondition as NonNullable<QuestionGroup['displayCondition']> }
+      : {}),
+  };
+}
+
 // ========================
 // 질문 조회 함수
 // ========================
@@ -238,23 +261,7 @@ export async function getSurveyWithDetails(surveyId: string): Promise<SurveyType
     ...(survey.description != null ? { description: survey.description } : {}),
     ...(survey.slug != null ? { slug: survey.slug } : {}),
     ...(survey.privateToken != null ? { privateToken: survey.privateToken } : {}),
-    groups: groups.map((g) => ({
-      id: g.id,
-      surveyId: g.surveyId,
-      name: g.name,
-      ...(g.description != null ? { description: g.description } : {}),
-      order: g.order,
-      ...(g.parentGroupId != null ? { parentGroupId: g.parentGroupId } : {}),
-      ...(g.color != null ? { color: g.color } : {}),
-      ...(g.collapsed != null ? { collapsed: g.collapsed } : {}),
-      ...(g.hideName != null ? { hideName: g.hideName } : {}),
-      ...(g.nameDesign != null
-        ? { nameDesign: g.nameDesign as NonNullable<QuestionGroup['nameDesign']> }
-        : {}),
-      ...(g.displayCondition != null
-        ? { displayCondition: g.displayCondition as NonNullable<QuestionGroup['displayCondition']> }
-        : {}),
-    })),
+    groups: groups.map(mapGroupRow),
     questions: questionList.map(mapQuestionRow),
     settings: {
       isPublic: survey.isPublic,
