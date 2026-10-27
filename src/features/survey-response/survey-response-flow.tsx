@@ -75,7 +75,11 @@ import {
   resolveEndRedirectUrl,
 } from '@/lib/survey/end-redirect';
 import { resolvePriorWaveLabel } from '@/lib/survey/prior-answers';
-import { resolveCurrentLocale } from '@/utils/survey-language';
+import {
+  findLanguageQuestion,
+  isLanguageOnlyPage,
+  resolveCurrentLocale,
+} from '@/utils/survey-language';
 import { systemText } from '@/utils/system-strings';
 import { PriorAnswersProvider } from '@/features/question-renderer/prior-answers-context';
 import { isChoiceGroupTableQuestion } from '@/lib/survey/choice-selection';
@@ -156,6 +160,12 @@ import { resolveChoiceOptions } from '@/utils/choice-source';
 type ResponsesMap = Record<string, unknown>;
 
 const EMPTY_ISSUES = new Map<string, NumericIssue[]>();
+
+/**
+ * 「언어 변경」 링크 글자 — 어느 언어를 고른 응답자든 읽을 수 있게 세 언어를 늘 함께 쓴다
+ * (PRD 「언어 변경」). 현재 언어를 따라 바뀌는 시스템 글자가 아니다.
+ */
+const LANGUAGE_SWITCH_LABEL = '언어 변경 · 语言 · Language';
 
 export interface SurveyResponseFlowProps {
   mode?: 'public' | 'admin-edit' | 'preview';
@@ -749,6 +759,28 @@ function SurveyResponseFlowActive({
         : [],
     [currentStep, responses, questions, groups, evalCtx],
   );
+
+  /**
+   * 언어 페이지 (PRD 「언어 선택 페이지」) — 보이는 문항이 언어 문항 하나뿐인 페이지. 「다음」·
+   * 하단 내비·진행률을 그리지 않고, 보기를 누르면 「다음」과 같은 경로로 넘어간다
+   * (아래 `handlePageResponse`). 그래서 현재 언어가 미정인 시스템 글자는 이 페이지에 나오지 않는다.
+   */
+  const languageQuestion = useMemo(
+    () => findLanguageQuestion(questions, groups),
+    [questions, groups],
+  );
+  const isLanguagePage = isLanguageOnlyPage(currentStepQuestions, languageQuestion);
+  // 언어 문항이 있는 페이지 — 「언어 변경」이 데려가는 곳. 그 페이지 위에서는 링크를 보이지 않는다.
+  const languageStepIndex = useMemo(
+    () =>
+      languageQuestion
+        ? steps.findIndex((step) =>
+            step.items.some((item) => item.question.id === languageQuestion.id),
+          )
+        : -1,
+    [steps, languageQuestion],
+  );
+  const showLanguageSwitch = languageStepIndex !== -1 && languageStepIndex !== currentStepIndex;
 
   /**
    * 아직 변동 여부를 밝히지 않아 입력이 잠겨 있는 문항(추적조사).
@@ -1495,6 +1527,35 @@ function SurveyResponseFlowActive({
     [handleResponse, setHighlightQuestionIds],
   );
 
+  /**
+   * 언어 페이지의 자동 넘김 요청 — 요청한 페이지 번호와 순번. 보기를 누른 그 이벤트 안에서 곧장
+   * `handleNext` 를 부르면 아직 답이 반영되지 않은 화면으로 필수 판정·분기를 해 막힌다.
+   * 그래서 요청만 남기고, 답이 반영된 렌더 뒤에 아래 effect 가 「다음」과 같은 경로로 넘긴다.
+   * 한 렌더 안의 연타는 마지막 요청 하나로 접히고, 넘어간 뒤 늦게 도착한 요청(다른 페이지 번호)은
+   * 버린다. 처리 중(쿼터 첫 판정 대기)에 다시 누르면 `handleNext` 의 기존 가드가 막는다.
+   */
+  const [languageAdvanceRequest, setLanguageAdvanceRequest] = useState<{
+    stepIndex: number;
+    seq: number;
+  } | null>(null);
+  const handledLanguageAdvanceSeqRef = useRef(0);
+  const handlePageResponse = useCallback(
+    (questionId: string, value: unknown) => {
+      if (!isLanguagePage || questionId !== languageQuestion?.id) {
+        handleStepResponse(questionId, value);
+        return;
+      }
+      // 이미 고른 보기를 다시 누르면 radio 는 선택을 푼다(null). 언어 페이지에서는 풀지 않고
+      // 고른 언어 그대로 넘어간다 — 「언어 변경」으로 돌아와 같은 언어를 다시 누른 경우다.
+      if (value !== null && value !== undefined) handleStepResponse(questionId, value);
+      setLanguageAdvanceRequest((prev) => ({
+        stepIndex: currentStepIndex,
+        seq: (prev?.seq ?? 0) + 1,
+      }));
+    },
+    [isLanguagePage, languageQuestion, handleStepResponse, currentStepIndex],
+  );
+
   // 기타/상세 기재(store.optionTexts)를 draft 파이프라인에 동기화한다.
   // 이게 없으면 사이드카는 최종 제출에만 실려, 제출 전 이탈 시 서버에 남지 않아
   // 재진입 복원(seedOptionTexts)이 되살릴 것이 없다. handleResponse('__optTexts__')는
@@ -1847,6 +1908,33 @@ function SurveyResponseFlowActive({
     }
   }, [stepHistory, steps]);
 
+  /**
+   * 「언어 변경」 — 언어 페이지로 간다. 「다음」과 같은 페이지 이동이라 지금 페이지를 방문 기록에
+   * 쌓고(「이전」·브라우저 뒤로 가기가 돌아올 곳), 이 페이지 변경분은 백그라운드로 저장한다.
+   * 답은 건드리지 않는다 — 다른 언어를 고르면 이전 언어 묶음이 숨으며 숨은 문항 규칙대로 지워진다.
+   */
+  const goToLanguagePage = () => {
+    if (!showLanguageSwitch) return;
+    blurActiveInput();
+    void flushPendingAnswersInBackground();
+    setStepHistory((prev) => [...prev, currentStepIndex]);
+    setCurrentStepIndex(languageStepIndex);
+  };
+
+  const advanceFromLanguagePage = useEffectEvent(() => {
+    void handleNext();
+  });
+  useEffect(() => {
+    if (!languageAdvanceRequest) return;
+    if (handledLanguageAdvanceSeqRef.current === languageAdvanceRequest.seq) return;
+    handledLanguageAdvanceSeqRef.current = languageAdvanceRequest.seq;
+    if (languageAdvanceRequest.stepIndex !== currentStepIndex) return;
+    // 「다음」과 같은 경로를 답이 커밋된 뒤에 태우려는 것이라 effect 밖에 둘 자리가 없다 —
+    // 렌더 중에는 저장·이동 부수 효과를 낼 수 없고, 누른 이벤트 안에서는 답이 아직 없다.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    advanceFromLanguagePage();
+  }, [languageAdvanceRequest, currentStepIndex]);
+
   // 브라우저 뒤로가기 → 이전 step 이동
   const hasResponses = Object.keys(responses).length > 0;
   // popstate 시점의 최신 stepHistory/handlePrevious 를 읽는다 — deps 에 넣으면 stepHistory/steps
@@ -2019,14 +2107,36 @@ function SurveyResponseFlowActive({
   const submitLabel = systemText('nav.next', inlineLocale);
   const submittingLabel = systemText('nav.submitting', inlineLocale);
 
+  const languageSwitchLink = showLanguageSwitch ? (
+    <button
+      type="button"
+      onClick={goToLanguagePage}
+      className="text-sm text-blue-600 underline-offset-2 hover:underline"
+    >
+      {LANGUAGE_SWITCH_LABEL}
+    </button>
+  ) : null;
   // 진행 현황 밴드. **조사표를 끼는 설문에서는 두지 않는다** — 조사표를 나란히 보는
   // 화면에서 그 밴드는 세로 공간을 먹고, 지금 위치는 헤더 설명 줄의 "N / M 페이지"
   // 가 말한다. 분할 페이지에서만 빼면 안내문 페이지에서 밴드가 다시 나타나 들썩인다.
-  const progressBand = isDocumentSurvey ? undefined : (
+  // 「언어 변경」은 진행률 줄 왼쪽에 둔다. 다국어가 아닌 설문의 줄은 종전 그대로다.
+  // 조사표를 끼는 설문은 진행 밴드가 없어 링크만 그 자리에 둔다.
+  const progressBand = isLanguagePage ? undefined : isDocumentSurvey ? (
+    (languageSwitchLink ?? undefined)
+  ) : (
     <>
-      <div className="hidden items-center justify-end pr-2 text-sm text-gray-500 md:flex">
-        {currentVisibleStepNumber || 1} / {Math.max(totalVisibleStepCount, 1)}
-      </div>
+      {languageSwitchLink ? (
+        <div className="flex items-center justify-between pr-2 text-sm text-gray-500">
+          {languageSwitchLink}
+          <span className="hidden md:inline">
+            {currentVisibleStepNumber || 1} / {Math.max(totalVisibleStepCount, 1)}
+          </span>
+        </div>
+      ) : (
+        <div className="hidden items-center justify-end pr-2 text-sm text-gray-500 md:flex">
+          {currentVisibleStepNumber || 1} / {Math.max(totalVisibleStepCount, 1)}
+        </div>
+      )}
       {/* 연속형 프로그레스바 */}
       <div className="mt-2">
         <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
@@ -2083,7 +2193,7 @@ function SurveyResponseFlowActive({
             <div lang={currentLocale ?? undefined} className="contents">
               <SurveyResponseLayout
                 containerMaxWidth={containerMaxWidth}
-                reserveBottomNavSpace={isMobile}
+                reserveBottomNavSpace={isMobile && !isLanguagePage}
                 documentPane={
                   isSplit && documentView ? (
                     <ResponseDocumentPane
@@ -2118,7 +2228,7 @@ function SurveyResponseFlowActive({
                 }
                 progress={progressBand}
                 bottomNav={
-                  isMobile ? (
+                  isMobile && !isLanguagePage ? (
                     <MobileBottomNav
                       locale={inlineLocale}
                       keyboardOpen={keyboardOpen}
@@ -2197,7 +2307,7 @@ function SurveyResponseFlowActive({
                     questions={questions}
                     groups={groups}
                     evalCtx={evalCtx}
-                    onResponse={handleStepResponse}
+                    onResponse={handlePageResponse}
                     highlightQuestionIds={highlightQuestionIds}
                     requiredMessageQuestionIds={requiredMessageQuestionIds}
                     changeConfirmMessageQuestionIds={changeConfirmMessageQuestionIds}
@@ -2205,8 +2315,10 @@ function SurveyResponseFlowActive({
                   />
                 )}
 
-                {/* 데스크톱 네비게이션 */}
-                <div className="mt-8 hidden items-center justify-between md:flex">
+                {/* 데스크톱 네비게이션 — 언어 페이지는 「다음」이 없고, 돌아갈 곳이 있을 때만 「이전」 */}
+                <div
+                  className={`mt-8 hidden items-center justify-between ${isLanguagePage && !hasPreviousDisplayable ? '' : 'md:flex'}`}
+                >
                   <Button variant="outline" onClick={handlePrevious} disabled={!hasPreviousDisplayable}>
                     <ArrowLeft className="mr-2 h-4 w-4" />
                     {systemText('nav.previous', inlineLocale)}
@@ -2252,7 +2364,7 @@ function SurveyResponseFlowActive({
                     )}
                   </div>
 
-                  {isLastVisibleStep ? (
+                  {isLanguagePage ? null : isLastVisibleStep ? (
                     <Button onClick={handleNext} disabled={isSubmitting}>
                       {isSubmitting ? submittingLabel : submitLabel}
                       {!isSubmitting && <ArrowRight className="ml-2 h-4 w-4" />}

@@ -1,8 +1,10 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { useSurveyResponseStore } from '@/features/survey-response/stores/survey-response-store';
 import { SurveyResponseFlow } from '@/features/survey-response/survey-response-flow';
-import type { Question, Survey } from '@/types/survey';
+import type { Question, QuestionGroup, Survey } from '@/types/survey';
 
 /**
  * 응답 화면의 현재 언어 (CONTEXT.md 「언어 문항」) — 언어 문항의 답에서 파생해 응답 화면을
@@ -13,16 +15,54 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
 
+// 명단 값이 필요한 시나리오(토큰 프리필)만 실응답 경로로 그린다 — 미리보기는 명단 값이 늘 비어 있다.
+const rpc = vi.hoisted(() => ({
+  forResponse: vi.fn(),
+  attrsLookup: vi.fn(),
+  createWithFirstAnswer: vi.fn(),
+  saveDraft: vi.fn(),
+}));
+vi.mock('@/shared/lib/rpc', () => ({
+  client: {
+    surveyBuilder: {
+      publicRead: {
+        bySlug: vi.fn().mockResolvedValue({ id: 'lang-survey' }),
+        byPrivateToken: vi.fn(),
+        forResponse: (...a: unknown[]) => rpc.forResponse(...a),
+      },
+    },
+    contacts: {
+      attrs: { lookup: (...a: unknown[]) => rpc.attrsLookup(...a) },
+      priorAnswers: { lookup: vi.fn().mockResolvedValue(null) },
+    },
+    surveyResponse: {
+      lifecycle: {
+        stepVisit: vi.fn().mockResolvedValue(undefined),
+        resume: vi.fn().mockResolvedValue(null),
+      },
+      response: {
+        createWithFirstAnswer: (...a: unknown[]) => rpc.createWithFirstAnswer(...a),
+        createBlank: vi.fn(),
+        saveDraft: (...a: unknown[]) => rpc.saveDraft(...a),
+        complete: vi.fn(),
+      },
+      duplicate: { checkOnEntry: vi.fn().mockResolvedValue({ blocked: false }) },
+    },
+    quota: { check: vi.fn() },
+  },
+}));
+
 function buildSurvey(
   questions: Question[],
   localizedMessages: Survey['settings']['localizedMessages'] = null,
+  groups: QuestionGroup[] = [],
 ): Survey {
   return {
     id: 'lang-survey',
     title: '다국어 설문',
     status: 'published',
     currentVersionId: 'version-1',
-    groups: [],
+    groups,
     questions,
     settings: {
       isPublic: true,
@@ -98,19 +138,77 @@ function renderFlow(
   questions: Question[],
   localizedMessages: Survey['settings']['localizedMessages'] = null,
   documentView: typeof DOCUMENT_VIEW | null = null,
+  groups: QuestionGroup[] = [],
 ) {
   return render(
     <SurveyResponseFlow
       mode="preview"
       surveyIdentifier="preview-lang-survey"
       previewContext={{
-        survey: buildSurvey(questions, localizedMessages),
+        survey: buildSurvey(questions, localizedMessages, groups),
         versionId: 'version-1',
         documentView,
       }}
     />,
   );
 }
+
+/** 언어 묶음 — 표시 조건이 「언어 문항 = 그 언어」 하나뿐인 그룹 (CONTEXT.md 「언어 묶음」). */
+function languageSet(id: string, order: number, value: string): QuestionGroup {
+  return {
+    id,
+    surveyId: 'lang-survey',
+    name: id,
+    order,
+    displayCondition: {
+      logicType: 'AND',
+      conditions: [
+        {
+          id: `c-${id}`,
+          sourceQuestionId: 'lang',
+          conditionType: 'value-match',
+          requiredValues: [value],
+          logicType: 'AND',
+        },
+      ],
+    },
+  };
+}
+
+/** 페이지 하나에 문항 하나 — 언어 페이지 · 한국어판 두 쪽 · 중국어판 두 쪽. */
+function pageQuestion(id: string, groupId: string, order: number): Question {
+  return {
+    id,
+    type: 'text',
+    title: id,
+    required: false,
+    order,
+    groupId,
+    pageBreakBefore: true,
+    placeholder: `${id} 입력`,
+  };
+}
+
+const LANGUAGE_SETS: QuestionGroup[] = [
+  { id: 'g-lang', surveyId: 'lang-survey', name: '언어', order: 0 },
+  languageSet('g-ko', 1, '1'),
+  languageSet('g-zh', 2, '2'),
+];
+const MULTILINGUAL_QUESTIONS: Question[] = [
+  { ...LANG_QUESTION, groupId: 'g-lang' },
+  pageQuestion('ko-1', 'g-ko', 1),
+  pageQuestion('ko-2', 'g-ko', 2),
+  pageQuestion('zh-1', 'g-zh', 3),
+  pageQuestion('zh-2', 'g-zh', 4),
+];
+
+function renderMultilingualFlow() {
+  return renderFlow(MULTILINGUAL_QUESTIONS, null, null, LANGUAGE_SETS);
+}
+
+/** 「다음」 — 어느 언어 글자로 그려지든 찾는다 */
+const nextButton = () => screen.queryByRole('button', { name: /다음|下一步|Next/ });
+const languageSwitch = () => screen.queryByRole('button', { name: '언어 변경 · 语言 · Language' });
 
 describe('응답 화면의 현재 언어', () => {
   beforeEach(() => {
@@ -120,15 +218,13 @@ describe('응답 화면의 현재 언어', () => {
   });
 
   it('언어를 고르기 전에는 lang 을 달지 않고, 고르면 그 언어가 된다', async () => {
-    const { container } = renderFlow([LANG_QUESTION]);
+    const { container } = renderMultilingualFlow();
     await screen.findByText('언어를 선택해 주세요');
     expect(container.querySelector('[lang]')).toBeNull();
 
     fireEvent.click(screen.getByText('中文'));
+    await screen.findByPlaceholderText('zh-1 입력');
     expect(container.querySelector('[lang]')?.getAttribute('lang')).toBe('zh');
-
-    fireEvent.click(screen.getByText('English'));
-    expect(container.querySelector('[lang]')?.getAttribute('lang')).toBe('en');
   });
 
   it('다국어 설문이 아니면 한국어다', async () => {
@@ -207,16 +303,197 @@ describe('응답 화면의 현재 언어', () => {
   });
 
   it('언어별 제목 — 고르기 전에는 세 언어 제목을 쌓고, 고르면 그 언어 제목이다', async () => {
-    const { container } = renderFlow([LANG_QUESTION], {
-      zh: { title: '绩效评估调查' },
-      en: { title: 'Performance Evaluation Survey' },
-    });
+    const { container } = renderFlow(
+      MULTILINGUAL_QUESTIONS,
+      {
+        zh: { title: '绩效评估调查' },
+        en: { title: 'Performance Evaluation Survey' },
+      },
+      null,
+      LANGUAGE_SETS,
+    );
     await screen.findByText('언어를 선택해 주세요');
     const headings = () => [...container.querySelectorAll('h1')].map((h) => h.textContent);
     expect(headings()).toContain('다국어 설문\n绩效评估调查\nPerformance Evaluation Survey');
 
     fireEvent.click(screen.getByText('中文'));
+    await screen.findByPlaceholderText('zh-1 입력');
     expect(headings()).toContain('绩效评估调查');
     expect(headings()).not.toContain('다국어 설문');
+  });
+
+  describe('언어 페이지 — 고르면 넘어간다', () => {
+    it('언어 문항 하나뿐인 페이지에는 「다음」 버튼과 진행률 숫자가 없다', async () => {
+      renderMultilingualFlow();
+      await screen.findByText('언어를 선택해 주세요');
+      expect(nextButton()).toBeNull();
+      expect(screen.queryByText(/\d+ \/ \d+/)).toBeNull();
+    });
+
+    it('보기를 누르면 그 언어판 첫 페이지로 한 번만 넘어간다 — 연타해도 한 번', async () => {
+      renderMultilingualFlow();
+      await screen.findByText('언어를 선택해 주세요');
+      const zh = screen.getByText('中文');
+
+      // 두 번의 누르기가 한 번의 렌더 안에 들어오게 한다 — 실제 연타처럼 화면이 바뀌기 전 두 번째 누르기
+      act(() => {
+        fireEvent.click(zh);
+        fireEvent.click(zh);
+      });
+
+      expect(await screen.findByPlaceholderText('zh-1 입력')).toBeInTheDocument();
+      expect(screen.queryByPlaceholderText('zh-2 입력')).toBeNull();
+      expect(screen.queryByText('언어를 선택해 주세요')).toBeNull();
+      // 언어판 페이지에는 「다음」이 돌아온다
+      expect(nextButton()).not.toBeNull();
+    });
+  });
+
+  describe('언어 변경', () => {
+    it('언어판 페이지 위의 「언어 변경」을 누르면 고른 보기가 선택된 채 언어 페이지로 돌아간다', async () => {
+      renderMultilingualFlow();
+      await screen.findByText('언어를 선택해 주세요');
+      expect(languageSwitch()).toBeNull();
+
+      fireEvent.click(screen.getByText('中文'));
+      await screen.findByPlaceholderText('zh-1 입력');
+      fireEvent.click(nextButton()!);
+      await screen.findByPlaceholderText('zh-2 입력');
+
+      fireEvent.click(languageSwitch()!);
+      await screen.findByText('언어를 선택해 주세요');
+      expect(screen.getByRole('radio', { name: '中文' })).toBeChecked();
+      expect(languageSwitch()).toBeNull();
+
+      // 같은 보기를 다시 누르면 선택이 풀리지 않고 그 언어판 첫 페이지로 넘어간다
+      fireEvent.click(screen.getByText('中文'));
+      expect(await screen.findByPlaceholderText('zh-1 입력')).toBeInTheDocument();
+      expect(screen.getByText('zh-1')).toBeInTheDocument();
+    });
+
+    it('다국어 설문이 아니면 「언어 변경」이 없다', async () => {
+      renderFlow([
+        { id: 'q1', type: 'text', title: '첫 질문', required: false, order: 0 },
+        {
+          id: 'q2',
+          type: 'text',
+          title: '둘째 질문',
+          required: false,
+          order: 1,
+          pageBreakBefore: true,
+        },
+      ]);
+      await screen.findByText('첫 질문');
+      expect(languageSwitch()).toBeNull();
+    });
+
+    it('다른 언어를 고르면 이전 언어판 답은 지워진다 (숨은 문항 규칙)', async () => {
+      renderMultilingualFlow();
+      await screen.findByText('언어를 선택해 주세요');
+
+      fireEvent.click(screen.getByText('中文'));
+      fireEvent.change(await screen.findByPlaceholderText('zh-1 입력'), {
+        target: { value: '中文答案' },
+      });
+
+      fireEvent.click(languageSwitch()!);
+      fireEvent.click(await screen.findByText('한국어'));
+      await screen.findByPlaceholderText('ko-1 입력');
+
+      fireEvent.click(languageSwitch()!);
+      fireEvent.click(await screen.findByText('中文'));
+      expect(await screen.findByPlaceholderText('zh-1 입력')).toHaveValue('');
+    });
+
+    it('명단 토큰 프리필 칸은 새 언어판에서 처음 보일 때 다시 깔린다', async () => {
+      window.localStorage.clear();
+      useSurveyResponseStore.getState().resetResponseState();
+      // 문4 부스비용처럼 언어판마다 같은 명단 열을 읽는 「응답자가 고칠 수 있게」 칸
+      const boothTable = (id: string, groupId: string, order: number): Question => ({
+        id,
+        type: 'table',
+        title: `${id} 부스비용`,
+        required: false,
+        order,
+        groupId,
+        pageBreakBefore: true,
+        tableColumns: [
+          { id: `${id}-col-label`, label: '항목' },
+          { id: `${id}-col-value`, label: '금액' },
+        ],
+        tableRowsData: [
+          {
+            id: `${id}-row`,
+            label: '부스비용',
+            cells: [
+              { id: `${id}-label`, type: 'text', content: '부스비용' },
+              {
+                id: `${id}-cost`,
+                type: 'input',
+                content: '',
+                placeholder: `${id} 금액`,
+                defaultValueTemplate: '{{1차_부스비용}}',
+                prefillEditable: true,
+              },
+            ],
+          },
+        ],
+      });
+      const survey = buildSurvey(
+        [
+          { ...LANG_QUESTION, groupId: 'g-lang' },
+          boothTable('ko-booth', 'g-ko', 1),
+          boothTable('zh-booth', 'g-zh', 2),
+        ],
+        null,
+        LANGUAGE_SETS,
+      );
+      rpc.forResponse.mockResolvedValue({
+        survey,
+        versionId: 'version-1',
+        control: {
+          isPaused: false,
+          pausedMessage: null,
+          testSession: 'none',
+          testSessionKind: null,
+        },
+      });
+      rpc.attrsLookup.mockResolvedValue({ '1차_부스비용': '1200' });
+      rpc.createWithFirstAnswer.mockResolvedValue({
+        kind: 'created',
+        id: 'response-1',
+        contactTargetId: null,
+      });
+      rpc.saveDraft.mockResolvedValue({ ok: true });
+
+      render(
+        <SurveyResponseFlow
+          surveyIdentifier="lang-survey"
+          inviteToken="11111111-1111-4111-8111-111111111111"
+          testToken={null}
+        />,
+      );
+      await screen.findByText('언어를 선택해 주세요');
+      await waitFor(() => expect(rpc.attrsLookup).toHaveBeenCalled());
+
+      fireEvent.click(screen.getByText('한국어'));
+      const koCost = await screen.findByPlaceholderText('ko-booth 금액');
+      await waitFor(() => expect(koCost).toHaveValue('1200'));
+      const user = userEvent.setup();
+      await user.clear(koCost);
+      await user.type(koCost, '1300');
+      expect(koCost).toHaveValue('1300');
+
+      fireEvent.click(languageSwitch()!);
+      fireEvent.click(await screen.findByText('中文'));
+      const zhCost = await screen.findByPlaceholderText('zh-booth 금액');
+      await waitFor(() => expect(zhCost).toHaveValue('1200'));
+
+      // 돌아가 한국어를 다시 고르면 고쳤던 한국어판 값은 지워졌고 명단 값이 다시 깔린다
+      fireEvent.click(languageSwitch()!);
+      fireEvent.click(await screen.findByText('한국어'));
+      const koAgain = await screen.findByPlaceholderText('ko-booth 금액');
+      await waitFor(() => expect(koAgain).toHaveValue('1200'));
+    });
   });
 });
