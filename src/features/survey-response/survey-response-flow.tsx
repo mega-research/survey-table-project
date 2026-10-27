@@ -2151,8 +2151,12 @@ function SurveyResponseFlowActive({
         />
         <FormulaEvalProvider value={formulaCtx}>
           <SurveyLocaleProvider locale={systemLocale}>
-            {/* display:contents — 배치를 바꾸지 않고 lang 만 싣는다. 미정이면 달지 않는다 */}
-            <div lang={currentLocale ?? undefined} className="contents">
+            {/* display:contents — 배치를 바꾸지 않고 lang 만 싣는다. 미정이면 달지 않고 표식만 단다(글꼴 순서, globals.css) */}
+            <div
+              lang={currentLocale ?? undefined}
+              data-locale-undetermined={currentLocale === null ? '' : undefined}
+              className="contents"
+            >
               <SurveyResponseLayout
                 containerMaxWidth={containerMaxWidth}
                 reserveBottomNavSpace={isMobile && (!isLanguagePage || hasPreviousDisplayable)}

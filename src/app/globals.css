@@ -483,6 +483,17 @@
 }
 */
 
+/* 중국어 글자의 글꼴 — Wanted Sans 에는 한자가 없어 다음 글꼴로 넘어간다. 한국어 글꼴(Malgun Gothic·
+   Apple SD Gothic Neo)은 흔한 한자(言·人·元)만 있고 간체(语·选)는 없어, 순서가 한국어 먼저면 한 단어가
+   두 글꼴로 갈린다. 중국어판(lang=zh)과 언어를 고르기 전(세 언어가 함께 보인다)만 중국어 글꼴을 앞에 둔다 —
+   한국어 설문은 그대로다. 한글·영문은 여전히 Wanted Sans 다. */
+[lang|="zh"],
+[data-locale-undetermined] {
+  font-family:
+    "Wanted Sans Variable", "Wanted Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
