@@ -97,6 +97,35 @@ describe('generateSPSSColumns — 공유 변수명 합치기', () => {
     expect(() => assertValidSpssVarNames(columns)).toThrow();
   });
 
+  it('합쳐진 문항에 남은 그 언어판만의 열은 파일 끝이 아니라 대표 문항 열 바로 뒤에 선다', () => {
+    const checkbox = (id: string, labels: string[], order: number): Question => ({
+      ...radio(id, 'Q2', labels, order),
+      type: 'checkbox',
+    });
+    // 중국어판 Q2 에만 셋째 보기가 있다 — Q2_3 은 한국어 Q2 열 뒤, Q9 앞
+    const questions = QUESTIONS.map((q) =>
+      q.id === 'ko-q2'
+        ? checkbox('ko-q2', ['가', '나'], 2)
+        : q.id === 'zh-q2'
+          ? checkbox('zh-q2', ['甲', '乙', '丙'], 12)
+          : q.id === 'en-q2'
+            ? checkbox('en-q2', ['A', 'B'], 22)
+            : q,
+    );
+    const columns = generateSPSSColumns(questions, { languageSetLocales: LOCALES });
+    expect(columns.map((c) => `${c.spssVarName}:${c.questionId}`)).toEqual([
+      'Q1:ko-q1',
+      'Q2_1:ko-q2',
+      'Q2_2:ko-q2',
+      'Q2_3:zh-q2',
+      'Q9:ko-q9',
+    ]);
+    // Raw 1행 제목도 한국어판 문항 것
+    expect(columns.find((c) => c.questionId === 'zh-q2')?.questionText).toBe(
+      columns.find((c) => c.questionId === 'ko-q2')?.questionText,
+    );
+  });
+
   it('한국어판이 없는 변수는 그 언어판 열이 대표다', () => {
     const questions = [...QUESTIONS, text('zh-q8', 'Q8', 13), text('en-q8', 'Q8', 23)];
     const locales = new Map(LOCALES).set('zh-q8', 'zh').set('en-q8', 'en');
