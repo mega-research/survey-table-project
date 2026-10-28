@@ -108,8 +108,35 @@ import { VirtualizedTableGrid } from './virtualized-table-grid';
 
 const VIRTUALIZATION_THRESHOLD = 100;
 
-/** 응답을 받지 않는 셀 유형 — 표 전체가 이것뿐이면 모바일에서도 원본 표로 그린다 */
+/** 응답을 받지 않는 셀 유형 */
 const DISPLAY_ONLY_CELL_TYPES = new Set<TableCell['type']>(['text', 'image', 'video']);
+
+/** 응답 칸 없이도 표시 셀(「바로 표시」·「접기」)을 카드로 그리는 표시 방식 — 행 카드 스테퍼로 가는 것들 */
+const MODES_DRAWING_DISPLAY_CELLS = new Set<MobileTableDisplayMode>([
+  'auto',
+  'row-cards',
+  'row-group-cards',
+]);
+
+/**
+ * 응답 칸이 하나도 없는 표를 모바일에서 원본 표로 바꿔 그려야 하는가 — 고른 표시 방식이 아무것도 그리지
+ * 못할 때만 참이다. 항목·축 카드와 행별 원본·척도는 응답 칸이 있어야 카드를 세우고, 선택 행 원본 보기는
+ * 값 없는 「0 / 0개」 목차만 남는다. 행 카드 계열은 모바일 표시를 지정한 글자 셀이 있으면 그것을 그린다.
+ */
+function displayOnlyTableNeedsOriginal(rows: TableRow[], mode: MobileTableDisplayMode): boolean {
+  if (mode === 'original') return false;
+  const displayOnly = rows.every((row) =>
+    row.cells.every((cell) => DISPLAY_ONLY_CELL_TYPES.has(cell.type)),
+  );
+  if (!displayOnly) return false;
+  if (!MODES_DRAWING_DISPLAY_CELLS.has(mode)) return true;
+  return !rows.some((row) =>
+    row.cells.some(
+      (cell) =>
+        !cell.isHidden && (cell.mobileDisplay === 'inline' || cell.mobileDisplay === 'collapsed'),
+    ),
+  );
+}
 
 // text-base: 헤더는 척도 라벨 등 응답 판단 정보가 실리므로 16px 고정 (TablePreview 와 동일)
 const HEADER_CELL_BASE_CLASS =
@@ -637,19 +664,17 @@ function InteractiveTableResponseBody({
   const locale = useInlineSurveyLocale();
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
-  // 응답 칸이 하나도 없는 표(글자·이미지만 있는 안내 표)는 모바일 카드 계열이 세울 카드가 없다 —
-  // 행 카드는 표시 설정 없는 글자 셀을 숨기고 항목·축 카드는 입력 칸이 있어야 카드를 연다. 그대로
-  // 두면 제목만 남고 표가 사라지므로 표시 방식과 무관하게 원본 표로 그린다.
-  const isDisplayOnlyTable = useMemo(
-    () => rows.every((row) => row.cells.every((cell) => DISPLAY_ONLY_CELL_TYPES.has(cell.type))),
-    [rows],
+  // 응답 칸이 하나도 없는 표(글자·이미지만 있는 안내 표)를 모바일 카드 계열이 그리지 못하면 원본 표로
+  // 그린다 — 그대로 두면 제목만 남고 표가 사라진다. 저작자가 정한 표시 방식이 그릴 수 있으면 그대로 둔다.
+  const authoredMobileMode = resolveMobileTableDisplayMode({
+    mobileTableDisplayMode,
+    mobileOriginalTable,
+  });
+  const displayOnlyFallsBack = useMemo(
+    () => displayOnlyTableNeedsOriginal(rows, authoredMobileMode),
+    [rows, authoredMobileMode],
   );
-  const mobileMode = isDisplayOnlyTable
-    ? 'original'
-    : resolveMobileTableDisplayMode({
-        mobileTableDisplayMode,
-        mobileOriginalTable,
-      });
+  const mobileMode = displayOnlyFallsBack ? 'original' : authoredMobileMode;
   const useOriginalRowDetail = isMobileView && mobileMode === 'drilldown-original-row';
   // 행별 원본 · 행별 척도 — 같은 시트 구조, 행 본문만 다르다
   const usesRowWiseSheet = isMobileView && isRowWiseMobileTableDisplayMode(mobileMode);

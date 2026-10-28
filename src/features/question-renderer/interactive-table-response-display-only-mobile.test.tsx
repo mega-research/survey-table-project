@@ -99,4 +99,49 @@ describe('응답 칸 없는 표 — 모바일', () => {
       expect(screen.getAllByText(text).length).toBeGreaterThan(0);
     }
   });
+
+  // 저작자가 글자 셀에 「바로 표시」를 지정하면 행 카드 계열은 그것을 카드로 그린다 — 그대로 둔다.
+  // 원본 표로 바꾸는 것은 고른 방식이 아무것도 그리지 못할 때뿐이다.
+  const inlineRows: TableRow[] = rows.map((row) => ({
+    ...row,
+    cells: row.cells.map((cell) => ({ ...cell, mobileDisplay: 'inline' as const })),
+  }));
+
+  it.each(['auto', 'row-cards', 'row-group-cards'] as const)(
+    '%s 는 바로 표시 셀이 있으면 원본 표가 아니라 카드로 그린다',
+    (mode) => {
+      const { container } = render(
+        <InteractiveTableResponse
+          questionId="q1"
+          columns={columns}
+          rows={inlineRows}
+          hideColumnLabels
+          mobileTableDisplayMode={mode}
+          value={{}}
+          onChange={() => {}}
+        />,
+      );
+      expect(container.querySelector('.mobile-row-card')).not.toBeNull();
+      expect(container.querySelector('table, [role="grid"], [data-row-index]')).toBeNull();
+      expect(screen.getAllByText('Domestic Exhibition Name').length).toBeGreaterThan(0);
+    },
+  );
+
+  it.each(['item-cards', 'axis-cards'] as const)(
+    '%s 는 바로 표시 셀이 있어도 그릴 카드가 없어 원본 표로 그린다',
+    (mode) => {
+      render(
+        <InteractiveTableResponse
+          questionId="q1"
+          columns={columns}
+          rows={inlineRows}
+          hideColumnLabels
+          mobileTableDisplayMode={mode}
+          value={{}}
+          onChange={() => {}}
+        />,
+      );
+      expect(screen.getAllByText('COEX').length).toBeGreaterThan(0);
+    },
+  );
 });
