@@ -56,6 +56,7 @@ import {
   Question,
   RowRepeatConfig,
   StagedRowsConfig,
+  TableCell,
   TableColumn,
   TableRow,
 } from '@/types/survey';
@@ -106,6 +107,9 @@ import { StagedRowsButtons } from './staged-rows-buttons';
 import { VirtualizedTableGrid } from './virtualized-table-grid';
 
 const VIRTUALIZATION_THRESHOLD = 100;
+
+/** 응답을 받지 않는 셀 유형 — 표 전체가 이것뿐이면 모바일에서도 원본 표로 그린다 */
+const DISPLAY_ONLY_CELL_TYPES = new Set<TableCell['type']>(['text', 'image', 'video']);
 
 // text-base: 헤더는 척도 라벨 등 응답 판단 정보가 실리므로 16px 고정 (TablePreview 와 동일)
 const HEADER_CELL_BASE_CLASS =
@@ -633,10 +637,19 @@ function InteractiveTableResponseBody({
   const locale = useInlineSurveyLocale();
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
-  const mobileMode = resolveMobileTableDisplayMode({
-    mobileTableDisplayMode,
-    mobileOriginalTable,
-  });
+  // 응답 칸이 하나도 없는 표(글자·이미지만 있는 안내 표)는 모바일 카드 계열이 세울 카드가 없다 —
+  // 행 카드는 표시 설정 없는 글자 셀을 숨기고 항목·축 카드는 입력 칸이 있어야 카드를 연다. 그대로
+  // 두면 제목만 남고 표가 사라지므로 표시 방식과 무관하게 원본 표로 그린다.
+  const isDisplayOnlyTable = useMemo(
+    () => rows.every((row) => row.cells.every((cell) => DISPLAY_ONLY_CELL_TYPES.has(cell.type))),
+    [rows],
+  );
+  const mobileMode = isDisplayOnlyTable
+    ? 'original'
+    : resolveMobileTableDisplayMode({
+        mobileTableDisplayMode,
+        mobileOriginalTable,
+      });
   const useOriginalRowDetail = isMobileView && mobileMode === 'drilldown-original-row';
   // 행별 원본 · 행별 척도 — 같은 시트 구조, 행 본문만 다르다
   const usesRowWiseSheet = isMobileView && isRowWiseMobileTableDisplayMode(mobileMode);
