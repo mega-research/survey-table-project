@@ -5,6 +5,7 @@ import {
   HEADER_MARK_HEIGHTS,
   HEADER_NOTICE_BOX_WIDTHS,
   getHeaderBandBorders,
+  localizeDefaultNoticeTexts,
   normalizeResponseHeaderConfig,
   partitionHeaderBlocks,
   resolveHeaderRow,
@@ -45,10 +46,11 @@ export function SurveyResponseHeader({
   showBranding = true,
   device = 'auto',
 }: SurveyResponseHeaderProps) {
-  const config = normalizeResponseHeaderConfig(responseHeader);
-  const descriptions = (typeof description === 'string' ? [description] : (description ?? [])).filter(
-    (text) => !isEmptyHtml(text),
-  );
+  const locale = useInlineSurveyLocale();
+  const config = localizeDefaultNoticeTexts(normalizeResponseHeaderConfig(responseHeader), locale);
+  const descriptions = (
+    typeof description === 'string' ? [description] : (description ?? [])
+  ).filter((text) => !isEmptyHtml(text));
 
   // 비-첫페이지: 로고·문구 블록만 제거하고 제목 밴드는 1페이지와 동일한 스타일로 유지한다.
   // 1페이지는 로고·문구가 세로 지지대 역할을 하지만 컴팩트 헤더는 제목뿐이라
@@ -175,7 +177,7 @@ function ComposedHeaderMobile({
             style={{ backgroundColor: config.bandBg, textAlign: config.titleTextAlign }}
           >
             <h1
-              className="leading-[1.3] font-extrabold whitespace-pre-line [text-wrap:pretty] break-keep text-[#141414]"
+              className="leading-[1.3] font-extrabold [text-wrap:pretty] break-keep whitespace-pre-line text-[#141414]"
               style={{ fontSize: titlePx, letterSpacing: '-0.4px' }}
             >
               {title}
@@ -216,7 +218,7 @@ function ComposedHeaderMobile({
         {above}
         <div className="flex items-center justify-between gap-3">
           <h1
-            className="min-w-0 flex-1 text-xl leading-[1.3] font-extrabold whitespace-pre-line break-keep text-[#141414]"
+            className="min-w-0 flex-1 text-xl leading-[1.3] font-extrabold break-keep whitespace-pre-line text-[#141414]"
             style={{ letterSpacing: '-0.5px' }}
           >
             {title}
@@ -271,7 +273,7 @@ function ComposedHeaderMobile({
         }}
       >
         <h1
-          className="leading-[1.35] font-extrabold whitespace-pre-line [text-wrap:balance] break-keep text-[#141414]"
+          className="leading-[1.35] font-extrabold [text-wrap:balance] break-keep whitespace-pre-line text-[#141414]"
           style={{ fontSize: titlePx, letterSpacing: '-0.4px' }}
         >
           {title}
@@ -500,7 +502,7 @@ function TitleBandText({
       {/* 기존 테스트·a11y 관례: 설문 제목은 heading (v1 TitleBlock h1 계승) */}
       <h1
         className={cn(
-          'font-semibold whitespace-pre-line break-keep text-[#141414]',
+          'font-semibold break-keep whitespace-pre-line text-[#141414]',
           inline ? 'leading-[1.3] [text-wrap:pretty]' : 'leading-[1.25] [text-wrap:balance]',
         )}
         style={{ fontSize: titlePx, letterSpacing: '-0.5px' }}
@@ -555,7 +557,10 @@ function HeaderImageBlock({
   mobile?: boolean;
 }) {
   const locale = useInlineSurveyLocale();
-  const defaultAlt = systemText(block.type === 'mark' ? 'header.markAlt' : 'header.logoAlt', locale);
+  const defaultAlt = systemText(
+    block.type === 'mark' ? 'header.markAlt' : 'header.logoAlt',
+    locale,
+  );
   const lineStyle: CSSProperties =
     block.frame === 'line'
       ? {

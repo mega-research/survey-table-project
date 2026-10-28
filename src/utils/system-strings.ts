@@ -192,6 +192,10 @@ const KO = {
   'document.goToQuestion': '이 영역의 문항으로 이동',
 
   'header.defaultNoticeTitle': '통계법 제33조(비밀의 보호)',
+  'header.defaultNoticeBody':
+    '통계의 작성 과정에서 알려진 사항으로서 개인이나 법인 또는 단체의 비밀에 속하는 사항은 보호되어야 한다.',
+  'header.defaultNoticeLine':
+    '본 조사는 통계법 제33조(비밀의 보호)에 의거, 응답하신 내용은 통계 작성 목적 외에는 사용되지 않습니다.',
   'header.markAlt': '국가통계 마크',
   'header.logoAlt': '설문 로고',
 
@@ -451,6 +455,10 @@ const ZH: Dictionary = {
   'document.goToQuestion': '转到此区域的题目',
 
   'header.defaultNoticeTitle': '《统计法》第33条（秘密保护）',
+  'header.defaultNoticeBody':
+    '在编制统计过程中获知的、属于个人、法人或团体秘密的事项，应当予以保护。',
+  'header.defaultNoticeLine':
+    '本调查依据《统计法》第33条（秘密保护），您的回答内容仅用于统计编制目的，不作其他用途。',
   'header.markAlt': '国家统计标志',
   'header.logoAlt': '问卷标志',
 
@@ -725,6 +733,10 @@ const EN: Dictionary = {
   'document.goToQuestion': 'Go to the question for this area',
 
   'header.defaultNoticeTitle': 'Statistics Act, Article 33 (Protection of Confidentiality)',
+  'header.defaultNoticeBody':
+    'Matters that become known in the course of compiling statistics and that are secrets of individuals, corporations or organizations shall be protected.',
+  'header.defaultNoticeLine':
+    'Under Article 33 of the Statistics Act (Protection of Confidentiality), your answers will be used only for compiling statistics.',
   'header.markAlt': 'National statistics mark',
   'header.logoAlt': 'Survey logo',
 

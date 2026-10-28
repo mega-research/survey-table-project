@@ -16,13 +16,25 @@ import { useRouter } from 'next/navigation';
 import { AlertCircle, ArrowLeft, ArrowRight } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { ResponseDocumentPane } from '@/features/survey-response/response-document-pane';
 import { Button } from '@/components/ui/button';
+import { ContactAttrsProvider } from '@/features/question-renderer/contact-attrs-context';
+import { FormulaEvalProvider } from '@/features/question-renderer/formula-context';
+import { PriorAnswersProvider } from '@/features/question-renderer/prior-answers-context';
 import {
   buildRowWiseCellInstanceIds,
   scrollToIssue,
   scrollToValidationNotice,
 } from '@/features/question-renderer/scroll-to-issue';
+import { SurveyLocaleProvider } from '@/features/question-renderer/survey-locale-context';
+import { SurveyResponseHeader } from '@/features/question-renderer/survey-response-header';
+import {
+  anchorQuestionLabel,
+  resolveAnchorFocus,
+  resolveAnchorOwnerId,
+  resolveQuestionForOwner,
+} from '@/features/question-renderer/utils/anchor-outline';
+import { resolveEffectiveOptionTextsByQuestion } from '@/features/question-renderer/utils/effective-option-texts';
+import { selectHighlightablePriorAnswers } from '@/features/question-renderer/utils/prior-answer-highlight';
 import { resolveResponseContainerWidth } from '@/features/question-renderer/utils/table-grid-utils';
 import { AlreadyRespondedView } from '@/features/survey-response/already-responded-view';
 import { HoneypotField } from '@/features/survey-response/honeypot-field';
@@ -30,25 +42,45 @@ import { sessionStorageKey } from '@/features/survey-response/hooks/session-help
 import { useClientSignals } from '@/features/survey-response/hooks/use-client-signals';
 import { useDuplicateGuard } from '@/features/survey-response/hooks/use-duplicate-guard';
 import { useKeyboardOpen } from '@/features/survey-response/hooks/use-keyboard-open';
-import { useResponseLifecycle } from '@/features/survey-response/hooks/use-response-lifecycle';
-import { useResponseTelemetry } from '@/features/survey-response/hooks/use-response-telemetry';
 import {
   type LanguageAdvance,
   useLanguagePage,
 } from '@/features/survey-response/hooks/use-language-page';
+import { useResponseLifecycle } from '@/features/survey-response/hooks/use-response-lifecycle';
+import { useResponseTelemetry } from '@/features/survey-response/hooks/use-response-telemetry';
 import { useSessionRecovery } from '@/features/survey-response/hooks/use-session-recovery';
 import { useSurveyLoader } from '@/features/survey-response/hooks/use-survey-loader';
 import { InviteRequiredScreen } from '@/features/survey-response/invite-required-screen';
-import { SystemText } from '@/features/survey-response/system-text';
 import type { SaveAdminEditPayload } from '@/features/survey-response/lib/admin-edit';
+import {
+  buildAdminRelaxWarningMessage,
+  classifyStepIssues,
+  snapshotStepResponses,
+} from '@/features/survey-response/lib/admin-edit-required-relax';
+import {
+  hasExplicitRequiredChoiceGroup,
+  isQuestionAnswered as isQuestionAnsweredPure,
+} from '@/features/survey-response/lib/answer-validation';
+import {
+  resolveHeaderDescriptions,
+  resolveHeaderTitle,
+} from '@/features/survey-response/lib/localized-survey-texts';
+import {
+  type NumericIssue,
+  collectNumericIssues,
+  collectVisibleTableCells,
+  resolveChoiceTableVisibleCellIds,
+} from '@/features/survey-response/lib/numeric-validation';
+import { isQuotaTargetFilled, shouldCheckQuota } from '@/features/survey-response/lib/quota-gate';
+import { collectRequiredOptionTextIssues } from '@/features/survey-response/lib/required-option-text-validation';
+import { SPLIT_MIN_VIEWPORT_WIDTH } from '@/features/survey-response/lib/split-viewport';
 import { MobileBottomNav } from '@/features/survey-response/mobile-bottom-nav';
+import { ResponseDocumentPane } from '@/features/survey-response/response-document-pane';
 import { ResumeToast } from '@/features/survey-response/resume-toast';
 import { DemandChecklist } from '@/features/survey-response/step-views/demand-checklist';
 import { PageStepView } from '@/features/survey-response/step-views/page-step-view';
 import { useSurveyResponseStore } from '@/features/survey-response/stores/survey-response-store';
 import { SurveyResponseLayout } from '@/features/survey-response/survey-response-layout';
-import { UnmodifiedChangedDialog } from '@/features/survey-response/unmodified-changed-dialog';
-import { SurveyResponseHeader } from '@/features/question-renderer/survey-response-header';
 import {
   DesktopOnlyScreen,
   EndRedirectNotice,
@@ -59,12 +91,14 @@ import {
   SurveyErrorScreen,
   SurveyLoadingScreen,
 } from '@/features/survey-response/survey-response-screens';
+import { SystemText } from '@/features/survey-response/system-text';
+import { UnmodifiedChangedDialog } from '@/features/survey-response/unmodified-changed-dialog';
 import { useSyncLatestRef } from '@/hooks/use-latest-ref';
 import { useMediaQuery } from '@/hooks/use-media-query';
-import {
-  type CompletionOutcome,
-  resolveCompletionScreen,
-} from './lib/completion-screen';
+import { midSurveyClosedBody } from '@/lib/quota/closed-message';
+import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
+import { withCalcValues } from '@/lib/survey/cell-formula';
+import type { FormulaEvalCtx } from '@/lib/survey/cell-formula';
 import {
   CHANGE_CONFIRM_KEY,
   collectUnconfirmedQuestionIds,
@@ -72,18 +106,34 @@ import {
   isAwaitingChangeConfirmation,
   readChangeConfirmations,
 } from '@/lib/survey/change-confirmation';
+import { isChoiceGroupTableQuestion } from '@/lib/survey/choice-selection';
 import {
   type EndRedirectOutcome,
   normalizePassParamNames,
   pickEntryParams,
   resolveEndRedirectUrl,
 } from '@/lib/survey/end-redirect';
+import { filterPriorAnswersByCondition } from '@/lib/survey/prior-answer-condition';
 import { resolvePriorWaveLabel } from '@/lib/survey/prior-answers';
-import { resolveCurrentLocale } from '@/utils/survey-language';
-import { systemText } from '@/utils/system-strings';
-import { PriorAnswersProvider } from '@/features/question-renderer/prior-answers-context';
-import { isChoiceGroupTableQuestion } from '@/lib/survey/choice-selection';
-import { normalizeFormatValues } from './lib/format-normalize';
+import type { PriorAnswers } from '@/lib/survey/prior-answers';
+import { stripHiddenQuestionValues } from '@/lib/survey/question-visibility';
+import { generateId } from '@/lib/utils';
+import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
+import type { ResponseEntrySeed } from '@/shared/contracts/survey-builder-io';
+import type { SurveyDocumentView } from '@/shared/contracts/survey-builder-io';
+import { client } from '@/shared/lib/rpc';
+import type { Question, QuestionGroup, Survey } from '@/types/survey';
+import { DEFAULT_SURVEY_LOCALE, type SurveyLocale, toInlineLocale } from '@/types/survey-locale';
+import { collectAnswerQuotes } from '@/utils/answer-quote';
+import { responsesToLookupShape } from '@/utils/branch-eval';
+import {
+  type BranchEvalCtx,
+  collectTraversedQuestionIds,
+  collectTraversedStepPath,
+  getBranchRuleForResponse,
+  shouldDisplayQuestion,
+} from '@/utils/branch-logic';
+import { resolveChoiceOptions } from '@/utils/choice-source';
 import {
   type RenderStep,
   buildRenderSteps,
@@ -95,67 +145,15 @@ import {
   collectTableQuestionOptions,
   filterOptionTextsForSubmission,
 } from '@/utils/option-text-migration';
-import { isQuotaTargetFilled, shouldCheckQuota } from '@/features/survey-response/lib/quota-gate';
-import { midSurveyClosedBody } from '@/lib/quota/closed-message';
-import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
-import { filterPriorAnswersByCondition } from '@/lib/survey/prior-answer-condition';
-import { selectHighlightablePriorAnswers } from '@/features/question-renderer/utils/prior-answer-highlight';
-import {
-  buildAdminRelaxWarningMessage,
-  classifyStepIssues,
-  snapshotStepResponses,
-} from '@/features/survey-response/lib/admin-edit-required-relax';
-import { collectAnswerQuotes } from '@/utils/answer-quote';
-import {
-  hasExplicitRequiredChoiceGroup,
-  isQuestionAnswered as isQuestionAnsweredPure,
-} from '@/features/survey-response/lib/answer-validation';
-import { withCalcValues } from '@/lib/survey/cell-formula';
-import type { FormulaEvalCtx } from '@/lib/survey/cell-formula';
-import { ContactAttrsProvider } from '@/features/question-renderer/contact-attrs-context';
-import { SurveyLocaleProvider } from '@/features/question-renderer/survey-locale-context';
-import {
-  resolveHeaderDescriptions,
-  resolveHeaderTitle,
-} from '@/features/survey-response/lib/localized-survey-texts';
-import { FormulaEvalProvider } from '@/features/question-renderer/formula-context';
-import {
-  type NumericIssue,
-  collectNumericIssues,
-  collectVisibleTableCells,
-  resolveChoiceTableVisibleCellIds,
-} from '@/features/survey-response/lib/numeric-validation';
-import { resolveEffectiveOptionTextsByQuestion } from '@/features/question-renderer/utils/effective-option-texts';
-import { collectRequiredOptionTextIssues } from '@/features/survey-response/lib/required-option-text-validation';
+import { resolveCurrentLocale } from '@/utils/survey-language';
+import { systemText } from '@/utils/system-strings';
+
+import { type CompletionOutcome, resolveCompletionScreen } from './lib/completion-screen';
+import { normalizeFormatValues } from './lib/format-normalize';
 import {
   collectPriorAnswerPrefills,
   collectPriorAnswerRetractions,
 } from './lib/prior-answer-prefill';
-import type { PriorAnswers } from '@/lib/survey/prior-answers';
-import { stripHiddenQuestionValues } from '@/lib/survey/question-visibility';
-import { generateId } from '@/lib/utils';
-import type { ResponseEntrySeed } from '@/shared/contracts/survey-builder-io';
-import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
-import { client } from '@/shared/lib/rpc';
-import type { Question, QuestionGroup, Survey } from '@/types/survey';
-import { DEFAULT_SURVEY_LOCALE, type SurveyLocale, toInlineLocale } from '@/types/survey-locale';
-import { responsesToLookupShape } from '@/utils/branch-eval';
-import {
-  type BranchEvalCtx,
-  collectTraversedQuestionIds,
-  collectTraversedStepPath,
-  getBranchRuleForResponse,
-  shouldDisplayQuestion,
-} from '@/utils/branch-logic';
-import { SPLIT_MIN_VIEWPORT_WIDTH } from '@/features/survey-response/lib/split-viewport';
-import {
-  anchorQuestionLabel,
-  resolveAnchorFocus,
-  resolveAnchorOwnerId,
-  resolveQuestionForOwner,
-} from '@/features/question-renderer/utils/anchor-outline';
-import type { SurveyDocumentView } from '@/shared/contracts/survey-builder-io';
-import { resolveChoiceOptions } from '@/utils/choice-source';
 
 type ResponsesMap = Record<string, unknown>;
 
@@ -367,7 +365,11 @@ function SurveyResponseFlowControl({
   // 안내 화면의 언어 (CONTEXT.md 「다국어 설문」) — 설문을 읽은 뒤에는 언어 문항의 답에서
   // 파생한다. 아직 답이 없는 다국어 설문은 미정(null)이라 세 언어를 함께 보인다.
   const noticeLocale = loader.loadedSurvey
-    ? resolveCurrentLocale(loader.loadedSurvey.questions, loader.loadedSurvey.groups ?? [], responses)
+    ? resolveCurrentLocale(
+        loader.loadedSurvey.questions,
+        loader.loadedSurvey.groups ?? [],
+        responses,
+      )
     : DEFAULT_SURVEY_LOCALE;
 
   if (loader.isLoading) return <SurveyLoadingScreen />;
@@ -1875,26 +1877,31 @@ function SurveyResponseFlowActive({
     }
   }, [stepHistory, steps]);
 
-  const { isLanguagePage, showLanguageSwitch, handlePageResponse, goToLanguagePage } =
-    useLanguagePage({
-      enabled: !isAdminEdit,
-      questions,
-      groups,
-      steps,
-      responses,
-      currentStepIndex,
-      currentStepQuestions,
-      handleStepResponse,
-      setCurrentStepIndex,
-      setStepHistory,
-      onLeavePage: () => {
-        blurActiveInput();
-        void flushPendingAnswersInBackground();
-      },
-      onAdvance: (advance) => {
-        void runNext(advance);
-      },
-    });
+  const {
+    isLanguagePage,
+    languageStepIndex,
+    showLanguageSwitch,
+    handlePageResponse,
+    goToLanguagePage,
+  } = useLanguagePage({
+    enabled: !isAdminEdit,
+    questions,
+    groups,
+    steps,
+    responses,
+    currentStepIndex,
+    currentStepQuestions,
+    handleStepResponse,
+    setCurrentStepIndex,
+    setStepHistory,
+    onLeavePage: () => {
+      blurActiveInput();
+      void flushPendingAnswersInBackground();
+    },
+    onAdvance: (advance) => {
+      void runNext(advance);
+    },
+  });
 
   // 브라우저 뒤로가기 → 이전 step 이동
   const hasResponses = Object.keys(responses).length > 0;
@@ -2021,7 +2028,11 @@ function SurveyResponseFlowActive({
     // 종료 결과에 따라 제목·문구가 갈린다 — 자격미달은 「설문 종료」+ 자격미달 종료 문구(폴백: 완료 문구)
     // 완료 뒤에는 언어가 정해져 있다 — 미정이면 한국어
     const completionLocale = toInlineLocale(systemLocale);
-    const screen = resolveCompletionScreen(loadedSurvey.settings, completionOutcome, completionLocale);
+    const screen = resolveCompletionScreen(
+      loadedSurvey.settings,
+      completionOutcome,
+      completionLocale,
+    );
     return (
       <SurveyCompletedScreen
         title={isPreview ? systemText('completion.previewTitle', completionLocale) : screen.title}
@@ -2082,6 +2093,10 @@ function SurveyResponseFlowActive({
   // 가 말한다. 분할 페이지에서만 빼면 안내문 페이지에서 밴드가 다시 나타나 들썩인다.
   // 「언어 변경」은 진행률 줄 왼쪽에 둔다. 다국어가 아닌 설문의 줄은 종전 그대로다.
   // 조사표를 끼는 설문은 진행 밴드가 없어 링크만 그 자리에 둔다.
+  // 로고·문구는 첫 페이지에만 — 다국어 설문의 첫 페이지가 언어 페이지면 언어를 고른 다음 페이지에서
+  // 그 언어로 보인다(언어 페이지는 아직 언어가 없다)
+  const brandingStepNumber =
+    languageStepIndex !== -1 && visibleSteps[0] === steps[languageStepIndex] ? 2 : 1;
   const progressBand = isLanguagePage ? undefined : isDocumentSurvey ? (
     (languageSwitchLink ?? undefined)
   ) : (
@@ -2189,7 +2204,7 @@ function SurveyResponseFlowActive({
                       currentLocale,
                     )}
                     responseHeader={loadedSurvey.settings.responseHeader}
-                    showBranding={currentVisibleStepNumber <= 1}
+                    showBranding={!isLanguagePage && currentVisibleStepNumber <= brandingStepNumber}
                   />
                 }
                 progress={progressBand}
@@ -2266,7 +2281,9 @@ function SurveyResponseFlowActive({
                     onQuestionFocus={selectAnchorQuestion}
                     onGroupSelect={selectAnchorGroup}
                     activeGroupId={activeAnchorGroupId}
-                    focusedQuestionId={anchorSelection?.kind === 'question' ? anchorSelection.id : null}
+                    focusedQuestionId={
+                      anchorSelection?.kind === 'question' ? anchorSelection.id : null
+                    }
                   />
                 ) : (
                   <PageStepView
@@ -2287,7 +2304,11 @@ function SurveyResponseFlowActive({
                 <div
                   className={`mt-8 hidden items-center justify-between ${isLanguagePage && !hasPreviousDisplayable ? '' : 'md:flex'}`}
                 >
-                  <Button variant="outline" onClick={handlePrevious} disabled={!hasPreviousDisplayable}>
+                  <Button
+                    variant="outline"
+                    onClick={handlePrevious}
+                    disabled={!hasPreviousDisplayable}
+                  >
                     <ArrowLeft className="mr-2 h-4 w-4" />
                     {systemText('nav.previous', inlineLocale)}
                   </Button>

@@ -256,7 +256,14 @@ describe('응답 화면의 현재 언어', () => {
       LANG_QUESTION,
       { id: 'name', type: 'text', title: '성명', required: true, order: 1 },
       { id: 'mail', type: 'text', title: '이메일', required: false, order: 2, inputType: 'email' },
-      { id: 'later', type: 'text', title: '다음 페이지', required: false, order: 3, pageBreakBefore: true },
+      {
+        id: 'later',
+        type: 'text',
+        title: '다음 페이지',
+        required: false,
+        order: 3,
+        pageBreakBefore: true,
+      },
     ]);
     await screen.findByText('언어를 선택해 주세요');
     fireEvent.click(screen.getByText('中文'));
@@ -348,6 +355,69 @@ describe('응답 화면의 현재 언어', () => {
       expect(screen.queryByText('언어를 선택해 주세요')).toBeNull();
       // 언어판 페이지에는 「다음」이 돌아온다
       expect(nextButton()).not.toBeNull();
+    });
+  });
+
+  describe('머리 문구 블록 — 언어를 고른 다음 페이지에 그 언어로', () => {
+    // 빌더가 기본 문구를 칸에 채워 저장한 모양 그대로(운영 설문과 같다)
+    const HEADER = {
+      style: 'composed' as const,
+      blocks: [
+        {
+          id: 'n1',
+          type: 'notice' as const,
+          pos: 'left' as const,
+          size: 'md' as const,
+          format: 'box' as const,
+          title: '통계법 제33조(비밀의 보호)',
+          boxBody:
+            '통계의 작성 과정에서 알려진 사항으로서 개인이나 법인 또는 단체의 비밀에 속하는 사항은 보호되어야 한다.',
+          lineBody: '',
+        },
+      ],
+    };
+    const renderWithHeader = () => {
+      const survey = buildSurvey(MULTILINGUAL_QUESTIONS, null, LANGUAGE_SETS);
+      survey.settings.responseHeader = HEADER;
+      return render(
+        <SurveyResponseFlow
+          mode="preview"
+          surveyIdentifier="preview-lang-survey"
+          previewContext={{ survey, versionId: 'version-1', documentView: null }}
+        />,
+      );
+    };
+
+    it('언어 페이지에는 없고, 중국어를 고른 다음 페이지에 중국어 기본 문구로 나온다', async () => {
+      renderWithHeader();
+      await screen.findByText('언어를 선택해 주세요');
+      expect(screen.queryByText('통계법 제33조(비밀의 보호)')).toBeNull();
+
+      fireEvent.click(screen.getByText('中文'));
+      await screen.findByPlaceholderText('zh-1 입력');
+      expect(screen.getAllByText('《统计法》第33条（秘密保护）').length).toBeGreaterThan(0);
+      expect(screen.queryByText('통계법 제33조(비밀의 보호)')).toBeNull();
+
+      // 둘째 쪽부터는 종전대로 제목만
+      fireEvent.click(nextButton()!);
+      await screen.findByPlaceholderText('zh-2 입력');
+      expect(screen.queryByText('《统计法》第33条（秘密保护）')).toBeNull();
+    });
+
+    it('다국어 설문이 아니면 첫 페이지에 한국어 문구 그대로다', async () => {
+      const survey = buildSurvey([
+        { id: 'q1', type: 'text', title: '첫 질문', required: false, order: 0 },
+      ]);
+      survey.settings.responseHeader = HEADER;
+      render(
+        <SurveyResponseFlow
+          mode="preview"
+          surveyIdentifier="preview-lang-survey"
+          previewContext={{ survey, versionId: 'version-1', documentView: null }}
+        />,
+      );
+      await screen.findByText('첫 질문');
+      expect(screen.getAllByText('통계법 제33조(비밀의 보호)').length).toBeGreaterThan(0);
     });
   });
 
@@ -620,7 +690,12 @@ describe('응답 화면의 현재 언어', () => {
       rpc.forResponse.mockResolvedValue({
         survey,
         versionId: 'version-1',
-        control: { isPaused: false, pausedMessage: null, testSession: 'none', testSessionKind: null },
+        control: {
+          isPaused: false,
+          pausedMessage: null,
+          testSession: 'none',
+          testSessionKind: null,
+        },
       });
       rpc.attrsLookup.mockResolvedValue({});
       rpc.createWithFirstAnswer.mockResolvedValue({
@@ -640,7 +715,9 @@ describe('응답 화면의 현재 언어', () => {
         )
         .mockResolvedValue({ blocked: false, closedMessage: null });
 
-      render(<SurveyResponseFlow surveyIdentifier="lang-survey" inviteToken={null} testToken={null} />);
+      render(
+        <SurveyResponseFlow surveyIdentifier="lang-survey" inviteToken={null} testToken={null} />,
+      );
       await screen.findByText('언어를 선택해 주세요');
 
       fireEvent.click(screen.getByText('中文'));
@@ -654,7 +731,9 @@ describe('응답 화면의 현재 언어', () => {
       expect(await screen.findByPlaceholderText('ko-1 입력')).toBeInTheDocument();
       expect(screen.queryByPlaceholderText('zh-1 입력')).toBeNull();
       // 마지막 판정은 지금 고른 답으로 다시 받았다
-      const lastCall = rpc.quotaCheck.mock.calls.at(-1)?.[0] as { answers: Record<string, unknown> };
+      const lastCall = rpc.quotaCheck.mock.calls.at(-1)?.[0] as {
+        answers: Record<string, unknown>;
+      };
       expect(lastCall.answers['lang']).toBe('1');
     });
   });

@@ -180,5 +180,11 @@ export function useLanguagePage({
     advance(advanceRequest.seq);
   }, [advanceRequest, currentStepIndex]);
 
-  return { isLanguagePage, showLanguageSwitch, handlePageResponse, goToLanguagePage };
+  return {
+    isLanguagePage,
+    languageStepIndex,
+    showLanguageSwitch,
+    handlePageResponse,
+    goToLanguagePage,
+  };
 }
