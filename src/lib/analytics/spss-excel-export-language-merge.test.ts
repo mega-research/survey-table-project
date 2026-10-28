@@ -97,6 +97,42 @@ describe('generateSPSSColumns — 공유 변수명 합치기', () => {
     expect(() => assertValidSpssVarNames(columns)).toThrow();
   });
 
+  it('합친 열이 없어도 문항 변수명이 같은 언어판 문항의 열은 한국어 문항 열 바로 뒤에 선다', () => {
+    // 금액 표 — 한국어는 만 원 칸(c01), 중·영은 외화 칸(c02). 겹치는 변수가 없다
+    const money = (id: string, columnCode: string, unit: string, order: number): Question => ({
+      ...text(id, 'Q2', order),
+      type: 'table',
+      tableColumns: [{ id: `${id}-col`, label: '', columnCode }],
+      tableRowsData: [
+        {
+          id: `${id}-row`,
+          label: '',
+          rowCode: 'r01',
+          cells: [{ id: `${id}-cell`, type: 'input', content: unit, inputType: 'number' }],
+        },
+      ],
+    });
+    const questions = QUESTIONS.map((q) =>
+      q.id === 'ko-q2'
+        ? money('ko-q2', 'c01', '만 원', 2)
+        : q.id === 'zh-q2'
+          ? money('zh-q2', 'c02', '元', 12)
+          : q.id === 'en-q2'
+            ? money('en-q2', 'c02', 'USD', 22)
+            : q,
+    );
+    const columns = generateSPSSColumns(questions, { languageSetLocales: LOCALES });
+    expect(columns.map((c) => `${c.spssVarName}:${c.questionId}`)).toEqual([
+      'Q1:ko-q1',
+      'Q2_r01_c01:ko-q2',
+      'Q2_r01_c02:zh-q2',
+      'Q9:ko-q9',
+    ]);
+    const foreign = columns.find((c) => c.spssVarName === 'Q2_r01_c02');
+    expect(foreign?.languageMembers?.map((m) => m.questionId)).toEqual(['en-q2']);
+    expect(foreign?.questionText).toBe('ko-q2');
+  });
+
   it('합쳐진 문항에 남은 그 언어판만의 열은 파일 끝이 아니라 대표 문항 열 바로 뒤에 선다', () => {
     const checkbox = (id: string, labels: string[], order: number): Question => ({
       ...radio(id, 'Q2', labels, order),

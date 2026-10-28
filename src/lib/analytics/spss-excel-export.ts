@@ -854,7 +854,9 @@ export function generateSPSSColumns(
  *
  * 합쳐진 문항에 남은 그 언어판만의 열(한국어 내수·수출 4칸 / 중·영 판매계약 전체 2칸의 중·영 쪽)은
  * 제 문항 자리(언어판 묶음 뒤쪽 = 파일 맨 뒤)가 아니라 그 문항을 합쳐 간 대표 문항의 열 바로 뒤에 둔다.
- * 문항 제목(Raw 1행·변수 라벨 앞머리)도 대표 문항 것으로 단다. 문항이 통째로 한 언어판에만 있으면 그대로다.
+ * 합친 열이 하나도 없어도 문항 변수명(직접 지정)이 한국어판 문항과 같으면 같은 자리로 옮긴다
+ * (문6-1 한국어 「만 원」 칸 · 중·영 외화 칸). 문항 제목(Raw 1행·변수 라벨 앞머리)도 대표 문항 것으로 단다.
+ * 문항이 통째로 한 언어판에만 있으면 그대로다.
  */
 function mergeLanguageSetColumns(
   columns: SPSSExportColumn[],
@@ -885,7 +887,6 @@ function mergeLanguageSetColumns(
     representativeOf.set(representative, members);
     for (const m of members) absorbed.add(m);
   }
-  if (representativeOf.size === 0) return columns;
 
   // 구성원 문항 → 그 문항을 합쳐 간 대표 문항 (먼저 나온 것)
   const hostQuestionOf = new Map<string, string>();
@@ -896,6 +897,31 @@ function mergeLanguageSetColumns(
       }
     }
   }
+  // 합친 열이 없어도 문항 변수명(직접 지정)이 기본 언어판 문항과 같으면 그 문항 열 뒤에 둔다 —
+  // 한국어 「만 원」 칸 · 중·영 외화 칸처럼 칸을 일부러 다른 변수로 가른 금액 표
+  const defaultByCode = new Map<string, string>();
+  for (const q of questions) {
+    if (!customNamed.has(q.id) || !q.questionCode) continue;
+    if (localeByQuestion.get(q.id) !== DEFAULT_SURVEY_LOCALE) continue;
+    const key = q.questionCode.toUpperCase();
+    if (!defaultByCode.has(key)) defaultByCode.set(key, q.id);
+  }
+  for (const q of questions) {
+    const locale = localeByQuestion.get(q.id);
+    if (!customNamed.has(q.id) || !q.questionCode || locale === undefined) continue;
+    if (locale === DEFAULT_SURVEY_LOCALE || hostQuestionOf.has(q.id)) continue;
+    const host = defaultByCode.get(q.questionCode.toUpperCase());
+    if (host !== undefined) hostQuestionOf.set(q.id, host);
+  }
+  // 대표가 다시 다른 문항 뒤로 가는 사슬은 끝까지 따라간다(중국어판 대표 → 한국어 문항)
+  for (const [questionId] of hostQuestionOf) {
+    let host = hostQuestionOf.get(questionId)!;
+    for (let guard = 0; hostQuestionOf.has(host) && guard < hostQuestionOf.size; guard++) {
+      host = hostQuestionOf.get(host)!;
+    }
+    hostQuestionOf.set(questionId, host);
+  }
+  if (representativeOf.size === 0 && hostQuestionOf.size === 0) return columns;
 
   const merged = columns
     .filter((col) => !absorbed.has(col))
