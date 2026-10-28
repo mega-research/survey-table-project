@@ -21,6 +21,7 @@ import {
 } from '@/features/question-renderer/utils/classify-table';
 import { distinctGroupOf } from '@/features/question-renderer/utils/distinct-select-group';
 import { expandHeaderGrid } from '@/features/question-renderer/utils/expand-header-grid';
+import { buildItemCards } from '@/features/question-renderer/utils/item-cards';
 import {
   useAnswerQuotes,
   useContactAttrs,
@@ -120,8 +121,9 @@ const MODES_DRAWING_DISPLAY_CELLS = new Set<MobileTableDisplayMode>([
 
 /**
  * 응답 칸이 하나도 없는 표를 모바일에서 원본 표로 바꿔 그려야 하는가 — 고른 표시 방식이 아무것도 그리지
- * 못할 때만 참이다. 항목·축 카드와 행별 원본·척도는 응답 칸이 있어야 카드를 세우고, 선택 행 원본 보기는
- * 값 없는 「0 / 0개」 목차만 남는다. 행 카드 계열은 모바일 표시를 지정한 글자 셀이 있으면 그것을 그린다.
+ * 못할 때만 참이다. 축 카드와 행별 원본·척도는 응답 칸이 있어야 카드를 세우고, 선택 행 원본 보기는
+ * 값 없는 「0 / 0개」 목차만 남는다. 항목 카드는 라벨 뒤 「바로 표시」 글자를 표시 전용 카드로 세우고,
+ * 행 카드 계열은 모바일 표시를 지정한 글자 셀이 있으면 그것을 그린다.
  */
 function displayOnlyTableNeedsOriginal(rows: TableRow[], mode: MobileTableDisplayMode): boolean {
   if (mode === 'original') return false;
@@ -129,6 +131,7 @@ function displayOnlyTableNeedsOriginal(rows: TableRow[], mode: MobileTableDispla
     row.cells.every((cell) => DISPLAY_ONLY_CELL_TYPES.has(cell.type)),
   );
   if (!displayOnly) return false;
+  if (mode === 'item-cards') return buildItemCards(rows).length === 0;
   if (!MODES_DRAWING_DISPLAY_CELLS.has(mode)) return true;
   return !rows.some((row) =>
     row.cells.some(

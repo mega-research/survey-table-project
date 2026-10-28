@@ -14,6 +14,8 @@
  *   「접기」는 카드 본문에 붙는 설명이다(열린 카드가 있으면 거기, 없으면 다음 카드). 단위·주석처럼
  *   입력 칸 뒤에 오는 글자를 새 카드로 오인하지 않게 하는 유일한 손잡이다 — 자동 추정은 없다.
  * - 라벨 없이 입력 칸만 있는 행은 행 이름을 제목으로 쓴다(격자형 표는 행 카드와 같은 모양이 된다).
+ * - 라벨 뒤에 「바로 표시」·「접기」 글자만 오고 입력 칸 없이 다음 라벨·행 끝이 오면 그 라벨의 **표시 전용
+ *   카드**다(전시회명 | 값 | 개최 기간 | 값). 세로 병합된 구분 라벨 뒤는 하위 항목이라 닫지 않는다.
  *
  * 표시 조건·동적 행은 호스트가 displayRows 로 이미 걸러 넘긴다. 응답값·검증·내보내기는 무변경 —
  * 표시만 바뀐다.
@@ -89,6 +91,25 @@ export function buildItemCards(
     let path: TableCell[] = [];
     let open: ItemCard | null = null;
     let pendingDisplay: TableCell[] = [];
+    // 라벨 뒤에 바로 표시 글자만 오고 입력 칸 없이 다음 라벨·행 끝이 오면 그 라벨의 표시 전용 카드다
+    // (전시회명 | 값 | 개최 기간 | 값). 라벨 없이 앞선 표시 글자는 종전대로 다음 카드의 설명이다.
+    // 세로 병합된 라벨(여러 행을 묶는 구분) 뒤의 라벨은 형제가 아니라 하위 항목이라 닫지 않는다 —
+    // 「바이어 접촉 명수(병합) | 설명 | 기존 | 입력」에서 설명은 「기존」 카드에 붙는다.
+    const closeDisplayOnlyCard = (atRowEnd: boolean) => {
+      const first = pendingDisplay[0];
+      if (open || path.length === 0 || !first) return;
+      if (!atRowEnd && (path[path.length - 1]?.rowspan ?? 1) > 1) return;
+      cards.push({
+        key: first.id,
+        rowId: row.id,
+        titleCells: path,
+        fallbackTitle: row.label ?? '',
+        inputs: [],
+        displayCells: pendingDisplay,
+      });
+      path = [];
+      pendingDisplay = [];
+    };
 
     row.cells.forEach((own, columnIndex) => {
       if (columnRange && (columnIndex < columnRange.start || columnIndex >= columnRange.end)) {
@@ -101,6 +122,7 @@ export function buildItemCards(
         if (!anchor || anchor === own) return;
         // 위 행에서 내려온 세로 병합
         if (isLabelCell(anchor)) {
+          closeDisplayOnlyCard(false);
           if (open) {
             open = null;
             path = [];
@@ -115,6 +137,7 @@ export function buildItemCards(
       }
 
       if (isLabelCell(own)) {
+        closeDisplayOnlyCard(false);
         if (open) {
           open = null;
           path = [];
@@ -144,6 +167,7 @@ export function buildItemCards(
       }
       open.inputs.push({ cell: own, row, columnIndex });
     });
+    closeDisplayOnlyCard(true);
   }
 
   return cards;

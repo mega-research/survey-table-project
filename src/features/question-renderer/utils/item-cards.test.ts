@@ -133,6 +133,80 @@ describe('buildItemCards', () => {
     ]);
   });
 
+  it('라벨 뒤에 바로 표시 글자만 오고 입력 칸 없이 다음 라벨·행 끝이 오면 그 라벨의 표시 전용 카드가 된다', () => {
+    // 전시회 정보(라벨 | 값 | 라벨 | 값)와 응답자 정보(업체명 | 값 | 휴대전화 | 입력)
+    const rows: TableRow[] = [
+      {
+        id: 'expo',
+        label: '',
+        cells: [
+          text('name', '전시회명'),
+          text('name-v', '{{전시회명}}', { mobileDisplay: 'inline' }),
+          text('period', '개최 기간'),
+          text('period-v', '{{개최기간}}', { mobileDisplay: 'inline' }),
+        ],
+      },
+      {
+        id: 'info',
+        label: '',
+        cells: [
+          text('company', '업체명'),
+          text('company-v', '{{업체명}}', { mobileDisplay: 'inline' }),
+          text('mobile', '휴대전화'),
+          input('mobile-in'),
+        ],
+      },
+    ];
+    const cards = buildItemCards(rows);
+    expect(summarize(rows)).toEqual([
+      { row: 'expo', title: '전시회명', inputs: [], display: ['name-v'] },
+      { row: 'expo', title: '개최 기간', inputs: [], display: ['period-v'] },
+      { row: 'info', title: '업체명', inputs: [], display: ['company-v'] },
+      { row: 'info', title: '휴대전화', inputs: ['mobile-in'], display: [] },
+    ]);
+    expect(new Set(cards.map((card) => card.key)).size).toBe(cards.length);
+  });
+
+  it('세로 병합된 구분 라벨 뒤의 바로 표시 글자는 하위 항목 카드의 설명이 된다', () => {
+    const rows: TableRow[] = [
+      {
+        id: 'r1',
+        label: '',
+        cells: [
+          text('group', '바이어 접촉 명수', { rowspan: 2 }),
+          text('desc', '명함을 수집한 참관객 수', { rowspan: 2, mobileDisplay: 'inline' }),
+          text('old', '기존'),
+          input('old-in'),
+        ],
+      },
+      {
+        id: 'r2',
+        label: '',
+        cells: [
+          text('group-c', '', { isHidden: true }),
+          text('desc-c', '', { isHidden: true }),
+          text('new', '신규'),
+          input('new-in'),
+        ],
+      },
+    ];
+    expect(summarize(rows)).toEqual([
+      { row: 'r1', title: '바이어 접촉 명수 > 기존', inputs: ['old-in'], display: ['desc'] },
+      { row: 'r2', title: '바이어 접촉 명수 > 신규', inputs: ['new-in'], display: [] },
+    ]);
+  });
+
+  it('라벨 없이 앞선 바로 표시 글자는 종전대로 다음 카드의 설명이다', () => {
+    const rows: TableRow[] = [
+      {
+        id: 'r',
+        label: '행 이름',
+        cells: [text('note', '※ 원 단위', { mobileDisplay: 'inline' }), input('v')],
+      },
+    ];
+    expect(summarize(rows)).toEqual([{ row: 'r', title: '(행 이름)', inputs: ['v'], display: ['note'] }]);
+  });
+
   it('옵션 1개짜리 라디오는 입력이 아니라 라벨이다', () => {
     const rows: TableRow[] = [
       {

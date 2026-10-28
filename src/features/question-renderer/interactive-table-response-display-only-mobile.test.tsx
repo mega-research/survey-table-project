@@ -127,21 +127,47 @@ describe('응답 칸 없는 표 — 모바일', () => {
     },
   );
 
-  it.each(['item-cards', 'axis-cards'] as const)(
-    '%s 는 바로 표시 셀이 있어도 그릴 카드가 없어 원본 표로 그린다',
-    (mode) => {
-      render(
-        <InteractiveTableResponse
-          questionId="q1"
-          columns={columns}
-          rows={inlineRows}
-          hideColumnLabels
-          mobileTableDisplayMode={mode}
-          value={{}}
-          onChange={() => {}}
-        />,
-      );
-      expect(screen.getAllByText('COEX').length).toBeGreaterThan(0);
-    },
-  );
+  it('axis-cards 는 바로 표시 셀이 있어도 그릴 카드가 없어 원본 표로 그린다', () => {
+    render(
+      <InteractiveTableResponse
+        questionId="q1"
+        columns={columns}
+        rows={inlineRows}
+        hideColumnLabels
+        mobileTableDisplayMode="axis-cards"
+        value={{}}
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.getAllByText('COEX').length).toBeGreaterThan(0);
+  });
+
+  it('item-cards 는 값 칸이 바로 표시면 라벨마다 표시 전용 카드를 세운다', () => {
+    // 라벨 칸은 그대로(제목), 값 칸만 바로 표시 — 전시회 정보 표의 모바일 설정
+    const valueInlineRows: TableRow[] = rows.map((row) => ({
+      ...row,
+      cells: row.cells.map((cell, index) =>
+        index % 2 === 1 ? { ...cell, mobileDisplay: 'inline' as const } : cell,
+      ),
+    }));
+    render(
+      <InteractiveTableResponse
+        questionId="q1"
+        columns={columns}
+        rows={valueInlineRows}
+        hideColumnLabels
+        mobileTableDisplayMode="item-cards"
+        value={{}}
+        onChange={() => {}}
+      />,
+    );
+    const headers = screen.getAllByTestId('item-card-header').map((el) => el.textContent);
+    expect(headers).toEqual([
+      'Domestic Exhibition Name',
+      'Exhibition Period',
+      'Organizer',
+      'Exhibition Venue',
+    ]);
+    expect(screen.getByText('COEX')).toBeTruthy();
+  });
 });
