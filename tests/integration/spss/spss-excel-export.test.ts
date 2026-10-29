@@ -231,6 +231,34 @@ describe('generateSPSSColumns', () => {
     expect(col?.cellExportLabel).toBe('영향평가_유무');
   });
 
+  it('radio-group 컬럼은 표 칸보다 먼저 몰리지 않고 그 묶음 첫 칸 자리(화면 순서)에 선다', () => {
+    // 1행: 업체명 입력 → 2행: 성별 묶음(남·여) → 3행: 연락처 입력
+    const radio = (id: string, label: string, code: number) => ({
+      id, type: 'radio', content: '', radioGroupName: 'sex',
+      radioOptions: [{ id: `${id}-o`, label, value: label, spssNumericCode: code }],
+    });
+    const q = {
+      id: 'q1', type: 'table', title: 'Q1', order: 1, required: false, questionCode: 'Q1',
+      tableColumns: [
+        { id: 'c1', label: '항목', columnCode: 'c1' },
+        { id: 'c2', label: '값1', columnCode: 'c2' },
+        { id: 'c3', label: '값2', columnCode: 'c3' },
+      ],
+      tableRowsData: [
+        { id: 'row1', label: '업체명', rowCode: 'r1', cells: [
+          { id: 'a1', type: 'text', content: '업체명' }, { id: 'name', type: 'input', content: '' }, { id: 'a3', type: 'text', content: '' },
+        ] },
+        { id: 'row2', label: '성별', rowCode: 'r2', cells: [
+          { id: 'b1', type: 'text', content: '성별' }, radio('m', '남', 1), radio('f', '여', 2),
+        ] },
+        { id: 'row3', label: '연락처', rowCode: 'r3', cells: [
+          { id: 'd1', type: 'text', content: '연락처' }, { id: 'tel', type: 'input', content: '' }, { id: 'd3', type: 'text', content: '' },
+        ] },
+      ],
+    } as unknown as Question;
+    expect(generateSPSSColumns([q]).map((c) => c.spssVarName)).toEqual(['Q1_r1_c2', 'Q1_r2', 'Q1_r3_c2']);
+  });
+
   it('radio-group 컬럼에 첫 멤버 셀의 cellExportLabel을 실어 준다', () => {
     const q: Question = {
       id: 'q1',

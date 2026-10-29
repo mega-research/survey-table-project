@@ -533,13 +533,14 @@ export function generateSPSSColumns(
       );
       const emittedChoiceGroups = new Set<(typeof pendingChoiceGroups)[number]>();
       // === Phase 5: radioGroup 사전 스캔 ===
-      // 같은 radioGroupName 셀들을 묶어 변수 1개로 export.
+      // 같은 radioGroupName 셀들을 묶어 변수 1개로 export. 열은 아래 셀 순회가 첫 멤버에 닿을 때 낸다.
       // 그룹 방향 자동 감지: 같은 행이면 열 단위 응답, 같은 열이면 행 단위 응답.
-      const groupedCellIds = collectAndEmitRadioGroupColumns(q, columns);
+      const radioGroupColumnOfCell = collectRadioGroupColumns(q);
+      const emittedRadioGroups = new Set<SPSSExportColumn>();
 
       // 테이블 질문: 입력 가능한 셀마다 개별 열 생성.
       // 순회 축은 exportCellOrder — 행 우선(기본): 행 고정 후 열 순회 / 열 우선: 열 고정 후 행 순회.
-      // 변수명·응답값은 불변, 열 나열 순서만 바뀐다. radio-group 사전 스캔 emit 위치는 영향 없음.
+      // 변수명·응답값은 불변, 열 나열 순서만 바뀐다. 보기 그룹·radio 묶음 열의 자리도 이 순회를 따른다.
       // 행 반복: 아무도 채우지 않은 뒤쪽 벌의 열은 내지 않는다. 앞 벌의 이름과 순서는
       // 변하지 않고 나중에 더 쓰이면 뒤에 붙기만 한다 (설계 결정 2).
       // 변수명 폴백에는 pruning 전 원본 행 목록을 넘긴다 — 잘린 배열을 넘기면 비반복
@@ -566,8 +567,15 @@ export function generateSPSSColumns(
         }
         // 병합(colspan/rowspan)으로 가려진 셀은 변수에서 제외 (변수명 중복 방지)
         if (cell.isHidden) continue;
-        // radioGroup 그룹에 속한 셀은 스킵 (그룹 변수로 이미 emit됨)
-        if (groupedCellIds.has(cell.id)) continue;
+        // radioGroup 묶음 멤버 — 첫 멤버 자리에서 묶음 열을 한 번 내고 셀 열은 만들지 않는다
+        const radioGroupColumn = radioGroupColumnOfCell.get(cell.id);
+        if (radioGroupColumn) {
+          if (!emittedRadioGroups.has(radioGroupColumn)) {
+            emittedRadioGroups.add(radioGroupColumn);
+            columns.push(radioGroupColumn);
+          }
+          continue;
+        }
         // 입력 불가능한 셀(text, image, video, ranking_opt)은 건너뛰기
         if (!['checkbox', 'radio', 'select', 'input', 'ranking', 'calc'].includes(cell.type))
           continue;
@@ -754,6 +762,10 @@ export function generateSPSSColumns(
       }
       const unreached = pendingChoiceGroups.filter((g) => !emittedChoiceGroups.has(g));
       if (unreached.length > 0) emitChoiceGroupColumns(q, q.questionCode, columns, unreached);
+      // 순회가 닿지 않은 묶음(멤버 행이 반복 pruning 으로 빠진 경우)은 표 끝에 — 열이 사라지지 않게
+      for (const column of new Set(radioGroupColumnOfCell.values())) {
+        if (!emittedRadioGroups.has(column)) columns.push(column);
+      }
     } else {
       columns.push({
         spssVarName: q.questionCode,
@@ -1029,11 +1041,12 @@ function insertChangeConfirmColumns(
  * - 방향 자동 감지: 모두 같은 행이면 'row' (열 단위 응답), 모두 같은 열이면 'column' (행 단위 응답)
  * - 변수명: row 그룹 → questionCode_rowCode / column 그룹 → questionCode_columnCode
  *
- * 반환: 그룹에 emit된 셀 id의 Set (호출자가 본 순회에서 스킵)
+ * 반환: 묶음 멤버 셀 id → 그 묶음 열. 호출자가 셀 순회에서 묶음의 첫 멤버에 닿을 때 열을 내고
+ * 나머지 멤버는 건너뛴다 — 열 자리가 화면 순서가 된다(변수 규칙 대전제 2, 2026-10-29).
  */
-function collectAndEmitRadioGroupColumns(q: Question, columns: SPSSExportColumn[]): Set<string> {
-  const groupedCellIds = new Set<string>();
-  if (!q.tableRowsData || !q.tableColumns || !q.questionCode) return groupedCellIds;
+function collectRadioGroupColumns(q: Question): Map<string, SPSSExportColumn> {
+  const columnOfCell = new Map<string, SPSSExportColumn>();
+  if (!q.tableRowsData || !q.tableColumns || !q.questionCode) return columnOfCell;
 
   type GroupCellInfo = { cell: TableCell; row: TableRow; rowIdx: number; colIdx: number };
   const radioGroups = new Map<string, GroupCellInfo[]>();
@@ -1133,7 +1146,7 @@ function collectAndEmitRadioGroupColumns(q: Question, columns: SPSSExportColumn[
       });
     }
 
-    columns.push({
+    const column: SPSSExportColumn = {
       spssVarName: groupVarName,
       questionText: q.title,
       optionLabel: groupLabel,
@@ -1161,12 +1174,12 @@ function collectAndEmitRadioGroupColumns(q: Question, columns: SPSSExportColumn[
         );
         return cellExportLabel !== undefined ? { cellExportLabel } : {};
       })(),
-    });
+    };
 
-    members.forEach((m) => groupedCellIds.add(m.cell.id));
+    members.forEach((m) => columnOfCell.set(m.cell.id, column));
   }
 
-  return groupedCellIds;
+  return columnOfCell;
 }
 
 function buildAutoTableCellExportLabel(
