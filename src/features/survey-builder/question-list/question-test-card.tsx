@@ -603,6 +603,7 @@ function QuestionTestInput({
           ignoreDisplayConditions
           hideColumnLabels={question.hideColumnLabels}
           stickyColumnCount={question.stickyColumnCount}
+          fitTableToWidth={question.fitTableToWidth ?? false}
           mobileOriginalTable={question.mobileOriginalTable}
           mobileTableDisplayMode={question.mobileTableDisplayMode}
           mobileDrilldownOmitLeadingColumns={question.mobileDrilldownOmitLeadingColumns}

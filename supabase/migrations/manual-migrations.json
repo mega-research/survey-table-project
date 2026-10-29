@@ -101,6 +101,7 @@
     "0141_survey_test_version",
     "0142_response_migration_history",
     "0143_drop_response_answers",
-    "0145_survey_localized_messages"
+    "0145_survey_localized_messages",
+    "0146_fit_table_to_width"
   ]
 }

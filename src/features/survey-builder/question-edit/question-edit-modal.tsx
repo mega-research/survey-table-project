@@ -208,6 +208,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
     let originalMobileDrilldownRepeatHeaderEndRow: Question['mobileDrilldownRepeatHeaderEndRow'];
     let originalExportCellOrder: Question['exportCellOrder'];
     let originalStickyColumnCount: Question['stickyColumnCount'];
+    let originalFitTableToWidth: Question['fitTableToWidth'];
     let originalMobileItemCardBlockColumns: Question['mobileItemCardBlockColumns'];
     if (isOpen && questionId) {
       setEditingQuestionId(questionId);
@@ -221,6 +222,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
       originalMobileDrilldownRepeatHeaderEndRow = q?.mobileDrilldownRepeatHeaderEndRow;
       originalExportCellOrder = q?.exportCellOrder;
       originalStickyColumnCount = q?.stickyColumnCount;
+      originalFitTableToWidth = q?.fitTableToWidth;
       originalMobileItemCardBlockColumns = q?.mobileItemCardBlockColumns;
       didSaveRef.current = false;
     }
@@ -272,6 +274,11 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                   delete restoredQuestion.stickyColumnCount;
                 } else {
                   restoredQuestion.stickyColumnCount = originalStickyColumnCount;
+                }
+                if (originalFitTableToWidth === undefined) {
+                  delete restoredQuestion.fitTableToWidth;
+                } else {
+                  restoredQuestion.fitTableToWidth = originalFitTableToWidth;
                 }
                 return restoredQuestion;
               }),
@@ -464,6 +471,10 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
       ...(storeQuestion?.stickyColumnCount !== undefined
         ? { stickyColumnCount: storeQuestion.stickyColumnCount }
         : {}),
+      // 화면 폭에 맞춰 표 줄이기도 같은 경로(표 에디터 토글 → store)다.
+      ...(storeQuestion?.fitTableToWidth !== undefined
+        ? { fitTableToWidth: storeQuestion.fitTableToWidth }
+        : {}),
       // 모바일 표 표시 설정도 표 에디터의 silentUpdateQuestion 경로로 store에만 쓰인다.
       ...(storeQuestion?.mobileOriginalTable !== undefined
         ? { mobileOriginalTable: storeQuestion.mobileOriginalTable }
@@ -646,6 +657,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                 currentFormData.stickyColumnCount !== undefined
                   ? currentFormData.stickyColumnCount
                   : question?.stickyColumnCount,
+              fitTableToWidth: currentFormData.fitTableToWidth ?? question?.fitTableToWidth,
               exportCellOrder: currentFormData.exportCellOrder ?? question?.exportCellOrder,
               mobileOriginalTable:
                 currentFormData.mobileOriginalTable ?? question?.mobileOriginalTable,

@@ -33,13 +33,12 @@ import {
   STICKY_BODY_Z,
   STICKY_MAX_VIEWPORT_RATIO,
   type StickyLeftInfo,
-  buildGridTemplateCols,
-  calcTotalWidth,
   computeStickyLeftColumns,
   getAlignmentClasses,
   getCellBorderClasses,
   getGridCellAria,
   getHeaderCellStickyStyle,
+  resolveTableGridSizing,
 } from '@/features/question-renderer/utils/table-grid-utils';
 import {
   buildRadioGroupBuckets,
@@ -530,6 +529,8 @@ interface InteractiveTableResponseProps {
   hideColumnLabels?: boolean | undefined;
   /** 좌측 고정 열 개수. null/undefined = 자동 판정, 0 = 고정 안 함, 1 이상 = 명시 지정 */
   stickyColumnCount?: number | null | undefined;
+  /** 화면 폭에 맞춰 표 줄이기 — 모바일 모드가 아닐 때 열 폭을 비율로 줄인다 (켜면 좌측 고정 열 없음) */
+  fitTableToWidth?: boolean | undefined;
   /** 모바일에서도 카드/스테퍼 전환 없이 원본 표(가로 스크롤)로 렌더 */
   mobileOriginalTable?: boolean | undefined;
   mobileTableDisplayMode?: MobileTableDisplayMode | undefined;
@@ -642,6 +643,7 @@ function InteractiveTableResponseBody({
   stagedRowsConfig,
   hideColumnLabels = false,
   stickyColumnCount,
+  fitTableToWidth = false,
   mobileOriginalTable = false,
   mobileTableDisplayMode,
   mobileDrilldownOmitLeadingColumns,
@@ -770,8 +772,12 @@ function InteractiveTableResponseBody({
   }, [columnFilteredRows, allResponses, allQuestions, ignoreDisplayConditions, branchEvalCtx]);
 
   // Grid 관련 계산
-  const totalWidth = useMemo(() => calcTotalWidth(visibleColumns), [visibleColumns]);
-  const gridTemplateCols = useMemo(() => buildGridTemplateCols(visibleColumns), [visibleColumns]);
+  // 화면 폭에 맞춰 줄이기는 모바일 모드가 아닐 때만 — 휴대폰 원본 표까지 줄이면 칸이 찌그러진다
+  const fitToWidth = fitTableToWidth && !isMobileView;
+  const gridSizing = useMemo(
+    () => resolveTableGridSizing(visibleColumns, fitToWidth),
+    [visibleColumns, fitToWidth],
+  );
 
   // 열 좌측 경계 누적 px — 스크롤 컨트롤의 "잘린 열 정렬" 페이징용
   const columnStops = useMemo(() => {
@@ -934,11 +940,15 @@ function InteractiveTableResponseBody({
 
   // 스크롤 뷰포트(가로 스크롤 컨테이너) 실측 폭 — sticky 열이 화면을 다 가리지 않도록
   // 누적 sticky 너비 상한 계산에 사용. 카드 모드/비활성 시 측정 생략(0).
-  const scrollViewportWidth = useElementWidth(tableContainerRef, !enableSticky || mobileUsesCards);
+  const scrollViewportWidth = useElementWidth(
+    tableContainerRef,
+    !enableSticky || mobileUsesCards || fitToWidth,
+  );
 
   // 좌측 sticky 열 판정 (카드 모드거나 비활성화면 비적용 — 모바일 원본 표 모드는 적용)
   const stickyInfo = useMemo<StickyLeftInfo | undefined>(() => {
-    if (!enableSticky || mobileUsesCards) return undefined;
+    // 화면 폭에 맞춰 줄인 표는 넘치지 않아 고정할 이유가 없고, px 누적 오프셋이 비율로 줄어든 열과 어긋난다
+    if (!enableSticky || mobileUsesCards || fitToWidth) return undefined;
     // 좁은 뷰포트에서 넓은 텍스트 열이 sticky로 화면을 다 덮는 것을 방지.
     // 측정 전(0)에는 제한 없음(undefined) — 측정 직후 ResizeObserver가 재계산한다.
     const maxStickyWidth =
@@ -947,6 +957,7 @@ function InteractiveTableResponseBody({
   }, [
     enableSticky,
     mobileUsesCards,
+    fitToWidth,
     visibleColumns,
     displayRows,
     scrollViewportWidth,
@@ -994,11 +1005,9 @@ function InteractiveTableResponseBody({
   const gridContainerStyle = useMemo<React.CSSProperties>(
     () => ({
       display: 'grid',
-      gridTemplateColumns: gridTemplateCols,
-      minWidth: totalWidth ? `${totalWidth}px` : '100%',
-      width: totalWidth ? `${totalWidth}px` : '100%',
+      ...gridSizing,
     }),
-    [gridTemplateCols, totalWidth],
+    [gridSizing],
   );
 
   // 헤더 셀 렌더링 (다단계/단일 폴백 공용 — 파일 상단 HeaderCells 참고)
@@ -1321,8 +1330,7 @@ function InteractiveTableResponseBody({
                 rowGridMap={rowGridMap}
                 value={value}
                 onChange={mergedOnChange}
-                gridTemplateCols={gridTemplateCols}
-                totalWidth={totalWidth}
+                gridSizing={gridSizing}
                 renderSelectorRows={renderInsertedRows}
                 stickyInfo={stickyInfo}
                 applyCellBackground={applyCellBackground}

@@ -54,6 +54,7 @@ export const PERSISTED_QUESTION_FIELDS = [
   'stagedRowsConfig',
   'hideColumnLabels',
   'stickyColumnCount',
+  'fitTableToWidth',
   'mobileOriginalTable',
   'mobileTableDisplayMode',
   'mobileDrilldownOmitLeadingColumns',

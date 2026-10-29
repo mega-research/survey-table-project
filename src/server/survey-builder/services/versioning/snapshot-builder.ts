@@ -85,6 +85,7 @@ interface SnapshotQuestion {
   stagedRowsConfig?: Question['stagedRowsConfig'] | undefined;
   hideColumnLabels?: boolean | undefined;
   stickyColumnCount?: number | null | undefined;
+  fitTableToWidth?: boolean | undefined;
   mobileOriginalTable?: boolean | undefined;
   mobileTableDisplayMode?: MobileTableDisplayMode | undefined;
   mobileDrilldownOmitLeadingColumns?: number | undefined;
@@ -186,6 +187,7 @@ export function buildSurveySnapshot(
       stagedRowsConfig: q.stagedRowsConfig,
       hideColumnLabels: q.hideColumnLabels,
       stickyColumnCount: q.stickyColumnCount,
+      fitTableToWidth: q.fitTableToWidth,
       mobileOriginalTable: q.mobileOriginalTable,
       mobileTableDisplayMode: q.mobileTableDisplayMode,
       mobileDrilldownOmitLeadingColumns: q.mobileDrilldownOmitLeadingColumns,

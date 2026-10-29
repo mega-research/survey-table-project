@@ -46,6 +46,7 @@ type EmbeddedTableFields = Pick<
   | 'tableHeaderGrid'
   | 'hideColumnLabels'
   | 'stickyColumnCount'
+  | 'fitTableToWidth'
   | 'exportCellOrder'
 >;
 

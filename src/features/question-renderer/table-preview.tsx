@@ -15,14 +15,14 @@ import {
   STICKY_BODY_Z,
   STICKY_MAX_VIEWPORT_RATIO,
   type StickyLeftInfo,
-  buildGridTemplateCols,
-  calcTotalWidth,
   computeStickyLeftColumns,
   getAlignmentClasses,
   getCellBorderClasses,
   getGridCellAria,
   getHeaderCellStickyStyle,
+  resolveTableGridSizing,
 } from '@/features/question-renderer/utils/table-grid-utils';
+import { useMobileView } from '@/hooks/use-media-query';
 import { cn } from '@/lib/utils';
 import { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 import { getCellBackgroundStyle, getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
@@ -49,6 +49,8 @@ interface TablePreviewProps {
   hideColumnLabels?: boolean | undefined;
   /** 좌측 고정 열 개수. null/undefined = 자동 판정, 0 = 고정 안 함, 1 이상 = 명시 지정 */
   stickyColumnCount?: number | null | undefined;
+  /** 화면 폭에 맞춰 표 줄이기 — 모바일 모드가 아닐 때 열 폭을 비율로 줄인다 (켜면 좌측 고정 열 없음) */
+  fitTableToWidth?: boolean | undefined;
   /** 셀 콘텐츠 렌더 오버라이드. undefined/null 반환 시 기본 PreviewCell 로 폴백. */
   renderCell?: (cell: TableCell, row: TableRow) => React.ReactNode;
   /**
@@ -83,6 +85,7 @@ export const TablePreview = React.memo(function TablePreview({
   contentClassName,
   hideColumnLabels = false,
   stickyColumnCount,
+  fitTableToWidth = false,
   renderCell,
   cellOutlineEdges,
   stickyHeader = true,
@@ -94,8 +97,9 @@ export const TablePreview = React.memo(function TablePreview({
   getCellInstanceId,
   applyCellBackground = true,
 }: TablePreviewProps) {
-  const totalWidth = useMemo(() => calcTotalWidth(columns), [columns]);
-  const gridTemplateCols = useMemo(() => buildGridTemplateCols(columns), [columns]);
+  // 화면 폭에 맞춰 줄이기는 모바일 모드가 아닐 때만 — 휴대폰 원본 표까지 줄이면 칸이 찌그러진다
+  const isMobileView = useMobileView();
+  const fitToWidth = fitTableToWidth && !isMobileView;
 
   // 열 좌측 경계 누적 px — 스크롤 컨트롤의 "잘린 열 정렬" 페이징용
   const columnStops = useMemo(() => {
@@ -159,23 +163,19 @@ export const TablePreview = React.memo(function TablePreview({
 
   // 스크롤 뷰포트 실측 폭 — 좁은 화면에서 넓은 텍스트 열이 sticky로 화면을 다
   // 덮지 않도록 누적 sticky 너비 상한 계산에 사용.
-  const scrollViewportWidth = useElementWidth(tableContainerRef, columns.length === 0);
+  const scrollViewportWidth = useElementWidth(tableContainerRef, columns.length === 0 || fitToWidth);
 
   const stickyInfo = useMemo<StickyLeftInfo | undefined>(() => {
-    if (columns.length === 0) return undefined;
+    // 화면 폭에 맞춰 줄인 표는 넘치지 않아 고정할 이유가 없고, px 누적 오프셋이 비율로 줄어든 열과 어긋난다
+    if (columns.length === 0 || fitToWidth) return undefined;
     const maxStickyWidth =
       scrollViewportWidth > 0 ? scrollViewportWidth * STICKY_MAX_VIEWPORT_RATIO : undefined;
     return computeStickyLeftColumns(columns, rows, maxStickyWidth, stickyColumnCount);
-  }, [columns, rows, scrollViewportWidth, stickyColumnCount]);
+  }, [columns, rows, scrollViewportWidth, stickyColumnCount, fitToWidth]);
 
   const gridContainerStyle = useMemo<React.CSSProperties>(
-    () => ({
-      display: 'grid',
-      gridTemplateColumns: gridTemplateCols,
-      width: `${totalWidth}px`,
-      minWidth: `${totalWidth}px`,
-    }),
-    [gridTemplateCols, totalWidth],
+    () => ({ display: 'grid', ...resolveTableGridSizing(columns, fitToWidth) }),
+    [columns, fitToWidth],
   );
 
   if (columns.length === 0 || rows.length === 0) {

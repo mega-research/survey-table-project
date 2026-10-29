@@ -166,8 +166,8 @@ interface VirtualizedTableGridProps {
   value?: Record<string, unknown> | undefined;
   onChange?: ((value: Record<string, unknown>) => void) | undefined;
   renderSelectorRows?: (() => React.ReactNode) | undefined;
-  gridTemplateCols: string;
-  totalWidth: number;
+  /** 헤더와 같은 grid 폭 스타일 (resolveTableGridSizing) */
+  gridSizing: React.CSSProperties;
   stickyInfo?: StickyLeftInfo | undefined;
   applyCellBackground: boolean;
   // 컨테이너가 내부 세로 스크롤 영역일 때 IntersectionObserver root로 사용 (미지정 시 뷰포트)
@@ -185,8 +185,7 @@ export const VirtualizedTableGrid = React.memo(function VirtualizedTableGrid({
   value,
   onChange,
   renderSelectorRows,
-  gridTemplateCols,
-  totalWidth,
+  gridSizing,
   stickyInfo,
   applyCellBackground,
   scrollRootRef,
@@ -210,9 +209,7 @@ export const VirtualizedTableGrid = React.memo(function VirtualizedTableGrid({
       className="mx-auto rounded-b-md border-r border-l border-gray-400 bg-white text-base"
       style={{
         display: 'grid',
-        gridTemplateColumns: gridTemplateCols,
-        minWidth: totalWidth ? `${totalWidth}px` : '100%',
-        width: totalWidth ? `${totalWidth}px` : '100%',
+        ...gridSizing,
       }}
     >
       {displayRows.map((row, rowIdx) => (

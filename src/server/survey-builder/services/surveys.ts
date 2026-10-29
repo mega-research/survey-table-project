@@ -349,6 +349,7 @@ export async function duplicateSurvey(
         stagedRowsConfig: question.stagedRowsConfig as NewQuestion['stagedRowsConfig'],
         hideColumnLabels: question.hideColumnLabels,
         stickyColumnCount: question.stickyColumnCount ?? null,
+        fitTableToWidth: question.fitTableToWidth ?? false,
         exportCellOrder: question.exportCellOrder ?? null,
         mobileOriginalTable: question.mobileOriginalTable,
         mobileTableDisplayMode: question.mobileTableDisplayMode,

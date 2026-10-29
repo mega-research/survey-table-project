@@ -58,6 +58,7 @@ const SENTINEL_ROW: Record<string, unknown> = {
   stagedRowsConfig: { enabled: true, rowIds: ['r1', 'r2'], initialVisibleCount: 1 },
   hideColumnLabels: true,
   stickyColumnCount: 2,
+  fitTableToWidth: true,
   mobileOriginalTable: true,
   mobileTableDisplayMode: 'drilldown',
   mobileDrilldownOmitLeadingColumns: 1,

@@ -969,6 +969,11 @@ export interface Question {
    * 0 = 고정 안 함, 1~3 = 앞에서 그 개수만큼 강제 고정.
    */
   stickyColumnCount?: number | null;
+  /**
+   * 화면 폭에 맞춰 표 줄이기 (표를 그리는 문항 전용). 켜면 모바일 모드가 아닐 때 열 폭을 비율로 바꿔
+   * 좁은 화면에 맞춰 줄이고 넓은 화면에서는 지정 총폭을 넘지 않는다. 끔/미지정 = 지정 px 고정(기존).
+   */
+  fitTableToWidth?: boolean;
   /** 테이블 문항 내보내기 셀 순서 — 행 우선(기본) | 열 우선. Raw·분할·코딩북·.sav 공통 적용 */
   exportCellOrder?: 'row-first' | 'column-first';
   // 모바일에서도 원본 표 레이아웃(가로 스크롤)으로 표시 — 카드/스테퍼 전환 안 함

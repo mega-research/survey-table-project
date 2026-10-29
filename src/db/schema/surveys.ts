@@ -275,6 +275,9 @@ export const questions = pgTable(
     // 좌측 고정 열 개수 (표를 그리는 문항 전용). NULL = 자동 판정, 0~3 = 명시 지정
     stickyColumnCount: smallint('sticky_column_count'),
 
+    // 화면 폭에 맞춰 표 줄이기 (표를 그리는 문항 전용, 0146). false = 지정 px 고정(기존), true = 좁은 화면에서 비율로 줄임
+    fitTableToWidth: boolean('fit_table_to_width').notNull().default(false),
+
     // 테이블 문항 내보내기 셀 순서 — 'row-first'(기본, null 동일) | 'column-first'
     exportCellOrder: text('export_cell_order').$type<'row-first' | 'column-first'>(),
 

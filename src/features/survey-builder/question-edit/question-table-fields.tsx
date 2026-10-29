@@ -148,6 +148,7 @@ export function QuestionTableFields({
             className="border-2 border-dashed border-gray-300"
             hideColumnLabels={questions.find((q) => q.id === questionId)?.hideColumnLabels}
             stickyColumnCount={questions.find((q) => q.id === questionId)?.stickyColumnCount}
+            fitTableToWidth={questions.find((q) => q.id === questionId)?.fitTableToWidth ?? false}
             choiceControlType={(cell) =>
               getGroupTypeOfCell(
                 {

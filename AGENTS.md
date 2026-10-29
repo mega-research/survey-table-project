@@ -200,6 +200,7 @@ questions                  # 개별 질문
 ├── mobileItemCardBlockColumns (JSONB)  # 「항목 단위 카드」 블록 시작 열 번호 배열(1부터, 작성 열 순서, NULL=블록 없음, 0131). 경계는 저작자가 적는다(자동 추정 없음) — CONTEXT.md 「블록 단위로 세우기」
 ├── hideColumnLabels, pageBreakBefore
 ├── stickyColumnCount            # 좌측 고정 열 개수 (NULL=자동 판정, 0~3=명시 지정)
+├── fitTableToWidth              # 화면 폭에 맞춰 표 줄이기 (기본 false, 0146) — 아래 "질문 유형"의 좌측 고정 열 다음 항목
 ├── priorAnswerCondition (JSONB), priorAnswerDisabled  # 추적조사 — 문항별 이월값 불러오기 조건(0102, 참→거짓으로 뒤집히면 프리필 회수)·끄기(0103, 켜면 이월값을 깔지 않고 Raw includePriorAnswers 도 비운다)
 ├── noticeContent, noticeBgColor, requiresAcknowledgment  # 공지 (배경색: NULL=기본 파랑, 'none'=무색, hex=커스텀)
 ├── imageUrl, videoUrl
@@ -486,6 +487,7 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
 - **입력 형식**: `inputType`(단답형·표 input 셀)·`textInputType`(보기 상세기재)은 `'text' | 'number'` 에 더해 형식 5종(`mobile` · `phone` · `biz_number` · `corp_number` · `email`)을 받는다. 값 목록은 `@/types/input-type` 이 SSOT 이고 zod 두 곳(`lib/question/schema.ts`, `server/survey-builder/domain/question.ts`)이 그 상수를 쓴다. **형식과 `number` 는 배타** — 형식을 고르면 숫자 서식·초기값·계산 검증이 붙지 않는다. 판정·정규화·실패 사유는 `@/features/question-renderer/utils/input-format` 의 `parseInputFormat` 하나에서 나오고, 차단은 `NumericIssue.kind: 'format'`(클라이언트 전용)이다. 타이핑 단계에서는 번호 형식 4종이 **숫자와 하이픈만** 받는다(`filterFormatTyping`, 훅 `useInputFormatField.handleChange` — 세 표면 공용, 이메일은 제외). 정돈(자동 하이픈)은 여전히 blur 때 한 번이다. 이메일은 타이핑을 막지 않는 대신 한글·전각 글자를 검사 사유 `non_ascii`(「이메일은 영문·숫자로만 입력해 주세요」)로 blur·다음에서 막는다 — 한글 조합 중 글자를 떨어뜨리면 자판이 고장 난 것처럼 보이고 붙여넣기에서 조용히 다른 주소가 되기 때문이다. **DB 마이그레이션 없음** — `input_type` 은 enum·CHECK 없는 text 컬럼이고 셀·보기 쪽은 JSONB 안이다. 자세한 규약은 CONTEXT.md "입력 형식" · `docs/adr/0023`.
 - **순위형 입력 방식** `rankingConfig.inputMode` (JSONB, 마이그레이션 없음): 미지정·`'dropdown'` 이면 **기존처럼 순위마다 드롭다운**, `'click'` 이면 보기를 눌러 순위를 매긴다 — 비어 있는 가장 낮은 순위에 들어가고 다시 누르면 해제(뒤 순위 당김), 요약 줄에 `1순위 [보기번호]` 칩 + 순위초기화, 기타·상세기재 입력칸은 그 보기 행 안에 있고 순위가 매겨져야 활성화. 순수 로직은 `features/question-renderer/utils/ranking-click.ts`, UI 조각은 `features/question-renderer/ranking-click-select.tsx`. 표 소스는 내장 표의 `ranking_opt` 셀을 `TablePreview renderCell` 로 같은 얼굴로 그리고, 그룹별 순위는 그룹마다 요약 줄·표는 하나. 응답 모양(`{rank, optionValue}[]`)은 두 방식이 같아 저장·검증·내보내기 무변경. **표 안 ranking 셀은 항상 드롭다운이고, `allowDuplicateRanks` 가 켜지면 클릭을 골라도 드롭다운**이다(클릭으로는 같은 보기를 두 순위에 둘 수 없다).
 - **좌측 고정 열**: `stickyColumnCount` — 표를 그리는 문항(table + 내장 테이블을 쓰는 radio/checkbox/ranking) 공용. NULL=자동 판정(왼쪽부터 연속된 정적 셀 열까지), 0=고정 안 함, 1~3=명시 지정. 기본을 0 이 아니라 NULL 로 둔 것은 회귀 방지다 — 0 이 기본이면 지금 고정된 표가 전부 풀린다. 명시 지정도 "스크롤할 열이 남는가"(지정값 ≥ 전체 열 수면 비활성)·"뷰포트 60% 를 넘지 않는가"(최소 1열 유지) 두 가드는 통과해야 한다. 또 고정 경계는 colspan 셀 한가운데를 자르지 않는다 — 본문이 `cellIndex < stickyColCount` 로 sticky 를 걸어, 여러 열을 덮는 셀이 sticky 가 되면 스크롤 시 뒤쪽 열 위를 덮으며 따라오기 때문이다(척도 응답이 colspan 으로 전 열을 덮는 표는 지정해도 라벨 열까지만 고정된다). 판정은 `features/question-renderer/utils/table-grid-utils.ts` 의 `computeStickyLeftColumns`. 가로(헤더) 고정은 옵션이 아니라 표 길이에 따른 자동 그대로다.
+- **화면 폭에 맞춰 표 줄이기**: `fitTableToWidth` — 표를 그리는 문항 공용, 기본 꺼짐(문항별 opt-in, 2026-10-29). 표 열 폭은 원래 px 고정이라 카드가 좁아져도(태블릿 세로 등) 표는 그대로 넘쳐 가로 스크롤이 된다. 켜면 모바일 모드(768px 미만)가 아닐 때 열 폭을 비율(`minmax(0, Nfr)`)로 바꿔 화면에 맞춰 줄이고 넓은 화면에서는 지정 총폭을 넘지 않는다. 켜면 좌측 고정 열은 쓰지 않는다(넘치지 않고, px 누적 오프셋이 줄어든 열과 어긋난다). 헤더·본문·가상화 본문이 같은 폭 스타일을 써야 열이 어긋나지 않으므로 grid 폭은 `table-grid-utils` 의 `resolveTableGridSizing` 하나로 낸다. 「화면 너비」(`forceWideLayout`)는 카드의 최대 폭일 뿐 표 폭과 무관하다. 태블릿 기준 폭: 표가 쓸 수 있는 폭 = 화면 폭 − 130px(페이지·카드·문항 여백), 가장 좁은 아이패드 세로(810px)에서 680px.
 
 ### 테이블 질문 셀 타입
 
@@ -1083,6 +1085,7 @@ export function QuestionEditor({ questionId, onSave }: Props) {
 - 새 마이그레이션은 **디스크에 없는 다음 번호**를 쓴다. 다른 브랜치가 이미 쓴 번호도 피한다
 - **나중에 병합하는 쪽은 `manual-migrations.json` 배열 끝에 append 한다.** 번호순으로 끼워 넣지 않는다 — 그 배열이 곧 빈 DB 재생 순서다
 - 그래서 번호와 배열 순서가 어긋나 보일 수 있다. 만지는 객체가 서로소면 정상이다
+- 화면 폭에 맞춰 표 줄이기 `questions.fit_table_to_width` 는 0146 이다 (2026-10-29) — **앱 배포 전에** 적용한다(새 앱이 읽고 쓴다, NOT NULL DEFAULT false 라 구버전 앱 INSERT 무관 · 단일 단계)
 - 언어별 설문 글자 `surveys.localized_messages` 는 0145 다 (2026-10-27) — **앱 배포 전에** 적용한다(새 앱이 읽는다, nullable 이라 2단계 배포 불필요). 0144 는 staging(클라이언트 링크 탭 백필)이 쓰고 있어 건너뛰었다 — staging 병합 시 배열 끝 append
 - 이관 이력 `response_migration_history` 는 0142 다 (2026-10-23) — **앱 배포 전에** 적용한다(새 앱이 쓴다)
 - `response_answers` 제거·응답 테이블 중복 인덱스 정리·`adminEditRollback` 이관은 0143 이다 (2026-10-23). **앱 배포 뒤에** 적용한다 — 먼저 적용하면 구버전 앱의 완료 제출이 실패한다. 재생 순서(배열)와 적용 순서가 같다

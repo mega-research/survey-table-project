@@ -17,6 +17,31 @@ export function calcTotalWidth(columns: TableColumn[]): number {
   return columns.reduce((sum, col) => sum + (col.width || 150), 0);
 }
 
+// ── 표 grid 폭 (화면 폭에 맞춰 줄이기) ──
+
+/**
+ * 표 grid 컨테이너의 폭 스타일. 헤더·본문·가상화 본문이 같은 값을 써야 열이 어긋나지 않는다.
+ * - 끔(기본): 열 폭을 px 로 고정한다. 화면이 좁으면 표가 넘쳐 가로 스크롤이 된다.
+ * - 켬(문항 설정 fitTableToWidth, 모바일 모드가 아닐 때): 열 폭을 비율(fr)로 바꿔 화면에 맞춰 줄고,
+ *   넓은 화면에서는 지정한 총폭을 넘지 않는다. 표가 넘치지 않으므로 좌측 고정 열은 호출측이 끈다.
+ */
+export function resolveTableGridSizing(
+  columns: TableColumn[],
+  fitToWidth: boolean,
+): Pick<CSSProperties, 'gridTemplateColumns' | 'width' | 'minWidth' | 'maxWidth'> {
+  const totalWidth = calcTotalWidth(columns);
+  if (!totalWidth) return { gridTemplateColumns: '', width: '100%', minWidth: '100%' };
+  if (!fitToWidth) {
+    return { gridTemplateColumns: buildGridTemplateCols(columns), width: `${totalWidth}px`, minWidth: `${totalWidth}px` };
+  }
+  return {
+    gridTemplateColumns: columns.map((col) => `minmax(0, ${col.width || 150}fr)`).join(' '),
+    width: '100%',
+    minWidth: 0,
+    maxWidth: `${totalWidth}px`,
+  };
+}
+
 // ── 응답 페이지 컨테이너 폭 판정 ──
 
 /** 표 총폭이 이 값(px)을 넘으면 응답 페이지 컨테이너를 넓게(1280px) 편다. */

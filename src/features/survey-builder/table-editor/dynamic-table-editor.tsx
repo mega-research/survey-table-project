@@ -111,6 +111,9 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
   const stickyColumnCount = useSurveyBuilderStore(
     (s) => s.currentSurvey.questions.find((q) => q.id === editingQuestionId)?.stickyColumnCount ?? null,
   );
+  const fitTableToWidth = useSurveyBuilderStore(
+    (s) => s.currentSurvey.questions.find((q) => q.id === editingQuestionId)?.fitTableToWidth ?? false,
+  );
   const mobileTableQuestion = useSurveyBuilderStore(
     (state) => state.currentSurvey.questions.find((q) => q.id === editingQuestionId),
   );
@@ -531,6 +534,36 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
               onChange={(e) => {
                 if (editingQuestionId) {
                   silentUpdateQuestion(editingQuestionId, { hideColumnLabels: e.target.checked });
+                }
+              }}
+              className="peer sr-only"
+            />
+            <div className="peer h-5 w-9 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-blue-600 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none" />
+          </label>
+        </div>
+      </div>
+
+      {/* 화면 폭에 맞춰 표 줄이기 — 좁은 화면(태블릿 세로 등)에서 가로 스크롤 대신 비율로 줄인다 */}
+      <div className="space-y-3 rounded-lg border border-gray-200 p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <Label htmlFor="fit-table-to-width" className="text-sm font-medium">
+              화면 폭에 맞춰 표 줄이기
+            </Label>
+            <p className="text-xs text-gray-500">
+              화면이 표보다 좁으면(태블릿 세로 등) 가로 스크롤 대신 열 비율대로 표를 줄입니다. 넓은
+              화면에서는 지정한 폭 그대로이고, 휴대폰은 모바일 표시 방식을 따릅니다. 켜면 좌측 고정
+              열은 쓰지 않습니다.
+            </p>
+          </div>
+          <label className="relative inline-flex cursor-pointer items-center">
+            <input
+              id="fit-table-to-width"
+              type="checkbox"
+              checked={fitTableToWidth}
+              onChange={(e) => {
+                if (editingQuestionId) {
+                  silentUpdateQuestion(editingQuestionId, { fitTableToWidth: e.target.checked });
                 }
               }}
               className="peer sr-only"

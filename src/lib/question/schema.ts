@@ -56,6 +56,7 @@ const embeddedTable = z.object({
   hideColumnLabels: z.boolean().optional(),
   // NULL = 자동 판정, 0~3 = 명시 지정
   stickyColumnCount: z.number().int().min(0).max(3).nullable().optional(),
+  fitTableToWidth: z.boolean().optional(),
   exportCellOrder: z.enum(['row-first', 'column-first']).optional(),
 });
 
