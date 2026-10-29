@@ -659,9 +659,20 @@ export function generateSPSSColumns(
 
         // checkbox 셀: checkboxOptions가 있으면 옵션별 분리 변수 생성
         if (cell.type === 'checkbox' && cell.checkboxOptions && cell.checkboxOptions.length > 0) {
+          const manyOptions = cell.checkboxOptions.length > 1;
           for (let optIdx = 0; optIdx < cell.checkboxOptions.length; optIdx++) {
             const opt = cell.checkboxOptions[optIdx];
             if (!opt) continue;
+            // 보기가 여럿이면 열마다 셀라벨 뒤에 보기 글자를 붙인다 — 붙이지 않으면 Raw 2행·코딩북 셀라벨이
+            // 보기 열 전부 같은 글자라 어느 보기인지 이름(opt01…)으로만 읽어야 한다(2026-10-29).
+            // 보기 하나짜리(글자 없는 체크 하나) 칸은 셀라벨이 곧 그 체크의 뜻이라 그대로 둔다.
+            const optionText = (opt.label ?? '').trim();
+            const optionExportLabel =
+              manyOptions && optionText
+                ? autoExportLabel
+                  ? `${autoExportLabel}_${optionText}`
+                  : optionText
+                : autoExportLabel;
             columns.push({
               spssVarName: `${varName}_${opt.optionCode ?? String(optIdx + 1)}`,
               questionText: q.title,
@@ -678,7 +689,7 @@ export function generateSPSSColumns(
               ...(cell.spssVarType !== undefined ? { cellSpssVarType: cell.spssVarType } : {}),
               ...(cell.spssMeasure !== undefined ? { cellSpssMeasure: cell.spssMeasure } : {}),
               ...(cell.numberFormat !== undefined ? { numberFormat: cell.numberFormat } : {}),
-              ...(autoExportLabel !== undefined ? { cellExportLabel: autoExportLabel } : {}),
+              ...(optionExportLabel !== undefined ? { cellExportLabel: optionExportLabel } : {}),
             });
             // allowTextInput 옵션마다 STRING 사이드카 텍스트 변수 생성
             if (opt.allowTextInput) {
@@ -691,7 +702,7 @@ export function generateSPSSColumns(
                 type: 'table-cell-option-text',
                 tableCellId: cell.id,
                 optionId: opt.id,
-                ...(autoExportLabel !== undefined ? { cellExportLabel: autoExportLabel } : {}),
+                ...(optionExportLabel !== undefined ? { cellExportLabel: optionExportLabel } : {}),
               });
             }
           }

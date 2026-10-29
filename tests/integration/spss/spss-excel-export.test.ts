@@ -231,6 +231,37 @@ describe('generateSPSSColumns', () => {
     expect(col?.cellExportLabel).toBe('영향평가_유무');
   });
 
+  it('보기가 여럿인 체크박스 칸은 열마다 셀라벨 뒤에 보기 글자를 붙인다', () => {
+    const q = {
+      id: 'q1', type: 'table', title: '2-1', order: 1, required: false, questionCode: 'Q2_1',
+      tableColumns: [{ id: 'c1', label: '', columnCode: 'c01' }, { id: 'c2', label: '', columnCode: 'c02' }],
+      tableRowsData: [{ id: 'r', label: '', rowCode: 'r02', cells: [
+        { id: 'l', type: 'text', content: '2) 지원 부문' },
+        { id: 'cb', type: 'checkbox', content: '', exportLabel: '지원 부문', isCustomExportLabel: true, checkboxOptions: [
+          { id: 'o1', label: '① 부스임차비용', value: '1', optionCode: 'opt01' },
+          { id: 'o8', label: '⑧ 기타', value: '8', optionCode: 'opt08', allowTextInput: true },
+        ] },
+      ] }],
+    } as unknown as Question;
+    const cols = generateSPSSColumns([q]);
+    expect(cols.map((c) => [c.spssVarName, c.cellExportLabel])).toEqual([
+      ['Q2_1_r02_c02_opt01', '지원 부문_① 부스임차비용'],
+      ['Q2_1_r02_c02_opt08', '지원 부문_⑧ 기타'],
+      ['Q2_1_r02_c02_opt08_text', '지원 부문_⑧ 기타'],
+    ]);
+  });
+
+  it('보기가 하나뿐인 체크박스 칸은 셀라벨 그대로다(글자 없는 체크 하나짜리 칸)', () => {
+    const q = {
+      id: 'q1', type: 'table', title: 'Q', order: 1, required: false, questionCode: 'Q9',
+      tableColumns: [{ id: 'c1', label: '', columnCode: 'c01' }],
+      tableRowsData: [{ id: 'r', label: '', rowCode: 'r01', cells: [
+        { id: 'cb', type: 'checkbox', content: '', exportLabel: '2025년', isCustomExportLabel: true, checkboxOptions: [{ id: 'o', label: '', value: '1' }] },
+      ] }],
+    } as unknown as Question;
+    expect(generateSPSSColumns([q])[0]?.cellExportLabel).toBe('2025년');
+  });
+
   it('radio-group 컬럼은 표 칸보다 먼저 몰리지 않고 그 묶음 첫 칸 자리(화면 순서)에 선다', () => {
     // 1행: 업체명 입력 → 2행: 성별 묶음(남·여) → 3행: 연락처 입력
     const radio = (id: string, label: string, code: number) => ({
