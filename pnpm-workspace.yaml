@@ -112,6 +112,8 @@ overrides:
   lodash-es: '>=4.18.0 <5'
   # serialize-javascript: 6.x 에 패치가 없어 7 로 의도적 승격
   'serialize-javascript@6': '>=7.0.3 <8'
+  # 2026-10-29 GHSA-3f7j-7jwc-fxfj(Windows services() 명령 주입) — inngest → otel host-metrics 경유 전이 의존
+  'systeminformation@5': '>=5.33.16 <6'
 
 allowBuilds:
   '@sentry/cli': true
