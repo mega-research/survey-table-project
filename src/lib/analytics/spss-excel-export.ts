@@ -212,11 +212,12 @@ function emitChoiceGroupColumns(
   q: QuestionVariant,
   questionCode: string,
   columns: SPSSExportColumn[],
+  groups: ReturnType<typeof collectChoiceGroups> = collectChoiceGroups(q),
 ): void {
   // choiceGroups 가 1개 이상 정의된 radio/checkbox 질문은 이 분기에서 처리.
   // 그룹 없는 checkbox 질문은 아래 else-if 의 기존 checkbox-item 경로를 탄다.
   // choiceGroups 기반 radio/checkbox — 그룹별 변수 생성
-  for (const group of collectChoiceGroups(q)) {
+  for (const group of groups) {
     if (group.type === 'radio') {
       // radio 그룹 → 기존 'choice-group' 1변수 (무변경)
       const cellValueMap: Record<string, number> = {};
@@ -522,9 +523,15 @@ export function generateSPSSColumns(
         }
       }
     } else if (q.type === 'table' && q.tableRowsData && q.tableColumns) {
-      // 보기 그룹 표 — 그룹 변수는 레거시 radio/checkbox 와 같은 규칙으로 먼저 낸다. 아래 셀 순회는
-      // choice_opt 를 건너뛰므로(입력 불가 셀 목록) 보기 셀에 table-cell 열이 생기지 않는다.
-      if (isChoiceGroupTableQuestion(q)) emitChoiceGroupColumns(q, q.questionCode, columns);
+      // 보기 그룹 표 — 그룹 변수는 레거시 radio/checkbox 와 같은 규칙으로 내되, 자리는 화면 순서다:
+      // 아래 셀 순회가 그 그룹의 첫 보기 칸에 닿을 때 그룹 열을 낸다(변수 규칙 대전제 2 — 파일 순서 =
+      // 화면 순서, 2026-10-29). 순회가 닿지 않은 그룹(보기 칸이 반복 pruning 으로 빠진 경우 등)은 표 끝에 낸다.
+      // 셀 순회는 choice_opt 를 건너뛰므로(입력 불가 셀 목록) 보기 셀에 table-cell 열이 생기지 않는다.
+      const pendingChoiceGroups = isChoiceGroupTableQuestion(q) ? collectChoiceGroups(q) : [];
+      const choiceGroupOfCell = new Map(
+        pendingChoiceGroups.flatMap((g) => g.cells.map((c) => [c.id, g] as const)),
+      );
+      const emittedChoiceGroups = new Set<(typeof pendingChoiceGroups)[number]>();
       // === Phase 5: radioGroup 사전 스캔 ===
       // 같은 radioGroupName 셀들을 묶어 변수 1개로 export.
       // 그룹 방향 자동 감지: 같은 행이면 열 단위 응답, 같은 열이면 행 단위 응답.
@@ -552,6 +559,11 @@ export function generateSPSSColumns(
       for (const { tRow, colIdx } of cellCoords) {
         const cell = tRow.cells[colIdx];
         if (!cell) continue;
+        const choiceGroup = choiceGroupOfCell.get(cell.id);
+        if (choiceGroup && !emittedChoiceGroups.has(choiceGroup)) {
+          emittedChoiceGroups.add(choiceGroup);
+          emitChoiceGroupColumns(q, q.questionCode, columns, [choiceGroup]);
+        }
         // 병합(colspan/rowspan)으로 가려진 셀은 변수에서 제외 (변수명 중복 방지)
         if (cell.isHidden) continue;
         // radioGroup 그룹에 속한 셀은 스킵 (그룹 변수로 이미 emit됨)
@@ -740,6 +752,8 @@ export function generateSPSSColumns(
           }
         }
       }
+      const unreached = pendingChoiceGroups.filter((g) => !emittedChoiceGroups.has(g));
+      if (unreached.length > 0) emitChoiceGroupColumns(q, q.questionCode, columns, unreached);
     } else {
       columns.push({
         spssVarName: q.questionCode,
