@@ -494,6 +494,15 @@
     "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
 }
 
+/* 중국어 줄바꿈 — body 의 keep-all(한국어 어절 보존)은 띄어쓰기 없는 중국어 문장을 끊을 수 없는 한 단어로
+   본다. 카드·표의 칸이 그 문장 길이(min-content)만큼 넓어져 페이지가 화면보다 넓어지고, 화면 폭에 붙은
+   하단 바의 「다음」이 오른쪽 밖으로 밀렸다(2026-10-29). 중국어판 안에서는 글자 사이에서 끊는다 — 칸에
+   직접 붙인 break-keep 도 함께 푼다. 한국어·영어 화면은 그대로다(영어는 keep-all 과 normal 이 같다). */
+[lang|="zh"],
+[lang|="zh"] .break-keep {
+  word-break: normal;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
