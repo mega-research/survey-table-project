@@ -13,6 +13,8 @@
  * - 라벨이 아닌 글자 셀은 저작자가 모바일 표시 설정으로 정한다: 「숨김」은 무시, 「바로 표시」·
  *   「접기」는 카드 본문에 붙는 설명이다(열린 카드가 있으면 거기, 없으면 다음 카드). 단위·주석처럼
  *   입력 칸 뒤에 오는 글자를 새 카드로 오인하지 않게 하는 유일한 손잡이다 — 자동 추정은 없다.
+ * - 세로 병합된 라벨 하나만 제목인 항목은 그 라벨이 덮는 아래 행의 같은 보기 그룹 보기 칸(하위 라벨 없이)까지
+ *   카드 한 장이다(「2) 지원 부문」 이 3행을 덮고 행마다 보기 칸만 있는 표). 입력 칸이 이어지면 행마다 카드다.
  * - 라벨 없이 입력 칸만 있는 행은 행 이름을 제목으로 쓴다(격자형 표는 행 카드와 같은 모양이 된다).
  * - 라벨 뒤에 「바로 표시」·「접기」 글자만 오고 입력 칸 없이 다음 라벨·행 끝이 오면 그 라벨의 **표시 전용
  *   카드**다(전시회명 | 값 | 개최 기간 | 값). 세로 병합된 구분 라벨 뒤는 하위 항목이라 닫지 않는다.
@@ -70,6 +72,14 @@ function isLabelCell(cell: TableCell): boolean {
   );
 }
 
+/** 카드의 입력이 전부 `cell` 과 같은 보기 그룹의 보기 칸인가 */
+function isSameChoiceGroup(card: ItemCard, cell: TableCell): boolean {
+  if (cell.type !== 'choice_opt' || !cell.choiceGroupId) return false;
+  return card.inputs.every(
+    (entry) => entry.cell.type === 'choice_opt' && entry.cell.choiceGroupId === cell.choiceGroupId,
+  );
+}
+
 /** 카드 제목 한 마디의 평문 — 옵션 1개짜리 라디오는 그 옵션 라벨 */
 export function itemCardTitleText(cell: TableCell): string {
   return labelOnlyRadioText(cell) ?? (cell.content ?? '').trim();
@@ -85,6 +95,10 @@ export function buildItemCards(
 ): ItemCard[] {
   const coverage = buildTableRowspanCoverage(displayRows);
   const cards: ItemCard[] = [];
+  // 세로 병합된 라벨 하나만 제목인 카드 — 그 라벨이 덮는 아래 행도 하위 라벨 없이 **같은 보기 그룹의
+  // 보기 칸**만 이어지면 한 문항의 보기라 이 카드에 잇는다(「2) 지원 부문」 3행의 보기 칸이 같은 제목 카드
+  // 석 장이 되지 않게). 입력 칸이 이어지는 행(국가 12행 × 국가·비중)은 종전대로 행마다 카드다
+  const cardByMergedLabel = new Map<string, ItemCard>();
 
   for (const row of displayRows) {
     const covered = coverage.get(row.id) ?? row.cells;
@@ -154,16 +168,26 @@ export function buildItemCards(
       }
 
       if (!open) {
-        open = {
-          key: own.id,
-          rowId: row.id,
-          titleCells: path,
-          fallbackTitle: row.label ?? '',
-          inputs: [],
-          displayCells: pendingDisplay,
-        };
+        const lone = path.length === 1 && (path[0]?.rowspan ?? 1) > 1 ? path[0] : undefined;
+        const candidate = lone ? cardByMergedLabel.get(lone.id) : undefined;
+        const continued =
+          candidate && isSameChoiceGroup(candidate, own) ? candidate : undefined;
+        if (continued) {
+          continued.displayCells.push(...pendingDisplay);
+          open = continued;
+        } else {
+          open = {
+            key: own.id,
+            rowId: row.id,
+            titleCells: path,
+            fallbackTitle: row.label ?? '',
+            inputs: [],
+            displayCells: pendingDisplay,
+          };
+          cards.push(open);
+          if (lone) cardByMergedLabel.set(lone.id, open);
+        }
         pendingDisplay = [];
-        cards.push(open);
       }
       open.inputs.push({ cell: own, row, columnIndex });
     });

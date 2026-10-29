@@ -90,6 +90,35 @@ describe('buildItemCards', () => {
     ]);
   });
 
+  it('세로 병합된 라벨 하나 아래 하위 라벨 없이 입력만 이어지면 그 행들은 카드 한 장이다', () => {
+    // 「2) 지원 부문 (복수 응답 가능)」 이 3행을 덮고 행마다 보기 칸만 있다 — 같은 제목 카드 3장이 아니다
+    const opt = (id: string) => ({ id, type: 'choice_opt' as const, content: id, choiceGroupId: 'g' });
+    const rows: TableRow[] = [
+      { id: 'org', label: 'org', cells: [text('orgs', '1) 기관명'), input('o1'), input('o2')] },
+      { id: 'p1', label: 'p1', cells: [text('part', '2) 지원 부문', { rowspan: 3 }), opt('①'), opt('②')] },
+      { id: 'p2', label: 'p2', cells: [text('part-c', '', { isHidden: true }), opt('④'), opt('⑤')] },
+      { id: 'p3', label: 'p3', cells: [text('part-c2', '', { isHidden: true }), opt('⑥'), opt('⑧')] },
+      { id: 'amt', label: 'amt', cells: [text('amount', '3) 금액'), input('a1', { colspan: 2 }), input('a1-c', { isHidden: true })] },
+    ];
+    expect(summarize(rows)).toEqual([
+      { row: 'org', title: '1) 기관명', inputs: ['o1', 'o2'], display: [] },
+      { row: 'p1', title: '2) 지원 부문', inputs: ['①', '②', '④', '⑤', '⑥', '⑧'], display: [] },
+      { row: 'amt', title: '3) 금액', inputs: ['a1'], display: [] },
+    ]);
+  });
+
+  it('세로 병합된 라벨 아래 입력 칸이 이어지는 행은 종전대로 행마다 카드다', () => {
+    // 「17-1-2) 수출 국가 및 비중」 이 국가 행들을 덮는 표 — 행 하나가 국가 하나다
+    const rows: TableRow[] = [
+      { id: 'y1', label: 'y1', cells: [text('ctry', '수출 국가', { rowspan: 2 }), input('c1'), input('p1')] },
+      { id: 'y2', label: 'y2', cells: [text('ctry-c', '', { isHidden: true }), input('c2'), input('p2')] },
+    ];
+    expect(summarize(rows).map((card) => [card.row, card.inputs])).toEqual([
+      ['y1', ['c1', 'p1']],
+      ['y2', ['c2', 'p2']],
+    ]);
+  });
+
   it('구분 열이 세로 병합된 표는 행마다 구분 > 항목 제목의 카드가 된다', () => {
     const rows: TableRow[] = [
       { id: 'a', label: 'a', cells: [text('sec', '직접 참여', { rowspan: 2 }), text('i1', '① 지원'), input('v1')] },
