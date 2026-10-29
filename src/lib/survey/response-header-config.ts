@@ -1,21 +1,23 @@
+import { cn, generateId } from '@/lib/utils';
 import type {
   ResponseHeaderBandStyle,
   ResponseHeaderBlockPos,
   ResponseHeaderBlockSize,
   ResponseHeaderImageFrame,
   ResponseHeaderLayout,
-  ResponseHeaderRowSpread,
   ResponseHeaderLogoAlign,
   ResponseHeaderLogoSize,
   ResponseHeaderMobileStyle,
   ResponseHeaderNoticeFormat,
   ResponseHeaderNoticeWidth,
+  ResponseHeaderRowSpread,
   ResponseHeaderTitleAlign,
   ResponseHeaderTitleSize,
   ResponseHeaderVAlign,
   SurveyResponseHeaderConfig,
 } from '@/shared/contracts/survey';
-import { cn, generateId } from '@/lib/utils';
+import { DEFAULT_SURVEY_LOCALE, type SurveyLocale } from '@/types/survey-locale';
+import { type SystemStringKey, systemText } from '@/utils/system-strings';
 
 type StatisticNoticeConfig = Extract<
   SurveyResponseHeaderConfig,
@@ -31,8 +33,8 @@ type OfficialBandArrangement = Extract<
 >['officialBand']['arrangement'];
 
 export const DEFAULT_STATISTIC_NOTICE = {
-  title: '통계법 제33조(비밀의 보호)',
-  body: '통계의 작성 과정에서 알려진 사항으로서 개인이나 법인 또는 단체의 비밀에 속하는 사항은 보호되어야 한다.',
+  title: systemText('header.defaultNoticeTitle'),
+  body: systemText('header.defaultNoticeBody'),
   width: 'md',
 } satisfies StatisticNoticeConfig;
 
@@ -216,7 +218,8 @@ export type NormalizedHeaderNoticeBlock = {
   alignLine: ResponseHeaderTitleAlign;
   fontSize: number | null;
 };
-export type NormalizedResponseHeaderBlock = NormalizedHeaderImageBlock | NormalizedHeaderNoticeBlock;
+export type NormalizedResponseHeaderBlock =
+  NormalizedHeaderImageBlock | NormalizedHeaderNoticeBlock;
 export type NormalizedResponseHeaderConfig = {
   style: 'composed';
   mobileStyle: ResponseHeaderMobileStyle;
@@ -235,8 +238,34 @@ export type NormalizedResponseHeaderConfig = {
   bandBg: string;
 };
 
-export const DEFAULT_NOTICE_LINE =
-  '본 조사는 통계법 제33조(비밀의 보호)에 의거, 응답하신 내용은 통계 작성 목적 외에는 사용되지 않습니다.';
+export const DEFAULT_NOTICE_LINE = systemText('header.defaultNoticeLine');
+
+/**
+ * 문구 블록의 글자가 한국어 기본 문구 그대로면 응답 화면의 현재 언어 기본 문구로 바꾼다(다국어 설문).
+ * 빌더가 기본 문구를 칸에 채워 저장하므로 「비었으면 번역」으로는 걸리지 않는다 — 고친 문구는 그대로 둔다.
+ * 한국어면 그대로라 다국어 아닌 설문은 바뀌지 않는다.
+ */
+export function localizeDefaultNoticeTexts(
+  config: NormalizedResponseHeaderConfig,
+  locale: SurveyLocale,
+): NormalizedResponseHeaderConfig {
+  if (locale === DEFAULT_SURVEY_LOCALE) return config;
+  const pick = (value: string, key: SystemStringKey) =>
+    value.trim() === '' || value === systemText(key) ? systemText(key, locale) : value;
+  return {
+    ...config,
+    blocks: config.blocks.map((block) =>
+      block.type === 'notice'
+        ? {
+            ...block,
+            title: pick(block.title, 'header.defaultNoticeTitle'),
+            boxBody: pick(block.boxBody, 'header.defaultNoticeBody'),
+            lineBody: pick(block.lineBody, 'header.defaultNoticeLine'),
+          }
+        : block,
+    ),
+  };
+}
 
 export const HEADER_MARK_HEIGHTS = { sm: 72, md: 98, lg: 128 } as const;
 export const HEADER_LOGO_HEIGHTS = { sm: 35, md: 51, lg: 70 } as const;
@@ -247,18 +276,38 @@ export const HEADER_NOTICE_LINE_FONT_PX = { sm: 12, md: 13.5, lg: 15.5 } as cons
 export const HEADER_NOTICE_BOX_FONT_PX = 11.5; // 박스형 문구 자동 글자 크기
 
 export const DEFAULT_COMPOSED_RESPONSE_HEADER: NormalizedResponseHeaderConfig = {
-  style: 'composed', mobileStyle: 'gov', layout: 'stacked', rowSpread: 'group', blocks: [], subtitle: '',
-  titleAlign: 'left', titleTextAlign: 'left', titleVAlign: 'center',
-  titleScale: 'md', titlePx: null, vAlignLogo: 'center', vAlignNotice: 'center',
-  bandStyle: 'plain', bandBg: '#ffffff',
+  style: 'composed',
+  mobileStyle: 'gov',
+  layout: 'stacked',
+  rowSpread: 'group',
+  blocks: [],
+  subtitle: '',
+  titleAlign: 'left',
+  titleTextAlign: 'left',
+  titleVAlign: 'center',
+  titleScale: 'md',
+  titlePx: null,
+  vAlignLogo: 'center',
+  vAlignNotice: 'center',
+  bandStyle: 'plain',
+  bandBg: '#ffffff',
 };
 
 // 공개 기본값 — 과거 v1 plain 리터럴을 대체해 composed 기본값을 그대로 노출한다.
 // store import 이름(DEFAULT_RESPONSE_HEADER_CONFIG)은 유지하고 형태만 composed 로 전환(Task 8 normalize 통합).
-export const DEFAULT_RESPONSE_HEADER_CONFIG: NormalizedResponseHeaderConfig = DEFAULT_COMPOSED_RESPONSE_HEADER;
+export const DEFAULT_RESPONSE_HEADER_CONFIG: NormalizedResponseHeaderConfig =
+  DEFAULT_COMPOSED_RESPONSE_HEADER;
 
 const blockSizes = new Set<ResponseHeaderBlockSize>(['sm', 'md', 'lg']);
-const blockPositions = new Set<ResponseHeaderBlockPos>(['left', 'center', 'right', 'title-left', 'title-right', 'above', 'below']);
+const blockPositions = new Set<ResponseHeaderBlockPos>([
+  'left',
+  'center',
+  'right',
+  'title-left',
+  'title-right',
+  'above',
+  'below',
+]);
 const imageFrames = new Set<ResponseHeaderImageFrame>(['none', 'line', 'wrap']);
 const vAligns = new Set<ResponseHeaderVAlign>(['top', 'center', 'bottom']);
 const bandStyleSet = new Set<ResponseHeaderBandStyle>(['band', 'boxed', 'rule', 'plain']);
@@ -281,7 +330,10 @@ const isLineNotice = (b: NormalizedResponseHeaderBlock): b is NormalizedHeaderNo
   b.type === 'notice' && b.format === 'line';
 
 // notice pos 규칙: box 인데 above/below → left, line 인데 그 외 → above
-function coerceNoticePos(format: ResponseHeaderNoticeFormat, pos: ResponseHeaderBlockPos): ResponseHeaderBlockPos {
+function coerceNoticePos(
+  format: ResponseHeaderNoticeFormat,
+  pos: ResponseHeaderBlockPos,
+): ResponseHeaderBlockPos {
   if (format === 'line') return pos === 'below' ? 'below' : 'above';
   return pos === 'above' || pos === 'below' ? 'left' : pos;
 }
@@ -295,15 +347,27 @@ function normalizeComposedBlock(raw: unknown, index: number): NormalizedResponse
   const pos = pickEnum(rec['pos'], blockPositions, 'left');
   if (type === 'mark' || type === 'logo') {
     return {
-      id, type, pos: pos === 'above' || pos === 'below' ? 'left' : pos, size,
-      imageUrl: pickString(rec['imageUrl']), altText: pickString(rec['altText']),
+      id,
+      type,
+      pos: pos === 'above' || pos === 'below' ? 'left' : pos,
+      size,
+      imageUrl: pickString(rec['imageUrl']),
+      altText: pickString(rec['altText']),
       frame: pickEnum(rec['frame'], imageFrames, 'none'),
     };
   }
   if (type === 'notice') {
-    const format = pickEnum(rec['format'], new Set<ResponseHeaderNoticeFormat>(['box', 'line']), 'box');
+    const format = pickEnum(
+      rec['format'],
+      new Set<ResponseHeaderNoticeFormat>(['box', 'line']),
+      'box',
+    );
     return {
-      id, type, pos: coerceNoticePos(format, pos), size, format,
+      id,
+      type,
+      pos: coerceNoticePos(format, pos),
+      size,
+      format,
       title: pickString(rec['title'], DEFAULT_STATISTIC_NOTICE.title),
       boxBody: pickString(rec['boxBody'], DEFAULT_STATISTIC_NOTICE.body),
       lineBody: pickString(rec['lineBody'], DEFAULT_NOTICE_LINE),
@@ -315,7 +379,9 @@ function normalizeComposedBlock(raw: unknown, index: number): NormalizedResponse
   return null; // 미지 type 드롭
 }
 
-export function coerceBlocksForInlineLayout(blocks: NormalizedResponseHeaderBlock[]): NormalizedResponseHeaderBlock[] {
+export function coerceBlocksForInlineLayout(
+  blocks: NormalizedResponseHeaderBlock[],
+): NormalizedResponseHeaderBlock[] {
   return blocks.map((b) => {
     if (b.pos === 'above' || b.pos === 'below') return b; // 한줄형 문구는 유지
     if (b.pos === 'center' || b.pos === 'title-left') return { ...b, pos: 'left' as const };
@@ -324,7 +390,9 @@ export function coerceBlocksForInlineLayout(blocks: NormalizedResponseHeaderBloc
   });
 }
 
-function normalizeComposedResponseHeader(rec: Record<string, unknown>): NormalizedResponseHeaderConfig {
+function normalizeComposedResponseHeader(
+  rec: Record<string, unknown>,
+): NormalizedResponseHeaderConfig {
   const layout = pickEnum(rec['layout'], layoutSet, 'stacked');
   const rawBlocks = Array.isArray(rec['blocks']) ? rec['blocks'] : [];
   let blocks = rawBlocks
@@ -334,7 +402,8 @@ function normalizeComposedResponseHeader(rec: Record<string, unknown>): Normaliz
   return {
     style: 'composed',
     mobileStyle: pickEnum(rec['mobileStyle'], mobileStyleSet, 'gov'),
-    layout, blocks,
+    layout,
+    blocks,
     rowSpread: pickEnum(rec['rowSpread'], rowSpreadSet, 'group'),
     subtitle: pickString(rec['subtitle']),
     titleAlign: normalizeTitleAlign(rec['titleAlign'], 'left'),
@@ -350,11 +419,15 @@ function normalizeComposedResponseHeader(rec: Record<string, unknown>): Normaliz
 }
 
 const V1_TITLE_SCALE: Record<ResponseHeaderTitleSize, ResponseHeaderBlockSize> = {
-  auto: 'md', md: 'sm', lg: 'md',
+  auto: 'md',
+  md: 'sm',
+  lg: 'md',
 };
 
 // normalizeV1ResponseHeaderConfig(v1 정제)의 출력을 composed 로 매핑
-function migrateV1ResponseHeader(config: SurveyResponseHeaderConfig): NormalizedResponseHeaderConfig {
+function migrateV1ResponseHeader(
+  config: SurveyResponseHeaderConfig,
+): NormalizedResponseHeaderConfig {
   // composed 는 호출부(normalizeResponseHeaderConfig)에서 이미 분기 처리되어 여기 도달하지 않음 — 타입 좁히기용 안전망
   if (config.style === 'composed') return DEFAULT_COMPOSED_RESPONSE_HEADER;
   const base: NormalizedResponseHeaderConfig = {
@@ -365,31 +438,53 @@ function migrateV1ResponseHeader(config: SurveyResponseHeaderConfig): Normalized
     const pos = config.logoTitle?.logoPosition === 'right' ? 'title-right' : 'title-left';
     return {
       ...base,
-      titleAlign: config.titleAlign ?? 'center', titleTextAlign: config.titleAlign ?? 'center',
-      blocks: [{
-        id: 'v1-logo', type: 'logo', pos, size: config.logo.size ?? 'md',
-        imageUrl: config.logo.imageUrl, altText: config.logo.altText ?? '', frame: 'none',
-      }],
+      titleAlign: config.titleAlign ?? 'center',
+      titleTextAlign: config.titleAlign ?? 'center',
+      blocks: [
+        {
+          id: 'v1-logo',
+          type: 'logo',
+          pos,
+          size: config.logo.size ?? 'md',
+          imageUrl: config.logo.imageUrl,
+          altText: config.logo.altText ?? '',
+          frame: 'none',
+        },
+      ],
     };
   }
   if (config.style === 'official-band') {
-    const noticePos = config.officialBand?.arrangement === 'logo-left-stat-right' ? 'right' : 'left';
+    const noticePos =
+      config.officialBand?.arrangement === 'logo-left-stat-right' ? 'right' : 'left';
     const logoPos = noticePos === 'left' ? 'right' : 'left';
     const notice = config.officialBand?.statisticNotice;
     return {
       ...base,
-      titleAlign: config.titleAlign ?? 'center', titleTextAlign: config.titleAlign ?? 'center',
+      titleAlign: config.titleAlign ?? 'center',
+      titleTextAlign: config.titleAlign ?? 'center',
       vAlignLogo: config.officialBand?.logoAlign ?? 'top',
       blocks: [
         {
-          id: 'v1-notice', type: 'notice', pos: noticePos, size: notice?.width ?? 'md', format: 'box',
+          id: 'v1-notice',
+          type: 'notice',
+          pos: noticePos,
+          size: notice?.width ?? 'md',
+          format: 'box',
           title: notice?.title ?? DEFAULT_STATISTIC_NOTICE.title,
           boxBody: notice?.body ?? DEFAULT_STATISTIC_NOTICE.body,
-          lineBody: DEFAULT_NOTICE_LINE, alignBox: 'left', alignLine: 'center', fontSize: null,
+          lineBody: DEFAULT_NOTICE_LINE,
+          alignBox: 'left',
+          alignLine: 'center',
+          fontSize: null,
         },
         {
-          id: 'v1-logo', type: 'logo', pos: logoPos, size: config.logo.size ?? 'md',
-          imageUrl: config.logo.imageUrl, altText: config.logo.altText ?? '', frame: 'none',
+          id: 'v1-logo',
+          type: 'logo',
+          pos: logoPos,
+          size: config.logo.size ?? 'md',
+          imageUrl: config.logo.imageUrl,
+          altText: config.logo.altText ?? '',
+          frame: 'none',
         },
       ],
     };
@@ -411,17 +506,28 @@ export function normalizeResponseHeaderConfig(
   return migrateV1ResponseHeader(normalizeV1ResponseHeaderConfig(config));
 }
 
-export function resolveHeaderTitlePx(config: NormalizedResponseHeaderConfig, title: string): number {
+/** 제목 길이 — 여러 줄(다국어 설문의 언어별 제목 쌓기)이면 가장 긴 줄. 줄마다 따로 흐르기 때문이다. */
+function longestLineLength(title: string): number {
+  return Math.max(0, ...title.split('\n').map((line) => line.trim().length));
+}
+
+export function resolveHeaderTitlePx(
+  config: NormalizedResponseHeaderConfig,
+  title: string,
+): number {
   if (config.titlePx !== null) return config.titlePx;
   const base = HEADER_TITLE_PX[config.titleScale];
-  const len = title.length;
+  const len = longestLineLength(title);
   const shrink = len > 40 ? 0.72 : len > 26 ? 0.85 : 1; // 긴 제목은 자동 축소해 두 줄로 흐르게 한다
   return Math.round(base * shrink);
 }
 
-export function resolveMobileHeaderTitlePx(config: NormalizedResponseHeaderConfig, title: string): number {
+export function resolveMobileHeaderTitlePx(
+  config: NormalizedResponseHeaderConfig,
+  title: string,
+): number {
   if (config.titlePx !== null) return Math.min(27, Math.max(17, Math.round(config.titlePx * 0.62)));
-  const len = title.trim().length;
+  const len = longestLineLength(title);
   // 모바일 제목: 약 2줄이면 27px, 3줄 이상 길수록 단계적으로 축소 (글자수로 줄 수 근사)
   return len > 54 ? 20 : len > 40 ? 23 : 27;
 }
@@ -429,34 +535,62 @@ export function resolveMobileHeaderTitlePx(config: NormalizedResponseHeaderConfi
 /** 문구 블록의 실효 글자 크기 px — fontSize 직접 지정이 없으면 형식·크기별 자동값 */
 export function resolveNoticeFontPx(block: NormalizedHeaderNoticeBlock): number {
   if (block.fontSize !== null) return block.fontSize;
-  return block.format === 'line' ? HEADER_NOTICE_LINE_FONT_PX[block.size] : HEADER_NOTICE_BOX_FONT_PX;
+  return block.format === 'line'
+    ? HEADER_NOTICE_LINE_FONT_PX[block.size]
+    : HEADER_NOTICE_BOX_FONT_PX;
 }
 
-export function getHeaderBandBorders(style: ResponseHeaderBandStyle): { top: string; bottom: string; side: string } {
+export function getHeaderBandBorders(style: ResponseHeaderBandStyle): {
+  top: string;
+  bottom: string;
+  side: string;
+} {
   switch (style) {
-    case 'band': return { top: '2px solid #3f3f3f', bottom: '2px solid #3f3f3f', side: 'none' };
-    case 'boxed': return { top: '1.5px solid #333333', bottom: '1.5px solid #333333', side: '1.5px solid #333333' };
-    case 'rule': return { top: 'none', bottom: '2.5px solid #222222', side: 'none' };
-    case 'plain': return { top: 'none', bottom: 'none', side: 'none' };
+    case 'band':
+      return { top: '2px solid #3f3f3f', bottom: '2px solid #3f3f3f', side: 'none' };
+    case 'boxed':
+      return {
+        top: '1.5px solid #333333',
+        bottom: '1.5px solid #333333',
+        side: '1.5px solid #333333',
+      };
+    case 'rule':
+      return { top: 'none', bottom: '2.5px solid #222222', side: 'none' };
+    case 'plain':
+      return { top: 'none', bottom: 'none', side: 'none' };
   }
 }
 
 export function createHeaderBlock(type: 'mark' | 'logo' | 'notice'): NormalizedResponseHeaderBlock {
   if (type === 'notice') {
     return {
-      id: generateId(), type: 'notice', pos: 'left', size: 'md', format: 'box',
-      title: DEFAULT_STATISTIC_NOTICE.title, boxBody: DEFAULT_STATISTIC_NOTICE.body,
-      lineBody: DEFAULT_NOTICE_LINE, alignBox: 'left', alignLine: 'center', fontSize: null,
+      id: generateId(),
+      type: 'notice',
+      pos: 'left',
+      size: 'md',
+      format: 'box',
+      title: DEFAULT_STATISTIC_NOTICE.title,
+      boxBody: DEFAULT_STATISTIC_NOTICE.body,
+      lineBody: DEFAULT_NOTICE_LINE,
+      alignBox: 'left',
+      alignLine: 'center',
+      fontSize: null,
     };
   }
   return {
-    id: generateId(), type, pos: type === 'mark' ? 'left' : 'right', size: 'md',
-    imageUrl: '', altText: '', frame: 'none',
+    id: generateId(),
+    type,
+    pos: type === 'mark' ? 'left' : 'right',
+    size: 'md',
+    imageUrl: '',
+    altText: '',
+    frame: 'none',
   };
 }
 
 export function noticeFormatPatch(
-  block: NormalizedHeaderNoticeBlock, format: ResponseHeaderNoticeFormat,
+  block: NormalizedHeaderNoticeBlock,
+  format: ResponseHeaderNoticeFormat,
 ): Partial<NormalizedHeaderNoticeBlock> {
   return { format, pos: coerceNoticePos(format, block.pos) };
 }
@@ -517,7 +651,12 @@ function buildPresetBlocks(preset: ResponseHeaderPresetKey): NormalizedResponseH
   }
   if (preset === 'band') return [{ ...createHeaderBlock('mark'), pos: 'left', size: 'md' }];
   return [
-    { ...(createHeaderBlock('notice') as NormalizedHeaderNoticeBlock), pos: 'title-right', size: 'lg', boxBody: PRESET_TITLE_NOTICE_BODY },
+    {
+      ...(createHeaderBlock('notice') as NormalizedHeaderNoticeBlock),
+      pos: 'title-right',
+      size: 'lg',
+      boxBody: PRESET_TITLE_NOTICE_BODY,
+    },
     { ...createHeaderBlock('mark'), pos: 'title-right', size: 'md' },
   ];
 }
@@ -525,31 +664,72 @@ function buildPresetBlocks(preset: ResponseHeaderPresetKey): NormalizedResponseH
 // 프리셋은 블록 배치를 새로 짜므로 가로 배분도 기본으로 되돌린다 — 프리셋이
 // 정해 준 좌/중/우 칸이 남의 '펼치기' 설정에 눌리면 그 프리셋 모양이 안 나온다.
 const PRESET_PATCH: Record<ResponseHeaderPresetKey, Partial<NormalizedResponseHeaderConfig>> = {
-  gov: { mobileStyle: 'gov', layout: 'stacked', rowSpread: 'group', bandStyle: 'band', bandBg: '#f0f0f0', titleAlign: 'center', titleScale: 'md' },
-  band: { mobileStyle: 'band', layout: 'inline', rowSpread: 'group', bandStyle: 'band', bandBg: '#cfe0ad', titleAlign: 'center', titleScale: 'md' },
-  title: { mobileStyle: 'title', layout: 'stacked', rowSpread: 'group', bandStyle: 'plain', bandBg: '#ffffff', titleAlign: 'left', titleScale: 'lg' },
+  gov: {
+    mobileStyle: 'gov',
+    layout: 'stacked',
+    rowSpread: 'group',
+    bandStyle: 'band',
+    bandBg: '#f0f0f0',
+    titleAlign: 'center',
+    titleScale: 'md',
+  },
+  band: {
+    mobileStyle: 'band',
+    layout: 'inline',
+    rowSpread: 'group',
+    bandStyle: 'band',
+    bandBg: '#cfe0ad',
+    titleAlign: 'center',
+    titleScale: 'md',
+  },
+  title: {
+    mobileStyle: 'title',
+    layout: 'stacked',
+    rowSpread: 'group',
+    bandStyle: 'plain',
+    bandBg: '#ffffff',
+    titleAlign: 'left',
+    titleScale: 'lg',
+  },
 };
 
 export function applyResponseHeaderPreset(
-  preset: ResponseHeaderPresetKey, current: NormalizedResponseHeaderConfig,
+  preset: ResponseHeaderPresetKey,
+  current: NormalizedResponseHeaderConfig,
 ): NormalizedResponseHeaderConfig {
   // 기존 블록의 업로드 이미지·문구 내용을 같은 타입 슬롯에 순서대로 승계 (스펙 §5)
   const marks = current.blocks.filter((b): b is NormalizedHeaderImageBlock => b.type === 'mark');
   const logos = current.blocks.filter((b): b is NormalizedHeaderImageBlock => b.type === 'logo');
-  const notices = current.blocks.filter((b): b is NormalizedHeaderNoticeBlock => b.type === 'notice');
-  let mi = 0; let li = 0; let ni = 0;
+  const notices = current.blocks.filter(
+    (b): b is NormalizedHeaderNoticeBlock => b.type === 'notice',
+  );
+  let mi = 0;
+  let li = 0;
+  let ni = 0;
   const blocks = buildPresetBlocks(preset).map((block) => {
     if (block.type === 'notice') {
       const src = notices[ni++];
       return src
-        ? { ...block, title: src.title, boxBody: src.boxBody, lineBody: src.lineBody, alignBox: src.alignBox, alignLine: src.alignLine, fontSize: src.fontSize }
+        ? {
+            ...block,
+            title: src.title,
+            boxBody: src.boxBody,
+            lineBody: src.lineBody,
+            alignBox: src.alignBox,
+            alignLine: src.alignLine,
+            fontSize: src.fontSize,
+          }
         : block;
     }
     const src = block.type === 'mark' ? marks[mi++] : logos[li++];
     return src ? { ...block, imageUrl: src.imageUrl, altText: src.altText } : block;
   });
   return {
-    ...current, ...PRESET_PATCH[preset], blocks,
-    vAlignLogo: 'center', vAlignNotice: 'center', titlePx: null,
+    ...current,
+    ...PRESET_PATCH[preset],
+    blocks,
+    vAlignLogo: 'center',
+    vAlignNotice: 'center',
+    titlePx: null,
   };
 }

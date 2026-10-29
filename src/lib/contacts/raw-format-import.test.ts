@@ -441,3 +441,77 @@ describe('내보내기 → 임포트 왕복', () => {
     expect(Object.keys(result.records[0]?.answers ?? {})).toEqual(['q-text']);
   });
 });
+
+describe('buildRawFormatRecords — 공유 변수명 (CONTEXT.md 「공유 변수명」)', () => {
+  it('같은 변수명이 여러 문항(언어판)에 있으면 어느 문항인지 모르므로 되읽지 않고 보고한다', () => {
+    const shared = (id: string): Question =>
+      ({
+        id,
+        type: 'text',
+        title: id,
+        required: false,
+        order: 1,
+        questionCode: 'Q1',
+        isCustomSpssVarName: true,
+      }) as Question;
+    const langQuestions = [shared('ko-q1'), shared('zh-q1')];
+    const result = buildRawFormatRecords({
+      headerRows: headerRows(['Q1']),
+      rows: [['7', '1', '값']],
+      matchColumnIndex: 0,
+      columns: generateSPSSColumns(langQuestions),
+      questions: langQuestions,
+    });
+    expect(result.records).toEqual([]);
+    expect(result.unsupportedVarNames).toEqual(['Q1']);
+  });
+
+  it('공유 이름의 변동 확인 열은 규칙상 되읽지 않는 열로 보고한다', () => {
+    const shared = (id: string): Question =>
+      ({
+        id,
+        type: 'radio',
+        title: id,
+        required: false,
+        order: 1,
+        questionCode: 'Q1',
+        isCustomSpssVarName: true,
+        options: [{ id: `${id}-o`, label: '예', value: '1' }],
+      }) as Question;
+    const langQuestions = [shared('ko-q1'), shared('zh-q1')];
+    const result = buildRawFormatRecords({
+      headerRows: headerRows(['Q1_CHG']),
+      rows: [['7', '1', '1']],
+      matchColumnIndex: 0,
+      columns: generateSPSSColumns(langQuestions, {
+        changeConfirmQuestionIds: new Set(['ko-q1', 'zh-q1']),
+      }),
+      questions: langQuestions,
+    });
+    expect(result.skippedByRuleVarNames).toEqual(['Q1_CHG']);
+    expect(result.unsupportedVarNames).toEqual([]);
+  });
+
+  it('대소문자만 다른 변수명도 같은 이름으로 보고 모호하다고 본다', () => {
+    const q = (id: string, code: string): Question =>
+      ({
+        id,
+        type: 'text',
+        title: id,
+        required: false,
+        order: 1,
+        questionCode: code,
+        isCustomSpssVarName: true,
+      }) as Question;
+    const langQuestions = [q('ko-q1', 'Q1'), q('zh-q1', 'q1')];
+    const result = buildRawFormatRecords({
+      headerRows: headerRows(['Q1']),
+      rows: [['7', '1', '값']],
+      matchColumnIndex: 0,
+      columns: generateSPSSColumns(langQuestions),
+      questions: langQuestions,
+    });
+    expect(result.records).toEqual([]);
+    expect(result.unsupportedVarNames).toEqual(['Q1']);
+  });
+});

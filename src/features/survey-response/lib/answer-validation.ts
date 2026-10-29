@@ -14,6 +14,7 @@ import {
   type ChoiceGroupWithCells,
 } from '@/utils/choice-group-helpers';
 import { parseRankingAnswers } from '@/utils/ranking-shared';
+import { DEFAULT_SURVEY_LOCALE, type SurveyLocale } from '@/types/survey-locale';
 import { resolveRequiredMessage } from '@/utils/required-message';
 import { collectChoiceOptCells } from '@/utils/choice-source';
 import { isChoiceGroupTableQuestion, readTableChoiceGroups } from '@/lib/survey/choice-selection';
@@ -317,11 +318,12 @@ export function collectUnfilledChoiceGroupIssues(
   question: Question,
   response: unknown,
   visibility: ChoiceGroupVisibility = {},
+  locale: SurveyLocale = DEFAULT_SURVEY_LOCALE,
 ): UnfilledChoiceGroupIssue[] {
   if (!isGroupedChoiceQuestion(question)) return [];
   const map = groupSelectionMap(question, response, visibility);
   if (isTableExclusiveSelected(question, map)) return [];
-  const fallback = resolveRequiredMessage(question);
+  const fallback = resolveRequiredMessage(question, locale);
   const byMessage = new Map<string, string[]>();
   for (const group of checkTargetChoiceGroups(question, visibility)) {
     if (isChoiceGroupFilled(group, map)) continue;
@@ -337,6 +339,7 @@ export function resolveGroupedRequiredMessage(
   question: Question,
   response: unknown,
   visibility: ChoiceGroupVisibility = {},
+  locale: SurveyLocale = DEFAULT_SURVEY_LOCALE,
 ): string {
   if (isGroupedChoiceQuestion(question)) {
     const map = groupSelectionMap(question, response, visibility);
@@ -346,5 +349,5 @@ export function resolveGroupedRequiredMessage(
     const custom = unmet?.requiredMessage?.trim();
     if (custom) return custom;
   }
-  return resolveRequiredMessage(question);
+  return resolveRequiredMessage(question, locale);
 }

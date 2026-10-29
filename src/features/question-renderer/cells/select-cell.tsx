@@ -16,7 +16,9 @@ import {
   isPriorChoice,
   matchesPriorChoice,
 } from '@/features/question-renderer/utils/prior-answer-highlight';
+import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
+import { systemText } from '@/utils/system-strings';
 
 import { CellContentLayout } from './cell-content-layout';
 import { useOptionTextMovedBelowTable } from './option-text-placement-context';
@@ -38,6 +40,7 @@ export const SelectCell = React.memo(function SelectCell({
   const quotes = useAnswerQuotes();
   const priorHighlight = usePriorHighlight();
   const textInputBelowTable = useOptionTextMovedBelowTable(cell);
+  const locale = useInlineSurveyLocale();
   const handleSelectChange = useCallback(
     (optionId: string) => {
       onUpdateValue(optionId);
@@ -83,7 +86,7 @@ export const SelectCell = React.memo(function SelectCell({
                 : ''
             }`}
           >
-            <option value="">선택하세요</option>
+            <option value="">{systemText('input.selectShort', locale)}</option>
             {cell.selectOptions.map((option) => (
               <option
                 key={option.id}

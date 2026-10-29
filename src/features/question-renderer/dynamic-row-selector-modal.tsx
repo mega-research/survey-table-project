@@ -16,6 +16,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { TableRow } from '@/types/survey';
+import { systemText } from '@/utils/system-strings';
+
+import { useInlineSurveyLocale } from './survey-locale-context';
 
 interface DynamicRowSelectorModalProps {
   open: boolean;
@@ -34,6 +37,7 @@ export function DynamicRowSelectorModal({
   onConfirm,
   label,
 }: DynamicRowSelectorModalProps) {
+  const locale = useInlineSurveyLocale();
   const [localSelected, setLocalSelected] = useState<Set<string>>(new Set(selectedRowIds));
 
   // 모달 열릴 때 외부 상태 동기화
@@ -81,13 +85,13 @@ export function DynamicRowSelectorModal({
         <DialogHeader className="p-6 pb-3">
           <DialogTitle className="flex items-center gap-2">
             <ListChecks className="h-5 w-5" />
-            {label || '항목 선택'}
+            {label || systemText('table.selectItems', locale)}
           </DialogTitle>
           <DialogDescription asChild>
             <div className="text-sm text-muted-foreground">
-              테이블에 표시할 항목을 선택하세요.
+              {systemText('table.selectItemsHint', locale)}
               <Badge variant="secondary" className="ml-2">
-                {localSelected.size}개 선택
+                {systemText('table.selectedCount', locale, { count: localSelected.size })}
               </Badge>
             </div>
           </DialogDescription>
@@ -100,7 +104,7 @@ export function DynamicRowSelectorModal({
               checked={allSelected}
               onCheckedChange={toggleAll}
             />
-            <span className="text-sm">전체 선택</span>
+            <span className="text-sm">{systemText('table.selectAll', locale)}</span>
             {allSelected && <Check className="ml-auto h-4 w-4 text-primary" />}
           </label>
 
@@ -124,10 +128,10 @@ export function DynamicRowSelectorModal({
 
         <DialogFooter className="border-t bg-background px-6 py-4">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            취소
+            {systemText('common.cancel', locale)}
           </Button>
           <Button onClick={handleConfirm}>
-            확인 ({localSelected.size}개)
+            {systemText('table.confirmCount', locale, { count: localSelected.size })}
           </Button>
         </DialogFooter>
       </DialogContent>

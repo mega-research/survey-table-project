@@ -28,10 +28,11 @@ import {
   resolveChoiceTableVisibleCellIds,
 } from '@/features/survey-response/lib/numeric-validation';
 import { usePriorAnswers } from '@/features/question-renderer/prior-answers-context';
+import { RootGroupNameBadge } from '@/features/question-renderer/root-group-name-badge';
 import { resolveQuestionTitleHtml } from '@/lib/survey/question-title-html';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { isEmptyHtml } from '@/lib/utils';
-import { Question } from '@/types/survey';
+import type { GroupNameDesign, Question } from '@/types/survey';
 import type { BranchEvalCtx } from '@/utils/branch-eval';
 import { isChoiceTableSource } from '@/utils/choice-source';
 import {
@@ -39,10 +40,17 @@ import {
   getDynamicRowSelections,
   updateDynamicRowSelections,
 } from '@/utils/dynamic-row-selection-sidecar';
-import { DEFAULT_REQUIRED_CELL_MESSAGE } from '@/utils/required-message';
+import { requiredCellMessage } from '@/utils/required-message';
+import { systemText } from '@/utils/system-strings';
+import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
 import { VALIDATION_NOTICE_ATTRIBUTE } from '@/features/question-renderer/scroll-to-issue';
 
 type ResponsesMap = Record<string, unknown>;
+
+/** 디자인 설정을 하나라도 지정했는가 — 기본값으로 되돌린 빈 객체는 지정 없음(종전 회색 소제목) */
+function hasNameDesign(design: GroupNameDesign | undefined): design is GroupNameDesign {
+  return !!design && (design.fullWidth === true || !!design.bgColor || !!design.textColor);
+}
 
 export function GroupStepItem({
   item,
@@ -147,6 +155,7 @@ export function GroupStepItem({
   // 모바일 축 단위 카드는 미충족 카드마다 자기 아래에 같은 상자를 그린다 — 여기서 또 내면
   // 마지막 카드 아래에 둘이 겹친다. 문구는 여전히 그 상자 몫이라 아래 <p> 는 생략한다.
   const isMobile = useMobileView();
+  const locale = useInlineSurveyLocale();
   // 보기 소스 표의 축 단위 카드만 해당한다 — 테이블 유형의 축 단위 카드(열 = 축)는 카드별 상자가 없다
   const axisCardsOnMobile =
     isMobile &&
@@ -154,7 +163,7 @@ export function GroupStepItem({
     (q.type === 'radio' || q.type === 'checkbox');
   const { visibleIssues, requiredMessageInBanner } = useMemo(() => {
     const groupIssues: NumericIssue[] = showRequiredMessage
-      ? collectUnfilledChoiceGroupIssues(q, responses[q.id], choiceGroupVisibility).map((issue) => ({
+      ? collectUnfilledChoiceGroupIssues(q, responses[q.id], choiceGroupVisibility, locale).map((issue) => ({
           kind: 'required-cells' as const,
           message: issue.message,
           cellIds: issue.cellIds,
@@ -168,22 +177,31 @@ export function GroupStepItem({
     const next = (issues ?? []).map((issue) => {
       const isDefaultRequiredIssue =
         (issue.kind === 'required-cells' || issue.kind === 'required-detail') &&
-        issue.message === DEFAULT_REQUIRED_CELL_MESSAGE;
+        issue.message === requiredCellMessage(locale);
       if (!isDefaultRequiredIssue) return issue;
       merged = true;
-      return { ...issue, message: resolveGroupedRequiredMessage(q, responses[q.id], choiceGroupVisibility) };
+      return {
+        ...issue,
+        message: resolveGroupedRequiredMessage(q, responses[q.id], choiceGroupVisibility, locale),
+      };
     });
     return { visibleIssues: [...groupIssues, ...next], requiredMessageInBanner: merged };
-  }, [issues, showRequiredMessage, q, responses, axisCardsOnMobile, choiceGroupVisibility]);
+  }, [issues, showRequiredMessage, q, responses, axisCardsOnMobile, choiceGroupVisibility, locale]);
 
   return (
     // 페이지 내 문항 간 여백은 PageStepView 래퍼가 소유한다 (first/last 판정이 래퍼 형제 기준이어야 해서)
     <div>
-      {showSubgroupHeading && (
-        <h3 className="mb-3 text-sm font-semibold tracking-[0.12em] text-gray-500 uppercase md:text-xs">
-          {subgroupNameText}
-        </h3>
-      )}
+      {showSubgroupHeading &&
+        (hasNameDesign(item.subgroupNameDesign) ? (
+          // 빌더 그룹 편집의 「디자인 설정」을 하위 그룹에도 — 루트 그룹 배지와 같은 얼굴
+          <div className="mb-5">
+            <RootGroupNameBadge name={subgroupNameText ?? ''} design={item.subgroupNameDesign} />
+          </div>
+        ) : (
+          <h3 className="mb-3 text-sm font-semibold tracking-[0.12em] text-gray-500 uppercase md:text-xs">
+            {subgroupNameText}
+          </h3>
+        ))}
       <div
         data-question-id={q.id}
         className={`space-y-2 ${
@@ -207,7 +225,10 @@ export function GroupStepItem({
                 titleText
               )}
               {q.required && (
-                <span className="ml-1 text-red-500" aria-label="필수 질문">
+                <span
+                  className="ml-1 text-red-500"
+                  aria-label={systemText('a11y.requiredQuestion', locale)}
+                >
                   *
                 </span>
               )}
@@ -277,7 +298,7 @@ export function GroupStepItem({
             {...{ [VALIDATION_NOTICE_ATTRIBUTE]: q.id }}
             className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
           >
-            {resolveGroupedRequiredMessage(q, responses[q.id], choiceGroupVisibility)}
+            {resolveGroupedRequiredMessage(q, responses[q.id], choiceGroupVisibility, locale)}
           </p>
         )}
       </div>

@@ -8,9 +8,11 @@ import {
   useAnswerQuotes,
   useContactAttrs,
 } from '@/features/question-renderer/contact-attrs-context';
+import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import type { RankingAnswer } from '@/types/survey';
 import { parseRankingAnswers } from '@/utils/ranking-shared';
+import { systemText } from '@/utils/system-strings';
 
 import { CellContentLayout } from './cell-content-layout';
 import { RankingDropdownStack } from './ranking-dropdown-stack';
@@ -28,6 +30,7 @@ export const RankingCell = React.memo(function RankingCell({
 }: InteractiveCellProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
+  const locale = useInlineSurveyLocale();
   const config = cell.rankingConfig;
   const options = cell.rankingOptions ?? [];
   const requestedPositions = Math.max(1, config?.positions ?? 3);
@@ -78,7 +81,7 @@ export const RankingCell = React.memo(function RankingCell({
         />
         {positions < requestedPositions && (
           <p className="text-xs text-gray-500">
-            선택지 {options.length}개 → 최대 {positions}순위
+            {systemText('ranking.limitHintShort', locale, { count: options.length, positions })}
           </p>
         )}
       </div>

@@ -14,6 +14,8 @@
  * 국제번호 라이브러리(libphonenumber 류)는 쓰지 않는다 — 국내 조사에는 과하고 번들만 무겁다.
  */
 import type { InputFormat } from '@/types/input-type';
+import { DEFAULT_SURVEY_LOCALE, type SurveyLocale } from '@/types/survey-locale';
+import { type SystemStringKey, systemText } from '@/utils/system-strings';
 
 export type FormatFailure =
   | 'wrong_length'
@@ -202,13 +204,37 @@ export function parseInputFormat(format: InputFormat, raw: string): ParseResult 
   }
 }
 
+/** 형식 이름 — 빌더 선택지(한국어)와 응답 화면 문구가 같은 사전 글자를 쓴다. */
+const FORMAT_LABEL_KEY: Record<InputFormat, SystemStringKey> = {
+  mobile: 'format.label.mobile',
+  phone: 'format.label.phone',
+  biz_number: 'format.label.biz_number',
+  corp_number: 'format.label.corp_number',
+  email: 'format.label.email',
+};
+
+/** 「숫자로 입력해 주세요」 — 한국어 조사(은/는)가 형식 이름마다 달라 형식마다 문장을 둔다. */
+const NOT_A_NUMBER_KEY: Record<InputFormat, SystemStringKey> = {
+  mobile: 'format.notANumber.mobile',
+  phone: 'format.notANumber.phone',
+  biz_number: 'format.notANumber.biz_number',
+  corp_number: 'format.notANumber.corp_number',
+  email: 'format.notANumber.email',
+};
+
+/** 자릿수가 정해진 형식 — 「N자리입니다」(조사 때문에 형식마다 문장). */
+const WRONG_LENGTH_FIXED_KEY: Record<'biz_number' | 'corp_number', SystemStringKey> = {
+  biz_number: 'format.wrongLengthFixed.biz_number',
+  corp_number: 'format.wrongLengthFixed.corp_number',
+};
+
 /** 형식의 화면 이름. 빌더 선택지·응답자 안내 문구가 이 한 곳을 참조한다. */
 export const INPUT_FORMAT_LABEL: Record<InputFormat, string> = {
-  mobile: '휴대전화',
-  phone: '전화번호',
-  biz_number: '사업자번호',
-  corp_number: '법인번호',
-  email: '이메일',
+  mobile: systemText(FORMAT_LABEL_KEY.mobile),
+  phone: systemText(FORMAT_LABEL_KEY.phone),
+  biz_number: systemText(FORMAT_LABEL_KEY.biz_number),
+  corp_number: systemText(FORMAT_LABEL_KEY.corp_number),
+  email: systemText(FORMAT_LABEL_KEY.email),
 };
 
 /**
@@ -229,45 +255,44 @@ export function formatSampleValue(format: InputFormat): string {
 }
 
 /** 자릿수를 말할 수 있는 형식만 — 전화번호는 지역번호·국번에 따라 갈려 자릿수 하나로 못 말한다. */
-const FIXED_LENGTH: Partial<Record<InputFormat, number>> = {
+const FIXED_LENGTH: Record<'biz_number' | 'corp_number', number> = {
   biz_number: 10,
   corp_number: 13,
 };
-
-/** '은/는' 결정 — 앞 글자에 받침이 있으면 '은'. (이메일은 'ㄹ' 받침이라 '이메일은') */
-function topicParticle(label: string): string {
-  const last = label.charCodeAt(label.length - 1);
-  const isHangulSyllable = last >= 0xac00 && last <= 0xd7a3;
-  if (!isHangulSyllable) return '는';
-  return (last - 0xac00) % 28 === 0 ? '는' : '은';
-}
 
 /**
  * 형식별·실패 사유별 기본 안내 문구.
  *
  * 문항별 커스터마이즈를 두지 않는다 — 실패 사유가 다섯인데 문구가 하나면 안내가
  * 뭉뚱그려지고, 운영자에게 사유마다 문구를 받게 하면 설정이 다섯 배가 된다.
+ * 문구는 현재 언어(기본 한국어)를 따른다 — 시스템 글자 사전(`utils/system-strings`).
  */
-export function formatFailureMessage(format: InputFormat, reason: FormatFailure): string {
-  const label = INPUT_FORMAT_LABEL[format];
+export function formatFailureMessage(
+  format: InputFormat,
+  reason: FormatFailure,
+  locale: SurveyLocale = DEFAULT_SURVEY_LOCALE,
+): string {
+  const values = { label: systemText(FORMAT_LABEL_KEY[format], locale) };
   switch (reason) {
     case 'not_a_number':
-      return `${label}${topicParticle(label)} 숫자로 입력해 주세요`;
+      return systemText(NOT_A_NUMBER_KEY[format], locale);
     case 'wrong_length': {
-      const length = FIXED_LENGTH[format];
-      if (length !== undefined) return `${label}${topicParticle(label)} ${length}자리입니다`;
-      return `${label} 자릿수가 맞지 않습니다`;
+      if (format === 'biz_number' || format === 'corp_number') {
+        return systemText(WRONG_LENGTH_FIXED_KEY[format], locale, { length: FIXED_LENGTH[format] });
+      }
+      return systemText('format.wrongLength', locale, values);
     }
     case 'unknown_prefix':
       return format === 'mobile'
-        ? '휴대전화 번호가 아닙니다'
-        : '지역번호 또는 휴대전화 식별번호로 시작해야 합니다';
+        ? systemText('format.unknownPrefixMobile', locale)
+        : systemText('format.unknownPrefix', locale);
     case 'checksum_mismatch':
-      return `${label} 확인번호가 맞지 않습니다. 다시 확인해 주세요`;
+      return systemText('format.checksum', locale, values);
     case 'malformed':
-      return `${label} 형식이 아닙니다`;
+      return systemText('format.malformed', locale, values);
     case 'non_ascii':
-      return `${label}은 영문·숫자로만 입력해 주세요`;
+      // 이메일만 나는 사유다(`parseEmail`)
+      return systemText('format.nonAscii', locale);
   }
 }
 

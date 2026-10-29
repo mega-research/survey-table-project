@@ -1,13 +1,6 @@
 'use client';
 
-import {
-  forwardRef,
-  useEffect,
-  useEffectEvent,
-  useImperativeHandle,
-  useMemo,
-  useState,
-} from 'react';
+import { type Ref, useEffect, useEffectEvent, useImperativeHandle, useMemo, useState } from 'react';
 
 import { EditorContent, useEditor } from '@tiptap/react';
 import { toast } from 'sonner';
@@ -76,227 +69,226 @@ async function uploadEditorImage(fd: FormData): Promise<string> {
   return json.url;
 }
 
-export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
-  function RichTextEditor(
-    {
-      initialHtml,
-      onChange,
-      kind = 'survey',
-      variableCatalog,
-      imageUploadMode,
-      className,
-      editorClassName,
-      minHeight = 320,
-      enableImageLinkArea,
-      placeholder,
+/**
+ * `forwardRef` 로 감싸지 않고 `ref` 를 prop 으로 받는다(React 19). React 19.2.3 은 forwardRef·memo
+ * 컴포넌트의 `useEffectEvent` 를 갱신하지 않아, 아래 `syncContentFromProp` 이 첫 렌더 값(편집기
+ * 없음)을 계속 읽고 바깥에서 바꾼 `initialHtml` 을 반영하지 못했다(AGENTS.md 주의사항 19).
+ */
+export function RichTextEditor({
+  ref,
+  initialHtml,
+  onChange,
+  kind = 'survey',
+  variableCatalog,
+  imageUploadMode,
+  className,
+  editorClassName,
+  minHeight = 320,
+  enableImageLinkArea,
+  placeholder,
+}: RichTextEditorProps & { ref?: Ref<RichTextEditorHandle> }) {
+  // 기본값 ternary 를 파라미터에서 본문으로 내린다 — React Compiler 는 파라미터 기본값의
+  // ConditionalExpression 을 안전하게 재배치하지 못해 컴포넌트 전체를 건너뛴다.
+  const resolvedImageUploadMode = imageUploadMode ?? (kind === 'mail' ? 'simple' : 'modal');
+  const extensions = useMemo(() => createUnifiedExtensions({ kind }), [kind]);
+  const imageTracker = useEditorImageTracker(initialHtml);
+  const fileTracker = useEditorFileAttachmentTracker(initialHtml);
+  const [showModal, setShowModal] = useState(false);
+  const [showFileModal, setShowFileModal] = useState(false);
+  const [replacingFile, setReplacingFile] = useState(false);
+
+  const editor = useEditor({
+    extensions,
+    content: initialHtml,
+    immediatelyRender: false,
+    editorProps: {
+      attributes: {
+        class: `${kind === 'mail' ? MAIL_BASE : SURVEY_BASE} ${editorClassName ?? ''}`,
+        ...(placeholder ? { 'data-placeholder': placeholder } : {}),
+      },
     },
+    onUpdate: ({ editor }) => {
+      const currentHtml = preserveLeadingIndent(stripTrailingEmptyParagraph(editor.getHTML()));
+      imageTracker.reconcileAfterUpdate(currentHtml);
+      fileTracker.reconcileAfterUpdate(currentHtml);
+      onChange(editor.isEmpty ? '' : currentHtml);
+    },
+  });
+
+  // editor·tracker 는 effect event 로 최신 참조를 읽는다. 트리거는 initialHtml 하나로 둔다 —
+  // editor 재생성이나 tracker identity 변화로 재발화하면 setContent 가 돌아 커서가 튄다.
+  const syncContentFromProp = useEffectEvent(() => {
+    if (!editor) return;
+    // onUpdate 가 내보내는 값과 동일한 정규화를 거쳐야 prop 왕복(setFormData → initialHtml)에서
+    // 불일치로 인한 setContent 리셋(커서 점프)이 생기지 않는다.
+    const currentNormalized = preserveLeadingIndent(stripTrailingEmptyParagraph(editor.getHTML()));
+    if (initialHtml !== currentNormalized) {
+      editor.commands.setContent(initialHtml, { emitUpdate: false });
+      imageTracker.resetPrevious(initialHtml);
+      fileTracker.resetPrevious(initialHtml);
+    }
+  });
+  useEffect(() => {
+    syncContentFromProp();
+  }, [initialHtml]);
+
+  useImperativeHandle(
     ref,
-  ) {
-    // 기본값 ternary 를 파라미터에서 본문으로 내린다 — React Compiler 는 파라미터 기본값의
-    // ConditionalExpression 을 안전하게 재배치하지 못해 컴포넌트 전체를 건너뛴다.
-    const resolvedImageUploadMode = imageUploadMode ?? (kind === 'mail' ? 'simple' : 'modal');
-    const extensions = useMemo(() => createUnifiedExtensions({ kind }), [kind]);
-    const imageTracker = useEditorImageTracker(initialHtml);
-    const fileTracker = useEditorFileAttachmentTracker(initialHtml);
-    const [showModal, setShowModal] = useState(false);
-    const [showFileModal, setShowFileModal] = useState(false);
-    const [replacingFile, setReplacingFile] = useState(false);
-
-    const editor = useEditor({
-      extensions,
-      content: initialHtml,
-      immediatelyRender: false,
-      editorProps: {
-        attributes: {
-          class: `${kind === 'mail' ? MAIL_BASE : SURVEY_BASE} ${editorClassName ?? ''}`,
-          ...(placeholder ? { 'data-placeholder': placeholder } : {}),
-        },
+    () => ({
+      getUnsavedImages: () =>
+        editor && !editor.isDestroyed ? imageTracker.getOrphans(editor.getHTML()) : [],
+      cleanupOrphanImages: async () => {
+        // editor 가 destroy 된 후 getHTML() 은 빈 문자열을 반환할 수 있어,
+        // 잘못된 orphan 검출로 살아있는 R2 객체가 삭제되는 사고를 막아야 한다.
+        if (!editor || editor.isDestroyed) return;
+        await imageTracker.cleanupOrphans(editor.getHTML());
       },
-      onUpdate: ({ editor }) => {
-        const currentHtml = preserveLeadingIndent(stripTrailingEmptyParagraph(editor.getHTML()));
-        imageTracker.reconcileAfterUpdate(currentHtml);
-        fileTracker.reconcileAfterUpdate(currentHtml);
-        onChange(editor.isEmpty ? '' : currentHtml);
+      insertImage: (url: string) => {
+        if (!editor || editor.isDestroyed) return;
+        imageTracker.trackUpload(url);
+        editor.chain().focus().setImage({ src: url }).run();
       },
-    });
+      getEditor: () => editor,
+      getUnsavedFileAttachments: () =>
+        editor && !editor.isDestroyed ? fileTracker.getOrphans(editor.getHTML()) : [],
+      cleanupOrphanFileAttachments: async () => {
+        if (!editor || editor.isDestroyed) return;
+        await fileTracker.cleanupOrphans(editor.getHTML());
+      },
+    }),
+    [editor, imageTracker, fileTracker],
+  );
 
-    // editor·tracker 는 effect event 로 최신 참조를 읽는다. 트리거는 initialHtml 하나로 둔다 —
-    // editor 재생성이나 tracker identity 변화로 재발화하면 setContent 가 돌아 커서가 튄다.
-    const syncContentFromProp = useEffectEvent(() => {
-      if (!editor) return;
-      // onUpdate 가 내보내는 값과 동일한 정규화를 거쳐야 prop 왕복(setFormData → initialHtml)에서
-      // 불일치로 인한 setContent 리셋(커서 점프)이 생기지 않는다.
-      const currentNormalized = preserveLeadingIndent(
-        stripTrailingEmptyParagraph(editor.getHTML()),
-      );
-      if (initialHtml !== currentNormalized) {
-        editor.commands.setContent(initialHtml, { emitUpdate: false });
-        imageTracker.resetPrevious(initialHtml);
-        fileTracker.resetPrevious(initialHtml);
-      }
-    });
-    useEffect(() => {
-      syncContentFromProp();
-    }, [initialHtml]);
+  if (!editor) return null;
 
-    useImperativeHandle(
-      ref,
-      () => ({
-        getUnsavedImages: () =>
-          editor && !editor.isDestroyed ? imageTracker.getOrphans(editor.getHTML()) : [],
-        cleanupOrphanImages: async () => {
-          // editor 가 destroy 된 후 getHTML() 은 빈 문자열을 반환할 수 있어,
-          // 잘못된 orphan 검출로 살아있는 R2 객체가 삭제되는 사고를 막아야 한다.
-          if (!editor || editor.isDestroyed) return;
-          await imageTracker.cleanupOrphans(editor.getHTML());
-        },
-        insertImage: (url: string) => {
-          if (!editor || editor.isDestroyed) return;
-          imageTracker.trackUpload(url);
-          editor.chain().focus().setImage({ src: url }).run();
-        },
-        getEditor: () => editor,
-        getUnsavedFileAttachments: () =>
-          editor && !editor.isDestroyed ? fileTracker.getOrphans(editor.getHTML()) : [],
-        cleanupOrphanFileAttachments: async () => {
-          if (!editor || editor.isDestroyed) return;
-          await fileTracker.cleanupOrphans(editor.getHTML());
-        },
-      }),
-      [editor, imageTracker, fileTracker],
-    );
-
-    if (!editor) return null;
-
-    const onPickImage = () => {
-      if (resolvedImageUploadMode === 'modal') {
-        setShowModal(true);
-        return;
-      }
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = 'image/jpeg,image/png,image/gif,image/webp';
-      input.onchange = async () => {
-        const file = input.files?.[0];
-        if (!file) return;
-        const fd = new FormData();
-        fd.append('file', file);
-        fd.append('kind', kind);
-        try {
-          const url = await uploadEditorImage(fd);
-          // 업로드 도중 호스트가 언마운트되어 editor 가 destroy 됐을 수 있다
-          if (editor.isDestroyed) return;
-          imageTracker.trackUpload(url);
-          editor.chain().focus().setImage({ src: url }).run();
-        } catch (err) {
-          if (!editor.isDestroyed) {
-            toast.error(err instanceof Error ? err.message : '이미지 업로드 실패');
-          }
+  const onPickImage = () => {
+    if (resolvedImageUploadMode === 'modal') {
+      setShowModal(true);
+      return;
+    }
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/jpeg,image/png,image/gif,image/webp';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('kind', kind);
+      try {
+        const url = await uploadEditorImage(fd);
+        // 업로드 도중 호스트가 언마운트되어 editor 가 destroy 됐을 수 있다
+        if (editor.isDestroyed) return;
+        imageTracker.trackUpload(url);
+        editor.chain().focus().setImage({ src: url }).run();
+      } catch (err) {
+        if (!editor.isDestroyed) {
+          toast.error(err instanceof Error ? err.message : '이미지 업로드 실패');
         }
-      };
-      input.click();
+      }
     };
+    input.click();
+  };
 
-    const onPickLink = () => {
-      const url = window.prompt('링크 URL');
-      if (url) editor.chain().focus().setLink({ href: url }).run();
-    };
+  const onPickLink = () => {
+    const url = window.prompt('링크 URL');
+    if (url) editor.chain().focus().setLink({ href: url }).run();
+  };
 
-    const onPickFile = () => setShowFileModal(true);
-    const onReplaceFile = () => {
-      if (!editor || !editor.isActive('fileAttachment')) return;
-      setReplacingFile(true);
-      setShowFileModal(true);
-    };
+  const onPickFile = () => setShowFileModal(true);
+  const onReplaceFile = () => {
+    if (!editor || !editor.isActive('fileAttachment')) return;
+    setReplacingFile(true);
+    setShowFileModal(true);
+  };
 
-    const handleFileUploaded = (
-      result: { key: string; url: string; filename: string; size: number; mime: string },
-      label: string,
-    ) => {
-      if (!editor || editor.isDestroyed) return;
+  const handleFileUploaded = (
+    result: { key: string; url: string; filename: string; size: number; mime: string },
+    label: string,
+  ) => {
+    if (!editor || editor.isDestroyed) return;
 
-      if (replacingFile && editor.isActive('fileAttachment')) {
-        const prev = editor.getAttributes('fileAttachment') as { key?: string | null };
-        const prevKey = prev?.key ?? null;
-        fileTracker.trackUpload(result.key);
-        editor
-          .chain()
-          .focus()
-          .updateAttributes('fileAttachment', {
+    if (replacingFile && editor.isActive('fileAttachment')) {
+      const prev = editor.getAttributes('fileAttachment') as { key?: string | null };
+      const prevKey = prev?.key ?? null;
+      fileTracker.trackUpload(result.key);
+      editor
+        .chain()
+        .focus()
+        .updateAttributes('fileAttachment', {
+          key: result.key,
+          url: result.url,
+          filename: result.filename,
+          label: label || result.filename,
+          size: result.size,
+          mime: result.mime,
+        })
+        .run();
+      // 트래커 reconcile 가 onUpdate 안에서 prevKey 사라짐을 detect 해 자동 DELETE.
+      // 기존 명시 DELETE 는 안전망으로 유지 prevKey 가 추적 안 된 케이스 대비.
+      // 멱등적이므로 중복 DELETE 가 발생해도 두 번째는 404 또는 no-op.
+      void deleteTmpNoticeAttachmentKey(prevKey);
+    } else {
+      fileTracker.trackUpload(result.key);
+      editor
+        .chain()
+        .focus()
+        .insertContent({
+          type: 'fileAttachment',
+          attrs: {
             key: result.key,
             url: result.url,
             filename: result.filename,
             label: label || result.filename,
             size: result.size,
             mime: result.mime,
-          })
-          .run();
-        // 트래커 reconcile 가 onUpdate 안에서 prevKey 사라짐을 detect 해 자동 DELETE.
-        // 기존 명시 DELETE 는 안전망으로 유지 prevKey 가 추적 안 된 케이스 대비.
-        // 멱등적이므로 중복 DELETE 가 발생해도 두 번째는 404 또는 no-op.
-        void deleteTmpNoticeAttachmentKey(prevKey);
-      } else {
-        fileTracker.trackUpload(result.key);
-        editor
-          .chain()
-          .focus()
-          .insertContent({
-            type: 'fileAttachment',
-            attrs: {
-              key: result.key,
-              url: result.url,
-              filename: result.filename,
-              label: label || result.filename,
-              size: result.size,
-              mime: result.mime,
-            },
-          })
-          .run();
-      }
-      setReplacingFile(false);
-    };
+          },
+        })
+        .run();
+    }
+    setReplacingFile(false);
+  };
 
-    return (
+  return (
+    <div
+      className={`flex flex-col overflow-hidden rounded-lg border border-gray-200 transition-colors focus-within:border-blue-500 ${className ?? ''}`}
+    >
+      <Toolbar
+        editor={editor}
+        {...(variableCatalog !== undefined ? { variableCatalog } : {})}
+        onPickImage={onPickImage}
+        onPickLink={onPickLink}
+        {...(kind === 'survey' && onPickFile !== undefined ? { onPickFile } : {})}
+        {...(kind === 'survey' && onReplaceFile !== undefined ? { onReplaceFile } : {})}
+        enableImageLinkArea={enableImageLinkArea ?? false}
+      />
       <div
-        className={`flex flex-col overflow-hidden rounded-lg border border-gray-200 transition-colors focus-within:border-blue-500 ${className ?? ''}`}
+        className="flex max-h-[calc(100vh-260px)] flex-col overflow-y-auto"
+        style={{ minHeight: `${minHeight}px` }}
       >
-        <Toolbar
-          editor={editor}
-          {...(variableCatalog !== undefined ? { variableCatalog } : {})}
-          onPickImage={onPickImage}
-          onPickLink={onPickLink}
-          {...(kind === 'survey' && onPickFile !== undefined ? { onPickFile } : {})}
-          {...(kind === 'survey' && onReplaceFile !== undefined ? { onReplaceFile } : {})}
-          enableImageLinkArea={enableImageLinkArea ?? false}
-        />
-        <div
-          className="flex max-h-[calc(100vh-260px)] flex-col overflow-y-auto"
-          style={{ minHeight: `${minHeight}px` }}
-        >
-          <EditorContent editor={editor} className="flex flex-1 flex-col" />
-        </div>
-        <ImageUploadModal
-          open={showModal}
-          onClose={() => setShowModal(false)}
-          onUploaded={(url) => {
-            setShowModal(false);
-            imageTracker.trackUpload(url);
-            editor.chain().focus().setImage({ src: url }).run();
-          }}
-          kind={kind}
-        />
-        <FileAttachmentUploadModal
-          open={showFileModal}
-          onClose={() => {
-            setShowFileModal(false);
-            setReplacingFile(false);
-          }}
-          onUploaded={(result, label) => {
-            setShowFileModal(false);
-            handleFileUploaded(result, label);
-          }}
-        />
+        <EditorContent editor={editor} className="flex flex-1 flex-col" />
       </div>
-    );
-  },
-);
+      <ImageUploadModal
+        open={showModal}
+        onClose={() => setShowModal(false)}
+        onUploaded={(url) => {
+          setShowModal(false);
+          imageTracker.trackUpload(url);
+          editor.chain().focus().setImage({ src: url }).run();
+        }}
+        kind={kind}
+      />
+      <FileAttachmentUploadModal
+        open={showFileModal}
+        onClose={() => {
+          setShowFileModal(false);
+          setReplacingFile(false);
+        }}
+        onUploaded={(result, label) => {
+          setShowFileModal(false);
+          handleFileUploaded(result, label);
+        }}
+      />
+    </div>
+  );
+}

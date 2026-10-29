@@ -1195,14 +1195,14 @@ function renderShell({
       overallStatus={{
         completed: 0,
         total: sections.flatMap((item) => item.leaves).length,
-        unit: '개 항목',
+        unit: 'items',
       }}
       getSectionStatus={(item) => ({
         completed: 0,
         total: item.leaves.length,
-        unit: '개 항목',
+        unit: 'items',
       })}
-      getLeafStatus={() => ({ completed: 0, total: 1, unit: '개 항목' })}
+      getLeafStatus={() => ({ completed: 0, total: 1, unit: 'items' })}
       renderLeafDetail={(item) => (
         <div data-testid="leaf-detail">
           <span>{item.label}</span>
@@ -1231,14 +1231,14 @@ function RerenderableShell({
       overallStatus={{
         completed: 0,
         total: sections.flatMap((item) => item.leaves).length,
-        unit: '개 항목',
+        unit: 'items',
       }}
       getSectionStatus={(item) => ({
         completed: 0,
         total: item.leaves.length,
-        unit: '개 항목',
+        unit: 'items',
       })}
-      getLeafStatus={() => ({ completed: 0, total: 1, unit: '개 항목' })}
+      getLeafStatus={() => ({ completed: 0, total: 1, unit: 'items' })}
       renderLeafDetail={(item) => <div data-testid="rerender-leaf-detail">{item.label}</div>}
       {...(onReturnToRoot ? { onReturnToRoot } : {})}
     />
@@ -1277,16 +1277,16 @@ function ControlledShell() {
     <MobileDrilldownShell
       sections={sections}
       leafNavigation="always"
-      overallStatus={{ completed, total: 2, unit: '개 항목' }}
+      overallStatus={{ completed, total: 2, unit: 'items' }}
       getSectionStatus={(item) => ({
         completed: item.leaves.filter((candidate) => selectedRows.has(candidate.rowId)).length,
         total: item.leaves.length,
-        unit: '개 항목',
+        unit: 'items',
       })}
       getLeafStatus={(item) => ({
         completed: selectedRows.has(item.rowId) ? 1 : 0,
         total: 1,
-        unit: '개 항목',
+        unit: 'items',
       })}
       renderLeafDetail={(item) => (
         <div data-testid="leaf-detail">

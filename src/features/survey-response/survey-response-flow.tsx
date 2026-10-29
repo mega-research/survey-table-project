@@ -16,13 +16,25 @@ import { useRouter } from 'next/navigation';
 import { AlertCircle, ArrowLeft, ArrowRight } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { ResponseDocumentPane } from '@/features/survey-response/response-document-pane';
 import { Button } from '@/components/ui/button';
+import { ContactAttrsProvider } from '@/features/question-renderer/contact-attrs-context';
+import { FormulaEvalProvider } from '@/features/question-renderer/formula-context';
+import { PriorAnswersProvider } from '@/features/question-renderer/prior-answers-context';
 import {
   buildRowWiseCellInstanceIds,
   scrollToIssue,
   scrollToValidationNotice,
 } from '@/features/question-renderer/scroll-to-issue';
+import { SurveyLocaleProvider } from '@/features/question-renderer/survey-locale-context';
+import { SurveyResponseHeader } from '@/features/question-renderer/survey-response-header';
+import {
+  anchorQuestionLabel,
+  resolveAnchorFocus,
+  resolveAnchorOwnerId,
+  resolveQuestionForOwner,
+} from '@/features/question-renderer/utils/anchor-outline';
+import { resolveEffectiveOptionTextsByQuestion } from '@/features/question-renderer/utils/effective-option-texts';
+import { selectHighlightablePriorAnswers } from '@/features/question-renderer/utils/prior-answer-highlight';
 import { resolveResponseContainerWidth } from '@/features/question-renderer/utils/table-grid-utils';
 import { AlreadyRespondedView } from '@/features/survey-response/already-responded-view';
 import { HoneypotField } from '@/features/survey-response/honeypot-field';
@@ -30,20 +42,45 @@ import { sessionStorageKey } from '@/features/survey-response/hooks/session-help
 import { useClientSignals } from '@/features/survey-response/hooks/use-client-signals';
 import { useDuplicateGuard } from '@/features/survey-response/hooks/use-duplicate-guard';
 import { useKeyboardOpen } from '@/features/survey-response/hooks/use-keyboard-open';
+import {
+  type LanguageAdvance,
+  useLanguagePage,
+} from '@/features/survey-response/hooks/use-language-page';
 import { useResponseLifecycle } from '@/features/survey-response/hooks/use-response-lifecycle';
 import { useResponseTelemetry } from '@/features/survey-response/hooks/use-response-telemetry';
 import { useSessionRecovery } from '@/features/survey-response/hooks/use-session-recovery';
 import { useSurveyLoader } from '@/features/survey-response/hooks/use-survey-loader';
 import { InviteRequiredScreen } from '@/features/survey-response/invite-required-screen';
 import type { SaveAdminEditPayload } from '@/features/survey-response/lib/admin-edit';
+import {
+  buildAdminRelaxWarningMessage,
+  classifyStepIssues,
+  snapshotStepResponses,
+} from '@/features/survey-response/lib/admin-edit-required-relax';
+import {
+  hasExplicitRequiredChoiceGroup,
+  isQuestionAnswered as isQuestionAnsweredPure,
+} from '@/features/survey-response/lib/answer-validation';
+import {
+  resolveHeaderDescriptions,
+  resolveHeaderTitle,
+} from '@/features/survey-response/lib/localized-survey-texts';
+import {
+  type NumericIssue,
+  collectNumericIssues,
+  collectVisibleTableCells,
+  resolveChoiceTableVisibleCellIds,
+} from '@/features/survey-response/lib/numeric-validation';
+import { isQuotaTargetFilled, shouldCheckQuota } from '@/features/survey-response/lib/quota-gate';
+import { collectRequiredOptionTextIssues } from '@/features/survey-response/lib/required-option-text-validation';
+import { SPLIT_MIN_VIEWPORT_WIDTH } from '@/features/survey-response/lib/split-viewport';
 import { MobileBottomNav } from '@/features/survey-response/mobile-bottom-nav';
+import { ResponseDocumentPane } from '@/features/survey-response/response-document-pane';
 import { ResumeToast } from '@/features/survey-response/resume-toast';
 import { DemandChecklist } from '@/features/survey-response/step-views/demand-checklist';
 import { PageStepView } from '@/features/survey-response/step-views/page-step-view';
 import { useSurveyResponseStore } from '@/features/survey-response/stores/survey-response-store';
 import { SurveyResponseLayout } from '@/features/survey-response/survey-response-layout';
-import { UnmodifiedChangedDialog } from '@/features/survey-response/unmodified-changed-dialog';
-import { SurveyResponseHeader } from '@/features/question-renderer/survey-response-header';
 import {
   DesktopOnlyScreen,
   EndRedirectNotice,
@@ -54,12 +91,14 @@ import {
   SurveyErrorScreen,
   SurveyLoadingScreen,
 } from '@/features/survey-response/survey-response-screens';
+import { SystemText } from '@/features/survey-response/system-text';
+import { UnmodifiedChangedDialog } from '@/features/survey-response/unmodified-changed-dialog';
 import { useSyncLatestRef } from '@/hooks/use-latest-ref';
 import { useMediaQuery } from '@/hooks/use-media-query';
-import {
-  type CompletionOutcome,
-  resolveCompletionScreen,
-} from './lib/completion-screen';
+import { midSurveyClosedBody } from '@/lib/quota/closed-message';
+import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
+import { withCalcValues } from '@/lib/survey/cell-formula';
+import type { FormulaEvalCtx } from '@/lib/survey/cell-formula';
 import {
   CHANGE_CONFIRM_KEY,
   collectUnconfirmedQuestionIds,
@@ -67,16 +106,34 @@ import {
   isAwaitingChangeConfirmation,
   readChangeConfirmations,
 } from '@/lib/survey/change-confirmation';
+import { isChoiceGroupTableQuestion } from '@/lib/survey/choice-selection';
 import {
   type EndRedirectOutcome,
   normalizePassParamNames,
   pickEntryParams,
   resolveEndRedirectUrl,
 } from '@/lib/survey/end-redirect';
+import { filterPriorAnswersByCondition } from '@/lib/survey/prior-answer-condition';
 import { resolvePriorWaveLabel } from '@/lib/survey/prior-answers';
-import { PriorAnswersProvider } from '@/features/question-renderer/prior-answers-context';
-import { isChoiceGroupTableQuestion } from '@/lib/survey/choice-selection';
-import { normalizeFormatValues } from './lib/format-normalize';
+import type { PriorAnswers } from '@/lib/survey/prior-answers';
+import { stripHiddenQuestionValues } from '@/lib/survey/question-visibility';
+import { generateId } from '@/lib/utils';
+import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
+import type { ResponseEntrySeed } from '@/shared/contracts/survey-builder-io';
+import type { SurveyDocumentView } from '@/shared/contracts/survey-builder-io';
+import { client } from '@/shared/lib/rpc';
+import type { Question, QuestionGroup, Survey } from '@/types/survey';
+import { DEFAULT_SURVEY_LOCALE, type SurveyLocale, toInlineLocale } from '@/types/survey-locale';
+import { collectAnswerQuotes } from '@/utils/answer-quote';
+import { responsesToLookupShape } from '@/utils/branch-eval';
+import {
+  type BranchEvalCtx,
+  collectTraversedQuestionIds,
+  collectTraversedStepPath,
+  getBranchRuleForResponse,
+  shouldDisplayQuestion,
+} from '@/utils/branch-logic';
+import { resolveChoiceOptions } from '@/utils/choice-source';
 import {
   type RenderStep,
   buildRenderSteps,
@@ -88,66 +145,25 @@ import {
   collectTableQuestionOptions,
   filterOptionTextsForSubmission,
 } from '@/utils/option-text-migration';
-import { isQuotaTargetFilled, shouldCheckQuota } from '@/features/survey-response/lib/quota-gate';
-import { midSurveyClosedBody } from '@/lib/quota/closed-message';
-import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
-import { filterPriorAnswersByCondition } from '@/lib/survey/prior-answer-condition';
-import { selectHighlightablePriorAnswers } from '@/features/question-renderer/utils/prior-answer-highlight';
-import {
-  buildAdminRelaxWarningMessage,
-  classifyStepIssues,
-  snapshotStepResponses,
-} from '@/features/survey-response/lib/admin-edit-required-relax';
-import { collectAnswerQuotes } from '@/utils/answer-quote';
-import {
-  hasExplicitRequiredChoiceGroup,
-  isQuestionAnswered as isQuestionAnsweredPure,
-} from '@/features/survey-response/lib/answer-validation';
-import { withCalcValues } from '@/lib/survey/cell-formula';
-import type { FormulaEvalCtx } from '@/lib/survey/cell-formula';
-import { ContactAttrsProvider } from '@/features/question-renderer/contact-attrs-context';
-import { FormulaEvalProvider } from '@/features/question-renderer/formula-context';
-import {
-  type NumericIssue,
-  collectNumericIssues,
-  collectVisibleTableCells,
-  resolveChoiceTableVisibleCellIds,
-} from '@/features/survey-response/lib/numeric-validation';
-import { resolveEffectiveOptionTextsByQuestion } from '@/features/question-renderer/utils/effective-option-texts';
-import { collectRequiredOptionTextIssues } from '@/features/survey-response/lib/required-option-text-validation';
+import { resolveCurrentLocale } from '@/utils/survey-language';
+import { systemText } from '@/utils/system-strings';
+
+import { type CompletionOutcome, resolveCompletionScreen } from './lib/completion-screen';
+import { normalizeFormatValues } from './lib/format-normalize';
 import {
   collectPriorAnswerPrefills,
   collectPriorAnswerRetractions,
 } from './lib/prior-answer-prefill';
-import type { PriorAnswers } from '@/lib/survey/prior-answers';
-import { stripHiddenQuestionValues } from '@/lib/survey/question-visibility';
-import { generateId } from '@/lib/utils';
-import type { ResponseEntrySeed } from '@/shared/contracts/survey-builder-io';
-import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
-import { client } from '@/shared/lib/rpc';
-import { DEFAULT_PAUSED_MESSAGE } from '@/shared/lib/survey-control';
-import type { Question, QuestionGroup, Survey } from '@/types/survey';
-import { responsesToLookupShape } from '@/utils/branch-eval';
-import {
-  type BranchEvalCtx,
-  collectTraversedQuestionIds,
-  collectTraversedStepPath,
-  getBranchRuleForResponse,
-  shouldDisplayQuestion,
-} from '@/utils/branch-logic';
-import { SPLIT_MIN_VIEWPORT_WIDTH } from '@/features/survey-response/lib/split-viewport';
-import {
-  anchorQuestionLabel,
-  resolveAnchorFocus,
-  resolveAnchorOwnerId,
-  resolveQuestionForOwner,
-} from '@/features/question-renderer/utils/anchor-outline';
-import type { SurveyDocumentView } from '@/shared/contracts/survey-builder-io';
-import { resolveChoiceOptions } from '@/utils/choice-source';
 
 type ResponsesMap = Record<string, unknown>;
 
 const EMPTY_ISSUES = new Map<string, NumericIssue[]>();
+
+/**
+ * 「언어 변경」 링크 글자 — 어느 언어를 고른 응답자든 읽을 수 있게 세 언어를 늘 함께 쓴다
+ * (PRD 「언어 변경」). 현재 언어를 따라 바뀌는 시스템 글자가 아니다.
+ */
+const LANGUAGE_SWITCH_LABEL = '언어 변경 · 语言 · Language';
 
 export interface SurveyResponseFlowProps {
   mode?: 'public' | 'admin-edit' | 'preview';
@@ -346,14 +362,25 @@ function SurveyResponseFlowControl({
     setResponses,
   });
 
+  // 안내 화면의 언어 (CONTEXT.md 「다국어 설문」) — 설문을 읽은 뒤에는 언어 문항의 답에서
+  // 파생한다. 아직 답이 없는 다국어 설문은 미정(null)이라 세 언어를 함께 보인다.
+  const noticeLocale = loader.loadedSurvey
+    ? resolveCurrentLocale(
+        loader.loadedSurvey.questions,
+        loader.loadedSurvey.groups ?? [],
+        responses,
+      )
+    : DEFAULT_SURVEY_LOCALE;
+
   if (loader.isLoading) return <SurveyLoadingScreen />;
-  if (loader.showInviteRequired) return <InviteRequiredScreen />;
+  if (loader.showInviteRequired) return <InviteRequiredScreen locale={noticeLocale} />;
   if (loader.control?.testSession === 'invalid') {
     return (
       <InvalidTestLinkGate
         surveyId={loader.loadedSurvey?.id}
         inviteToken={inviteToken}
         clearResponses={clearResponses}
+        locale={noticeLocale}
       />
     );
   }
@@ -365,7 +392,9 @@ function SurveyResponseFlowControl({
         reason="survey_paused"
         surveyTitle={loader.loadedSurvey?.title ?? ''}
         contactEmail={loader.loadedSurvey?.contactEmail ?? null}
-        customBody={loader.control.pausedMessage ?? DEFAULT_PAUSED_MESSAGE}
+        // 비면 화면이 현재 언어의 기본 중단 문구로 폴백한다
+        customBody={loader.control.pausedMessage ?? null}
+        locale={noticeLocale}
       />
     );
   }
@@ -395,10 +424,12 @@ function InvalidTestLinkGate({
   surveyId,
   inviteToken,
   clearResponses,
+  locale,
 }: {
   surveyId: string | undefined;
   inviteToken: string | null;
   clearResponses: () => void;
+  locale: SurveyLocale | null;
 }) {
   useLayoutEffect(() => {
     if (surveyId) window.localStorage.removeItem(sessionStorageKey(surveyId, inviteToken));
@@ -406,7 +437,7 @@ function InvalidTestLinkGate({
     clearResponses();
   }, [surveyId, inviteToken, clearResponses]);
 
-  return <InvalidTestLinkScreen />;
+  return <InvalidTestLinkScreen locale={locale} />;
 }
 
 function SurveyResponseFlowActive({
@@ -541,7 +572,8 @@ function SurveyResponseFlowActive({
   const [refetchedPausedMessage, setRefetchedPausedMessage] = useState<string | null>(null);
   // 무중단 갈아타기(티켓 04) 안내 문구 — 서버가 응답 행을 현재 버전으로 재핀한 것을 감지해
   // 최신 스냅샷 재취득이 끝난 뒤 한 줄 표시한다 (resume 토스트와 동일 패턴).
-  const [rebaseMessage, setRebaseMessage] = useState<string | null>(null);
+  // 버전 이관 안내를 띄우는가 — 문장은 화면이 현재 언어로 그린다
+  const [showRebaseNotice, setShowRebaseNotice] = useState(false);
 
   const keyboardOpen = useKeyboardOpen();
 
@@ -578,6 +610,18 @@ function SurveyResponseFlowActive({
   // 현재 설문의 질문들
   const questions = useMemo(() => loadedSurvey?.questions || [], [loadedSurvey]);
   const groups = useMemo(() => loadedSurvey?.groups || [], [loadedSurvey]);
+
+  // 현재 언어 (CONTEXT.md 「언어 문항」) — 언어 문항의 답에서 파생한다. 저장하지 않는다.
+  const currentLocale = useMemo(
+    () => resolveCurrentLocale(questions, groups, responses),
+    [questions, groups, responses],
+  );
+  // 시스템 글자(버튼·검증 문구·안내 화면)의 언어. 관리자 응답 수정은 관리자 화면이라 한국어
+  // 그대로다(PRD 「시스템 글자 사전」) — 내용 언어(`lang`·언어별 제목)는 응답자가 고른 언어 그대로.
+  const systemLocale = isAdminEdit ? DEFAULT_SURVEY_LOCALE : currentLocale;
+  // 콜백 안(쿼터 마감 문구·저장 실패 토스트)에서 읽는 시스템 글자 언어 — 의존성을 늘리지 않는다
+  const systemLocaleRef = useRef(systemLocale);
+  useSyncLatestRef(systemLocaleRef, systemLocale);
 
   // 응답 인용 — {{{이름}}} 채널로 소비되는 파생값. 저장하지 않는다.
   const answerQuotes = useMemo(
@@ -1054,10 +1098,10 @@ function SurveyResponseFlowActive({
   const [recoveredDraftSeq, setRecoveredDraftSeq] = useState<number | undefined>(undefined);
 
   // 운영 현황 콘솔(T6): localStorage 기반 응답 회복 + 회복 토스트 자동 dismiss.
-  // 회복 effect + dismiss effect 와 isRecovering/resumeMessage state 를
+  // 회복 effect + dismiss effect 와 isRecovering/showResumeNotice state 를
   // useSessionRecovery 로 추출 (두 effect 등록 순서·deps 동일, 세터 전용이라 훅이 소유).
   // isRecovering 은 handleResponse 의 INSERT 가드(I-1)에서 참조한다.
-  const { isRecovering, resumeMessage, dismissResume, reeditNotice } = useSessionRecovery({
+  const { isRecovering, showResumeNotice, dismissResume, reeditNotice } = useSessionRecovery({
     // 이월 응답 프리필 판정이 끝나기 전에 회복이 응답값을 세팅하면, 뒤늦은 프리필이
     // 저장된 답을 지난 회차 값으로 되돌린다 — 프리필이 정착한 뒤에만 회복을 연다.
     enabled: !isCompleted && prefillSettled,
@@ -1190,15 +1234,21 @@ function SurveyResponseFlowActive({
     for (const q of currentStepQuestions) {
       // 잠긴 문항은 검증하지 않는다 — 값이 아직 이번 회차 응답이 아니다.
       if (awaitingConfirmationIds.has(q.id)) continue;
-      const issues = collectNumericIssues(q, responses[q.id], {
-        allResponses: responses,
-        allQuestions: questions,
-        optionTexts: effectiveOptionTextsByQuestion[q.id],
-        lookups: loadedSurvey?.lookups ?? [],
-        contactAttrs,
-        // 이월 원본은 형식 검사 면제 판정에만 쓴다 — 손대지 않은 지난 회차 값은 막지 않는다.
-        priorAnswers,
-      });
+      const issues = collectNumericIssues(
+        q,
+        responses[q.id],
+        {
+          allResponses: responses,
+          allQuestions: questions,
+          optionTexts: effectiveOptionTextsByQuestion[q.id],
+          lookups: loadedSurvey?.lookups ?? [],
+          contactAttrs,
+          // 이월 원본은 형식 검사 면제 판정에만 쓴다 — 손대지 않은 지난 회차 값은 막지 않는다.
+          priorAnswers,
+        },
+        // 검증 문구는 한 줄짜리라 미정이면 한국어(inlineLocale 과 같은 규칙)
+        toInlineLocale(systemLocale),
+      );
       if (issues.length > 0) map.set(q.id, issues);
     }
     return map;
@@ -1211,6 +1261,7 @@ function SurveyResponseFlowActive({
     loadedSurvey?.lookups,
     contactAttrs,
     priorAnswers,
+    systemLocale,
   ]);
   const [numericErrorStepIndex, setNumericErrorStepIndex] = useState<number | null>(null);
   const showNumericErrors = numericErrorStepIndex === currentStepIndex;
@@ -1390,7 +1441,7 @@ function SurveyResponseFlowActive({
       setResponses(
         (prev) => applyStructuralSurvival(prev, refetched.survey.questions).survivingResponses,
       );
-      setRebaseMessage('설문이 업데이트되어 최신 버전으로 이어집니다');
+      setShowRebaseNotice(true);
     })();
   }, [refetchSnapshot, setResponses]);
 
@@ -1440,6 +1491,7 @@ function SurveyResponseFlowActive({
       setDuplicateStatus,
       setPausedMessage: setRefetchedPausedMessage,
       setQuotaClosedMessage,
+      localeRef: systemLocaleRef,
       setInviteIsInvalid,
       setIsSubmitting,
       setCurrentStepIndex,
@@ -1597,7 +1649,12 @@ function SurveyResponseFlowActive({
     );
   };
 
-  const handleNext = async () => {
+  /**
+   * 「다음」. 언어 페이지의 자동 넘김(`useLanguagePage`)은 `languageAdvance` 를 함께 넘긴다 —
+   * 방문 기록을 고쳐 쌓고, 쿼터 첫 판정을 기다리는 사이 응답자가 다시 골랐으면 낡은 답으로 넘기지
+   * 않고 지금 답으로 다시 넘긴다.
+   */
+  const runNext = async (languageAdvance: LanguageAdvance | null) => {
     blurActiveInput();
     const unansweredCurrent = currentStepQuestions.filter(
       (q) => !awaitingConfirmationIds.has(q.id) && isQuestionRequired(q) && !isQuestionAnswered(q),
@@ -1759,7 +1816,12 @@ function SurveyResponseFlowActive({
           });
           if (!res.blocked || quotaRecheckStaleRef.current) return;
           // 입장 뒤 막힘 — 진행 중 마감 문구(서버가 마감 문구로 폴백 적용, 구 서버는 필드 없음).
-          setQuotaClosedMessage(midSurveyClosedBody(res.midSurveyClosedMessage ?? res.closedMessage));
+          setQuotaClosedMessage(
+            midSurveyClosedBody(
+              res.midSurveyClosedMessage ?? res.closedMessage,
+              systemLocaleRef.current,
+            ),
+          );
           setDuplicateStatus({ kind: 'blocked', reason: 'quota_closed' });
         } catch (err) {
           console.error('쿼터 재확인 오류:', err);
@@ -1779,6 +1841,13 @@ function SurveyResponseFlowActive({
       // 쿼터 판정(응답당 최대 1회)만은 기다린다 — 낙관 전환하면 마감 응답자에게
       // 다음 문항을 보여줬다가 차단 화면으로 갈아치우는 어색한 상태가 생긴다.
       const res = await quotaPromise;
+      if (languageAdvance?.isSuperseded()) {
+        // 판정은 낡은 답(이전에 고른 언어)으로 받았다 — 버리고 지금 답으로 다시 판정·넘김한다.
+        // 서버가 이미 마감으로 기록했다면 다시 받은 판정도 마감이다(재호출 멱등).
+        quotaCheckedRef.current = false;
+        languageAdvance.retry();
+        return;
+      }
       if (res?.blocked) {
         setQuotaClosedMessage(res.closedMessage);
         setDuplicateStatus({ kind: 'blocked', reason: 'quota_closed' });
@@ -1786,7 +1855,8 @@ function SurveyResponseFlowActive({
       }
     }
 
-    setStepHistory((prev) => [...prev, currentStepIndex]);
+    const rebaseHistory = languageAdvance?.rebaseHistory;
+    setStepHistory((prev) => [...(rebaseHistory ? rebaseHistory(prev) : prev), currentStepIndex]);
 
     if (nextIndex === -1) {
       quotaRecheckStaleRef.current = true;
@@ -1796,6 +1866,7 @@ function SurveyResponseFlowActive({
 
     setCurrentStepIndex(nextIndex);
   };
+  const handleNext = () => runNext(null);
 
   const handlePrevious = useCallback(() => {
     if (stepHistory.length === 0) return;
@@ -1811,6 +1882,32 @@ function SurveyResponseFlowActive({
       setStepHistory((prev) => prev.slice(0, lastIndex));
     }
   }, [stepHistory, steps]);
+
+  const {
+    isLanguagePage,
+    languageStepIndex,
+    showLanguageSwitch,
+    handlePageResponse,
+    goToLanguagePage,
+  } = useLanguagePage({
+    enabled: !isAdminEdit,
+    questions,
+    groups,
+    steps,
+    responses,
+    currentStepIndex,
+    currentStepQuestions,
+    handleStepResponse,
+    setCurrentStepIndex,
+    setStepHistory,
+    onLeavePage: () => {
+      blurActiveInput();
+      void flushPendingAnswersInBackground();
+    },
+    onAdvance: (advance) => {
+      void runNext(advance);
+    },
+  });
 
   // 브라우저 뒤로가기 → 이전 step 이동
   const hasResponses = Object.keys(responses).length > 0;
@@ -1859,7 +1956,9 @@ function SurveyResponseFlowActive({
   const redirectsNow = endRedirectUrl !== null && !isPreview && !isTestSession;
   // 테스트·미리보기만 완료 화면 아래에 갈 주소를 보인다. 실응답은 아래에서 이동 중 화면으로 바꾼다.
   const endRedirectFooter =
-    endRedirectUrl && !redirectsNow ? <EndRedirectNotice url={endRedirectUrl} /> : null;
+    endRedirectUrl && !redirectsNow ? (
+      <EndRedirectNotice url={endRedirectUrl} locale={systemLocale} />
+    ) : null;
   useEffect(() => {
     // replace — 뒤로 가기로 우리 종료 화면에 돌아와 같은 주소로 다시 튕기지 않게 한다
     if (redirectsNow && endRedirectUrl) window.location.replace(endRedirectUrl);
@@ -1881,14 +1980,14 @@ function SurveyResponseFlowActive({
   // 종료 후 이동 — 완료·쿼터 마감 화면을 그리지 않고 곧장 이동 중 화면. 완료 카드가 패널 종료
   // 페이지가 열리기 전 잠깐 비치면 응답자가 거기서 창을 닫는다(이동은 위 effect 가 건다).
   if (redirectsNow && endRedirectUrl) {
-    return <EndRedirectingScreen url={endRedirectUrl} />;
+    return <EndRedirectingScreen url={endRedirectUrl} locale={systemLocale} />;
   }
 
   // 중복 검사 진행 중
   if (duplicateStatus.kind === 'checking') {
     return (
       <div className="text-muted-foreground mx-auto flex min-h-screen items-center justify-center text-sm">
-        확인 중...
+        <SystemText k="screen.checking" locale={systemLocale} />
       </div>
     );
   }
@@ -1896,18 +1995,29 @@ function SurveyResponseFlowActive({
   // 중복 응답 차단 화면
   if (duplicateStatus.kind === 'blocked') {
     if (duplicateStatus.reason === 'invalid_test_token') {
-      return <InvalidTestLinkScreen />;
+      return <InvalidTestLinkScreen locale={systemLocale} />;
     }
+    // 응답 행을 읽은 재진입(이어가기·다른 화면에서 완료)이면 그 답의 언어 하나, 응답 행 없이
+    // 막힌 진입(이미 응답함 등)은 미정이라 세 언어를 함께 보인다.
     return (
       <AlreadyRespondedView
         reason={duplicateStatus.reason}
-        surveyTitle={loadedSurvey?.title ?? ''}
+        locale={systemLocale}
+        surveyTitle={
+          loadedSurvey
+            ? resolveHeaderTitle(
+                loadedSurvey.title,
+                loadedSurvey.settings.localizedMessages,
+                currentLocale,
+              )
+            : ''
+        }
         contactEmail={loadedSurvey?.contactEmail ?? null}
         customBody={
           duplicateStatus.reason === 'quota_closed'
             ? quotaClosedMessage
             : duplicateStatus.reason === 'survey_paused'
-              ? (refetchedPausedMessage ?? control?.pausedMessage ?? DEFAULT_PAUSED_MESSAGE)
+              ? (refetchedPausedMessage ?? control?.pausedMessage ?? null)
               : null
         }
         footer={endRedirectFooter}
@@ -1922,12 +2032,21 @@ function SurveyResponseFlowActive({
   // 완료 화면
   if (isCompleted) {
     // 종료 결과에 따라 제목·문구가 갈린다 — 자격미달은 「설문 종료」+ 자격미달 종료 문구(폴백: 완료 문구)
-    const screen = resolveCompletionScreen(loadedSurvey.settings, completionOutcome);
+    // 완료 뒤에는 언어가 정해져 있다 — 미정이면 한국어
+    const completionLocale = toInlineLocale(systemLocale);
+    const screen = resolveCompletionScreen(
+      loadedSurvey.settings,
+      completionOutcome,
+      completionLocale,
+    );
     return (
       <SurveyCompletedScreen
-        title={isPreview ? '설문 확인 완료' : screen.title}
-        thankYouMessage={isPreview ? '입력 내용은 저장되지 않았습니다.' : screen.message}
+        title={isPreview ? systemText('completion.previewTitle', completionLocale) : screen.title}
+        thankYouMessage={
+          isPreview ? systemText('completion.previewMessage', completionLocale) : screen.message
+        }
         showCompletedTime={!isPreview}
+        locale={completionLocale}
         footer={endRedirectFooter}
       />
     );
@@ -1942,7 +2061,7 @@ function SurveyResponseFlowActive({
   // 화면은 면제한다 — 운영자가 좁은 창에서 응답을 고치는 일을 막을 이유가 없다.
   // 쿼터·자격미달·초대·미리보기에는 모드 분기를 만들지 않는다.
   if (isDocumentSurvey && isTooNarrowForSplit && !isAdminEdit) {
-    return <DesktopOnlyScreen />;
+    return <DesktopOnlyScreen locale={systemLocale} />;
   }
 
   // 표가 그려지는 페이지는 표 총폭 기준 분기(718px 초과 → 1280px, 이하 → 896px), 아니면 896px (2026-07-27)
@@ -1959,17 +2078,47 @@ function SurveyResponseFlowActive({
   );
   // 미리보기도 '다음'으로 통일 — '확인 완료' 라벨은 마지막 페이지에서만 나타나
   // 버튼이 바뀐 것처럼 보이는 혼란만 줬다 (2026-08-12 피드백).
-  const submitLabel = '다음';
-  const submittingLabel = '처리 중...';
+  //
+  // 한 줄짜리 시스템 글자는 현재 언어로, 미정이면 한국어다 — 언어 페이지는 언어 문항 하나뿐이라
+  // 버튼이 없고(04), 미정 상태에서 세 언어를 쌓는 것은 전체 화면 안내뿐이다.
+  const inlineLocale = toInlineLocale(systemLocale);
+  const submitLabel = systemText('nav.next', inlineLocale);
+  const submittingLabel = systemText('nav.submitting', inlineLocale);
 
+  const languageSwitchLink = showLanguageSwitch ? (
+    <button
+      type="button"
+      onClick={goToLanguagePage}
+      className="text-sm text-blue-600 underline-offset-2 hover:underline"
+    >
+      {LANGUAGE_SWITCH_LABEL}
+    </button>
+  ) : null;
   // 진행 현황 밴드. **조사표를 끼는 설문에서는 두지 않는다** — 조사표를 나란히 보는
   // 화면에서 그 밴드는 세로 공간을 먹고, 지금 위치는 헤더 설명 줄의 "N / M 페이지"
   // 가 말한다. 분할 페이지에서만 빼면 안내문 페이지에서 밴드가 다시 나타나 들썩인다.
-  const progressBand = isDocumentSurvey ? undefined : (
+  // 「언어 변경」은 진행률 줄 왼쪽에 둔다. 다국어가 아닌 설문의 줄은 종전 그대로다.
+  // 조사표를 끼는 설문은 진행 밴드가 없어 링크만 그 자리에 둔다.
+  // 로고·문구는 첫 페이지에만 — 다국어 설문의 첫 페이지가 언어 페이지면 언어를 고른 다음 페이지에서
+  // 그 언어로 보인다(언어 페이지는 아직 언어가 없다)
+  const brandingStepNumber =
+    languageStepIndex !== -1 && visibleSteps[0] === steps[languageStepIndex] ? 2 : 1;
+  const progressBand = isLanguagePage ? undefined : isDocumentSurvey ? (
+    (languageSwitchLink ?? undefined)
+  ) : (
     <>
-      <div className="hidden items-center justify-end pr-2 text-sm text-gray-500 md:flex">
-        {currentVisibleStepNumber || 1} / {Math.max(totalVisibleStepCount, 1)}
-      </div>
+      {languageSwitchLink ? (
+        <div className="flex items-center justify-between pr-2 text-sm text-gray-500">
+          {languageSwitchLink}
+          <span className="hidden md:inline">
+            {currentVisibleStepNumber || 1} / {Math.max(totalVisibleStepCount, 1)}
+          </span>
+        </div>
+      ) : (
+        <div className="hidden items-center justify-end pr-2 text-sm text-gray-500 md:flex">
+          {currentVisibleStepNumber || 1} / {Math.max(totalVisibleStepCount, 1)}
+        </div>
+      )}
       {/* 연속형 프로그레스바 */}
       <div className="mt-2">
         <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
@@ -1985,7 +2134,10 @@ function SurveyResponseFlowActive({
         {isMobile && (
           <div className="mt-1.5 flex items-center justify-between text-xs text-gray-400">
             <span>
-              {answeredCount}/{traversedQuestionIds.size} 응답 완료
+              {systemText('progress.answered', inlineLocale, {
+                answered: answeredCount,
+                total: traversedQuestionIds.size,
+              })}
             </span>
           </div>
         )}
@@ -2010,6 +2162,7 @@ function SurveyResponseFlowActive({
           open={showUnmodifiedChangedDialog}
           questionTitles={unmodifiedChangedQuestions.map((q) => q.title)}
           waveLabel={resolvePriorWaveLabel(control?.priorWaveLabel)}
+          locale={toInlineLocale(systemLocale)}
           onCancel={() => setShowUnmodifiedChangedDialog(false)}
           onConfirm={() => {
             setShowUnmodifiedChangedDialog(false);
@@ -2018,176 +2171,216 @@ function SurveyResponseFlowActive({
           }}
         />
         <FormulaEvalProvider value={formulaCtx}>
-          <SurveyResponseLayout
-            containerMaxWidth={containerMaxWidth}
-            reserveBottomNavSpace={isMobile}
-            documentPane={
-              isSplit && documentView ? (
-                <ResponseDocumentPane
-                  url={documentView.url}
-                  pageCount={documentView.pageCount}
-                  anchors={documentView.anchors}
-                  focus={anchorFocus}
-                  labelOf={anchorLabelOf}
-                  onOwnerSelect={handleAnchorOwnerSelect}
-                />
-              ) : undefined
-            }
-            chrome={
-              <>
-                {/* 봇 방어 허니팟 — 화면에 안 보이는 입력. 봇이 채우면 서버가 차단 */}
-                <HoneypotField ref={honeypotRef} />
-                {/*
-                  대리 응답 배너가 **없다** (ADR-0026, 티켓 09). 외주가 보는 화면은 응답자가
-                  보는 것과 글자 하나 다르지 않아야 한다 — 대행 표시는 응답자에게 읽어 주는
-                  내용과 실사의 화면을 갈라놓는다. 귀속은 저장 경계가 쿠키를 보고 찍는다.
-                */}
-              </>
-            }
-            header={
-              <SurveyResponseHeader
-                title={loadedSurvey.title}
-                description={loadedSurvey.description}
-                responseHeader={loadedSurvey.settings.responseHeader}
-                showBranding={currentVisibleStepNumber <= 1}
-              />
-            }
-            progress={progressBand}
-            bottomNav={
-              isMobile ? (
-                <MobileBottomNav
-                  keyboardOpen={keyboardOpen}
-                  currentStepNumber={currentVisibleStepNumber}
-                  totalStepCount={totalVisibleStepCount}
-                  hasPrevious={hasPreviousDisplayable}
-                  isLastStep={isLastVisibleStep}
-                  isSubmitting={isSubmitting}
-                  submitLabel={submitLabel}
-                  submittingLabel={submittingLabel}
-                  onPrevious={handlePrevious}
-                  onNext={handleNext}
-                />
-              ) : undefined
-            }
-          >
-            {reeditNotice && (
-              <div
-                role="status"
-                className="mb-4 flex items-start gap-2 rounded border border-blue-300 bg-blue-50 px-3 py-2 text-sm text-blue-900"
-              >
-                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                <div>
-                  재응답이 허용된 설문입니다. 답변을 수정한 뒤 <strong>끝까지 진행해 제출</strong>
-                  해야 완료로 반영됩니다. 제출하지 않고 나가면 완료 처리되지 않습니다.
-                </div>
-              </div>
-            )}
-            {resumeMessage && <ResumeToast message={resumeMessage} onDismiss={dismissResume} />}
-            {rebaseMessage && (
-              <ResumeToast message={rebaseMessage} onDismiss={() => setRebaseMessage(null)} />
-            )}
-            {inviteIsInvalid && (
-              <div
-                role="alert"
-                className="mb-4 flex items-start gap-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
-              >
-                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                <div>초대 링크가 유효하지 않아 익명 응답으로 진행됩니다.</div>
-              </div>
-            )}
-            {isSplit ? (
-              /* 분할 화면의 오른쪽 — 조사표와 눈을 오가야 해서 한 문항이 한 줄이다.
-             전용 질문 유형이 아니라 그리는 방식만 다르다 (데이터는 평범한 radio). */
-              <DemandChecklist
-                items={currentStep.items.filter((item) =>
-                  currentStepQuestions.some((q) => q.id === item.question.id),
-                )}
-                groups={groups}
-                responses={responses}
-                questions={questions}
-                onResponse={handleResponse}
-                highlightQuestionIds={highlightQuestionIds}
-                requiredMessageQuestionIds={requiredMessageQuestionIds}
-                changeConfirmMessageQuestionIds={changeConfirmMessageQuestionIds}
-                numericIssues={visibleNumericIssues}
-                onQuestionFocus={selectAnchorQuestion}
-                onGroupSelect={selectAnchorGroup}
-                activeGroupId={activeAnchorGroupId}
-                focusedQuestionId={anchorSelection?.kind === 'question' ? anchorSelection.id : null}
-              />
-            ) : (
-              <PageStepView
-                step={currentStep}
-                responses={responses}
-                questions={questions}
-                groups={groups}
-                evalCtx={evalCtx}
-                onResponse={handleStepResponse}
-                highlightQuestionIds={highlightQuestionIds}
-                requiredMessageQuestionIds={requiredMessageQuestionIds}
-                changeConfirmMessageQuestionIds={changeConfirmMessageQuestionIds}
-                numericIssues={visibleNumericIssues}
-              />
-            )}
-
-            {/* 데스크톱 네비게이션 */}
-            <div className="mt-8 hidden items-center justify-between md:flex">
-              <Button variant="outline" onClick={handlePrevious} disabled={!hasPreviousDisplayable}>
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                이전
-              </Button>
-
-              {/* 가운데 슬롯 — admin-edit 경고 1회 상태에선 빈 필수 통과 안내가 우선한다.
-              상단 배너는 시야에서 벗어나 인지되지 않아(2026-08-14) 버튼 사이로 이동. */}
-              <div
-                className="px-4 text-sm text-gray-500"
-                role={showAdminRelaxWarning ? 'alert' : undefined}
-              >
-                {showAdminRelaxWarning && adminStepClassification ? (
-                  <span className="flex flex-wrap items-center justify-center gap-2 text-amber-700">
-                    <span>{buildAdminRelaxWarningMessage(adminStepClassification)}</span>
-                    {adminFirstRelaxTarget && (
-                      <button
-                        type="button"
-                        className="shrink-0 rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs text-amber-900 hover:bg-amber-100"
-                        onClick={() => {
-                          const { questionId: targetQuestionId, issue: targetIssue } =
-                            adminFirstRelaxTarget;
-                          scrollToIssue({
-                            questionId: targetQuestionId,
-                            detailTargetIds: targetIssue?.detailTargetIds,
-                            cellInstanceIds: buildRowWiseCellInstanceIds(
-                              questions.find((q) => q.id === targetQuestionId)?.tableRowsData,
-                              targetIssue?.cellIds,
-                            ),
-                            cellIds: targetIssue?.cellIds,
-                          });
-                        }}
-                      >
-                        위치로 이동
-                      </button>
+          <SurveyLocaleProvider locale={systemLocale}>
+            {/* display:contents — 배치를 바꾸지 않고 lang 만 싣는다. 미정이면 달지 않고 표식만 단다(글꼴 순서, globals.css) */}
+            <div
+              lang={currentLocale ?? undefined}
+              data-locale-undetermined={currentLocale === null ? '' : undefined}
+              className="contents"
+            >
+              <SurveyResponseLayout
+                containerMaxWidth={containerMaxWidth}
+                reserveBottomNavSpace={isMobile && (!isLanguagePage || hasPreviousDisplayable)}
+                documentPane={
+                  isSplit && documentView ? (
+                    <ResponseDocumentPane
+                      url={documentView.url}
+                      pageCount={documentView.pageCount}
+                      anchors={documentView.anchors}
+                      focus={anchorFocus}
+                      labelOf={anchorLabelOf}
+                      onOwnerSelect={handleAnchorOwnerSelect}
+                    />
+                  ) : undefined
+                }
+                chrome={
+                  <>
+                    {/* 봇 방어 허니팟 — 화면에 안 보이는 입력. 봇이 채우면 서버가 차단 */}
+                    <HoneypotField ref={honeypotRef} />
+                    {/*
+                      대리 응답 배너가 **없다** (ADR-0026, 티켓 09). 외주가 보는 화면은 응답자가
+                      보는 것과 글자 하나 다르지 않아야 한다 — 대행 표시는 응답자에게 읽어 주는
+                      내용과 실사의 화면을 갈라놓는다. 귀속은 저장 경계가 쿠키를 보고 찍는다.
+                    */}
+                  </>
+                }
+                header={
+                  <SurveyResponseHeader
+                    title={resolveHeaderTitle(
+                      loadedSurvey.title,
+                      loadedSurvey.settings.localizedMessages,
+                      currentLocale,
                     )}
-                  </span>
-                ) : (
-                  showRequiredNotice && (
-                    <span className="text-red-500">* 필수 질문에 답변해주세요</span>
-                  )
+                    description={resolveHeaderDescriptions(
+                      loadedSurvey.description ?? '',
+                      loadedSurvey.settings.localizedMessages,
+                      currentLocale,
+                    )}
+                    responseHeader={loadedSurvey.settings.responseHeader}
+                    showBranding={!isLanguagePage && currentVisibleStepNumber <= brandingStepNumber}
+                  />
+                }
+                progress={progressBand}
+                bottomNav={
+                  // 언어 페이지는 「언어 변경」으로 와서 돌아갈 곳이 있을 때만 「이전」 하나
+                  isMobile && (!isLanguagePage || hasPreviousDisplayable) ? (
+                    <MobileBottomNav
+                      previousOnly={isLanguagePage}
+                      locale={inlineLocale}
+                      keyboardOpen={keyboardOpen}
+                      currentStepNumber={currentVisibleStepNumber}
+                      totalStepCount={totalVisibleStepCount}
+                      hasPrevious={hasPreviousDisplayable}
+                      isLastStep={isLastVisibleStep}
+                      isSubmitting={isSubmitting}
+                      submitLabel={submitLabel}
+                      submittingLabel={submittingLabel}
+                      onPrevious={handlePrevious}
+                      onNext={handleNext}
+                    />
+                  ) : undefined
+                }
+              >
+                {reeditNotice && (
+                  <div
+                    role="status"
+                    className="mb-4 flex items-start gap-2 rounded border border-blue-300 bg-blue-50 px-3 py-2 text-sm text-blue-900"
+                  >
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <div>
+                      {systemText('flow.reedit.before', inlineLocale)}
+                      <strong>{systemText('flow.reedit.emphasis', inlineLocale)}</strong>
+                      {systemText('flow.reedit.after', inlineLocale)}
+                    </div>
+                  </div>
                 )}
-              </div>
+                {/* 두 안내는 문장이 하나씩이라 켜졌는지만 보고 현재 언어로 그린다 */}
+                {showResumeNotice && (
+                  <ResumeToast
+                    message={systemText('flow.resumed', inlineLocale)}
+                    onDismiss={dismissResume}
+                  />
+                )}
+                {showRebaseNotice && (
+                  <ResumeToast
+                    message={systemText('flow.versionRebased', inlineLocale)}
+                    onDismiss={() => setShowRebaseNotice(false)}
+                  />
+                )}
+                {inviteIsInvalid && (
+                  <div
+                    role="alert"
+                    className="mb-4 flex items-start gap-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+                  >
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <div>{systemText('flow.inviteInvalidAnonymous', inlineLocale)}</div>
+                  </div>
+                )}
+                {isSplit ? (
+                  /* 분할 화면의 오른쪽 — 조사표와 눈을 오가야 해서 한 문항이 한 줄이다.
+                 전용 질문 유형이 아니라 그리는 방식만 다르다 (데이터는 평범한 radio). */
+                  <DemandChecklist
+                    items={currentStep.items.filter((item) =>
+                      currentStepQuestions.some((q) => q.id === item.question.id),
+                    )}
+                    groups={groups}
+                    responses={responses}
+                    questions={questions}
+                    onResponse={handleResponse}
+                    highlightQuestionIds={highlightQuestionIds}
+                    requiredMessageQuestionIds={requiredMessageQuestionIds}
+                    changeConfirmMessageQuestionIds={changeConfirmMessageQuestionIds}
+                    numericIssues={visibleNumericIssues}
+                    onQuestionFocus={selectAnchorQuestion}
+                    onGroupSelect={selectAnchorGroup}
+                    activeGroupId={activeAnchorGroupId}
+                    focusedQuestionId={
+                      anchorSelection?.kind === 'question' ? anchorSelection.id : null
+                    }
+                  />
+                ) : (
+                  <PageStepView
+                    step={currentStep}
+                    responses={responses}
+                    questions={questions}
+                    groups={groups}
+                    evalCtx={evalCtx}
+                    onResponse={handlePageResponse}
+                    highlightQuestionIds={highlightQuestionIds}
+                    requiredMessageQuestionIds={requiredMessageQuestionIds}
+                    changeConfirmMessageQuestionIds={changeConfirmMessageQuestionIds}
+                    numericIssues={visibleNumericIssues}
+                  />
+                )}
 
-              {isLastVisibleStep ? (
-                <Button onClick={handleNext} disabled={isSubmitting}>
-                  {isSubmitting ? submittingLabel : submitLabel}
-                  {!isSubmitting && <ArrowRight className="ml-2 h-4 w-4" />}
-                </Button>
-              ) : (
-                <Button onClick={handleNext}>
-                  다음
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              )}
+                {/* 데스크톱 네비게이션 — 언어 페이지는 「다음」이 없고, 돌아갈 곳이 있을 때만 「이전」 */}
+                <div
+                  className={`mt-8 hidden items-center justify-between ${isLanguagePage && !hasPreviousDisplayable ? '' : 'md:flex'}`}
+                >
+                  <Button
+                    variant="outline"
+                    onClick={handlePrevious}
+                    disabled={!hasPreviousDisplayable}
+                  >
+                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    {systemText('nav.previous', inlineLocale)}
+                  </Button>
+
+                  {/* 가운데 슬롯 — admin-edit 경고 1회 상태에선 빈 필수 통과 안내가 우선한다.
+                  상단 배너는 시야에서 벗어나 인지되지 않아(2026-08-14) 버튼 사이로 이동. */}
+                  <div
+                    className="px-4 text-sm text-gray-500"
+                    role={showAdminRelaxWarning ? 'alert' : undefined}
+                  >
+                    {showAdminRelaxWarning && adminStepClassification ? (
+                      <span className="flex flex-wrap items-center justify-center gap-2 text-amber-700">
+                        <span>{buildAdminRelaxWarningMessage(adminStepClassification)}</span>
+                        {adminFirstRelaxTarget && (
+                          <button
+                            type="button"
+                            className="shrink-0 rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs text-amber-900 hover:bg-amber-100"
+                            onClick={() => {
+                              const { questionId: targetQuestionId, issue: targetIssue } =
+                                adminFirstRelaxTarget;
+                              scrollToIssue({
+                                questionId: targetQuestionId,
+                                detailTargetIds: targetIssue?.detailTargetIds,
+                                cellInstanceIds: buildRowWiseCellInstanceIds(
+                                  questions.find((q) => q.id === targetQuestionId)?.tableRowsData,
+                                  targetIssue?.cellIds,
+                                ),
+                                cellIds: targetIssue?.cellIds,
+                              });
+                            }}
+                          >
+                            {systemText('validation.goToLocation', inlineLocale)}
+                          </button>
+                        )}
+                      </span>
+                    ) : (
+                      showRequiredNotice && (
+                        <span className="text-red-500">
+                          {systemText('flow.requiredUnanswered', inlineLocale)}
+                        </span>
+                      )
+                    )}
+                  </div>
+
+                  {isLanguagePage ? null : isLastVisibleStep ? (
+                    <Button onClick={handleNext} disabled={isSubmitting}>
+                      {isSubmitting ? submittingLabel : submitLabel}
+                      {!isSubmitting && <ArrowRight className="ml-2 h-4 w-4" />}
+                    </Button>
+                  ) : (
+                    <Button onClick={handleNext}>
+                      {submitLabel}
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              </SurveyResponseLayout>
             </div>
-          </SurveyResponseLayout>
+          </SurveyLocaleProvider>
         </FormulaEvalProvider>
       </PriorAnswersProvider>
     </ContactAttrsProvider>

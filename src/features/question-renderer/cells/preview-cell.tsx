@@ -9,6 +9,7 @@ import {
   useAnswerQuotes,
   useContactAttrs,
 } from '@/features/question-renderer/contact-attrs-context';
+import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
 import {
   getHorizontalItemsClass,
   getInputTextAlignClass,
@@ -17,6 +18,7 @@ import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { TableCell } from '@/types/survey';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
+import { systemText } from '@/utils/system-strings';
 
 import { RankingOptionImage } from '../ranking-option-image';
 import { getYouTubeEmbedUrl } from '../table-cell-renderers';
@@ -43,6 +45,7 @@ export const PreviewCell = React.memo(function PreviewCell({
 }) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
+  const locale = useInlineSurveyLocale();
 
   if (!cell) return <span className="text-sm text-gray-400">-</span>;
 
@@ -111,7 +114,7 @@ export const PreviewCell = React.memo(function PreviewCell({
           textColor={cell.textColor}
         >
           <select className="w-full rounded border border-gray-300 p-2 text-base" disabled>
-            <option value="">선택하세요...</option>
+            <option value="">{systemText('input.selectPlaceholder', locale)}</option>
             {cell.selectOptions.map((option) => (
               <option key={option.id} value={option.value}>
                 {option.label}
@@ -157,7 +160,7 @@ export const PreviewCell = React.memo(function PreviewCell({
                   frameBorder="0"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   allowFullScreen
-                  title="테이블 동영상"
+                  title={systemText('media.tableVideo', locale)}
                 />
               </div>
             </div>
@@ -170,18 +173,18 @@ export const PreviewCell = React.memo(function PreviewCell({
                   frameBorder="0"
                   allow="autoplay; fullscreen; picture-in-picture"
                   allowFullScreen
-                  title="테이블 동영상"
+                  title={systemText('media.tableVideo', locale)}
                 />
               </div>
             </div>
           ) : cell.videoUrl.match(/\.(mp4|webm|ogg)$/i) ? (
             <video src={cell.videoUrl} controls className="max-h-32 w-full max-w-xs rounded">
-              동영상을 지원하지 않는 브라우저입니다.
+              {systemText('media.videoUnsupported', locale)}
             </video>
           ) : (
             <div className="flex items-center gap-2 text-yellow-600">
               <Video className="h-4 w-4" />
-              <span className="text-sm">동영상 링크 오류</span>
+              <span className="text-sm">{systemText('media.videoLinkError', locale)}</span>
             </div>
           )}
           {caption && (
@@ -227,7 +230,7 @@ export const PreviewCell = React.memo(function PreviewCell({
             {(cell.inputRows ?? 1) >= 2 || cell.inputAutoGrow === true ? (
               <textarea
                 rows={Math.max(1, Math.floor(cell.inputRows ?? 1))}
-                placeholder={cell.placeholder || '답변을 입력하세요...'}
+                placeholder={cell.placeholder || systemText('input.placeholder', locale)}
                 maxLength={cell.inputMaxLength}
                 disabled
                 style={fixedWidthStyle}
@@ -239,7 +242,7 @@ export const PreviewCell = React.memo(function PreviewCell({
             ) : (
               <input
                 type="text"
-                placeholder={cell.placeholder || '답변을 입력하세요...'}
+                placeholder={cell.placeholder || systemText('input.placeholder', locale)}
                 maxLength={cell.inputMaxLength}
                 disabled
                 style={fixedWidthStyle}
@@ -251,7 +254,7 @@ export const PreviewCell = React.memo(function PreviewCell({
             )}
             {cell.inputMaxLength && (
               <div className="mt-1 text-right text-xs text-gray-500">
-                최대 {cell.inputMaxLength}자
+                {systemText('input.charLimitMax', locale, { max: cell.inputMaxLength })}
               </div>
             )}
           </div>
@@ -290,8 +293,10 @@ export const PreviewCell = React.memo(function PreviewCell({
           textColor={cell.textColor}
         >
           <div className="text-xs text-gray-500">
-            (순위형 셀 · {cell.rankingOptions?.length ?? 0}개 옵션 ·{' '}
-            {cell.rankingConfig?.positions ?? 3}순위)
+            {systemText('cell.rankingPreview', locale, {
+              count: cell.rankingOptions?.length ?? 0,
+              positions: cell.rankingConfig?.positions ?? 3,
+            })}
           </div>
         </CellContentLayout>
       );
@@ -306,7 +311,7 @@ export const PreviewCell = React.memo(function PreviewCell({
             type={choiceControlType}
             disabled
             className="h-4 w-4"
-            aria-label={cell.choiceLabel || '보기 선택'}
+            aria-label={cell.choiceLabel || systemText('cell.choiceAria', locale)}
           />
           {choiceLabelText && (
             <span
@@ -332,7 +337,9 @@ export const PreviewCell = React.memo(function PreviewCell({
           boldFirstLine={cell.boldFirstLine}
           textColor={cell.textColor}
         >
-          <div className="px-2 py-1.5 text-xs text-blue-600">계산 값</div>
+          <div className="px-2 py-1.5 text-xs text-blue-600">
+            {systemText('cell.calcPreview', locale)}
+          </div>
         </CellContentLayout>
       );
 

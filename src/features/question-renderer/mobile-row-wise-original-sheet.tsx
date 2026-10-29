@@ -13,8 +13,10 @@ import type {
 } from '@/features/question-renderer/utils/row-scale-bars';
 import { cn } from '@/lib/utils';
 import type { ChoiceGroup, TableCell } from '@/types/survey';
+import { systemText } from '@/utils/system-strings';
 
 import { MobileOriginalRowTable } from './mobile-original-row-table';
+import { useInlineSurveyLocale } from './survey-locale-context';
 
 interface MobileRowWiseOriginalSheetProps {
   model: MobileRowWiseOriginalModel;
@@ -68,6 +70,7 @@ export function MobileRowWiseOriginalSheet({
   renderScaleBar,
 }: MobileRowWiseOriginalSheetProps) {
   const labelIdPrefix = useId();
+  const locale = useInlineSurveyLocale();
 
   return (
     <div
@@ -158,8 +161,8 @@ export function MobileRowWiseOriginalSheet({
                         {errorDescriptionId ? (
                           <p id={errorDescriptionId} className="sr-only">
                             {hasTitle
-                              ? `${question.title}의 응답을 확인해 주세요.`
-                              : '응답을 확인해 주세요.'}
+                              ? systemText('mobile.checkAnswerOf', locale, { title: question.title })
+                              : systemText('mobile.checkAnswer', locale)}
                           </p>
                         ) : null}
                         {/* 제외한 앞쪽 열에 놓인 응답 칸(「기타」 행의 입력칸 등) — 조각에 자리가 없어 여기 그린다 */}

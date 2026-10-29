@@ -17,6 +17,7 @@ import type React from 'react';
 
 import { isUntouchedPriorValue } from '@/lib/survey/prior-answers';
 import type { InputFormat } from '@/types/input-type';
+import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
 import { filterFormatTyping, formatFailureMessage, parseInputFormat } from '@/features/question-renderer/utils/input-format';
 
 interface Options {
@@ -54,6 +55,7 @@ export function useInputFormatField({
   priorOriginal = null,
 }: Options): InputFormatField {
   const [focused, setFocused] = useState(false);
+  const locale = useInlineSurveyLocale();
   const untouchedPrior = isUntouchedPriorValue(rawValue, priorOriginal);
 
   const handleChange = useCallback(
@@ -76,7 +78,7 @@ export function useInputFormatField({
   let violation: string | null = null;
   if (format && enabled && !untouchedPrior && !focused && rawValue.trim() !== '') {
     const result = parseInputFormat(format, rawValue);
-    if (!result.ok) violation = formatFailureMessage(format, result.reason);
+    if (!result.ok) violation = formatFailureMessage(format, result.reason, locale);
   }
 
   const inputMode = format

@@ -42,6 +42,7 @@ import {
 } from '@/lib/survey/prior-answers';
 import { isInputFormat } from '@/types/input-type';
 import type { Question, SumConstraint, SurveyLookup, TableCell } from '@/types/survey';
+import { DEFAULT_SURVEY_LOCALE, type SurveyLocale } from '@/types/survey-locale';
 import { type BranchEvalCtx, responsesToLookupShape } from '@/utils/branch-eval';
 import {
   shouldDisplayColumn,
@@ -55,7 +56,8 @@ import { formatFailureMessage, parseInputFormat } from '@/features/question-rend
 import { rangeViolationMessage } from '@/utils/number-format';
 import { parseNumericInput } from '@/utils/numeric-input';
 import { collectSelectedOptionIds } from '@/utils/option-text-migration';
-import { DEFAULT_REQUIRED_CELL_MESSAGE } from '@/utils/required-message';
+import { requiredCellMessage } from '@/utils/required-message';
+import { type SystemStringKey, systemText } from '@/utils/system-strings';
 import { REQUIRED_CELL_TYPES, isCellValuePresent } from '@/utils/table-cell-semantics';
 import { recalculateRowspansForVisibleRows } from '@/utils/table-merge-helpers';
 import {
@@ -72,7 +74,7 @@ import { isExclusiveChoiceValue } from './answer-validation';
 import { collectRequiredOptionTextIssues } from './required-option-text-validation';
 
 /** 중복 불가 묶음 위반 문구 — 고정이다(저작자 문구를 받지 않는다). */
-export const DISTINCT_SELECT_MESSAGE = '같은 항목을 두 번 선택할 수 없습니다.';
+export const DISTINCT_SELECT_MESSAGE = systemText('validation.distinct');
 
 export interface NumericIssue {
   kind:
@@ -468,13 +470,13 @@ function filledCountHighlightIds(
   }
 }
 
-const FILLED_COUNT_PHRASES: Record<SumConstraint['operator'], (target: number) => string> = {
-  eq: (n) => `정확히 ${n}칸을 입력해야 합니다`,
-  ne: (n) => `입력한 칸이 ${n}칸이 아니어야 합니다`,
-  gte: (n) => `${n}칸 이상 입력해야 합니다`,
-  lte: (n) => `${n}칸까지만 입력할 수 있습니다`,
-  gt: (n) => `${n}칸보다 많이 입력해야 합니다`,
-  lt: (n) => `${n}칸보다 적게 입력해야 합니다`,
+const FILLED_COUNT_KEYS: Record<SumConstraint['operator'], SystemStringKey> = {
+  eq: 'validation.filledCount.eq',
+  ne: 'validation.filledCount.ne',
+  gte: 'validation.filledCount.gte',
+  lte: 'validation.filledCount.lte',
+  gt: 'validation.filledCount.gt',
+  lt: 'validation.filledCount.lt',
 };
 
 /** 저작자 문구에서 실제 숫자로 바뀌는 자리표시자 — 쓰지 않으면 문구는 종전 그대로다. */
@@ -505,20 +507,33 @@ export function fillMessageValues(
 }
 
 // 저작자 문구가 있으면 그대로, 없으면 기준과 현재 칸 수를 알려 준다(합계 문구와 같은 원칙).
-function filledCountMessage(constraint: SumConstraint, count: number): string {
+// 저작자 문구는 번역하지 않는다 — 기본 문구만 현재 언어를 따른다.
+function filledCountMessage(constraint: SumConstraint, count: number, locale: SurveyLocale): string {
   const custom = constraint.errorMessage?.trim();
   if (custom) return fillMessageValues(custom, { current: count, target: constraint.target });
-  return `선택된 칸 중 ${FILLED_COUNT_PHRASES[constraint.operator](constraint.target)} (현재 ${count}칸)`;
+  return systemText(FILLED_COUNT_KEYS[constraint.operator], locale, {
+    target: constraint.target,
+    count,
+  });
 }
 
-const SUM_OPERATOR_PHRASES: Record<SumConstraint['operator'], string> = {
-  eq: '이 되어야 합니다',
-  ne: '이 아니어야 합니다',
-  lte: ' 이하여야 합니다',
-  gte: ' 이상이어야 합니다',
-  lt: ' 미만이어야 합니다',
-  gt: ' 초과여야 합니다',
+const SUM_OPERATOR_KEYS: Record<SumConstraint['operator'], SystemStringKey> = {
+  eq: 'validation.sum.eq',
+  ne: 'validation.sum.ne',
+  lte: 'validation.sum.lte',
+  gte: 'validation.sum.gte',
+  lt: 'validation.sum.lt',
+  gt: 'validation.sum.gt',
 };
+
+/** 「{무엇이} {기준} (현재 {값})」 꼴의 기본 비교 문구 — 합계 제약·계산 칸 비교가 같이 쓴다. */
+function comparisonMessage(
+  operator: SumConstraint['operator'],
+  values: { subject: string; target: string; current: number },
+  locale: SurveyLocale,
+): string {
+  return systemText(SUM_OPERATOR_KEYS[operator], locale, values);
+}
 
 // 우변이 수식(targetExpr)이면 값을 노출하지 않는다 — 이전 응답·attrs 기반 기준값은
 // 응답자에게 힌트가 되므로 "기준값" 으로만 지칭 (셀 수식 검증의 계산값 미노출 원칙과 동일).
@@ -529,6 +544,7 @@ function sumConstraintMessage(
   constraint: SumConstraint,
   sum: number,
   targetValue: number | undefined,
+  locale: SurveyLocale,
 ): string {
   const custom = constraint.errorMessage?.trim();
   if (custom) {
@@ -537,9 +553,14 @@ function sumConstraintMessage(
       ...(targetValue !== undefined ? { target: targetValue } : {}),
     });
   }
-  const subject = constraint.leftExpr ? '계산 값' : '선택된 셀 합계';
-  const target = constraint.targetExpr ? '기준값' : String(constraint.target);
-  return `${subject}가 ${target}${SUM_OPERATOR_PHRASES[constraint.operator]} (현재 ${sum})`;
+  const subject = systemText(
+    constraint.leftExpr ? 'validation.sum.subjectCalc' : 'validation.sum.subjectSelected',
+    locale,
+  );
+  const target = constraint.targetExpr
+    ? systemText('validation.sum.targetExpr', locale)
+    : String(constraint.target);
+  return comparisonMessage(constraint.operator, { subject, target, current: sum }, locale);
 }
 
 /**
@@ -557,7 +578,8 @@ function collectOptionTextIssues(
   question: Question,
   response: unknown,
   optionTexts: Record<string, string> | undefined,
-  priorAnswers?: PriorAnswers | null,
+  priorAnswers: PriorAnswers | null | undefined,
+  locale: SurveyLocale,
 ): NumericIssue[] {
   if (!optionTexts) return [];
   const options = resolveChoiceOptions(question);
@@ -578,6 +600,7 @@ function collectOptionTextIssues(
       opt.textInputType,
       raw,
       priorOptionText(priorAnswers, question.id, opt.id),
+      locale,
     );
     if (formatMessage) {
       issues.push({
@@ -587,7 +610,7 @@ function collectOptionTextIssues(
       });
       continue;
     }
-    const message = rangeViolationMessage(text, opt.textInputNumberFormat);
+    const message = rangeViolationMessage(text, opt.textInputNumberFormat, locale);
     if (message) {
       issues.push({
         kind: 'range',
@@ -609,6 +632,7 @@ function collectOptionTextIssues(
 function collectChoiceTableInputCellIssues(
   question: Question,
   ctx: NumericValidationCtx | undefined,
+  locale: SurveyLocale,
 ): NumericIssue[] {
   if (question.type !== 'radio' && question.type !== 'checkbox') return [];
   if (!isChoiceTableSource(question)) return [];
@@ -666,6 +690,7 @@ function collectChoiceTableInputCellIssues(
             cell.inputType,
             rawValue,
             priorOptionText(ctx?.priorAnswers, question.id, cell.id),
+            locale,
           );
       if (formatMessage) {
         issues.push({
@@ -680,6 +705,7 @@ function collectChoiceTableInputCellIssues(
         rawValue,
         ctx?.contactAttrs,
         priorOptionText(ctx?.priorAnswers, question.id, cell.id),
+        locale,
       );
       if (quality) {
         issues.push({
@@ -690,7 +716,7 @@ function collectChoiceTableInputCellIssues(
         continue;
       }
       if (cell.inputType !== 'number') continue;
-      const message = rangeViolationMessage(value, cell.numberFormat);
+      const message = rangeViolationMessage(value, cell.numberFormat, locale);
       if (message) {
         issues.push({
           kind: 'range',
@@ -704,7 +730,7 @@ function collectChoiceTableInputCellIssues(
   if (missingTargets.length > 0) {
     issues.unshift({
       kind: 'required-detail',
-      message: DEFAULT_REQUIRED_CELL_MESSAGE,
+      message: requiredCellMessage(locale),
       detailTargetIds: missingTargets,
     });
   }
@@ -721,6 +747,7 @@ export function resolveTextQualityViolation(
   value: unknown,
   attrs: Record<string, string | undefined> | null | undefined,
   priorAnswers?: PriorAnswers | null,
+  locale: SurveyLocale = DEFAULT_SURVEY_LOCALE,
 ): TextQualityViolation | null {
   if (!question.textValidation || !isPlainTextInput(question)) return null;
   if (question.type === 'text' && isTokenPrefilled(question.defaultValueTemplate, attrs)) {
@@ -732,7 +759,7 @@ export function resolveTextQualityViolation(
   ) {
     return null;
   }
-  return textQualityViolation(question.textValidation, value);
+  return textQualityViolation(question.textValidation, value, locale);
 }
 
 /**
@@ -747,13 +774,14 @@ function formatViolationMessage(
   inputType: Question['inputType'] | undefined,
   value: unknown,
   priorOriginal?: string | null,
+  locale: SurveyLocale = DEFAULT_SURVEY_LOCALE,
 ): string | null {
   if (!isInputFormat(inputType)) return null;
   if (typeof value !== 'string') return null;
   // 이월 원본 그대로면 면제 — 응답자가 치지도 않은 지난 회차 값이다.
   if (isUntouchedPriorValue(value, priorOriginal ?? null)) return null;
   const result = parseInputFormat(inputType, value);
-  return result.ok ? null : formatFailureMessage(inputType, result.reason);
+  return result.ok ? null : formatFailureMessage(inputType, result.reason, locale);
 }
 
 /**
@@ -767,6 +795,7 @@ function selectionMaxIssue(
   question: Question,
   response: unknown,
   ctx: NumericValidationCtx | undefined,
+  locale: SurveyLocale,
 ): NumericIssue | null {
   if (question.type !== 'checkbox' || !question.maxSelectionsSource?.questionId) return null;
   if (isGroupedChoiceQuestion(question) || !Array.isArray(response)) return null;
@@ -776,7 +805,7 @@ function selectionMaxIssue(
   if (count <= max) return null;
   return {
     kind: 'selection-max',
-    message: `최대 ${max}개까지 선택할 수 있습니다. (현재 ${count}개 선택)`,
+    message: systemText('validation.selectionMax', locale, { max, count }),
   };
 }
 
@@ -784,6 +813,7 @@ export function collectNumericIssues(
   question: Question,
   response: unknown,
   ctx?: NumericValidationCtx,
+  locale: SurveyLocale = DEFAULT_SURVEY_LOCALE,
 ): NumericIssue[] {
   if (question.type === 'text' && isInputFormat(question.inputType)) {
     if (isTokenPrefilled(question.defaultValueTemplate, ctx?.contactAttrs)) return [];
@@ -791,13 +821,14 @@ export function collectNumericIssues(
       question.inputType,
       response,
       priorAnswerText(ctx?.priorAnswers, question.id),
+      locale,
     );
     return message ? [{ kind: 'format', message }] : [];
   }
 
   if (question.type === 'text' && question.inputType === 'number') {
     if (typeof response !== 'string') return [];
-    const message = rangeViolationMessage(response, question.numberFormat);
+    const message = rangeViolationMessage(response, question.numberFormat, locale);
     return message ? [{ kind: 'range', message }] : [];
   }
 
@@ -808,6 +839,7 @@ export function collectNumericIssues(
       response,
       ctx?.contactAttrs,
       ctx?.priorAnswers,
+      locale,
     );
     if (quality) issues.push({ kind: 'text-quality', message: quality.message });
     // 보기 소스 표 — 숨은 칸을 가리키는 선택은 답이 아니다. 그 상세기재를 요구하지 않고 최대
@@ -827,15 +859,21 @@ export function collectNumericIssues(
     if (optionTextIssues.questionMissing) {
       issues.push({
         kind: 'required-detail',
-        message: DEFAULT_REQUIRED_CELL_MESSAGE,
+        message: requiredCellMessage(locale),
         detailTargetIds: optionTextIssues.detailTargetIds ?? [],
       });
     }
     issues.push(
-      ...collectOptionTextIssues(question, visibleResponse, ctx?.optionTexts, ctx?.priorAnswers),
+      ...collectOptionTextIssues(
+        question,
+        visibleResponse,
+        ctx?.optionTexts,
+        ctx?.priorAnswers,
+        locale,
+      ),
     );
-    issues.push(...collectChoiceTableInputCellIssues(question, ctx));
-    const selectionMax = selectionMaxIssue(question, visibleResponse, ctx);
+    issues.push(...collectChoiceTableInputCellIssues(question, ctx, locale));
+    const selectionMax = selectionMaxIssue(question, visibleResponse, ctx, locale);
     if (selectionMax) issues.push(selectionMax);
     return issues;
   }
@@ -866,6 +904,7 @@ export function collectNumericIssues(
         ),
         ctx?.optionTexts,
         ctx?.priorAnswers,
+        locale,
       )
     : [];
 
@@ -891,7 +930,7 @@ export function collectNumericIssues(
     const highlightIds = filledCountHighlightIds(constraint, result);
     issues.push({
       kind: 'sum',
-      message: filledCountMessage(constraint, result.count),
+      message: filledCountMessage(constraint, result.count, locale),
       ...(highlightIds.length > 0 ? { cellIds: highlightIds } : {}),
     });
   }
@@ -913,7 +952,7 @@ export function collectNumericIssues(
     if (rangeViolations.length > 0) {
       issues.push({
         kind: 'range',
-        message: '허용 범위를 벗어난 값이 입력된 셀이 있습니다',
+        message: systemText('validation.rangeCells', locale),
         cellIds: rangeViolations.map((c) => c.id),
       });
     }
@@ -932,7 +971,7 @@ export function collectNumericIssues(
     if (formatViolations.length > 0) {
       issues.push({
         kind: 'format',
-        message: '입력 형식이 맞지 않은 칸이 있습니다',
+        message: systemText('validation.formatCells', locale),
         cellIds: formatViolations.map((c) => c.id),
       });
     }
@@ -950,7 +989,7 @@ export function collectNumericIssues(
     if (qualityViolations.length > 0) {
       issues.push({
         kind: 'text-quality',
-        message: '응답 조건(글자 수·내용)에 맞지 않는 칸이 있습니다',
+        message: systemText('validation.qualityCells', locale),
         cellIds: qualityViolations.map((c) => c.id),
       });
     }
@@ -972,7 +1011,7 @@ export function collectNumericIssues(
           : constraint.cellIds.filter((id) => existingIds.has(id));
         issues.push({
           kind: 'sum',
-          message: sumConstraintMessage(constraint, result.sum, result.target),
+          message: sumConstraintMessage(constraint, result.sum, result.target, locale),
           ...(highlightIds.length > 0 ? { cellIds: highlightIds } : {}),
         });
       }
@@ -1033,7 +1072,7 @@ export function collectNumericIssues(
     if (missingIds.length > 0) {
       issues.push({
         kind: 'required-cells',
-        message: DEFAULT_REQUIRED_CELL_MESSAGE,
+        message: requiredCellMessage(locale),
         cellIds: missingIds,
         ...(visibleOptionTextIssues.detailTargetIds
           ? { detailTargetIds: visibleOptionTextIssues.detailTargetIds }
@@ -1054,7 +1093,7 @@ export function collectNumericIssues(
     if (distinctViolationIds.length > 0) {
       issues.push({
         kind: 'distinct',
-        message: DISTINCT_SELECT_MESSAGE,
+        message: systemText('validation.distinct', locale),
         cellIds: distinctViolationIds,
       });
     }
@@ -1089,7 +1128,7 @@ export function collectNumericIssues(
             fillMessageValues(cell.formulaErrorMessage?.trim() ?? '', {
               current: roundedInput,
               target: computed,
-            }) || '입력하신 값이 앞서 입력한 값들의 계산 결과와 일치하지 않습니다.',
+            }) || systemText('validation.formulaMismatch', locale),
           cellIds: [cell.id],
         });
       }
@@ -1128,7 +1167,15 @@ export function collectNumericIssues(
         kind: 'formula',
         message:
           fillMessageValues(v.errorMessage?.trim() ?? '', { current: computed, target }) ||
-          `계산 결과가 기준값${SUM_OPERATOR_PHRASES[v.operator]} (현재 ${computed})`,
+          comparisonMessage(
+            v.operator,
+            {
+              subject: systemText('validation.sum.subjectCalcResult', locale),
+              target: systemText('validation.sum.targetExpr', locale),
+              current: computed,
+            },
+            locale,
+          ),
         cellIds: [cell.id],
       });
     }

@@ -68,6 +68,8 @@ import {
 } from '@/utils/mobile-table-display-mode';
 import { omitKey } from '@/utils/omit-key';
 import { resolveRequiredMessage } from '@/utils/required-message';
+import { systemText } from '@/utils/system-strings';
+import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
 
 import { ChoiceGroupScaleBar } from './choice-group-scale-bar';
 import { ChoiceTableCellControl } from './choice-table-cell-control';
@@ -178,6 +180,7 @@ function ChoiceTableResponseBody({
   const isMobile = useMobileView();
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
+  const locale = useInlineSurveyLocale();
   // 조건 평가 컨텍스트 — 빠뜨리면 attr/lookup 피연산자가 undefined 로 평가된다.
   const branchEvalCtx = useBranchEvalCtx(allResponses);
   const [activeDynamicGroupId, setActiveDynamicGroupId] = useState<string | null>(null);
@@ -529,7 +532,9 @@ function ChoiceTableResponseBody({
     // 덕분에 초안·재진입 복원·버전 rebase·관리자 편집 diff 가 그대로 동작한다.
     if (cell.type === 'input' && !cell.isHidden) {
       const cellLabel =
-        (cell.exportLabel ?? '').trim() || (cell.placeholder ?? '').trim() || '상세 기재';
+        (cell.exportLabel ?? '').trim() ||
+        (cell.placeholder ?? '').trim() ||
+        systemText('input.optionTextPlaceholder', locale);
       return gate(
         cell,
         <OptionTextInput
@@ -605,7 +610,7 @@ function ChoiceTableResponseBody({
             id={inputIdScope ? `${inputIdScope}-${cell.id}` : undefined}
             type={cellType === 'checkbox' ? 'checkbox' : 'radio'}
             name={inputName}
-            aria-label={option?.label ?? '선택'}
+            aria-label={option?.label ?? systemText('common.select', locale)}
             checked={checked}
             disabled={disabled}
             // radio 셀: 그룹 모드에서 재클릭(이미 선택) 은 onChange 가 발화하지 않으므로
@@ -654,11 +659,16 @@ function ChoiceTableResponseBody({
     <div className="flex items-center justify-end gap-2 text-sm">
       <span className="text-gray-600">
         {maxSel !== undefined && maxSel > 0
-          ? `${visibleSelectedIds.length}/${maxSel}개 선택됨`
-          : `${visibleSelectedIds.length}개 선택됨`}
+          ? systemText('choice.selectedCountOf', locale, {
+              count: visibleSelectedIds.length,
+              max: maxSel,
+            })
+          : systemText('choice.selectedCount', locale, { count: visibleSelectedIds.length })}
       </span>
       {!satisfiesMinSelections(visibleSelectedIds, minSel, isExclusiveChoiceCell) && (
-        <span className="text-orange-600">최소 {minSel}개 이상 선택해주세요</span>
+        <span className="text-orange-600">
+          {systemText('choice.minSelections', locale, { min: minSel ?? 0 })}
+        </span>
       )}
     </div>
   ) : null;
@@ -1135,7 +1145,8 @@ function ChoiceTableResponseBody({
           const rawTitle = columnLabel || group.label.trim();
           const title = rawTitle ? substituteTokens(rawTitle, attrs, quotes) : '';
           const unfilled = group.cells.some((c) => unfilledGroupCellIds.has(c.id));
-          const requiredMessage = group.requiredMessage?.trim() || resolveRequiredMessage(question);
+          const requiredMessage =
+            group.requiredMessage?.trim() || resolveRequiredMessage(question, locale);
           const memberIds = new Set(group.cells.map((c) => c.id));
           return (
             <div key={groupId}>
@@ -1319,9 +1330,11 @@ function ChoiceTableResponseBody({
             >
               <ListChecks className="h-4 w-4 shrink-0 text-gray-500" />
               <span className="flex-1 text-sm font-medium text-gray-700">
-                {config.label || '항목 선택'}
+                {config.label || systemText('table.selectItems', locale)}
               </span>
-              <span className="text-xs text-gray-500">{selectedCount}개 선택</span>
+              <span className="text-xs text-gray-500">
+                {systemText('table.selectedCount', locale, { count: selectedCount })}
+              </span>
               <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />
             </button>
           );

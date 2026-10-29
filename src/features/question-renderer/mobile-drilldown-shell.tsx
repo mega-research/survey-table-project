@@ -4,14 +4,23 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 
-import { cn } from '@/lib/utils';
+import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
 import type { ClassifiedLeaf, ClassifiedSection } from '@/features/question-renderer/utils/classify-table';
+import { cn } from '@/lib/utils';
+import { type SystemStringKey, systemText } from '@/utils/system-strings';
 
 export interface DrilldownStatus {
   completed: number;
   total: number;
-  unit: '칸' | '개 항목' | '개 선택';
+  /** 진행 줄의 단위 — 입력 칸 · 항목(행) · 선택. 화면 글자는 현재 언어로 사전이 정한다(`UNIT_KEY`). */
+  unit: 'cells' | 'items' | 'selections';
 }
+
+const UNIT_KEY = {
+  cells: 'drilldown.unit.cells',
+  items: 'drilldown.unit.items',
+  selections: 'drilldown.unit.selections',
+} as const satisfies Record<DrilldownStatus['unit'], SystemStringKey>;
 
 interface MobileDrilldownShellProps {
   sections: ClassifiedSection[];
@@ -47,6 +56,7 @@ export function getSectionIdentity(section: ClassifiedSection): string {
 /** 묶음 머리·계산 전용 요약의 「설명 보기」 — 제목 줄 아래에 설명 전문을 펼친다. */
 function GroupHeadDescription({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
+  const locale = useInlineSurveyLocale();
   return (
     <>
       <button
@@ -55,7 +65,7 @@ function GroupHeadDescription({ children }: { children: React.ReactNode }) {
         onClick={() => setOpen((value) => !value)}
         className="inline-flex shrink-0 items-center gap-0.5 text-xs font-semibold text-blue-600"
       >
-        설명 보기
+        {systemText('drilldown.showDescription', locale)}
         <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', open && 'rotate-180')} />
       </button>
       {open && <div className="basis-full rounded-lg bg-white/70 p-3">{children}</div>}
@@ -79,6 +89,7 @@ export function MobileDrilldownShell({
   onReturnToRoot,
   navigateRef,
 }: MobileDrilldownShellProps) {
+  const locale = useInlineSurveyLocale();
   const [nav, setNav] = useState<{ sectionId: string | null; leafId: string | null }>({
     sectionId: null,
     leafId: null,
@@ -201,16 +212,18 @@ export function MobileDrilldownShell({
   const secSubText = (section: ClassifiedSection, status: DrilldownStatus) => {
     const inputs = inputLeafCount(section);
     // 계산 전용 섹션(합계 블록 등) — "입력 0개" 대신 표시 전용임을 그대로 알린다
-    if (inputs === 0) return `표시 ${section.leaves.length}개`;
+    if (inputs === 0) return systemText('drilldown.displayCount', locale, { count: section.leaves.length });
     return section.kind === 'matrix'
       ? // 선택형(choice) 테이블은 셀이 입력 칸이 아니라 선택지다 — "입력 6칸"으로 쓰면
         // 그룹당 1개만 고르면 되는 rad 그룹에서 6개를 다 채워야 하는 것처럼 읽힌다
-        status.unit === '개 선택'
-        ? `세부 ${inputs}개 · 선택지 ${section.totalInputs}개`
-        : `세부 ${inputs}개 · 입력 ${section.totalInputs}칸`
-      : section.kind === 'list'
-        ? `항목 ${inputs}개`
-        : `입력 ${inputs}개`;
+        systemText(
+          status.unit === 'selections' ? 'drilldown.matrixChoices' : 'drilldown.matrixInputs',
+          locale,
+          { inputs, total: section.totalInputs },
+        )
+      : systemText(section.kind === 'list' ? 'drilldown.listItems' : 'drilldown.inputs', locale, {
+          count: inputs,
+        });
   };
 
   const renderCrumb = ({ label, onBack }: { label: string; onBack: () => void }) => (
@@ -221,7 +234,7 @@ export function MobileDrilldownShell({
         className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-lg bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-600 active:bg-gray-200"
       >
         <ChevronLeft className="h-4 w-4" />
-        뒤로
+        {systemText('drilldown.back', locale)}
       </button>
       {/* key={label}: 라벨이 바뀔 때 리마운트되어 플래시 애니메이션 재생 — 섹션 전환 인지용 */}
       <span
@@ -256,7 +269,12 @@ export function MobileDrilldownShell({
               className="flex flex-1 items-center justify-center gap-1 rounded-xl border border-gray-200 bg-white py-3 text-sm font-semibold text-gray-600 active:bg-gray-50"
             >
               <ChevronLeft className="h-4 w-4" />
-              {adjacentEnterableIndex(sectionIndex, -1) !== null ? '이전 섹션' : '목차로'}
+              {systemText(
+                adjacentEnterableIndex(sectionIndex, -1) !== null
+                  ? 'drilldown.previousSection'
+                  : 'drilldown.toContents',
+                locale,
+              )}
             </button>
             {adjacentEnterableIndex(sectionIndex, 1) !== null && (
               <button
@@ -267,7 +285,7 @@ export function MobileDrilldownShell({
                 }}
                 className="flex flex-1 items-center justify-center gap-1 rounded-xl border border-blue-200 bg-blue-50 py-3 text-sm font-semibold text-blue-600 active:bg-blue-100"
               >
-                다음 섹션
+                {systemText('drilldown.nextSection', locale)}
                 <ChevronRight className="h-4 w-4" />
               </button>
             )}
@@ -283,8 +301,9 @@ export function MobileDrilldownShell({
             </div>
             <div className="mt-1.5 flex justify-between text-xs text-gray-500">
               <span>
-                전체 <b className="font-semibold text-gray-700">{completed}</b> / {total}
-                {overallStatus.unit}
+                {systemText('drilldown.overall', locale)}{' '}
+                <b className="font-semibold text-gray-700">{completed}</b> / {total}
+                {systemText(UNIT_KEY[overallStatus.unit], locale)}
               </span>
               <span className="font-semibold text-gray-700">{pct}%</span>
             </div>
@@ -312,7 +331,7 @@ export function MobileDrilldownShell({
       >
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold text-gray-900">
-            {cardSection.label || '항목'}
+            {cardSection.label || systemText('drilldown.itemFallback', locale)}
           </div>
           {description ? (
             <div className="mt-0.5">{description}</div>
@@ -367,7 +386,7 @@ export function MobileDrilldownShell({
     return (
       <div className={cn('flex flex-wrap items-center gap-x-2 gap-y-2', className)}>
         <div className="min-w-0 flex-1 text-sm font-semibold text-gray-900">
-          {blockSection.label || '항목'}
+          {blockSection.label || systemText('drilldown.itemFallback', locale)}
         </div>
         {description && <GroupHeadDescription>{description}</GroupHeadDescription>}
       </div>
@@ -380,7 +399,7 @@ export function MobileDrilldownShell({
       <div
         key={getSectionIdentity(blockSection)}
         role="group"
-        aria-label={blockSection.label || '항목'}
+        aria-label={blockSection.label || systemText('drilldown.itemFallback', locale)}
         className="rounded-xl border border-gray-200 bg-gray-50 p-4"
       >
         {renderBlockTitle(blockSection)}
@@ -392,7 +411,9 @@ export function MobileDrilldownShell({
   if (nav.sectionId === null || !section || sectionIndex === null) {
     return (
       <div ref={rootRef}>
-        <p className="mb-3 px-1 text-sm font-medium text-gray-500">작성할 항목을 선택하세요</p>
+        <p className="mb-3 px-1 text-sm font-medium text-gray-500">
+          {systemText('drilldown.chooseItem', locale)}
+        </p>
         <div className="space-y-2.5">
           {rootBlocks.map((block) => {
             if (block.kind === 'card') return renderSectionCard(block.index);
@@ -403,7 +424,7 @@ export function MobileDrilldownShell({
               <div
                 key={getSectionIdentity(blockSection)}
                 role="group"
-                aria-label={blockSection.label || '항목'}
+                aria-label={blockSection.label || systemText('drilldown.itemFallback', locale)}
                 className="space-y-2.5 rounded-xl border border-blue-100 bg-blue-50/40 p-3"
               >
                 {renderBlockTitle(blockSection, 'px-1')}
@@ -426,7 +447,10 @@ export function MobileDrilldownShell({
   if (leafNavigation === 'matrix-only' && section.kind !== 'matrix') {
     return (
       <div ref={rootRef}>
-        {renderCrumb({ label: section.label || '항목', onBack: goToRoot })}
+        {renderCrumb({
+          label: section.label || systemText('drilldown.itemFallback', locale),
+          onBack: goToRoot,
+        })}
         {renderLegacySection?.(section)}
         {renderProgressBar()}
       </div>
@@ -436,7 +460,10 @@ export function MobileDrilldownShell({
   if (nav.leafId === null || !leaf || leafIndex === null || leafIndex < 0) {
     return (
       <div ref={rootRef}>
-        {renderCrumb({ label: section.label || '항목', onBack: goToRoot })}
+        {renderCrumb({
+          label: section.label || systemText('drilldown.itemFallback', locale),
+          onBack: goToRoot,
+        })}
         <div className="space-y-2.5">
           {section.leaves.map((leaf, leafIndex) => {
             const previousSubGroup = section.leaves[leafIndex - 1]?.subGroup ?? null;
@@ -501,7 +528,7 @@ export function MobileDrilldownShell({
     <div ref={rootRef}>
       {renderCrumb({
         label: !usesLeafList
-          ? section.label || '항목'
+          ? section.label || systemText('drilldown.itemFallback', locale)
           : leaf.subGroup && leaf.subGroup !== leaf.label
             ? `${leaf.subGroup} › ${leaf.label}`
             : leaf.label,
@@ -512,7 +539,7 @@ export function MobileDrilldownShell({
         <div className="mt-3">
           <button type="button" onClick={goToRoot} className={cn(navGray, 'w-full')}>
             <ChevronLeft className="h-4 w-4" />
-            목차로
+            {systemText('drilldown.toContents', locale)}
           </button>
         </div>
       ) : (
@@ -525,12 +552,12 @@ export function MobileDrilldownShell({
               className={navGray}
             >
               <ChevronLeft className="h-4 w-4" />
-              이전 섹션
+              {systemText('drilldown.previousSection', locale)}
             </button>
           ) : isFirstLeaf ? (
             <button type="button" onClick={goToRoot} className={navGray}>
               <ChevronLeft className="h-4 w-4" />
-              목차로
+              {systemText('drilldown.toContents', locale)}
             </button>
           ) : (
             <button
@@ -544,7 +571,7 @@ export function MobileDrilldownShell({
               className={navGray}
             >
               <ChevronLeft className="h-4 w-4" />
-              이전 항목
+              {systemText('drilldown.previousItem', locale)}
             </button>
           )}
           {!isLastLeaf ? (
@@ -559,7 +586,7 @@ export function MobileDrilldownShell({
               }}
               className={navBlue}
             >
-              다음 항목
+              {systemText('drilldown.nextItem', locale)}
               <ChevronRight className="h-4 w-4" />
             </button>
           ) : hasNextSection ? (
@@ -568,12 +595,12 @@ export function MobileDrilldownShell({
               onClick={() => goToNextSection(sectionIndex, section)}
               className={navBlue}
             >
-              다음 섹션
+              {systemText('drilldown.nextSection', locale)}
               <ChevronRight className="h-4 w-4" />
             </button>
           ) : (
             <button type="button" onClick={goToRoot} className={navBlue}>
-              목차로
+              {systemText('drilldown.toContents', locale)}
               <ChevronRight className="h-4 w-4" />
             </button>
           )}

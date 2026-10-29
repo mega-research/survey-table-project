@@ -20,6 +20,7 @@ import { buildCodebookVariableMetadata } from '@/lib/spss/export-metadata';
 import { buildMrsetNameMap } from '@/lib/spss/mrsets-syntax';
 import { buildInviteUrl } from '@/lib/survey-url';
 import { Question, SurveySubmission } from '@/types/survey';
+import type { SurveyLocale } from '@/types/survey-locale';
 
 // ============================================================
 // Raw Data 워크북
@@ -113,6 +114,11 @@ export interface RawExportContext {
    * 모든 시트가 같은 맵을 공유해야 파일 안에서 열 구성이 갈리지 않는다.
    */
   usedRepeatCounts?: ReadonlyMap<string, number>;
+  /**
+   * 문항 id → 언어 묶음의 언어 (`resolveLanguageSetLocales`). 공유 변수명을 한 열로 합친다
+   * (CONTEXT.md 「공유 변수명」). 다국어 설문이 아니면 비어 있거나 없고, 열 구성은 그대로다.
+   */
+  languageSetLocales?: ReadonlyMap<string, SurveyLocale>;
 }
 
 /**
@@ -125,6 +131,7 @@ export function toSpssColumnOptions(ctx: RawExportContext): SpssColumnOptions {
       ? { changeConfirmQuestionIds: ctx.changeConfirmQuestionIds }
       : {}),
     ...(ctx.usedRepeatCounts ? { usedRepeatCounts: ctx.usedRepeatCounts } : {}),
+    ...(ctx.languageSetLocales ? { languageSetLocales: ctx.languageSetLocales } : {}),
   };
 }
 

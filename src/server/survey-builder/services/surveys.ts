@@ -139,6 +139,7 @@ export async function ensureSurveyInDb(
       requireLogin: input.settings.requireLogin ?? false,
       thankYouMessage: input.settings.thankYouMessage ?? '응답해주셔서 감사합니다!',
       screenedOutMessage: input.settings.screenedOutMessage ?? null,
+      localizedMessages: input.settings.localizedMessages ?? null,
       responseHeader,
     });
   });
@@ -171,6 +172,7 @@ export async function createSurvey(
       maxResponses: data.settings?.maxResponses ?? null,
       thankYouMessage: data.settings?.thankYouMessage ?? '응답해주셔서 감사합니다!',
       screenedOutMessage: data.settings?.screenedOutMessage ?? null,
+      localizedMessages: data.settings?.localizedMessages ?? null,
       responseHeader,
     };
 
@@ -208,6 +210,7 @@ export async function updateSurvey(input: UpdateSurveyInput): Promise<SurveyRow>
   if (data.maxResponses !== undefined) picked.maxResponses = data.maxResponses;
   if (data.thankYouMessage !== undefined) picked.thankYouMessage = data.thankYouMessage;
   if (data.screenedOutMessage !== undefined) picked.screenedOutMessage = data.screenedOutMessage;
+  if (data.localizedMessages !== undefined) picked.localizedMessages = data.localizedMessages;
 
   // responseHeader 가 실려 온 경우에만 로고 tmp-to-permanent 승격 후 set(미포함 시 기존 값 보존)
   const dataToUpdate: Partial<SurveyRow> =
@@ -470,6 +473,7 @@ export async function duplicateSurvey(
         maxResponses: original.maxResponses,
         thankYouMessage: original.thankYouMessage,
         screenedOutMessage: original.screenedOutMessage,
+        localizedMessages: original.localizedMessages ?? null,
         endRedirects: original.endRedirects ?? null,
         responseHeader: original.responseHeader ?? null,
         // LUT 사본은 질문(옵션 소스·조건)이 id 로 참조하므로 함께 복사해야 복제본이 깨지지 않는다.

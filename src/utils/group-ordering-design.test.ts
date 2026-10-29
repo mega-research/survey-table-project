@@ -44,4 +44,22 @@ describe('buildRenderSteps 루트 그룹 디자인 전달', () => {
     // ungrouped 항목: rootGroupId === null
     expect(steps[0]!.items[0]!.rootGroupNameDesign).toBeUndefined();
   });
+
+  it('하위 그룹의 nameDesign 을 그 그룹 첫 문항에 소제목과 함께 싣는다', () => {
+    const groups: QuestionGroup[] = [
+      { id: 'root', surveyId: 's', name: '한국어판', order: 0, hideName: true },
+      {
+        id: 'sub', surveyId: 's', name: '※ 마케팅 비용', order: 1, parentGroupId: 'root',
+        nameDesign: { fullWidth: true, bgColor: '#000000', textColor: '#ffffff' },
+      },
+      { id: 'hidden-sub', surveyId: 's', name: '숨김', order: 2, parentGroupId: 'root', hideName: true, nameDesign: { bgColor: '#123456' } },
+    ];
+    const items = buildRenderSteps([q('q1', 'sub', 0), q('q2', 'sub', 1), q('q3', 'hidden-sub', 2)], groups).flatMap((s) => s.items);
+    const byId = new Map(items.map((it) => [it.question.id, it]));
+    expect(byId.get('q1')!.subgroupName).toBe('※ 마케팅 비용');
+    expect(byId.get('q1')!.subgroupNameDesign).toEqual({ fullWidth: true, bgColor: '#000000', textColor: '#ffffff' });
+    expect(byId.get('q2')!.subgroupNameDesign).toBeUndefined();
+    expect(byId.get('q3')!.subgroupName).toBeNull();
+    expect(byId.get('q3')!.subgroupNameDesign).toBeUndefined();
+  });
 });

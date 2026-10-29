@@ -189,6 +189,8 @@ export type StepItem = {
   rootGroupNameDesign?: GroupNameDesign | undefined;
   // 이 질문의 바로 위에 새 하위그룹이 시작되면 그 이름 (소제목 표시용)
   subgroupName: string | null;
+  // 그 하위그룹의 이름 디자인 — 있으면 소제목을 루트 그룹 배지와 같은 얼굴로 그린다
+  subgroupNameDesign?: GroupNameDesign | undefined;
 };
 
 export type RenderStep = {
@@ -204,7 +206,11 @@ export function stepIdOf(step: RenderStep): string {
   return `page:${step.items[0]?.question.id ?? 'empty'}`;
 }
 
-type FlatItem = { question: Question; subgroupName: string | null };
+type FlatItem = {
+  question: Question;
+  subgroupName: string | null;
+  subgroupNameDesign?: GroupNameDesign | undefined;
+};
 
 /**
  * 최상위 그룹(또는 ungrouped)의 질문들을 인터리브 순서로 flatten하고,
@@ -217,17 +223,33 @@ function flattenRootScope(
 ): FlatItem[] {
   const result: FlatItem[] = [];
 
-  const walk = (groupId: string | null, pendingSubgroupName: string | null) => {
+  const walk = (
+    groupId: string | null,
+    pendingSubgroupName: string | null,
+    pendingDesign: GroupNameDesign | undefined,
+  ) => {
     const children = getInterleavedChildren(groupId, questions, groups);
     let subName = pendingSubgroupName;
+    let subDesign = pendingDesign;
     for (const child of children) {
       if (child.kind === 'question') {
-        result.push({ question: child.data, subgroupName: subName });
+        result.push({
+          question: child.data,
+          subgroupName: subName,
+          ...(subName !== null && subDesign ? { subgroupNameDesign: subDesign } : {}),
+        });
         subName = null;
+        subDesign = undefined;
       } else {
-        // hideName 그룹은 응답 페이지에서 소제목을 노출하지 않는다.
-        walk(child.data.id, child.data.hideName ? null : child.data.name);
+        // hideName 그룹은 응답 페이지에서 소제목(디자인 포함)을 노출하지 않는다.
+        const hidden = child.data.hideName === true;
+        walk(
+          child.data.id,
+          hidden ? null : child.data.name,
+          hidden ? undefined : (child.data.nameDesign ?? undefined),
+        );
         subName = null;
+        subDesign = undefined;
       }
     }
   };
@@ -241,7 +263,7 @@ function flattenRootScope(
       result.push({ question: q, subgroupName: null });
     }
   } else {
-    walk(rootGroupId, null);
+    walk(rootGroupId, null, undefined);
   }
 
   return result;
@@ -269,6 +291,7 @@ function buildLinearStepItems(questions: Question[], groups: QuestionGroup[]): S
         rootGroupName,
         rootGroupNameDesign: design,
         subgroupName: it.subgroupName,
+        ...(it.subgroupNameDesign ? { subgroupNameDesign: it.subgroupNameDesign } : {}),
       });
     }
   }

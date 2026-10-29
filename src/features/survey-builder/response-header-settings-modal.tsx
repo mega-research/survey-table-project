@@ -13,6 +13,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { normalizeResponseHeaderConfig, responseHeaderButtonClass } from '@/lib/survey/response-header-config';
 import type { NormalizedResponseHeaderConfig } from '@/lib/survey/response-header-config';
 import { cn } from '@/lib/utils';
+import {
+  LocalizedTextFields,
+  useHasLanguageQuestion,
+} from '@/features/survey-builder/localized-text-fields';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 
 export function ResponseHeaderSettingsModal() {
@@ -31,18 +35,21 @@ export function ResponseHeaderSettingsModal() {
     normalizeResponseHeaderConfig(settings.responseHeader),
   );
   const [draftTitle, setDraftTitle] = useState(title);
+  const hasLanguageQuestion = useHasLanguageQuestion();
+  const [draftLocalized, setDraftLocalized] = useState(settings.localizedMessages ?? null);
 
   const handleOpenChange = (next: boolean) => {
     if (next) {
       // 열릴 때마다 최신 store 기준으로 재시드 — 이전 초안(취소로 폐기된 편집분 포함)은 버린다
       setDraftConfig(normalizeResponseHeaderConfig(settings.responseHeader));
       setDraftTitle(title);
+      setDraftLocalized(settings.localizedMessages ?? null);
     }
     setOpen(next);
   };
 
   const handleSave = () => {
-    updateSurveySettings({ responseHeader: draftConfig });
+    updateSurveySettings({ responseHeader: draftConfig, localizedMessages: draftLocalized });
     if (draftTitle !== title) {
       updateSurveyTitle(draftTitle);
     }
@@ -137,6 +144,17 @@ export function ResponseHeaderSettingsModal() {
                 settings={draftSettings}
                 onChange={(responseHeader) => setDraftConfig(normalizeResponseHeaderConfig(responseHeader))}
               />
+              {/* 언어별 제목 (CONTEXT.md 「다국어 설문」) — 언어 문항이 있을 때만 */}
+              {hasLanguageQuestion && (
+                <div className="mt-5 border-t border-gray-200 pt-4">
+                  <LocalizedTextFields
+                    field="title"
+                    label="설문 제목"
+                    texts={draftLocalized}
+                    onChange={setDraftLocalized}
+                  />
+                </div>
+              )}
             </aside>
           </div>
 

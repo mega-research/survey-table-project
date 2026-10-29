@@ -76,6 +76,7 @@ vi.mock('./raw-export-load', () => ({
   // .sps 경로는 이 스위트가 보지 않지만, 모듈에 있는 export 를 빠뜨리면 그 경로를
   // 건드리는 순간 "mock 에 없는 export" 로 엉뚱하게 깨진다.
   loadUsedRepeatCounts: vi.fn(async () => new Map<string, number>()),
+  loadLanguageSetLocales: vi.fn(async () => new Map()),
   buildRawExportContext: vi.fn(async () => ({
     appUrl: '',
     stepLabels: new Map(),

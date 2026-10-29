@@ -4,6 +4,7 @@
  * 설문 데이터를 불변 스냅샷 구조로 변환하는 순수 함수
  */
 
+import type { LocalizedSurveyTexts } from '@/shared/contracts/survey';
 import type { SurveyAnchorSnapshot } from '@/shared/contracts/survey-document';
 import type { MobileTableDisplayMode } from '@/types/mobile-table-display';
 import type {
@@ -31,6 +32,7 @@ export interface SurveySnapshot {
     maxResponses?: number | undefined;
     thankYouMessage: string;
     screenedOutMessage?: string | null | undefined;
+    localizedMessages?: LocalizedSurveyTexts | null | undefined;
     // 컨택 attrs invite token 강제 — 스냅샷에 freeze (shared/contracts/survey 의 SurveyVersionSnapshot.settings 와 정렬)
     requireInviteToken?: boolean | undefined;
     // 화면 너비 강제 — 스냅샷에 freeze
@@ -236,6 +238,7 @@ export function buildSurveySnapshot(
       maxResponses: survey.settings.maxResponses,
       thankYouMessage: survey.settings.thankYouMessage,
       screenedOutMessage: survey.settings.screenedOutMessage ?? null,
+      localizedMessages: survey.settings.localizedMessages ?? null,
       requireInviteToken: survey.settings.requireInviteToken,
       forceWideLayout: survey.settings.forceWideLayout,
       responseHeader: survey.settings.responseHeader,

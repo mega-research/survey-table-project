@@ -13,8 +13,10 @@ import {
   PRIOR_HIGHLIGHT_TEXT_CLS,
   isPriorMultiSelectLevel,
 } from '@/features/question-renderer/utils/prior-answer-highlight';
+import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { QuestionOption, SelectLevel } from '@/types/survey';
+import { systemText } from '@/utils/system-strings';
 
 interface UserDefinedMultiLevelSelectProps {
   levels: SelectLevel[];
@@ -38,6 +40,7 @@ export function UserDefinedMultiLevelSelect({
 }: UserDefinedMultiLevelSelectProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
+  const locale = useInlineSurveyLocale();
   const [currentValues, setCurrentValues] = useState<string[]>(values);
 
   // 부모가 매 렌더마다 새로운 [] 참조를 넘겨도(초기 빈 응답 상태) 진행 중 선택이
@@ -115,7 +118,7 @@ export function UserDefinedMultiLevelSelect({
                     : ''
                 }`}
               >
-                <option value="">{level.placeholder || `${level.label} 선택`}</option>
+                <option value="">{level.placeholder || systemText('input.selectLevel', locale, { label: level.label })}</option>
                 {options.map((option) => (
                   <option key={option.id} value={option.value}>
                     {substituteTokens(option.label, attrs, quotes)}

@@ -212,6 +212,7 @@ export function useSurveyLoader({
                   : {}),
                 thankYouMessage: snapshot.settings.thankYouMessage,
                 screenedOutMessage: snapshot.settings.screenedOutMessage ?? null,
+                localizedMessages: snapshot.settings.localizedMessages ?? null,
                 ...(snapshot.settings.requireInviteToken !== undefined
                   ? { requireInviteToken: snapshot.settings.requireInviteToken }
                   : {}),

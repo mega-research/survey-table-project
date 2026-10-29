@@ -17,8 +17,23 @@ import type {
   TextValidation,
   MaxSelectionsSource,
 } from '@/types/survey';
+import type { TranslatedSurveyLocale } from '@/types/survey-locale';
 
 import type { SurveyAnchorSnapshot } from './survey-document';
+
+/**
+ * 언어별 설문 글자 (CONTEXT.md 「다국어 설문」) — 제목·설명·완료 문구·자격미달 문구의 다른 언어판.
+ * 한국어는 기존 칸(title·description·thank_you_message·screened_out_message)이고 여기는 그 밖의 언어만
+ * 담는다. 빈 칸은 한국어로 폴백한다. surveys.localized_messages(0145)·발행 스냅샷 settings.
+ */
+export interface LocalizedSurveyText {
+  title?: string;
+  description?: string;
+  thankYou?: string;
+  screenedOut?: string;
+}
+
+export type LocalizedSurveyTexts = Partial<Record<TranslatedSurveyLocale, LocalizedSurveyText>>;
 
 // 버전 스냅샷 타입
 /** 테스트 버전 행의 `survey_versions.status` 값 (0141). 버전 목록 · 배포 번호 · 정리에서 뺀다. */
@@ -65,6 +80,8 @@ export interface SurveyVersionSnapshot {
     thankYouMessage: string;
     /** 자격미달 종료 문구 — 발행 시점 freeze. 이 필드 도입 이전 발행본은 undefined = 폴백 */
     screenedOutMessage?: string | null;
+    /** 언어별 설문 글자 — 발행 시점 freeze (0145). 이 필드 도입 이전 발행본은 undefined = 한국어만 */
+    localizedMessages?: LocalizedSurveyTexts | null;
     requireInviteToken?: boolean;
     forceWideLayout?: boolean;
     responseHeader?: SurveyResponseHeaderConfig;

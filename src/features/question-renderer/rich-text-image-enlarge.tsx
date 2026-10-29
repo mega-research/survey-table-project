@@ -11,7 +11,10 @@ import {
 
 import { Maximize2 } from 'lucide-react';
 
+import type { SurveyLocale } from '@/types/survey-locale';
+
 import { ImageEnlargeOverlay } from './enlargeable-image';
+import { useInlineSurveyLocale } from './survey-locale-context';
 import {
   type ImageBox,
   type ImageSize,
@@ -125,7 +128,7 @@ interface OpenImage {
   natural: ImageSize;
 }
 
-function markImage(img: HTMLImageElement): void {
+function markImage(img: HTMLImageElement, locale: SurveyLocale): void {
   const enlargeable =
     img.closest('a') === null &&
     canEnlargeImage({
@@ -137,7 +140,7 @@ function markImage(img: HTMLImageElement): void {
     img.setAttribute(ENLARGE_MARK, '');
     img.setAttribute('role', 'button');
     img.setAttribute('tabindex', '0');
-    img.setAttribute('aria-label', enlargeTriggerLabel(img.alt));
+    img.setAttribute('aria-label', enlargeTriggerLabel(img.alt, locale));
   } else {
     for (const name of [ENLARGE_MARK, 'role', 'tabindex', 'aria-label']) img.removeAttribute(name);
   }
@@ -161,6 +164,7 @@ export function useRichTextImageEnlarge<T extends HTMLElement>(
 } {
   const [opened, setOpened] = useState<OpenImage | null>(null);
   const [badgeLayer, setBadgeLayer] = useState<BadgeLayer>(EMPTY_LAYER);
+  const locale = useInlineSurveyLocale();
 
   // 본문이 바뀌면 이미지를 다시 찾는다. 로드가 끝나야 원본 크기를 알고, 상자 폭이 바뀌면 다시 잰다.
   // 다른 이미지의 로드·글 줄바꿈으로 사진 자리가 바뀌므로 돋보기 자리는 매번 전부 다시 잰다
@@ -170,7 +174,7 @@ export function useRichTextImageEnlarge<T extends HTMLElement>(
     const images = Array.from(container.querySelectorAll('img'));
     const refresh = (loaded?: HTMLImageElement) => {
       for (const img of images) {
-        if (img === loaded || (img.complete && img.naturalWidth > 0)) markImage(img);
+        if (img === loaded || (img.complete && img.naturalWidth > 0)) markImage(img, locale);
       }
       const next = measureBadgeLayer(container);
       setBadgeLayer((prev) => (sameLayer(prev, next) ? prev : next));
@@ -189,7 +193,7 @@ export function useRichTextImageEnlarge<T extends HTMLElement>(
       container.removeEventListener('scroll', onScroll);
       for (const img of images) img.removeEventListener('load', onLoad);
     };
-  }, [ref, html]);
+  }, [ref, html, locale]);
 
   const enlargeTarget = (target: EventTarget): HTMLImageElement | null =>
     target instanceof HTMLImageElement && target.hasAttribute(ENLARGE_MARK) ? target : null;

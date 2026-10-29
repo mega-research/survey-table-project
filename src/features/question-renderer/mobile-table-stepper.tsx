@@ -11,10 +11,12 @@ import {
 import { collectMobileLegendLabels } from '@/features/question-renderer/utils/split-display-cells';
 import { isTableRowCompleted } from '@/features/question-renderer/utils/table-row-completion';
 import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
+import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import { collectTableCells } from '@/lib/survey/cell-gating';
 import type { HeaderCell, TableColumn, TableRow, TableCell } from '@/types/survey';
+import { systemText } from '@/utils/system-strings';
 
 import { useGatingTableCells } from './cells/gating-table-cells-context';
 import { MobileRowCard } from './mobile-row-card';
@@ -87,6 +89,7 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
   // ── 내부에서 훅으로 계산 (props drilling 제거) ──
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
+  const locale = useInlineSurveyLocale();
   const rowGroups = useRowGroups(displayRows);
   // 표 전체 "카드 범례" 라벨 — 모든 응답 카드 상단에 공통 표시
   const legendLabels = useMemo(() => collectMobileLegendLabels(displayRows), [displayRows]);
@@ -317,7 +320,9 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
   if (phase === 'group-select') {
     return (
       <div className="space-y-2">
-        <p className="text-sm font-medium text-gray-700">응답할 항목을 선택하세요</p>
+        <p className="text-sm font-medium text-gray-700">
+          {systemText('stepper.chooseItems', locale)}
+        </p>
         {rowGroups.map((group, idx) => (
           <label
             key={idx}
@@ -337,7 +342,9 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
             <span className="flex-1 text-sm font-medium text-gray-900">
               {groupLabelByStart.get(group.startIndex) ?? group.label}
             </span>
-            <span className="text-xs text-gray-400">{group.rows.length}개</span>
+            <span className="text-xs text-gray-400">
+                {systemText('stepper.count', locale, { count: group.rows.length })}
+              </span>
           </label>
         ))}
         <button
@@ -345,7 +352,8 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
           onClick={() => setPhase('row-select')}
           className="mt-2 flex w-full items-center justify-center gap-1 rounded-xl bg-blue-600 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400"
         >
-          상세 입력 ({preSelectedGroupIndices.size}개 선택) <ChevronRight className="h-4 w-4" />
+          {systemText('stepper.detailInput', locale, { count: preSelectedGroupIndices.size })}{' '}
+          <ChevronRight className="h-4 w-4" />
         </button>
       </div>
     );
@@ -359,7 +367,9 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
 
     return (
       <div className="space-y-3">
-        <p className="text-sm font-medium text-gray-700">세부 항목을 선택하세요</p>
+        <p className="text-sm font-medium text-gray-700">
+          {systemText('stepper.chooseSubItems', locale)}
+        </p>
         {selectedGroups.map((group) => (
           // key는 group.startIndex 사용 — group.label은 같은 선두 텍스트를 가진
           // 두 rowspan 섹션 간 충돌 가능(중복 key → React reconciliation 오류)
@@ -404,7 +414,7 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
               onClick={() => setPhase('group-select')}
               className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-600"
             >
-              <ChevronLeft className="h-4 w-4" /> 그룹
+              <ChevronLeft className="h-4 w-4" /> {systemText('stepper.groups', locale)}
             </button>
           )}
           <button
@@ -416,7 +426,8 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
             }}
             className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400"
           >
-            상세 입력 ({preSelectedRowIds.size}개 선택) <ChevronRight className="h-4 w-4" />
+            {systemText('stepper.detailInput', locale, { count: preSelectedRowIds.size })}{' '}
+            <ChevronRight className="h-4 w-4" />
           </button>
         </div>
       </div>
@@ -441,7 +452,7 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
           onClick={() => setPhase('row-select')}
           className="flex items-center gap-1 text-sm font-medium text-blue-600 transition-colors hover:text-blue-800"
         >
-          <ChevronLeft className="h-4 w-4" /> 항목 선택으로 돌아가기
+          <ChevronLeft className="h-4 w-4" /> {systemText('stepper.backToSelection', locale)}
         </button>
 
         <div className="flex items-center justify-between text-xs text-gray-400">
@@ -449,7 +460,10 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
             {detailIdx + 1} / {filteredRows.length}
           </span>
           <span>
-            {detailCompletedCount} / {filteredRows.length} 완료
+            {systemText('stepper.completedOf', locale, {
+              completed: detailCompletedCount,
+              total: filteredRows.length,
+            })}
           </span>
         </div>
 
@@ -472,14 +486,14 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
             disabled={detailIsFirst}
             className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-gray-200 bg-white py-3 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <ChevronLeft className="h-4 w-4" /> 이전
+            <ChevronLeft className="h-4 w-4" /> {systemText('nav.previous', locale)}
           </button>
           <button
             onClick={() => setCurrentRowInGroup((c) => Math.min(filteredRows.length - 1, c + 1))}
             disabled={detailIsLast}
             className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-blue-600 py-3 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400"
           >
-            다음 <ChevronRight className="h-4 w-4" />
+            {systemText('nav.next', locale)} <ChevronRight className="h-4 w-4" />
           </button>
         </div>
       </div>
@@ -506,10 +520,10 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
         >
           <div className="flex items-center gap-2">
             <ListChecks className="h-4 w-4" />
-            <span>항목 선택</span>
+            <span>{systemText('table.selectItems', locale)}</span>
           </div>
           <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs">
-            {selectedRowIds.length}개 선택됨
+            {systemText('choice.selectedCount', locale, { count: selectedRowIds.length })}
           </span>
         </button>
       )}
@@ -591,7 +605,10 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
           {currentRowInGroup + 1} / {currentGroup.rows.length}
         </span>
         <span>
-          {groupCompletedCount} / {currentGroup.rows.length} 완료
+          {systemText('stepper.completedOf', locale, {
+            completed: groupCompletedCount,
+            total: currentGroup.rows.length,
+          })}
         </span>
       </div>
 
@@ -614,14 +631,14 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
           disabled={isFirst}
           className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-gray-200 bg-white py-3 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          <ChevronLeft className="h-4 w-4" /> 이전
+          <ChevronLeft className="h-4 w-4" /> {systemText('nav.previous', locale)}
         </button>
         <button
           onClick={goNext}
           disabled={isLast}
           className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-blue-600 py-3 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400"
         >
-          다음 <ChevronRight className="h-4 w-4" />
+          {systemText('nav.next', locale)} <ChevronRight className="h-4 w-4" />
         </button>
       </div>
     </div>

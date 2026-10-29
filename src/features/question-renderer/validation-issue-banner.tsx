@@ -1,6 +1,9 @@
 'use client';
 
+import { systemText } from '@/utils/system-strings';
+
 import { scrollToIssue, VALIDATION_NOTICE_ATTRIBUTE } from './scroll-to-issue';
+import { useInlineSurveyLocale } from './survey-locale-context';
 
 export interface ValidationBannerItem {
   message: string;
@@ -40,6 +43,7 @@ export function ValidationIssueBanner({
   /** admin-edit 빈 필수 완화 경고는 'amber' — 응답자 흐름 차단형 배너는 기본값(red) 그대로. */
   tone?: ValidationBannerTone;
 }) {
+  const locale = useInlineSurveyLocale();
   if (!items || items.length === 0) return null;
   const toneClasses = TONE_CLASSES[tone];
 
@@ -80,7 +84,7 @@ export function ValidationIssueBanner({
                 }}
                 className={`shrink-0 rounded border px-2 py-0.5 text-xs font-medium transition-colors ${toneClasses.button}`}
               >
-                위치로 이동
+                {systemText('validation.goToLocation', locale)}
               </button>
             )}
           </div>

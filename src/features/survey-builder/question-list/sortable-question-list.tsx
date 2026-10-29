@@ -53,9 +53,11 @@ import {
   useAnswerQuotes,
   useContactAttrs,
 } from '@/features/question-renderer/contact-attrs-context';
+import { SurveyLocaleProvider } from '@/features/question-renderer/survey-locale-context';
 import { FormulaEvalProvider } from '@/features/question-renderer/formula-context';
 import { resolveEffectiveOptionTextsByQuestion } from '@/features/question-renderer/utils/effective-option-texts';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
+import { resolveCurrentLocale } from '@/utils/survey-language';
 import { generateId, isEmptyHtml } from '@/lib/utils';
 import { client } from '@/shared/lib/rpc';
 import { Question, QuestionGroup, SurveyLookup } from '@/types/survey';
@@ -447,6 +449,12 @@ export function SortableQuestionList({
         ),
       ),
     [questions, testResponses, optionTexts],
+  );
+
+  // 현재 언어 (CONTEXT.md 「언어 문항」) — 응답 페이지와 같은 판정으로 테스트 응답에서 파생한다.
+  const testLocale = useMemo(
+    () => resolveCurrentLocale(questions, groups, testResponses),
+    [questions, groups, testResponses],
   );
 
   // calc 셀 수식 평가 컨텍스트 (빌더 테스트 모드) — 응답 페이지의 formulaCtx 와 동일 구성.
@@ -875,27 +883,29 @@ export function SortableQuestionList({
       {/* 편집 목록 — 카드 미리보기가 실제 응답 렌더링이므로 토큰 치환용 attrs 컨텍스트로 감싼다 */}
       {/* 참조표도 함께 — 표 입력 칸의 목록에서 찾기가 빌더 미리보기에서도 후보를 띄운다 */}
       <ContactAttrsProvider attrs={testContactAttrs} quotes={testAnswerQuotes} lookups={lookups}>
-        <FormulaEvalProvider value={testFormulaCtx}>
-          <div ref={editContainerRef}>
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragStart={handleDragStart}
-              onDragOver={handleDragOver}
-              onDragEnd={handleDragEnd}
-            >
-              {/* 그룹 없는 질문용 SortableContext */}
-              <SortableContext
-                items={ungroupedQuestions.map((q) => q.id)}
-                strategy={verticalListSortingStrategy}
+        <SurveyLocaleProvider locale={testLocale}>
+          <FormulaEvalProvider value={testFormulaCtx}>
+            <div ref={editContainerRef}>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragStart={handleDragStart}
+                onDragOver={handleDragOver}
+                onDragEnd={handleDragEnd}
               >
-                <div className="space-y-6">{renderGroups(renderEditCard, true)}</div>
-              </SortableContext>
+                {/* 그룹 없는 질문용 SortableContext */}
+                <SortableContext
+                  items={ungroupedQuestions.map((q) => q.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div className="space-y-6">{renderGroups(renderEditCard, true)}</div>
+                </SortableContext>
 
-              <DragOverlay>{activeId && renderDragOverlay(activeId)}</DragOverlay>
-            </DndContext>
-          </div>
-        </FormulaEvalProvider>
+                <DragOverlay>{activeId && renderDragOverlay(activeId)}</DragOverlay>
+              </DndContext>
+            </div>
+          </FormulaEvalProvider>
+        </SurveyLocaleProvider>
       </ContactAttrsProvider>
 
       {/* 모달 — 양 모드 밖 */}

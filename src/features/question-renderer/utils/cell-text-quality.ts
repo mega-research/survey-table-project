@@ -1,5 +1,6 @@
 import { isUntouchedPriorValue } from '@/lib/survey/prior-answers';
 import type { TableCell } from '@/types/survey';
+import { DEFAULT_SURVEY_LOCALE, type SurveyLocale } from '@/types/survey-locale';
 
 import { type TextQualityViolation, isPlainTextInput, textQualityViolation } from './text-quality';
 import { cellLockTemplate, isTokenPrefilled } from './token-prefill';
@@ -23,11 +24,12 @@ export function resolveCellTextQualityViolation(
   value: unknown,
   attrs: Record<string, string | undefined> | null | undefined,
   priorOriginal?: string | null,
+  locale: SurveyLocale = DEFAULT_SURVEY_LOCALE,
 ): TextQualityViolation | null {
   if (!cell.textValidation || !isPlainTextInput({ type: 'text', inputType: cell.inputType })) {
     return null;
   }
   if (isTokenPrefilled(cellLockTemplate(cell), attrs)) return null;
   if (typeof value === 'string' && isUntouchedPriorValue(value, priorOriginal ?? null)) return null;
-  return textQualityViolation(cell.textValidation, value);
+  return textQualityViolation(cell.textValidation, value, locale);
 }

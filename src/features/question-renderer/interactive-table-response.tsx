@@ -14,12 +14,14 @@ import { useScrollLeftSync } from '@/features/question-renderer/hooks/use-scroll
 import { useTablePerf } from '@/features/question-renderer/hooks/use-table-perf';
 import { useResponseSources } from '@/features/question-renderer/response-sources';
 import { scrollToIssue } from '@/features/question-renderer/scroll-to-issue';
+import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
 import {
   DEFAULT_TABLE_ANSWERABLE_CELL_TYPES,
   decideDrilldown,
 } from '@/features/question-renderer/utils/classify-table';
 import { distinctGroupOf } from '@/features/question-renderer/utils/distinct-select-group';
 import { expandHeaderGrid } from '@/features/question-renderer/utils/expand-header-grid';
+import { buildItemCards } from '@/features/question-renderer/utils/item-cards';
 import {
   useAnswerQuotes,
   useContactAttrs,
@@ -55,6 +57,7 @@ import {
   Question,
   RowRepeatConfig,
   StagedRowsConfig,
+  TableCell,
   TableColumn,
   TableRow,
 } from '@/types/survey';
@@ -64,6 +67,7 @@ import {
   shouldDisplayRow,
 } from '@/utils/branch-logic';
 import { getCellBackgroundStyle, getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
+import { systemText } from '@/utils/system-strings';
 import {
   type CellOutlineEdges,
   buildChoiceGroupOutline,
@@ -105,6 +109,38 @@ import { VirtualizedTableGrid } from './virtualized-table-grid';
 
 const VIRTUALIZATION_THRESHOLD = 100;
 
+/** 응답을 받지 않는 셀 유형 */
+const DISPLAY_ONLY_CELL_TYPES = new Set<TableCell['type']>(['text', 'image', 'video']);
+
+/** 응답 칸 없이도 표시 셀(「바로 표시」·「접기」)을 카드로 그리는 표시 방식 — 행 카드 스테퍼로 가는 것들 */
+const MODES_DRAWING_DISPLAY_CELLS = new Set<MobileTableDisplayMode>([
+  'auto',
+  'row-cards',
+  'row-group-cards',
+]);
+
+/**
+ * 응답 칸이 하나도 없는 표를 모바일에서 원본 표로 바꿔 그려야 하는가 — 고른 표시 방식이 아무것도 그리지
+ * 못할 때만 참이다. 축 카드와 행별 원본·척도는 응답 칸이 있어야 카드를 세우고, 선택 행 원본 보기는
+ * 값 없는 「0 / 0개」 목차만 남는다. 항목 카드는 라벨 뒤 「바로 표시」 글자를 표시 전용 카드로 세우고,
+ * 행 카드 계열은 모바일 표시를 지정한 글자 셀이 있으면 그것을 그린다.
+ */
+function displayOnlyTableNeedsOriginal(rows: TableRow[], mode: MobileTableDisplayMode): boolean {
+  if (mode === 'original') return false;
+  const displayOnly = rows.every((row) =>
+    row.cells.every((cell) => DISPLAY_ONLY_CELL_TYPES.has(cell.type)),
+  );
+  if (!displayOnly) return false;
+  if (mode === 'item-cards') return buildItemCards(rows).length === 0;
+  if (!MODES_DRAWING_DISPLAY_CELLS.has(mode)) return true;
+  return !rows.some((row) =>
+    row.cells.some(
+      (cell) =>
+        !cell.isHidden && (cell.mobileDisplay === 'inline' || cell.mobileDisplay === 'collapsed'),
+    ),
+  );
+}
+
 // text-base: 헤더는 척도 라벨 등 응답 판단 정보가 실리므로 16px 고정 (TablePreview 와 동일)
 const HEADER_CELL_BASE_CLASS =
   'flex min-w-0 items-center justify-center border-r border-b border-gray-400 bg-gray-50 px-3 py-2 text-center text-base font-semibold whitespace-pre-line text-gray-800 [overflow-wrap:anywhere]';
@@ -132,6 +168,7 @@ const RowRepeatControls = React.memo(function RowRepeatControls({
   onAdd,
   onRemove,
 }: RowRepeatControlsProps) {
+  const locale = useInlineSurveyLocale();
   return (
     <div className="mt-3 flex flex-wrap items-center gap-2">
       <button
@@ -150,11 +187,13 @@ const RowRepeatControls = React.memo(function RowRepeatControls({
           className="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
         >
           <Minus className="h-4 w-4" />
-          마지막 줄 삭제
+          {systemText('table.removeLastRow', locale)}
         </button>
       )}
       {!canAdd && (
-        <span className="text-xs text-gray-500">최대 {maxCount}개까지 추가할 수 있습니다.</span>
+        <span className="text-xs text-gray-500">
+          {systemText('table.maxRowsReached', locale, { max: maxCount })}
+        </span>
       )}
     </div>
   );
@@ -190,10 +229,11 @@ const StagedRowsControlRow = React.memo(function StagedRowsControlRow({
   gridRow,
   columnStart,
 }: StagedRowsControlRowProps) {
+  const locale = useInlineSurveyLocale();
   return (
     <div
       role="group"
-      aria-label="행 추가·삭제"
+      aria-label={systemText('table.rowControls', locale)}
       className="border-r border-b border-gray-400 bg-white"
       style={{ gridColumn: `${columnStart} / -1`, gridRow }}
     >
@@ -233,6 +273,7 @@ const SelectorRow = React.memo(function SelectorRow({
   isExpanded,
   onToggleExpand,
 }: SelectorRowProps) {
+  const locale = useInlineSurveyLocale();
   // buttonAlign은 가로 스크롤에서 항상 보이도록 좌측 sticky로 통일한다.
   return (
     <div
@@ -248,7 +289,7 @@ const SelectorRow = React.memo(function SelectorRow({
               e.stopPropagation();
               onToggleExpand(groupId);
             }}
-            aria-label={isExpanded ? '접기' : '펼치기'}
+            aria-label={systemText(isExpanded ? 'table.collapse' : 'table.expand', locale)}
           >
             <ChevronDown
               className={cn('h-4 w-4 transition-transform', isExpanded ? '' : '-rotate-90')}
@@ -262,7 +303,9 @@ const SelectorRow = React.memo(function SelectorRow({
           onClick={() => onSelect(groupId)}
         >
           <ListChecks className="h-3.5 w-3.5 shrink-0 text-gray-500" />
-          <span className="text-sm font-medium text-gray-700">{label || '항목 선택'}</span>
+          <span className="text-sm font-medium text-gray-700">
+            {label || systemText('table.selectItems', locale)}
+          </span>
           {selectedCount > 0 && (
             <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-gray-200 px-1.5 text-xs font-semibold text-gray-700">
               {selectedCount}
@@ -621,12 +664,20 @@ function InteractiveTableResponseBody({
     containerRef: tableContainerRef,
   });
   const isMobileView = useMobileView();
+  const locale = useInlineSurveyLocale();
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
-  const mobileMode = resolveMobileTableDisplayMode({
+  // 응답 칸이 하나도 없는 표(글자·이미지만 있는 안내 표)를 모바일 카드 계열이 그리지 못하면 원본 표로
+  // 그린다 — 그대로 두면 제목만 남고 표가 사라진다. 저작자가 정한 표시 방식이 그릴 수 있으면 그대로 둔다.
+  const authoredMobileMode = resolveMobileTableDisplayMode({
     mobileTableDisplayMode,
     mobileOriginalTable,
   });
+  const displayOnlyFallsBack = useMemo(
+    () => displayOnlyTableNeedsOriginal(rows, authoredMobileMode),
+    [rows, authoredMobileMode],
+  );
+  const mobileMode = displayOnlyFallsBack ? 'original' : authoredMobileMode;
   const useOriginalRowDetail = isMobileView && mobileMode === 'drilldown-original-row';
   // 행별 원본 · 행별 척도 — 같은 시트 구조, 행 본문만 다르다
   const usesRowWiseSheet = isMobileView && isRowWiseMobileTableDisplayMode(mobileMode);
@@ -1365,10 +1416,12 @@ function InteractiveTableResponseBody({
           >
             <ListChecks className="h-4 w-4 shrink-0 text-gray-500" />
             <span className="flex-1 text-sm font-medium text-gray-700">
-              {config.label || '항목 선택'}
+              {config.label || systemText('table.selectItems', locale)}
             </span>
             <span className="text-xs text-gray-500">
-              {groupSelectedCountMap.get(groupId) ?? 0}개 선택
+              {systemText('table.selectedCount', locale, {
+                count: groupSelectedCountMap.get(groupId) ?? 0,
+              })}
             </span>
             <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />
           </button>

@@ -4,10 +4,12 @@ import {
   useAnswerQuotes,
   useContactAttrs,
 } from '@/features/question-renderer/contact-attrs-context';
+import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { TableCell } from '@/types/survey';
 import { buildRankingOptLabel } from '@/utils/ranking-source';
+import { systemText } from '@/utils/system-strings';
 
 import { EnlargeableImage } from './enlargeable-image';
 import { useTableImageEnlarge } from './table-image-enlarge';
@@ -21,6 +23,7 @@ export function RankingOptionImage({ cell, className }: { cell: TableCell; class
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
   const enlarge = useTableImageEnlarge(cell.id);
+  const locale = useInlineSurveyLocale();
   if (!cell.imageUrl) return null;
   // 대체 텍스트·머리 줄 모두 보기 라벨(토큰 치환 후)이다
   const label = substituteTokens(buildRankingOptLabel(cell, ''), attrs, quotes);
@@ -28,7 +31,7 @@ export function RankingOptionImage({ cell, className }: { cell: TableCell; class
     <EnlargeableImage
       key={cell.imageUrl}
       src={cell.imageUrl}
-      alt={label || '순위 옵션 이미지'}
+      alt={label || systemText('ranking.optionImageAlt', locale)}
       enabled={enlarge !== null}
       fit="cover"
       trigger="button"

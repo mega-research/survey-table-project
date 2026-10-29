@@ -5,9 +5,11 @@ import React from 'react';
 import { Video } from 'lucide-react';
 
 import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
+import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
+import { systemText } from '@/utils/system-strings';
 
 import { getYouTubeEmbedUrl } from '../table-cell-renderers';
 import type { InteractiveCellProps, PreviewCellProps } from './types';
@@ -19,6 +21,7 @@ export const VideoCell = React.memo(function VideoCell({
 }: InteractiveCellProps | PreviewCellProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
+  const locale = useInlineSurveyLocale();
   // content 오버라이드 미지정 시 직접 치환(단일 패스) — image-cell.tsx 와 동일한 패턴.
   const caption = content ?? substituteTokens(cell.content, attrs, quotes);
 
@@ -46,7 +49,7 @@ export const VideoCell = React.memo(function VideoCell({
               frameBorder="0"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
-              title="테이블 동영상"
+              title={systemText('media.tableVideo', locale)}
             />
           </div>
         </div>
@@ -59,18 +62,18 @@ export const VideoCell = React.memo(function VideoCell({
               frameBorder="0"
               allow="autoplay; fullscreen; picture-in-picture"
               allowFullScreen
-              title="테이블 동영상"
+              title={systemText('media.tableVideo', locale)}
             />
           </div>
         </div>
       ) : isDirectVideo ? (
         <video src={cell.videoUrl} controls className="max-h-32 w-full max-w-xs rounded">
-          동영상을 지원하지 않는 브라우저입니다.
+          {systemText('media.videoUnsupported', locale)}
         </video>
       ) : (
         <div className="flex items-center gap-2 text-yellow-600">
           <Video className="h-4 w-4" />
-          <span className="text-sm">동영상 링크 오류</span>
+          <span className="text-sm">{systemText('media.videoLinkError', locale)}</span>
         </div>
       )}
       {caption && (

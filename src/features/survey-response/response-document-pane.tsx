@@ -5,7 +5,9 @@ import { useMemo, useState } from 'react';
 import type { SurveyAnchorSnapshot } from '@/shared/contracts/survey-document';
 import { place, type PageBox, type ScrollBand } from '@/features/question-renderer/utils/anchor-geometry';
 import type { AnchorFocus } from '@/features/question-renderer/utils/anchor-outline';
+import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
 import { cn } from '@/lib/utils';
+import { systemText } from '@/utils/system-strings';
 
 import { MAX_PAGE_SPAN, PdfPageView, type RenderedPageBox } from '@/features/question-renderer/pdf-page-view';
 
@@ -42,6 +44,7 @@ export function ResponseDocumentPane({
   labelOf,
   onOwnerSelect,
 }: Props) {
+  const locale = useInlineSurveyLocale();
   const [page, setPage] = useState(1);
   const [boxes, setBoxes] = useState<RenderedPageBox[]>([]);
   // 이어 붙여 볼 다음 쪽 수. 초점이 여러 쪽에 걸치면 그 범위만큼 저절로 열린다.
@@ -112,7 +115,7 @@ export function ResponseDocumentPane({
               type="button"
               key={`${anchor.ownerId}-${anchor.page}-${index}`}
               onClick={() => onOwnerSelect?.(anchor.ownerId)}
-              aria-label="이 영역의 문항으로 이동"
+              aria-label={systemText('document.goToQuestion', locale)}
               className={cn(
                 // 채움 없이 테두리만 — 채우면 조사표 글씨를 덮는다
                 'absolute rounded-[3px] transition-colors',

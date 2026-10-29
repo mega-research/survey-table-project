@@ -205,7 +205,10 @@ export interface SplitCandidate {
   note: string;
 }
 
-export function detectSplitCandidates(questions: Question[]): SplitCandidate[] {
+export function detectSplitCandidates(
+  questions: Question[],
+  options?: SpssColumnOptions,
+): SplitCandidate[] {
   // 1) value-match sourceQuestionId 빈도 집계 (질문 + 테이블 행)
   const refCount = new Map<string, number>();
   const bump = (dc: QuestionConditionGroup | undefined) => {
@@ -237,7 +240,7 @@ export function detectSplitCandidates(questions: Question[]): SplitCandidate[] {
   for (const [qid, refs] of refCount) {
     const basis = qmap.get(qid);
     if (!basis || !SPLIT_BASIS_TYPES.includes(basis.type)) continue;
-    const plan = planSplit(questions, qid);
+    const plan = planSplit(questions, qid, {}, options);
     if (plan.sheets.length < 2) continue; // 분할 효과 없음
     candidates.push({
       questionId: qid,

@@ -17,7 +17,7 @@ import {
 } from '@/features/question-renderer/utils/table-radio-groups';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
-import type { HeaderCell, TableColumn, TableRow } from '@/types/survey';
+import type { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 
 import { CellText, resolveCellTextHtml } from './cell-text';
 import { InteractiveCell } from './cells';
@@ -34,6 +34,13 @@ interface MobileColumnAxisCardsProps {
   errorCellIds?: Set<string> | undefined;
   /** 동적 행 그룹 선택 버튼 목록 — 호스트가 만들어 카드 목록 위에 둔다 */
   dynamicGroupPicker?: ReactNode;
+}
+
+/** 상세 입력 칸을 금액 칸 아래에 그릴 모양 — 칸 글자(행 제목과 같은 「9) 기타비용」)는 빼고 모바일 라벨을 안내로 */
+function asDetailCell(cell: TableCell): TableCell {
+  const hint = cell.mobileLabel?.trim();
+  const { contentHtml: _contentHtml, ...rest } = cell;
+  return { ...rest, content: '', ...(hint ? { placeholder: hint } : {}) };
 }
 
 /**
@@ -91,7 +98,7 @@ export const MobileColumnAxisCards = React.memo(function MobileColumnAxisCards({
           }
         >
           <div className="space-y-3 px-1 py-1">
-            {card.items.map(({ cell: sourceCell, row, label, labelCell, groupCells }, index) => {
+            {card.items.map(({ cell: sourceCell, row, label, labelCell, groupCells, details }, index) => {
               // 글자 없는 체크박스 하나짜리 칸은 행 제목을 그 체크의 라벨로 옆에 붙인다(☐ 행 제목).
               const checkWithTitle = withRowTitleAsCheckLabel(sourceCell, label);
               const cell = overrideCellOptionsColumnsForCard(checkWithTitle ?? sourceCell);
@@ -152,6 +159,31 @@ export const MobileColumnAxisCards = React.memo(function MobileColumnAxisCards({
                         )}
                       />
                     </div>
+                    {details.map((detail) => (
+                      // 이 칸이 여는 같은 행 상세 입력(「9) 기타비용」 기타 내용) — 칸 글자는 행 제목과 겹치니
+                      // 지우고 모바일 라벨을 입력칸 안내로 쓴다. 닫혀 있으면 게이팅이 컨트롤째 숨긴다
+                      <div
+                        key={detail.id}
+                        data-detail-cell-id={detail.id}
+                        className={cn(errorCellIds?.has(detail.id) && 'rounded-lg ring-2 ring-red-300')}
+                      >
+                        <InteractiveCell
+                          cell={asDetailCell(detail)}
+                          questionId={questionId}
+                          value={value}
+                          onChange={onChange}
+                          rowCells={row.cells}
+                          ariaInvalid={errorCellIds?.has(detail.id) === true}
+                          hintInFlow
+                          ignoreInputWidth
+                          {...resolveRadioGroupProps(
+                            detail,
+                            row.id,
+                            radioBucketsByRowId.get(row.id) ?? new Map(),
+                          )}
+                        />
+                      </div>
+                    ))}
                   </div>
                 </React.Fragment>
               );

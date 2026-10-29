@@ -10,11 +10,12 @@
 import { useCallback, useState } from 'react';
 
 import type { NumberFormat } from '@/types/survey';
+import { DEFAULT_SURVEY_LOCALE, type SurveyLocale } from '@/types/survey-locale';
 import {
   canInputAllowedValue,
   exceedsDecimalPlaces,
   exceedsMax,
-  formatKoreanUnitReading,
+  formatUnitReading,
   formatWithComma,
   rangeViolationMessage,
   stripComma,
@@ -29,6 +30,8 @@ interface Options {
   // Question.numberFormat(옵셔널 필드) 을 그대로 전달하는 호출부와 타입을 맞춘다.
   numberFormat?: NumberFormat | null | undefined;
   enabled: boolean;
+  /** 범위 힌트 문구의 언어 — 공용 구역 훅이라 컨텍스트를 못 읽어 호출부가 넘긴다. 기본 한국어. */
+  locale?: SurveyLocale;
 }
 
 export function useFormattedNumericInput({
@@ -36,6 +39,7 @@ export function useFormattedNumericInput({
   onRawChange,
   numberFormat,
   enabled,
+  locale = DEFAULT_SURVEY_LOCALE,
 }: Options) {
   // min 힌트는 포커스 중 숨긴다 — '15' 를 치는 도중 '1' 에서 에러가 스치는 깜빡임 방지
   const [focused, setFocused] = useState(false);
@@ -88,13 +92,13 @@ export function useFormattedNumericInput({
   );
 
   const unitReading = enabled
-    ? formatKoreanUnitReading(rawValue, numberFormat?.unit, numberFormat?.unitSuffix)
+    ? formatUnitReading(rawValue, numberFormat?.unit, numberFormat?.unitSuffix, locale)
     : null;
 
   // 범위 힌트 — 포커스 중 숨김. min 은 이 힌트가 1차 피드백이고,
   // max 는 타이핑 차단이 1차·이 힌트는 우회 값(prefill 오설정 등) 봉합용.
   const rangeViolation =
-    enabled && !focused ? rangeViolationMessage(rawValue, numberFormat) : null;
+    enabled && !focused ? rangeViolationMessage(rawValue, numberFormat, locale) : null;
 
   return { displayValue, handleChange, handleFocus, handleBlur, unitReading, rangeViolation };
 }

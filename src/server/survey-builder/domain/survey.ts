@@ -75,9 +75,9 @@ export type CreateSurveyInput = z.infer<typeof CreateSurveyInput>;
  * `.strict()` 인 이유는 조용히 버리지 않기 위해서다 — 권한 컬럼을 실어 보낸 요청은
  * BAD_REQUEST 로 되돌아가야 로그에 남는다. 서비스도 허용 필드만 명시 set 해 두 겹으로 막는다.
  *
- * `responseHeader` 만 z.custom 으로 남긴다. 판별 유니온이라 zod 로 옮기면 타입과 드리프트가
- * 생기고, 값은 JSONB 컬럼으로만 가서 권한에 닿지 않으며 읽는 쪽이 정규화한다
- * (`normalizeResponseHeaderConfig`, JSONB 드리프트 관례).
+ * `responseHeader`·`localizedMessages` 만 z.custom 으로 남긴다. 둘 다 JSONB 리프라 값은 JSONB
+ * 컬럼으로만 가서 권한에 닿지 않는다. responseHeader 는 판별 유니온이라 zod 로 옮기면 타입과
+ * 드리프트가 생기고, 읽는 쪽이 정규화한다(`normalizeResponseHeaderConfig`, JSONB 드리프트 관례).
  */
 export const UpdateSurveyDataSchema = z
   .object({
@@ -94,6 +94,10 @@ export const UpdateSurveyDataSchema = z
     maxResponses: z.number().int().nullable().optional(),
     thankYouMessage: z.string().optional(),
     screenedOutMessage: z.string().nullable().optional(),
+    localizedMessages: z
+      .custom<NonNullable<SurveyType['settings']['localizedMessages']>>()
+      .nullable()
+      .optional(),
     responseHeader: z.custom<SurveyType['settings']['responseHeader']>().optional(),
   })
   .strict();

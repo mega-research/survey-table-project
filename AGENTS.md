@@ -27,7 +27,7 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 | 조사 대상 — 컨택원 배정 · 필터 해석 · ID 목록 검색 · 이월 응답 임포트                                            | `src/server/contacts/AGENTS.md`          |
 | 운영 콘솔 필터 바 구조                                                                                           | `src/features/operations/AGENTS.md`      |
 | DB 스키마 (테이블·컬럼·관계)                                                                                     | `src/db/schema/AGENTS.md`                |
-| 프론트 기능 묶음 트리 · 질문 유형·셀 타입·테이블 검증 규칙                                                       | `src/features/AGENTS.md`                 |
+| 프론트 기능 묶음 트리 · 질문 유형·셀 타입·테이블 검증 규칙 · 다국어 설문                                         | `src/features/AGENTS.md`                 |
 | lib 트리 · 레이트리밋 · 로깅 · Sentry                                                                            | `src/lib/AGENTS.md`                      |
 | 도메인 용어                                                                                                      | `CONTEXT.md`                             |
 | 결정 배경                                                                                                        | `docs/adr/`                              |
@@ -152,6 +152,7 @@ src/
 │   ├── table-cell-refs.ts      # 표 셀 참조 재배선 (lib/question/row-repeat 가 import 해 공용 잔류). 입력 형식·응답 품질·순위 클릭·보기 그룹 외곽선/섹션 라벨은 소비자가 features 뿐이라 question-renderer/utils 로 (2026-09-15)
 │   ├── conditional-table-layout.ts  # 응답 표 가시 투영(행·열 표시조건 + 동적 행 선택) — 렌더러·차단 검증·저장 경계 strip 공용이라 공용 구역 (구 question-renderer/utils, 2026-10-22)
 │   ├── cell-gate-tree.ts       # 셀 게이팅 조건 트리 순회(잎 수집·컨트롤러 id·잎 매핑·잎 재해석) — 타입만 import 하는 잎 모듈, lib·utils·features 공용
+│   ├── survey-language / system-strings.ts  # 다국어 판정(언어 문항·현재 언어·언어 묶음)·응답 화면 시스템 글자 사전 ko·zh·en — 공용 구역 (src/features/AGENTS.md "다국어 설문")
 │   ├── dynamic-row-selection-sidecar.ts  # 동적 행 선택 사이드카 키·정제 — lib/survey/response-sidecars 등록부가 import 하므로 공용 구역 (구 question-renderer/utils)
 │   └── ...
 │
@@ -159,12 +160,13 @@ src/
 │   ├── index.ts                # drizzle(postgres-js) 클라이언트
 │   └── schema/                 # Drizzle ORM 스키마 (src/db/schema/AGENTS.md 참조)
 │
-├── types/                      # 전역 타입·어휘 4파일
+├── types/                      # 전역 타입·어휘 5파일
 │   ├── survey.ts               # 질문 구조 타입 SoT — TableCell·QuestionOption·조건식 등 (986줄, 비테스트 소비 282파일)
 │   │                           # shared/contracts/survey 와 심볼 겹침 0. 저쪽은 JSONB 문서 어휘라 역할이 다르다
 │   ├── question-types.ts       # 질문 유형 어휘 런타임 SoT — QUESTION_TYPES 배열 ↔ QuestionType 동치를 tsc 로 강제
 │   ├── mobile-table-display.ts # 모바일 표 표시 모드 어휘 + 타입 가드
-│   └── input-type.ts           # 입력 형식 어휘 SSOT — text·number + 형식 5종(mobile·phone·biz_number·corp_number·email)
+│   ├── input-type.ts           # 입력 형식 어휘 SSOT — text·number + 형식 5종(mobile·phone·biz_number·corp_number·email)
+│   └── survey-locale.ts        # 다국어 언어 어휘 — SURVEY_LOCALES(ko·zh·en)·DEFAULT_SURVEY_LOCALE·isSurveyLocale
 ├── instrumentation.ts          # Sentry 서버 instrumentation
 ├── instrumentation-client.ts   # Sentry 클라이언트 instrumentation
 └── proxy.ts                    # Next 미들웨어 (세션 쿠키 1차 게이트 + x-pathname 전달)
@@ -443,12 +445,12 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 
 ---
 
-## 쓰기 변경 체크리스트
+## 기능 개발 체크리스트
 
-데이터를 쓰거나 권한·외부 호출이 걸린 변경은 **스펙(PRD) 단계**와 **적대적 리뷰 단계** 두 번
-`write-change-checklist` 스킬(`.agents/skills/write-change-checklist/SKILL.md`)을 거친다 — 변경 종류를 정하고
-항목마다 「지킨다(어떻게) / 해당 없음(이유) / 일부러 안 지킨다(이유)」를 이 레포의 기존 장치로 답한다.
-스펙에 적히지 않은 성질은 TDD 가 테스트를 만들지 않고, 리뷰도 눈에 띄는 버그에서 멈춘다.
+모든 기능 개발·수정은 **스펙(PRD) 단계**와 **적대적 리뷰 단계** 두 번
+`write-change-checklist` 스킬(`.agents/skills/write-change-checklist/SKILL.md`)을 거친다 — 축은 셋(백엔드 · 프론트엔드 ·
+개인정보·컴플라이언스)이고, 변경 종류를 정한 뒤 항목마다 「지킨다(어떻게) / 해당 없음(이유) / 일부러 안 지킨다(이유)」를
+이 레포의 기존 장치로 답한다. 스펙에 적히지 않은 성질은 TDD 가 테스트를 만들지 않고, 리뷰도 눈에 띄는 버그에서 멈춘다.
 
 ---
 
@@ -464,7 +466,7 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 
 4. **테이블 질문**: `tableColumns`, `tableRowsData`, `tableHeaderGrid`, `tableValidationRules`, `dynamicRowConfigs`, `rowRepeatConfig`, `sumConstraints` JSONB 사용. choice 응답값은 `cell.id`.
 
-   **행 차례로 열기**(`stagedRowsConfig`, 0132)는 행 반복과 또 다른 기능이다(ADR 0028) — 저작자가 직접 만든 평범한 행 묶음을 처음 N행만 보이고 `+` 로 한 행씩 연다. **구조를 펼치지도 접지도 않는다.** 묶음의 행은 평범한 행이라 선택 칸·셀 게이팅·합계 제약이 그대로 동작하고, 내보내기 열은 열림 여부와 무관하게 항상 나간다(행 반복의 미사용 벌 pruning 없음). 열린 행 수는 저장하지 않고 값에서 파생한다 — `max(처음 보이는 행 수, 값이 있는 마지막 묶음 행)`(`features/question-renderer/utils/staged-rows.ts` 의 `deriveOpenStagedCount`, 게이팅으로 닫힌 칸의 값은 없는 것으로 친다). **필수 판정도 같은 함수를 쓴다** — 그 뒤의 묶음 행만 필수에서 빠진다(`stagedOptionalCellIds`). 행 반복의 「1벌만」과 다르다. `−` 는 마지막으로 연 행의 값을 비우고 닫는다. 버튼 줄은 묶음 바로 아래에 선다: 데스크톱 표는 격자 한 줄(`use-dynamic-row-layout` 의 `stagedControl`)이고 묶음을 가로지르는 세로 병합 칸은 `_gridRowSpanExtra`(런타임 전용)로 그 줄까지 덮는다 — 가로지르는 칸이 왼쪽 끝에 붙어 있지 않거나 같은 표에 동적 행 셀렉터가 있으면 병합을 앵커에서 쪼갠다. 모바일 「항목 단위 카드」는 블록마다(`MobileItemCards` 의 `afterRows`), 그 밖의 모바일 표시 방식은 표 아래에 한 번. 묶음에 넣을 수 없는 행은 행 반복 행·동적 행 그룹 행·표시 조건 행·**보기 옵션(choice_opt)·순위 옵션(ranking_opt) 셀이 든 행**이고(`validateStagedRows`) — 그 선택은 행의 칸 값이 아니라 표 응답 안 예약 키·문항 응답에 저장돼, 열린 수 파생·닫을 때 값 비우기·필수 범위가 따라가지 못한다 — 표가 바뀌어 묶음이 깨지면(`isStagedRowsIntact`) 설정을 **명시적 null** 로 끈다(`question-table-fields.tsx`). 응답 화면과 검증은 저장된 설정을 그대로 믿지 않고 `resolveStagedRows` 로 구조가 성립할 때만 동작시킨다(깨졌으면 전부 보인다). 열린 수에는 **응답 칸(게이팅 가능 유형)의 값만** 센다 — 계산 칸은 저장 경계가 값을 주입해(빈 행도 '0') 세면 저장 전후로 열린 수가 달라진다. 설정 카드는 테이블 유형 문항에만 나온다(보기·순위 문항의 내장 표는 다른 렌더러라 설정을 읽지 않는다). 문항 복제는 `remapStagedRowIds` 로 행 id 를 옮긴다. 순수 로직이 lib 이 아니라 renderer 에 있는 것은 소비자가 features 뿐이어서다.
+   **행 차례로 열기**(`stagedRowsConfig`, 0132, ADR 0028)는 행 반복과 다른 기능이다 — 구조를 펼치지 않고 가시성만 정하며 내보내기 열은 늘 나간다. 열린 행 수와 필수 범위는 저장하지 않고 값에서 파생한다(`features/question-renderer/utils/staged-rows.ts` 의 `deriveOpenStagedCount`). 응답 화면과 검증은 `resolveStagedRows` 로 구조가 성립할 때만 동작시킨다. 묶음에 넣을 수 없는 행·버튼 줄 배치는 CONTEXT.md 「행 차례로 열기」.
 
    **행 반복**(`rowRepeatConfig`)은 동적 행 그룹과 다른 기능이다 — 저쪽은 빌더가 만들어 둔 행 풀에서 응답자가 고르는 것이고, 이쪽은 같은 모양의 칸을 원하는 벌 수만큼(최대 20) 반복하는 것이다. 설정은 분리하고 렌더 파이프라인(`use-dynamic-rows`)만 공유한다. 구조에는 저장 시점에 최대 벌까지 **실제로 펼쳐 둔다**(`lib/question/row-repeat.ts` 의 `expandRepeatRows`) — 응답값 키가 발행 스냅샷 안의 `cell.id` 로 유지되어 저장 경계·초안·이월 임포트·관리자 편집이 전부 무변경이다. **펼치기는 멱등**이어야 한다(이미 있는 벌은 행·셀 id 를 그대로 두고 템플릿 구조 변경만 전파). 표에 반복 블록을 켜면 그 표의 `rowCode` 를 **명시 발번**한다 — `buildTableCellVarName` 의 제로패딩 자릿수가 `rows.length` 기준이라 20벌로 펼치는 순간 같은 표의 비반복 행 변수명이 `r1` → `r01` 로 통째 바뀌기 때문이다. 내보내기는 모수 전체를 1회 스캔해(`lib/analytics/row-repeat-usage.ts`) 아무도 채우지 않은 뒤쪽 벌의 열을 뺀다(설문 전체 기준 — 분할 파일 간 열 구성이 갈리지 않도록). 필수 검증은 1벌만 본다.
 
@@ -508,6 +510,8 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 
 18. **설문 종료는 「새로 들어오는 사람」만 막는다 — 진행 중 응답은 끝까지 제출된다**(ADR-0030): 응답 접수 판정표(`server/survey-response/domain/acceptance.ts`)의 `survey_closed` 는 **신규 진입과 재응답 허용**만 거부하고 완료 제출·진행 중 계속은 통과시킨다(마감일과 같은 결 — 즉시 전면 중단의 수단은 `isPaused` 다). 술어가 **설문 행만** 본다: 종료는 버전 행을 건드리지 않아 버전은 published 로 남으므로 「설문 또는 버전」으로 물으면 새 응답이 그대로 들어온다. 반대로 `status_not_published` 는 closed 를 「발행된 적 있는 설문」으로 통과시킨다 — 한 술어에 섞으면 완료 게이트가 종료된 설문의 진행 중 응답을 미배포로 잘라낸다. **첫 화면 차단도 같은 범위다**: 종료된 설문은 이어 갈 것이 없는 방문자에게만 접수 종료 화면(`not_accepting`)을 그린다. 「이어 갈 것」은 서버가 초대 토큰의 조사 대상에게 열린 응답이 있는지 본 값(`SurveyControl.resumableByInvite`)과 브라우저의 세션 키 둘로 판정한다(`use-duplicate-guard` 의 `closedEntry`) — 중단처럼 무조건 첫 화면에서 막으면 새로고침 한 번에 진행 중 응답이 버려진다. 새 접수 게이트를 만들 때 종료를 중단과 같은 줄에 넣지 말 것.
 
+19. **`useEffectEvent` 를 `React.memo`·`forwardRef` 컴포넌트 안에 쓰지 말 것**: React 19.2.3 은 memo·forwardRef 로 감싼 컴포넌트의 `useEffectEvent` 를 갱신하지 않는다(react-dom 커밋 단계가 일반 함수 컴포넌트만 `ref.impl` 을 갈아끼운다 — dev·prod 둘 다). 이벤트가 첫 렌더 값을 계속 읽어, 표 입력 칸 `InputCell` 의 「응답자가 고칠 수 있게」 칸을 고치면 곧바로 명단 값으로 되돌아갔다(2026-10-27 — `InputCell` 의 memo 를 걷어 고쳤다, 부모 `CellRouter` 가 memo 라 손실 없음). `RichTextEditor`(forwardRef)도 바깥에서 바꾼 `initialHtml` 이 본문에 반영되지 않았다. 그 안에서 부르는 훅(이미지·첨부 추적기)의 `useEffectEvent` 도 같았다 — 컴포넌트 단위로 걸리므로 훅 안에 숨어 있어도 같다. forwardRef 를 걷고 React 19 의 `ref` prop 으로 받게 고쳤다(`rich-text-editor-prop-sync.test.tsx`). 지금 src 에 그 조합은 없다. ref 가 필요하면 forwardRef 대신 `ref` prop 을, memo 가 필요하면 바깥 컴포넌트를 memo 로 두고 안쪽은 일반 함수 컴포넌트로 둔다. **React 를 올리면 다시 확인할 것.**
+
 ---
 
 ## CI 게이트
@@ -532,7 +536,7 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 - **나중에 병합하는 쪽은 `manual-migrations.json` 배열 끝에 append 한다.** 번호순으로 끼워 넣지 않는다 — 그 배열이 곧 빈 DB 재생 순서다
 - 그래서 번호와 배열 순서가 어긋나 보일 수 있다. 만지는 객체가 서로소면 정상이다
 - **배열 순서를 지켜야 하는 쌍**: 0128 과 0129 는 같은 CHECK(`mobile_table_display_mode`)를 차례로 갈아끼운다 — 0128 을 뒤에 재생하면 `item-cards` 가 빠진다
-- **배포 전후가 갈리는 쌍**: 0142(이관 이력 표)는 앱 배포 **전**, 0143(`response_answers` 삭제 등)은 배포 **뒤** — 거꾸로 하면 구버전 앱의 완료 제출이 실패한다
+- **배포 전후가 갈리는 쌍**: 0142(이관 이력 표)는 앱 배포 **전**, 0143(`response_answers` 삭제 등)은 배포 **뒤** — 거꾸로 하면 구버전 앱의 완료 제출이 실패한다. 0145(언어별 설문 글자 `surveys.localized_messages`)도 배포 **전**이다(새 앱이 읽는다, nullable 이라 2단계 불필요)
 - **승격 때 프로덕션에 적용할 것**(staging 에만 있는 번호): 역할 모델 v2 는 **0112~0122** 다(0111 은 선반영 재현용이라 적용 금지 — 파일 머리 참조). 팀 종류(실사팀 표시) **0139** 는 teams 를 만지므로 역할 v2 와 함께 간다. 외주·클라이언트 링크는 **0126·0127·0133·0134 를 함께** 적용하고, 0134 는 테이블 개명이라 옛 코드와 양립하지 않아 **앱 배포 직전에** 적용한다
 - 번호를 옮긴 이력은 문서에 두지 않는다 — 역할 v2 의 옛 번호 매핑(0101→0111 …)은 병합 커밋 `c7197701` 의 `AGENTS.md`, 외주 링크 0128→0133 은 0133 파일 머리에 있다. 이미 적용한 DB 는 번호와 무관하다(적용 이력 표가 없다)
 

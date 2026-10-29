@@ -483,6 +483,26 @@
 }
 */
 
+/* 중국어 글자의 글꼴 — Wanted Sans 에는 한자가 없어 다음 글꼴로 넘어간다. 한국어 글꼴(Malgun Gothic·
+   Apple SD Gothic Neo)은 흔한 한자(言·人·元)만 있고 간체(语·选)는 없어, 순서가 한국어 먼저면 한 단어가
+   두 글꼴로 갈린다. 중국어판(lang=zh)과 언어를 고르기 전(세 언어가 함께 보인다)만 중국어 글꼴을 앞에 둔다 —
+   한국어 설문은 그대로다. 한글·영문은 여전히 Wanted Sans 다. */
+[lang|="zh"],
+[data-locale-undetermined] {
+  font-family:
+    "Wanted Sans Variable", "Wanted Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+}
+
+/* 중국어 줄바꿈 — body 의 keep-all(한국어 어절 보존)은 띄어쓰기 없는 중국어 문장을 끊을 수 없는 한 단어로
+   본다. 카드·표의 칸이 그 문장 길이(min-content)만큼 넓어져 페이지가 화면보다 넓어지고, 화면 폭에 붙은
+   하단 바의 「다음」이 오른쪽 밖으로 밀렸다(2026-10-29). 중국어판 안에서는 글자 사이에서 끊는다 — 칸에
+   직접 붙인 break-keep 도 함께 푼다. 한국어·영어 화면은 그대로다(영어는 keep-all 과 normal 이 같다). */
+[lang|="zh"],
+[lang|="zh"] .break-keep {
+  word-break: normal;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);

@@ -4,6 +4,10 @@ import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
+import { systemText } from '@/utils/system-strings';
+
+import { useInlineSurveyLocale } from './survey-locale-context';
+
 // 헤더 가로 스크롤 컨테이너: 스크롤바 숨김 + 프린트 시 overflow 해제
 export const HEADER_SCROLL_CLASS =
   'overflow-x-auto overflow-y-hidden px-4 md:px-0 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden print:overflow-visible';
@@ -94,13 +98,14 @@ function ScrollStepButton({
   onClick: () => void;
 }) {
   const Icon = direction === 'left' ? ChevronLeft : ChevronRight;
+  const locale = useInlineSurveyLocale();
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
       className={SCROLL_STEP_BUTTON_CLASS}
-      aria-label={direction === 'left' ? '왼쪽으로 스크롤' : '오른쪽으로 스크롤'}
+      aria-label={systemText(direction === 'left' ? 'table.scrollLeft' : 'table.scrollRight', locale)}
     >
       <Icon className="h-4 w-4" />
     </button>
@@ -120,6 +125,7 @@ export function TableScrollControls({
    *  "잘린 열 정렬" 페이징으로 동작하고, 미제공이면 뷰포트 폭 페이징 폴백. */
   columnStops?: readonly number[] | undefined;
 }) {
+  const locale = useInlineSurveyLocale();
   const trackRef = useRef<HTMLDivElement>(null);
   const thumbRef = useRef<HTMLDivElement>(null);
   const [needsScroll, setNeedsScroll] = useState(false);
@@ -270,7 +276,7 @@ export function TableScrollControls({
         ref={trackRef}
         role="scrollbar"
         aria-orientation="horizontal"
-        aria-label="가로 스크롤"
+        aria-label={systemText('table.horizontalScroll', locale)}
         aria-controls={scrollAreaId}
         aria-valuemin={0}
         aria-valuemax={100}

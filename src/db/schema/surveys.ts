@@ -21,6 +21,7 @@ import type { ProfileColumnScheme, ProgressColumnScheme } from '@/shared/contrac
 import type { QuotaConfig } from '@/shared/contracts/quota';
 import type {
   GroupNameDesign,
+  LocalizedSurveyTexts,
   QuestionData,
   SurveyEndRedirects,
   SurveyResponseHeaderConfig,
@@ -95,6 +96,8 @@ export const surveys = pgTable(
     thankYouMessage: text('thank_you_message').default('응답해주셔서 감사합니다!').notNull(),
     // 자격미달 종료 문구 — NULL/빈 값이면 thankYouMessage 로 폴백 (0110, CONTEXT.md 「자격미달 종료 문구」)
     screenedOutMessage: text('screened_out_message'),
+    // 언어별 설문 글자 — 제목·설명·완료·자격미달의 다른 언어판, NULL = 한국어만 (0145, CONTEXT.md 「다국어 설문」)
+    localizedMessages: jsonb('localized_messages').$type<LocalizedSurveyTexts>(),
 
     // 응답 페이지 헤더 프리셋 (0041 마이그레이션) — NULL = 기본형 폴백
     responseHeader: jsonb('response_header').$type<SurveyResponseHeaderConfig>(),

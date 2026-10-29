@@ -8,22 +8,36 @@ import Link from 'next/link';
 import { formatLocalDateTime } from '@/lib/date-formatters';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { DEFAULT_SURVEY_LOCALE, type SurveyLocale, toInlineLocale } from '@/types/survey-locale';
+import type { SystemStringKey } from '@/utils/system-strings';
+
+import { SystemText } from './system-text';
 
 /**
  * 설문 응답 흐름의 전체 화면 early-return 상태 컴포넌트들.
  * 모두 presentation 전용 — 컴포넌트 state 의존값은 prop 으로 명시 전달한다.
  * SurveyResponseFlow 의 hook 스코프 밖이므로 hook 호출 순서에 영향이 없다.
+ *
+ * 다국어 설문(CONTEXT.md 「다국어 설문」)이면 `locale` 로 현재 언어를 받는다. 미정(`null`)이면
+ * 세 언어를 위아래로 함께 보인다. 기본은 한국어 — 설문을 모르는 자리(라우트 로딩·짧은 링크)와
+ * 다국어 아닌 설문은 지금 글자 그대로다.
  */
 
+type ScreenLocale = SurveyLocale | null;
+
 // 로딩 중
-export function SurveyLoadingScreen() {
+export function SurveyLoadingScreen({ locale = DEFAULT_SURVEY_LOCALE }: { locale?: ScreenLocale }) {
   return (
     <div className="flex min-h-dvh items-center justify-center bg-gray-50">
       <Card className="mx-auto max-w-md">
         <CardContent className="p-8 text-center">
           <Loader2 className="mx-auto mb-4 h-12 w-12 animate-spin text-blue-500" />
-          <h2 className="mb-2 text-xl font-semibold text-gray-900">설문을 불러오는 중...</h2>
-          <p className="text-gray-600">잠시만 기다려주세요.</p>
+          <h2 className="mb-2 text-xl font-semibold text-gray-900">
+            <SystemText k="screen.loading.title" locale={locale} />
+          </h2>
+          <p className="text-gray-600">
+            <SystemText k="screen.loading.body" locale={locale} />
+          </p>
         </CardContent>
       </Card>
     </div>
@@ -84,18 +98,30 @@ export function SurveyEmptyScreen({ onGoHome }: { onGoHome: () => void }) {
   );
 }
 
-function InvalidLinkScreen({ title, body }: { title: string; body: string }) {
+function InvalidLinkScreen({
+  title,
+  body,
+  locale,
+}: {
+  title: SystemStringKey;
+  body: SystemStringKey;
+  locale: ScreenLocale;
+}) {
   return (
     <div className="flex min-h-dvh items-center justify-center bg-gray-50 px-4">
       <Card className="w-full max-w-md">
         <CardContent className="p-8 text-center">
           <AlertCircle className="mx-auto mb-4 h-12 w-12 text-amber-500" />
-          <h2 className="mb-2 text-xl font-semibold text-gray-900">{title}</h2>
-          <p className="mb-6 text-gray-600">{body}</p>
+          <h2 className="mb-2 text-xl font-semibold text-gray-900">
+            <SystemText k={title} locale={locale} />
+          </h2>
+          <p className="mb-6 text-gray-600">
+            <SystemText k={body} locale={locale} />
+          </p>
           <Button asChild>
             <Link href="/">
               <ArrowLeft className="mr-2 h-4 w-4" />
-              홈으로 돌아가기
+              <SystemText k="screen.goHome" locale={locale} />
             </Link>
           </Button>
         </CardContent>
@@ -104,11 +130,16 @@ function InvalidLinkScreen({ title, body }: { title: string; body: string }) {
   );
 }
 
-export function InvalidInviteLinkScreen() {
+export function InvalidInviteLinkScreen({
+  locale = DEFAULT_SURVEY_LOCALE,
+}: {
+  locale?: ScreenLocale;
+}) {
   return (
     <InvalidLinkScreen
-      title="유효하지 않은 초대 링크입니다"
-      body="초대 링크가 잘못되었거나 더 이상 사용할 수 없습니다. 설문 담당자에게 문의해주세요."
+      title="screen.invalidInviteLink.title"
+      body="screen.invalidInviteLink.body"
+      locale={locale}
     />
   );
 }
@@ -119,20 +150,30 @@ export function InvalidInviteLinkScreen() {
  * 링크 자체는 유효하므로 "유효하지 않은 링크" 로 말하면 응답자가 담당자에게 링크를
  * 다시 요청하게 된다. 잠시 뒤 다시 열면 된다는 것을 알려야 한다.
  */
-export function TooManyRequestsScreen() {
+export function TooManyRequestsScreen({
+  locale = DEFAULT_SURVEY_LOCALE,
+}: {
+  locale?: ScreenLocale;
+}) {
   return (
     <InvalidLinkScreen
-      title="잠시 후 다시 시도해주세요"
-      body="접속이 일시적으로 몰렸습니다. 링크는 그대로 유효하니 잠시 뒤 다시 열어주세요."
+      title="screen.tooManyRequests.title"
+      body="screen.tooManyRequests.body"
+      locale={locale}
     />
   );
 }
 
-export function InvalidTestLinkScreen() {
+export function InvalidTestLinkScreen({
+  locale = DEFAULT_SURVEY_LOCALE,
+}: {
+  locale?: ScreenLocale;
+}) {
   return (
     <InvalidLinkScreen
-      title="유효하지 않은 테스트 링크입니다"
-      body="테스트 모드가 종료되었거나 이 링크를 더 이상 사용할 수 없습니다."
+      title="screen.invalidTestLink.title"
+      body="screen.invalidTestLink.body"
+      locale={locale}
     />
   );
 }
@@ -146,19 +187,20 @@ export function InvalidTestLinkScreen() {
  * 그리고 **진입 시 설문 전체를 막는다.** 분할 페이지에 도달했을 때만 막으면
  * 절반쯤 답한 시간이 버려진다.
  */
-export function DesktopOnlyScreen() {
+export function DesktopOnlyScreen({ locale = DEFAULT_SURVEY_LOCALE }: { locale?: ScreenLocale }) {
   return (
     <div className="flex min-h-dvh items-center justify-center bg-gray-50 px-4">
       <Card className="w-full max-w-md">
         <CardContent className="p-8 text-center">
           <Monitor className="mx-auto mb-4 h-12 w-12 text-blue-500" />
-          <h2 className="mb-2 text-xl font-semibold text-gray-900">PC 에서 열어 주세요</h2>
+          <h2 className="mb-2 text-xl font-semibold text-gray-900">
+            <SystemText k="screen.desktopOnly.title" locale={locale} />
+          </h2>
           <p className="text-gray-600">
-            이 설문은 조사표를 나란히 보면서 판단하는 형식이라 넓은 화면이 필요합니다.
+            <SystemText k="screen.desktopOnly.body" locale={locale} />
           </p>
           <p className="mt-3 text-sm text-gray-500">
-            같은 링크를 PC 브라우저에서 열면 이어서 진행할 수 있습니다. 창을 넓히면
-            이 화면은 바로 사라집니다.
+            <SystemText k="screen.desktopOnly.hint" locale={locale} />
           </p>
         </CardContent>
       </Card>
@@ -169,12 +211,15 @@ export function DesktopOnlyScreen() {
 // 완료 화면
 export function SurveyCompletedScreen({
   thankYouMessage,
-  title = '응답 완료!',
+  title,
   showCompletedTime = true,
   footer,
+  locale = DEFAULT_SURVEY_LOCALE,
 }: {
   thankYouMessage: string | null | undefined;
+  /** 비우면 시스템 문장 「응답 완료!」(현재 언어). */
   title?: string;
+  locale?: ScreenLocale;
   showCompletedTime?: boolean;
   /** 카드 맨 아래 — 종료 후 이동 안내(EndRedirectNotice) 자리. */
   footer?: ReactNode;
@@ -184,13 +229,21 @@ export function SurveyCompletedScreen({
       <Card className="mx-auto max-w-md">
         <CardContent className="p-8 text-center">
           <CheckCircle className="mx-auto mb-4 h-16 w-16 text-green-500" />
-          <h2 className="mb-2 text-2xl font-semibold text-gray-900">{title}</h2>
+          <h2 className="mb-2 text-2xl font-semibold text-gray-900">
+            {title ?? <SystemText k="completion.title" locale={locale} />}
+          </h2>
           <p className="mb-6 text-gray-600">
-            {thankYouMessage || '설문에 참여해주셔서 감사합니다!'}
+            {thankYouMessage || <SystemText k="completion.defaultMessage" locale={locale} />}
           </p>
           {showCompletedTime && (
             <div className="space-y-2 text-sm text-gray-500">
-              <p>응답 완료 시간: {formatLocalDateTime(new Date())}</p>
+              <p>
+                <SystemText
+                  k="completion.completedAt"
+                  locale={locale}
+                  values={{ time: formatLocalDateTime(new Date()) }}
+                />
+              </p>
             </div>
           )}
           {footer}
@@ -205,17 +258,27 @@ export function SurveyCompletedScreen({
  * 패널 종료 페이지가 열리기 전 잠깐 「응답 완료」가 비치면 응답자가 거기서 창을 닫는다.
  * 이동이 막힌 경우를 위해 손으로 누를 링크를 남긴다.
  */
-export function EndRedirectingScreen({ url }: { url: string }) {
+export function EndRedirectingScreen({
+  url,
+  locale = DEFAULT_SURVEY_LOCALE,
+}: {
+  url: string;
+  locale?: ScreenLocale;
+}) {
+  // 한 문장 안에 링크가 끼므로 미정이면 한국어 — 이 화면은 응답을 마친 뒤라 언어가 정해져 있다
+  const lineLocale = toInlineLocale(locale);
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-gray-50 px-4 text-center">
       <Loader2 className="h-8 w-8 animate-spin text-blue-500" aria-hidden />
-      <p className="text-gray-700">잠시만 기다려 주세요.</p>
+      <p className="text-gray-700">
+        <SystemText k="endRedirect.waiting" locale={lineLocale} />
+      </p>
       <p className="text-sm text-gray-500">
-        이동하지 않으면{' '}
+        <SystemText k="endRedirect.fallbackBefore" locale={lineLocale} />
         <a href={url} className="font-medium text-blue-600 underline">
-          여기를 눌러 주세요
+          <SystemText k="endRedirect.fallbackLink" locale={lineLocale} />
         </a>
-        .
+        <SystemText k="endRedirect.fallbackAfter" locale={lineLocale} />
       </p>
     </div>
   );
@@ -225,10 +288,18 @@ export function EndRedirectingScreen({ url }: { url: string }) {
  * 종료 후 이동 안내 (패널 연동) — 테스트·미리보기는 패널 집계에 잡히지 않게 이동하지 않고
  * 완료 화면 아래에 어디로 갈지만 보인다. 실응답은 EndRedirectingScreen 이 대신 선다.
  */
-export function EndRedirectNotice({ url }: { url: string }) {
+export function EndRedirectNotice({
+  url,
+  locale = DEFAULT_SURVEY_LOCALE,
+}: {
+  url: string;
+  locale?: ScreenLocale;
+}) {
   return (
     <div className="mt-6 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
-      <p>테스트 응답이라 이동하지 않습니다. 실제 응답은 아래 주소로 이동합니다.</p>
+      <p>
+        <SystemText k="endRedirect.testNotice" locale={locale} />
+      </p>
       <p className="mt-1 font-medium break-all text-gray-900">{url}</p>
     </div>
   );

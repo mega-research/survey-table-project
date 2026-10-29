@@ -8,7 +8,7 @@ import type {
   TableRow,
 } from '@/types/survey';
 
-import { buildColumnAxisCards } from './column-axis-cards';
+import { buildColumnAxisCards, headerPath } from './column-axis-cards';
 
 /**
  * 「상세 기재 입력칸을 표 아래에」(`TableCell.optionTextBelowTable`) — 체크박스·라디오·선택 칸의
@@ -73,6 +73,12 @@ export function collectBelowTableCandidates(input: {
   for (const card of buildColumnAxisCards(input)) {
     for (const item of card.items) {
       context.set(item.cell.id, { rowLabel: flat(item.label), columnLabel: flat(card.title) });
+      // 같은 행 칸 아래로 딸린 상세 칸은 제 열 제목을 쓴다(축 카드에서 자리만 옮겼다)
+      for (const detail of item.details) {
+        const columnIndex = item.row.cells.indexOf(detail);
+        const columnLabel = headerPath(input.columns, input.headerGrid, columnIndex).at(-1) ?? '';
+        context.set(detail.id, { rowLabel: flat(item.label), columnLabel: flat(columnLabel) });
+      }
     }
   }
   const candidates: BelowTableCandidate[] = [];

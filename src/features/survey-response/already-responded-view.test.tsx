@@ -78,4 +78,52 @@ describe('AlreadyRespondedView', () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/테스트 모드가 꺼져 있거나 링크가 잘못되었습니다/)).toBeInTheDocument();
   });
+  describe('중단 문구가 한국어 기본 문구 그대로일 때 (운영 콘솔이 기본 문구를 채워 저장한다)', () => {
+    const KO_DEFAULT = '설문이 일시 중단되었습니다. 잠시 후 다시 시도해 주세요.';
+
+    it('현재 언어의 기본 문구를 보인다', () => {
+      render(
+        <AlreadyRespondedView
+          reason="survey_paused"
+          surveyTitle="테스트 설문"
+          contactEmail={null}
+          customBody={KO_DEFAULT}
+          locale="zh"
+        />,
+      );
+      expect(screen.getByText('问卷已暂停。请稍后再试。')).toBeInTheDocument();
+      expect(screen.queryByText(KO_DEFAULT)).not.toBeInTheDocument();
+    });
+
+    it('언어 미정이면 세 언어 기본 문구를 함께 보인다', () => {
+      render(
+        <AlreadyRespondedView
+          reason="survey_paused"
+          surveyTitle="테스트 설문"
+          contactEmail={null}
+          customBody={KO_DEFAULT}
+          locale={null}
+        />,
+      );
+      expect(screen.getByText(KO_DEFAULT)).toBeInTheDocument();
+      expect(screen.getByText('问卷已暂停。请稍后再试。')).toBeInTheDocument();
+      expect(
+        screen.getByText('The survey has been paused. Please try again later.'),
+      ).toBeInTheDocument();
+    });
+
+    it('다국어 설문이 아니면(한국어) 글자 그대로 한 줄이다', () => {
+      const { container } = render(
+        <AlreadyRespondedView
+          reason="survey_paused"
+          surveyTitle="테스트 설문"
+          contactEmail={null}
+          customBody={KO_DEFAULT}
+        />,
+      );
+      const body = screen.getByText(KO_DEFAULT);
+      expect(body.tagName).toBe('P');
+      expect(container.querySelectorAll('[lang]')).toHaveLength(0);
+    });
+  });
 });

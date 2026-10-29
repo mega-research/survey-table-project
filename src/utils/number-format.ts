@@ -6,7 +6,9 @@
  */
 
 import type { NumberFormat, NumberUnit } from '@/types/survey';
+import { DEFAULT_SURVEY_LOCALE, type SurveyLocale } from '@/types/survey-locale';
 import { isPartialNumericInput, parseNumericInput } from '@/utils/numeric-input';
+import { systemText } from '@/utils/system-strings';
 
 /** 단위 → 배수. percent 는 배수 개념이 없어 null (환산 표시 없음). */
 export const UNIT_MULTIPLIERS: Record<NumberUnit, number | null> = {
@@ -93,17 +95,22 @@ export function canInputAllowedValue(raw: string, allowedValues: number[] | unde
 /**
  * min/max 범위 위반 메시지 — blur 힌트와 "다음"/제출 차단 검증이 공유한다.
  * max 는 타이핑에서 차단되는 게 원칙이지만 emptyDefault 오설정·레거시 응답의 우회 값을 봉합한다.
- * 빈 값·부분 입력은 null (미응답 차단은 required 소관).
+ * 빈 값·부분 입력은 null (미응답 차단은 required 소관). 문구는 현재 언어(기본 한국어)를 따른다.
  */
 export function rangeViolationMessage(
   raw: string,
   format: NumberFormat | null | undefined,
+  locale: SurveyLocale = DEFAULT_SURVEY_LOCALE,
 ): string | null {
   if (!format) return null;
   const n = parseNumericInput(raw);
   if (n === null) return null;
-  if (format.min !== undefined && n < format.min) return `${format.min} 이상 입력해주세요`;
-  if (format.max !== undefined && n > format.max) return `${format.max} 이하로 입력해주세요`;
+  if (format.min !== undefined && n < format.min) {
+    return systemText('validation.range.min', locale, { min: format.min });
+  }
+  if (format.max !== undefined && n > format.max) {
+    return systemText('validation.range.max', locale, { max: format.max });
+  }
   return null;
 }
 
@@ -181,4 +188,79 @@ export function formatKoreanUnitReading(
   }
   if (parts.length === 0) return null;
   return (neg ? '-' : '') + parts.join(' ') + sfx;
+}
+
+// ── 언어별 읽기 (다국어 설문) ───────────────────────────────────────────────
+
+/** 중국어 끊어 읽기 — 亿·万 으로 끊고 묶음 안은 숫자 그대로 (1,500,000,000,000 → 1万5000亿) */
+function readChinese(n: number): string {
+  if (n >= 1e8) {
+    const rest = n % 1e8;
+    return `${readChinese(Math.floor(n / 1e8))}亿${rest > 0 ? readChinese(rest) : ''}`;
+  }
+  if (n >= 1e4) {
+    const rest = n % 1e4;
+    return `${Math.floor(n / 1e4)}万${rest > 0 ? String(rest) : ''}`;
+  }
+  return String(n);
+}
+
+const ENGLISH_SCALES: Array<{ value: number; label: string }> = [
+  { value: 1e12, label: 'trillion' },
+  { value: 1e9, label: 'billion' },
+  { value: 1e6, label: 'million' },
+];
+
+/** 영어 읽기 — 백만 이상만 million·billion·trillion 으로, 소수 둘째 자리까지 (1,111,111 → 1.11 million) */
+function readEnglish(total: number): string | null {
+  for (let i = ENGLISH_SCALES.length - 1; i >= 0; i--) {
+    const scale = ENGLISH_SCALES[i]!;
+    const next = ENGLISH_SCALES[i - 1];
+    if (total < scale.value) continue;
+    const rounded = Number((total / scale.value).toFixed(2));
+    // 999,999,999 가 「1000 million」 이 되지 않게 반올림 뒤 1000 이면 다음 단위로
+    if (next && rounded >= 1000 && total < next.value) {
+      return `${Number((total / next.value).toFixed(2))} ${next.label}`;
+    }
+    if (next && total >= next.value) continue;
+    return `${rounded} ${scale.label}`;
+  }
+  return null;
+}
+
+/**
+ * 입력칸 아래 읽기 — 현재 언어를 따른다. 한국어(기본)는 `formatKoreanUnitReading` 그대로라 다국어가 아닌
+ * 설문은 한 글자도 바뀌지 않는다. 중국어는 万·亿 로 끊고(`111万1111元`), 영어는 백만 이상을
+ * million·billion·trillion 으로 읽고 어절 앞을 띄운다(`1.11 million USD`). 만(영어는 백만) 미만은 세 언어 모두
+ * 콤마 숫자 + 어절이고, 0·빈 값·부분 입력·percent 는 null 이다.
+ */
+export function formatUnitReading(
+  raw: string,
+  unit: NumberUnit | undefined,
+  suffix?: string | undefined,
+  locale: SurveyLocale = DEFAULT_SURVEY_LOCALE,
+): string | null {
+  if (locale === 'ko') return formatKoreanUnitReading(raw, unit, suffix);
+  const sfx = (suffix ?? '').trim();
+  const join = (body: string) => (locale === 'en' && sfx ? `${body} ${sfx}` : body + sfx);
+  const n = parseNumericInput(raw);
+  if (n === null || n === 0) return null;
+  const commaWithSuffix = () => (sfx ? join(formatWithComma(raw)) : null);
+  if (!unit) return commaWithSuffix();
+  const multiplier = UNIT_MULTIPLIERS[unit];
+  if (multiplier === null) return null;
+
+  const total = Math.abs(n) * multiplier;
+  const sign = n < 0 ? '-' : '';
+  const reading = locale === 'en' ? readEnglish(total) : total >= 1e4 ? '' : null;
+  if (reading === null) {
+    // 끊어 읽을 만큼 크지 않다 — 일 단위는 입력 그대로라 어절이 있을 때만, 배수 단위는 환산한 총량을 콤마로
+    if (unit === 'one') return commaWithSuffix();
+    return join(sign + formatWithComma(String(Math.round(total * 1e9) / 1e9)));
+  }
+  if (locale === 'en') return join(sign + reading);
+  const intPart = Math.floor(total);
+  const frac = Math.round((total - intPart) * 1e9) / 1e9;
+  const fracText = frac > 0 ? String(frac).slice(1) : '';
+  return join(sign + readChinese(intPart) + fracText);
 }

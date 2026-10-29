@@ -4,7 +4,9 @@ import React from 'react';
 
 import { Minus, Plus } from 'lucide-react';
 
+import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
 import { cn } from '@/lib/utils';
+import { systemText } from '@/utils/system-strings';
 
 export interface StagedRowsButtonsProps {
   addLabel: string;
@@ -34,6 +36,7 @@ export const StagedRowsButtons = React.memo(function StagedRowsButtons({
   onRemove,
   className,
 }: StagedRowsButtonsProps) {
+  const locale = useInlineSurveyLocale();
   return (
     <div className={cn('flex flex-wrap items-center gap-2', className)}>
       <button
@@ -52,7 +55,7 @@ export const StagedRowsButtons = React.memo(function StagedRowsButtons({
           className="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
         >
           <Minus className="h-4 w-4" />
-          마지막 줄 삭제
+          {systemText('table.removeLastRow', locale)}
         </button>
       )}
       <span className="text-xs text-gray-500 tabular-nums">

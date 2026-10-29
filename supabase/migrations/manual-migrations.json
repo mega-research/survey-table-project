@@ -120,6 +120,7 @@
     "0141_survey_test_version",
     "0142_response_migration_history",
     "0143_drop_response_answers",
-    "0144_client_link_tabs_backfill"
+    "0144_client_link_tabs_backfill",
+    "0145_survey_localized_messages"
   ]
 }

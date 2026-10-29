@@ -1,4 +1,6 @@
 import type { QuotaConfig } from '@/shared/contracts/quota';
+import { DEFAULT_SURVEY_LOCALE, type SurveyLocale } from '@/types/survey-locale';
+import { systemText } from '@/utils/system-strings';
 
 /**
  * 「진행 중 마감」이 실제로 작동하는 플랜인가 — 집행 중이고 옵션이 켜져 있다.
@@ -15,12 +17,19 @@ export function isMidSurveyCloseActive<T extends Pick<QuotaConfig, 'enabled' | '
  * 응답 화면과 편집 화면 미리보기가 같은 값을 보인다. 입장 판정에서 막힌 응답자의 기본 문구는
  * 종전대로 already-responded-view 의 quota_closed body 다.
  */
-export const QUOTA_MID_SURVEY_CLOSED_FALLBACK =
-  '죄송합니다. 응답 중에 해당 조건의 모집이 완료되어 더 이상 진행하실 수 없습니다. 소중한 시간을 내어 참여해 주셔서 감사합니다.';
+export const QUOTA_MID_SURVEY_CLOSED_FALLBACK = systemText('default.quotaMidSurveyClosed');
 
-/** 입장 뒤에 막힌 응답자에게 보일 본문 — 서버 문구(폴백 적용 완료), 없으면 사과 톤 기본 문구. */
-export function midSurveyClosedBody(serverMessage: string | null | undefined): string {
-  return serverMessage && serverMessage.trim() ? serverMessage : QUOTA_MID_SURVEY_CLOSED_FALLBACK;
+/**
+ * 입장 뒤에 막힌 응답자에게 보일 본문 — 서버 문구(폴백 적용 완료), 없으면 사과 톤 기본 문구.
+ * 운영자 문구는 한국어 한 벌이고 기본 문구만 현재 언어다(CONTEXT.md 「다국어 설문」).
+ */
+export function midSurveyClosedBody(
+  serverMessage: string | null | undefined,
+  locale: SurveyLocale | null = DEFAULT_SURVEY_LOCALE,
+): string {
+  return serverMessage && serverMessage.trim()
+    ? serverMessage
+    : systemText('default.quotaMidSurveyClosed', locale);
 }
 
 /**

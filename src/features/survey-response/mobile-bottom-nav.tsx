@@ -2,7 +2,12 @@
 
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
+import { DEFAULT_SURVEY_LOCALE, type SurveyLocale } from '@/types/survey-locale';
+import { systemText } from '@/utils/system-strings';
+
 interface MobileBottomNavProps {
+  /** 버튼 글자의 언어 — 다국어 설문의 현재 언어(미정이면 호출부가 한국어로 넘긴다). */
+  locale?: SurveyLocale;
   keyboardOpen: boolean;
   currentStepNumber: number;
   totalStepCount: number;
@@ -13,6 +18,11 @@ interface MobileBottomNavProps {
   submittingLabel?: string;
   onPrevious: () => void;
   onNext: () => void;
+  /**
+   * 「이전」만 — 「언어 변경」으로 온 언어 페이지(PRD 「언어 선택 페이지」). 보기를 누르면
+   * 넘어가므로 「다음」과 쪽수가 없고, 돌아갈 곳만 남긴다.
+   */
+  previousOnly?: boolean;
 }
 
 const primaryButtonCls =
@@ -26,17 +36,20 @@ const primaryButtonCls =
  * - MobileTableStepper의 row 내부 네비와 병존 (행 이동 vs 스텝 이동 역할 분리).
  */
 export function MobileBottomNav({
+  locale = DEFAULT_SURVEY_LOCALE,
   keyboardOpen,
   currentStepNumber,
   totalStepCount,
   hasPrevious,
   isLastStep,
   isSubmitting,
-  submitLabel = '다음',
-  submittingLabel = '처리 중...',
+  submitLabel,
+  submittingLabel,
   onPrevious,
   onNext,
+  previousOnly = false,
 }: MobileBottomNavProps) {
+  const nextLabel = systemText('nav.next', locale);
   return (
     <div
       className={`fixed inset-x-0 bottom-0 z-50 border-t border-gray-200 bg-white shadow-[0_-2px_10px_rgba(0,0,0,0.05)] transition-transform duration-200 md:hidden ${
@@ -51,25 +64,31 @@ export function MobileBottomNav({
           className="flex items-center gap-1 rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 active:scale-[0.98] disabled:pointer-events-none disabled:text-gray-300"
         >
           <ChevronLeft className="h-4 w-4" />
-          이전
+          {systemText('nav.previous', locale)}
         </button>
 
-        {/* 쪽수만 — 필수 미충족 안내는 문항 아래 검증 안내가 맡는다(하단 바의 「필수 질문」
+        {previousOnly ? null : (
+          <>
+            {/* 쪽수만 — 필수 미충족 안내는 문항 아래 검증 안내가 맡는다(하단 바의 「필수 질문」
             소표시는 2026-09-15 에 뺐다: 어느 문항인지 알려주지 않는 중복 신호였다). */}
-        <span className="text-sm font-medium text-gray-900">
-          {currentStepNumber || 1} / {Math.max(totalStepCount, 1)}
-        </span>
+            <span className="text-sm font-medium text-gray-900">
+              {currentStepNumber || 1} / {Math.max(totalStepCount, 1)}
+            </span>
 
-        {isLastStep ? (
-          <button onClick={onNext} disabled={isSubmitting} className={primaryButtonCls}>
-            {isSubmitting ? submittingLabel : submitLabel}
-            {!isSubmitting && <ChevronRight className="h-4 w-4" />}
-          </button>
-        ) : (
-          <button onClick={onNext} disabled={isSubmitting} className={primaryButtonCls}>
-            다음
-            <ChevronRight className="h-4 w-4" />
-          </button>
+            {isLastStep ? (
+              <button onClick={onNext} disabled={isSubmitting} className={primaryButtonCls}>
+                {isSubmitting
+                  ? (submittingLabel ?? systemText('nav.submitting', locale))
+                  : (submitLabel ?? nextLabel)}
+                {!isSubmitting && <ChevronRight className="h-4 w-4" />}
+              </button>
+            ) : (
+              <button onClick={onNext} disabled={isSubmitting} className={primaryButtonCls}>
+                {nextLabel}
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>

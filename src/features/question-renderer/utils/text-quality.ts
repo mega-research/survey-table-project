@@ -1,5 +1,7 @@
 import { isInputFormat } from '@/types/input-type';
 import type { InputType, TextValidation } from '@/types/survey';
+import { DEFAULT_SURVEY_LOCALE, type SurveyLocale } from '@/types/survey-locale';
+import { systemText } from '@/utils/system-strings';
 
 /**
  * 단답형·장문형 응답 품질 검사 — 최소 글자 수와 "의미 없는 입력" 거부.
@@ -98,11 +100,12 @@ function isShortUnitRepetition(chars: string[]): boolean {
   return false;
 }
 
-export const MEANINGLESS_TEXT_MESSAGE =
-  '자음·모음이나 숫자만으로는 답할 수 없습니다. 내용을 입력해 주세요.';
-
-export function minLengthMessage(minLength: number, current: number): string {
-  return `${minLength}자 이상 입력해 주세요. (현재 ${current}자, 공백 제외)`;
+export function minLengthMessage(
+  minLength: number,
+  current: number,
+  locale: SurveyLocale = DEFAULT_SURVEY_LOCALE,
+): string {
+  return systemText('validation.text.minLength', locale, { min: minLength, current });
 }
 
 /** 빌더가 저장한 최소 글자 수 — 양의 정수일 때만 뜻이 있다. */
@@ -115,34 +118,40 @@ export function effectiveMaxLength(config: TextValidation | null | undefined): n
   return positiveInt(config?.maxLength);
 }
 
-export function maxLengthMessage(maxLength: number, current: number): string {
-  return `${maxLength}자 이하로 입력해 주세요. (현재 ${current}자)`;
+export function maxLengthMessage(
+  maxLength: number,
+  current: number,
+  locale: SurveyLocale = DEFAULT_SURVEY_LOCALE,
+): string {
+  return systemText('validation.text.maxLength', locale, { max: maxLength, current });
 }
 
 /**
  * 값 하나를 문항의 품질 설정에 비추어 본다. 통과·빈 값·문자열이 아니면 null.
  * 둘 다 걸리면 "의미 없는 입력" 을 먼저 알린다 — 글자 수를 채워도 통과하지 못하는 값이다.
+ * 문구는 현재 언어(기본 한국어)를 따른다.
  */
 export function textQualityViolation(
   config: TextValidation | null | undefined,
   value: unknown,
+  locale: SurveyLocale = DEFAULT_SURVEY_LOCALE,
 ): TextQualityViolation | null {
   if (!config || typeof value !== 'string' || value.trim() === '') return null;
   if (config.rejectMeaningless === true && isMeaninglessText(value)) {
-    return { reason: 'meaningless', message: MEANINGLESS_TEXT_MESSAGE };
+    return { reason: 'meaningless', message: systemText('validation.text.meaningless', locale) };
   }
   const min = effectiveMinLength(config);
   if (min !== null) {
     const current = countAnswerChars(value);
     if (current < min) {
-      return { reason: 'min_length', message: minLengthMessage(min, current) };
+      return { reason: 'min_length', message: minLengthMessage(min, current, locale) };
     }
   }
   // 상한은 입력칸이 이미 막지만, 붙여넣기·설정 전 값·이월 값이 넘어올 수 있어 여기서도 본다.
   // 입력칸의 maxLength 와 같은 단위(공백 포함 길이)로 센다.
   const max = effectiveMaxLength(config);
   if (max !== null && value.length > max) {
-    return { reason: 'max_length', message: maxLengthMessage(max, value.length) };
+    return { reason: 'max_length', message: maxLengthMessage(max, value.length, locale) };
   }
   return null;
 }

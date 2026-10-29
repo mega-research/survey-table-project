@@ -6,7 +6,9 @@ import { ChevronLeft, ChevronRight, Rows2 } from 'lucide-react';
 
 import { useElementWidth } from '@/features/question-renderer/hooks/use-element-width';
 import { scrollTarget, type ScrollBand } from '@/features/question-renderer/utils/anchor-geometry';
+import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
 import { cn } from '@/lib/utils';
+import { systemText } from '@/utils/system-strings';
 
 /**
  * 조사표 PDF 뷰어 — **한 번에 한 페이지**만 그린다.
@@ -134,6 +136,7 @@ export function PdfPageView({
   const [failure, setFailure] = useState<{ url: string; message: string } | null>(null);
   const [rendering, setRendering] = useState(false);
   const [zoom, setZoom] = useState(1);
+  const locale = useInlineSurveyLocale();
   /**
    * 쪽을 그릴 폭. **재서 상태로 든다** — 그리는 순간에 읽으면 그때의 폭이 곧
    * 그려진 폭으로 굳어, 그 뒤에 판이 좁아져도(창 크기 변경) 다시 그리지 않는다.
@@ -288,7 +291,7 @@ export function PdfPageView({
             className="rounded p-0.5 hover:bg-white/10 disabled:opacity-30"
             disabled={page <= 1}
             onClick={() => go(page - 1)}
-            aria-label="이전 쪽"
+            aria-label={systemText('document.previousPage', locale)}
           >
             <ChevronLeft size={15} />
           </button>
@@ -299,7 +302,7 @@ export function PdfPageView({
             max={total || 1}
             onChange={(e) => go(Number(e.target.value))}
             className="w-11 rounded bg-white/10 px-1.5 py-0.5 text-center tabular-nums outline-none focus:bg-white/20 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
-            aria-label="쪽 번호"
+            aria-label={systemText('document.pageNumber', locale)}
           />
           <span className="tabular-nums">/ {total || '…'}</span>
           <button
@@ -307,20 +310,22 @@ export function PdfPageView({
             className="rounded p-0.5 hover:bg-white/10 disabled:opacity-30"
             disabled={page >= total}
             onClick={() => go(page + 1)}
-            aria-label="다음 쪽"
+            aria-label={systemText('document.nextPage', locale)}
           >
             <ChevronRight size={15} />
           </button>
         </div>
         <div className="flex items-center gap-2">
-          {loading && <span className="text-[11px] text-[#9a9aa2]">그리는 중…</span>}
+          {loading && <span className="text-[11px] text-[#9a9aa2]">
+              {systemText('document.rendering', locale)}
+            </span>}
           {onSpanChange && (
             <button
               type="button"
               title={
                 span > 0
-                  ? '이어보기 끄기'
-                  : '다음 쪽을 이어 붙여 본다 — 쪽 경계에 걸친 문항을 확인할 때'
+                  ? systemText('document.spanOff', locale)
+                  : systemText('document.spanOn', locale)
               }
               onClick={() => onSpanChange(span > 0 ? 0 : 1)}
               disabled={page >= total}
@@ -330,14 +335,19 @@ export function PdfPageView({
               )}
             >
               <Rows2 size={13} />
-              {span > 0 ? `${page}–${Math.min(page + span, total)}쪽` : '이어보기'}
+              {span > 0
+                ? systemText('document.pageRange', locale, {
+                    from: page,
+                    to: Math.min(page + span, total),
+                  })
+                : systemText('document.span', locale)}
             </button>
           )}
           <button
             type="button"
             className="px-1 hover:text-white"
             onClick={() => setZoom((z) => Math.max(0.5, z - 0.15))}
-            aria-label="축소"
+            aria-label={systemText('media.zoomOut', locale)}
           >
             −
           </button>
@@ -346,7 +356,7 @@ export function PdfPageView({
             type="button"
             className="px-1 hover:text-white"
             onClick={() => setZoom((z) => Math.min(2.5, z + 0.15))}
-            aria-label="확대"
+            aria-label={systemText('media.zoomIn', locale)}
           >
             ＋
           </button>

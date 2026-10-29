@@ -12,6 +12,7 @@ import { recordKeyRefs } from '@/server/storage-lifecycle/key-ref-index';
 import { hydrateQuestionsForSpss } from '@/lib/spss/hydrate-questions';
 import { toAnchorSnapshot } from '@/server/read-models/anchor-row';
 import { assertValidSpssVarNames } from '@/lib/spss/variable-name-guard';
+import { resolveLanguageSetLocales } from '@/utils/survey-language';
 import { buildSurveySnapshot } from './versioning/snapshot-builder';
 import { pruneVersionSnapshots } from './versioning/version-prune';
 import { findPrunableVersionIds } from './versioning/version-retention-sql';
@@ -54,6 +55,11 @@ export async function publishSurvey(input: PublishSurveyInput): Promise<SurveyVe
     generateSPSSColumns(questionsForVarNameGate, {
       changeConfirmQuestionIds: new Set(
         questionsForVarNameGate.filter(supportsChangeConfirmation).map((q) => q.id),
+      ),
+      // 공유 변수명(ADR 0034)은 내보내기처럼 한 변수로 합친 뒤 검사한다 — 언어 묶음 밖 중복은 그대로 막힌다.
+      languageSetLocales: resolveLanguageSetLocales(
+        questionsForVarNameGate,
+        surveyData.groups ?? [],
       ),
     }),
   );

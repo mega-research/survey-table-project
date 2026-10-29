@@ -1,4 +1,5 @@
 import type { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
+import { collectGateControllerIds } from '@/utils/cell-gate-tree';
 
 import { expandHeaderGrid } from './expand-header-grid';
 import { buildTableRowspanCoverage } from './table-rowspan-coverage';
@@ -24,6 +25,11 @@ export interface ColumnAxisCardItem {
    * (「내부 R&D」 아래 ①②③). 카드 안에서 구분이 바뀌는 자리에 소제목으로 선다.
    */
   groupCells: TableCell[];
+  /**
+   * 이 칸이 열어 주는 같은 행의 상세 입력 칸(게이팅 컨트롤러가 이 칸 하나뿐인 칸) — 제 열 카드가 아니라
+   * 이 칸 바로 아래에 그린다(「9) 기타비용」 금액을 적으면 그 아래 기타 내용 칸).
+   */
+  details: TableCell[];
 }
 
 export interface ColumnAxisCard {
@@ -118,8 +124,30 @@ function rowLabel(
 }
 
 /**
+ * 행 안의 상세 입력 칸 → 그 칸을 여는 같은 행 응답 칸 id. 게이팅 컨트롤러가 하나뿐이고 그것이 같은 행의
+ * 다른 응답 칸일 때만이다 — 다른 행 칸이 여는 칸이나 여러 칸이 함께 여는 칸은 종전대로 제 열 카드다.
+ */
+function detailControllerOf(row: TableRow): Map<string, string> {
+  const answerIds = new Set(row.cells.filter(isAnswerCell).map((cell) => cell.id));
+  const result = new Map<string, string>();
+  for (const cell of row.cells) {
+    if (!isAnswerCell(cell)) continue;
+    const controllers = [...new Set(collectGateControllerIds(cell.enabledWhen))];
+    const [controller] = controllers;
+    if (controllers.length !== 1 || !controller || controller === cell.id || !answerIds.has(controller)) {
+      continue;
+    }
+    result.set(cell.id, controller);
+  }
+  // 컨트롤러가 그 자신도 상세 칸이면(사슬) 묶지 않는다 — 어느 카드에도 안 그려지는 칸이 생기지 않게
+  for (const [cellId, controller] of result) if (result.has(controller)) result.delete(cellId);
+  return result;
+}
+
+/**
  * 열마다 카드를 만든다. `columns` 와 `displayRows` 의 셀은 인덱스가 맞아야 한다(표시 조건으로 걸러진
- * 뒤의 열·행). 응답 칸이 하나도 없는 열(구분·단위 열)은 카드가 되지 않는다. 가로 병합된 응답 칸은
+ * 뒤의 열·행). 응답 칸이 하나도 없는 열(구분·단위 열)은 카드가 되지 않는다. 같은 행 칸이 여는 상세 입력은
+ * 그 칸의 `details` 로 간다(그 열에 다른 응답 칸이 없으면 그 열 카드도 없다). 가로 병합된 응답 칸은
  * 시작 열 카드에, 세로 병합된 칸은 시작 행에만 놓인다(가려진 자리는 isHidden 이라 건너뛴다).
  */
 export function buildColumnAxisCards(input: {
@@ -131,13 +159,17 @@ export function buildColumnAxisCards(input: {
   const labels = new Map(
     input.displayRows.map((row) => [row.id, rowLabel(row, coverage.get(row.id) ?? row.cells)]),
   );
+  const detailsByRow = new Map(input.displayRows.map((row) => [row.id, detailControllerOf(row)]));
   const cards: ColumnAxisCard[] = [];
   for (const [columnIndex, column] of input.columns.entries()) {
     const items: ColumnAxisCardItem[] = [];
     for (const row of input.displayRows) {
       const cell = row.cells[columnIndex];
       if (!cell || !isAnswerCell(cell)) continue;
-      items.push({ cell, row, ...labels.get(row.id)! });
+      const detailOf = detailsByRow.get(row.id)!;
+      if (detailOf.has(cell.id)) continue;
+      const details = row.cells.filter((other) => detailOf.get(other.id) === cell.id);
+      items.push({ cell, row, ...labels.get(row.id)!, details });
     }
     if (items.length === 0) continue;
     const path = headerPath(input.columns, input.headerGrid, columnIndex);

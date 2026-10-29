@@ -17,7 +17,11 @@ import {
   SPLIT_EXCEL_LIMIT,
 } from '@/lib/analytics/split-export';
 import { applyExportRowExclusions } from '@/lib/analytics/export-exclusions';
-import { countRawExportPopulation, rawResponseWhere } from '../raw-export-load';
+import {
+  countRawExportPopulation,
+  loadLanguageSetLocales,
+  rawResponseWhere,
+} from '../raw-export-load';
 import { generateSPSSColumns } from '@/lib/analytics/spss-excel-export';
 import { getSurveyContactStats } from '@/server/operations/services/contact-stats';
 import { loadChangeConfirmQuestionIds } from '@/server/contacts/services/contact-prior-answers';
@@ -70,11 +74,13 @@ async function handleSplitPreview(
     const changeConfirmQuestionIds = await loadChangeConfirmQuestionIds(surveyId, {
       isTest: testFlagForScope(scope),
     });
+    // 공유 변수명(ADR 0034)도 실제 워크북처럼 한 열로 센다.
+    const languageSetLocales = await loadLanguageSetLocales(surveyId, questions);
 
     if (!basis) {
       const totalVars = generateSPSSColumns(
         [...questions].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
-        { changeConfirmQuestionIds },
+        { changeConfirmQuestionIds, languageSetLocales },
       ).length;
       // 다이얼로그가 「조사 대상 중 미응답자 포함」 영역을 그릴지 정하는 근거 —
       // 조사 대상이 없는 설문(hasContacts=false)에서는 영역 자체가 없다.
@@ -83,7 +89,7 @@ async function handleSplitPreview(
         totalVars,
         softLimit: SPLIT_SOFT_LIMIT,
         excelLimit: SPLIT_EXCEL_LIMIT,
-        candidates: detectSplitCandidates(questions),
+        candidates: detectSplitCandidates(questions, { changeConfirmQuestionIds, languageSetLocales }),
         hasContacts,
       });
     }
@@ -109,7 +115,7 @@ async function handleSplitPreview(
       }
     }
 
-    const plan = planSplit(questions, basis, respCounts, { changeConfirmQuestionIds });
+    const plan = planSplit(questions, basis, respCounts, { changeConfirmQuestionIds, languageSetLocales });
     if (!includeNonRespondents) return NextResponse.json({ plan });
 
     // 켜졌을 때만 모수 count 를 더한다 — 꺼진 경로의 쿼리 수를 늘리지 않기 위해서다.

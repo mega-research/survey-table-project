@@ -10,6 +10,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { DEFAULT_SURVEY_LOCALE, type SurveyLocale } from '@/types/survey-locale';
+import { systemText } from '@/utils/system-strings';
+
+import { localizedWaveLabel } from './change-confirm-control';
 
 /**
  * "달라졌다"고 밝혔는데 값이 지난 회차와 완전히 같은 문항을 제출 직전에 한 번 되묻는다.
@@ -21,6 +25,7 @@ export function UnmodifiedChangedDialog({
   open,
   questionTitles,
   waveLabel,
+  locale = DEFAULT_SURVEY_LOCALE,
   onConfirm,
   onCancel,
 }: {
@@ -28,16 +33,19 @@ export function UnmodifiedChangedDialog({
   /** 되묻는 문항의 제목 — 응답자가 어디로 돌아가야 하는지 알아야 한다. */
   questionTitles: string[];
   waveLabel: string;
+  /** 응답 화면의 현재 언어(미정이면 한국어) — 창은 언어 공급자 밖에서 그려져 직접 받는다. */
+  locale?: SurveyLocale;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const wave = localizedWaveLabel(waveLabel, locale);
   return (
     <AlertDialog open={open} onOpenChange={(next) => !next && onCancel()}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>고치지 않은 문항이 있습니다</AlertDialogTitle>
+          <AlertDialogTitle>{systemText('tracking.unmodified.title', locale)}</AlertDialogTitle>
           <AlertDialogDescription>
-            {`아래 문항은 달라졌다고 하셨지만 ${waveLabel} 답변과 똑같습니다. 이대로 제출해도 괜찮습니다.`}
+            {systemText('tracking.unmodified.body', locale, { wave })}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <ul className="max-h-48 list-disc space-y-1 overflow-y-auto pl-5 text-sm text-gray-700">
@@ -48,8 +56,12 @@ export function UnmodifiedChangedDialog({
           ))}
         </ul>
         <AlertDialogFooter>
-          <AlertDialogCancel onClick={onCancel}>돌아가서 확인</AlertDialogCancel>
-          <AlertDialogAction onClick={onConfirm}>이대로 제출</AlertDialogAction>
+          <AlertDialogCancel onClick={onCancel}>
+            {systemText('tracking.unmodified.back', locale)}
+          </AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm}>
+            {systemText('tracking.unmodified.submit', locale)}
+          </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

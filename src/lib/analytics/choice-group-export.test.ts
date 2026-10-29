@@ -992,6 +992,29 @@ describe('보기 그룹 표 export — generateSPSSColumns', () => {
     });
   });
 
+  it('열은 화면 순서다 — 그룹 열은 그 그룹 첫 보기 칸 자리에 선다', () => {
+    // 1행 보유 그룹 → 1행 수량 칸 → 2행 구매처 그룹 (그룹을 표 칸보다 먼저 몰아 내지 않는다)
+    expect(generateSPSSColumns([choiceGroupTable]).map((c) => c.spssVarName)).toEqual([
+      'Q10_rad1',
+      'Q10_rad1_2_text',
+      'Q10_r1_c4',
+      'Q10_cb1_1',
+      'Q10_cb1_2',
+    ]);
+  });
+
+  it('열 우선 내보내기를 켠 표는 열 순서로 그룹 자리를 정한다', () => {
+    const columnFirst = { ...choiceGroupTable, exportCellOrder: 'column-first' } as Question;
+    // 열 2(보기 1)에서 두 그룹을 만나고, 수량 칸은 열 4
+    expect(generateSPSSColumns([columnFirst]).map((c) => c.spssVarName)).toEqual([
+      'Q10_rad1',
+      'Q10_rad1_2_text',
+      'Q10_cb1_1',
+      'Q10_cb1_2',
+      'Q10_r1_c4',
+    ]);
+  });
+
   it('MRSET 은 레거시와 같은 세트명으로 묶인다', () => {
     const cols = generateSPSSColumns([choiceGroupTable]);
     const syntax = generateMrsetsSyntax(cols, [choiceGroupTable]) ?? '';

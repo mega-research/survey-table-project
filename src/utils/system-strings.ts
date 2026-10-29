@@ -1,0 +1,889 @@
+/**
+ * 시스템 글자 사전 (CONTEXT.md 「다국어 설문」) — 응답 화면이 저작자 글자 밖에서 스스로 내는 문장.
+ *
+ * 다국어 설문의 응답자는 고른 언어(현재 언어)로 이 문장들을 본다. 다국어 설문이 아니면 현재 언어가
+ * 늘 한국어라 지금 화면 글자가 한 글자도 바뀌지 않는다 — 한국어 문장은 옮겨 오기 전 문장 그대로다.
+ * 저작자 문구(필수 안내 문구·합계 제약 문구 등)는 번역하지 않는다 — 언어판마다 저작자가 쓴다.
+ *
+ * 공용 구역에 두는 이유: 검증 문구를 만드는 순수 함수(`utils/required-message` 등)와
+ * 일시중지·쿼터 마감 기본 문구(`shared/lib`·`lib/quota`)가 이 사전을 읽는다.
+ *
+ * 자리표시자는 `{이름}`(영문) — `systemText` 의 `values` 로 채운다.
+ */
+import { DEFAULT_SURVEY_LOCALE, SURVEY_LOCALES, type SurveyLocale } from '@/types/survey-locale';
+
+const KO = {
+  // 이동
+  'nav.previous': '이전',
+  'nav.next': '다음',
+  'nav.submitting': '처리 중...',
+
+  'progress.answered': '{answered}/{total} 응답 완료',
+
+  'flow.requiredUnanswered': '* 필수 질문에 답변해주세요',
+  // 응답 흐름 안내
+  'flow.reedit.before': '재응답이 허용된 설문입니다. 답변을 수정한 뒤 ',
+  'flow.reedit.emphasis': '끝까지 진행해 제출',
+  'flow.reedit.after': '해야 완료로 반영됩니다. 제출하지 않고 나가면 완료 처리되지 않습니다.',
+  'flow.inviteInvalidAnonymous': '초대 링크가 유효하지 않아 익명 응답으로 진행됩니다.',
+  'flow.resumed': '이전 응답을 이어서 진행합니다',
+  'flow.versionRebased': '설문이 업데이트되어 최신 버전으로 이어집니다',
+
+  // 전체 화면
+  'screen.checking': '확인 중...',
+  'screen.loading.title': '설문을 불러오는 중...',
+  'screen.loading.body': '잠시만 기다려주세요.',
+  'screen.goHome': '홈으로 돌아가기',
+  'screen.inviteRequired.title': '초대 링크가 필요합니다',
+  'screen.inviteRequired.body':
+    '이 설문은 초대된 응답자만 응답할 수 있습니다. 받으신 메일/메시지의 링크로 다시 접속해주세요.',
+  'screen.invalidInviteLink.title': '유효하지 않은 초대 링크입니다',
+  'screen.invalidInviteLink.body':
+    '초대 링크가 잘못되었거나 더 이상 사용할 수 없습니다. 설문 담당자에게 문의해주세요.',
+  'screen.tooManyRequests.title': '잠시 후 다시 시도해주세요',
+  'screen.tooManyRequests.body':
+    '접속이 일시적으로 몰렸습니다. 링크는 그대로 유효하니 잠시 뒤 다시 열어주세요.',
+  'screen.invalidTestLink.title': '유효하지 않은 테스트 링크입니다',
+  'screen.invalidTestLink.body': '테스트 모드가 종료되었거나 이 링크를 더 이상 사용할 수 없습니다.',
+  'screen.desktopOnly.title': 'PC 에서 열어 주세요',
+  'screen.desktopOnly.body':
+    '이 설문은 조사표를 나란히 보면서 판단하는 형식이라 넓은 화면이 필요합니다.',
+  'screen.desktopOnly.hint':
+    '같은 링크를 PC 브라우저에서 열면 이어서 진행할 수 있습니다. 창을 넓히면 이 화면은 바로 사라집니다.',
+
+  // 완료 화면
+  'completion.title': '응답 완료!',
+  'completion.screenedOutTitle': '설문 종료',
+  'completion.defaultMessage': '설문에 참여해주셔서 감사합니다!',
+  'completion.completedAt': '응답 완료 시간: {time}',
+  'completion.previewTitle': '설문 확인 완료',
+  'completion.previewMessage': '입력 내용은 저장되지 않았습니다.',
+
+  // 종료 후 이동
+  'endRedirect.waiting': '잠시만 기다려 주세요.',
+  'endRedirect.fallbackBefore': '이동하지 않으면 ',
+  'endRedirect.fallbackLink': '여기를 눌러 주세요',
+  'endRedirect.fallbackAfter': '.',
+  'endRedirect.testNotice':
+    '테스트 응답이라 이동하지 않습니다. 실제 응답은 아래 주소로 이동합니다.',
+
+  // 차단·안내 화면 (already-responded-view)
+  'notice.contactEmail': '문의 이메일',
+  'notice.testVersionRepublished.title': '설문이 수정되었습니다',
+  'notice.testVersionRepublished.body': '새로고침하면 바뀐 곳부터 이어집니다.',
+  'notice.responseConcluded.title': '이미 완료된 설문입니다',
+  'notice.responseConcluded.body':
+    '이 응답은 이미 제출이 완료되었습니다. 참여해 주셔서 감사합니다.',
+  'notice.invalidToken.title': '잘못된 초대 링크입니다',
+  'notice.invalidToken.body': '이 링크는 유효하지 않거나 만료되었습니다. 운영자에게 문의해 주세요.',
+  'notice.alreadyResponded.title': '이미 응답하신 설문입니다',
+  'notice.tokenAlreadyUsed.body':
+    '이 초대 링크로는 이미 응답이 제출되었습니다. 중복 응답은 허용되지 않습니다.',
+  'notice.deviceAlreadyResponded.body':
+    '이 기기에서 이 설문에 응답한 기록이 있습니다. 한 분당 한 번만 응답 가능합니다.',
+  'notice.invalidTestToken.title': '테스트 링크가 유효하지 않습니다',
+  'notice.invalidTestToken.body':
+    '테스트 모드가 꺼져 있거나 링크가 잘못되었습니다. 운영 콘솔에서 테스트 링크를 다시 복사해 주세요.',
+  'notice.notAccepting.title': '지금은 응답을 받고 있지 않습니다',
+  'notice.notAccepting.body':
+    '이 설문은 현재 응답을 받지 않습니다. 링크가 맞는지 확인하시거나 운영자에게 문의해 주세요.',
+  'notice.acknowledge': '위 내용을 읽고 이해했습니다.',
+  'notice.acknowledgeRequired': '위 내용을 확인하고 체크해주세요.',
+
+  // 검증 문구 — 저작자 문구가 비었을 때의 기본 문구와 고정 문구
+  'validation.required': '필수 질문에 답변해주세요.',
+  'validation.requiredCell': '필수 응답이 비어있습니다',
+  'validation.distinct': '같은 항목을 두 번 선택할 수 없습니다.',
+  'validation.selectionMax': '최대 {max}개까지 선택할 수 있습니다. (현재 {count}개 선택)',
+  'validation.rangeCells': '허용 범위를 벗어난 값이 입력된 셀이 있습니다',
+  'validation.formatCells': '입력 형식이 맞지 않은 칸이 있습니다',
+  'validation.qualityCells': '응답 조건(글자 수·내용)에 맞지 않는 칸이 있습니다',
+  'validation.formulaMismatch': '입력하신 값이 앞서 입력한 값들의 계산 결과와 일치하지 않습니다.',
+  'validation.range.min': '{min} 이상 입력해주세요',
+  'validation.range.max': '{max} 이하로 입력해주세요',
+  'validation.goToLocation': '위치로 이동',
+  // 합계 제약·계산 칸 비교 — {subject}(무엇이) {target}(기준) (현재 {current})
+  'validation.sum.subjectCalc': '계산 값',
+  'validation.sum.subjectSelected': '선택된 셀 합계',
+  'validation.sum.subjectCalcResult': '계산 결과',
+  'validation.sum.targetExpr': '기준값',
+  'validation.sum.eq': '{subject}가 {target}이 되어야 합니다 (현재 {current})',
+  'validation.sum.ne': '{subject}가 {target}이 아니어야 합니다 (현재 {current})',
+  'validation.sum.lte': '{subject}가 {target} 이하여야 합니다 (현재 {current})',
+  'validation.sum.gte': '{subject}가 {target} 이상이어야 합니다 (현재 {current})',
+  'validation.sum.lt': '{subject}가 {target} 미만이어야 합니다 (현재 {current})',
+  'validation.sum.gt': '{subject}가 {target} 초과여야 합니다 (현재 {current})',
+  // 입력된 칸 수
+  'validation.filledCount.eq': '선택된 칸 중 정확히 {target}칸을 입력해야 합니다 (현재 {count}칸)',
+  'validation.filledCount.ne':
+    '선택된 칸 중 입력한 칸이 {target}칸이 아니어야 합니다 (현재 {count}칸)',
+  'validation.filledCount.gte': '선택된 칸 중 {target}칸 이상 입력해야 합니다 (현재 {count}칸)',
+  'validation.filledCount.lte': '선택된 칸 중 {target}칸까지만 입력할 수 있습니다 (현재 {count}칸)',
+  'validation.filledCount.gt': '선택된 칸 중 {target}칸보다 많이 입력해야 합니다 (현재 {count}칸)',
+  'validation.filledCount.lt': '선택된 칸 중 {target}칸보다 적게 입력해야 합니다 (현재 {count}칸)',
+  // 응답 품질
+  'validation.text.meaningless':
+    '자음·모음이나 숫자만으로는 답할 수 없습니다. 내용을 입력해 주세요.',
+  'validation.text.minLength': '{min}자 이상 입력해 주세요. (현재 {current}자, 공백 제외)',
+  'validation.text.maxLength': '{max}자 이하로 입력해 주세요. (현재 {current}자)',
+
+  // 입력칸 안내 — 저작자가 placeholder 를 비웠을 때의 기본 문구와 선택 개수 안내
+  'input.placeholder': '답변을 입력하세요...',
+  'input.placeholderNumber': '숫자만 입력하세요...',
+  'input.charLimit': '{max}자',
+  'input.selectPlaceholder': '선택하세요...',
+  'input.otherPlaceholder': '기타 내용을 입력하세요...',
+  'input.optionTextPlaceholder': '상세 기재',
+  'input.selectShort': '선택하세요',
+  'input.selectLevel': '{label} 선택',
+  'input.charLimitMax': '최대 {max}자',
+
+  'choice.selectedCountOf': '{count}/{max}개 선택됨',
+  'choice.selectedCount': '{count}개 선택됨',
+  'choice.minSelections': '최소 {min}개 이상 선택해주세요',
+  'choice.maxReached': '최대 선택 개수에 도달했습니다',
+
+  'a11y.requiredQuestion': '필수 질문',
+
+  // 순위형 — 보기 클릭 · 드롭다운 · 표 소스
+  'ranking.rank': '{rank}순위',
+  'ranking.selectRank': '{rank}순위 선택',
+  'ranking.reset': '순위초기화',
+  'ranking.allRanked':
+    '{positions}순위까지 모두 선택했습니다. 바꾸려면 선택한 보기를 다시 누르거나 순위를 초기화하세요.',
+  'ranking.other': '기타',
+  'ranking.otherDirect': '기타 (직접 입력)',
+  'ranking.otherPlaceholder': '기타 내용 입력...',
+  'ranking.detailAria': '{rank}순위 상세 기재',
+  'ranking.otherDetailAria': '{rank}순위 기타 상세 기재',
+  'ranking.optionsGroup': '순위 보기',
+  'ranking.limitHint': '선택지가 {count}개라 최대 {positions}순위까지 입력할 수 있습니다.',
+  'ranking.limitHintShort': '선택지 {count}개 → 최대 {positions}순위',
+  'ranking.optionImageAlt': '순위 옵션 이미지',
+
+  'demand.blockCount': '{count}문항 · {answered} 응답',
+  'demand.itemCount': '{count}문항',
+  'demand.opinionToggle': '의견 (자유기재)',
+  'demand.opinionPlaceholder': '이 문항에 대한 의견을 자유롭게 적어 주십시오',
+
+  'tracking.defaultWaveLabel': '지난 회차',
+  'tracking.same': '{wave}와 같음',
+  'tracking.changed': '달라졌습니다',
+  'tracking.prefilled': '{wave} 답변이 채워져 있습니다',
+  'tracking.legend': '{wave} 대비 변동 확인',
+  'tracking.required': '이 문항의 변동 여부를 선택해주세요',
+  'tracking.unmodified.title': '고치지 않은 문항이 있습니다',
+  'tracking.unmodified.body':
+    '아래 문항은 달라졌다고 하셨지만 {wave} 답변과 똑같습니다. 이대로 제출해도 괜찮습니다.',
+  'tracking.unmodified.back': '돌아가서 확인',
+  'tracking.unmodified.submit': '이대로 제출',
+
+  'toast.draftSaveFailed': '응답 임시 저장에 실패했습니다. 잠시 후 다시 시도해주세요.',
+  'toast.submitFailed': '응답 제출 중 오류가 발생했습니다. 다시 시도해주세요.',
+
+  'document.previousPage': '이전 쪽',
+  'document.nextPage': '다음 쪽',
+  'document.pageNumber': '쪽 번호',
+  'document.rendering': '그리는 중…',
+  'document.spanOff': '이어보기 끄기',
+  'document.spanOn': '다음 쪽을 이어 붙여 본다 — 쪽 경계에 걸친 문항을 확인할 때',
+  'document.pageRange': '{from}–{to}쪽',
+  'document.span': '이어보기',
+  'document.goToQuestion': '이 영역의 문항으로 이동',
+
+  'header.defaultNoticeTitle': '통계법 제33조(비밀의 보호)',
+  'header.defaultNoticeBody':
+    '통계의 작성 과정에서 알려진 사항으로서 개인이나 법인 또는 단체의 비밀에 속하는 사항은 보호되어야 한다.',
+  'header.defaultNoticeLine':
+    '본 조사는 통계법 제33조(비밀의 보호)에 의거, 응답하신 내용은 통계 작성 목적 외에는 사용되지 않습니다.',
+  'header.markAlt': '국가통계 마크',
+  'header.logoAlt': '설문 로고',
+
+  'media.enlarge': '{alt} 크게 보기',
+  'media.imageFallbackAlt': '이미지',
+  'media.viewerTitle': '이미지 크게 보기',
+  'media.zoomIn': '확대',
+  'media.zoomOut': '축소',
+  'media.watchVideo': '동영상 보기',
+  'media.imageError': '이미지 오류',
+  'media.cellImageAlt': '셀 이미지',
+  'media.tableVideo': '테이블 동영상',
+  'media.videoUnsupported': '동영상을 지원하지 않는 브라우저입니다.',
+  'media.videoLinkError': '동영상 링크 오류',
+
+  'common.close': '닫기',
+  'common.cancel': '취소',
+  'common.select': '선택',
+
+  'mobile.details': '자세히',
+  'mobile.checkAnswerOf': '{title}의 응답을 확인해 주세요.',
+  'mobile.checkAnswer': '응답을 확인해 주세요.',
+
+  'drilldown.showDescription': '설명 보기',
+  'drilldown.displayCount': '표시 {count}개',
+  'drilldown.matrixChoices': '세부 {inputs}개 · 선택지 {total}개',
+  'drilldown.matrixInputs': '세부 {inputs}개 · 입력 {total}칸',
+  'drilldown.listItems': '항목 {count}개',
+  'drilldown.inputs': '입력 {count}개',
+  'drilldown.back': '뒤로',
+  'drilldown.previousSection': '이전 섹션',
+  'drilldown.nextSection': '다음 섹션',
+  'drilldown.toContents': '목차로',
+  'drilldown.previousItem': '이전 항목',
+  'drilldown.nextItem': '다음 항목',
+  'drilldown.overall': '전체',
+  'drilldown.unit.cells': '칸',
+  'drilldown.unit.items': '개 항목',
+  'drilldown.unit.selections': '개 선택',
+  'drilldown.itemFallback': '항목',
+  'drilldown.inputFallback': '입력',
+  'drilldown.chooseItem': '작성할 항목을 선택하세요',
+
+  'stepper.chooseItems': '응답할 항목을 선택하세요',
+  'stepper.count': '{count}개',
+  'stepper.detailInput': '상세 입력 ({count}개 선택)',
+  'stepper.chooseSubItems': '세부 항목을 선택하세요',
+  'stepper.groups': '그룹',
+  'stepper.backToSelection': '항목 선택으로 돌아가기',
+  'stepper.completedOf': '{completed} / {total} 완료',
+
+  'table.addRow': '행 추가',
+  'table.removeLastRow': '마지막 줄 삭제',
+  'table.maxRowsReached': '최대 {max}개까지 추가할 수 있습니다.',
+  'table.rowControls': '행 추가·삭제',
+  'table.collapse': '접기',
+  'table.expand': '펼치기',
+  'table.selectItems': '항목 선택',
+  'table.selectedCount': '{count}개 선택',
+  'table.selectItemsHint': '테이블에 표시할 항목을 선택하세요.',
+  'table.selectAll': '전체 선택',
+  'table.confirmCount': '확인 ({count}개)',
+  'table.scrollLeft': '왼쪽으로 스크롤',
+  'table.scrollRight': '오른쪽으로 스크롤',
+  'table.horizontalScroll': '가로 스크롤',
+
+  'cell.minSelections': '최소 {min}개 이상',
+  'cell.maxReached': '최대 도달',
+  'cell.choiceAria': '보기 선택',
+  'cell.calcPreview': '계산 값',
+  'cell.rankingPreview': '(순위형 셀 · {count}개 옵션 · {positions}순위)',
+
+  // 입력 형식 — {label} 은 형식 이름. 한국어 조사(은/는)가 붙는 문장은 형식마다 키를 따로 둔다
+  'format.label.mobile': '휴대전화',
+  'format.label.phone': '전화번호',
+  'format.label.biz_number': '사업자번호',
+  'format.label.corp_number': '법인번호',
+  'format.label.email': '이메일',
+  'format.notANumber.mobile': '휴대전화는 숫자로 입력해 주세요',
+  'format.notANumber.phone': '전화번호는 숫자로 입력해 주세요',
+  'format.notANumber.biz_number': '사업자번호는 숫자로 입력해 주세요',
+  'format.notANumber.corp_number': '법인번호는 숫자로 입력해 주세요',
+  'format.notANumber.email': '이메일은 숫자로 입력해 주세요',
+  'format.wrongLengthFixed.biz_number': '사업자번호는 {length}자리입니다',
+  'format.wrongLengthFixed.corp_number': '법인번호는 {length}자리입니다',
+  'format.wrongLength': '{label} 자릿수가 맞지 않습니다',
+  'format.unknownPrefixMobile': '휴대전화 번호가 아닙니다',
+  'format.unknownPrefix': '지역번호 또는 휴대전화 식별번호로 시작해야 합니다',
+  'format.checksum': '{label} 확인번호가 맞지 않습니다. 다시 확인해 주세요',
+  'format.malformed': '{label} 형식이 아닙니다',
+  'format.nonAscii': '이메일은 영문·숫자로만 입력해 주세요',
+
+  // 저작자가 비웠을 때의 기본 문구 — 라이브 설정이라 저작 문구는 한국어 한 벌이다
+  'default.paused': '설문이 일시 중단되었습니다. 잠시 후 다시 시도해 주세요.',
+  'default.quotaClosed':
+    '해당 조건의 모집이 완료되어 더 이상 참여하실 수 없습니다. 참여해 주셔서 감사합니다.',
+  'default.quotaMidSurveyClosed':
+    '죄송합니다. 응답 중에 해당 조건의 모집이 완료되어 더 이상 진행하실 수 없습니다. 소중한 시간을 내어 참여해 주셔서 감사합니다.',
+} as const;
+
+export type SystemStringKey = keyof typeof KO;
+
+type Dictionary = Readonly<Record<SystemStringKey, string>>;
+
+/** 중국어(간체). */
+const ZH: Dictionary = {
+  'nav.previous': '上一步',
+  'nav.next': '下一步',
+  'nav.submitting': '处理中...',
+
+  'progress.answered': '已回答 {answered}/{total}',
+
+  'flow.requiredUnanswered': '* 请回答必答题',
+  'flow.reedit.before': '本问卷允许重新作答。修改答案后，需',
+  'flow.reedit.emphasis': '继续作答至最后并提交',
+  'flow.reedit.after': '，才会记为完成。未提交就离开将不会记为完成。',
+  'flow.inviteInvalidAnonymous': '邀请链接无效，将以匿名方式作答。',
+  'flow.resumed': '继续之前的作答',
+  'flow.versionRebased': '问卷已更新，将在最新版本中继续作答',
+
+  'screen.checking': '正在确认...',
+  'screen.loading.title': '正在加载问卷...',
+  'screen.loading.body': '请稍候。',
+  'screen.goHome': '返回首页',
+  'screen.inviteRequired.title': '需要邀请链接',
+  'screen.inviteRequired.body': '本问卷仅限受邀者作答。请通过您收到的邮件或消息中的链接重新访问。',
+  'screen.invalidInviteLink.title': '邀请链接无效',
+  'screen.invalidInviteLink.body': '邀请链接有误或已无法使用。请联系问卷负责人。',
+  'screen.tooManyRequests.title': '请稍后再试',
+  'screen.tooManyRequests.body': '当前访问人数较多。链接仍然有效，请稍后重新打开。',
+  'screen.invalidTestLink.title': '测试链接无效',
+  'screen.invalidTestLink.body': '测试模式已结束，或此链接已无法使用。',
+  'screen.desktopOnly.title': '请在电脑上打开',
+  'screen.desktopOnly.body': '本问卷需要对照调查表作答，因此需要较宽的屏幕。',
+  'screen.desktopOnly.hint':
+    '在电脑浏览器中打开同一链接即可继续作答。窗口变宽后，此页面会立即消失。',
+
+  'completion.title': '作答完成！',
+  'completion.screenedOutTitle': '问卷结束',
+  'completion.defaultMessage': '感谢您参与本次问卷调查！',
+  'completion.completedAt': '作答完成时间：{time}',
+  'completion.previewTitle': '问卷检查完成',
+  'completion.previewMessage': '填写的内容未被保存。',
+
+  'endRedirect.waiting': '请稍候。',
+  'endRedirect.fallbackBefore': '如果页面没有跳转，',
+  'endRedirect.fallbackLink': '请点击这里',
+  'endRedirect.fallbackAfter': '。',
+  'endRedirect.testNotice': '这是测试作答，因此不会跳转。实际作答将跳转至以下地址。',
+
+  'notice.contactEmail': '咨询邮箱',
+  'notice.testVersionRepublished.title': '问卷已修改',
+  'notice.testVersionRepublished.body': '刷新页面后，将从修改处继续。',
+  'notice.responseConcluded.title': '问卷已完成',
+  'notice.responseConcluded.body': '此作答已提交完成。感谢您的参与。',
+  'notice.invalidToken.title': '邀请链接有误',
+  'notice.invalidToken.body': '此链接无效或已过期。请联系问卷负责人。',
+  'notice.alreadyResponded.title': '您已作答过本问卷',
+  'notice.tokenAlreadyUsed.body': '此邀请链接已提交过作答，不允许重复作答。',
+  'notice.deviceAlreadyResponded.body': '此设备已有本问卷的作答记录。每人仅可作答一次。',
+  'notice.invalidTestToken.title': '测试链接无效',
+  'notice.invalidTestToken.body': '测试模式已关闭或链接有误。请在运营控制台重新复制测试链接。',
+  'notice.notAccepting.title': '目前不接受作答',
+  'notice.notAccepting.body': '本问卷目前不接受作答。请确认链接是否正确，或联系问卷负责人。',
+  'notice.acknowledge': '我已阅读并理解以上内容。',
+  'notice.acknowledgeRequired': '请确认以上内容并勾选。',
+
+  'validation.required': '请回答此必答题。',
+  'validation.requiredCell': '有必填项未填写',
+  'validation.distinct': '不能重复选择同一项。',
+  'validation.selectionMax': '最多可选择{max}项。（当前已选{count}项）',
+  'validation.rangeCells': '有单元格的数值超出允许范围',
+  'validation.formatCells': '有单元格的输入格式不正确',
+  'validation.qualityCells': '有单元格不符合作答要求（字数·内容）',
+  'validation.formulaMismatch': '您输入的数值与前面输入值的计算结果不一致。',
+  'validation.range.min': '请输入{min}或以上的数值',
+  'validation.range.max': '请输入{max}或以下的数值',
+  'validation.goToLocation': '前往该位置',
+  'validation.sum.subjectCalc': '计算值',
+  'validation.sum.subjectSelected': '所选单元格合计',
+  'validation.sum.subjectCalcResult': '计算结果',
+  'validation.sum.targetExpr': '基准值',
+  'validation.sum.eq': '{subject}应等于{target}（当前 {current}）',
+  'validation.sum.ne': '{subject}不应等于{target}（当前 {current}）',
+  'validation.sum.lte': '{subject}应小于或等于{target}（当前 {current}）',
+  'validation.sum.gte': '{subject}应大于或等于{target}（当前 {current}）',
+  'validation.sum.lt': '{subject}应小于{target}（当前 {current}）',
+  'validation.sum.gt': '{subject}应大于{target}（当前 {current}）',
+  'validation.filledCount.eq': '所选单元格中须正好填写{target}格（当前 {count}格）',
+  'validation.filledCount.ne': '所选单元格中填写的格数不能为{target}格（当前 {count}格）',
+  'validation.filledCount.gte': '所选单元格中须至少填写{target}格（当前 {count}格）',
+  'validation.filledCount.lte': '所选单元格中最多只能填写{target}格（当前 {count}格）',
+  'validation.filledCount.gt': '所选单元格中须填写多于{target}格（当前 {count}格）',
+  'validation.filledCount.lt': '所选单元格中须填写少于{target}格（当前 {count}格）',
+  'validation.text.meaningless': '不能只输入辅音、元音或数字。请输入具体内容。',
+  'validation.text.minLength': '请至少输入{min}个字。（当前 {current}个字，不含空格）',
+  'validation.text.maxLength': '请输入不超过{max}个字。（当前 {current}个字）',
+
+  'input.placeholder': '请输入答案...',
+  'input.placeholderNumber': '请只输入数字...',
+  'input.charLimit': '{max}字',
+  'input.selectPlaceholder': '请选择...',
+  'input.otherPlaceholder': '请输入其他内容...',
+  'input.optionTextPlaceholder': '请具体说明',
+  'input.selectShort': '请选择',
+  'input.selectLevel': '选择{label}',
+  'input.charLimitMax': '最多{max}字',
+
+  'choice.selectedCountOf': '已选 {count}/{max} 项',
+  'choice.selectedCount': '已选 {count} 项',
+  'choice.minSelections': '请至少选择{min}项',
+  'choice.maxReached': '已达到最多可选数量',
+
+  'a11y.requiredQuestion': '必答题',
+
+  'ranking.rank': '第{rank}位',
+  'ranking.selectRank': '选择第{rank}位',
+  'ranking.reset': '重置排名',
+  'ranking.allRanked': '已选满{positions}个名次。如需更改，请再次点击已选选项或重置排名。',
+  'ranking.other': '其他',
+  'ranking.otherDirect': '其他（请注明）',
+  'ranking.otherPlaceholder': '请输入其他内容...',
+  'ranking.detailAria': '第{rank}位 详细说明',
+  'ranking.otherDetailAria': '第{rank}位 其他 详细说明',
+  'ranking.optionsGroup': '排名选项',
+  'ranking.limitHint': '共有{count}个选项，最多可排到第{positions}位。',
+  'ranking.limitHintShort': '{count}个选项 → 最多排到第{positions}位',
+  'ranking.optionImageAlt': '排名选项图片',
+
+  'demand.blockCount': '{count}题 · 已答{answered}',
+  'demand.itemCount': '{count}题',
+  'demand.opinionToggle': '意见（自由填写）',
+  'demand.opinionPlaceholder': '请自由填写您对此题的意见',
+
+  'tracking.defaultWaveLabel': '上一轮',
+  'tracking.same': '与{wave}相同',
+  'tracking.changed': '有变化',
+  'tracking.prefilled': '已填入{wave}的回答',
+  'tracking.legend': '与{wave}相比是否有变化',
+  'tracking.required': '请选择此题的回答是否有变化',
+  'tracking.unmodified.title': '有未修改的题目',
+  'tracking.unmodified.body': '您表示以下题目有变化，但回答与{wave}完全相同。也可以直接提交。',
+  'tracking.unmodified.back': '返回检查',
+  'tracking.unmodified.submit': '直接提交',
+
+  'toast.draftSaveFailed': '临时保存回答失败，请稍后重试。',
+  'toast.submitFailed': '提交回答时出错，请重试。',
+
+  'document.previousPage': '上一页',
+  'document.nextPage': '下一页',
+  'document.pageNumber': '页码',
+  'document.rendering': '正在显示…',
+  'document.spanOff': '关闭连续查看',
+  'document.spanOn': '连同下一页一起查看——用于确认跨页的题目',
+  'document.pageRange': '第{from}–{to}页',
+  'document.span': '连续查看',
+  'document.goToQuestion': '转到此区域的题目',
+
+  'header.defaultNoticeTitle': '《统计法》第33条（秘密保护）',
+  'header.defaultNoticeBody':
+    '在编制统计过程中获知的、属于个人、法人或团体秘密的事项，应当予以保护。',
+  'header.defaultNoticeLine':
+    '本调查依据《统计法》第33条（秘密保护），您的回答内容仅用于统计编制目的，不作其他用途。',
+  'header.markAlt': '国家统计标志',
+  'header.logoAlt': '问卷标志',
+
+  'media.enlarge': '放大查看{alt}',
+  'media.imageFallbackAlt': '图片',
+  'media.viewerTitle': '放大查看图片',
+  'media.zoomIn': '放大',
+  'media.zoomOut': '缩小',
+  'media.watchVideo': '观看视频',
+  'media.imageError': '图片加载失败',
+  'media.cellImageAlt': '单元格图片',
+  'media.tableVideo': '表格视频',
+  'media.videoUnsupported': '您的浏览器不支持播放视频。',
+  'media.videoLinkError': '视频链接无效',
+
+  'common.close': '关闭',
+  'common.cancel': '取消',
+  'common.select': '选择',
+
+  'mobile.details': '详细',
+  'mobile.checkAnswerOf': '请检查「{title}」的回答。',
+  'mobile.checkAnswer': '请检查您的回答。',
+
+  'drilldown.showDescription': '查看说明',
+  'drilldown.displayCount': '显示{count}项',
+  'drilldown.matrixChoices': '{inputs}个细项 · {total}个选项',
+  'drilldown.matrixInputs': '{inputs}个细项 · {total}个填写格',
+  'drilldown.listItems': '{count}个项目',
+  'drilldown.inputs': '{count}个填写项',
+  'drilldown.back': '返回',
+  'drilldown.previousSection': '上一部分',
+  'drilldown.nextSection': '下一部分',
+  'drilldown.toContents': '返回目录',
+  'drilldown.previousItem': '上一项',
+  'drilldown.nextItem': '下一项',
+  'drilldown.overall': '全部',
+  'drilldown.unit.cells': '格',
+  'drilldown.unit.items': '项',
+  'drilldown.unit.selections': '个选择',
+  'drilldown.itemFallback': '项目',
+  'drilldown.inputFallback': '填写',
+  'drilldown.chooseItem': '请选择要填写的项目',
+
+  'stepper.chooseItems': '请选择要回答的项目',
+  'stepper.count': '{count}项',
+  'stepper.detailInput': '详细填写（已选{count}项）',
+  'stepper.chooseSubItems': '请选择细项',
+  'stepper.groups': '组',
+  'stepper.backToSelection': '返回项目选择',
+  'stepper.completedOf': '已完成 {completed} / {total}',
+
+  'table.addRow': '添加行',
+  'table.removeLastRow': '删除最后一行',
+  'table.maxRowsReached': '最多可添加{max}个。',
+  'table.rowControls': '添加或删除行',
+  'table.collapse': '收起',
+  'table.expand': '展开',
+  'table.selectItems': '选择项目',
+  'table.selectedCount': '已选{count}项',
+  'table.selectItemsHint': '请选择要在表格中显示的项目。',
+  'table.selectAll': '全选',
+  'table.confirmCount': '确定（{count}项）',
+  'table.scrollLeft': '向左滚动',
+  'table.scrollRight': '向右滚动',
+  'table.horizontalScroll': '横向滚动',
+
+  'cell.minSelections': '至少选择{min}项',
+  'cell.maxReached': '已达上限',
+  'cell.choiceAria': '选择选项',
+  'cell.calcPreview': '计算值',
+  'cell.rankingPreview': '（排名单元格 · {count}个选项 · {positions}个名次）',
+
+  'format.label.mobile': '手机号码',
+  'format.label.phone': '电话号码',
+  'format.label.biz_number': '营业执照号码',
+  'format.label.corp_number': '法人登记号码',
+  'format.label.email': '电子邮箱',
+  'format.notANumber.mobile': '手机号码请输入数字',
+  'format.notANumber.phone': '电话号码请输入数字',
+  'format.notANumber.biz_number': '营业执照号码请输入数字',
+  'format.notANumber.corp_number': '法人登记号码请输入数字',
+  'format.notANumber.email': '电子邮箱请输入数字',
+  'format.wrongLengthFixed.biz_number': '营业执照号码应为{length}位',
+  'format.wrongLengthFixed.corp_number': '法人登记号码应为{length}位',
+  'format.wrongLength': '{label}位数不正确',
+  'format.unknownPrefixMobile': '不是有效的手机号码',
+  'format.unknownPrefix': '号码应以区号或手机号段开头',
+  'format.checksum': '{label}校验码不正确，请再次确认',
+  'format.malformed': '{label}格式不正确',
+  'format.nonAscii': '电子邮箱只能输入英文字母和数字',
+
+  'default.paused': '问卷已暂停。请稍后再试。',
+  'default.quotaClosed': '该条件的名额已满，无法继续参与。感谢您的参与。',
+  'default.quotaMidSurveyClosed':
+    '非常抱歉，在您作答期间该条件的名额已满，无法继续作答。感谢您抽出宝贵时间参与。',
+};
+
+const EN: Dictionary = {
+  'nav.previous': 'Previous',
+  'nav.next': 'Next',
+  'nav.submitting': 'Processing...',
+
+  'progress.answered': '{answered}/{total} answered',
+
+  'flow.requiredUnanswered': '* Please answer the required questions',
+  'flow.reedit.before': 'You are allowed to edit your response. After editing, you must ',
+  'flow.reedit.emphasis': 'continue to the end and submit',
+  'flow.reedit.after':
+    ' for it to be recorded as complete. If you leave without submitting, it will not be completed.',
+  'flow.inviteInvalidAnonymous': 'The invitation link is invalid, so you will respond anonymously.',
+  'flow.resumed': 'Continuing your previous response',
+  'flow.versionRebased': 'The survey has been updated. You will continue in the latest version.',
+
+  'screen.checking': 'Checking...',
+  'screen.loading.title': 'Loading the survey...',
+  'screen.loading.body': 'Please wait a moment.',
+  'screen.goHome': 'Back to home',
+  'screen.inviteRequired.title': 'An invitation link is required',
+  'screen.inviteRequired.body':
+    'Only invited respondents can take this survey. Please open it again using the link in the email or message you received.',
+  'screen.invalidInviteLink.title': 'Invalid invitation link',
+  'screen.invalidInviteLink.body':
+    'The invitation link is incorrect or can no longer be used. Please contact the survey administrator.',
+  'screen.tooManyRequests.title': 'Please try again shortly',
+  'screen.tooManyRequests.body':
+    'There are too many connections at the moment. Your link is still valid, so please open it again in a moment.',
+  'screen.invalidTestLink.title': 'Invalid test link',
+  'screen.invalidTestLink.body': 'Test mode has ended, or this link can no longer be used.',
+  'screen.desktopOnly.title': 'Please open this on a PC',
+  'screen.desktopOnly.body':
+    'This survey is answered while viewing the questionnaire side by side, so it needs a wide screen.',
+  'screen.desktopOnly.hint':
+    'Open the same link in a PC browser to continue. This screen disappears as soon as the window is wide enough.',
+
+  'completion.title': 'Response complete!',
+  'completion.screenedOutTitle': 'Survey ended',
+  'completion.defaultMessage': 'Thank you for taking part in the survey!',
+  'completion.completedAt': 'Completed at: {time}',
+  'completion.previewTitle': 'Survey check complete',
+  'completion.previewMessage': 'Your entries were not saved.',
+
+  'endRedirect.waiting': 'Please wait a moment.',
+  'endRedirect.fallbackBefore': 'If you are not redirected, ',
+  'endRedirect.fallbackLink': 'click here',
+  'endRedirect.fallbackAfter': '.',
+  'endRedirect.testNotice':
+    'This is a test response, so you will not be redirected. Real responses go to the address below.',
+
+  'notice.contactEmail': 'Contact email',
+  'notice.testVersionRepublished.title': 'The survey has been modified',
+  'notice.testVersionRepublished.body': 'Refresh the page to continue from where it changed.',
+  'notice.responseConcluded.title': 'This survey is already completed',
+  'notice.responseConcluded.body':
+    'This response has already been submitted. Thank you for taking part.',
+  'notice.invalidToken.title': 'Incorrect invitation link',
+  'notice.invalidToken.body':
+    'This link is invalid or has expired. Please contact the survey administrator.',
+  'notice.alreadyResponded.title': 'You have already responded to this survey',
+  'notice.tokenAlreadyUsed.body':
+    'A response has already been submitted with this invitation link. Duplicate responses are not allowed.',
+  'notice.deviceAlreadyResponded.body':
+    'This device has already responded to this survey. Only one response per person is allowed.',
+  'notice.invalidTestToken.title': 'The test link is invalid',
+  'notice.invalidTestToken.body':
+    'Test mode is off or the link is incorrect. Please copy the test link again from the operations console.',
+  'notice.notAccepting.title': 'Responses are not being accepted right now',
+  'notice.notAccepting.body':
+    'This survey is not accepting responses at the moment. Please check the link or contact the survey administrator.',
+  'notice.acknowledge': 'I have read and understood the above.',
+  'notice.acknowledgeRequired': 'Please read the above and check the box.',
+
+  'validation.required': 'Please answer this required question.',
+  'validation.requiredCell': 'A required field is empty',
+  'validation.distinct': 'You cannot select the same item twice.',
+  'validation.selectionMax': 'You can select up to {max}. ({count} selected)',
+  'validation.rangeCells': 'Some cells contain values outside the allowed range',
+  'validation.formatCells': 'Some fields are not in the correct format',
+  'validation.qualityCells': 'Some fields do not meet the answer requirements (length or content)',
+  'validation.formulaMismatch':
+    'The value you entered does not match the result calculated from your previous entries.',
+  'validation.range.min': 'Please enter {min} or more',
+  'validation.range.max': 'Please enter {max} or less',
+  'validation.goToLocation': 'Go to field',
+  'validation.sum.subjectCalc': 'The calculated value',
+  'validation.sum.subjectSelected': 'The total of the selected cells',
+  'validation.sum.subjectCalcResult': 'The calculated result',
+  'validation.sum.targetExpr': 'the reference value',
+  'validation.sum.eq': '{subject} must equal {target} (current: {current})',
+  'validation.sum.ne': '{subject} must not equal {target} (current: {current})',
+  'validation.sum.lte': '{subject} must be at most {target} (current: {current})',
+  'validation.sum.gte': '{subject} must be at least {target} (current: {current})',
+  'validation.sum.lt': '{subject} must be less than {target} (current: {current})',
+  'validation.sum.gt': '{subject} must be greater than {target} (current: {current})',
+  'validation.filledCount.eq':
+    'Of the selected fields, exactly {target} must be filled in (currently {count})',
+  'validation.filledCount.ne':
+    'Of the selected fields, the number filled in must not be {target} (currently {count})',
+  'validation.filledCount.gte':
+    'Of the selected fields, at least {target} must be filled in (currently {count})',
+  'validation.filledCount.lte':
+    'Of the selected fields, no more than {target} can be filled in (currently {count})',
+  'validation.filledCount.gt':
+    'Of the selected fields, more than {target} must be filled in (currently {count})',
+  'validation.filledCount.lt':
+    'Of the selected fields, fewer than {target} must be filled in (currently {count})',
+  'validation.text.meaningless':
+    'Answers made up only of single letters or numbers are not accepted. Please enter your answer.',
+  'validation.text.minLength':
+    'Please enter at least {min} characters. (currently {current}, excluding spaces)',
+  'validation.text.maxLength': 'Please enter no more than {max} characters. (currently {current})',
+
+  'input.placeholder': 'Enter your answer...',
+  'input.placeholderNumber': 'Numbers only...',
+  'input.charLimit': '{max}',
+  'input.selectPlaceholder': 'Select...',
+  'input.otherPlaceholder': 'Please specify...',
+  'input.optionTextPlaceholder': 'Please specify',
+  'input.selectShort': 'Select',
+  'input.selectLevel': 'Select {label}',
+  'input.charLimitMax': 'Up to {max} characters',
+
+  'choice.selectedCountOf': '{count}/{max} selected',
+  'choice.selectedCount': '{count} selected',
+  'choice.minSelections': 'Please select at least {min}',
+  'choice.maxReached': 'You have reached the maximum number of selections',
+
+  'a11y.requiredQuestion': 'Required question',
+
+  'ranking.rank': 'Rank {rank}',
+  'ranking.selectRank': 'Select rank {rank}',
+  'ranking.reset': 'Reset ranking',
+  'ranking.allRanked':
+    'You have ranked all {positions} positions. To change, click a selected option again or reset the ranking.',
+  'ranking.other': 'Other',
+  'ranking.otherDirect': 'Other (please specify)',
+  'ranking.otherPlaceholder': 'Enter other...',
+  'ranking.detailAria': 'Rank {rank} details',
+  'ranking.otherDetailAria': 'Rank {rank} other details',
+  'ranking.optionsGroup': 'Ranking options',
+  'ranking.limitHint': 'There are {count} options, so you can rank up to {positions} positions.',
+  'ranking.limitHintShort': '{count} options → up to rank {positions}',
+  'ranking.optionImageAlt': 'Ranking option image',
+
+  'demand.blockCount': '{count} questions · {answered} answered',
+  'demand.itemCount': '{count} questions',
+  'demand.opinionToggle': 'Comment (free text)',
+  'demand.opinionPlaceholder': 'Please feel free to comment on this question',
+
+  'tracking.defaultWaveLabel': 'the previous wave',
+  'tracking.same': 'Same as {wave}',
+  'tracking.changed': 'Changed',
+  'tracking.prefilled': 'Your answer from {wave} has been filled in',
+  'tracking.legend': 'Change since {wave}',
+  'tracking.required': 'Please indicate whether this answer has changed',
+  'tracking.unmodified.title': 'Some answers were not changed',
+  'tracking.unmodified.body':
+    'You said the answers below changed, but they are the same as your answers from {wave}. You can still submit as is.',
+  'tracking.unmodified.back': 'Go back and check',
+  'tracking.unmodified.submit': 'Submit as is',
+
+  'toast.draftSaveFailed': 'Could not save your answers. Please try again shortly.',
+  'toast.submitFailed': 'An error occurred while submitting your answers. Please try again.',
+
+  'document.previousPage': 'Previous page',
+  'document.nextPage': 'Next page',
+  'document.pageNumber': 'Page number',
+  'document.rendering': 'Rendering…',
+  'document.spanOff': 'Turn off continuous view',
+  'document.spanOn': 'Show the next page below — to check questions that cross a page break',
+  'document.pageRange': 'Pages {from}–{to}',
+  'document.span': 'Continuous',
+  'document.goToQuestion': 'Go to the question for this area',
+
+  'header.defaultNoticeTitle': 'Statistics Act, Article 33 (Protection of Confidentiality)',
+  'header.defaultNoticeBody':
+    'Matters that become known in the course of compiling statistics and that are secrets of individuals, corporations or organizations shall be protected.',
+  'header.defaultNoticeLine':
+    'Under Article 33 of the Statistics Act (Protection of Confidentiality), your answers will be used only for compiling statistics.',
+  'header.markAlt': 'National statistics mark',
+  'header.logoAlt': 'Survey logo',
+
+  'media.enlarge': 'Enlarge {alt}',
+  'media.imageFallbackAlt': 'image',
+  'media.viewerTitle': 'Enlarged image',
+  'media.zoomIn': 'Zoom in',
+  'media.zoomOut': 'Zoom out',
+  'media.watchVideo': 'Watch video',
+  'media.imageError': 'Image failed to load',
+  'media.cellImageAlt': 'Cell image',
+  'media.tableVideo': 'Table video',
+  'media.videoUnsupported': 'Your browser does not support video playback.',
+  'media.videoLinkError': 'Invalid video link',
+
+  'common.close': 'Close',
+  'common.cancel': 'Cancel',
+  'common.select': 'Select',
+
+  'mobile.details': 'Details',
+  'mobile.checkAnswerOf': 'Please check your answer to "{title}".',
+  'mobile.checkAnswer': 'Please check your answer.',
+
+  'drilldown.showDescription': 'Show description',
+  'drilldown.displayCount': '{count} shown',
+  'drilldown.matrixChoices': '{inputs} sub-items · {total} options',
+  'drilldown.matrixInputs': '{inputs} sub-items · {total} fields',
+  'drilldown.listItems': '{count} items',
+  'drilldown.inputs': '{count} fields',
+  'drilldown.back': 'Back',
+  'drilldown.previousSection': 'Previous section',
+  'drilldown.nextSection': 'Next section',
+  'drilldown.toContents': 'Back to contents',
+  'drilldown.previousItem': 'Previous item',
+  'drilldown.nextItem': 'Next item',
+  'drilldown.overall': 'Total',
+  'drilldown.unit.cells': ' fields',
+  'drilldown.unit.items': ' items',
+  'drilldown.unit.selections': ' selections',
+  'drilldown.itemFallback': 'Item',
+  'drilldown.inputFallback': 'Input',
+  'drilldown.chooseItem': 'Choose an item to fill in',
+
+  'stepper.chooseItems': 'Choose the items to answer',
+  'stepper.count': '{count}',
+  'stepper.detailInput': 'Fill in details ({count} selected)',
+  'stepper.chooseSubItems': 'Choose sub-items',
+  'stepper.groups': 'Groups',
+  'stepper.backToSelection': 'Back to item selection',
+  'stepper.completedOf': '{completed} / {total} done',
+
+  'table.addRow': 'Add row',
+  'table.removeLastRow': 'Remove last row',
+  'table.maxRowsReached': 'You can add up to {max}.',
+  'table.rowControls': 'Add or remove rows',
+  'table.collapse': 'Collapse',
+  'table.expand': 'Expand',
+  'table.selectItems': 'Select items',
+  'table.selectedCount': '{count} selected',
+  'table.selectItemsHint': 'Select the items to show in the table.',
+  'table.selectAll': 'Select all',
+  'table.confirmCount': 'Confirm ({count})',
+  'table.scrollLeft': 'Scroll left',
+  'table.scrollRight': 'Scroll right',
+  'table.horizontalScroll': 'Horizontal scroll',
+
+  'cell.minSelections': 'At least {min}',
+  'cell.maxReached': 'Maximum reached',
+  'cell.choiceAria': 'Select option',
+  'cell.calcPreview': 'Calculated value',
+  'cell.rankingPreview': '(Ranking cell · {count} options · {positions} ranks)',
+
+  'format.label.mobile': 'mobile number',
+  'format.label.phone': 'phone number',
+  'format.label.biz_number': 'business registration number',
+  'format.label.corp_number': 'corporate registration number',
+  'format.label.email': 'email address',
+  'format.notANumber.mobile': 'Please enter the mobile number using numbers only',
+  'format.notANumber.phone': 'Please enter the phone number using numbers only',
+  'format.notANumber.biz_number':
+    'Please enter the business registration number using numbers only',
+  'format.notANumber.corp_number':
+    'Please enter the corporate registration number using numbers only',
+  'format.notANumber.email': 'Please enter the email address using numbers only',
+  'format.wrongLengthFixed.biz_number': 'The business registration number must be {length} digits',
+  'format.wrongLengthFixed.corp_number':
+    'The corporate registration number must be {length} digits',
+  'format.wrongLength': 'The {label} has the wrong number of digits',
+  'format.unknownPrefixMobile': 'This is not a mobile number',
+  'format.unknownPrefix': 'The number must start with an area code or a mobile prefix',
+  'format.checksum': 'The {label} check digit is incorrect. Please check it again',
+  'format.malformed': 'This is not a valid {label}',
+  'format.nonAscii': 'Please use only English letters and numbers in the email address',
+
+  'default.paused': 'The survey has been paused. Please try again later.',
+  'default.quotaClosed':
+    'Recruitment for your group is complete, so you can no longer take part. Thank you for your interest.',
+  'default.quotaMidSurveyClosed':
+    'We are sorry. Recruitment for your group was completed while you were responding, so you cannot continue. Thank you for taking the time to take part.',
+};
+
+export const SYSTEM_STRINGS: Readonly<Record<SurveyLocale, Dictionary>> = {
+  ko: KO,
+  zh: ZH,
+  en: EN,
+};
+
+export type SystemStringValues = Readonly<Record<string, string | number>>;
+
+function fill(template: string, values: SystemStringValues | undefined): string {
+  if (!values) return template;
+  return template.replace(/\{(\w+)\}/g, (whole, name: string) =>
+    name in values ? String(values[name]) : whole,
+  );
+}
+
+/**
+ * 한 언어의 문장 목록 — 언어가 정해지면 그 언어 하나, 미정(`null`)이면 한국어 · 中文 · English
+ * 순으로 세 언어(같은 문장은 한 번). 언어가 정해지기 전 안내 화면이 세 언어를 위아래로 쌓는다.
+ */
+export function systemTextLines(
+  key: SystemStringKey,
+  locale: SurveyLocale | null,
+  values?: SystemStringValues,
+): { locale: SurveyLocale; text: string }[] {
+  const locales = locale === null ? SURVEY_LOCALES : [locale];
+  const seen = new Set<string>();
+  const lines: { locale: SurveyLocale; text: string }[] = [];
+  for (const l of locales) {
+    const text = fill(SYSTEM_STRINGS[l][key], values);
+    if (seen.has(text)) continue;
+    seen.add(text);
+    lines.push({ locale: l, text });
+  }
+  return lines;
+}
+
+/**
+ * 시스템 문장 하나. 언어를 주지 않으면 한국어 — 기존 호출부는 지금 문장 그대로다.
+ * 미정(`null`)이면 세 언어를 줄바꿈으로 잇는다(줄바꿈을 살리는 자리에서 위아래로 쌓인다).
+ */
+export function systemText(
+  key: SystemStringKey,
+  locale: SurveyLocale | null = DEFAULT_SURVEY_LOCALE,
+  values?: SystemStringValues,
+): string {
+  return systemTextLines(key, locale, values)
+    .map((line) => line.text)
+    .join('\n');
+}
