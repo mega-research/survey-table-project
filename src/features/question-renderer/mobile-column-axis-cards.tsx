@@ -176,6 +176,11 @@ export const MobileColumnAxisCards = React.memo(function MobileColumnAxisCards({
                           ariaInvalid={errorCellIds?.has(detail.id) === true}
                           hintInFlow
                           ignoreInputWidth
+                          {...resolveRadioGroupProps(
+                            detail,
+                            row.id,
+                            radioBucketsByRowId.get(row.id) ?? new Map(),
+                          )}
                         />
                       </div>
                     ))}

@@ -54,7 +54,11 @@ const rows: TableRow[] = [
     label: '9) 기타비용',
     cells: [
       {
-        id: 'etc', type: 'input', content: '9) 기타비용', colspan: 2, mobileLabel: '기타 내용',
+        id: 'etc',
+        type: 'input',
+        content: '9) 기타비용',
+        colspan: 2,
+        mobileLabel: '기타 내용',
         enabledWhen: { kind: 'numeric', controllerCellId: 'a9', op: '>', value: 0 },
       },
       { id: 'etc-c', type: 'text', content: '', isHidden: true },
@@ -89,9 +93,71 @@ describe('InteractiveTableResponse — 축 단위 카드 상세 입력', () => {
     const amount = container.querySelector('[data-cell-id="a9"] input') as HTMLInputElement;
     fireEvent.change(amount, { target: { value: '5000' } });
 
-    const detail = container.querySelector('[data-cell-id="a9"] [data-detail-cell-id="etc"] input') as HTMLInputElement;
+    const detail = container.querySelector(
+      '[data-cell-id="a9"] [data-detail-cell-id="etc"] input',
+    ) as HTMLInputElement;
     expect(detail).not.toBeNull();
     expect(detail.placeholder).toBe('기타 내용');
     expect(within(card).getAllByText('9) 기타비용')).toHaveLength(1);
+  });
+
+  it('같은 단일선택 묶음의 라디오 상세 칸은 하나를 고르면 다른 하나가 풀린다', () => {
+    const radioRows: TableRow[] = [
+      {
+        id: 'r1',
+        label: '1) 숙박',
+        cells: [
+          { id: 'l1', type: 'text', content: '1) 숙박' },
+          {
+            id: 'yes',
+            type: 'radio',
+            content: '',
+            radioGroupName: 'paid',
+            radioOptions: [{ id: 'o-yes', label: '선불', value: '1' }],
+            enabledWhen: { kind: 'numeric', controllerCellId: 'a1', op: '>', value: 0 },
+          },
+          {
+            id: 'no',
+            type: 'radio',
+            content: '',
+            radioGroupName: 'paid',
+            radioOptions: [{ id: 'o-no', label: '후불', value: '2' }],
+            enabledWhen: { kind: 'numeric', controllerCellId: 'a1', op: '>', value: 0 },
+          },
+          { id: 'a1', type: 'input', content: '원', inputType: 'number' },
+        ],
+      },
+    ];
+    let latest: Record<string, unknown> = {};
+    function RadioHarness() {
+      const [value, setValue] = useState<Record<string, unknown>>({});
+      return (
+        <InteractiveTableResponse
+          questionId="q1"
+          columns={[
+            { id: 'item', label: '' },
+            { id: 'c-yes', label: '' },
+            { id: 'c-no', label: '' },
+            { id: 'amount', label: '응답 기재' },
+          ]}
+          rows={radioRows}
+          mobileTableDisplayMode="axis-cards"
+          value={value}
+          onChange={(next) => {
+            latest = next;
+            setValue(next);
+          }}
+        />
+      );
+    }
+    const { container } = render(<RadioHarness />);
+    const amount = container.querySelector('[data-cell-id="a1"] input') as HTMLInputElement;
+    fireEvent.change(amount, { target: { value: '5000' } });
+
+    fireEvent.click(screen.getByLabelText('선불'));
+    expect(latest['yes']).toBe('1');
+    fireEvent.click(screen.getByLabelText('후불'));
+    expect(latest['no']).toBe('2');
+    expect(latest['yes']).toBe('');
   });
 });
