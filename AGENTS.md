@@ -55,199 +55,77 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 
 ## 프로젝트 구조
 
+폴더마다 **무엇이 어디에 사는가와 그 자리의 규칙**만 적는다. 파일 목록은 `ls` 가 정본이다. 경계 규칙은 전부 ESLint 가 강제한다(아래 "데이터 흐름 아키텍처").
+
 ```
 src/
 ├── app/                        # Next.js App Router
-│   ├── admin/                  # 관리자 인터페이스
-│   │   ├── surveys/
-│   │   │   ├── create/         # 설문 생성
-│   │   │   └── [id]/
-│   │   │       ├── edit/       # 설문 편집
-│   │   │       ├── preview/    # 빌더 미리보기
-│   │   │       ├── analytics/  # 설문별 분석
-│   │   │       └── operations/ # 운영 콘솔 (아래 라우트 섹션 참조)
-│   │   ├── billing/mail-cost/  # 메일 비용 정산
-│   │   ├── file-cleanup/       # R2 유예 삭제 큐 관리
-│   │   ├── login/              # 로그인
-│   │   └── profile/            # 프로필
-│   ├── api/                    # API 라우트 (아래 API 섹션 참조)
-│   ├── survey/[id]/            # 공개 설문 응답 페이지 (?invite=<uuid>)
-│   ├── i/[code]/               # 짧은 초대 링크 (inviteCode → 응답 페이지)
-│   ├── preview/[token]/        # 토큰 미리보기 (previewToken)
-│   ├── analytics/              # 분석 대시보드
-│   └── unsubscribe/            # 메일 수신거부 (+ /restored)
+│   ├── admin/surveys/[id]/     # edit(빌더) · preview · analytics · operations(운영 콘솔 — 아래 라우트 절)
+│   ├── admin/                  # billing/mail-cost · file-cleanup · login · profile · surveys/create
+│   ├── api/                    # 아래 API 절
+│   ├── survey/[id]/            # 공개 응답 페이지 (?invite=<uuid>) · i/[code]/ 짧은 초대 링크 · preview/[token]/
+│   └── analytics/ · unsubscribe/
 │
 ├── server/                     # oRPC 백엔드 — 코어 + 도메인 11개 (경량 DDD: domain 순수 · procedures 얇음 · services)
-│   ├── context.ts              # createContext (supabase session + db + headers — RSC·procedure 공용)
-│   ├── orpc.ts                 # base + pub / authed(admin) / scoped(게스트 grant) + withRateLimit
-│   ├── router.ts               # 전체 도메인 router 합성 (AppRouter)
-│   ├── handler.ts              # RPCHandler (+ Sentry onError)
-│   ├── openapi.ts              # OpenAPI 핸들러 (ENABLE_PUBLIC_API 게이트)
-│   ├── rpc-logging.ts          # 전 procedure 구조화 로그 미들웨어
-│   ├── rpc-error-policy.ts     # 에러 → RPC 코드 매핑
-│   ├── rpc-timeout.ts          # 타임아웃 가드
-│   ├── health.ts               # health procedure (코어 옆)
-│   ├── data-scope.ts           # 요청이 어느 파티션(실/테스트)을 보는가 + 쓰기 잠금 — context 와 같은 계층
-│   ├── response-filters.ts     # 어느 응답 행이 보이는가 (활성·삭제됨·완료·비테스트) — data-scope 의 형제, 8구역 공용
-│   └── <domain>/               # survey-builder · survey-response · survey-document · operations · contacts
-│       │                       # · mail · analytics · library · auth · media · quota
-│       │                       # survey-document = 조사표 PDF·영역 앵커 (2026-09-03 신설, 자기 테이블 2개·procedures 2·services 4)
-│       ├── domain/             # zod 계약 + 순수 규칙 (**client-safe** — server-only·Node·DB 의존 0. zod 는 런타임 의존이라 'import 0' 이 아니다)
-│       │                       # UI 도 쓰는 모양은 shared/contracts 소관 — 여기는 그것을 다시 내보내고 서버 전용 입력·규칙만 남긴다
-│       ├── procedures/         # oRPC procedure (authed/scoped/pub, 얇은 위임) + colocated *.test.ts
-│       └── services/           # 비즈 로직 + drizzle (server-only, requireAuth/revalidatePath 없음)
-│                               # 도메인 간 직접 import 금지(ESLint), 내부는 상대경로. 타 도메인 테이블 직접 쿼리는 허용
-│   ├── read-models/            # 여러 도메인 테이블을 **읽기만** 하는 projection (설문 구조 · 버전 스냅샷 · 응답 · 보관함 분류 · 컨택 read model · 초대 조회 · 결과코드 · 쿼터 모수 · 설문 제어 플래그 · 템플릿 변수 카탈로그 · 응답내역 컬럼 스킴 · ID 목록 토큰 조회 contact-id-lists · 조사 대상 필터 해석 contact-filter-resolution(하위 파서 contacts-filter-parse) · 컨택원 선택지 contact-assignment-options · 앵커 행→스냅샷 매퍼 anchor-row)
-│   │                           # 자기완결 — 도메인을 import 하지 않는다(ESLint). 구 src/data
-│   │                           # survey-structure 의 getSurveyById 는 React cache — **사본을 만들지 말 것**(cache 가 갈리면 RSC dedupe 가 깨진다)
-│   │                           # version-snapshot 의 snapshotQuestions 는 비배열을 빈 배열로 접는다 — "구조가 깨졌다" 와 "질문이 없다" 를
+│   ├── (코어)                  # context · orpc(base·pub·authed·scoped·withRateLimit) · router · handler · openapi · rpc-logging · rpc-error-policy · rpc-timeout · health
+│   │                           # data-scope = 요청이 어느 파티션(실/테스트)을 보는가 + 쓰기 잠금, response-filters = 어느 응답 행이 보이는가(8구역 공용)
+│   ├── <domain>/               # survey-builder · survey-response · survey-document · operations · contacts · mail · analytics · library · auth · media · quota
+│   │   ├── domain/             # zod 계약 + 순수 규칙. **client-safe** (server-only·Node·DB 의존 0). UI 도 쓰는 모양은 shared/contracts 소관 — 여기는 다시 내보내고 서버 전용 입력·규칙만
+│   │   ├── procedures/         # authed/scoped/pub, 얇은 위임 + 옆에 *.test.ts
+│   │   └── services/           # 비즈 로직 + drizzle (server-only, requireAuth/revalidatePath 없음)
+│   │                           # 도메인 간 직접 import 금지, 내부는 상대경로. 타 도메인 테이블 직접 쿼리는 허용
+│   ├── read-models/            # 여러 도메인 테이블을 **읽기만** 하는 projection. 도메인을 import 하지 않는다
+│   │                           # survey-structure 의 getSurveyById 는 React cache — 사본을 만들지 말 것(RSC dedupe 가 깨진다)
+│   │                           # version-snapshot 의 snapshotQuestions 는 비배열을 빈 배열로 접는다 — "구조가 깨졌다"와 "질문이 없다"를
 │   │                           # 갈라야 하는 자리(응답 이관의 생존 판정 등)에서는 쓰지 말고 호출측이 직접 Array.isArray 로 볼 것
-│   ├── workflows/              # 여러 도메인의 **쓰기를 조율**하는 흐름. 이 층만 도메인을 부를 수 있다
-│   │                           # 결합을 없애는 게 아니라 한곳에 모아 보이게 하는 자리 — 파일이 늘면 그 자체가 신호다
-│   │   ├── test-mail-archive.ts  # 테스트 파티션 메일 보관·삭제 흐름 (mail·contacts 쓰기를 함께 조율)
-│   │   ├── test-version.ts       # 테스트 버전 맞추기 ensureTestVersion — 빌더 진입(survey-read)과 테스트 응답 저장(survey-response)이 부른다
-│   │   └── jobs/                 # Inngest 함수 4개 + index (구 lib/inngest/functions). 잡은 도메인을 부르므로 여기가 집이다
-│   └── storage-lifecycle/      # R2 유예 삭제 큐·발송 장부·참조 인덱스 (자체 r2_* 테이블만 만지는 독립 모듈)
+│   ├── workflows/              # 여러 도메인의 **쓰기를 조율**하는 흐름. 도메인을 부를 수 있는 유일한 층 — 파일이 늘면 그 자체가 신호다
+│   │                           # test-mail-archive · test-version(ensureTestVersion) · jobs/(Inngest 함수 — 아래 백그라운드 잡 절)
+│   └── storage-lifecycle/      # R2 유예 삭제 큐·발송 장부·참조 인덱스 (자기 r2_* 테이블만 만지는 독립 모듈)
 │
-│   ※ "여러 도메인이 쓴다" 는 공용의 근거가 아니다 — 역할로 묶이지 않으면 제2의 lib 가 된다
+│   ※ "여러 도메인이 쓴다"는 공용의 근거가 아니다 — 역할로 묶이지 않으면 제2의 lib 가 된다
 │
-├── features/                   # 프론트 기능 묶음 5개 (UI·훅·스토어·query 훅을 기능 단위로 — 레이어 규약 아님, FSD 아님)
-│   │                           # 의존 방향(ESLint): survey-builder → survey-response → question-renderer 단방향, operations·analytics 독립
-│   │                           # builder → response 는 2건만 남았고 **둘 다 의도된 공유**다(옵션 텍스트 사이드카 저장소).
-│   │                           # 인용값 계산이 양쪽에서 같은 입력을 봐야 해서 저장소를 하나로 둔 것 — 떼면 resetResponseState 의 원자적 리셋이 갈린다
-│   │                           # UI 가 서버에서 가져올 수 있는 건 없다 — @/server 전면 금지(타입 포함), 모양은 @/shared/contracts 로
-│   │                           # 루트 잔류 기준: ① 복수 하위 묶음이 소비하는 공용 조각 ② app 라우트가 직접 여는 진입점만 — 단일 묶음만 소비하면 그 묶음 안으로
-│   │                           # 루트 개수는 목표가 아니라 이 기준의 결과다(2026-08-25 전수 실측: 72파일 중 이동 1건). 새 묶음의 진입점은 폴더 안(table-editor 방식), 기존 group-manager·condition-card 는 유지
-│   ├── survey-builder/         # 설문 편집기 (140개) — importer 그래프의 닫힌 묶음대로 폴더화
-│   │   ├── question-list/      # 빌더 질문 목록 (sortable-question-list 진입점, question-test-card·group-header·duplicate-question-table(질문 복제 시 셀 참조·행 반복 참조 재배선))
-│   │   ├── survey-document/    # 조사표 오서링 (survey-document-panel 진입점 + anchor-canvas 드래그) — app edit 페이지가 연다
-│   │   ├── question-edit/      # 질문 편집 모달 (question-edit-modal → question-basic-tab·table-validation-editor·sum-constraint-editor)
-│   │   ├── table-editor/       # 표 질문 편집기 (dynamic-table-editor 진입점 + row-repeat-settings-card 행 반복 설정 + staged-rows-settings-card 행 차례로 열기 설정) + hooks/·utils/(column-distinct-group 묶음 이름 열 일괄 지정 포함)·bulk-generator/
-│   │   │   └── cell-editor/    # 셀 내용 모달 (cell-content-modal → *-cell-tab·cell-choice/gating-editor) + hooks/use-cell-form·utils/serialize-cell·utils/cell-rich-text(셀 본문 부분 강조 HTML)
-│   │   ├── condition/          # 표시조건 편집 사슬 (question-condition-editor → condition-card → expression/value/numeric) + utils/
-│   │   ├── lookup/             # LUT 선택·편집·CSV·보관함 (공용 리프 — condition·formula 가 소비)
-│   │   ├── formula/            # 수식 편집기 (cell-editor·sum-constraint 양쪽이 소비)
-│   │   ├── group-manager/      # 그룹 관리
-│   │   ├── hooks/              # 빌더 전용 훅 (use-ensure-survey-in-db·use-survey-sync·use-builder-scroll)
-│   │   ├── stores/             # survey-store(빌더 상태)·ui-store(빌더 UI 상태)·test-response-store(미리보기 응답)·preview-response-sources — 구 src/stores
-│   │   ├── queries/            # TanStack Query 훅 use-surveys·use-library·use-cell-library·use-survey-documents·use-survey-anchors — 구 src/hooks/queries
-│   │   ├── lib/                # changeset·diff-payload·persist-question·variable-generator·saved-question-branch-logic·cell-formula/gating-diagnostics — 구 src/lib/survey-builder
-│   │   ├── utils/              # option-value-remap·prune-sum-constraints·input-mode(숫자 모드↔입력 형식 전환)
-│   │   └── (루트 27개)          # 복수 묶음이 쓰는 공용 필드 위젯(input-format-select·option-text-settings-editor·text-validation-fields·placeholder-field 등) + app 이 직접 여는 모달·패널
-│   │                           # 폴더 위상: hooks ← lookup ← condition ← table-editor ← question-edit ← question-list (DAG, 순환 없음)
-│   ├── question-renderer/      # 두 화면(빌더 미리보기·응답 페이지)이 함께 쓰는 렌더 조각 (102개) — 어떤 feature 도 import 하지 않는다
-│   │   │                       # 질문 렌더러가 주지만 화면 공용 조각도 여기가 집이다 — 응답 헤더·루트 그룹 배지·검증 배너
-│   │   │                       # 셀 본문 cell-text·순위형 클릭 ranking-click-select·보기 소스 표 셀 컨트롤 choice-table-cell-control/gated-cell·상세기재 줄 option-text-row·행 단위 그룹 카드 mobile-row-group-cards 도 여기 (2026-09-15 병합 — 스토어 직접 구독 대신 response-sources 주입 계약으로 옮겨 적었다)
-│   │   │                       # pdf-page-view(조사표 한 쪽 렌더, 빌더·응답 공용) 도 루트
-│   │   │                       # survey-locale-context(다국어 현재 언어 주입 — SurveyLocaleProvider·useSurveyLocale(미정 null)·useInlineSurveyLocale(미정이면 'ko'), 아래 "다국어 설문") 도 루트
-│   │   ├── cells/              # 표 셀 렌더러
-│   │   ├── hooks/              # 표 레이아웃·동적 행·응답 쓰기 채널 훅 + 행 반복 use-row-repeat·행 차례로 열기 use-staged-rows·입력 형식 use-input-format-field·포커스 use-field-focus
-│   │   └── utils/              # 표 그리드·모바일 표시 순수 계산 + renders-as-table·trailing-coalescer·effective-option-texts + anchor-geometry·anchor-outline(조사표 좌표) + ranking-mobile-sections(순위형 모바일 구간) + 입력 형식 파서 input-format·응답 품질 text-quality/cell-text-quality·단독 선택 exclusive-choice·순위 클릭 ranking-click·보기 그룹 외곽선/섹션 라벨 choice-group-outline/section-label · 모바일 보기 그룹 보기 모양 choice-group-mobile-view/section-view · 원본 한 줄 choice-group-original-line · 척도 막대 투영 choice-group-scale-bar(빌더 진단도 소비)·행별 척도 row-scale-bars (input-format·text-quality/cell-text-quality·exclusive-choice 는 builder·response 도 소비하고 나머지는 렌더러 전용 — 여러 feature 가 쓰는 순수 규칙은 방향상 가장 낮은 renderer 가 소유, 2026-09-15)
-│   ├── survey-response/        # 응답 흐름 (flow·lifecycle·step-views) (38개) — 렌더러만 import
-│   │   ├── hooks/              # 응답 플로우 훅 + use-client-signals·use-keyboard-open
-│   │   ├── lib/                # version-rebase·answer/numeric/required-option-text-validation·admin-edit·quota-gate·hover-follow·split-viewport·format-normalize(제출 전 형식 정규화)·prior-answer-prefill(이월값 프리필·회수)·completion-screen(완료 화면 문구)·localized-survey-texts(언어별 제목·설명·완료 문구 고르기) (순수)
-│   │   │                       # response-document-pane(응답 화면 좌측 조사표)·step-views/demand-checklist(판정 체크리스트) 도 이 묶음
-│   │   │                       # system-text.tsx(시스템 글자 안내 화면 — 미정이면 세 언어 세 줄) 도 루트
-│   │   ├── step-views/         # 스텝 단위 화면
-│   │   └── stores/             # survey-response-store(실응답)·live-response-sources — 미리보기용 test-response-store 는 survey-builder/stores
-│   ├── operations/             # 운영 콘솔 (88개) — contacts·profiles·report·quota·mail-campaign·mail-template·filters·demand(문항 수요 집계 표)
-│   │   ├── hooks/              # use-auto-fade-message·use-search-params-mutator
-│   │   └── queries/            # use-contacts·use-campaigns·use-file-cleanup
-│   └── analytics/              # 차트 및 리포팅 (23개)
+├── features/                   # 프론트 기능 묶음 5개 (기능 단위 폴더 — 레이어 규약 아님, FSD 아님)
+│   │                           # 방향: survey-builder → survey-response → question-renderer 단방향, operations·analytics 독립
+│   │                           # builder → response 는 2건만 남았고 둘 다 의도된 공유다(옵션 텍스트 사이드카 저장소 —
+│   │                           #   인용값 계산이 양쪽에서 같은 입력을 봐야 한다. 떼면 resetResponseState 의 원자적 리셋이 갈린다)
+│   │                           # UI 는 @/server 전면 금지(타입 포함) — 모양은 @/shared/contracts 로
+│   │                           # 루트 잔류 기준: ① 복수 하위 묶음이 소비하는 공용 조각 ② app 라우트가 직접 여는 진입점. 단일 묶음만 쓰면 그 묶음 안으로.
+│   │                           #   새 묶음의 진입점은 폴더 안(table-editor 방식)
+│   ├── survey-builder/         # 설문 편집기. 폴더 위상: hooks ← lookup ← condition ← table-editor ← question-edit ← question-list (DAG)
+│   │                           # question-list · survey-document(조사표 오서링) · question-edit · table-editor(+cell-editor·bulk-generator) · condition
+│   │                           # lookup(LUT, 공용 리프) · formula · group-manager · hooks · stores(survey-store·ui-store·test-response-store) · queries · lib · utils
+│   ├── question-renderer/      # 빌더 미리보기·응답 페이지가 함께 쓰는 렌더 조각. 어떤 feature 도 import 하지 않는다 — 스토어 대신 response-sources 주입 계약으로 값을 받는다
+│   │                           # 화면 공용 조각(응답 헤더·루트 그룹 배지·검증 배너·cell-text·survey-locale-context)도 여기가 집
+│   │                           # cells/ · hooks/ · utils/(표 그리드·모바일 표시 투영·입력 형식·응답 품질·단독 선택 …)
+│   │                           # 여러 feature 가 쓰는 순수 규칙(input-format·text-quality·exclusive-choice)은 방향상 가장 낮은 이 묶음이 소유
+│   ├── survey-response/        # 응답 흐름 (flow·lifecycle·step-views). 렌더러만 import
+│   │                           # hooks/ · lib/(순수 — version-rebase·검증·프리필·완료 문구·언어별 글자) · step-views/ · stores/(survey-response-store 실응답)
+│   ├── operations/             # 운영 콘솔 — contacts·profiles·report·quota·mail-campaign·mail-template·filters·demand + hooks/·queries/
+│   └── analytics/              # 차트·리포팅
 │
 ├── shared/                     # 서버·프론트 양쪽 공용 (feature 직접 import 금지의 탈출구)
 │   ├── contracts/              # 서버와 UI 가 합의한 모양 — UI 가 서버에서 가져오는 유일한 출처
-│   │                           #   <domain>.ts     JSONB 문서 어휘 SoT (DB 에 저장되는 모양, DB 스키마 $type<> 가 참조, 런타임 의존 없음)
-│   │                           #   <domain>-io.ts  경계를 건너는 모양 — RPC 입출력 zod + RSC 가 props 로 넘기는 read model 행
-│   │                           #   survey-document.ts(앵커 스냅샷 어휘)·survey-document-io.ts(조사표·앵커 RPC zod) — 2026-09-03 신설
-│   │                           # 질문 구조 타입은 @/types/survey 소관(겹침 0). 구 db/schema/schema-types.ts
-│   ├── lib/rpc.ts              # 타입드 RPC client: client(plain 호출) + orpc(TanStack utils)
-│   ├── lib/survey-control.ts   # 설문 운영 제어 공용 로직
-│   ├── lib/image-utils.ts      # 브라우저 이미지 리사이즈·압축 (업로드 전 최적화)
-│   └── types/test-attempt.ts
+│   │                           #   <domain>.ts    JSONB 문서 어휘 SoT (DB 스키마 $type<> 가 참조, 런타임 의존 없음)
+│   │                           #   <domain>-io.ts 경계를 건너는 모양 — RPC 입출력 zod + RSC 가 props 로 넘기는 read model 행
+│   │                           # 질문 구조 타입은 @/types/survey 소관(겹침 0)
+│   └── lib/                    # rpc(client + orpc) · survey-control · image-utils(브라우저 이미지 압축)
 │
-├── actions/                    # 잔존 서버 액션 — 3파일 (의도적 유지)
-│   ├── auth-actions.ts         # login/logout (redirect+쿠키 의미론이 server action 특화)
-│   ├── unsubscribe-actions.ts  # 수신거부 POST form (메일 클라 JS 비활성 환경 + redirect)
-│   └── index.ts                # 잔존 사유 주석 포함 배럴
-│
-├── components/                 # 진짜 공용 UI 만 — features 를 모른다(ESLint)
-│   ├── ui/                     # shadcn/ui 기반 컴포넌트 (23개 + rich-text-editor/)
-│   └── providers/              # Context providers
-│
-├── stores/                     # error-dialog-store.ts 하나 (전역 에러 다이얼로그). 기능 스토어는 features/<x>/stores
-│
-├── hooks/                      # 범용 훅 4개 — use-latest-ref · use-media-query · use-formatted-numeric-input · use-auto-grow-textarea(renderer 입력칸·컨택원 수정 ID 목록 칸)
-│                               # (기능 전용 훅·query 훅은 features/<x>/hooks·queries 로 흡수, 루트 배럴 없음)
-│
-├── lib/                        # 인프라 어댑터 + 프론트·서버가 함께 쓰는 계산 (도메인 로직 흡수 완료 — 트래커 E-1)
-│                               # 판정은 폴더 이름이 아니라 소비자 실측 — 아래 "src/lib 잔류 기준" 참조
-│   ├── supabase/               # Supabase 클라이언트 (client/server/middleware)
-│   ├── auth/ + auth.ts         # admin allowlist, 게스트 grant, 설문 소유권 가드
-│   ├── rate-limit/             # Upstash 2단 레이트리밋 + 신뢰 IP 추출
-│   ├── logger/                 # pino + Axiom transport, redact, route/context 로깅
-│   ├── crypto/                 # PII 암호화 (cipher + blind index, 컨택·응답 공용)
-│   ├── contacts/               # 그룹 레벨·업로드 병합 매칭·업로드 제한·결과코드 정규화(result-code-statuses-normalize)·Raw 양식 이월 응답 되읽기 raw-format-import 순수 공용
-│   │                           # (엑셀 파서·스킴 헬퍼는 server/contacts, 컬럼 자동감지는 features/operations)
-│   ├── operations/             # 운영 콘솔 공유 계산 21파일 — format 짝 12개는 *-format.ts(서버 쌍이 동일 어간 소유) + 공유 판정·필터 9개. UI 도 소비하므로 여기가 정답 (ADR 0016)
-│   │                           # contacts-filter-sql.server.ts 는 drizzle 의존 서버 전용 — lib 안 .server.ts 마킹의 예
-│   ├── mail/                   # 렌더 미리보기·변수 추출·이미지 클릭영역·상수 4파일 (발송·dispatch·reconcile·빌링은 server/mail)
-│   ├── quota/                  # 쿼터 응답 매칭·정규화·달성 상태 계산 quota-status-calc (쿼터 게이트는 features/survey-response/lib/quota-gate)
-│   ├── r2-client.ts            # R2 인프라 어댑터 — S3Client 단일 소유자 + 객체 존재 검사 + URL→key
-│   ├── r2-env.ts               # R2 env 검증 (SDK 를 모르는 순수 헬퍼)
-│   ├── image-utils-server.ts   # 서버 이미지/파일 삭제·복사
-│   ├── image-extractor.ts      # 질문에서 이미지 URL 추출
-│   ├── spss/                   # SPSS .sav 빌더 + 변수 생성/검증 + 데이터 변환
-│   ├── inngest/                # Inngest 클라이언트 어댑터만 (client.ts) — 함수는 server/workflows/jobs
-│   ├── question/               # 질문 스키마/정규화/가드/변형 + row-repeat(행 반복 펼치기·판정·참조 재배선 — analytics 가 import 해 lib 잔류)
-│   ├── survey/                 # 토큰 치환, 수식·셀 게이팅, 이미지/첨부 promote, PII 보관기한, 응답 헤더 설정, 숨은 문항 판정·strip question-visibility, 경로 밖 문항 판정·strip answer-path, 답할 수 있는 범위 answerable-scope(응답 확정·Raw 내보내기 공용 판정), 표의 숨은 칸 판정 table-cell-visibility, 이월값 조건 prior-answer-condition, 보기 선택 판독 choice-selection·choice-table-cell-value — 전부 서버·lib 가 소비해 잔류 (컨택 attrs·이월 응답 context 와 이월값 강조는 features/question-renderer, 프리필·형식 정규화는 features/survey-response/lib, 셀 리치텍스트는 table-editor/cell-editor/utils)
-│   ├── survey-response/        # 구조 생존 판정 1파일 (테스트 응답 초기화는 server/survey-response, version-rebase 는 features/survey-response/lib)
-│   ├── analytics/              # 통계 analyzer + 엑셀/SPSS export 워크북 계산 + row-repeat-usage(내보내기에서 쓰이지 않은 뒤쪽 벌 pruning) (교차분석·필터는 features/analytics)
-│   ├── duplicate-detection/    # 중복 감지 신호 타입 1파일 (판정 로직은 server/survey-response)
-│   ├── lookup/                 # LUT 룩업
-│   ├── upload/                 # 업로드 정책(첨부·이미지) + 라우트 진입 가드(route-guard)
-│   ├── sanitize.ts             # HTML sanitize (서버: jsdom 금지, sanitize-html 사용)
-│   ├── survey-url.ts           # 설문 URL 조립
-│   ├── option-text-read.ts     # 응답에서 옵션 텍스트 입력값 읽기
-│   ├── option-value-code-migration.ts  # 옵션 value→optionCode 일괄 마이그레이션 순수 로직
-│   ├── date-formatters.ts      # 날짜·시각 표시 공통 포매터
-│   ├── get-error-message.ts    # 에러 → 사용자 표시 메시지
-│   ├── pg-error.ts             # Postgres 에러 판별 (SQLSTATE 23505 등) — 드라이버 모양을 읽는 인프라 헬퍼
-│   ├── fake-data-generator.ts  # 테스트용 더미 응답 생성
-│   └── utils.ts                # 공통 유틸리티 (cn())
-│
-├── utils/                      # 순수 유틸리티 함수
-│   ├── branch-logic / branch-eval.ts # 분기 로직 평가
-│   │                           # (renders-as-table·trailing-coalescer 는 features/question-renderer/utils, classify-table 도 거기)
-│   ├── choice-source / ranking-source / ranking-shared / choice-group-helpers.ts # 옵션 소스 해석
-│   ├── option-code-generator / table-cell-code-generator.ts # 코드 발번 (option-value-remap 은 features/survey-builder/utils)
-│   ├── spss-var-name.ts        # SPSS 변수명 생성
-│   ├── cell-label / cell-style / cell-library-helpers.ts  # (cell-type-detector·serialize-cell 은 survey-builder 아래로 이동)
-│   ├── table-cell-field-policy.ts  # 셀 필드 정책 — TableCell 키마다 폼 소유(owned·kept·dropped)·보관함(carry·drop). 새 필드는 여기 한 줄 없으면 tsc 오류, owned 면 serialize-cell 견본 셀도 넣을 것 (CONTEXT.md 「셀 필드 정책」)
-│   ├── table-merge-helpers / table-cell-optimizer.ts  # (table-grid-utils · expand-header-grid 는 question-renderer/utils)
-│   ├── mobile-drilldown-repeat-header / mobile-table-display-mode.ts  # 서버도 import — 나머지 mobile-* 는 question-renderer/utils
-│   ├── number-format / numeric-input.ts  # (expression-migration 은 survey-builder/condition/utils, header-style 은 table-editor/utils)
-│   ├── table-cell-refs.ts      # 표 셀 참조 재배선 (lib/question/row-repeat 가 import 해 공용 잔류). 입력 형식·응답 품질·순위 클릭·보기 그룹 외곽선/섹션 라벨은 소비자가 features 뿐이라 question-renderer/utils 로 (2026-09-15)
-│   ├── conditional-table-layout.ts  # 응답 표 가시 투영(행·열 표시조건 + 동적 행 선택) — 렌더러·차단 검증·저장 경계 strip 공용이라 공용 구역 (구 question-renderer/utils, 2026-10-22)
-│   ├── cell-gate-tree.ts       # 셀 게이팅 조건 트리 순회(잎 수집·컨트롤러 id·잎 매핑·잎 재해석) — 타입만 import 하는 잎 모듈, lib·utils·features 공용
-│   ├── dynamic-row-selection-sidecar.ts  # 동적 행 선택 사이드카 키·정제 — lib/survey/response-sidecars 등록부가 import 하므로 공용 구역 (구 question-renderer/utils)
-│   ├── survey-language.ts      # 다국어 판정(순수) — 언어 문항 findLanguageQuestion·isLanguageQuestion · 현재 언어 resolveCurrentLocale · 언어 묶음 resolveLanguageSetLocales · 언어 페이지 isLanguageOnlyPage. 응답 화면·빌더 경고·내보내기 합치기가 같이 쓴다
-│   ├── system-strings.ts       # 응답 화면 시스템 글자 사전 ko·zh·en (SYSTEM_STRINGS · systemText · systemTextLines · SystemStringKey) — utils/required-message·number-format · lib/quota/closed-message · shared/lib/survey-control 도 쓰므로 공용 구역
-│   └── ...
-│
-├── db/
-│   ├── index.ts                # drizzle(postgres-js) 클라이언트
-│   └── schema/                 # Drizzle ORM 스키마 (아래 DB 섹션 참조)
-│
-├── types/                      # 전역 타입·어휘 5파일 (+ pdfjs-legacy-worker.d.ts 선언)
-│   ├── survey.ts               # 질문 구조 타입 SoT — TableCell·QuestionOption·조건식 등 (986줄, 비테스트 소비 282파일)
-│   │                           # shared/contracts/survey 와 심볼 겹침 0. 저쪽은 JSONB 문서 어휘라 역할이 다르다
-│   ├── question-types.ts       # 질문 유형 어휘 런타임 SoT — QUESTION_TYPES 배열 ↔ QuestionType 동치를 tsc 로 강제
-│   ├── mobile-table-display.ts # 모바일 표 표시 모드 어휘 + 타입 가드
-│   ├── input-type.ts           # 입력 형식 어휘 SSOT — text·number + 형식 5종(mobile·phone·biz_number·corp_number·email)
-│   └── survey-locale.ts        # 다국어 언어 어휘 — SURVEY_LOCALES(ko·zh·en)·DEFAULT_SURVEY_LOCALE·TRANSLATED_SURVEY_LOCALES·SURVEY_LOCALE_LABELS·isSurveyLocale
-├── instrumentation.ts          # Sentry 서버 instrumentation
-├── instrumentation-client.ts   # Sentry 클라이언트 instrumentation
+├── actions/                    # 잔존 서버 액션 3파일 — 의도적 유지(auth login/logout · 수신거부 POST form). 아래 "표면 선택 원칙"
+├── components/                 # 진짜 공용 UI(ui/ shadcn · providers/) — features 를 모른다
+├── stores/                     # error-dialog-store 하나. 기능 스토어는 features/<x>/stores
+├── hooks/                      # 범용 훅 4개(use-latest-ref · use-media-query · use-formatted-numeric-input · use-auto-grow-textarea). 기능 훅은 features 안
+├── lib/                        # 인프라 어댑터 + 서버·프론트가 함께 쓰는 계산 — 무엇이 남는지는 아래 "src/lib 잔류 기준"
+│                               # survey/ = 응답 판정 공용(question-visibility·answer-path·answerable-scope·table-cell-visibility·pii-retention …, 주의사항 14)
+│                               # operations/ = 운영 콘솔 공유 계산(서버 쌍은 *-format.ts, ADR 0016), lib 안 서버 전용은 .server.ts 마킹(contacts-filter-sql.server.ts)
+│                               # mail/ · contacts/ · quota/ · spss/ · analytics/ · question/(row-repeat 포함) · crypto/ · logger/ · rate-limit/ · supabase/ · inngest/(client 만)
+│                               # r2-client.ts 가 S3Client 의 단일 소유자다 — R2 클라이언트를 새로 만들지 말 것
+├── utils/                      # 순수 유틸리티 — 공용 구역이라 lib·server 도 쓴다
+│                               # table-cell-field-policy.ts = 셀 필드 정책. TableCell 새 필드는 여기 한 줄 없으면 tsc 오류, owned 면 serialize-cell 견본 셀도 넣을 것
+│                               # conditional-table-layout(응답 표 가시 투영 — 렌더러·차단 검증·저장 경계 strip 공용) · cell-gate-tree · survey-language · system-strings
+├── db/                         # index.ts(drizzle postgres-js) · schema/(아래 DB 절)
+├── types/                      # 전역 타입·어휘 — survey.ts(질문 구조 SoT, shared/contracts 와 겹침 0) · question-types(배열 ↔ 타입 동치를 tsc 로 강제)
+│                               # mobile-table-display · input-type(입력 형식 SSOT) · survey-locale
+├── instrumentation*.ts         # Sentry
 └── proxy.ts                    # Next 미들웨어 (/admin, /analytics 세션 갱신)
 ```
 
