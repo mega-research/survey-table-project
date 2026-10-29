@@ -213,3 +213,56 @@ describe('withRowTitleAsCheckLabel — 글자 없는 체크박스 하나짜리 �
     expect(withRowTitleAsCheckLabel(lone({ content: '설명' }), '제목')).toBeNull();
   });
 });
+
+describe('buildColumnAxisCards — 같은 행 칸이 열어 주는 상세 입력', () => {
+  // 문4·문5 「9) 기타비용」 — 항목 글자 칸 안 입력칸(기타 내용, 금액 > 0 일 때 열림) + 금액 칸
+  const cols: TableColumn[] = [
+    { id: 'item', label: '구분' },
+    { id: 'item2', label: '' },
+    { id: 'amount', label: '응답 기재' },
+  ];
+  const body: TableRow[] = [
+    { id: 'r1', label: '1) 숙박', cells: [text('l1', '1) 숙박', { colspan: 2 }), text('l1c', '', { isHidden: true }), input('a1', { content: '원' })] },
+    {
+      id: 'r9',
+      label: '9) 기타비용',
+      cells: [
+        input('etc', {
+          content: '9) 기타비용', colspan: 2, mobileLabel: '기타 내용',
+          enabledWhen: { kind: 'numeric', controllerCellId: 'a9', op: '>', value: 0 },
+        }),
+        text('etc-c', '', { isHidden: true }),
+        input('a9', { content: '원' }),
+      ],
+    },
+  ];
+
+  it('상세 입력은 제 열 카드가 아니라 같은 행 금액 칸 바로 뒤에 딸린다', () => {
+    const cards = buildColumnAxisCards({ columns: cols, displayRows: body });
+    expect(cards.map((card) => card.key)).toEqual(['amount']);
+    const items = cards[0]!.items;
+    expect(items.map((item) => [item.cell.id, item.label])).toEqual([
+      ['a1', '1) 숙박'],
+      ['a9', '9) 기타비용'],
+    ]);
+    expect(items[1]!.details.map((cell) => cell.id)).toEqual(['etc']);
+    expect(items[0]!.details).toEqual([]);
+  });
+
+  it('다른 행 칸이 열어 주는 입력은 종전대로 제 열 카드에 남는다', () => {
+    const crossRow: TableRow[] = [
+      body[0]!,
+      {
+        id: 'r2',
+        label: '2) 기타',
+        cells: [
+          input('x', { colspan: 2, enabledWhen: { kind: 'numeric', controllerCellId: 'a1', op: '>', value: 0 } }),
+          text('x-c', '', { isHidden: true }),
+          input('a2', { content: '원' }),
+        ],
+      },
+    ];
+    const cards = buildColumnAxisCards({ columns: cols, displayRows: crossRow });
+    expect(cards.map((card) => card.key)).toEqual(['item', 'amount']);
+  });
+});
