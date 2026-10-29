@@ -966,11 +966,15 @@ function mergeLanguageSetColumns(
       const members = representativeOf.get(col);
       return members ? { ...col, languageMembers: members } : col;
     });
+  // 따라갈 문항에 남은 열이 없으면(글자 칸뿐인 표 등) 제자리에 둔다 — 옮겨 놓을 자리가 없어 열이 사라진다
+  const questionsWithColumns = new Set(
+    merged.filter((col) => !hostQuestionOf.has(col.questionId)).map((col) => col.questionId),
+  );
   const movedTo = new Map<string, SPSSExportColumn[]>();
   const stay: SPSSExportColumn[] = [];
   for (const col of merged) {
     const host = hostQuestionOf.get(col.questionId);
-    if (host === undefined) {
+    if (host === undefined || !questionsWithColumns.has(host)) {
       stay.push(col);
       continue;
     }

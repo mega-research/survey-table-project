@@ -162,6 +162,36 @@ describe('generateSPSSColumns — 공유 변수명 합치기', () => {
     );
   });
 
+  it('따라갈 한국어 문항에 열이 하나도 없으면 언어판 열은 제자리에 남는다 (사라지지 않는다)', () => {
+    // 한국어 표는 글자 칸뿐(열 0개), 영어 표에만 입력 칸이 있다
+    const table = (id: string, cellType: 'text' | 'input', order: number): Question => ({
+      ...text(id, 'Q2', order),
+      type: 'table',
+      tableColumns: [{ id: `${id}-col`, label: '', columnCode: 'c01' }],
+      tableRowsData: [
+        {
+          id: `${id}-row`,
+          label: '',
+          rowCode: 'r01',
+          cells: [{ id: `${id}-cell`, type: cellType, content: '' }],
+        },
+      ],
+    });
+    const questions = QUESTIONS.filter((q) => q.id !== 'zh-q2').map((q) =>
+      q.id === 'ko-q2'
+        ? table('ko-q2', 'text', 2)
+        : q.id === 'en-q2'
+          ? table('en-q2', 'input', 22)
+          : q,
+    );
+    const columns = generateSPSSColumns(questions, { languageSetLocales: LOCALES });
+    expect(columns.map((c) => `${c.spssVarName}:${c.questionId}`)).toEqual([
+      'Q1:ko-q1',
+      'Q9:ko-q9',
+      'Q2_r01_c01:en-q2',
+    ]);
+  });
+
   it('한국어판이 없는 변수는 그 언어판 열이 대표다', () => {
     const questions = [...QUESTIONS, text('zh-q8', 'Q8', 13), text('en-q8', 'Q8', 23)];
     const locales = new Map(LOCALES).set('zh-q8', 'zh').set('en-q8', 'en');
