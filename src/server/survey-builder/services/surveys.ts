@@ -3,7 +3,7 @@ import 'server-only';
 import { eq } from 'drizzle-orm';
 
 import { getSurveyById } from '@/server/read-models/survey-structure';
-import type { CompleteQuestionWrite } from '@/db/schema/question-persisted-fields';
+import type { CompleteQuestionCopy } from '@/db/schema/question-persisted-fields';
 import { db } from '@/db';
 import {
   NewQuestion,
@@ -368,7 +368,7 @@ export async function duplicateSurvey(
         answerQuoteEnabled: question.answerQuoteEnabled,
         answerQuoteName: question.answerQuoteName,
         answerQuoteText: question.answerQuoteText,
-      } satisfies CompleteQuestionWrite;
+      } satisfies CompleteQuestionCopy;
       return remapQuestionIdRefs(row, questionIdMap);
     });
 

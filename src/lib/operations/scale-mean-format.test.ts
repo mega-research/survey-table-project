@@ -4,7 +4,13 @@ import { buildDataRow, generateSPSSColumns } from '@/lib/analytics/spss-excel-ex
 import type { QuestionVariant } from '@/lib/question';
 import type { Question, QuestionOption, SurveySubmission, TableCell } from '@/types/survey';
 
-import { formatScaleMean, overallRowLabel, summarizeScaleMeans } from './scale-mean-format';
+import {
+  formatScaleMean,
+  listScaleMeanCandidates,
+  overallRowLabel,
+  resolveScaleMeanSelection,
+  summarizeScaleMeans,
+} from './scale-mean-format';
 
 const SEVEN = ['매우 불만족', '불만족', '약간 불만족', '보통', '약간 만족', '만족', '매우 만족'];
 
@@ -81,7 +87,9 @@ function matrixQ(id: string, code: string, rowLabels: string[]): Question {
   } as unknown as Question;
 }
 
-function sub(questionResponses: Record<string, unknown>): Pick<SurveySubmission, 'questionResponses'> {
+function sub(
+  questionResponses: Record<string, unknown>,
+): Pick<SurveySubmission, 'questionResponses'> {
   return { questionResponses };
 }
 
@@ -196,10 +204,7 @@ describe('척도 평균 — 종합 평균', () => {
     const seven = radioQ('q1', 'Q1');
     const five = radioQ('q2', 'Q2');
     five.options = five.options!.slice(0, 5);
-    const result = summarizeScaleMeans(
-      [seven, five],
-      [sub({ q1: 'q1-o7', q2: 'q2-o5' })],
-    );
+    const result = summarizeScaleMeans([seven, five], [sub({ q1: 'q1-o7', q2: 'q2-o5' })]);
     expect(result.overall).toEqual({ kind: 'mixed-scale' });
     expect(result.rows.map((r) => r.mean)).toEqual([7, 5]);
   });
@@ -228,5 +233,53 @@ describe('척도 평균 — 표시', () => {
     ).rows;
     expect(overallRowLabel(rows)).toBe('응답자별 평균 (Q1~Q3)');
     expect(overallRowLabel(rows.slice(0, 1))).toBe('응답자별 평균 (Q1)');
+  });
+});
+
+describe('척도 평균 — 문항 고르기 후보', () => {
+  it('켜면 척도 줄이 생기는 문항만 후보다 — 켜짐 여부와 줄 수를 함께 낸다', () => {
+    const on = radioQ('q1', 'Q1');
+    const off = radioQ('q2', 'Q2', { scaleMeanEnabled: false });
+    const matrix = {
+      ...matrixQ('m', 'Q7', ['시설', '프로그램']),
+      scaleMeanEnabled: false,
+    } as Question;
+    const text = { id: 't', type: 'text', title: '이름', order: 1, required: false } as Question;
+    const checkbox = { ...radioQ('c', 'Q9'), type: 'checkbox' } as Question;
+
+    expect(listScaleMeanCandidates([on, off, matrix, text, checkbox])).toEqual([
+      { questionId: 'q1', code: 'Q1', title: 'Q1. 만족하십니까?', rowCount: 1, enabled: true },
+      { questionId: 'q2', code: 'Q2', title: 'Q2. 만족하십니까?', rowCount: 1, enabled: false },
+      { questionId: 'm', code: 'Q7', title: 'Q7. 요소별 만족도', rowCount: 2, enabled: false },
+    ]);
+  });
+
+  it('보기를 표 칸에서 가져오는 문항도 후보다', () => {
+    const q = { ...choiceTableQ('q1', 'Q1'), scaleMeanEnabled: false };
+    expect(listScaleMeanCandidates([q])).toMatchObject([
+      { questionId: 'q1', rowCount: 1, enabled: false },
+    ]);
+  });
+});
+
+describe('척도 평균 — 고른 문항 검증', () => {
+  const candidates = listScaleMeanCandidates([radioQ('q1', 'Q1'), radioQ('q2', 'Q2')]);
+
+  it('후보 안의 문항만 받고 중복은 하나로 접는다', () => {
+    expect(resolveScaleMeanSelection(candidates, ['q2', 'q1', 'q2'])).toEqual({
+      ok: true,
+      questionIds: ['q2', 'q1'],
+    });
+  });
+
+  it('하나도 고르지 않아도 된다 — 전부 끈다', () => {
+    expect(resolveScaleMeanSelection(candidates, [])).toEqual({ ok: true, questionIds: [] });
+  });
+
+  it('후보가 아닌 문항이 섞이면 아무것도 바꾸지 않고 거부한다', () => {
+    expect(resolveScaleMeanSelection(candidates, ['q1', 'other'])).toEqual({
+      ok: false,
+      error: '평균을 낼 수 없는 문항이 섞여 있습니다. 화면을 새로고침한 뒤 다시 골라 주세요.',
+    });
   });
 });

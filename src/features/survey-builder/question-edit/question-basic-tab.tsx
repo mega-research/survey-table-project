@@ -398,26 +398,15 @@ export function QuestionBasicTab({
           variableCatalog={variableCatalog}
         />
 
-        {/* 평균 산출 (CONTEXT.md 「척도 평균」) — 단일값 변수를 내는 유형만 */}
-        {(question.type === 'radio' || question.type === 'select' || question.type === 'table') && (
-          <div className="flex items-start space-x-2">
-            <Switch
-              id="scale-mean-enabled"
-              checked={formData.scaleMeanEnabled === true}
-              onCheckedChange={(checked) =>
-                setFormData((prev) => ({ ...prev, scaleMeanEnabled: checked }))
-              }
-            />
-            <div className="space-y-1">
-              <Label htmlFor="scale-mean-enabled">척도 평균에 넣기</Label>
-              <p className="text-xs text-gray-500">
-                현황 「척도 평균」에 이 문항의 완료 응답 평균과 응답수가 나옵니다. 점수는 데이터 파일의
-                값 코드입니다. 표 문항은 행마다 묶인 라디오 칸이 한 줄씩 나옵니다. 「모름」 같은 보기는
-                「평균에서 제외」로 빼세요.
-              </p>
-            </div>
-          </div>
-        )}
+        {/* 평균 산출 (CONTEXT.md 「척도 평균」) — 켜고 끄는 곳은 현황 「척도 평균」의 「문항 선택」이다.
+            빌더는 보이기만 한다(옛 빌더 탭 저장이 콘솔 값을 되돌리지 않게 저장하지 않는다). */}
+        {formData.scaleMeanEnabled === true &&
+          (question.type === 'radio' || question.type === 'select' || question.type === 'table') && (
+            <p className="rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-700">
+              현황 「척도 평균」에 들어간 문항입니다. 「모름」 같은 보기는{' '}
+              {question.type === 'table' ? '칸 편집의' : '아래 보기의'} 「평균 제외」로 빼세요.
+            </p>
+          )}
 
         {/* 단답형·장문형 개인정보 암호화 토글 */}
         {(question.type === 'text' || question.type === 'textarea') && (

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { PERSISTED_QUESTION_FIELDS } from '@/db/schema/question-persisted-fields';
+import {
+  CONSOLE_OWNED_QUESTION_FIELDS,
+  PERSISTED_QUESTION_FIELDS,
+} from '@/db/schema/question-persisted-fields';
 import type { Question } from '@/types/survey';
 
 import { buildSurveySnapshot } from './snapshot-builder';
@@ -15,6 +18,9 @@ import { buildSurveySnapshot } from './snapshot-builder';
  *
  * 스냅샷이 **의도적으로** 담지 않는 필드는 아래 목록에 사유와 함께 등재한다.
  */
+/** 읽기 방향은 빌더 밖 화면이 쓰는 컬럼(CONSOLE_OWNED_QUESTION_FIELDS)까지 대조한다. */
+const READ_FIELDS = [...PERSISTED_QUESTION_FIELDS, ...CONSOLE_OWNED_QUESTION_FIELDS];
+
 const INTENTIONALLY_OMITTED: ReadonlySet<string> = new Set([
   // export 계열은 라이브 설정을 본다 — 내보내기 시점의 코딩북 규칙이 최신이어야 한다.
   'isCustomSpssVarName',
@@ -113,7 +119,7 @@ describe('발행 스냅샷 — 영속 필드 전수 대조', () => {
     } as never);
 
     const question = snapshot.questions[0] as unknown as Record<string, unknown>;
-    const missing = PERSISTED_QUESTION_FIELDS.filter(
+    const missing = READ_FIELDS.filter(
       (field) => !INTENTIONALLY_OMITTED.has(field) && question[field] === undefined,
     );
     expect(missing).toEqual([]);
@@ -121,7 +127,7 @@ describe('발행 스냅샷 — 영속 필드 전수 대조', () => {
 
   it('sentinel 이 모든 영속 필드를 덮는다 (테스트 자기 검증)', () => {
     const row = SENTINEL as unknown as Record<string, unknown>;
-    const uncovered = PERSISTED_QUESTION_FIELDS.filter((field) => row[field] == null);
+    const uncovered = READ_FIELDS.filter((field) => row[field] == null);
     expect(uncovered).toEqual([]);
   });
 });

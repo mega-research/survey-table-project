@@ -55,7 +55,6 @@ export const PERSISTED_QUESTION_FIELDS = [
   'hideColumnLabels',
   'stickyColumnCount',
   'fitTableToWidth',
-  'scaleMeanEnabled',
   'mobileOriginalTable',
   'mobileTableDisplayMode',
   'mobileDrilldownOmitLeadingColumns',
@@ -83,12 +82,36 @@ export const PERSISTED_QUESTION_FIELDS = [
 export type PersistedQuestionField = (typeof PERSISTED_QUESTION_FIELDS)[number];
 
 /**
+ * 빌더 밖 화면이 소유하는 질문 컬럼 — 읽기(행→Question 매퍼·발행 스냅샷)는 하지만 빌더 쓰기 채널
+ * (survey-save upsert·questions.create/update)은 싣지 않는다. 열어 둔 옛 빌더 탭이 저장하며
+ * 다른 화면에서 바꾼 값을 되돌리지 않게 하기 위해서다.
+ * - scaleMeanEnabled: 운영 콘솔 「척도 평균」의 「문항 선택」 (operations/services/scale-mean)
+ * 읽기 방향 전수 대조(map-question-row·snapshot-builder 테스트)는 이 목록도 함께 돈다.
+ */
+export const CONSOLE_OWNED_QUESTION_FIELDS = [
+  'scaleMeanEnabled',
+] as const satisfies readonly (keyof NewQuestion)[];
+
+export type ConsoleOwnedQuestionField = (typeof CONSOLE_OWNED_QUESTION_FIELDS)[number];
+
+/**
  * 쓰기 객체 literal 에 `satisfies CompleteQuestionWrite` 로 부착한다.
  * 영속 필드 누락은 컴파일 에러, 지점별 추가 키(id/surveyId/updatedAt 등)는
  * index signature 가 흡수해 허용된다. 값 타입 검증은 drizzle 의 NewQuestion
  * 컨텍스트 타이핑이 그대로 수행한다.
  */
-export type CompleteQuestionWrite = Record<PersistedQuestionField, unknown> &
+export type CompleteQuestionWrite = Record<PersistedQuestionField, unknown> & {
+  // 빌더 쓰기 채널은 콘솔 소유 컬럼을 싣지 않는다 — 실으면 컴파일 에러
+  [K in ConsoleOwnedQuestionField]?: never;
+} & Record<string, unknown>;
+
+/**
+ * 설문 복제처럼 행을 통째로 옮기는 쓰기 — 콘솔 소유 컬럼까지 빠짐없이 싣는다.
+ */
+export type CompleteQuestionCopy = Record<
+  PersistedQuestionField | ConsoleOwnedQuestionField,
+  unknown
+> &
   Record<string, unknown>;
 
 // 역방향 검사 — questions 테이블에 새 컬럼이 생기면 아래 return 할당이 컴파일 에러가
@@ -105,6 +128,7 @@ export function toPersistedQuestionField(
     // 공유 DB 스키마 동기화 전용. 모바일 반복 헤더 기능 브랜치가 영속 계약을 소유한다.
     | 'mobileDrilldownRepeatHeaderStartRow'
     | 'mobileDrilldownRepeatHeaderEndRow'
+    | (typeof CONSOLE_OWNED_QUESTION_FIELDS)[number]
   >,
 ): PersistedQuestionField {
   return column;

@@ -1,8 +1,8 @@
 import {
-  buildDataRow,
-  generateSPSSColumns,
   type SPSSExportColumn,
   type SpssColumnOptions,
+  buildDataRow,
+  generateSPSSColumns,
 } from '@/lib/analytics/spss-excel-export';
 import type { QuestionVariant } from '@/lib/question';
 import type { Question, SurveySubmission, TableCell } from '@/types/survey';
@@ -67,7 +67,10 @@ function cellsById(question: Question): Map<string, TableCell> {
 }
 
 /** 값 코드 목록 — [코드, 평균에서 제외 여부]. 척도 줄이 될 수 없는 열이면 null. */
-function codedValuesOf(column: SPSSExportColumn, question: Question): Array<[number, boolean]> | null {
+function codedValuesOf(
+  column: SPSSExportColumn,
+  question: Question,
+): Array<[number, boolean]> | null {
   switch (column.type) {
     case 'single':
       return resolveChoiceOptions(question).map((option, idx) => [
@@ -192,6 +195,69 @@ export function summarizeScaleMeans(
       : { kind: 'mean', mean: average(respondentMeans), count: respondentMeans.length };
 
   return { rows, overall };
+}
+
+export interface ScaleMeanCandidate {
+  questionId: string;
+  /** 문항코드 — 없으면 첫 척도 줄 변수명 */
+  code: string;
+  title: string;
+  /** 켜면 생기는 척도 줄 수 — 행렬 척도는 행 수 */
+  rowCount: number;
+  enabled: boolean;
+}
+
+/**
+ * 콘솔 「문항 선택」 목록 — 켜면 척도 줄이 하나 이상 생기는 문항. 켜짐 여부와 무관하게 같은 판정
+ * (`selectScaleColumns`)을 타므로 후보에 있는 문항은 켜면 반드시 표에 줄이 생긴다.
+ */
+export function listScaleMeanCandidates(
+  questions: readonly Question[],
+  options?: SpssColumnOptions,
+): ScaleMeanCandidate[] {
+  const asEnabled = questions.map((q) =>
+    SCALE_QUESTION_TYPES.has(q.type) ? { ...q, scaleMeanEnabled: true } : q,
+  );
+  const columns = generateSPSSColumns(asEnabled as unknown as QuestionVariant[], options);
+  const byId = new Map(questions.map((q) => [q.id, q]));
+  const candidates = new Map<string, ScaleMeanCandidate>();
+  for (const { column } of selectScaleColumns(asEnabled, columns)) {
+    const existing = candidates.get(column.questionId);
+    if (existing) {
+      existing.rowCount += 1;
+      continue;
+    }
+    const question = byId.get(column.questionId);
+    if (!question) continue;
+    candidates.set(column.questionId, {
+      questionId: question.id,
+      code: question.questionCode || column.spssVarName,
+      title: flattenTitle(question.title),
+      rowCount: 1,
+      enabled: question.scaleMeanEnabled === true,
+    });
+  }
+  return [...candidates.values()];
+}
+
+export type ScaleMeanSelection = { ok: true; questionIds: string[] } | { ok: false; error: string };
+
+/**
+ * 「문항 선택」 저장 입력 검증. 고른 집합이 곧 켜진 문항 전체다(나머지는 끈다).
+ * 후보 밖 id 가 섞이면 일부만 반영하지 않고 통째로 거부한다 — 화면이 낡았다는 신호다.
+ */
+export function resolveScaleMeanSelection(
+  candidates: readonly ScaleMeanCandidate[],
+  questionIds: readonly string[],
+): ScaleMeanSelection {
+  const allowed = new Set(candidates.map((c) => c.questionId));
+  if (questionIds.some((id) => !allowed.has(id))) {
+    return {
+      ok: false,
+      error: '평균을 낼 수 없는 문항이 섞여 있습니다. 화면을 새로고침한 뒤 다시 골라 주세요.',
+    };
+  }
+  return { ok: true, questionIds: [...new Set(questionIds)] };
 }
 
 /** 평균 표시 — 소수 둘째 자리. 응답이 없으면 대시. */

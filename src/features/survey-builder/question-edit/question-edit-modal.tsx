@@ -534,6 +534,8 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                 ? currentFormData.placeholder
                 : question?.placeholder;
             const updateData: Partial<Question> = { ...currentFormData };
+            // 평균 산출은 콘솔 「척도 평균」 소유 — 옛 탭 저장이 콘솔 값을 되돌리지 않게 싣지 않는다
+            delete updateData.scaleMeanEnabled;
             if (resolvedPlaceholder !== undefined) {
               updateData.placeholder = resolvedPlaceholder;
             }
@@ -661,7 +663,6 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                   ? currentFormData.stickyColumnCount
                   : question?.stickyColumnCount,
               fitTableToWidth: currentFormData.fitTableToWidth ?? question?.fitTableToWidth,
-              scaleMeanEnabled: currentFormData.scaleMeanEnabled ?? question?.scaleMeanEnabled,
               exportCellOrder: currentFormData.exportCellOrder ?? question?.exportCellOrder,
               mobileOriginalTable:
                 currentFormData.mobileOriginalTable ?? question?.mobileOriginalTable,

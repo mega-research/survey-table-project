@@ -990,7 +990,7 @@ export interface Question {
    */
   fitTableToWidth?: boolean;
   /**
-   * 평균 산출 (CONTEXT.md 「척도 평균」, 빌더 표기 「척도 평균에 넣기」) — 켠 문항의 단일값 변수가 운영 콘솔
+   * 평균 산출 (CONTEXT.md 「척도 평균」, 콘솔 「척도 평균」의 「문항 선택」이 켠다) — 켠 문항의 단일값 변수가 운영 콘솔
    * 척도 평균 표의 줄이 된다. 단일 선택(radio·select)과 표 문항(행렬 척도 radio 칸) 전용, 기본 꺼짐.
    */
   scaleMeanEnabled?: boolean;

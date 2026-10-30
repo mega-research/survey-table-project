@@ -4,15 +4,19 @@ import { Pencil } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
+  type ScaleMeanCandidate,
+  type ScaleMeanSummary,
   formatScaleMean,
   overallRowLabel,
-  type ScaleMeanSummary,
 } from '@/lib/operations/scale-mean-format';
 import { cn } from '@/lib/utils';
+
+import { ScaleMeanQuestionPicker } from './scale-mean-question-picker';
 
 interface Props {
   surveyId: string;
   summary: ScaleMeanSummary;
+  candidates: ScaleMeanCandidate[];
 }
 
 const CELL = 'border-r border-gray-300 px-3 last:border-r-0';
@@ -22,20 +26,35 @@ const CELL = 'border-r border-gray-300 px-3 last:border-r-0';
  * 구분 · 문항 · 평균 · 응답수 네 열, 맨 위 「전체」 줄이 종합 평균이다. 막대·요약 카드는 두지 않는다
  * (2026-10-30 시안 검토 — 숫자가 먼저 읽혀야 한다).
  */
-export function ScaleMeanTable({ surveyId, summary }: Props) {
+export function ScaleMeanTable({ surveyId, summary, candidates }: Props) {
   if (summary.overall.kind === 'empty') {
+    if (candidates.length === 0) {
+      return (
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-gray-200 bg-white px-6 py-12 text-center">
+          <p className="text-sm font-semibold text-gray-900">평균을 낼 수 있는 문항이 없습니다</p>
+          <p className="text-sm text-gray-500">
+            단일 선택·드롭다운 문항이나 행마다 라디오 칸을 묶은 척도 표가 있어야 합니다.
+          </p>
+          <Link href={`/admin/surveys/${surveyId}/edit`} className="mt-2">
+            <Button variant="outline" size="sm">
+              <Pencil className="mr-2 h-4 w-4" />
+              설문 편집
+            </Button>
+          </Link>
+        </div>
+      );
+    }
+    // 켠 문항이 없으면 안내 대신 고르는 목록을 바로 보인다
     return (
-      <div className="flex flex-col items-center gap-2 rounded-lg border border-gray-200 bg-white px-6 py-12 text-center">
-        <p className="text-sm font-semibold text-gray-900">평균을 낼 문항이 없습니다</p>
-        <p className="text-sm text-gray-500">
-          문항 편집에서 「척도 평균에 넣기」를 켜면 여기에 문항별 평균과 응답수가 나옵니다.
-        </p>
-        <Link href={`/admin/surveys/${surveyId}/edit`} className="mt-2">
-          <Button variant="outline" size="sm">
-            <Pencil className="mr-2 h-4 w-4" />
-            설문 편집
-          </Button>
-        </Link>
+      <div className="max-w-[880px] space-y-3 rounded-lg border border-gray-200 bg-white p-5">
+        <div className="space-y-1">
+          <p className="text-sm font-semibold text-gray-900">평균을 낼 문항을 고르세요</p>
+          <p className="text-sm text-gray-500">
+            고른 문항의 완료 응답 평균과 응답수가 표로 나옵니다. 나중에 「문항 선택」으로 바꿀 수
+            있습니다.
+          </p>
+        </div>
+        <ScaleMeanQuestionPicker surveyId={surveyId} candidates={candidates} />
       </div>
     );
   }

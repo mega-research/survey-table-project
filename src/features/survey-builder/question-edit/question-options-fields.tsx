@@ -244,7 +244,7 @@ interface SortableOptionItemProps {
   isCheckboxQuestion: boolean;
   /** 라디오 문항일 때만 「언어」 선택을 보인다 — 언어 문항은 radio 뿐이다 */
   isRadioQuestion: boolean;
-  /** 「척도 평균에 넣기」를 켠 단일 선택 문항일 때만 「평균에서 제외」를 보인다 */
+  /** 척도 평균에 들어간(현황 「문항 선택」) 단일 선택 문항일 때만 「평균에서 제외」를 보인다 */
   showExcludeFromMean: boolean;
 }
 

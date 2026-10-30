@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { PERSISTED_QUESTION_FIELDS } from '@/db/schema/question-persisted-fields';
+import {
+  CONSOLE_OWNED_QUESTION_FIELDS,
+  PERSISTED_QUESTION_FIELDS,
+} from '@/db/schema/question-persisted-fields';
 import { mapQuestionRow } from '@/server/read-models/survey-structure';
 
 /**
@@ -13,6 +16,9 @@ import { mapQuestionRow } from '@/server/read-models/survey-structure';
  */
 
 // 각 필드에 매퍼의 != null 가드를 통과하는 최소 유효값을 준다.
+/** 읽기 방향은 빌더 밖 화면이 쓰는 컬럼(CONSOLE_OWNED_QUESTION_FIELDS)까지 대조한다. */
+const READ_FIELDS = [...PERSISTED_QUESTION_FIELDS, ...CONSOLE_OWNED_QUESTION_FIELDS];
+
 const SENTINEL_ROW: Record<string, unknown> = {
   id: 'q1',
   surveyId: 's1',
@@ -87,12 +93,12 @@ const SENTINEL_ROW: Record<string, unknown> = {
 describe('mapQuestionRow — 영속 필드 전수 매핑', () => {
   it('PERSISTED_QUESTION_FIELDS 의 모든 필드가 매핑 결과에 존재한다', () => {
     const mapped = mapQuestionRow(SENTINEL_ROW as never) as unknown as Record<string, unknown>;
-    const missing = PERSISTED_QUESTION_FIELDS.filter((field) => !(field in mapped));
+    const missing = READ_FIELDS.filter((field) => !(field in mapped));
     expect(missing).toEqual([]);
   });
 
   it('sentinel 행 자체가 모든 영속 필드를 덮는다 (테스트 자기 검증)', () => {
-    const uncovered = PERSISTED_QUESTION_FIELDS.filter(
+    const uncovered = READ_FIELDS.filter(
       (field) => SENTINEL_ROW[field] === undefined || SENTINEL_ROW[field] === null,
     );
     expect(uncovered).toEqual([]);
