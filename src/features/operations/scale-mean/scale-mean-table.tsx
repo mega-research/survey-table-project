@@ -12,6 +12,7 @@ import {
 import { cn } from '@/lib/utils';
 
 import { ScaleMeanQuestionPicker } from './scale-mean-question-picker';
+import { TruncatedText } from './truncated-text';
 
 interface Props {
   surveyId: string;
@@ -104,8 +105,8 @@ export function ScaleMeanTable({ surveyId, summary, candidates }: Props) {
               <th scope="row" className={cn(CELL, 'truncate text-left font-bold text-gray-900')}>
                 {row.varName}
               </th>
-              <td className={cn(CELL, 'truncate text-gray-900')} title={row.label}>
-                {row.label}
+              <td className={cn(CELL, 'text-gray-900')}>
+                <TruncatedText text={row.label} />
               </td>
               <td className={cn(CELL, 'text-right font-bold text-gray-900 tabular-nums')}>
                 {formatScaleMean(row.mean)}
