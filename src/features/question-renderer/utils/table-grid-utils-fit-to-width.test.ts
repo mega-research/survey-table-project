@@ -22,14 +22,14 @@ describe('resolveTableGridSizing', () => {
       minWidth: 0,
       maxWidth: '300px',
       borderRightWidth: 0,
-      borderTopRightRadius: 0,
-      borderBottomRightRadius: 0,
+      borderRadius: 0,
     });
   });
 
   // 컨테이너의 border-r 과 마지막 칸의 border-r 이 나란히 그려져 오른쪽 끝이 이중선이 됐다(2026-10-30).
   // 끈 쪽은 px 열이 컨테이너 안쪽 폭보다 테두리만큼 넓어 마지막 칸이 컨테이너 선을 덮으므로 선이 하나다.
-  it('켜면 컨테이너 오른쪽 테두리를 빼 마지막 칸의 선 하나만 남긴다', () => {
+  // 오른쪽만 각지면 왼쪽 둥근 모서리와 모양이 갈린다 — 네 모서리를 모두 각지게(2026-10-30)
+  it('켜면 컨테이너 오른쪽 테두리를 빼 마지막 칸의 선 하나만 남기고 모서리는 모두 각지게', () => {
     expect(resolveTableGridSizing([col(100)], true)).toMatchObject({ borderRightWidth: 0 });
     expect(resolveTableGridSizing([col(100)], false)).not.toHaveProperty('borderRightWidth');
   });

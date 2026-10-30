@@ -20,6 +20,7 @@ import {
   getCellBorderClasses,
   getGridCellAria,
   getHeaderCellStickyStyle,
+  fitTableMarker,
   resolveTableGridSizing,
 } from '@/features/question-renderer/utils/table-grid-utils';
 import { useMobileView } from '@/hooks/use-media-query';
@@ -357,6 +358,7 @@ export const TablePreview = React.memo(function TablePreview({
                 )}
                 <div
                   key="table-body"
+                  {...fitTableMarker(fitToWidth)}
                   role="rowgroup"
                   className={cn(
                     'mx-auto rounded-b-md border-r border-l border-gray-400 bg-white text-base',

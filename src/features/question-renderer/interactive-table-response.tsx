@@ -38,6 +38,7 @@ import {
   getCellBorderClasses,
   getGridCellAria,
   getHeaderCellStickyStyle,
+  fitTableMarker,
   resolveTableGridSizing,
 } from '@/features/question-renderer/utils/table-grid-utils';
 import {
@@ -1331,6 +1332,7 @@ function InteractiveTableResponseBody({
                 value={value}
                 onChange={mergedOnChange}
                 gridSizing={gridSizing}
+                fitToWidth={fitToWidth}
                 renderSelectorRows={renderInsertedRows}
                 stickyInfo={stickyInfo}
                 applyCellBackground={applyCellBackground}
@@ -1339,6 +1341,7 @@ function InteractiveTableResponseBody({
               /* 바디 전용 grid */
               <div
                 key="table-body"
+                {...fitTableMarker(fitToWidth)}
                 role="rowgroup"
                 className={cn(
                   'mx-auto rounded-b-md border-r border-l border-gray-400 bg-white text-base',

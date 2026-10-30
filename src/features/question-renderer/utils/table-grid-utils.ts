@@ -35,8 +35,7 @@ export function resolveTableGridSizing(
   | 'minWidth'
   | 'maxWidth'
   | 'borderRightWidth'
-  | 'borderTopRightRadius'
-  | 'borderBottomRightRadius'
+  | 'borderRadius'
 > {
   const totalWidth = calcTotalWidth(columns);
   if (!totalWidth) return { gridTemplateColumns: '', width: '100%', minWidth: '100%' };
@@ -50,11 +49,19 @@ export function resolveTableGridSizing(
     maxWidth: `${totalWidth}px`,
     // 컨테이너(border-r)와 칸(border-r)이 둘 다 오른쪽 선을 그린다. px 열은 컨테이너 안쪽 폭보다
     // 테두리만큼 넓어 마지막 칸이 컨테이너 선을 덮지만, 비율 열은 안쪽 폭에 딱 맞아 두 선이 나란히
-    // 보인다(이중선). 컨테이너 쪽을 빼 마지막 칸의 선을 오른쪽 끝선으로 쓴다 — 모서리도 칸처럼 각지게.
+    // 보인다(이중선). 컨테이너 쪽을 빼 마지막 칸의 선을 오른쪽 끝선으로 쓴다.
+    // 오른쪽 모서리가 칸처럼 각지므로 왼쪽도 각지게 해 네 모서리 모양을 맞춘다.
     borderRightWidth: 0,
-    borderTopRightRadius: 0,
-    borderBottomRightRadius: 0,
+    borderRadius: 0,
   };
+}
+
+/**
+ * 화면 폭에 맞춰 줄인 표의 본문 표식. globals.css 가 이 표식 아래의 보기 N열 그리드를
+ * 「1/N 폭이 보기 글자보다 좁으면 보기째로 다음 줄」로 푼다 — 패드 폭에서 보기 글자가 칸 안에서 꺾였다.
+ */
+export function fitTableMarker(fitToWidth: boolean): { 'data-fit-table'?: '' } {
+  return fitToWidth ? { 'data-fit-table': '' } : {};
 }
 
 // ── 응답 페이지 컨테이너 폭 판정 ──

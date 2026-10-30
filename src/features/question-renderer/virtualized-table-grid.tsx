@@ -16,6 +16,7 @@ import { useRowVisibility } from '@/features/question-renderer/hooks/use-row-vis
 import { useTablePerf } from '@/features/question-renderer/hooks/use-table-perf';
 import {
   type StickyLeftInfo,
+  fitTableMarker,
   getAlignmentClasses,
   getCellBorderClasses,
   getGridCellAria,
@@ -168,6 +169,8 @@ interface VirtualizedTableGridProps {
   renderSelectorRows?: (() => React.ReactNode) | undefined;
   /** 헤더와 같은 grid 폭 스타일 (resolveTableGridSizing) */
   gridSizing: React.CSSProperties;
+  /** 화면 폭에 맞춰 줄인 표 — 본문 표식(fitTableMarker) */
+  fitToWidth?: boolean | undefined;
   stickyInfo?: StickyLeftInfo | undefined;
   applyCellBackground: boolean;
   // 컨테이너가 내부 세로 스크롤 영역일 때 IntersectionObserver root로 사용 (미지정 시 뷰포트)
@@ -186,6 +189,7 @@ export const VirtualizedTableGrid = React.memo(function VirtualizedTableGrid({
   onChange,
   renderSelectorRows,
   gridSizing,
+  fitToWidth = false,
   stickyInfo,
   applyCellBackground,
   scrollRootRef,
@@ -205,6 +209,7 @@ export const VirtualizedTableGrid = React.memo(function VirtualizedTableGrid({
 
   return (
     <div
+      {...fitTableMarker(fitToWidth)}
       role="rowgroup"
       className="mx-auto rounded-b-md border-r border-l border-gray-400 bg-white text-base"
       style={{

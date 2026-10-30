@@ -807,6 +807,19 @@ html {
     grid-template-columns: var(--options-grid-cols, minmax(0, 1fr));
   }
 }
+/* 화면 폭에 맞춰 줄인 표(fitTableToWidth, 본문 표식 data-fit-table): 보기 N열 그리드를 flex 로 푼다.
+   보기 한 칸은 1/N 폭(그리드 열과 같은 계산)이되 자기 글자 폭보다 좁아지지 않는다 — 넉넉하면 그리드와
+   같은 자리, 모자라면 보기째로 다음 줄(「가로 한 줄」과 같은 모양). 패드 폭에서 보기 글자가 칸 안에서 꺾였다. */
+@media (min-width: 640px) {
+  [data-fit-table] .options-grid {
+    display: flex;
+    flex-wrap: wrap;
+  }
+  [data-fit-table] .options-grid > * {
+    flex: 0 0 calc((100% - (var(--options-grid-n, 1) - 1) * 1rem) / var(--options-grid-n, 1));
+    min-width: fit-content;
+  }
+}
 /* 모바일 카드 안에서는 뷰포트 폭과 무관하게 --options-grid-cols 적용 */
 .mobile-row-card .options-grid {
   grid-template-columns: var(--options-grid-cols, minmax(0, 1fr));

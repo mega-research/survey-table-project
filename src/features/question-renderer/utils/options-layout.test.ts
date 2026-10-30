@@ -34,7 +34,11 @@ describe('getOptionsLayout', () => {
   it('N열 그리드는 w-full 로 컨테이너(셀) 너비를 채운다', () => {
     const { className, style } = getOptionsLayout(3);
     expect(className).toBe('options-grid w-full');
-    expect(style).toMatchObject({ '--options-grid-cols': 'repeat(3, minmax(0, 1fr))' });
+    expect(style).toMatchObject({
+      '--options-grid-cols': 'repeat(3, minmax(0, 1fr))',
+      // 화면 폭에 맞춰 줄인 표가 그리드를 풀 때 보기 한 칸의 기준 폭(1/N)을 계산하는 열 수
+      '--options-grid-n': '3',
+    });
   });
 
   it('N열 그리드는 align 을 무시한다', () => {

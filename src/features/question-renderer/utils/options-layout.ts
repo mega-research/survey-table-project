@@ -37,6 +37,8 @@ export function getOptionsLayout(
     className: 'options-grid w-full',
     style: {
       ['--options-grid-cols' as string]: `repeat(${columns}, minmax(0, 1fr))`,
+      // 화면 폭에 맞춰 줄인 표가 그리드를 풀 때 보기 한 칸의 기준 폭(1/N) 계산용 (globals.css)
+      ['--options-grid-n' as string]: String(columns),
     } as CSSProperties,
   };
 }
