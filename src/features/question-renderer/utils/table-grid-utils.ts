@@ -35,7 +35,7 @@ export function resolveTableGridSizing(
   | 'minWidth'
   | 'maxWidth'
   | 'borderRightWidth'
-  | 'borderRadius'
+  | 'overflow'
 > {
   const totalWidth = calcTotalWidth(columns);
   if (!totalWidth) return { gridTemplateColumns: '', width: '100%', minWidth: '100%' };
@@ -50,9 +50,11 @@ export function resolveTableGridSizing(
     // 컨테이너(border-r)와 칸(border-r)이 둘 다 오른쪽 선을 그린다. px 열은 컨테이너 안쪽 폭보다
     // 테두리만큼 넓어 마지막 칸이 컨테이너 선을 덮지만, 비율 열은 안쪽 폭에 딱 맞아 두 선이 나란히
     // 보인다(이중선). 컨테이너 쪽을 빼 마지막 칸의 선을 오른쪽 끝선으로 쓴다.
-    // 오른쪽 모서리가 칸처럼 각지므로 왼쪽도 각지게 해 네 모서리 모양을 맞춘다.
+    // 둥근 모서리(rounded-*)는 그대로 두고 칸을 그 안으로 자른다 — 마지막 칸의 오른쪽 선이 모서리 곡선을
+    // 따라 잘려 왼쪽과 같은 둥근 모서리가 된다. clip 은 hidden 과 달리 스크롤 컨테이너를 만들지 않는다.
+    // 칸 밖으로 띄우는 목록·안내는 이미 body 포털이라 잘리지 않는다.
     borderRightWidth: 0,
-    borderRadius: 0,
+    overflow: 'clip',
   };
 }
 
