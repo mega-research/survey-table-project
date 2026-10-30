@@ -31,13 +31,8 @@ export default async function ScaleMeanPage({ params }: PageProps) {
 
   return (
     <main className="mx-auto max-w-7xl space-y-4 px-6 py-6">
-      <div className="flex max-w-[880px] items-end justify-between gap-4">
-        <div className="space-y-1">
-          <h2 className="text-xl font-bold text-gray-900">척도 평균</h2>
-          <p className="text-sm text-gray-500">
-            완료 응답 기준 · 「평균에서 제외」 보기는 평균과 응답수에서 빠집니다
-          </p>
-        </div>
+      <div className="flex min-h-8 max-w-[862px] items-center justify-between gap-4">
+        <h2 className="text-xl font-bold text-gray-900">척도 평균</h2>
         {summary.overall.kind !== 'empty' && (
           <ScaleMeanPickerDialog surveyId={surveyId} candidates={candidates} />
         )}

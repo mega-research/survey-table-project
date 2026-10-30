@@ -23,14 +23,14 @@ const CELL = 'border-r border-gray-300 px-3 last:border-r-0';
 
 /**
  * 척도 평균 표 (CONTEXT.md 「척도 평균」) — 엑셀처럼 한눈에 보는 격자 하나.
- * 구분 · 문항 · 평균 · 응답수 네 열, 맨 위 「전체」 줄이 종합 평균이다. 막대·요약 카드는 두지 않는다
- * (2026-10-30 시안 검토 — 숫자가 먼저 읽혀야 한다).
+ * 구분 · 문항 · 평균 · 응답수 네 열, 맨 위 「전체」 줄이 종합 평균이다. 막대·요약 카드·부제목은 두지 않는다
+ * (2026-10-30 시안 검토 — 숫자가 먼저 읽혀야 한다). 치수는 pencil/척도평균_시안.pen 「A」 — 표 862 · 열 80/600/90/90 · 행 38 · 13px.
  */
 export function ScaleMeanTable({ surveyId, summary, candidates }: Props) {
   if (summary.overall.kind === 'empty') {
     if (candidates.length === 0) {
       return (
-        <div className="flex flex-col items-center gap-2 rounded-lg border border-gray-200 bg-white px-6 py-12 text-center">
+        <div className="flex max-w-[862px] flex-col items-center gap-2 rounded-lg border border-gray-200 bg-white px-6 py-12 text-center">
           <p className="text-sm font-semibold text-gray-900">평균을 낼 수 있는 문항이 없습니다</p>
           <p className="text-sm text-gray-500">
             단일 선택·드롭다운 문항이나 행마다 라디오 칸을 묶은 척도 표가 있어야 합니다.
@@ -46,7 +46,7 @@ export function ScaleMeanTable({ surveyId, summary, candidates }: Props) {
     }
     // 켠 문항이 없으면 안내 대신 고르는 목록을 바로 보인다
     return (
-      <div className="max-w-[880px] space-y-3 rounded-lg border border-gray-200 bg-white p-5">
+      <div className="max-w-[862px] space-y-3 rounded-lg border border-gray-200 bg-white p-5">
         <div className="space-y-1">
           <p className="text-sm font-semibold text-gray-900">평균을 낼 문항을 고르세요</p>
           <p className="text-sm text-gray-500">
@@ -63,19 +63,19 @@ export function ScaleMeanTable({ surveyId, summary, candidates }: Props) {
 
   return (
     <div className="space-y-2">
-      <table className="w-full max-w-[880px] table-fixed border-collapse border border-gray-300 bg-white text-sm">
+      <table className="w-full max-w-[862px] table-fixed border-collapse border border-gray-300 bg-white text-[13px]">
         <colgroup>
-          <col className="w-[96px]" />
+          <col className="w-[80px]" />
           <col />
           <col className="w-[90px]" />
           <col className="w-[90px]" />
         </colgroup>
         <thead>
-          <tr className="h-10 border-b border-gray-300 bg-gray-100 text-left font-semibold text-gray-700">
+          <tr className="h-[38px] border-b border-gray-300 bg-gray-100 text-left font-semibold text-gray-700">
             <th scope="col" className={CELL}>
               구분
             </th>
-            <th scope="col" className={CELL}>
+            <th scope="col" className={cn(CELL, 'text-gray-900')}>
               문항
             </th>
             <th scope="col" className={cn(CELL, 'text-right')}>
@@ -87,7 +87,7 @@ export function ScaleMeanTable({ surveyId, summary, candidates }: Props) {
           </tr>
         </thead>
         <tbody>
-          <tr className="h-10 border-b-2 border-gray-300 bg-blue-50">
+          <tr className="h-[38px] border-b-2 border-gray-300 bg-blue-50">
             <th scope="row" className={cn(CELL, 'text-left font-bold text-blue-700')}>
               전체
             </th>
@@ -100,7 +100,7 @@ export function ScaleMeanTable({ surveyId, summary, candidates }: Props) {
             </td>
           </tr>
           {rows.map((row) => (
-            <tr key={row.varName} className="h-10 border-b border-gray-300 last:border-b-0">
+            <tr key={row.varName} className="h-[38px] border-b border-gray-300 last:border-b-0">
               <th scope="row" className={cn(CELL, 'truncate text-left font-bold text-gray-900')}>
                 {row.varName}
               </th>
