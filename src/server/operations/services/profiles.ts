@@ -7,6 +7,7 @@ import { contactTargets, surveyResponses } from '@/db/schema';
 import { attrsSortKey } from '@/lib/operations/contacts-format';
 import { attrsNaturalSortExprs } from '@/lib/operations/contacts-filter-sql.server';
 import type { Platform } from '@/lib/operations/parse-ua';
+import type { AnswerChoiceMap } from '@/lib/operations/profile-answer-choices';
 import {
   type NormalizedListArgs,
   type ProfilesSystemSortKey,
@@ -37,6 +38,8 @@ export type ListProfilesArgs = Omit<NormalizedListArgs, 'q' | 'col'> & {
   pageSize: number;
   /** 다중 조건 필터 (검색바 + 헤더 깔때기, 조사 대상과 동일 절 파이프라인) */
   clauses: FilterClause[];
+  /** 보기 열(응답값 열 키) → 보기 목록 — 그 열의 검색·깔때기를 보기 글자로 한다 */
+  answerChoices?: AnswerChoiceMap;
 };
 
 export interface ListProfilesResult {
@@ -68,7 +71,7 @@ function orderExpr(col: AnyColumn | SQL, direction: SortDir): SQL {
 export async function listResponsesForProfiles(
   args: ListProfilesArgs,
 ): Promise<ListProfilesResult> {
-  const { surveyId, scope, page, pageSize, status, sort, dir, view, clauses } = args;
+  const { surveyId, scope, page, pageSize, status, sort, dir, view, clauses, answerChoices } = args;
 
   // negative result codes — base subquery WHERE 의 NOT EXISTS 분기에 사용.
   // 빈 배열이면 unsubscribed_at 만 검사 (negative code 분기는 SQL 차원에서 생략).
@@ -174,7 +177,7 @@ export async function listResponsesForProfiles(
         contactTargetId: sql`${numbered.contactTargetId}`,
         entryParams: sql`${numbered.entryParams}`,
         answers: sql`${numbered.questionResponses}`,
-      }),
+      }, answerChoices),
     );
   }
 

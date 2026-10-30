@@ -63,4 +63,34 @@ describe('loadProfileAnswerValues', () => {
       r2: {},
     });
   });
+
+  it('보기 열은 보기 글자로 — 복수는 「, 」, 상세 기재는 괄호, 표 선택 칸도 같다', async () => {
+    const radioKey = answerColumnKey('q-radio');
+    const checkKey = answerColumnKey('q-check');
+    const cellKey = answerColumnKey('q-table', 'cell-radio');
+    const choices = new Map([
+      [radioKey, [{ id: 'o1', value: '1', label: '① 남성' }, { id: 'o9', value: '9', label: '⑨ 기타' }]],
+      [checkKey, [{ id: 'c1', value: '1', label: '① AI' }, { id: 'c2', value: '2', label: '② 반도체' }]],
+      [cellKey, [{ id: 'x1', value: '1', label: '남' }]],
+    ]);
+    selectRows.rows = [
+      {
+        id: 'r1',
+        q0: '9',
+        q1: ['1', '2'],
+        q2: { 'cell-radio': '1' },
+        opt: { 'q-radio': { o9: '무응답 희망' } },
+      },
+    ];
+
+    const out = await loadProfileAnswerValues(['r1'], [radioKey, checkKey, cellKey], choices);
+
+    // 문항 수준 보기 열이 있으면 상세 기재 사이드카도 한 필드로 읽는다
+    expect(Object.keys(selectSpy.mock.calls[0]![0] as object)).toEqual(['id', 'q0', 'q1', 'q2', 'opt']);
+    expect(out['r1']).toEqual({
+      [radioKey]: '⑨ 기타(무응답 희망)',
+      [checkKey]: '① AI, ② 반도체',
+      [cellKey]: '남',
+    });
+  });
 });

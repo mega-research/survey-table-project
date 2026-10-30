@@ -54,8 +54,8 @@ export function AnswerColumnPicker({ open, onOpenChange, sources, addedKeys, onP
         <DialogHeader>
           <DialogTitle>응답값 열 추가</DialogTitle>
           <DialogDescription>
-            응답 내역에 응답자가 적은 값을 열로 보입니다. 단답형·장문형 문항과 표의 입력 칸을 고를
-            수 있습니다.
+            응답 내역에 응답자가 적거나 고른 값을 열로 보입니다. 단답형·장문형·선택형 문항과 표의
+            입력·선택 칸을 고를 수 있고, 선택한 값은 보기 글자로 보입니다.
           </DialogDescription>
         </DialogHeader>
 

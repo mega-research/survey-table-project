@@ -204,6 +204,40 @@ describe('응답값 열 검색', () => {
   });
 });
 
+// 보기 열(성별·복수 선택·표 선택 칸)은 저장값이 번호라 보기 글자로 거른다 — 글자에 검색어가 든 보기들의
+// 저장값으로 바꿔 JSONB 안 문자열 값과 맞춘다(2026-10-30).
+describe('buildProfilesFilterSql — 보기 열', () => {
+  const GENDER = 'answer.q-g';
+  const choiceCandidates: ColumnCandidate[] = [...candidates, { source: GENDER, label: '성별' }];
+  const choices = new Map([
+    [GENDER, [
+      { id: 'o1', value: '1', label: '① 남성' },
+      { id: 'o2', value: '2', label: '② 여성' },
+    ]],
+  ]);
+  const build = (clauses: Parameters<typeof buildProfilesFilterSql>[0]) =>
+    dialect.sqlToQuery(buildProfilesFilterSql(clauses, COLS, choices));
+
+  it('보기 글자로 맞춰 그 보기들의 저장값을 JSONB 안 문자열 값과 비교한다', () => {
+    const q = build(parseProfilesClausesFromUrl(GENDER, '성', undefined, choiceCandidates));
+    expect(q.sql).toContain(`jsonb_path_query(("numbered"."question_responses" -> $1), 'lax $.**')`);
+    expect(q.sql).toContain("jsonb_typeof(v) = 'string'");
+    expect(q.params).toEqual(['q-g', '1', '2']);
+  });
+
+  it('맞는 보기가 없으면 0건 — 저장값 번호로는 걸리지 않는다', () => {
+    expect(build(parseProfilesClausesFromUrl(GENDER, '1', undefined, choiceCandidates)).sql).toContain('FALSE');
+  });
+
+  it('값 없음/있음은 문자열 값이 하나라도 있는가로 본다(배열·그룹 맵 포함)', () => {
+    const none = build(parseProfilesHeaderFiltersFromUrl(GENDER, 'in', FILTER_NONE_VALUE, choiceCandidates));
+    expect(none.sql).toContain('NOT EXISTS');
+    const some = build(parseProfilesHeaderFiltersFromUrl(GENDER, 'in', FILTER_NOT_NONE_VALUE, choiceCandidates));
+    expect(some.sql).not.toContain('NOT EXISTS');
+    expect(some.sql).toContain('EXISTS');
+  });
+});
+
 describe('parseProfilesHeaderFiltersFromUrl — 헤더 깔때기', () => {
   it('status in — 유효 상태만 통과, 어휘 외 값 필터링', () => {
     const result = parseProfilesHeaderFiltersFromUrl(
