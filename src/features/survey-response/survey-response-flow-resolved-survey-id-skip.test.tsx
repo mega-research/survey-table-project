@@ -141,6 +141,7 @@ describe('resolvedSurveyId 가 있으면 식별자 조회 왕복이 없다', () 
               priorWaveLabel: null,
               changeConfirmEnabled: false,
               endRedirects: null,
+              allowMultipleResponses: false,
             },
           },
           contactAttrs: { 회사: '메가리서치' },

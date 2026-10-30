@@ -53,6 +53,11 @@ export type SurveyControl = {
    * null 이면 종전대로 종료 화면.
    */
   endRedirects: SurveyEndRedirects | null;
+  /**
+   * 중복 응답 허용 (조사원 대리 응답). 켜면 완료 화면에 「새 응답 시작」이 나오고 서버가
+   * 초대 토큰 없는 응답의 기기 중복 검사를 건너뛴다. 저장 즉시 반영되도록 라이브다.
+   */
+  allowMultipleResponses: boolean;
 };
 
 /**

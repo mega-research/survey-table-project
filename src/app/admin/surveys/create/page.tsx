@@ -474,6 +474,21 @@ export default function CreateSurveyPage() {
                       className="rounded"
                     />
                   </div>
+                  {/* 조사원 대리 응답용 — 공개 링크로 같은 기기에서 여러 번 응답한다 */}
+                  <div className="flex items-center justify-between">
+                    <label htmlFor="allow-multiple-responses" className="text-sm text-gray-600">
+                      중복 응답 허용
+                    </label>
+                    <input
+                      id="allow-multiple-responses"
+                      type="checkbox"
+                      checked={currentSurvey.settings.allowMultipleResponses}
+                      onChange={(e) =>
+                        updateSurveySettings({ allowMultipleResponses: e.target.checked })
+                      }
+                      className="rounded"
+                    />
+                  </div>
                 </div>
               </div>
 

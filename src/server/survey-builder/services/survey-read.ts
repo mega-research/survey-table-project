@@ -271,6 +271,8 @@ export async function getSurveyForResponse(
     changeConfirmEnabled: survey.changeConfirmEnabled,
     // 종료 후 이동 주소도 라이브다 — 실사 중 주소 교체가 재발행 없이 반영돼야 한다.
     endRedirects: survey.endRedirects ?? null,
+    // 중복 응답 허용도 라이브다 — 서버의 중복 검사가 지금 설문 행을 읽으므로 화면도 같은 값을 본다.
+    allowMultipleResponses: survey.allowMultipleResponses,
   };
 
   // 테스트 세션과 관리자 미리보기는 저장본으로 만든 테스트 버전을 본다(CONTEXT.md 「테스트 버전」).

@@ -312,7 +312,8 @@ async function admitAndCreateResponseInner(
     if (trackA.blocked) return { kind: 'blocked', reason: trackA.reason };
     contactTargetId = trackA.contactTargetId ?? null;
     isTestTarget = trackA.isTestTarget === true;
-  } else if (!isAnonymousTest && signals) {
+  } else if (!isAnonymousTest && signals && !survey.allowMultipleResponses) {
+    // 중복 응답 허용 설문은 같은 기기의 반복 응답이 정상이라(조사원 대리 응답) Track B 를 건너뛴다.
     const trackB = await checkTrackB({ surveyId, signals });
     if (trackB.blocked) return { kind: 'blocked', reason: trackB.reason };
   }

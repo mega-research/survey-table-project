@@ -10,13 +10,20 @@ import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 // DB 조회 결과(findFirst)를 시나리오별로 제어하여 blocked/passed 를 검증.
 // WHERE 절 SQL 정확성은 Task 7 단위 테스트에서 커버.
 
-const { mockFindFirst, mockHeaders } = vi.hoisted(() => ({
+const { mockFindFirst, mockSurveysFindFirst, mockHeaders } = vi.hoisted(() => ({
   mockFindFirst: vi.fn(),
+  // 막힐 때만 읽는 중복 응답 허용 설정 — 기본은 꺼짐(설정 행 그대로 차단).
+  mockSurveysFindFirst: vi.fn(async () => ({ allowMultipleResponses: false })),
   mockHeaders: vi.fn(),
 }));
 
 vi.mock('@/db', () => ({
-  db: { query: { surveyResponses: { findFirst: mockFindFirst } } },
+  db: {
+    query: {
+      surveyResponses: { findFirst: mockFindFirst },
+      surveys: { findFirst: mockSurveysFindFirst },
+    },
+  },
 }));
 
 vi.mock('next/headers', () => ({
@@ -51,6 +58,33 @@ beforeEach(() => {
   mockHeaders.mockResolvedValue(
     new Headers({ 'x-forwarded-for': '10.0.0.1', 'user-agent': 'Chrome/120' }),
   );
+});
+
+describe('중복 응답 허용 설문 — Track B 가 막을 상황이어도 통과', () => {
+  it('같은 deviceId 완료 응답이 있어도 allowMultipleResponses 면 통과한다', async () => {
+    mockFindFirst.mockResolvedValue({ id: 'existing-response' });
+    mockSurveysFindFirst.mockResolvedValueOnce({ allowMultipleResponses: true });
+
+    const r = await checkDuplicateOnEntry({
+      surveyId: SURVEY_ID,
+      clientSignals: BASE_SIGNALS,
+    });
+
+    expect(r).toEqual({ blocked: false });
+  });
+
+  it('막을 응답이 없으면 설정을 읽지 않는다 (평소 진입에 조회를 늘리지 않는다)', async () => {
+    mockFindFirst.mockResolvedValue(undefined);
+    mockSurveysFindFirst.mockClear();
+
+    const r = await checkDuplicateOnEntry({
+      surveyId: SURVEY_ID,
+      clientSignals: BASE_SIGNALS,
+    });
+
+    expect(r).toEqual({ blocked: false });
+    expect(mockSurveysFindFirst).not.toHaveBeenCalled();
+  });
 });
 
 describe('Track B: deviceId 일치 완료 응답 존재 -> 차단', () => {

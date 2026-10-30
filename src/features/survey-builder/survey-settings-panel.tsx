@@ -85,6 +85,20 @@ export const SurveySettingsPanel = React.memo(function SurveySettingsPanel({
                 className="rounded"
               />
             </div>
+            {/* 조사원 대리 응답용 — 켜면 공개 링크로 같은 기기에서 여러 번 응답할 수 있고 완료 화면에
+                「새 응답 시작」이 나온다. 초대 링크는 그대로 토큰 하나에 응답 하나. 배포 없이 즉시 반영 */}
+            <div className="flex items-center justify-between">
+              <label htmlFor="allow-multiple-responses" className="text-sm text-gray-600">
+                중복 응답 허용
+              </label>
+              <input
+                id="allow-multiple-responses"
+                type="checkbox"
+                checked={surveySettings.allowMultipleResponses}
+                onChange={(e) => updateSurveySettings({ allowMultipleResponses: e.target.checked })}
+                className="rounded"
+              />
+            </div>
             {/* 켜면 응답 페이지 컨테이너를 표 유무와 무관하게 항상 넓게(max-w-7xl),
                 끄면 표 총폭 기준 자동 판정 (기본) */}
             <div className="flex items-center justify-between">

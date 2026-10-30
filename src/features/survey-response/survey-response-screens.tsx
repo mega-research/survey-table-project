@@ -214,6 +214,7 @@ export function SurveyCompletedScreen({
   title,
   showCompletedTime = true,
   footer,
+  onStartNew,
   locale = DEFAULT_SURVEY_LOCALE,
 }: {
   thankYouMessage: string | null | undefined;
@@ -223,6 +224,8 @@ export function SurveyCompletedScreen({
   showCompletedTime?: boolean;
   /** 카드 맨 아래 — 종료 후 이동 안내(EndRedirectNotice) 자리. */
   footer?: ReactNode;
+  /** 중복 응답 허용 설문 — 같은 화면에서 다음 응답을 받는 「새 응답 시작」 버튼. 없으면 안 그린다. */
+  onStartNew?: () => void;
 }) {
   return (
     <div className="flex min-h-dvh items-center justify-center bg-gray-50">
@@ -245,6 +248,11 @@ export function SurveyCompletedScreen({
                 />
               </p>
             </div>
+          )}
+          {onStartNew && (
+            <Button type="button" className="mt-6" onClick={onStartNew}>
+              <SystemText k="completion.startNew" locale={locale} />
+            </Button>
           )}
           {footer}
         </CardContent>

@@ -2,7 +2,7 @@ import 'server-only';
 
 import { headers } from 'next/headers';
 
-import { checkTrackA, checkTrackB } from './check';
+import { allowsMultipleResponses, checkTrackA, checkTrackB } from './check';
 import { computeSignals } from './signals';
 
 import type {
@@ -36,5 +36,11 @@ export async function checkDuplicateOnEntry(
 
   const h = await headers();
   const signals = computeSignals(h as unknown as Headers, clientSignals);
-  return checkTrackB({ surveyId, signals });
+  const trackB = await checkTrackB({ surveyId, signals });
+  // 중복 응답 허용 설문 — 같은 기기의 반복 응답이 정상이다(조사원 대리 응답). 설정은 막힐 때만
+  // 읽는다(평소 진입에 조회를 늘리지 않는다). 첫 답 저장의 재검증도 같은 설정으로 건너뛴다.
+  if (trackB.blocked && (await allowsMultipleResponses(surveyId))) {
+    return { blocked: false };
+  }
+  return trackB;
 }

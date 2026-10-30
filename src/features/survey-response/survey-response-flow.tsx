@@ -2024,6 +2024,11 @@ function SurveyResponseFlowActive({
   }
 
   // 완료 화면
+  // 중복 응답 허용 설문(조사원 대리 응답)은 같은 화면에서 다음 응답을 받는다. 제출 성공 때 회복용
+  // 세션 키를 이미 지웠으므로 다시 불러오면 새 세션으로 처음부터 시작한다. 초대 링크는 토큰 하나에
+  // 응답 하나라 내지 않는다.
+  const canStartNewResponse =
+    control?.allowMultipleResponses === true && !isPreview && !isAdminEdit && inviteToken == null;
   if (isCompleted) {
     // 종료 결과에 따라 제목·문구가 갈린다 — 자격미달은 「설문 종료」+ 자격미달 종료 문구(폴백: 완료 문구)
     // 완료 뒤에는 언어가 정해져 있다 — 미정이면 한국어
@@ -2042,6 +2047,7 @@ function SurveyResponseFlowActive({
         showCompletedTime={!isPreview}
         locale={completionLocale}
         footer={endRedirectFooter}
+        {...(canStartNewResponse ? { onStartNew: () => window.location.reload() } : {})}
       />
     );
   }

@@ -141,6 +141,7 @@ src/
 surveys                    # 설문 설정
 ├── id, title, description, slug, privateToken, previewToken
 ├── isPublic, allowMultipleResponses, showProgressBar, shuffleQuestions, requireLogin
+│                                 #   allowMultipleResponses = 「중복 응답 허용」(조사원 대리 응답, 2026-10-30) — 라이브 컬럼(control 로 흘린다). 켜면 초대 토큰 없는 응답의 기기 중복 검사(Track B)를 진입·첫 답 저장 둘 다 건너뛰고 완료 화면에 「새 응답 시작」. 초대 링크는 그대로 토큰당 하나
 ├── endDate, maxResponses, thankYouMessage, screenedOutMessage (자격미달 종료 문구, NULL=완료 문구 폴백, 0110), contactEmail, responseHeader (JSONB)
 ├── localizedMessages (JSONB)     # 언어별 설문 글자 { zh?, en? : { title, description, thankYou, screenedOut } } (0145, NULL=한국어만, 빈 칸은 한국어 폴백). 발행 스냅샷 settings 에 얼린다(라이브 아님). 계약 shared/contracts/survey 의 LocalizedSurveyTexts — 아래 "다국어 설문"
 ├── piiRetentionUntil (개인정보 보관기한)
@@ -1021,7 +1022,7 @@ export function QuestionEditor({ questionId, onSave }: Props) {
 
 2. **상태 관리**: 서버 상태는 TanStack Query, 클라이언트 상태는 Zustand(+Immer).
 
-3. **응답 페이지는 snapshot 기반**: 빌더 수정은 publish 전까지 실응답 페이지 미반영. 테스트 링크·테스트 대상자 링크·관리자 미리보기는 **저장본(테스트 버전)** 을 보므로 저장만 하면 반영된다(2026-10-23, 아래 "테스트 모드") — "테스트 링크 OK + 응답 페이지 NG" 패턴이면 publish 누락 먼저 의심. 공개 미리보기 `/preview/<token>` 은 배포본이다. 단, `quotaConfig`·`isPaused`·`pausedMessage`·`endRedirects`는 스냅샷 밖 라이브 컬럼이라 즉시 반영된다.
+3. **응답 페이지는 snapshot 기반**: 빌더 수정은 publish 전까지 실응답 페이지 미반영. 테스트 링크·테스트 대상자 링크·관리자 미리보기는 **저장본(테스트 버전)** 을 보므로 저장만 하면 반영된다(2026-10-23, 아래 "테스트 모드") — "테스트 링크 OK + 응답 페이지 NG" 패턴이면 publish 누락 먼저 의심. 공개 미리보기 `/preview/<token>` 은 배포본이다. 단, `quotaConfig`·`isPaused`·`pausedMessage`·`endRedirects`·`allowMultipleResponses`는 스냅샷 밖 라이브 컬럼이라 즉시 반영된다.
 
 4. **테이블 질문**: `tableColumns`, `tableRowsData`, `tableHeaderGrid`, `tableValidationRules`, `dynamicRowConfigs`, `rowRepeatConfig`, `sumConstraints` JSONB 사용. choice 응답값은 `cell.id`.
 
