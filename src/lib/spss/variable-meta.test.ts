@@ -114,3 +114,25 @@ describe('buildLabel — 셀라벨과 같은 기준', () => {
     ).toBe('질문 제목 - 사업장 형태 상세 기재');
   });
 });
+
+// 문항코드를 넘기면 앞머리는 문항 제목 대신 문항코드 — 긴 제목이 라벨을 잡아먹지 않게(2026-10-30).
+// 변수가 문항 그 자체인 열(단일 선택 등)은 앞머리 뒤에 붙일 말이 없어 문항 제목을 그대로 쓴다.
+describe('buildLabel — 문항코드 앞머리', () => {
+  it('셀라벨이 있는 열은 「문항코드 - 셀라벨」', () => {
+    expect(buildLabel(makeCol({ type: 'table-cell', tableCellType: 'input', cellExportLabel: '회사명' }), 'SQ')).toBe('SQ - 회사명');
+    expect(buildLabel(makeCol({ type: 'checkbox-item', optionLabel: '① 인공지능(AI)' }), 'A3')).toBe('A3 - ① 인공지능(AI)');
+    expect(buildLabel(makeCol({ type: 'option-text', optionLabel: '⑨ 기타' }), 'A7')).toBe('A7 - ⑨ 기타 상세 기재');
+    expect(buildLabel(makeCol({ type: 'choice-group', optionLabel: '회사의 관심도' }), 'C2')).toBe('C2 - 회사의 관심도');
+    expect(buildLabel(makeCol({ type: 'choice-group-item', optionLabel: '그룹 - 보기A' }), 'C3')).toBe('C3 - 그룹 - 보기A');
+  });
+
+  it('순위·동의 등 고정 꼬리도 문항코드 뒤에 붙는다', () => {
+    expect(buildLabel(makeCol({ type: 'ranking-rank', rankIndex: 1, optionLabel: '1순위' }), 'C6')).toBe('C6 (1순위)');
+    expect(buildLabel(makeCol({ type: 'notice-agree' }), 'N1')).toBe('N1 - 동의 여부');
+  });
+
+  it('변수가 문항 그 자체인 열은 문항 제목을 쓴다', () => {
+    expect(buildLabel(makeCol({ type: 'single' }), 'A4')).toBe('질문 제목');
+    expect(buildLabel(makeCol({ type: 'table-cell', tableCellType: 'input' }), 'Q9')).toBe('질문 제목');
+  });
+});

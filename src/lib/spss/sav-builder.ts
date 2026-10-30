@@ -225,7 +225,7 @@ export function toSavVariable(
   return {
     name: sanitizeSpssVarName(col.spssVarName),
     short: sanitizeSpssVarName(shortName),
-    label: buildLabel(col),
+    label: buildLabel(col, question?.questionCode),
     type: varType,
     width: isNumeric ? numericFormat.width : maxWidth,
     decimal: isNumeric ? numericFormat.decimal : 0,

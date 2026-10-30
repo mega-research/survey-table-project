@@ -139,85 +139,90 @@ export function resolveMeasure(col: SPSSExportColumn, question: Question | undef
 }
 
 /**
- * 변수 라벨 생성
+ * 변수 라벨 생성 — 「앞머리 - 그 변수가 문항 안에서 무엇인지」.
+ * 앞머리는 문항코드(questionCode, 넘기면)이고 없으면 문항 제목이다. 긴 문항 제목이 SPSS 변수 목록에서
+ * 라벨 앞을 다 잡아먹어 표·보기 변수끼리 구별되지 않았다(2026-10-30 — 「SQ - 회사명」·「A3 - ① 인공지능(AI)」).
+ * 변수가 문항 그 자체인 열(단일 선택 등, 뒤에 붙일 말이 없음)은 문항 제목을 그대로 쓴다.
  */
-export function buildLabel(col: SPSSExportColumn): string {
+export function buildLabel(col: SPSSExportColumn, questionCode?: string): string {
+  const head = questionCode?.trim() || col.questionText;
   // 엑셀라벨이 있는 열(표 칸·보기)과 상세 기재 열은 Raw 2행·코딩북과 같은 셀라벨을 쓴다 — 표 칸이
   // 행·열 제목 조합이나 보기 목록을 이어 붙이면 같은 문항의 변수끼리 라벨이 겹쳤다(2026-10-30).
   if (usesCellLabelForVariableLabel(col)) {
     const label = columnCellLabel(col);
-    return label ? `${col.questionText} - ${label}` : col.questionText;
+    return label ? `${head} - ${label}` : col.questionText;
   }
   switch (col.type) {
     case 'checkbox-item':
-      return `${col.questionText} - ${col.optionLabel}`;
+      return `${head} - ${col.optionLabel}`;
     case 'other-text':
-      return `${col.questionText} - 기타 입력`;
+      return `${head} - 기타 입력`;
     case 'option-text':
     case 'table-cell-option-text':
     case 'choice-table-cell':
-      return `${col.questionText} - ${col.optionLabel}`;
+      return `${head} - ${col.optionLabel}`;
     case 'notice-agree':
-      return `${col.questionText} - 동의 여부`;
+      return `${head} - 동의 여부`;
     case 'change-confirm':
-      return `${col.questionText} - ${CHANGE_CONFIRM_LABEL_SUFFIX}`;
+      return `${head} - ${CHANGE_CONFIRM_LABEL_SUFFIX}`;
     case 'notice-date':
-      return `${col.questionText} - 동의 일시`;
+      return `${head} - 동의 일시`;
     case 'ranking-rank':
       // grouped 그룹 라벨 접두: optionLabel "그룹라벨 - 1순위" → "질문제목 - 그룹라벨 - 1순위"
       return col.optionLabel && col.optionLabel !== `${col.rankIndex}순위`
-        ? `${col.questionText} - ${col.optionLabel}`
-        : `${col.questionText} (${col.rankIndex}순위)`;
+        ? `${head} - ${col.optionLabel}`
+        : `${head} (${col.rankIndex}순위)`;
     case 'ranking-other':
       return col.optionLabel && col.optionLabel !== `${col.rankIndex}순위 기타 입력`
-        ? `${col.questionText} - ${col.optionLabel}`
-        : `${col.questionText} - ${col.rankIndex}순위 기타 입력`;
+        ? `${head} - ${col.optionLabel}`
+        : `${head} - ${col.rankIndex}순위 기타 입력`;
     case 'ranking-option-text':
       return col.optionLabel && col.optionLabel !== `${col.rankIndex}순위 상세 기재`
-        ? `${col.questionText} - ${col.optionLabel}`
-        : `${col.questionText} - ${col.rankIndex}순위 상세 기재`;
+        ? `${head} - ${col.optionLabel}`
+        : `${head} - ${col.rankIndex}순위 상세 기재`;
     case 'table-cell-ranking': {
       const loc = col.rowLabel && col.colLabel
         ? `${col.rowLabel} > ${col.colLabel}`
         : col.optionLabel;
       return loc
-        ? `${col.questionText} - ${loc} (${col.rankIndex}순위)`
-        : `${col.questionText} (${col.rankIndex}순위)`;
+        ? `${head} - ${loc} (${col.rankIndex}순위)`
+        : `${head} (${col.rankIndex}순위)`;
     }
     case 'table-cell-ranking-other': {
       const loc = col.rowLabel && col.colLabel
         ? `${col.rowLabel} > ${col.colLabel}`
         : col.optionLabel;
       return loc
-        ? `${col.questionText} - ${loc} - ${col.rankIndex}순위 기타 입력`
-        : `${col.questionText} - ${col.rankIndex}순위 기타 입력`;
+        ? `${head} - ${loc} - ${col.rankIndex}순위 기타 입력`
+        : `${head} - ${col.rankIndex}순위 기타 입력`;
     }
     case 'table-cell-ranking-option-text': {
       const loc = col.rowLabel && col.colLabel
         ? `${col.rowLabel} > ${col.colLabel}`
         : col.optionLabel;
       return loc
-        ? `${col.questionText} - ${loc} - ${col.rankIndex}순위 상세 기재`
-        : `${col.questionText} - ${col.rankIndex}순위 상세 기재`;
+        ? `${head} - ${loc} - ${col.rankIndex}순위 상세 기재`
+        : `${head} - ${col.rankIndex}순위 상세 기재`;
     }
     case 'table-cell':
       return col.optionLabel
-        ? `${col.questionText} - ${col.optionLabel}`
+        ? `${head} - ${col.optionLabel}`
         : col.questionText;
     case 'radio-group':
       return col.optionLabel
-        ? `${col.questionText} - ${col.optionLabel}`
+        ? `${head} - ${col.optionLabel}`
         : col.questionText;
     case 'choice-group':
       // M1 fix: 그룹 라벨이 없어 optionLabel === questionText 인 경우 이중화 방지.
       // 예) 그룹 라벨 미설정 시 optionLabel = q.title → "제목 - 제목" 방지.
       return col.optionLabel && col.optionLabel !== col.questionText
-        ? `${col.questionText} - ${col.optionLabel}`
+        ? `${head} - ${col.optionLabel}`
         : col.questionText;
     case 'choice-group-item':
-      // optionLabel 이 "그룹라벨 - 보기라벨" 을 이미 포함하므로 그대로 반환한다.
-      // (questionText prefix 를 붙이면 "질문제목 - 그룹라벨 - 보기라벨" 이 되어 장황해짐)
-      return col.optionLabel || col.questionText;
+      // optionLabel 이 "그룹라벨 - 보기라벨" 을 이미 포함한다. 문항 제목 앞머리는 장황해 붙이지 않고,
+      // 짧은 문항코드 앞머리만 붙인다.
+      if (!col.optionLabel) return col.questionText;
+      return questionCode?.trim() ? `${head} - ${col.optionLabel}` : col.optionLabel;
     default:
       return col.questionText;
   }
