@@ -19,6 +19,7 @@ import {
 } from '@/lib/operations/profiles-format';
 import { buildCodebookVariableMetadata } from '@/lib/spss/export-metadata';
 import { buildMrsetNameMap } from '@/lib/spss/mrsets-syntax';
+import { buildLabel } from '@/lib/spss/variable-meta';
 import { buildInviteUrl } from '@/lib/survey-url';
 import { Question, SurveySubmission } from '@/types/survey';
 import type { SurveyLocale } from '@/types/survey-locale';
@@ -410,9 +411,13 @@ export function appendCodebookSheet(
     '측정 수준',
     '표시 형식',
     '다중응답 세트',
+    // .sav 에 실제로 들어가는 변수 라벨 — SPSS 화면과 같은 글자를 코딩북에서도 본다.
+    // 맨 끝에 두는 것은 앞 열을 위치로 읽는 기존 작업을 깨지 않기 위해서다.
+    'SPSS 변수 라벨',
   ]);
   columns.forEach((c, i) => {
-    const metadata = buildCodebookVariableMetadata(c, questionMap.get(c.questionId));
+    const question = questionMap.get(c.questionId);
+    const metadata = buildCodebookVariableMetadata(c, question);
     ws.addRow([
       i + 1,
       c.spssVarName,
@@ -424,10 +429,11 @@ export function appendCodebookSheet(
       metadata.measure,
       metadata.displayFormat,
       mrsetNames.get(c.spssVarName) ?? '',
+      buildLabel(c, question?.questionCode),
     ]);
   });
-  styleHeaderRows(ws, [1], 9);
-  autoFitRawColumns(ws, 9);
+  styleHeaderRows(ws, [1], 10);
+  autoFitRawColumns(ws, 10);
 }
 
 // ── Raw/Split 워크북 공통 스타일·레이아웃 헬퍼 ──

@@ -193,7 +193,7 @@ describe('generateRawDataWorkbook', () => {
   it('코딩북 시트는 변수번호/변수명/값라벨과 SPSS 감사 메타데이터를 담는다', () => {
     const wb = generateRawDataWorkbook([radioQ], [makeRow()], TEST_CTX);
     const ws = wb.getWorksheet('코딩북')!;
-    expect([1, 2, 3, 4, 5, 6, 7, 8, 9].map((c) => ws.getRow(1).getCell(c).value)).toEqual([
+    expect([1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((c) => ws.getRow(1).getCell(c).value)).toEqual([
       '변수번호',
       'SPSS 변수명',
       '질문 제목',
@@ -203,6 +203,7 @@ describe('generateRawDataWorkbook', () => {
       '측정 수준',
       '표시 형식',
       '다중응답 세트',
+      'SPSS 변수 라벨',
     ]);
     let valueLabel: unknown;
     ws.eachRow((row) => {
@@ -252,6 +253,18 @@ describe('generateRawDataWorkbook', () => {
     expect(labelOf('Q2_1')).toBe('AI');
     expect(labelOf('Q2_2')).toBe('ML');
     for (const varName of ['Q1', 'Q2_1', 'Q2_2']) expect(labelOf(varName)).toBe(rawLabels.get(varName));
+  });
+
+  // 코딩북 끝 열 = .sav 에 실제로 들어가는 변수 라벨(buildLabel 그대로) — SPSS 화면과 코딩북이 같은 글자
+  it('코딩북 SPSS 변수 라벨 열은 .sav 변수 라벨과 같다 — 「문항코드 - 셀라벨」', () => {
+    const wb = generateRawDataWorkbook([radioQ, checkboxQ], [makeRow()], TEST_CTX);
+    const ws = wb.getWorksheet('코딩북')!;
+    const labelOf = (varName: string) => {
+      const rowIndex = ws.getColumn(2).values.findIndex((value) => value === varName);
+      return ws.getRow(rowIndex).getCell(10).value;
+    };
+    expect(labelOf('Q2_1')).toBe('Q2 - AI');
+    expect(labelOf('Q1')).toBe('Q1. 성별');
   });
 
   // 코딩북 값 라벨도 .sav 와 같은 기준 — 보기 글자의 줄바꿈은 공백 한 칸(CONTEXT.md 「옵션 라벨 줄바꿈」)
