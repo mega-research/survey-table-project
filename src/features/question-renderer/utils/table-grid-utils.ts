@@ -28,7 +28,16 @@ export function calcTotalWidth(columns: TableColumn[]): number {
 export function resolveTableGridSizing(
   columns: TableColumn[],
   fitToWidth: boolean,
-): Pick<CSSProperties, 'gridTemplateColumns' | 'width' | 'minWidth' | 'maxWidth'> {
+): Pick<
+  CSSProperties,
+  | 'gridTemplateColumns'
+  | 'width'
+  | 'minWidth'
+  | 'maxWidth'
+  | 'borderRightWidth'
+  | 'borderTopRightRadius'
+  | 'borderBottomRightRadius'
+> {
   const totalWidth = calcTotalWidth(columns);
   if (!totalWidth) return { gridTemplateColumns: '', width: '100%', minWidth: '100%' };
   if (!fitToWidth) {
@@ -39,6 +48,12 @@ export function resolveTableGridSizing(
     width: '100%',
     minWidth: 0,
     maxWidth: `${totalWidth}px`,
+    // 컨테이너(border-r)와 칸(border-r)이 둘 다 오른쪽 선을 그린다. px 열은 컨테이너 안쪽 폭보다
+    // 테두리만큼 넓어 마지막 칸이 컨테이너 선을 덮지만, 비율 열은 안쪽 폭에 딱 맞아 두 선이 나란히
+    // 보인다(이중선). 컨테이너 쪽을 빼 마지막 칸의 선을 오른쪽 끝선으로 쓴다 — 모서리도 칸처럼 각지게.
+    borderRightWidth: 0,
+    borderTopRightRadius: 0,
+    borderBottomRightRadius: 0,
   };
 }
 
