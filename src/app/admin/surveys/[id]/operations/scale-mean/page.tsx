@@ -29,8 +29,9 @@ export default async function ScaleMeanPage({ params }: PageProps) {
   const scope = await getOperationsDataScope(surveyId);
   const { summary, candidates } = await getScaleMeanView(surveyId, scope);
 
+  // 본문 폭 862 = 시안 표 폭(max 910 − 좌우 여백 24) — 표와 제목 줄을 화면 가운데에 둔다
   return (
-    <main className="mx-auto max-w-7xl space-y-4 px-6 py-6">
+    <main className="mx-auto max-w-[910px] space-y-4 px-6 py-6">
       <div className="flex min-h-8 items-center justify-between gap-4">
         <h2 className="text-xl font-bold text-gray-900">척도 평균</h2>
         {summary.overall.kind !== 'empty' && (

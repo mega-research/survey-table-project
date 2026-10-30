@@ -24,7 +24,7 @@ const CELL = 'border-r border-gray-300 px-3 last:border-r-0';
 /**
  * 척도 평균 표 (CONTEXT.md 「척도 평균」) — 엑셀처럼 한눈에 보는 격자 하나.
  * 구분 · 문항 · 평균 · 응답수 네 열, 맨 위 「전체」 줄이 종합 평균이다. 막대·요약 카드·부제목은 두지 않는다
- * (2026-10-30 시안 검토 — 숫자가 먼저 읽혀야 한다). 치수는 pencil/척도평균_시안.pen 「A」(열 80/·/90/90 · 행 38 · 13px)이되 표는 본문 폭을 채운다 — 862 고정은 넓은 화면에서 제목이 잘리고 오른쪽이 비었다.
+ * (2026-10-30 시안 검토 — 숫자가 먼저 읽혀야 한다). 치수는 pencil/척도평균_시안.pen 「A」(열 80/·/90/90 · 행 38 · 13px) · 표 862 를 화면 가운데에 둔다(폭은 페이지 main 이 정한다).
  */
 export function ScaleMeanTable({ surveyId, summary, candidates }: Props) {
   if (summary.overall.kind === 'empty') {
