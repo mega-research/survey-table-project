@@ -24,6 +24,8 @@ export interface ScaleMeanRow {
   label: string;
   /** 응답수가 0 이면 null */
   mean: number | null;
+  /** 100점 환산 평균 — 척도 최저가 0, 최고가 100. 응답이 없거나 척도 범위가 한 점이면 null */
+  mean100: number | null;
   /** 점수가 있는 응답 수 — 평균의 분모 */
   count: number;
   /** 「평균에서 제외」를 뺀 값 코드의 최소·최대. 값 코드가 없으면 null */
@@ -32,9 +34,12 @@ export interface ScaleMeanRow {
 }
 
 export type ScaleMeanOverall =
-  | { kind: 'mean'; mean: number | null; count: number }
-  /** 척도 범위가 다른 줄이 섞여 종합 평균을 내지 않는다 */
-  | { kind: 'mixed-scale' }
+  | { kind: 'mean'; mean: number | null; mean100: number | null; count: number }
+  /**
+   * 척도 범위가 다른 줄이 섞여 원점수 종합 평균은 내지 않는다. 100점 환산은 줄마다 범위를 맞춘
+   * 값이라 섞여도 낸다.
+   */
+  | { kind: 'mixed-scale'; mean100: number | null; count: number }
   /** 평균 산출을 켠 문항이 없다 */
   | { kind: 'empty' };
 
@@ -144,6 +149,21 @@ function average(values: readonly number[]): number | null {
 }
 
 /**
+ * 100점 환산 — 척도 최저 0, 최고 100 으로 선형 변환(7점이면 1→0, 4→50, 7→100). 선형이라 평균을
+ * 환산한 값과 점수마다 환산해 평균한 값이 같다. 범위가 한 점이면 환산할 수 없다.
+ */
+function toHundred(value: number | null, min: number | null, max: number | null): number | null {
+  if (value === null || min === null || max === null || max <= min) return null;
+  return ((value - min) / (max - min)) * 100;
+}
+
+function rangeOf(codes: readonly number[]): { min: number | null; max: number | null } {
+  return codes.length > 0
+    ? { min: Math.min(...codes), max: Math.max(...codes) }
+    : { min: null, max: null };
+}
+
+/**
  * 완료 응답(호출측이 모수를 정한다)에서 척도 줄별 평균·응답수와 종합 평균을 낸다.
  * `questions` 는 내보내기와 같이 hydrate 된 지금 빌더 구조여야 한다.
  */
@@ -158,41 +178,57 @@ export function summarizeScaleMeans(
 
   const questionMap = new Map(variants.map((q) => [q.id, q]));
   const columnList = scaleColumns.map((c) => c.column);
+  const ranges = scaleColumns.map((scale) => rangeOf(scale.scaleCodes));
   const scoresByRow: number[][] = scaleColumns.map(() => []);
   const respondentMeans: number[] = [];
+  const respondentMeans100: number[] = [];
 
   for (const submission of submissions) {
     const values = buildDataRow(columnList, questionMap, submission as SurveySubmission);
     const own: number[] = [];
+    const own100: number[] = [];
     values.forEach((value, idx) => {
       const scale = scaleColumns[idx];
       if (!scale || typeof value !== 'number' || !Number.isFinite(value)) return;
       if (scale.excludedCodes.has(value)) return;
       scoresByRow[idx]?.push(value);
       own.push(value);
+      const score100 = toHundred(value, ranges[idx]?.min ?? null, ranges[idx]?.max ?? null);
+      if (score100 !== null) own100.push(score100);
     });
     const ownMean = average(own);
     if (ownMean !== null) respondentMeans.push(ownMean);
+    const ownMean100 = average(own100);
+    if (ownMean100 !== null) respondentMeans100.push(ownMean100);
   }
 
   const rows: ScaleMeanRow[] = scaleColumns.map((scale, idx) => {
     const scores = scoresByRow[idx] ?? [];
+    const { min, max } = ranges[idx] ?? { min: null, max: null };
+    const mean = average(scores);
     return {
       varName: scale.column.spssVarName,
       questionId: scale.column.questionId,
       label: scale.label,
-      mean: average(scores),
+      mean,
+      mean100: toHundred(mean, min, max),
       count: scores.length,
-      scaleMin: scale.scaleCodes.length > 0 ? Math.min(...scale.scaleCodes) : null,
-      scaleMax: scale.scaleCodes.length > 0 ? Math.max(...scale.scaleCodes) : null,
+      scaleMin: min,
+      scaleMax: max,
     };
   });
 
-  const ranges = new Set(rows.map((r) => `${r.scaleMin}~${r.scaleMax}`));
+  const distinctRanges = new Set(rows.map((r) => `${r.scaleMin}~${r.scaleMax}`));
+  const mean100 = average(respondentMeans100);
   const overall: ScaleMeanOverall =
-    ranges.size > 1
-      ? { kind: 'mixed-scale' }
-      : { kind: 'mean', mean: average(respondentMeans), count: respondentMeans.length };
+    distinctRanges.size > 1
+      ? { kind: 'mixed-scale', mean100, count: respondentMeans100.length }
+      : {
+          kind: 'mean',
+          mean: average(respondentMeans),
+          mean100,
+          count: respondentMeans.length,
+        };
 
   return { rows, overall };
 }
@@ -263,6 +299,16 @@ export function resolveScaleMeanSelection(
 /** 평균 표시 — 소수 둘째 자리. 응답이 없으면 대시. */
 export function formatScaleMean(mean: number | null): string {
   return mean === null ? '—' : mean.toFixed(2);
+}
+
+/**
+ * 100점 환산 표시 — 소수 첫째 자리 반올림. 응답이 없으면 대시.
+ * 10 을 곱한 값을 유효숫자 12자리로 잘라 이진 표현 오차(83.35 × 10 이 833.4999… 가 되는 등)로
+ * 내림되지 않게 한다. toFixed 만 쓰면 그 오차대로 83.3 이 된다.
+ */
+export function formatScaleMean100(mean100: number | null): string {
+  if (mean100 === null) return '—';
+  return (Math.round(Number((mean100 * 10).toPrecision(12))) / 10).toFixed(1);
 }
 
 /** 「전체」 줄의 문항 칸 — 어느 줄들을 묶었는지 첫·끝 변수명으로 적는다. */

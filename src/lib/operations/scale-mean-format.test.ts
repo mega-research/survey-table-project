@@ -6,6 +6,7 @@ import type { Question, QuestionOption, SurveySubmission, TableCell } from '@/ty
 
 import {
   formatScaleMean,
+  formatScaleMean100,
   listScaleMeanCandidates,
   overallRowLabel,
   resolveScaleMeanSelection,
@@ -161,6 +162,47 @@ describe('척도 평균 — 단일 선택 문항', () => {
   });
 });
 
+describe('척도 평균 — 100점 환산', () => {
+  it('7점 척도는 1점이 0, 4점이 50, 7점이 100 이다', () => {
+    const q = radioQ('q1', 'Q1');
+    const at = (option: string) =>
+      summarizeScaleMeans([q], [sub({ q1: option })]).rows[0]?.mean100;
+    expect(at('q1-o1')).toBe(0);
+    expect(at('q1-o4')).toBe(50);
+    expect(at('q1-o7')).toBe(100);
+  });
+
+  it('줄 평균을 척도 범위로 환산한다 — 「평균에서 제외」 보기는 범위에 들지 않는다', () => {
+    const q = radioQ('q1', 'Q1');
+    q.options = [
+      ...(q.options ?? []),
+      { id: 'q1-o8', label: '모름', value: '8', excludeFromMean: true },
+    ];
+    const result = summarizeScaleMeans(
+      [q],
+      [sub({ q1: 'q1-o5' }), sub({ q1: 'q1-o6' }), sub({ q1: 'q1-o8' })],
+    );
+    // 평균 5.5 → (5.5 - 1) / 6 × 100 = 75
+    expect(result.rows[0]).toMatchObject({ mean: 5.5, mean100: 75, scaleMax: 7 });
+  });
+
+  it('5점 척도는 제 범위로 환산한다', () => {
+    const q = radioQ('q1', 'Q1');
+    q.options = q.options!.slice(0, 5);
+    const result = summarizeScaleMeans([q], [sub({ q1: 'q1-o2' })]);
+    expect(result.rows[0]?.mean100).toBe(25);
+  });
+
+  it('응답이 없거나 척도 범위가 한 점이면 비운다', () => {
+    expect(summarizeScaleMeans([radioQ('q1', 'Q1')], []).rows[0]?.mean100).toBeNull();
+    const single = radioQ('q1', 'Q1');
+    single.options = single.options!.slice(0, 1);
+    expect(
+      summarizeScaleMeans([single], [sub({ q1: 'q1-o1' })]).rows[0]?.mean100,
+    ).toBeNull();
+  });
+});
+
 describe('척도 평균 — 표 행렬 척도', () => {
   it('행마다 한 줄이고 「모름」 칸은 빠진다', () => {
     const q = matrixQ('m', 'Q7', ['시설', '프로그램']);
@@ -197,7 +239,9 @@ describe('척도 평균 — 종합 평균', () => {
       ],
     );
 
-    expect(result.overall).toEqual({ kind: 'mean', mean: 5, count: 2 });
+    // 100점 환산: A (16.67 + 50) / 2 = 33.33…, B 100 → (33.33… + 100) / 2 = 66.66…
+    expect(result.overall).toMatchObject({ kind: 'mean', mean: 5, count: 2 });
+    expect(result.overall.kind === 'mean' && result.overall.mean100).toBeCloseTo(200 / 3, 10);
   });
 
   it('척도 범위가 다른 줄이 섞이면 종합 평균을 내지 않는다', () => {
@@ -205,8 +249,26 @@ describe('척도 평균 — 종합 평균', () => {
     const five = radioQ('q2', 'Q2');
     five.options = five.options!.slice(0, 5);
     const result = summarizeScaleMeans([seven, five], [sub({ q1: 'q1-o7', q2: 'q2-o5' })]);
-    expect(result.overall).toEqual({ kind: 'mixed-scale' });
+    expect(result.overall).toEqual({ kind: 'mixed-scale', mean100: 100, count: 1 });
     expect(result.rows.map((r) => r.mean)).toEqual([7, 5]);
+  });
+
+  it('척도가 섞여도 100점 환산 종합은 줄마다 제 범위로 환산한 뒤 응답자별 평균의 평균이다', () => {
+    const seven = radioQ('q1', 'Q1');
+    const five = radioQ('q2', 'Q2');
+    five.options = five.options!.slice(0, 5);
+    // 7점 4 → 50, 5점 2 → 25 → 응답자 평균 37.5
+    const result = summarizeScaleMeans([seven, five], [sub({ q1: 'q1-o4', q2: 'q2-o2' })]);
+    expect(result.overall).toEqual({ kind: 'mixed-scale', mean100: 37.5, count: 1 });
+  });
+
+  it('같은 척도면 100점 환산 종합은 원점수 종합을 환산한 값과 같다', () => {
+    const result = summarizeScaleMeans(
+      [radioQ('q1', 'Q1'), radioQ('q2', 'Q2')],
+      [sub({ q1: 'q1-o2', q2: 'q2-o5' }), sub({ q1: 'q1-o6' }), sub({ q2: 'q2-o3' })],
+    );
+    if (result.overall.kind !== 'mean') throw new Error('종합 평균이 나와야 한다');
+    expect(result.overall.mean100).toBeCloseTo(((result.overall.mean! - 1) / 6) * 100, 10);
   });
 
   it('켠 문항이 없으면 줄도 종합도 없다', () => {
@@ -224,6 +286,21 @@ describe('척도 평균 — 표시', () => {
     expect(formatScaleMean(5.125)).toBe('5.13');
     expect(formatScaleMean(4)).toBe('4.00');
     expect(formatScaleMean(null)).toBe('—');
+  });
+
+  it('100점 환산은 소수 첫째 자리 반올림, 없으면 대시', () => {
+    expect(formatScaleMean100(200 / 3)).toBe('66.7');
+    expect(formatScaleMean100(250 / 3)).toBe('83.3');
+    expect(formatScaleMean100(100)).toBe('100.0');
+    expect(formatScaleMean100(0)).toBe('0.0');
+    expect(formatScaleMean100(null)).toBe('—');
+  });
+
+  it('100점 환산 반올림은 이진 표현 오차에 내림되지 않는다', () => {
+    // 83.35 × 10 = 833.4999… — toFixed(1) 은 83.3 을 낸다
+    expect(formatScaleMean100(83.35)).toBe('83.4');
+    expect(formatScaleMean100(1.05)).toBe('1.1');
+    expect(formatScaleMean100(12.25)).toBe('12.3');
   });
 
   it('전체 줄 이름은 첫 줄~끝 줄 변수명이다', () => {
