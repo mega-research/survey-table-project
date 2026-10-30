@@ -31,7 +31,7 @@ export default async function ScaleMeanPage({ params }: PageProps) {
 
   return (
     <main className="mx-auto max-w-7xl space-y-4 px-6 py-6">
-      <div className="flex min-h-8 max-w-[862px] items-center justify-between gap-4">
+      <div className="flex min-h-8 items-center justify-between gap-4">
         <h2 className="text-xl font-bold text-gray-900">척도 평균</h2>
         {summary.overall.kind !== 'empty' && (
           <ScaleMeanPickerDialog surveyId={surveyId} candidates={candidates} />
