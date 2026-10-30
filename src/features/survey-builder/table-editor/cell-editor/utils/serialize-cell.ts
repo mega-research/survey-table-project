@@ -447,6 +447,10 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
       ? {
           ...(form.formula ? { formula: form.formula } : {}),
           ...(form.cellNumberFormat ? { numberFormat: form.cellNumberFormat } : {}),
+          // 값 너비 — input 셀의 입력칸 너비와 같은 필드·규칙(지정하면 단위 글자가 값 바로 뒤에 붙는다)
+          ...(typeof form.inputWidth === 'number' && form.inputWidth > 0
+            ? { inputWidth: form.inputWidth }
+            : {}),
           ...(form.calcValidationEnabled && form.calcValidationTarget
             ? {
                 calcValidation: {

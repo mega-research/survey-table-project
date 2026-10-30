@@ -244,6 +244,7 @@ export function CellContentModal({
     calcValidationTarget,
     calcValidationToleranceRaw,
     calcValidationErrorMessage,
+    inputWidth,
   } = form;
   // 순위 옵션(ranking_opt, Case 2)은 순위형 질문의 내장 테이블에서만 렌더러가 있다.
   // 테이블형 질문에서는 응답 select 가 나오지 않는 막다른 조합이 되므로 탭을 숨긴다.
@@ -287,6 +288,7 @@ export function CellContentModal({
     setHideRightBorder,
     setOptionTextBelowTable,
     setCellNumberFormat,
+    setInputWidth,
     setCellRequired,
     setCellRequiredMessage,
     setGatingRequiredWhenEnabled,
@@ -942,6 +944,34 @@ export function CellContentModal({
               value={cellNumberFormat}
               onChange={setCellNumberFormat}
             />
+
+            {/* 값 너비 — 입력 셀의 「입력칸 너비」와 같은 필드(inputWidth). 오른쪽 단위 글자가 값 바로 뒤에 붙는다 */}
+            <div className="space-y-2">
+              <Label htmlFor="calc-value-width" className="text-sm font-medium">
+                값 너비(px) <span className="font-normal text-gray-500">(선택사항)</span>
+              </Label>
+              <Input
+                id="calc-value-width"
+                type="number"
+                min={1}
+                max={2000}
+                value={inputWidth}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === '') {
+                    setInputWidth('');
+                  } else {
+                    const num = parseInt(value);
+                    if (!isNaN(num) && num >= 1 && num <= 2000) setInputWidth(num);
+                  }
+                }}
+                placeholder="셀 폭 전체"
+                className="w-full"
+              />
+              <p className="text-xs text-gray-500">
+                지정하면 값이 이 너비 안에 서고 단위 글자(셀 텍스트)가 값 바로 뒤에 붙습니다. 같은 열의 입력칸과 같은 너비로 두면 자리가 맞습니다.
+              </p>
+            </div>
 
             <div className="space-y-3 rounded border p-3">
               <label className="flex items-center gap-2 text-sm">

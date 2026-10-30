@@ -498,6 +498,16 @@ describe('buildUpdatedCell — 셀타입별 characterization', () => {
     expect(cellToFormState({ id: 'c1', type: 'input', content: '' }).inputWidth).toBe('');
   });
 
+  it('calc: 값 너비도 양수일 때만 inputWidth 키를 남기고, 비우면 기존 값도 지운다', () => {
+    const on = buildUpdatedCell({ ...baseForm('calc'), inputWidth: 120 }, baseCell);
+    expect(on.inputWidth).toBe(120);
+    const off = buildUpdatedCell(
+      { ...baseForm('calc'), inputWidth: '' },
+      { id: 'c1', type: 'calc', content: '', inputWidth: 120 },
+    );
+    expect(off).not.toHaveProperty('inputWidth');
+  });
+
   it('상세 기재 입력칸을 표 아래에 — 선택형 칸에서 켰을 때만 키를 남기고, 유형을 바꾸면 떨어진다', () => {
     const on = buildUpdatedCell({ ...baseForm('checkbox'), optionTextBelowTable: true }, baseCell);
     expect(on.optionTextBelowTable).toBe(true);
