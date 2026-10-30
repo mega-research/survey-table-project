@@ -91,3 +91,26 @@ describe('buildLabel 폴백', () => {
     expect(buildLabel(makeCol({ type: 'text' }))).toBe('질문 제목');
   });
 });
+
+// .sav 변수 라벨 = 「문항 제목 - 셀라벨」. 셀라벨은 Raw 2행·코딩북과 같은 값이다(columnCellLabel).
+// 표 칸이 엑셀라벨 대신 행·열 제목이나 보기 목록을 이어 붙여, 같은 문항의 변수끼리 라벨이 겹쳤다(2026-10-30).
+describe('buildLabel — 셀라벨과 같은 기준', () => {
+  it('표 칸은 엑셀라벨을 쓴다 — 행·열 제목 조합이 같아도 변수끼리 구별된다', () => {
+    const a = makeCol({ type: 'table-cell', tableCellType: 'input', optionLabel: '문1. 회사명 - ', cellExportLabel: '회사명' });
+    const b = makeCol({ type: 'table-cell', tableCellType: 'input', optionLabel: '문1. 회사명 - ', cellExportLabel: '회사설립연도' });
+    expect(buildLabel(a)).toBe('질문 제목 - 회사명');
+    expect(buildLabel(b)).toBe('질문 제목 - 회사설립연도');
+  });
+
+  it('보기를 표로 그린 복수응답 보기도 엑셀라벨을 쓴다 — 「(라벨 없음)」 대신', () => {
+    const col = makeCol({ type: 'checkbox-item', optionLabel: '(라벨 없음)', cellExportLabel: '① 컴퓨터 비전' });
+    expect(buildLabel(col)).toBe('질문 제목 - ① 컴퓨터 비전');
+  });
+
+  it('상세 기재 열은 본 변수와 구별되게 「상세 기재」를 붙인다', () => {
+    expect(buildLabel(makeCol({ type: 'option-text', optionLabel: '⑨ 기타' }))).toBe('질문 제목 - ⑨ 기타 상세 기재');
+    expect(
+      buildLabel(makeCol({ type: 'table-cell-option-text', optionLabel: '⑥ 기타', cellExportLabel: '사업장 형태' })),
+    ).toBe('질문 제목 - 사업장 형태 상세 기재');
+  });
+});

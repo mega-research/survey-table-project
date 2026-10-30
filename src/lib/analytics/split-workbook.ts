@@ -15,11 +15,11 @@ import {
   buildRawSeqMap,
   clampRawWidth,
   estimateTextWidth,
-  row2Label,
   styleHeaderRows,
   toSpssColumnOptions,
   withUsedRepeatCounts,
 } from './raw-workbook';
+import { columnCellLabel } from './column-cell-label';
 
 /** 분할 내보내기 워크북: 응답내역 + 공통 + 옵션별 + 코딩북 (열만 분할, 행 전체 공통) */
 export function buildSplitWorkbook(
@@ -50,7 +50,7 @@ export function buildSplitWorkbook(
     const metaCount = metaHeaders.length;
     const colCount = columns.length + metaCount;
     ws.addRow([...metaHeaders, ...columns.map((c) => c.questionText)]);
-    ws.addRow([...metaHeaders.map(() => ''), ...columns.map((c) => row2Label(c))]);
+    ws.addRow([...metaHeaders.map(() => ''), ...columns.map((c) => columnCellLabel(c))]);
     ws.addRow([...metaHeaders.map(() => ''), ...columns.map((c) => c.spssVarName)]);
     // 데이터는 전체 응답자 + 이 버킷 컬럼만 (열만 분할)
     rows.forEach((row) => {
@@ -75,7 +75,7 @@ export function buildSplitWorkbook(
     }
     autoFitRawColumnRange(ws, 1, metaCount);
     columns.forEach((c, i) => {
-      ws.getColumn(i + metaCount + 1).width = clampRawWidth(estimateTextWidth(row2Label(c)));
+      ws.getColumn(i + metaCount + 1).width = clampRawWidth(estimateTextWidth(columnCellLabel(c)));
     });
   };
 

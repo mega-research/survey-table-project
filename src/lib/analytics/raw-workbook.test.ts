@@ -254,6 +254,20 @@ describe('generateRawDataWorkbook', () => {
     for (const varName of ['Q1', 'Q2_1', 'Q2_2']) expect(labelOf(varName)).toBe(rawLabels.get(varName));
   });
 
+  // 코딩북 값 라벨도 .sav 와 같은 기준 — 보기 글자의 줄바꿈은 공백 한 칸(CONTEXT.md 「옵션 라벨 줄바꿈」)
+  it('코딩북 값 라벨은 보기 글자의 줄바꿈을 공백으로 접는다 (.sav 와 같게)', () => {
+    const q = {
+      ...radioQ,
+      options: [
+        { id: 'a', label: 'SW계열\n(전산 등)', value: '1', spssNumericCode: 1 },
+        { id: 'b', label: '기타', value: '2', spssNumericCode: 2 },
+      ],
+    } as unknown as Question;
+    const ws = generateRawDataWorkbook([q], [makeRow()], TEST_CTX).getWorksheet('코딩북')!;
+    const rowIndex = ws.getColumn(2).values.findIndex((value) => value === 'Q1');
+    expect(ws.getRow(rowIndex).getCell(5).value).toBe('1=SW계열 (전산 등), 2=기타');
+  });
+
   it('시트2 1행은 같은 질문 변수 열끼리 가로 병합되고 메타 열은 세로 병합된다', () => {
     // radio(변수1) + checkbox(변수2: Q2_1, Q2_2) → 메타 10열(A~J) 후 K(Q1) L(Q2_1) M(Q2_2)
     const wb = generateRawDataWorkbook([radioQ, checkboxQ], [makeRow()], TEST_CTX);
@@ -299,6 +313,7 @@ describe('generateRawDataWorkbook', () => {
     expect(ws.getRow(2).getCell(12).value).toBe('ⓖ 에이전트');
   });
 
+  // 사이드카는 옵션 셀 exportLabel 을 따르되 「상세 기재」를 붙여 본 변수와 가른다(2026-10-30)
   it('테이블-소스 체크박스의 텍스트 사이드카도 옵션 셀 exportLabel을 유지한다', () => {
     const wb = generateRawDataWorkbook([tableSourceCheckboxWithTextQ], [makeRow()], TEST_CTX);
     const raw = wb.getWorksheet('Raw Data')!;
@@ -307,11 +322,11 @@ describe('generateRawDataWorkbook', () => {
     expect(raw.getRow(3).getCell(11).value).toBe('Q4_1');
     expect(raw.getRow(3).getCell(12).value).toBe('Q4_1_text');
     expect(raw.getRow(2).getCell(11).value).toBe('ⓧ 기타 분야');
-    expect(raw.getRow(2).getCell(12).value).toBe('ⓧ 기타 분야');
+    expect(raw.getRow(2).getCell(12).value).toBe('ⓧ 기타 분야 상세 기재');
 
     const sidecar = codebook.getColumn(2).values.findIndex((v) => v === 'Q4_1_text');
     expect(sidecar).toBeGreaterThan(0);
-    expect(codebook.getRow(sidecar).getCell(4).value).toBe('ⓧ 기타 분야');
+    expect(codebook.getRow(sidecar).getCell(4).value).toBe('ⓧ 기타 분야 상세 기재');
   });
 
   it('시트2 헤더 1~3행에 색상(fill)과 열 너비가 적용된다', () => {

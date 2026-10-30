@@ -1,5 +1,6 @@
 import { VariableMeasure, VariableType } from 'sav-writer';
 
+import { columnCellLabel, usesCellLabelForVariableLabel } from '@/lib/analytics/column-cell-label';
 import type { SPSSExportColumn } from '@/lib/analytics/spss-excel-export';
 import { CHANGE_CONFIRM_LABEL_SUFFIX } from '@/lib/spss/change-confirm-variable';
 import type { Question } from '@/types/survey';
@@ -141,6 +142,12 @@ export function resolveMeasure(col: SPSSExportColumn, question: Question | undef
  * 변수 라벨 생성
  */
 export function buildLabel(col: SPSSExportColumn): string {
+  // 엑셀라벨이 있는 열(표 칸·보기)과 상세 기재 열은 Raw 2행·코딩북과 같은 셀라벨을 쓴다 — 표 칸이
+  // 행·열 제목 조합이나 보기 목록을 이어 붙이면 같은 문항의 변수끼리 라벨이 겹쳤다(2026-10-30).
+  if (usesCellLabelForVariableLabel(col)) {
+    const label = columnCellLabel(col);
+    return label ? `${col.questionText} - ${label}` : col.questionText;
+  }
   switch (col.type) {
     case 'checkbox-item':
       return `${col.questionText} - ${col.optionLabel}`;

@@ -1,6 +1,7 @@
 import ExcelJS from 'exceljs';
 
 import { HEADER_BORDER, HEADER_FILL, HEADER_FONT } from '@/lib/analytics/export-styles';
+import { columnCellLabel } from '@/lib/analytics/column-cell-label';
 import { buildCodebookValueLabel, formatExcelDateTime } from '@/lib/analytics/raw-export-helpers';
 import {
   type SPSSExportColumn,
@@ -352,7 +353,7 @@ export function generateRawDataWorkbook(
   const metaCount = metaHeaders.length;
   const colCount = columns.length + metaCount;
   ws2.addRow([...metaHeaders, ...columns.map((c) => c.questionText)]);
-  ws2.addRow([...metaHeaders.map(() => ''), ...columns.map((c) => row2Label(c))]);
+  ws2.addRow([...metaHeaders.map(() => ''), ...columns.map((c) => columnCellLabel(c))]);
   ws2.addRow([...metaHeaders.map(() => ''), ...columns.map((c) => c.spssVarName)]);
   rows.forEach((row) => {
     ws2.addRow([
@@ -381,7 +382,7 @@ export function generateRawDataWorkbook(
   // 열 너비: 메타 열은 표본 기반, 변수 열은 2행(셀라벨) 기준
   autoFitRawColumnRange(ws2, 1, metaCount);
   columns.forEach((c, i) => {
-    ws2.getColumn(i + metaCount + 1).width = clampRawWidth(estimateTextWidth(row2Label(c)));
+    ws2.getColumn(i + metaCount + 1).width = clampRawWidth(estimateTextWidth(columnCellLabel(c)));
   });
 
   // 시트 3: 코딩북
@@ -416,8 +417,8 @@ export function appendCodebookSheet(
       i + 1,
       c.spssVarName,
       c.questionText,
-      // 셀라벨은 Raw Data 2행과 같은 값 — 표 칸 엑셀라벨이 없으면 보기·순위·상세 기재 열의 글자
-      row2Label(c),
+      // 셀라벨은 Raw Data 2행과 같은 값(columnCellLabel)
+      columnCellLabel(c),
       buildCodebookValueLabel(c, questionMap),
       metadata.variableType,
       metadata.measure,
@@ -490,26 +491,4 @@ export function autoFitRawColumnRange(
 /** 헤더 + 데이터 일부를 표본으로 열 너비를 자동 맞춤 (시트1/코딩북용). */
 export function autoFitRawColumns(ws: ExcelJS.Worksheet, colCount: number): void {
   autoFitRawColumnRange(ws, 1, colCount);
-}
-
-/** Raw Data 헤더 행2: 테이블 셀라벨 > 옵션 분리 열 라벨 > 공백 */
-export function row2Label(c: SPSSExportColumn): string {
-  if (c.cellExportLabel) return c.cellExportLabel;
-  if (
-    c.type === 'checkbox-item' ||
-    c.type === 'choice-group' ||
-    c.type === 'choice-group-item' ||
-    c.type === 'ranking-rank' ||
-    c.type === 'ranking-other' ||
-    c.type === 'ranking-option-text' ||
-    c.type === 'option-text' ||
-    c.type === 'choice-table-cell' ||
-    c.type === 'other-text' ||
-    c.type === 'table-cell-option-text' ||
-    c.type === 'table-cell-ranking-other' ||
-    c.type === 'table-cell-ranking-option-text'
-  ) {
-    return c.optionLabel ?? '';
-  }
-  return '';
 }
