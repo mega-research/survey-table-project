@@ -416,7 +416,8 @@ export function appendCodebookSheet(
       i + 1,
       c.spssVarName,
       c.questionText,
-      c.cellExportLabel ?? '',
+      // 셀라벨은 Raw Data 2행과 같은 값 — 표 칸 엑셀라벨이 없으면 보기·순위·상세 기재 열의 글자
+      row2Label(c),
       buildCodebookValueLabel(c, questionMap),
       metadata.variableType,
       metadata.measure,

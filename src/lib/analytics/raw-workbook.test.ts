@@ -237,6 +237,23 @@ describe('generateRawDataWorkbook', () => {
     ]);
   });
 
+  // 코딩북 셀라벨 = Raw Data 2행 셀라벨. 코딩북만 표 칸 엑셀라벨을 읽어 복수응답 보기 열의 셀라벨이
+  // 비어 있었다 — 값 라벨이 「빈값=비선택, 1=선택」뿐이라 어느 보기의 열인지 알 수 없었다(2026-10-30).
+  it('코딩북 셀라벨은 Raw Data 2행과 같다 — 복수응답 보기 열에는 보기 글자', () => {
+    const wb = generateRawDataWorkbook([radioQ, checkboxQ], [makeRow()], TEST_CTX);
+    const raw = wb.getWorksheet('Raw Data')!;
+    const codebook = wb.getWorksheet('코딩북')!;
+    const rawLabels = new Map<string, unknown>();
+    raw.getRow(3).eachCell((cell, col) => rawLabels.set(String(cell.value), raw.getRow(2).getCell(col).value ?? ''));
+    const labelOf = (varName: string) => {
+      const rowIndex = codebook.getColumn(2).values.findIndex((value) => value === varName);
+      return codebook.getRow(rowIndex).getCell(4).value ?? '';
+    };
+    expect(labelOf('Q2_1')).toBe('AI');
+    expect(labelOf('Q2_2')).toBe('ML');
+    for (const varName of ['Q1', 'Q2_1', 'Q2_2']) expect(labelOf(varName)).toBe(rawLabels.get(varName));
+  });
+
   it('시트2 1행은 같은 질문 변수 열끼리 가로 병합되고 메타 열은 세로 병합된다', () => {
     // radio(변수1) + checkbox(변수2: Q2_1, Q2_2) → 메타 10열(A~J) 후 K(Q1) L(Q2_1) M(Q2_2)
     const wb = generateRawDataWorkbook([radioQ, checkboxQ], [makeRow()], TEST_CTX);
