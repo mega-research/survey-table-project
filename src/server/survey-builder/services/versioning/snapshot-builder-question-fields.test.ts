@@ -95,6 +95,7 @@ const SENTINEL = {
   exportCellOrder: 'row',
   stickyColumnCount: 2,
   fitTableToWidth: true,
+  scaleMeanEnabled: true,
   answerQuoteEnabled: true,
   answerQuoteName: '인용',
   answerQuoteText: '{{Q1}}',

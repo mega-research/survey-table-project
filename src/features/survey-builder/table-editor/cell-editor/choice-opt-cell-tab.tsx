@@ -12,6 +12,7 @@ import {
 } from '@/features/question-renderer/utils/choice-group-mobile-view';
 import { AnswerQuoteTextField } from '@/features/survey-builder/answer-quote-fields';
 import { BranchRuleEditor } from '@/features/survey-builder/branch-rule-editor';
+import { ExcludeFromMeanSwitch } from '@/features/survey-builder/exclude-from-mean-switch';
 import { InputFormatSelect } from '@/features/survey-builder/input-format-select';
 import type { ScaleBarIssue } from '@/features/survey-builder/lib/scale-bar-diagnostics';
 import { NumberFormatFields } from '@/features/survey-builder/number-format-fields';
@@ -43,6 +44,9 @@ interface ChoiceOptCellTabProps {
   /** 단독 선택 범위 — 그룹이 여럿인 표에서만 노출 */
   exclusiveScope: 'group' | 'table';
   onExclusiveScopeChange: (v: 'group' | 'table') => void;
+  /** 평균에서 제외 (CONTEXT.md 「척도 평균」) — 라디오로 그려지는 보기 칸에서만 노출 */
+  excludeFromMean: boolean;
+  onExcludeFromMeanChange: (v: boolean) => void;
   /** 이 셀을 품은 문항의 유형 — 그룹 없는 보기 셀이 체크박스로 그려지는지 판단한다 */
   parentQuestionType: QuestionType | undefined;
   /** 사이드카 텍스트 입력 모드 — 'number' 면 숫자만 (입력 셀과 같은 규칙) */
@@ -93,6 +97,8 @@ export function ChoiceOptCellTab({
   onExclusiveChoiceChange,
   exclusiveScope,
   onExclusiveScopeChange,
+  excludeFromMean,
+  onExcludeFromMeanChange,
   parentQuestionType,
   textInputType,
   onTextInputTypeChange,
@@ -361,6 +367,15 @@ export function ChoiceOptCellTab({
             </div>
           )}
         </div>
+      )}
+
+      {/* 평균에서 제외 — 척도 줄은 단일 선택 변수뿐이라 라디오로 그려지는 보기 칸에만 의미가 있다 */}
+      {(currentGroup ? currentGroup.type === 'radio' : parentQuestionType === 'radio') && (
+        <ExcludeFromMeanSwitch
+          id="choice-opt-exclude-from-mean"
+          checked={excludeFromMean}
+          onCheckedChange={onExcludeFromMeanChange}
+        />
       )}
 
       <div className="flex items-center justify-between gap-4">

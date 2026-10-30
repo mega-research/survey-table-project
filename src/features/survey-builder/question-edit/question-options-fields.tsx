@@ -197,6 +197,10 @@ export function QuestionOptionsFields({
                 questionId={questionId}
                 isCheckboxQuestion={question.type === 'checkbox'}
                 isRadioQuestion={question.type === 'radio'}
+                showExcludeFromMean={
+                  (question.type === 'radio' || question.type === 'select') &&
+                  formData.scaleMeanEnabled === true
+                }
               />
             ))}
           </div>
@@ -240,6 +244,8 @@ interface SortableOptionItemProps {
   isCheckboxQuestion: boolean;
   /** 라디오 문항일 때만 「언어」 선택을 보인다 — 언어 문항은 radio 뿐이다 */
   isRadioQuestion: boolean;
+  /** 「척도 평균에 넣기」를 켠 단일 선택 문항일 때만 「평균에서 제외」를 보인다 */
+  showExcludeFromMean: boolean;
 }
 
 function SortableOptionItem({
@@ -256,6 +262,7 @@ function SortableOptionItem({
   questionId,
   isCheckboxQuestion,
   isRadioQuestion,
+  showExcludeFromMean,
 }: SortableOptionItemProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: option.id,
@@ -318,6 +325,24 @@ function SortableOptionItem({
                 e.target.checked
                   ? updateOption(option.id, { exclusiveChoice: true })
                   : updateOption(option.id, {}, ['exclusiveChoice'])
+              }
+              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+          </label>
+        )}
+
+        {/* 평균에서 제외 (CONTEXT.md 「척도 평균」) — 「모름」류. 끄면 키를 지운다 */}
+        {showExcludeFromMean && (
+          <label className="flex shrink-0 cursor-pointer flex-col items-center gap-0.5">
+            <span className="text-[10px] text-gray-400">평균 제외</span>
+            <input
+              type="checkbox"
+              aria-label="평균에서 제외"
+              checked={option.excludeFromMean === true}
+              onChange={(e) =>
+                e.target.checked
+                  ? updateOption(option.id, { excludeFromMean: true })
+                  : updateOption(option.id, {}, ['excludeFromMean'])
               }
               className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
             />

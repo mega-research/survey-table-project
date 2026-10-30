@@ -41,6 +41,7 @@ export const TABLE_CELL_FIELD_POLICY = {
   choiceGroupId: OWNED,
   exclusiveChoice: OWNED,
   exclusiveScope: OWNED,
+  excludeFromMean: OWNED,
   spssVarType: OWNED,
   spssMeasure: OWNED,
   spssNumericCode: OWNED,

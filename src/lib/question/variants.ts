@@ -50,6 +50,9 @@ type EmbeddedTableFields = Pick<
   | 'exportCellOrder'
 >;
 
+/** 평균 산출(척도 평균) — 단일값 변수를 내는 radio/select/table 3유형 전용. */
+type ScaleMeanFields = Pick<Question, 'scaleMeanEnabled'>;
+
 /** 테이블 레벨 옵션 그룹 — radio/checkbox/ranking 전용. */
 type ChoiceGroupFields = Pick<Question, 'choiceGroups'>;
 
@@ -99,7 +102,8 @@ export interface RadioQuestion
     OptionListFields,
     EmbeddedTableFields,
     MobileTableDisplayFields,
-    ChoiceGroupFields {
+    ChoiceGroupFields,
+    ScaleMeanFields {
   type: 'radio';
 }
 
@@ -115,7 +119,7 @@ export interface CheckboxQuestion
 }
 
 export interface SelectQuestion
-  extends QuestionBase, Pick<Question, 'options' | 'allowOtherOption'> {
+  extends QuestionBase, ScaleMeanFields, Pick<Question, 'options' | 'allowOtherOption'> {
   type: 'select';
 }
 
@@ -139,6 +143,7 @@ export interface TableQuestion
     EmbeddedTableFields,
     MobileTableDisplayFields,
     ChoiceGroupFields,
+    ScaleMeanFields,
     Pick<
       Question,
       'tableValidationRules' | 'dynamicRowConfigs' | 'rowRepeatConfig' | 'stagedRowsConfig'

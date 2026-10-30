@@ -304,6 +304,7 @@ export async function commitCellEdit({
               spssVarType: question.spssVarType,
               spssMeasure: question.spssMeasure,
               exportCellOrder: question.exportCellOrder,
+              scaleMeanEnabled: question.scaleMeanEnabled,
               answerQuoteEnabled: question.answerQuoteEnabled,
               answerQuoteName: question.answerQuoteName,
               answerQuoteText: question.answerQuoteText,

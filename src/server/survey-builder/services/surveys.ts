@@ -350,6 +350,7 @@ export async function duplicateSurvey(
         hideColumnLabels: question.hideColumnLabels,
         stickyColumnCount: question.stickyColumnCount ?? null,
         fitTableToWidth: question.fitTableToWidth ?? false,
+        scaleMeanEnabled: question.scaleMeanEnabled ?? false,
         exportCellOrder: question.exportCellOrder ?? null,
         mobileOriginalTable: question.mobileOriginalTable,
         mobileTableDisplayMode: question.mobileTableDisplayMode,

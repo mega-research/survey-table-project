@@ -25,7 +25,7 @@ interface OperationsTabStripProps {
 /**
  * 현황 콘솔 상단 탭 스트립.
  *
- * - "실사 현황" trigger hover/click → `응답 현황` / `응답 내역` 드롭다운
+ * - "실사 현황" trigger hover/click → `응답 현황` / `응답 내역` / `척도 평균`(게스트 제외) 드롭다운
  * - "진척 보고" 는 단일 페이지 링크 (`/operations/report`)
  * - "조사 대상" trigger hover/click → `조사 대상 목록` / `조사 대상 업로드` / `컬럼 설정` / `결과코드 설정` / `컨택원 관리`(게스트 제외) 드롭다운
  * - "메일" trigger → `템플릿` / `단체 발송` / `비용 정산` 드롭다운 (수신거부자는 단체 발송 페이지 하단 세그먼트)
@@ -47,7 +47,9 @@ export function OperationsTabStrip({
   const profilesHref = `${operationsBase}/profiles`;
   const isOverviewActive = pathname.startsWith(overviewHref);
   const isProfilesActive = pathname.startsWith(profilesHref);
-  const isFieldworkActive = isOverviewActive || isProfilesActive;
+  const scaleMeanHref = `${operationsBase}/scale-mean`;
+  const isScaleMeanActive = pathname.startsWith(scaleMeanHref);
+  const isFieldworkActive = isOverviewActive || isProfilesActive || isScaleMeanActive;
 
   const contactsHref = `${operationsBase}/contacts`;
   const contactsUploadHref = `${operationsBase}/contacts/upload`;
@@ -112,6 +114,12 @@ export function OperationsTabStrip({
               <SubLink href={profilesHref} active={isProfilesActive}>
                 응답 내역
               </SubLink>
+              {/* 척도 평균은 내부 담당자용 집계 — 게스트에게는 메뉴가 없다 */}
+              {!isGuest && (
+                <SubLink href={scaleMeanHref} active={isScaleMeanActive}>
+                  척도 평균
+                </SubLink>
+              )}
             </NavigationMenuContent>
           </NavigationMenuItem>
 

@@ -113,6 +113,9 @@ function buildFormDataFromQuestion(question: Question): Partial<Question> {
     requiresAcknowledgment: question.requiresAcknowledgment || false,
     placeholder: question.placeholder || '',
     piiEncrypted: question.piiEncrypted ?? false,
+    ...(question.scaleMeanEnabled !== undefined
+      ? { scaleMeanEnabled: question.scaleMeanEnabled }
+      : {}),
     defaultValueTemplate: question.defaultValueTemplate ?? null,
     inputType: question.inputType ?? 'text',
     ...(question.emptyDefault !== undefined ? { emptyDefault: question.emptyDefault } : {}),
@@ -658,6 +661,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                   ? currentFormData.stickyColumnCount
                   : question?.stickyColumnCount,
               fitTableToWidth: currentFormData.fitTableToWidth ?? question?.fitTableToWidth,
+              scaleMeanEnabled: currentFormData.scaleMeanEnabled ?? question?.scaleMeanEnabled,
               exportCellOrder: currentFormData.exportCellOrder ?? question?.exportCellOrder,
               mobileOriginalTable:
                 currentFormData.mobileOriginalTable ?? question?.mobileOriginalTable,

@@ -55,6 +55,7 @@ export const PERSISTED_QUESTION_FIELDS = [
   'hideColumnLabels',
   'stickyColumnCount',
   'fitTableToWidth',
+  'scaleMeanEnabled',
   'mobileOriginalTable',
   'mobileTableDisplayMode',
   'mobileDrilldownOmitLeadingColumns',

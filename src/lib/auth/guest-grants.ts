@@ -169,6 +169,8 @@ export function guestPathRedirect(
         // 컨택원 관리 — 내부 실사 운영 도구라 게스트에게 열지 않는다(procedure 도 authed).
         'contacts/assignments',
         'quota',
+        // 척도 평균 — 내부 담당자용 집계(발주처 공개는 별도 결정, CONTEXT.md 「척도 평균」).
+        'scale-mean',
       ];
       for (const sub of blockedSubpaths) {
         const full = `${allowedPrefix}/${sub}`;

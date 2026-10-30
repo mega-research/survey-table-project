@@ -146,6 +146,7 @@ describe('guestPathRedirect', () => {
       expect(guestPathRedirect(`${base}/contacts/assignments`, grants)).toBe(dest);
       expect(guestPathRedirect(`${base}/contacts/assignments/abc`, grants)).toBe(dest);
       expect(guestPathRedirect(`${base}/quota`, grants)).toBe(dest);
+      expect(guestPathRedirect(`${base}/scale-mean`, grants)).toBe(dest);
       // 허용 유지 — 컨택 목록·상세·수동 추가는 게스트 허용 procedure 와 짝
       expect(guestPathRedirect(`${base}/contacts`, grants)).toBeNull();
       expect(guestPathRedirect(`${base}/contacts/new`, grants)).toBeNull();

@@ -195,6 +195,7 @@ export function mapQuestionRow(q: QuestionRow): QuestionType {
     ...(q.stickyColumnCount != null ? { stickyColumnCount: q.stickyColumnCount } : {}),
     // 꺼진 값(기본)은 싣지 않는다 — 기존 문항의 스냅샷·빌더 모양이 그대로다
     ...(q.fitTableToWidth ? { fitTableToWidth: true } : {}),
+    ...(q.scaleMeanEnabled ? { scaleMeanEnabled: true } : {}),
     ...(q.exportCellOrder != null ? { exportCellOrder: q.exportCellOrder } : {}),
     ...(q.mobileOriginalTable != null ? { mobileOriginalTable: q.mobileOriginalTable } : {}),
     ...(q.mobileTableDisplayMode != null

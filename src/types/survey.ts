@@ -363,6 +363,11 @@ export interface QuestionOption {
    */
   exclusiveChoice?: boolean;
   /**
+   * 평균에서 제외 (CONTEXT.md 「척도 평균」) — 「모름」·「해당 없음」처럼 척도 밖인 보기. 이 보기를 고른 응답은
+   * 척도 평균의 평균·응답수에서 빠진다. 문항의 scaleMeanEnabled 가 꺼져 있으면 의미 없다.
+   */
+  excludeFromMean?: boolean;
+  /**
    * 언어 보기 (CONTEXT.md 「언어 문항」) — radio 문항의 보기에 붙으면 그 문항이 언어 문항이 되고,
    * 응답자가 이 보기를 고르면 현재 언어가 이 값이 된다. 다른 유형의 보기에서는 의미 없다.
    */
@@ -473,6 +478,11 @@ export interface TableCell {
    * 전부를 충족한 것으로 본다(다른 그룹이 비어 있어도 「다음」이 막히지 않는다).
    */
   exclusiveScope?: 'group' | 'table';
+  /**
+   * 평균에서 제외 (CONTEXT.md 「척도 평균」) — 보기 칸(choice_opt)이나 행렬 척도의 radio 칸이 「모름」처럼
+   * 척도 밖일 때. 이 칸을 고른 응답은 척도 평균의 평균·응답수에서 빠진다.
+   */
+  excludeFromMean?: boolean;
   // SPSS 변수 타입 / 측정 수준 (셀 단위)
   spssVarType?: 'Numeric' | 'String' | 'Date' | 'DateTime';
   spssMeasure?: 'Nominal' | 'Ordinal' | 'Continuous';
@@ -715,6 +725,11 @@ export interface RadioOption {
   spssNumericCode?: number; // SPSS 숫자코드
   isCustomOptionCode?: boolean; // 사용자가 수동 편집한 옵션코드인지 여부
   selected?: boolean;
+  /**
+   * 평균에서 제외 (CONTEXT.md 「척도 평균」) — 「모름」·「해당 없음」처럼 척도 밖인 보기. 이 보기를 고른 응답은
+   * 척도 평균의 평균·응답수에서 빠진다. 문항의 scaleMeanEnabled 가 꺼져 있으면 의미 없다.
+   */
+  excludeFromMean?: boolean;
   /**
    * 선택 시 사이드카 텍스트 입력 받기.
    * 빌더의 "+ 텍스트 옵션 추가" 버튼으로 생성된 옵션은 true.
@@ -974,6 +989,11 @@ export interface Question {
    * 좁은 화면에 맞춰 줄이고 넓은 화면에서는 지정 총폭을 넘지 않는다. 끔/미지정 = 지정 px 고정(기존).
    */
   fitTableToWidth?: boolean;
+  /**
+   * 평균 산출 (CONTEXT.md 「척도 평균」, 빌더 표기 「척도 평균에 넣기」) — 켠 문항의 단일값 변수가 운영 콘솔
+   * 척도 평균 표의 줄이 된다. 단일 선택(radio·select)과 표 문항(행렬 척도 radio 칸) 전용, 기본 꺼짐.
+   */
+  scaleMeanEnabled?: boolean;
   /** 테이블 문항 내보내기 셀 순서 — 행 우선(기본) | 열 우선. Raw·분할·코딩북·.sav 공통 적용 */
   exportCellOrder?: 'row-first' | 'column-first';
   // 모바일에서도 원본 표 레이아웃(가로 스크롤)으로 표시 — 카드/스테퍼 전환 안 함

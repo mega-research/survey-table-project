@@ -278,6 +278,10 @@ export const questions = pgTable(
     // 화면 폭에 맞춰 표 줄이기 (표를 그리는 문항 전용, 0146). false = 지정 px 고정(기존), true = 좁은 화면에서 비율로 줄임
     fitTableToWidth: boolean('fit_table_to_width').notNull().default(false),
 
+    // 평균 산출 (척도 평균, 0147). true = 운영 콘솔 척도 평균 표에 이 문항의 단일값 변수가 줄로 나온다.
+    // 응답 화면과 무관하고, 집계는 발행 스냅샷이 아니라 지금 빌더 구조로 읽는다(내보내기와 같은 기준).
+    scaleMeanEnabled: boolean('scale_mean_enabled').notNull().default(false),
+
     // 테이블 문항 내보내기 셀 순서 — 'row-first'(기본, null 동일) | 'column-first'
     exportCellOrder: text('export_cell_order').$type<'row-first' | 'column-first'>(),
 

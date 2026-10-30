@@ -64,6 +64,11 @@ const choiceGroups = z.object({
   choiceGroups: z.custom<NonNullable<Question['choiceGroups']>>().optional(),
 });
 
+/** 평균 산출(척도 평균) — radio/select/table 전용. */
+const scaleMean = z.object({
+  scaleMeanEnabled: z.boolean().optional(),
+});
+
 const optionList = z.object({
   options: z.custom<NonNullable<Question['options']>>().optional(),
   optionsColumns: z.number().optional(),
@@ -105,6 +110,7 @@ export const RadioQuestionSchema = base
   .extend(embeddedTable.shape)
   .extend(mobileTableDisplay.shape)
   .extend(choiceGroups.shape)
+  .extend(scaleMean.shape)
   .extend({ type: z.literal('radio') });
 
 export const CheckboxQuestionSchema = base
@@ -122,7 +128,7 @@ export const CheckboxQuestionSchema = base
       .optional(),
   });
 
-export const SelectQuestionSchema = base.extend({
+export const SelectQuestionSchema = base.extend(scaleMean.shape).extend({
   type: z.literal('select'),
   options: z.custom<NonNullable<Question['options']>>().optional(),
   allowOtherOption: z.boolean().optional(),
@@ -146,6 +152,7 @@ export const TableQuestionSchema = base
   .extend(embeddedTable.shape)
   .extend(mobileTableDisplay.shape)
   .extend(choiceGroups.shape)
+  .extend(scaleMean.shape)
   .extend({
     type: z.literal('table'),
     tableValidationRules: z.custom<NonNullable<Question['tableValidationRules']>>().optional(),

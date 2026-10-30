@@ -1,0 +1,232 @@
+import { describe, expect, it } from 'vitest';
+
+import { buildDataRow, generateSPSSColumns } from '@/lib/analytics/spss-excel-export';
+import type { QuestionVariant } from '@/lib/question';
+import type { Question, QuestionOption, SurveySubmission, TableCell } from '@/types/survey';
+
+import { formatScaleMean, overallRowLabel, summarizeScaleMeans } from './scale-mean-format';
+
+const SEVEN = ['매우 불만족', '불만족', '약간 불만족', '보통', '약간 만족', '만족', '매우 만족'];
+
+function radioQ(id: string, code: string, extra: Partial<Question> = {}): Question {
+  const options: QuestionOption[] = SEVEN.map((label, i) => ({
+    id: `${id}-o${i + 1}`,
+    label,
+    value: String(i + 1),
+  }));
+  return {
+    id,
+    type: 'radio',
+    title: `${code}. 만족하십니까?`,
+    order: 1,
+    required: true,
+    questionCode: code,
+    options,
+    scaleMeanEnabled: true,
+    ...extra,
+  } as Question;
+}
+
+/** 보기를 표 칸(choice_opt)에서 가져오는 radio — 균형성장 Q1~Q5 모양. 응답값은 칸 id 다. */
+function choiceTableQ(id: string, code: string): Question {
+  const cells: TableCell[] = SEVEN.map((label, i) => ({
+    id: `${id}-c${i + 1}`,
+    type: 'choice_opt',
+    content: `${i + 1}\n${label}`,
+  }));
+  return {
+    id,
+    type: 'radio',
+    title: `${code}. 표 보기`,
+    order: 1,
+    required: true,
+    questionCode: code,
+    tableColumns: cells.map((_, i) => ({ id: `${id}-col${i + 1}`, label: '' })),
+    tableRowsData: [{ id: `${id}-r1`, label: '', cells }],
+    scaleMeanEnabled: true,
+  } as unknown as Question;
+}
+
+/** 행마다 한 칸 한 보기 radio 칸을 radioGroupName 으로 묶은 행렬 척도 — 마지막 열은 「모름」. */
+function matrixQ(id: string, code: string, rowLabels: string[]): Question {
+  const columnLabels = [...SEVEN.map((_, i) => String(i + 1)), '모름'];
+  return {
+    id,
+    type: 'table',
+    title: `${code}. 요소별 만족도`,
+    order: 1,
+    required: true,
+    questionCode: code,
+    tableColumns: [
+      { id: `${id}-h`, label: '항목' },
+      ...columnLabels.map((label, i) => ({ id: `${id}-col${i + 1}`, label })),
+    ],
+    tableRowsData: rowLabels.map((label, r) => ({
+      id: `${id}-r${r + 1}`,
+      label,
+      rowCode: `r${r + 1}`,
+      cells: [
+        { id: `${id}-r${r + 1}-h`, type: 'text', content: label },
+        ...columnLabels.map((colLabel, c) => ({
+          id: `${id}-r${r + 1}-c${c + 1}`,
+          type: 'radio',
+          content: '',
+          radioGroupName: `${id}-g${r + 1}`,
+          radioOptions: [{ id: `${id}-r${r + 1}-c${c + 1}-o`, label: colLabel, value: colLabel }],
+          ...(colLabel === '모름' ? { excludeFromMean: true } : {}),
+        })),
+      ],
+    })),
+    scaleMeanEnabled: true,
+  } as unknown as Question;
+}
+
+function sub(questionResponses: Record<string, unknown>): Pick<SurveySubmission, 'questionResponses'> {
+  return { questionResponses };
+}
+
+describe('척도 평균 — 단일 선택 문항', () => {
+  it('켠 문항만 줄이 되고, 점수는 보기 값 코드다', () => {
+    const q1 = radioQ('q1', 'Q1');
+    const q2 = radioQ('q2', 'Q2', { scaleMeanEnabled: false });
+    const result = summarizeScaleMeans(
+      [q1, q2],
+      [sub({ q1: 'q1-o5', q2: 'q2-o1' }), sub({ q1: 'q1-o7' }), sub({ q1: 'q1-o3' })],
+    );
+
+    expect(result.rows.map((r) => r.varName)).toEqual(['Q1']);
+    expect(result.rows[0]).toMatchObject({ mean: 5, count: 3, scaleMin: 1, scaleMax: 7 });
+  });
+
+  it('줄 이름은 문항 제목(줄바꿈은 공백으로)이다', () => {
+    const q1 = radioQ('q1', 'Q1', { title: '1. 귀하는\n만족하십니까?' });
+    const result = summarizeScaleMeans([q1], [sub({ q1: 'q1-o1' })]);
+    expect(result.rows[0]?.label).toBe('1. 귀하는 만족하십니까?');
+  });
+
+  it('보기를 표 칸에서 가져오는 문항은 칸 순서가 점수다 — 내보내기 값과 같다', () => {
+    const q = choiceTableQ('q1', 'Q1');
+    const answers = [sub({ q1: 'q1-c2' }), sub({ q1: 'q1-c6' })];
+    const result = summarizeScaleMeans([q], answers);
+
+    const columns = generateSPSSColumns([q] as unknown as QuestionVariant[]);
+    const questionMap = new Map([[q.id, q as unknown as QuestionVariant]]);
+    const exported = answers.map(
+      (a) => buildDataRow(columns, questionMap, a as SurveySubmission)[0],
+    );
+
+    expect(exported).toEqual([2, 6]);
+    expect(result.rows[0]).toMatchObject({ mean: 4, count: 2 });
+  });
+
+  it('미응답·구조에 없는 값은 세지 않는다', () => {
+    const q = radioQ('q1', 'Q1');
+    const result = summarizeScaleMeans(
+      [q],
+      [sub({ q1: 'q1-o4' }), sub({}), sub({ q1: 'gone-option' })],
+    );
+    expect(result.rows[0]).toMatchObject({ mean: 4, count: 1 });
+  });
+
+  it('「평균에서 제외」 보기를 고른 응답은 평균과 응답수에서 빠지고 척도 범위에서도 빠진다', () => {
+    const q = radioQ('q1', 'Q1');
+    q.options = [
+      ...(q.options ?? []),
+      { id: 'q1-o8', label: '모름', value: '8', excludeFromMean: true },
+    ];
+    const result = summarizeScaleMeans([q], [sub({ q1: 'q1-o8' }), sub({ q1: 'q1-o2' })]);
+    expect(result.rows[0]).toMatchObject({ mean: 2, count: 1, scaleMin: 1, scaleMax: 7 });
+  });
+
+  it('보기 칸의 「평균에서 제외」도 같다', () => {
+    const q = choiceTableQ('q1', 'Q1');
+    const cells = q.tableRowsData![0]!.cells;
+    cells.push({ id: 'q1-c8', type: 'choice_opt', content: '모름', excludeFromMean: true });
+    q.tableColumns!.push({ id: 'q1-col8', label: '' });
+    const result = summarizeScaleMeans([q], [sub({ q1: 'q1-c8' }), sub({ q1: 'q1-c7' })]);
+    expect(result.rows[0]).toMatchObject({ mean: 7, count: 1, scaleMax: 7 });
+  });
+
+  it('응답이 하나도 없으면 평균은 비고 응답수는 0', () => {
+    const result = summarizeScaleMeans([radioQ('q1', 'Q1')], []);
+    expect(result.rows[0]).toMatchObject({ mean: null, count: 0 });
+  });
+});
+
+describe('척도 평균 — 표 행렬 척도', () => {
+  it('행마다 한 줄이고 「모름」 칸은 빠진다', () => {
+    const q = matrixQ('m', 'Q7', ['시설', '프로그램']);
+    const result = summarizeScaleMeans(
+      [q],
+      [
+        sub({ m: { 'm-r1-c6': 'm-r1-c6-o', 'm-r2-c8': 'm-r2-c8-o' } }),
+        sub({ m: { 'm-r1-c4': 'm-r1-c4-o', 'm-r2-c3': 'm-r2-c3-o' } }),
+      ],
+    );
+
+    expect(result.rows.map((r) => [r.varName, r.label])).toEqual([
+      ['Q7_r1', '시설'],
+      ['Q7_r2', '프로그램'],
+    ]);
+    expect(result.rows[0]).toMatchObject({ mean: 5, count: 2, scaleMin: 1, scaleMax: 7 });
+    expect(result.rows[1]).toMatchObject({ mean: 3, count: 1 });
+  });
+});
+
+describe('척도 평균 — 종합 평균', () => {
+  it('응답자별 평균의 평균이다 — 일부 줄만 답한 응답자도 자기 평균으로 들어간다', () => {
+    const q1 = radioQ('q1', 'Q1');
+    const q2 = radioQ('q2', 'Q2');
+    const result = summarizeScaleMeans(
+      [q1, q2],
+      [
+        // 응답자 A: (2 + 4) / 2 = 3
+        sub({ q1: 'q1-o2', q2: 'q2-o4' }),
+        // 응답자 B: Q1 만 7
+        sub({ q1: 'q1-o7' }),
+        // 응답자 C: 점수 없음 — 응답수에서 빠진다
+        sub({}),
+      ],
+    );
+
+    expect(result.overall).toEqual({ kind: 'mean', mean: 5, count: 2 });
+  });
+
+  it('척도 범위가 다른 줄이 섞이면 종합 평균을 내지 않는다', () => {
+    const seven = radioQ('q1', 'Q1');
+    const five = radioQ('q2', 'Q2');
+    five.options = five.options!.slice(0, 5);
+    const result = summarizeScaleMeans(
+      [seven, five],
+      [sub({ q1: 'q1-o7', q2: 'q2-o5' })],
+    );
+    expect(result.overall).toEqual({ kind: 'mixed-scale' });
+    expect(result.rows.map((r) => r.mean)).toEqual([7, 5]);
+  });
+
+  it('켠 문항이 없으면 줄도 종합도 없다', () => {
+    const result = summarizeScaleMeans(
+      [radioQ('q1', 'Q1', { scaleMeanEnabled: false })],
+      [sub({ q1: 'q1-o1' })],
+    );
+    expect(result.rows).toEqual([]);
+    expect(result.overall).toEqual({ kind: 'empty' });
+  });
+});
+
+describe('척도 평균 — 표시', () => {
+  it('평균은 소수 둘째 자리, 없으면 대시', () => {
+    expect(formatScaleMean(5.125)).toBe('5.13');
+    expect(formatScaleMean(4)).toBe('4.00');
+    expect(formatScaleMean(null)).toBe('—');
+  });
+
+  it('전체 줄 이름은 첫 줄~끝 줄 변수명이다', () => {
+    const rows = summarizeScaleMeans(
+      [radioQ('q1', 'Q1'), radioQ('q2', 'Q2'), radioQ('q3', 'Q3')],
+      [],
+    ).rows;
+    expect(overallRowLabel(rows)).toBe('응답자별 평균 (Q1~Q3)');
+    expect(overallRowLabel(rows.slice(0, 1))).toBe('응답자별 평균 (Q1)');
+  });
+});

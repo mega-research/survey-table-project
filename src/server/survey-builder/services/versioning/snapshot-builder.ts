@@ -86,6 +86,7 @@ interface SnapshotQuestion {
   hideColumnLabels?: boolean | undefined;
   stickyColumnCount?: number | null | undefined;
   fitTableToWidth?: boolean | undefined;
+  scaleMeanEnabled?: boolean | undefined;
   mobileOriginalTable?: boolean | undefined;
   mobileTableDisplayMode?: MobileTableDisplayMode | undefined;
   mobileDrilldownOmitLeadingColumns?: number | undefined;
@@ -188,6 +189,7 @@ export function buildSurveySnapshot(
       hideColumnLabels: q.hideColumnLabels,
       stickyColumnCount: q.stickyColumnCount,
       fitTableToWidth: q.fitTableToWidth,
+      scaleMeanEnabled: q.scaleMeanEnabled,
       mobileOriginalTable: q.mobileOriginalTable,
       mobileTableDisplayMode: q.mobileTableDisplayMode,
       mobileDrilldownOmitLeadingColumns: q.mobileDrilldownOmitLeadingColumns,

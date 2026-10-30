@@ -59,6 +59,7 @@ const SENTINEL_ROW: Record<string, unknown> = {
   hideColumnLabels: true,
   stickyColumnCount: 2,
   fitTableToWidth: true,
+  scaleMeanEnabled: true,
   mobileOriginalTable: true,
   mobileTableDisplayMode: 'drilldown',
   mobileDrilldownOmitLeadingColumns: 1,

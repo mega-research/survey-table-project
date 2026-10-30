@@ -80,6 +80,7 @@ export async function createQuestion(data: CreateQuestionInput): Promise<Questio
     hideColumnLabels: data.hideColumnLabels,
     stickyColumnCount: data.stickyColumnCount ?? null,
     fitTableToWidth: data.fitTableToWidth ?? false,
+    scaleMeanEnabled: data.scaleMeanEnabled ?? false,
     exportCellOrder: data.exportCellOrder ?? null,
     mobileOriginalTable: data.mobileOriginalTable,
     mobileTableDisplayMode: data.mobileTableDisplayMode,
