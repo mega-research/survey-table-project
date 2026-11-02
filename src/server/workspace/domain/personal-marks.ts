@@ -2,12 +2,9 @@
 //
 // client-safe — server-only·Node·DB 의존 없음. 계약은 shared/contracts 가 소유하고 여기는 그것을
 // 다시 내보낸다(공유 설정·그룹 도메인과 같은 구조). 태그 이름 정규화·한도는 화면도 써야 해서
-// 계약(`shared/contracts/workspace`)에 있고, 서버만 정하는 색 배정은 여기 있다.
-import {
-  PERSONAL_TAG_MESSAGE,
-  type PersonalTagColor,
-  personalTagColorValues,
-} from '@/shared/contracts/workspace';
+// 계약(`shared/contracts/workspace`)에 있다. 새 태그 색 배정도 「만들기」 미리보기가 같은 규칙을
+// 봐야 해서 계약에 있다.
+import { PERSONAL_TAG_MESSAGE } from '@/shared/contracts/workspace';
 
 export {
   CreatePersonalTagInput,
@@ -23,23 +20,11 @@ export {
   UpdatePersonalTagOutput,
 } from '@/shared/contracts/workspace-io';
 export type { PersonalTagItem } from '@/shared/contracts/workspace-io';
-export { PERSONAL_TAG_LIMIT, isPersonalTagLimitReached } from '@/shared/contracts/workspace';
-
-/**
- * 새 태그 색 — 내 태그에서 가장 적게 쓴 색, 같으면 어휘 순서가 앞선 색.
- *
- * 만들 때 색을 고르지 않게 하고, 태그가 늘어도 한 색으로 몰리지 않게 한다. `usedColors` 는 내
- * 태그 전부의 색(중복 포함)이다.
- */
-export function pickPersonalTagColor(usedColors: readonly PersonalTagColor[]): PersonalTagColor {
-  const usage = new Map<PersonalTagColor, number>(personalTagColorValues.map((c) => [c, 0]));
-  for (const color of usedColors) usage.set(color, (usage.get(color) ?? 0) + 1);
-  let best: PersonalTagColor = personalTagColorValues[0];
-  for (const color of personalTagColorValues) {
-    if ((usage.get(color) ?? 0) < (usage.get(best) ?? 0)) best = color;
-  }
-  return best;
-}
+export {
+  PERSONAL_TAG_LIMIT,
+  isPersonalTagLimitReached,
+  pickPersonalTagColor,
+} from '@/shared/contracts/workspace';
 
 /** 내 태그가 아니거나 없는 태그 — 둘을 가르지 않는다(남의 태그 존재를 알리지 않는다). */
 export class PersonalTagNotFoundError extends Error {

@@ -7,6 +7,7 @@ import {
   normalizePersonalTagName,
   personalTagColorValues,
   personalTagNameKey,
+  pickPersonalTagColor,
 } from './workspace';
 import { CreatePersonalTagInput } from './workspace-io';
 
@@ -79,5 +80,22 @@ describe('CreatePersonalTagInput — 입력 검증도 같은 규칙', () => {
       expect(result.success).toBe(false);
       expect(JSON.stringify(result.error?.issues)).not.toContain('비밀발주처');
     }
+  });
+});
+
+// 새 태그 색 배정 — 서버의 만들기와 태그 창의 「만들기」 미리보기가 같은 함수를 본다.
+describe('pickPersonalTagColor — 새 태그 색', () => {
+  it('태그가 하나도 없으면 어휘 첫 색(파랑)이다', () => {
+    expect(pickPersonalTagColor([])).toBe('blue');
+  });
+
+  it('안 쓴 색 중 어휘 순서가 앞선 색을 고른다', () => {
+    expect(pickPersonalTagColor(['blue', 'red', 'green', 'purple'])).toBe('amber');
+  });
+
+  it('모든 색을 썼으면 가장 적게 쓴 색 — 동점이면 어휘 순서', () => {
+    const used = ['blue', 'red', 'green', 'purple', 'amber', 'teal', 'pink', 'gray'] as const;
+    expect(pickPersonalTagColor([...used, 'blue', 'red', 'teal'])).toBe('green');
+    expect(pickPersonalTagColor([...used, ...used, 'gray'])).toBe('blue');
   });
 });

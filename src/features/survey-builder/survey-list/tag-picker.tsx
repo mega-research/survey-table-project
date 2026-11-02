@@ -5,7 +5,11 @@ import { useId, useState } from 'react';
 import { Check, X } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
-import { PERSONAL_TAG_MESSAGE, PERSONAL_TAG_NAME_MAX_LENGTH } from '@/shared/contracts/workspace';
+import {
+  PERSONAL_TAG_MESSAGE,
+  PERSONAL_TAG_NAME_MAX_LENGTH,
+  pickPersonalTagColor,
+} from '@/shared/contracts/workspace';
 import type { PersonalTagItem } from '@/shared/contracts/workspace-io';
 
 import { PersonalTagLabel } from './personal-tag-label';
@@ -199,7 +203,10 @@ export function TagPickerPanel({ attachedIds, tags, onToggle, onCreate }: TagPic
               onHover={() => setActiveIndex(view.matches.length)}
             >
               <span className="text-[13px] text-[#3A3A3C]">만들기</span>
-              <PersonalTagLabel tag={{ name: view.create, color: 'gray' }} />
+              {/* 미리보기 색은 서버가 배정할 색 그대로 — 같은 규칙(가장 덜 쓴 색, 같으면 어휘 순서). */}
+              <PersonalTagLabel
+                tag={{ name: view.create, color: pickPersonalTagColor(tags.map((t) => t.color)) }}
+              />
               <kbd className="ml-auto rounded border border-[#E5E5EA] bg-white px-1.5 text-[11px] text-[#6E6E73]">
                 Enter
               </kbd>

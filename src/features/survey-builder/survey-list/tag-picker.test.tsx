@@ -110,4 +110,15 @@ describe('태그 창', () => {
     await user.keyboard('{Enter}');
     expect(onCreate).not.toHaveBeenCalled();
   });
+
+  it('「만들기」 미리보기 점은 서버가 배정할 색이다 — 내 태그에서 가장 덜 쓴 색, 같으면 어휘 순서', async () => {
+    // 파랑 둘·빨강 하나 → 아직 안 쓴 초록이 어휘 순서로 앞선다.
+    const { user } = renderPanel({
+      tags: [A, B, { ...C, color: 'red' }],
+    });
+    await user.type(screen.getByRole('combobox', { name: '검색하거나 새 태그 이름 입력' }), 'C사');
+    const create = screen.getByRole('option', { name: /만들기 C사/ });
+    const dot = create.querySelector('[aria-hidden].rounded-full');
+    expect(dot).toHaveClass('bg-[#22C55E]');
+  });
 });

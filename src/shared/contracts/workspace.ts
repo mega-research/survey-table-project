@@ -613,6 +613,23 @@ export const personalTagColorValues = [
 ] as const;
 export type PersonalTagColor = (typeof personalTagColorValues)[number];
 
+/**
+ * 새 태그 색 — 내 태그에서 가장 적게 쓴 색, 같으면 어휘 순서가 앞선 색.
+ *
+ * 만들 때 색을 고르지 않게 하고, 태그가 늘어도 한 색으로 몰리지 않게 한다. `usedColors` 는 내
+ * 태그 전부의 색(중복 포함)이다. 서버의 만들기가 이 색을 저장하고, 태그 창의 「만들기」 미리보기가
+ * 같은 함수로 그 색을 미리 보인다 — 둘이 갈리면 미리보기와 다른 색의 태그가 생긴다.
+ */
+export function pickPersonalTagColor(usedColors: readonly PersonalTagColor[]): PersonalTagColor {
+  const usage = new Map<PersonalTagColor, number>(personalTagColorValues.map((c) => [c, 0]));
+  for (const color of usedColors) usage.set(color, (usage.get(color) ?? 0) + 1);
+  let best: PersonalTagColor = personalTagColorValues[0];
+  for (const color of personalTagColorValues) {
+    if ((usage.get(color) ?? 0) < (usage.get(best) ?? 0)) best = color;
+  }
+  return best;
+}
+
 export const PERSONAL_TAG_COLOR_LABEL: Record<PersonalTagColor, string> = {
   blue: '파랑',
   red: '빨강',

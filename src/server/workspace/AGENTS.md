@@ -110,7 +110,7 @@
   켜기가 외래 키(23503)에서 깨지면 `PersonalMarkTargetGoneError` → NOT_FOUND 다(500 이 아니다). 300개 한도와 이름 충돌은
   `createTag`·`updateTag` 가 사용자 advisory lock(`lockPersonalTags`) 아래서 본다 — 만들기는 같은 이름이면
   있던 태그를 돌려주고, 이름 바꾸기는 CONFLICT(유일 인덱스 위반도 같은 에러로 접는다). 새 태그 색은
-  서버가 내 태그에서 가장 덜 쓴 색으로 정한다(`pickPersonalTagColor`). 목록이 이 표들을 읽는 자리는
+  서버가 내 태그에서 가장 덜 쓴 색으로 정한다(`shared/contracts/workspace` 의 `pickPersonalTagColor` — 태그 창 「만들기」 미리보기도 같은 함수). 목록이 이 표들을 읽는 자리는
   `src/server/AGENTS.md` 「설문 목록 조회」.
 - **작업 범위는 `server/work-scope.ts` 가 정한다.** 팀 | 시스템 전체 보기(메가리서치) | 없음 셋이며,
   폴백은 마지막 유효 팀 → 첫 active 팀 → 없음이다(.pen FLOW 6-1). 화면이 보내는 값은 편의일 뿐이라
