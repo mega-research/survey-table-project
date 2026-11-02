@@ -17,10 +17,16 @@ import {
   SURVEY_LIST_PAGE_SIZE,
   type SurveyListPageQuery,
 } from '@/shared/contracts/survey-builder-io';
+import type { PersonalTagItem } from '@/shared/contracts/workspace-io';
 import { surveyListPageQueryOptions, surveyListScopeParam } from '@/shared/lib/survey-list-queries';
 import { useWorkScopeOptional } from '@/shared/lib/work-scope-context';
 
-import { useSetFavorite } from '../queries/use-personal-marks';
+import {
+  useCreatePersonalTag,
+  useMyPersonalTags,
+  useSetFavorite,
+  useSetTagLink,
+} from '../queries/use-personal-marks';
 import { useMoveSurveyToGroup, useSurveyGroups } from '../queries/use-survey-groups';
 import { useDeleteSurvey, useDuplicateSurvey, useRestoreSurvey } from '../queries/use-surveys';
 import { AdvancedSearchPanel } from './advanced-search-panel';
@@ -103,6 +109,11 @@ export function SurveyListView() {
   const { mutate: restoreSurvey, isPending: isRestoring } = useRestoreSurvey();
   const { mutate: duplicateSurvey, isPending: isDuplicating } = useDuplicateSurvey();
   const setFavorite = useSetFavorite();
+  // 내 태그 — 작업 범위와 무관한 한 목록(팀을 바꿔도 같다). 카드는 id 만 받고 이름·색을 여기서 찾는다.
+  const { data: myTagsData } = useMyPersonalTags();
+  const myTags = myTagsData?.tags ?? EMPTY_TAGS;
+  const setTagLink = useSetTagLink();
+  const createTag = useCreatePersonalTag();
 
   const requestedGroupId = query.groupId;
   const ungroupedOnly = query.ungrouped;
@@ -446,6 +457,12 @@ export function SurveyListView() {
                       survey={survey}
                       isFavorite={survey.isFavorite}
                       onFavoriteChange={(on) => setFavorite(survey.id, on)}
+                      tagging={{
+                        myTagIds: survey.myTagIds,
+                        tags: myTags,
+                        onToggle: (tagId, on) => setTagLink(survey.id, tagId, on),
+                        onCreate: (name) => createTag(survey.id, name),
+                      }}
                       viewer={{ scope, currentUserId, isSuperadmin, leaderTeamIds }}
                       onDelete={handleDelete}
                       onDuplicate={handleDuplicate}
@@ -492,6 +509,8 @@ export function SurveyListView() {
     </div>
   );
 }
+
+const EMPTY_TAGS: readonly PersonalTagItem[] = [];
 
 /** 검색창 안내 — 단어마다 이 칸들 중 하나에 들면 맞는다(내 태그 이름 매칭은 티켓 09). */
 const SEARCH_PLACEHOLDER = '설문 이름, 설명, 소유자, 내 태그 — 여러 단어는 띄어서';

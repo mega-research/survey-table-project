@@ -4,8 +4,9 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { SurveyListItem } from '@/shared/contracts/survey-builder-io';
+import type { PersonalTagItem } from '@/shared/contracts/workspace-io';
 
-import { SurveyCard } from './survey-card';
+import { type CardTagging, SurveyCard } from './survey-card';
 
 function item(over: Partial<SurveyListItem> = {}): SurveyListItem {
   return {
@@ -45,12 +46,14 @@ function renderCard(
     isFavorite: false,
     onFavoriteChange: vi.fn(),
   },
+  tagging: CardTagging = { myTagIds: [], tags: [], onToggle: vi.fn(), onCreate: vi.fn() },
 ) {
   return render(
     <SurveyCard
       survey={survey}
       isFavorite={favorite.isFavorite}
       onFavoriteChange={favorite.onFavoriteChange}
+      tagging={tagging}
       viewer={{
         scope: { kind: 'team', teamId: 'team-1' },
         currentUserId: 'u-1',
@@ -148,5 +151,67 @@ describe('SurveyCard — 즐겨찾기 별', () => {
     // 동료 소유 + 참여자 아님 — 수정 버튼은 잠기지만 별은 볼 수 있으면 켤 수 있다.
     renderCard(item({ ownerUserId: 'u-2', visibility: 'invite_only', isParticipant: true }));
     expect(screen.getByRole('button', { name: '즐겨찾기 추가' })).toBeEnabled();
+  });
+});
+
+/**
+ * 카드의 태그 줄 (설문 즐겨찾기·태그 티켓 07, 시안 F6 ①) — 응답 수 줄 아래, 최대 2개 + 「+N」.
+ * 태그가 없으면 줄이 없고 마우스를 올리면 「+ 태그」가 보인다. 줄·「+ 태그」·케밥 「태그」가 같은
+ * 태그 창을 연다.
+ */
+describe('SurveyCard — 내 태그 줄', () => {
+  const tags: PersonalTagItem[] = [
+    { id: 'a', name: 'A사', color: 'blue', linkCount: 1 },
+    { id: 'b', name: '2026', color: 'red', linkCount: 1 },
+    { id: 'c', name: '실태조사', color: 'green', linkCount: 1 },
+  ];
+  const tagging = (myTagIds: string[]): CardTagging => ({
+    myTagIds,
+    tags,
+    onToggle: vi.fn(),
+    onCreate: vi.fn(),
+  });
+
+  it('붙인 순서대로 2개와 「+N」을 보인다', () => {
+    renderCard(item(), undefined, tagging(['c', 'a', 'b']));
+    const row = screen.getByRole('button', { name: '태그 편집' });
+    expect(row).toHaveTextContent('실태조사');
+    expect(row).toHaveTextContent('A사');
+    expect(row).toHaveTextContent('+1');
+    expect(row).not.toHaveTextContent('2026');
+  });
+
+  it('태그가 없으면 줄이 없고 「+ 태그」 단추만 있다', () => {
+    renderCard(item(), undefined, tagging([]));
+    expect(screen.queryByRole('button', { name: '태그 편집' })).toBeNull();
+    expect(screen.getByRole('button', { name: '태그 추가' })).toBeInTheDocument();
+  });
+
+  it('태그 줄을 누르면 태그 창이 열리고, 목록에서 누르면 그 설문에 붙이기를 올린다', async () => {
+    const props = tagging(['a']);
+    renderCard(item(), undefined, props);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', { name: '태그 편집' }));
+    const list = await screen.findByRole('listbox', { name: '내 태그' });
+    expect(list).toBeInTheDocument();
+
+    await user.click(screen.getByRole('option', { name: '2026' }));
+    expect(props.onToggle).toHaveBeenCalledWith('b', true);
+    // 창은 닫히지 않는다.
+    expect(screen.getByRole('listbox', { name: '내 태그' })).toBeInTheDocument();
+  });
+
+  it('「+ 태그」와 케밥 「태그」도 같은 창을 연다', async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderCard(item(), undefined, tagging([]));
+    await user.click(screen.getByRole('button', { name: '태그 추가' }));
+    expect(await screen.findByRole('listbox', { name: '내 태그' })).toBeInTheDocument();
+    unmount();
+
+    renderCard(item(), undefined, tagging(['a']));
+    await user.click(screen.getByRole('button', { name: '더보기' }));
+    await user.click(await screen.findByRole('menuitem', { name: '태그' }));
+    expect(await screen.findByRole('listbox', { name: '내 태그' })).toBeInTheDocument();
   });
 });
