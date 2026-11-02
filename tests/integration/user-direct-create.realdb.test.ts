@@ -3,7 +3,7 @@
  *
  * 이 티켓의 핵심 약속은 하나다 — 슈퍼어드민이 만든 계정으로 **그 자리에서 로그인된다**.
  * 단위 테스트는 어떤 행을 쓰는지까지만 보고, 그 행이 Better Auth sign-in 이 실제로
- * 찾아가는 모양인지는 실 DB + 실 인스턴스로만 증명된다(issuer/provider_id/account_id
+ * 찾아가는 모양인지는 실 DB + 실 인스턴스로만 증명된다(provider_id/account_id
  * 규약이나 해셔가 어긋나면 계정은 생기는데 로그인만 조용히 실패한다).
  *
  * 실행 조건: DATABASE_URL 이 127.0.0.1/localhost 일 때만 (pnpm test:integration).

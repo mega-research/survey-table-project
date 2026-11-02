@@ -7,7 +7,7 @@
  * 이메일이 이미 존재하면 active + 슈퍼어드민(internal)으로 승격만 한다(비밀번호 불변).
  * Better Auth 서버 인스턴스는 server-only 라 스크립트에서 import 할 수 없으므로
  * users/accounts 테이블에 직접 기록한다 (해시는 better-auth 기본 해셔와 동일,
- * accounts.issuer 는 1.7 크리덴셜 규약값 'local:credential').
+ * accounts 는 provider_id='credential', account_id=user id 규약).
  *
  * 주의: .env 는 로컬, .env.local 은 원격 DB 를 가리키는 관행 — Next.js 와 같은
  * 우선순위(.env.local > .env)로 로드하며, 셸에서 DATABASE_URL 을 직접 지정하면
@@ -37,7 +37,7 @@ async function main() {
   const { eq } = await import('drizzle-orm');
   const { db } = await import('../src/db');
   const { accounts, users, userStatusEvents } = await import('../src/db/schema');
-  const { CREDENTIAL_PROVIDER_ID, LOCAL_CREDENTIAL_ISSUER } = await import(
+  const { CREDENTIAL_PROVIDER_ID } = await import(
     '../src/shared/contracts/auth'
   );
 
@@ -86,7 +86,6 @@ async function main() {
     userId,
     accountId: userId,
     providerId: CREDENTIAL_PROVIDER_ID,
-    issuer: LOCAL_CREDENTIAL_ISSUER,
     password: await hashPassword(password),
     createdAt: now,
     updatedAt: now,

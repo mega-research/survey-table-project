@@ -124,6 +124,7 @@
     "0145_survey_localized_messages",
     "0148_client_response_columns",
     "0149_survey_favorites",
-    "0150_personal_survey_tags"
+    "0150_personal_survey_tags",
+    "0151_accounts_issuer_relax"
   ]
 }

@@ -16,7 +16,6 @@ import { auth } from '@/lib/auth/server';
 import { isUniqueViolation } from '@/lib/pg-error';
 import {
   CREDENTIAL_PROVIDER_ID,
-  LOCAL_CREDENTIAL_ISSUER,
   type UserStatus,
   type UserStatusAction,
   type UserType,
@@ -117,7 +116,7 @@ export async function listUsers(input: ListUsersInput): Promise<ListUsersOutput>
  * 승인 단계도 안내 메일도 없다. 초기 비밀번호는 슈퍼어드민이 정해 사내 채널로 전달하고
  * 본인이 프로필에서 바꾼다.
  *
- * 계정 행(accounts)의 issuer/provider_id/account_id 는 Better Auth 1.7 의 크리덴셜 규약값과
+ * 계정 행(accounts)의 provider_id/account_id 는 Better Auth 의 크리덴셜 규약값과
  * 정확히 같아야 한다 — 어긋나면 sign-in 의 계정 조회가 조용히 실패해 "계정은 있는데
  * 로그인만 안 되는" 상태가 된다. 해시는 인스턴스 설정 해셔(auth.$context)를 그대로 쓴다.
  */
@@ -171,7 +170,6 @@ export async function createUser(
         userId: id,
         accountId: id,
         providerId: CREDENTIAL_PROVIDER_ID,
-        issuer: LOCAL_CREDENTIAL_ISSUER,
         password: passwordHash,
         createdAt: now,
         updatedAt: now,
@@ -264,7 +262,7 @@ export async function hashPassword(plain: string): Promise<string> {
  *
  * 행이 없으면 만든다 — Better Auth 이전에 이관된 행처럼 크리덴셜 계정이 아예 없는 사용자가
  * 있을 수 있고, 그 경우 UPDATE 는 0행을 고치고 조용히 끝나 "재설정했다는데 로그인은 안 되는"
- * 상태가 된다. 규약값(providerId·issuer·accountId)은 발급 경로와 같은 상수를 쓴다.
+ * 상태가 된다. 규약값(providerId·accountId)은 발급 경로와 같은 상수를 쓴다.
  */
 async function writeCredentialPassword(
   tx: Tx,
@@ -279,7 +277,6 @@ async function writeCredentialPassword(
       and(
         eq(accounts.userId, userId),
         eq(accounts.providerId, CREDENTIAL_PROVIDER_ID),
-        eq(accounts.issuer, LOCAL_CREDENTIAL_ISSUER),
       ),
     )
     .returning({ id: accounts.id });
@@ -290,7 +287,6 @@ async function writeCredentialPassword(
     userId,
     accountId: userId,
     providerId: CREDENTIAL_PROVIDER_ID,
-    issuer: LOCAL_CREDENTIAL_ISSUER,
     password: passwordHash,
     createdAt: now,
     updatedAt: now,

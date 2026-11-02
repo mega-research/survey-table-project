@@ -167,15 +167,14 @@ export function logRoleForUserType(userType: UserType | undefined): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// accounts.provider_id / accounts.issuer — 크리덴셜 계정 규약값 (SSOT)
+// accounts.provider_id — 크리덴셜 계정 규약값 (SSOT)
 // ─────────────────────────────────────────────────────────────────────────────
 //
-// better-auth 1.7 이 이메일+비밀번호 계정에 쓰는 값. 시드·직접 발급 경로가 어댑터와
+// better-auth 가 이메일+비밀번호 계정에 쓰는 값. 시드·직접 발급 경로가 어댑터와
 // 같은 행 모양을 만들 때 이 상수를 쓴다 — 어긋나면 sign-in 의 계정 조회
-// (providerId + issuer + accountId=user.id 매칭)가 조용히 실패한다.
+// (providerId + accountId=user.id 매칭)가 조용히 실패한다. 1.7.0~1.7.2 의 issuer 는
+// 1.7.3 부터 쓰이지 않는다(0151).
 
 /** 이메일+비밀번호 계정의 accounts.provider_id 값. */
 export const CREDENTIAL_PROVIDER_ID = 'credential';
 
-/** 이메일+비밀번호 계정의 accounts.issuer 값 — better-auth createLocalAccountIssuer 산출. */
-export const LOCAL_CREDENTIAL_ISSUER = 'local:credential';

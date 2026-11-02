@@ -3,14 +3,14 @@
  *
  * 겨누는 것은 두 가지다.
  *   - createUser 가 Better Auth sign-in 이 찾아갈 수 있는 계정 행을 만드는가
- *     (accounts.issuer/provider_id/account_id 규약 + 설정된 해셔로 해시된 비밀번호).
+ *     (accounts.provider_id/account_id 규약 + 설정된 해셔로 해시된 비밀번호).
  *     이 규약이 어긋나면 계정은 생기는데 로그인만 조용히 실패한다.
  *   - listUsers 의 유형 칩 카운트가 상태 필터를 함께 반영하는가.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { accounts, sessions, userStatusEvents, users } from '@/db/schema';
-import { CREDENTIAL_PROVIDER_ID, LOCAL_CREDENTIAL_ISSUER } from '@/shared/contracts/auth';
+import { CREDENTIAL_PROVIDER_ID } from '@/shared/contracts/auth';
 
 import {
   DuplicateEmailError,
@@ -167,7 +167,6 @@ describe('createUser', () => {
       userId: res.id,
       accountId: res.id,
       providerId: CREDENTIAL_PROVIDER_ID,
-      issuer: LOCAL_CREDENTIAL_ISSUER,
       password: 'hashed#13',
     });
   });
@@ -405,7 +404,6 @@ describe('changeUserStatus', () => {
       userId: TARGET,
       accountId: TARGET,
       providerId: CREDENTIAL_PROVIDER_ID,
-      issuer: LOCAL_CREDENTIAL_ISSUER,
       password: 'hashed#12',
     });
   });

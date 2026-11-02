@@ -22,6 +22,14 @@
   이메일·직책을 읽기 전용으로 보고, 게스트·실사에게는 그 두 칸이 아예 보이지 않는다(스펙 §10). 비밀번호 변경은 **다른 기기 세션만 끊고 현재 세션은 남긴다**(슈퍼어드민 재설정이 전부 끊는
   것과 갈리는 지점). 아바타는 전용 라우트 `/api/upload/avatar` 가 정사각 WebP 로 깎아 저장하고,
   서비스가 그 URL 이 우리 R2 공개 URL 인지 확인한다(외부 주소면 남의 서버가 우리 화면에 그림을 그린다).
+- **계정 행의 규약은 `provider_id='credential'` + `account_id = user id` 둘이다** — 직접 발급(`createUser`)·
+  비밀번호 재설정(`writeCredentialPassword`)·시드(`scripts/seed-superadmin.ts`)가 어댑터와 같은 행을 만든다.
+  better-auth 1.7.0~1.7.2 에만 있던 `accounts.issuer` 는 1.7.3 부터 쓰이지 않는다: 0151 이 NOT NULL 을 풀고
+  (issuer, account_id) UNIQUE 를 (provider_id, account_id) UNIQUE 로 바꿨고 Drizzle 스키마에서는 뺐다.
+  1.7.14 는 시작할 때 **Drizzle 스키마**를 대조해 「쓰지 않는 필수 컬럼」이 있으면 인증 전체를 거부한다 —
+  스키마에 NOT NULL 컬럼을 더할 때는 better-auth 가 쓰는지 볼 것(단위 테스트는 실제 인스턴스를 만들지
+  않아 못 잡는다, `better-auth-session.realdb` 가 잡는다). DB 의 `issuer` 컬럼 자체는 1.7.14 앱이 나간 뒤
+  지운다(1.7.1 앱이 그 값을 읽던 시기와 겹치지 않게).
 - **실사·게스트 계정의 발급 입구는 닫혀 있다**(ADR-0029, 2026-10-12). 발급 가능 유형 목록
   `creatableUserTypes`(`shared/contracts/auth-io`, 지금 값은 `['internal']`) 하나를 계정 생성 창과
   발급 표면 `auth.users.create` 가 함께 본다 — 모양이 완전한 raw 요청도 BAD_REQUEST 다. **닫은 것은 입구이고 옛 모델은

@@ -22,11 +22,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { db } from '@/db';
 import { accounts, sessions, users } from '@/db/schema';
 import { auth } from '@/lib/auth/server';
-import {
-  CREDENTIAL_PROVIDER_ID,
-  LOCAL_CREDENTIAL_ISSUER,
-  type UserStatus,
-} from '@/shared/contracts/auth';
+import { CREDENTIAL_PROVIDER_ID, type UserStatus } from '@/shared/contracts/auth';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
@@ -37,7 +33,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 const createdUserIds: string[] = [];
 
-/** 시드 스크립트와 동일 규약의 직접 발급 (issuer='local:credential', accountId=userId). */
+/** 시드 스크립트와 동일 규약의 직접 발급 (provider_id='credential', accountId=userId). */
 async function seedUser(status: UserStatus): Promise<{ id: string; email: string }> {
   const id = crypto.randomUUID();
   const email = `ba-ticket01-${id}@example.com`;
@@ -57,7 +53,6 @@ async function seedUser(status: UserStatus): Promise<{ id: string; email: string
     userId: id,
     accountId: id,
     providerId: CREDENTIAL_PROVIDER_ID,
-    issuer: LOCAL_CREDENTIAL_ISSUER,
     password: await hashPassword(PASSWORD),
     createdAt: now,
     updatedAt: now,

@@ -18,7 +18,8 @@ import type { FieldworkRole, UserStatus, UserType } from '@/shared/contracts/aut
  * 생성해 삽입하므로 DB default 가 없다. 시드 스크립트도 동일하게 UUID 를 직접 넣는다.
  *
  * 프로덕션·스테이징 DB 에는 5테이블이 선반영돼 있다(0111 재생용 마이그레이션 참조).
- * better-auth 1.7 어댑터 기대와의 차이(accounts.issuer 등)는 0112 가 해소한다.
+ * better-auth 1.7 어댑터 기대와의 차이는 0112 가 해소했다. 1.7.0~1.7.2 에만 있던 accounts.issuer 는
+ * 0151 이 nullable 로 풀었고 이 스키마에서는 뺐다(DB 컬럼은 다음 단계에서 지운다).
  */
 export const users = pgTable('users', {
   id: uuid('id').primaryKey(),
@@ -82,9 +83,6 @@ export const accounts = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     accountId: text('account_id').notNull(),
     providerId: text('provider_id').notNull(),
-    // better-auth 1.7 신설 — 이메일+비밀번호 계정은 'local:credential'
-    // (createLocalAccountIssuer). OAuth 미사용이므로 이 값 하나만 실린다.
-    issuer: text('issuer').notNull(),
     accessToken: text('access_token'),
     refreshToken: text('refresh_token'),
     idToken: text('id_token'),
@@ -97,8 +95,8 @@ export const accounts = pgTable(
   },
   (t) => [
     index('accounts_user_id_idx').on(t.userId),
-    // better-auth 1.7 어댑터 기대 인덱스 — findAccountByKey(issuer, accountId) 유일 조회.
-    uniqueIndex('accounts_issuer_account_id_unique').on(t.issuer, t.accountId),
+    // better-auth 의 계정 조회 키 (providerId, accountId) — 한 키에 행이 둘이면 조회를 거부한다(0151).
+    uniqueIndex('accounts_provider_id_account_id_unique').on(t.providerId, t.accountId),
   ],
 );
 
