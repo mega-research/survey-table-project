@@ -184,11 +184,10 @@ function surveyListColumns(viewerId: string | null, leaderTeamIds: readonly stri
 
 /**
  * 작업 범위가 보는 설문의 WHERE — 목록(`getScopedSurveys`)과 사이드바 요약
- * (`getScopedSurveySummaries`)이 함께 쓴다. null 이면 아무것도 보지 않는다(`kind: 'none'`).
+ * (`getScopedSurveySummaries`)이 함께 쓴다. 아무것도 보지 않는 범위(`kind: 'none'`)는 호출 쪽이
+ * 조회 전에 빈 결과로 끝낸다.
  */
-function scopedSurveyWhere(filter: SurveyScopeFilter): SQL | null {
-  if (filter.kind === 'none') return null;
-
+function scopedSurveyWhere(filter: Exclude<SurveyScopeFilter, { kind: 'none' }>): SQL {
   const conditions: SQL[] = [isNull(surveys.deletedAt)];
   if (filter.kind === 'team') {
     // 팀 범위가 보는 것 = 그 팀 설문 + **내가 초대받은 설문**(팀 무관, 티켓 18).
@@ -234,8 +233,8 @@ function scopedSurveyWhere(filter: SurveyScopeFilter): SQL | null {
  * NULL 이라 어느 팀 범위에도 걸리지 않는다. 시스템 범위만 그것을 본다.
  */
 export async function getScopedSurveys(filter: SurveyScopeFilter) {
+  if (filter.kind === 'none') return [];
   const where = scopedSurveyWhere(filter);
-  if (!where) return [];
 
   return db
     .select({
@@ -262,8 +261,8 @@ export async function getScopedSurveys(filter: SurveyScopeFilter) {
  * 쓴다 — 목록이 미분류로 접는 설문을 사이드바가 폴더로 세면 누른 폴더에서 카드가 모자란다.
  */
 export async function getScopedSurveySummaries(filter: SurveyScopeFilter) {
+  if (filter.kind === 'none') return [];
   const where = scopedSurveyWhere(filter);
-  if (!where) return [];
 
   return db
     .select({
