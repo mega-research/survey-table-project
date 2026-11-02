@@ -6,6 +6,7 @@ import * as z from 'zod';
 import { fieldworkRoleValues, userStatusValues } from './auth';
 import {
   type ClientLinkTabs,
+  PERSONAL_TAG_MESSAGE,
   type SurveyGuestTabs,
   accessLinkKindValues,
   fieldworkOrgStatusValues,
@@ -488,11 +489,6 @@ export type SetFavoriteOutput = z.infer<typeof SetFavoriteOutput>;
 // 태그 소유는 언제나 요청자다 — 입력에 사용자 칸이 없고, 남의 태그 id 는 없는 태그와 같은
 // NOT_FOUND 다. 태그 이름은 로그에 싣지 않는다: 거부 사유(issue message)에도 이름을 넣지 않는다.
 
-const PERSONAL_TAG_NAME_MESSAGE = {
-  empty: '태그 이름을 입력하세요.',
-  too_long: '태그 이름은 20자까지입니다.',
-} as const;
-
 /** 태그 이름 칸 — `normalizePersonalTagName` 하나가 정한다(앞뒤 공백 제거·1~20자). */
 export const PersonalTagNameField = z
   .string()
@@ -500,7 +496,7 @@ export const PersonalTagNameField = z
   .transform((raw, ctx) => {
     const checked = normalizePersonalTagName(raw);
     if (!checked.ok) {
-      ctx.addIssue({ code: 'custom', message: PERSONAL_TAG_NAME_MESSAGE[checked.reason] });
+      ctx.addIssue({ code: 'custom', message: PERSONAL_TAG_MESSAGE[checked.reason] });
       return z.NEVER;
     }
     return checked.name;

@@ -169,14 +169,14 @@ describe('태그 만들기 + 붙이기', () => {
   });
 
   it('실패하면 이유를 보이고 아무것도 바꾸지 않는다', async () => {
-    rpc.createTag.mockRejectedValue(new Error('태그는 300개까지 만들 수 있습니다.'));
+    rpc.createTag.mockRejectedValue(new Error('태그는 300개까지 만들 수 있습니다'));
     const { hooks, tagsOf, mine } = setup([item(SURVEY, [])], [tag(TAG_A, 'A사', 0)]);
 
     await act(async () => {
       await hooks.current.createTag(SURVEY, '새것');
     });
 
-    expect(toast.error).toHaveBeenCalledWith('태그는 300개까지 만들 수 있습니다.');
+    expect(toast.error).toHaveBeenCalledWith('태그는 300개까지 만들 수 있습니다');
     expect(tagsOf(SURVEY)).toEqual([]);
     expect(mine()).toEqual([tag(TAG_A, 'A사', 0)]);
   });

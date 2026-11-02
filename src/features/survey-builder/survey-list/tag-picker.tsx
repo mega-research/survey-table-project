@@ -5,7 +5,7 @@ import { useId, useState } from 'react';
 import { Check, X } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
-import { PERSONAL_TAG_NAME_MAX_LENGTH } from '@/shared/contracts/workspace';
+import { PERSONAL_TAG_MESSAGE, PERSONAL_TAG_NAME_MAX_LENGTH } from '@/shared/contracts/workspace';
 import type { PersonalTagItem } from '@/shared/contracts/workspace-io';
 
 import { PersonalTagLabel } from './personal-tag-label';
@@ -22,8 +22,6 @@ interface TagPickerPanelProps {
   /** 만들고 이 설문에 붙인다. 만든(또는 같은 이름의 기존) 태그, 실패면 null. */
   onCreate: (name: string) => Promise<PersonalTagItem | null>;
 }
-
-const LIMIT_MESSAGE = '태그 이름은 20자까지입니다';
 
 /**
  * 태그 창 본문 (설문 즐겨찾기·태그 티켓 07, 시안 F6 ①②) — 카드의 태그 줄·「+N」·「+ 태그」·케밥
@@ -144,7 +142,7 @@ export function TagPickerPanel({ attachedIds, tags, onToggle, onCreate }: TagPic
         />
         {tooLong && (
           <p role="status" className="text-[12px] text-[#D93025]">
-            {LIMIT_MESSAGE}
+            {PERSONAL_TAG_MESSAGE.too_long}
           </p>
         )}
       </div>
@@ -209,9 +207,7 @@ export function TagPickerPanel({ attachedIds, tags, onToggle, onCreate }: TagPic
           )}
         </div>
         {view.limitReached && (
-          <p className="px-2 py-1.5 text-[12.5px] text-[#6E6E73]">
-            태그는 300개까지 만들 수 있습니다
-          </p>
+          <p className="px-2 py-1.5 text-[12.5px] text-[#6E6E73]">{PERSONAL_TAG_MESSAGE.limit}</p>
         )}
         {tags.length === 0 && query.trim() === '' && (
           <p className="px-2 py-1.5 text-[12.5px] text-[#8E8E93]">

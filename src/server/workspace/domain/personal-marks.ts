@@ -3,7 +3,11 @@
 // client-safe — server-only·Node·DB 의존 없음. 계약은 shared/contracts 가 소유하고 여기는 그것을
 // 다시 내보낸다(공유 설정·그룹 도메인과 같은 구조). 태그 이름 정규화·한도는 화면도 써야 해서
 // 계약(`shared/contracts/workspace`)에 있고, 서버만 정하는 색 배정은 여기 있다.
-import { type PersonalTagColor, personalTagColorValues } from '@/shared/contracts/workspace';
+import {
+  PERSONAL_TAG_MESSAGE,
+  type PersonalTagColor,
+  personalTagColorValues,
+} from '@/shared/contracts/workspace';
 
 export {
   CreatePersonalTagInput,
@@ -51,15 +55,15 @@ export class PersonalTagNotFoundError extends Error {
  */
 export class PersonalTagNameTakenError extends Error {
   constructor() {
-    super('이미 같은 이름의 태그가 있습니다');
+    super(PERSONAL_TAG_MESSAGE.taken);
     this.name = 'PersonalTagNameTakenError';
   }
 }
 
-/** 한도(300개)에 닿아 더 만들 수 없다. 이름은 메시지에 싣지 않는다. */
+/** 한도(`PERSONAL_TAG_LIMIT`)에 닿아 더 만들 수 없다. 이름은 메시지에 싣지 않는다. */
 export class PersonalTagLimitError extends Error {
   constructor() {
-    super('태그는 300개까지 만들 수 있습니다.');
+    super(PERSONAL_TAG_MESSAGE.limit);
     this.name = 'PersonalTagLimitError';
   }
 }

@@ -1,4 +1,5 @@
 import {
+  PERSONAL_TAG_MESSAGE,
   type PersonalTagColor,
   isPersonalTagLimitReached,
   normalizePersonalTagName,
@@ -136,12 +137,6 @@ export type TagRenameDecision =
   | { kind: 'invalid'; reason: 'empty' | 'too_long' | 'taken'; message: string }
   | { kind: 'save'; name: string };
 
-const RENAME_MESSAGE = {
-  empty: '태그 이름을 입력하세요',
-  too_long: '태그 이름은 20자까지입니다',
-  taken: '이미 같은 이름의 태그가 있습니다',
-} as const;
-
 /**
  * 편집 패널의 이름 칸 — 보낼지, 왜 못 보내는지 (티켓 08).
  *
@@ -156,12 +151,16 @@ export function resolveTagRename(
 ): TagRenameDecision {
   const checked = normalizePersonalTagName(draft);
   if (!checked.ok) {
-    return { kind: 'invalid', reason: checked.reason, message: RENAME_MESSAGE[checked.reason] };
+    return {
+      kind: 'invalid',
+      reason: checked.reason,
+      message: PERSONAL_TAG_MESSAGE[checked.reason],
+    };
   }
   if (checked.name === tag.name) return { kind: 'unchanged' };
   const key = personalTagNameKey(checked.name);
   if (tags.some((t) => t.id !== tag.id && personalTagNameKey(t.name) === key)) {
-    return { kind: 'invalid', reason: 'taken', message: RENAME_MESSAGE.taken };
+    return { kind: 'invalid', reason: 'taken', message: PERSONAL_TAG_MESSAGE.taken };
   }
   return { kind: 'save', name: checked.name };
 }

@@ -19,6 +19,7 @@ import { useLatestRef } from '@/hooks/use-latest-ref';
 import { cn } from '@/lib/utils';
 import {
   PERSONAL_TAG_COLOR_LABEL,
+  PERSONAL_TAG_MESSAGE,
   PERSONAL_TAG_NAME_MAX_LENGTH,
   personalTagColorValues,
 } from '@/shared/contracts/workspace';
@@ -30,8 +31,6 @@ import {
   useUpdatePersonalTag,
 } from '../queries/use-personal-marks';
 import { PERSONAL_TAG_SWATCH_CLASS, resolveTagRename } from './personal-tags';
-
-const TOO_LONG_MESSAGE = '태그 이름은 20자까지입니다';
 
 interface TagEditPanelProps {
   /** 고칠 태그 — 내 태그(`mine`)의 한 줄. 패널은 같은 id 의 최신 값을 캐시에서 다시 읽는다. */
@@ -109,7 +108,7 @@ export function TagEditPanel({ tag, onClose }: TagEditPanelProps) {
 
   function handleChange(next: string) {
     if ([...next.trim()].length > PERSONAL_TAG_NAME_MAX_LENGTH) {
-      setMessage(TOO_LONG_MESSAGE);
+      setMessage(PERSONAL_TAG_MESSAGE.too_long);
       return;
     }
     setDraft(next);

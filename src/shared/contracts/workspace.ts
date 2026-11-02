@@ -403,7 +403,9 @@ export function normalizeClientResponseColumns(raw: unknown): ClientResponseColu
   }
   const source = raw as Record<string, unknown>;
   const version =
-    typeof source['version'] === 'number' && Number.isInteger(source['version']) && source['version'] >= 0
+    typeof source['version'] === 'number' &&
+    Number.isInteger(source['version']) &&
+    source['version'] >= 0
       ? source['version']
       : 0;
   if (!Array.isArray(source['keys'])) {
@@ -627,6 +629,17 @@ export const PERSONAL_TAG_NAME_MAX_LENGTH = 20;
 
 /** 한 사람의 태그 한도 — 실수로 수천 개가 생기는 것만 막는다. 만들기가 사용자 잠금 아래서 센다. */
 export const PERSONAL_TAG_LIMIT = 300;
+
+/**
+ * 태그 거부 문구 — 서버(입력 검증·이름 겹침·한도)와 태그 창·편집 패널이 같은 글자를 보인다. 이름은
+ * 싣지 않는다(서버 문구는 로그에 남는다).
+ */
+export const PERSONAL_TAG_MESSAGE = {
+  empty: '태그 이름을 입력하세요',
+  too_long: `태그 이름은 ${PERSONAL_TAG_NAME_MAX_LENGTH}자까지입니다`,
+  taken: '이미 같은 이름의 태그가 있습니다',
+  limit: `태그는 ${PERSONAL_TAG_LIMIT}개까지 만들 수 있습니다`,
+} as const;
 
 export type PersonalTagNameCheck =
   { ok: true; name: string } | { ok: false; reason: 'empty' | 'too_long' };
