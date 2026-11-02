@@ -1,5 +1,5 @@
 /**
- * 개인 표시 procedure — 즐겨찾기 (티켓 06) · 내 태그 (티켓 07).
+ * 개인 표시 procedure — 즐겨찾기 (티켓 06) · 내 태그 (티켓 07·08).
  *
  * 관문은 **`survey.view`** 다 — 편집 권한이 없어도 볼 수 있는 설문이면 별을 켜고 태그를 붙인다
  * (참여자로 맡은 설문도 표시한다). 볼 수 없는 설문은 존재를 알리지 않고 NOT_FOUND 다(관문의 계약).
@@ -14,26 +14,31 @@ import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 import {
   CreatePersonalTagInput,
   CreatePersonalTagOutput,
+  DeletePersonalTagInput,
+  DeletePersonalTagOutput,
   MinePersonalTagsOutput,
   PersonalMarkTargetGoneError,
   PersonalTagLimitError,
+  PersonalTagNameTakenError,
   PersonalTagNotFoundError,
   SetFavoriteInput,
   SetFavoriteOutput,
   SetTagLinkInput,
   SetTagLinkOutput,
+  UpdatePersonalTagInput,
+  UpdatePersonalTagOutput,
 } from '../domain/personal-marks';
 import * as svc from '../services/personal-marks';
 
 /**
  * 개인 표시 도메인 에러 → RPC 코드. 메시지에 태그 이름을 싣지 않는다(로그에 남는다).
- * 한도는 지금 상태와 부딪힌 것이라 CONFLICT 다.
+ * 한도와 이름 충돌은 지금 상태와 부딪힌 것이라 CONFLICT 다.
  */
 function rethrowPersonalMarksError(err: unknown): never {
   if (err instanceof PersonalTagNotFoundError || err instanceof PersonalMarkTargetGoneError) {
     throw new ORPCError('NOT_FOUND', { message: err.message });
   }
-  if (err instanceof PersonalTagLimitError) {
+  if (err instanceof PersonalTagLimitError || err instanceof PersonalTagNameTakenError) {
     throw new ORPCError('CONFLICT', { message: err.message });
   }
   throw err;
@@ -74,9 +79,29 @@ const createTag = authed
     return svc.createTag(context.user.id, input).catch(rethrowPersonalMarksError);
   });
 
+/**
+ * 태그 고치기·지우기 (티켓 08) — 설문을 지목하지 않아 설문 관문이 없다. 태그 소유는 서비스가
+ * 요청자 id 를 WHERE 에 걸어 보고, 남의 태그 id 는 없는 태그와 같은 NOT_FOUND 다.
+ */
+const updateTag = authed
+  .input(UpdatePersonalTagInput)
+  .output(UpdatePersonalTagOutput)
+  .handler(({ input, context }) =>
+    svc.updateTag(context.user.id, input).catch(rethrowPersonalMarksError),
+  );
+
+const deleteTag = authed
+  .input(DeletePersonalTagInput)
+  .output(DeletePersonalTagOutput)
+  .handler(({ input, context }) =>
+    svc.deleteTag(context.user.id, input).catch(rethrowPersonalMarksError),
+  );
+
 export const personalMarks = {
   setFavorite,
   mine,
   setTagLink,
   createTag,
+  updateTag,
+  deleteTag,
 };

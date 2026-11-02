@@ -958,6 +958,9 @@ const OTHER_BOUNDARY_SURFACES: Record<string, string> = {
   'mail.billing.deleteLatest': '메일 비용 정산 — 설문 스코프가 아닌 전역 장부',
   'surveyBuilder.read.listPage':
     'groupId 는 목록 좁힘 조건일 뿐 — 원천이 작업 범위 필터라 범위 밖 설문은 어떤 id 로도 안 나온다(survey-list-page.realdb)',
+  'workspace.personalMarks.updateTag':
+    '태그 소유는 user_id WHERE — 남의 태그 NOT_FOUND (personal-marks.realdb)',
+  'workspace.personalMarks.deleteTag': '위와 같음',
 };
 
 /**

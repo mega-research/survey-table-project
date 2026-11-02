@@ -1,6 +1,5 @@
-import 'server-only';
-
 import { and, asc, count, countDistinct, eq, inArray, sql } from 'drizzle-orm';
+import 'server-only';
 
 import { db } from '@/db';
 import { fieldworkOrgs, surveyParticipants, users } from '@/db/schema';
@@ -65,10 +64,7 @@ export async function listFieldworkOrgs(): Promise<ListFieldworkOrgsOutput> {
       .where(inArray(users.fieldworkOrgId, orgIds))
       // 팀장을 위에 세운다 — 카드의 첫 줄이 누구에게 물어야 하는지를 알려준다.
       // 역할 문자열의 사전순에 기대지 않는다(팀 상세와 같은 관례).
-      .orderBy(
-        sql`case when ${users.fieldworkRole} = 'leader' then 0 else 1 end`,
-        asc(users.name),
-      ),
+      .orderBy(sql`case when ${users.fieldworkRole} = 'leader' then 0 else 1 end`, asc(users.name)),
     // 초대 표면은 티켓 25 다 — 지금은 늘 0 이지만 쿼리를 미리 세워 두면 그 티켓이 자리만 채운다.
     db
       .select({
@@ -77,9 +73,7 @@ export async function listFieldworkOrgs(): Promise<ListFieldworkOrgsOutput> {
       })
       .from(surveyParticipants)
       .innerJoin(users, eq(users.id, surveyParticipants.userId))
-      .where(
-        and(eq(surveyParticipants.kind, 'fieldwork'), inArray(users.fieldworkOrgId, orgIds)),
-      )
+      .where(and(eq(surveyParticipants.kind, 'fieldwork'), inArray(users.fieldworkOrgId, orgIds)))
       .groupBy(users.fieldworkOrgId),
   ]);
 

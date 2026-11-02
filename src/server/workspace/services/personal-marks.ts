@@ -1,21 +1,26 @@
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, ne, sql } from 'drizzle-orm';
 import 'server-only';
 
 import { db } from '@/db';
 import { personalSurveyTagLinks, personalSurveyTags, surveyFavorites } from '@/db/schema';
-import { isForeignKeyViolation } from '@/lib/pg-error';
+import { isForeignKeyViolation, isUniqueViolation } from '@/lib/pg-error';
 
 import {
   type CreatePersonalTagInput,
   type CreatePersonalTagOutput,
+  type DeletePersonalTagInput,
+  type DeletePersonalTagOutput,
   type MinePersonalTagsOutput,
   PersonalMarkTargetGoneError,
   PersonalTagLimitError,
+  PersonalTagNameTakenError,
   PersonalTagNotFoundError,
   type SetFavoriteInput,
   type SetFavoriteOutput,
   type SetTagLinkInput,
   type SetTagLinkOutput,
+  type UpdatePersonalTagInput,
+  type UpdatePersonalTagOutput,
   isPersonalTagLimitReached,
   pickPersonalTagColor,
 } from '../domain/personal-marks';
@@ -101,15 +106,18 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 /**
  * 사용자 단위 태그 잠금 — 트랜잭션이 끝나면 풀린다. 300개 한도를 「세기 → 넣기」 사이에 끼어들
  * 수 없게 한다. 태그를 만드는 경로는 `createTag` 하나뿐이라 이 잠금이 한도의 유일한 근거다.
+ * 이름 고치기(`updateTag`)도 같은 잠금을 잡는다 — 만들기와 고치기가 같은 이름으로 엇갈려
+ * 「같은 이름이 없다」를 함께 보는 창이 없다(유일 인덱스는 최후 방어선으로 남는다).
  */
 export async function lockPersonalTags(tx: Pick<Tx, 'execute'>, userId: string): Promise<void> {
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('personal-tags-' || ${userId}))`);
 }
 
 /** 내 태그 한 줄을 붙은 설문 수와 함께 — 볼 수 없게 된 설문도 센다(내가 붙인 수). */
-const linkCountSql = sql<number>`(select count(*) from ${personalSurveyTagLinks} where ${personalSurveyTagLinks.tagId} = ${personalSurveyTags.id})`.mapWith(
-  Number,
-);
+const linkCountSql =
+  sql<number>`(select count(*) from ${personalSurveyTagLinks} where ${personalSurveyTagLinks.tagId} = ${personalSurveyTags.id})`.mapWith(
+    Number,
+  );
 
 const tagItemColumns = {
   id: personalSurveyTags.id,
@@ -194,4 +202,78 @@ export async function createTag(
     if (!tag) throw new Error('personal_survey_tags row vanished inside its transaction');
     return { tag, created: !existing };
   });
+}
+
+/**
+ * 태그 고치기 — 이름·색 중 보낸 것만 (티켓 08).
+ *
+ * 사용자 잠금 아래에서 1) 내 태그인지 2) 다른 내 태그와 이름이 겹치는지(`lower(btrim(name))`,
+ * 자기 자신은 뺀다 — 대소문자만 바꾸는 것은 충돌이 아니다)를 보고 쓴다. 겹치면 만들기와 달리
+ * 기존 태그로 접지 않고 CONFLICT 다 — 두 태그를 합치는 것은 사용자가 고른 일이 아니다.
+ * 같은 태그를 연달아 고치면 잠금 순서대로 쓰여 나중 값이 남는다.
+ */
+export async function updateTag(
+  userId: string,
+  input: UpdatePersonalTagInput,
+): Promise<UpdatePersonalTagOutput> {
+  try {
+    return await db.transaction(async (tx) => {
+      await lockPersonalTags(tx, userId);
+
+      const own = and(
+        eq(personalSurveyTags.id, input.tagId),
+        eq(personalSurveyTags.userId, userId),
+      );
+      const [current] = await tx
+        .select({ id: personalSurveyTags.id })
+        .from(personalSurveyTags)
+        .where(own)
+        .limit(1);
+      if (!current) throw new PersonalTagNotFoundError();
+
+      if (input.name !== undefined) {
+        const [clash] = await tx
+          .select({ id: personalSurveyTags.id })
+          .from(personalSurveyTags)
+          .where(
+            and(
+              eq(personalSurveyTags.userId, userId),
+              ne(personalSurveyTags.id, input.tagId),
+              sql`lower(btrim(${personalSurveyTags.name})) = lower(btrim(${input.name}))`,
+            ),
+          )
+          .limit(1);
+        if (clash) throw new PersonalTagNameTakenError();
+      }
+
+      // 명시 필드 대입 — 요청 객체를 펼치지 않는다.
+      const patch: Partial<typeof personalSurveyTags.$inferInsert> = { updatedAt: new Date() };
+      if (input.name !== undefined) patch.name = input.name;
+      if (input.color !== undefined) patch.color = input.color;
+      await tx.update(personalSurveyTags).set(patch).where(own);
+
+      const [tag] = await tx.select(tagItemColumns).from(personalSurveyTags).where(own);
+      if (!tag) throw new Error('personal_survey_tags row vanished inside its transaction');
+      return tag;
+    });
+  } catch (err) {
+    if (isUniqueViolation(err)) throw new PersonalTagNameTakenError();
+    throw err;
+  }
+}
+
+/**
+ * 태그 지우기 (티켓 08) — 내 행만 지운다. 붙어 있던 연결은 FK `ON DELETE CASCADE` 가 함께
+ * 지운다. 남의 태그·이미 없는 태그는 같은 NOT_FOUND 다(다른 탭에서 먼저 지운 경우도 이것).
+ */
+export async function deleteTag(
+  userId: string,
+  input: DeletePersonalTagInput,
+): Promise<DeletePersonalTagOutput> {
+  const deleted = await db
+    .delete(personalSurveyTags)
+    .where(and(eq(personalSurveyTags.id, input.tagId), eq(personalSurveyTags.userId, userId)))
+    .returning({ id: personalSurveyTags.id });
+  if (deleted.length === 0) throw new PersonalTagNotFoundError();
+  return { tagId: input.tagId };
 }

@@ -549,6 +549,32 @@ export const CreatePersonalTagOutput = z.object({
 });
 export type CreatePersonalTagOutput = z.infer<typeof CreatePersonalTagOutput>;
 
+/**
+ * 태그 고치기 (티켓 08) — 이름·색 중 보낸 것만 바꾼다. 이름 정규화는 만들기와 같은 칸이 한다.
+ * 다른 내 태그와 이름이 겹치면(공백·대소문자 무시) CONFLICT 다 — 만들기처럼 기존 태그로 접지 않는다.
+ */
+export const UpdatePersonalTagInput = z
+  .object({
+    tagId: z.uuid(),
+    name: PersonalTagNameField.optional(),
+    color: PersonalTagColorSchema.optional(),
+  })
+  .refine((v) => v.name !== undefined || v.color !== undefined, {
+    message: '바꿀 이름이나 색이 없습니다.',
+  });
+export type UpdatePersonalTagInput = z.infer<typeof UpdatePersonalTagInput>;
+
+/** 고친 뒤의 한 줄 — 태그 창·카드가 캐시를 이 값으로 맞춘다. */
+export const UpdatePersonalTagOutput = PersonalTagItem;
+export type UpdatePersonalTagOutput = z.infer<typeof UpdatePersonalTagOutput>;
+
+/** 태그 지우기 (티켓 08) — 붙어 있던 연결은 FK 연쇄로 함께 사라진다. 되돌리기는 없다. */
+export const DeletePersonalTagInput = z.object({ tagId: z.uuid() });
+export type DeletePersonalTagInput = z.infer<typeof DeletePersonalTagInput>;
+
+export const DeletePersonalTagOutput = DeletePersonalTagInput;
+export type DeletePersonalTagOutput = z.infer<typeof DeletePersonalTagOutput>;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 설문 참여자 (.pen FLOW 4-2 참여자 블록, 티켓 18)
 // ─────────────────────────────────────────────────────────────────────────────
