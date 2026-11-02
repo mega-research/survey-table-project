@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 import { ProgressColumnEditor } from '@/features/operations/report/progress-column-editor';
-import { Button } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button';
 import { getContactColumnScheme } from '@/server/read-models/contacts';
 import { getProgressColumnScheme } from '@/server/operations/services/report-progress';
 import { getOperationsDataScope } from '@/server/data-scope';
@@ -44,9 +44,12 @@ export default async function ReportColumnsPage({ params }: PageProps) {
           <h2 className="text-xl font-bold text-gray-900">진척률 컬럼 설정</h2>
           <p className="text-sm text-slate-500">진척률 표의 그룹 메타 컬럼 순서·라벨·표시 여부</p>
         </div>
-        <Button variant="outline" render={<Link href={`/surveys/${surveyId}/operations/report`} />}>
+        <Link
+          href={`/surveys/${surveyId}/operations/report`}
+          className={buttonVariants({ variant: 'outline' })}
+        >
           ← 진척률로
-        </Button>
+        </Link>
       </div>
 
       <ProgressColumnEditor

@@ -192,10 +192,18 @@ export function ColumnSchemeEditor({ surveyId, scheme }: ColumnSchemeEditorProps
                   >
                     {canGroupBy ? (
                       <Select
-                        value={col.groupLevel != null ? String(col.groupLevel) : '_none'}
-                        onValueChange={(v) =>
-                          setGroupLevel(i, v === '_none' ? null : (Number(v) as GroupLevel))
-                        }
+                        items={[
+                          { value: '_none', label: '없음' },
+                          ...GROUP_LEVELS.map((l) => ({
+                            value: String(l),
+                            label: GROUP_LEVEL_LABELS[l],
+                          })),
+                        ]}
+                        value={(col.groupLevel != null ? String(col.groupLevel) : '_none') || null}
+                        onValueChange={(v) => {
+                          if (v !== null)
+                            setGroupLevel(i, v === '_none' ? null : (Number(v) as GroupLevel));
+                        }}
                       >
                         <SelectTrigger className="h-8 w-[110px] text-sm">
                           <SelectValue />
@@ -244,8 +252,17 @@ export function ColumnSchemeEditor({ surveyId, scheme }: ColumnSchemeEditorProps
                     >
                       {canOrderMailEmail(col) ? (
                         <Select
-                          value={col.mailOrder != null ? String(col.mailOrder) : '_none'}
-                          onValueChange={(v) => setMailOrder(i, v === '_none' ? null : Number(v))}
+                          items={[
+                            { value: '_none', label: '지정 안 함' },
+                            ...mailOrderRanks.map((rank) => ({
+                              value: String(rank),
+                              label: <>{rank}순위</>,
+                            })),
+                          ]}
+                          value={(col.mailOrder != null ? String(col.mailOrder) : '_none') || null}
+                          onValueChange={(v) => {
+                            if (v !== null) setMailOrder(i, v === '_none' ? null : Number(v));
+                          }}
                         >
                           <SelectTrigger
                             className="h-8 w-[110px] text-sm"

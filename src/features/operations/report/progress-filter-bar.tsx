@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState, useTransition } from 'react';
 
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -94,8 +94,21 @@ export function ProgressFilterBar({
     >
       <label htmlFor="filter-column" className="sr-only">검색 컬럼</label>
       <Select
-        value={source ?? ''}
-        onValueChange={(v) => setSource(v || null)}
+        items={[
+          ...columnCandidates.map((c) => ({
+            value: c.source,
+            label: (
+              <>
+                {c.label}
+                <PiiExactMarker source={c.source} />
+              </>
+            ),
+          })),
+        ]}
+        value={source || null}
+        onValueChange={(v) => {
+          if (v !== null) setSource(v || null);
+        }}
       >
         <SelectTrigger id="filter-column" className="w-[180px] shrink-0">
           <SelectValue placeholder="컬럼 선택" />
@@ -138,13 +151,12 @@ export function ProgressFilterBar({
           setValue('');
         }}
       />
-      <Button
-        variant="outline"
-        className="ml-auto h-10"
-        render={<Link href={operationsPaths(basePath).reportColumns} />}
+      <Link
+        href={operationsPaths(basePath).reportColumns}
+        className={buttonVariants({ variant: 'outline', className: 'ml-auto h-10' })}
       >
         컬럼 설정
-      </Button>
+      </Link>
     </form>
   );
 }

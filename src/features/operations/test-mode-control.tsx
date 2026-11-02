@@ -507,11 +507,10 @@ export function TestModeControl({ surveyId, initial }: Props) {
             >
               보관하고 끄기
             </Button>
-            {/* preventBaseUIHandler: Action(Base UI Close) 의 자동 닫힘을 막아 실패 시 다이얼로그를 유지한다 */}
+            {/* Action 은 누르기만 하는 버튼이다(닫힘 없음) — 실패 시 다이얼로그를 유지한다 */}
             <AlertDialogAction
               disabled={isPending}
-              onClick={(e) => {
-                e.preventBaseUIHandler();
+              onClick={() => {
                 disableTestMode('delete');
               }}
             >

@@ -77,8 +77,11 @@ export function AdvancedSearchPanel({
           <label className="mb-1.5 block text-[12.5px] font-medium text-[#374151]">기간</label>
           <div className="flex items-center gap-1.5">
             <Select
-              value={advanced.dateField}
-              onValueChange={(v) => onChange({ dateField: v as SurveyListDateField })}
+              items={[...DATE_FIELD_OPTIONS.map((opt) => ({ value: opt.key, label: opt.label }))]}
+              value={advanced.dateField || null}
+              onValueChange={(v) => {
+                if (v !== null) onChange({ dateField: v as SurveyListDateField });
+              }}
             >
               <SelectTrigger className="h-9 w-[96px] shrink-0 rounded-[9px] border-[#E5E5EA] text-[13px]">
                 <SelectValue />
@@ -110,8 +113,14 @@ export function AdvancedSearchPanel({
         <div>
           <label className="mb-1.5 block text-[12.5px] font-medium text-[#374151]">소유자</label>
           <Select
-            value={advanced.ownerUserId ?? ALL_OWNERS_VALUE}
-            onValueChange={(v) => onChange({ ownerUserId: v === ALL_OWNERS_VALUE ? null : v })}
+            items={[
+              { value: ALL_OWNERS_VALUE, label: '전체' },
+              ...owners.map((owner) => ({ value: owner.id, label: owner.name })),
+            ]}
+            value={(advanced.ownerUserId ?? ALL_OWNERS_VALUE) || null}
+            onValueChange={(v) => {
+              if (v !== null) onChange({ ownerUserId: v === ALL_OWNERS_VALUE ? null : v });
+            }}
           >
             <SelectTrigger className="h-9 w-full rounded-[9px] border-[#E5E5EA] text-[13px]">
               <SelectValue />

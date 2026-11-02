@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import {
   Select,
   SelectContent,
@@ -213,11 +213,21 @@ export function FilterBarCore({
           검색 컬럼
         </label>
         <Select
-          value={first.source}
-          onValueChange={(v) =>
-            // source 변경 시 이전 mode 의 value 는 의미 없음 — 페이지별 기본값으로 초기화.
-            setFirst({ source: v, value: defaultValueForSource(v) })
-          }
+          items={[
+            ...columnCandidates.map((c) => ({
+              value: c.source,
+              label: (
+                <>
+                  {c.label}
+                  <PiiExactMarker source={c.source} />
+                </>
+              ),
+            })),
+          ]}
+          value={first.source || null}
+          onValueChange={(v) => {
+            if (v !== null) setFirst({ source: v, value: defaultValueForSource(v) });
+          }}
         >
           <SelectTrigger id="contacts-first-source" className="h-10 w-[180px] shrink-0">
             <SelectValue placeholder="컬럼 선택" />
@@ -270,13 +280,12 @@ export function FilterBarCore({
         {trailing}
         {resetControl}
         {columnsSettingsHref && (
-          <Button
-            variant="outline"
-            className="ml-auto h-10"
-            render={<Link href={columnsSettingsHref} />}
+          <Link
+            href={columnsSettingsHref}
+            className={buttonVariants({ variant: 'outline', className: 'ml-auto h-10' })}
           >
             컬럼 설정
-          </Button>
+          </Link>
         )}
       </div>
 

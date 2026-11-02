@@ -29,7 +29,7 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 | DB 스키마 (테이블·컬럼·관계)                                                                                     | `src/db/schema/AGENTS.md`                |
 | 프론트 기능 묶음 트리 · 질문 유형·셀 타입·테이블 검증 규칙 · 다국어 설문                                         | `src/features/AGENTS.md`                 |
 | lib 트리 · 레이트리밋 · 로깅 · Sentry                                                                            | `src/lib/AGENTS.md`                      |
-| shadcn 받기 · ui 래퍼 계약 | `src/components/AGENTS.md` |
+| shadcn 받기 · ui 공식 규칙 | `src/components/AGENTS.md` |
 | 도메인 용어                                                                                                      | `CONTEXT.md`                             |
 | 결정 배경                                                                                                        | `docs/adr/`                              |
 

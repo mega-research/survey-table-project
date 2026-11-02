@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 
 import { ArrowUpDown, ChevronDown, ChevronRight, Download } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import {
   applyDemandView,
   type DemandSortMode,
@@ -108,10 +108,10 @@ export function DemandSummaryTable({ surveyId, rows }: Props) {
                 ? '필요율 낮은 순'
                 : '필요율 높은 순'}
           </Button>
-          <Button variant="outline" size="sm" render={<a href={exportHref} />}>
+          <a href={exportHref} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
             <Download className="mr-1 h-3 w-3" />
             엑셀
-          </Button>
+          </a>
         </div>
       </div>
 

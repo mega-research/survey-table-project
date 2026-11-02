@@ -81,10 +81,14 @@ export function LookupComparandEditor({ value, onChange }: Props) {
               </div>
             ) : (
               <Select
+                items={[
+                  { value: NONE_SENTINEL, label: '— 미선택 —' },
+                  ...valueCandidates.map((c) => ({ value: c, label: c })),
+                ]}
                 value={value.valueColumn || NONE_SENTINEL}
-                onValueChange={(v) =>
-                  onChange({ ...value, valueColumn: v === NONE_SENTINEL ? '' : v })
-                }
+                onValueChange={(v) => {
+                  if (v !== null) onChange({ ...value, valueColumn: v === NONE_SENTINEL ? '' : v });
+                }}
               >
                 <SelectTrigger className="w-64">
                   <SelectValue placeholder="값 컬럼 선택" />

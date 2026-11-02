@@ -72,8 +72,7 @@ export function DeleteTemplateButton({ surveyId, templateId, templateName }: Pro
         <AlertDialogFooter>
           <AlertDialogCancel disabled={pending}>취소</AlertDialogCancel>
           <AlertDialogAction
-            onClick={(e) => {
-              e.preventBaseUIHandler();
+            onClick={() => {
               onConfirm();
             }}
             disabled={pending}

@@ -106,8 +106,8 @@ describe('셀 모달 — 셀 단위 응답 인용', () => {
     seedStore('table', cell);
     renderModal(cell, vi.fn());
 
-    expect(screen.getByLabelText('조건부 분기')).toBeInTheDocument();
-    expect(screen.getByLabelText('응답 인용')).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: '조건부 분기' })).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: '응답 인용' })).toBeInTheDocument();
     // 꺼진 상태에서는 이름 입력칸이 없다
     expect(screen.queryByLabelText('인용 이름')).not.toBeInTheDocument();
   });
@@ -117,8 +117,8 @@ describe('셀 모달 — 셀 단위 응답 인용', () => {
     seedStore('radio', cell);
     renderModal(cell, vi.fn());
 
-    expect(screen.getByLabelText('조건부 분기')).toBeInTheDocument();
-    expect(screen.queryByLabelText('응답 인용')).not.toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: '조건부 분기' })).toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: '응답 인용' })).not.toBeInTheDocument();
   });
 
   it('토글을 켜고 이름을 입력해 저장하면 셀에 두 필드가 남는다', async () => {
@@ -127,7 +127,7 @@ describe('셀 모달 — 셀 단위 응답 인용', () => {
     const onSave = vi.fn();
     renderModal(cell, onSave);
 
-    fireEvent.click(screen.getByLabelText('응답 인용'));
+    fireEvent.click(screen.getByRole('switch', { name: '응답 인용' }));
     fireEvent.change(screen.getByLabelText('인용 이름'), { target: { value: '마케팅유형' } });
     fireEvent.click(screen.getByRole('button', { name: '저장' }));
 
@@ -146,14 +146,14 @@ describe('셀 모달 — 셀 단위 응답 인용', () => {
     const onSave = vi.fn();
     renderModal(cell, onSave);
 
-    fireEvent.click(screen.getByLabelText('응답 인용'));
+    fireEvent.click(screen.getByRole('switch', { name: '응답 인용' }));
     const texts = screen.getAllByLabelText('인용 문구') as HTMLInputElement[];
     expect(texts.map((t) => t.value)).toEqual(['디지털마케팅', '오프라인마케팅']);
 
     // 껐다 켜도 옵션 문구는 폼에 그대로 살아 있어야 한다
-    fireEvent.click(screen.getByLabelText('응답 인용'));
+    fireEvent.click(screen.getByRole('switch', { name: '응답 인용' }));
     expect(screen.queryAllByLabelText('인용 문구')).toHaveLength(0);
-    fireEvent.click(screen.getByLabelText('응답 인용'));
+    fireEvent.click(screen.getByRole('switch', { name: '응답 인용' }));
     expect(
       (screen.getAllByLabelText('인용 문구') as HTMLInputElement[]).map((t) => t.value),
     ).toEqual(['디지털마케팅', '오프라인마케팅']);
@@ -187,7 +187,7 @@ describe('셀 모달 — 셀 단위 응답 인용', () => {
     const onSave = vi.fn();
     renderModal(cell, onSave);
 
-    fireEvent.click(screen.getByLabelText('응답 인용'));
+    fireEvent.click(screen.getByRole('switch', { name: '응답 인용' }));
     fireEvent.change(screen.getByLabelText('인용 이름'), { target: { value: '인력' } });
     fireEvent.change(screen.getByLabelText('인용 문구'), { target: { value: '{{입력}}명' } });
     fireEvent.click(screen.getByRole('button', { name: '저장' }));
@@ -212,7 +212,7 @@ describe('셀 모달 — 셀 단위 응답 인용', () => {
     for (const cell of cells) {
       seedStore('table', cell);
       renderModal(cell, vi.fn());
-      expect(screen.getByLabelText('응답 인용')).toBeInTheDocument();
+      expect(screen.getByRole('switch', { name: '응답 인용' })).toBeInTheDocument();
       cleanup();
     }
   });
@@ -221,7 +221,7 @@ describe('셀 모달 — 셀 단위 응답 인용', () => {
     const cell: TableCell = { id: 'cellT', type: 'text', content: '안내' };
     seedStore('table', cell);
     renderModal(cell, vi.fn());
-    expect(screen.queryByLabelText('응답 인용')).not.toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: '응답 인용' })).not.toBeInTheDocument();
   });
 
   it('input 셀에서 토글을 켜면 셀 문맥 안내(이 셀에 응답이 있을 때만)가 뜬다', () => {
@@ -229,7 +229,7 @@ describe('셀 모달 — 셀 단위 응답 인용', () => {
     seedStore('table', cell);
     renderModal(cell, vi.fn());
 
-    fireEvent.click(screen.getByLabelText('응답 인용'));
+    fireEvent.click(screen.getByRole('switch', { name: '응답 인용' }));
     expect(screen.getByText(/이 셀에 응답이 있을 때만 표시/)).toBeInTheDocument();
     // 표 전체 응답 조건은 이 셀 값이 있다는 보장이 아니므로 "이 질문" 문구는 나오면 안 된다
     expect(screen.queryByText(/이 질문에 응답이 있을 때만 표시/)).not.toBeInTheDocument();
@@ -240,7 +240,7 @@ describe('셀 모달 — 셀 단위 응답 인용', () => {
     seedStore('table', cell);
     renderModal(cell, vi.fn());
 
-    fireEvent.click(screen.getByLabelText('응답 인용'));
+    fireEvent.click(screen.getByRole('switch', { name: '응답 인용' }));
     expect(screen.getByText(/이 셀에 응답이 있을 때만 표시/)).toBeInTheDocument();
   });
 
@@ -254,7 +254,7 @@ describe('셀 모달 — 셀 단위 응답 인용', () => {
     seedStore('table', cell);
     renderModal(cell, vi.fn());
 
-    fireEvent.click(screen.getByLabelText('응답 인용'));
+    fireEvent.click(screen.getByRole('switch', { name: '응답 인용' }));
     expect(screen.getByText(/이 셀에 응답이 있을 때만 표시/)).toBeInTheDocument();
   });
 
@@ -269,7 +269,7 @@ describe('셀 모달 — 셀 단위 응답 인용', () => {
     for (const cell of cells) {
       seedStore('table', cell);
       renderModal(cell, vi.fn());
-      fireEvent.click(screen.getByLabelText('응답 인용'));
+      fireEvent.click(screen.getByRole('switch', { name: '응답 인용' }));
       expect(screen.getByText(/이 셀에 응답이 있을 때만 표시/)).toBeInTheDocument();
       cleanup();
     }
@@ -280,7 +280,7 @@ describe('셀 모달 — 셀 단위 응답 인용', () => {
     seedStore('table', cell);
     renderModal(cell, vi.fn());
 
-    fireEvent.click(screen.getByLabelText('응답 인용'));
+    fireEvent.click(screen.getByRole('switch', { name: '응답 인용' }));
     const nameInput = screen.getByLabelText('인용 이름') as HTMLInputElement;
     fireEvent.change(nameInput, { target: { value: '{{{마케팅}}}' } });
     expect(nameInput.value).toBe('마케팅');

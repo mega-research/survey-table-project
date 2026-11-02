@@ -97,8 +97,11 @@ export function LookupSearchFields({
               <div className="space-y-1">
                 <Label className="text-xs text-gray-600">후보로 보일 열 (이 칸에 들어갈 값)</Label>
                 <Select
-                  value={value.labelColumn}
-                  onValueChange={(column) => update({ labelColumn: column })}
+                  items={[...columns.map((column) => ({ value: column, label: column }))]}
+                  value={value.labelColumn || null}
+                  onValueChange={(column) => {
+                    if (column !== null) update({ labelColumn: column });
+                  }}
                 >
                   <SelectTrigger aria-label="후보로 보일 열">
                     <SelectValue placeholder="열 선택" />
@@ -118,8 +121,11 @@ export function LookupSearchFields({
                 {fills.map((fill, index) => (
                   <div key={index} className="flex items-center gap-2">
                     <Select
-                      value={fill.column}
-                      onValueChange={(column) => updateFill(index, { column })}
+                      items={[...columns.map((column) => ({ value: column, label: column }))]}
+                      value={fill.column || null}
+                      onValueChange={(column) => {
+                        if (column !== null) updateFill(index, { column });
+                      }}
                     >
                       <SelectTrigger className="flex-1" aria-label={`채울 값 ${index + 1}`}>
                         <SelectValue placeholder="참조표 열" />
@@ -134,8 +140,13 @@ export function LookupSearchFields({
                     </Select>
                     <span className="text-xs text-gray-400">→</span>
                     <Select
-                      value={fill.cellId}
-                      onValueChange={(target) => updateFill(index, { cellId: target })}
+                      items={[
+                        ...targets.map((target) => ({ value: target.cellId, label: target.label })),
+                      ]}
+                      value={fill.cellId || null}
+                      onValueChange={(target) => {
+                        if (target !== null) updateFill(index, { cellId: target });
+                      }}
                     >
                       <SelectTrigger className="flex-1" aria-label={`채울 칸 ${index + 1}`}>
                         <SelectValue placeholder="채울 칸" />

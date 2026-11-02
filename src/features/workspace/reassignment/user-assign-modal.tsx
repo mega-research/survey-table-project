@@ -80,7 +80,15 @@ export function UserAssignModal({ user, onClose }: Props) {
               목적지 팀
             </Label>
             {/* 미선택은 빈 문자열로 계속 제어한다 — assignment-fields 의 같은 주석 참조. */}
-            <Select value={teamId ?? ''} onValueChange={setTeamId}>
+            <Select
+              items={[
+                ...(teams.data?.teams ?? []).map((team) => ({ value: team.id, label: team.name })),
+              ]}
+              value={teamId || null}
+              onValueChange={(value) => {
+                if (value !== null) setTeamId(value);
+              }}
+            >
               <SelectTrigger id="assign-team" className={SELECT_TRIGGER}>
                 <SelectValue placeholder={teams.isLoading ? '불러오는 중...' : '팀 선택'} />
               </SelectTrigger>
@@ -98,7 +106,18 @@ export function UserAssignModal({ user, onClose }: Props) {
             <Label htmlFor="assign-role" className={FIELD_LABEL}>
               역할
             </Label>
-            <Select value={role} onValueChange={(next) => setRole(next as TeamRole)}>
+            <Select
+              items={[
+                ...(Object.keys(ROLE_LABEL) as TeamRole[]).map((value) => ({
+                  value: value,
+                  label: ROLE_LABEL[value],
+                })),
+              ]}
+              value={role || null}
+              onValueChange={(next) => {
+                if (next !== null) setRole(next as TeamRole);
+              }}
+            >
               <SelectTrigger id="assign-role" className={SELECT_TRIGGER}>
                 <SelectValue />
               </SelectTrigger>

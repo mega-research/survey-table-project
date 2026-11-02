@@ -37,7 +37,32 @@ export function CycleSelector({ options, value }: Props) {
   };
 
   return (
-    <Select value={value} onValueChange={handleChange}>
+    <Select
+      items={[
+        ...options.map((opt) => ({
+          value: opt.cycleKey,
+          label: (
+            <>
+              <span className="flex items-center gap-2 whitespace-nowrap">
+                <span className="tabular-nums">
+                  {opt.startLabel} ~ {opt.endLabel}
+                </span>
+                {opt.isCurrent && (
+                  <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
+                    진행 중
+                  </span>
+                )}
+                <span className="text-xs text-gray-500">· {formatKrw(opt.totalCostKrw)}</span>
+              </span>
+            </>
+          ),
+        })),
+      ]}
+      value={value || null}
+      onValueChange={(value) => {
+        if (value !== null) handleChange(value);
+      }}
+    >
       <SelectTrigger className="w-[400px]">
         <SelectValue placeholder="기간을 선택하세요" />
       </SelectTrigger>

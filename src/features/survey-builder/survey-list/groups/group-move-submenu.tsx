@@ -3,6 +3,7 @@
 import { Check, Folder, FolderInput, FolderMinus } from 'lucide-react';
 
 import {
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -44,29 +45,32 @@ export function GroupMoveSubmenu({
       <DropdownMenuSubContent className="w-[238px]">
         {/* 패널이 열리면 트리거 문구는 부모 메뉴에 남는다 — 라벨이 없으면 그룹 이름이
             설문 제목처럼 읽힌다(.pen FLOW 2-4 의 「서브메뉴 라벨 행」). */}
-        <DropdownMenuLabel className="text-[11px] font-semibold text-[#9CA3AF]">
-          그룹 이동
-        </DropdownMenuLabel>
-        {groups.length === 0 ? (
-          <p className="px-2 py-2 text-[12px] text-[#9CA3AF]">아직 만든 그룹이 없습니다.</p>
-        ) : (
-          groups.map((group) => {
-            const isCurrent = group.id === currentGroupId;
-            return (
-              <DropdownMenuItem
-                key={group.id}
-                onClick={() => onMove(group.id)}
-                className={cn(
-                  isCurrent && 'bg-[#EEF2FF] text-[#2743AE] data-[highlighted]:bg-[#EEF2FF]',
-                )}
-              >
-                <Folder className={cn('h-3.5 w-3.5', isCurrent && 'text-[#2743AE]')} />
-                <span className={cn('truncate', isCurrent && 'font-semibold')}>{group.name}</span>
-                {isCurrent && <Check className="ml-auto h-3.5 w-3.5 text-[#2743AE]" />}
-              </DropdownMenuItem>
-            );
-          })
-        )}
+        {/* 공식 DropdownMenuLabel 은 Base UI GroupLabel 이라 Group 안에 있어야 한다(밖이면 런타임 오류). */}
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="text-[11px] font-semibold text-[#9CA3AF]">
+            그룹 이동
+          </DropdownMenuLabel>
+          {groups.length === 0 ? (
+            <p className="px-2 py-2 text-[12px] text-[#9CA3AF]">아직 만든 그룹이 없습니다.</p>
+          ) : (
+            groups.map((group) => {
+              const isCurrent = group.id === currentGroupId;
+              return (
+                <DropdownMenuItem
+                  key={group.id}
+                  onClick={() => onMove(group.id)}
+                  className={cn(
+                    isCurrent && 'bg-[#EEF2FF] text-[#2743AE] data-[highlighted]:bg-[#EEF2FF]',
+                  )}
+                >
+                  <Folder className={cn('h-3.5 w-3.5', isCurrent && 'text-[#2743AE]')} />
+                  <span className={cn('truncate', isCurrent && 'font-semibold')}>{group.name}</span>
+                  {isCurrent && <Check className="ml-auto h-3.5 w-3.5 text-[#2743AE]" />}
+                </DropdownMenuItem>
+              );
+            })
+          )}
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           disabled={currentGroupId === null}

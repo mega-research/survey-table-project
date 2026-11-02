@@ -142,10 +142,15 @@ export function CrossTabPanel({ questions, responses }: CrossTabPanelProps) {
                     <div className="flex items-center gap-2">
                       <Label className="text-sm text-gray-600">기준:</Label>
                       <Select
-                        value={percentageBase}
-                        onValueChange={(value: string) =>
-                          setPercentageBase(value as PercentageBase)
-                        }
+                        items={[
+                          { value: 'row', label: '행 기준 %' },
+                          { value: 'column', label: '열 기준 %' },
+                          { value: 'total', label: '전체 기준 %' },
+                        ]}
+                        value={percentageBase || null}
+                        onValueChange={(value) => {
+                          if (value !== null) setPercentageBase(value as PercentageBase);
+                        }}
                       >
                         <SelectTrigger className="w-[130px]">
                           <SelectValue />

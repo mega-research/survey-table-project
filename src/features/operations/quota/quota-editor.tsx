@@ -781,7 +781,31 @@ export function QuotaEditor({
         ))}
 
         <div className="rounded-lg border border-dashed border-slate-300 bg-white p-3">
-          <Select value={addDimensionValue} onValueChange={handleAddDimension}>
+          <Select
+            items={[
+              ...addableQuestions.map((q) => ({
+                value: q.id,
+                label: (
+                  <>
+                    {q.title}
+                    {kindForQuestion(q) === 'numeric' ? ' (단답 숫자)' : ''}
+                  </>
+                ),
+              })),
+              ...addableAttrColumns.map((c) => ({
+                value: `${ATTR_PREFIX}${c.key}`,
+                label: <>[조사 대상 속성] {c.label}</>,
+              })),
+              ...addableTextQuestions.map((q) => ({
+                value: `${TEXT_PREFIX}${q.id}`,
+                label: <>[텍스트 키워드] {q.title}</>,
+              })),
+            ]}
+            value={addDimensionValue || null}
+            onValueChange={(value) => {
+              if (value !== null) handleAddDimension(value);
+            }}
+          >
             <SelectTrigger className="w-full border-dashed border-blue-300 font-semibold text-blue-600 hover:bg-blue-50">
               <SelectValue placeholder="+ 조건 추가" />
             </SelectTrigger>

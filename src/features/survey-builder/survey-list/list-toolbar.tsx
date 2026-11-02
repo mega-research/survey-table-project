@@ -211,7 +211,13 @@ export function ListToolbar({
 
         <div className="flex items-center gap-1 text-[13px] text-[#6E6E73]">
           <span className="tabular-nums">{resultCount}개</span>
-          <Select value={sortBy} onValueChange={(v) => onSortByChange(v as SurveyListSortBy)}>
+          <Select
+            items={[...SORT_OPTIONS.map((opt) => ({ value: opt.key, label: opt.label }))]}
+            value={sortBy || null}
+            onValueChange={(v) => {
+              if (v !== null) onSortByChange(v as SurveyListSortBy);
+            }}
+          >
             <SelectTrigger
               aria-label="정렬"
               className="h-8 w-auto shrink-0 gap-1 border-0 bg-transparent px-2 text-[13px] text-[#1C1C1E] shadow-none hover:bg-[#F5F5F7] focus-visible:ring-2 focus-visible:ring-[#2E4FCE]/40"

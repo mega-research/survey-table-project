@@ -55,8 +55,13 @@ export function LookupSelector({ value, onChange }: Props) {
     <div className="space-y-1">
       <div className="flex gap-2">
         <Select
+          items={[
+            { value: NONE_SENTINEL, label: '— 미선택 —' },
+            ...lookups.map((l) => ({ value: l.id, label: l.name })),
+          ]}
           value={value || NONE_SENTINEL}
           onValueChange={(v) => {
+            if (v === null) return;
             if (v === NONE_SENTINEL) return;
             if (lookups.some((l) => l.id === v)) onChange(v);
           }}

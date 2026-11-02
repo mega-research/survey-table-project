@@ -2,8 +2,8 @@
 
 import { ArrowRight } from 'lucide-react';
 
-import { Combobox } from '@/components/ui/combobox';
 import { isCrossTabableQuestion } from '@/features/analytics/cross-tab/cross-tab';
+import { SearchableSelect } from '@/features/analytics/searchable-select';
 import type { Question } from '@/types/survey';
 
 interface CrossTabSelectorProps {
@@ -41,9 +41,9 @@ export function CrossTabSelector({
       {/* 행 질문 선택 */}
       <div className="flex items-center gap-2">
         <span className="text-sm font-medium whitespace-nowrap text-gray-600">행:</span>
-        <Combobox
+        <SearchableSelect
           options={rowOptions}
-          value={rowQuestionId || ''}
+          value={rowQuestionId}
           onValueChange={onRowQuestionChange}
           placeholder="행 질문 선택"
           searchPlaceholder="질문 검색..."
@@ -58,9 +58,9 @@ export function CrossTabSelector({
       {/* 열 질문 선택 */}
       <div className="flex items-center gap-2">
         <span className="text-sm font-medium whitespace-nowrap text-gray-600">열:</span>
-        <Combobox
+        <SearchableSelect
           options={colOptions}
-          value={colQuestionId || ''}
+          value={colQuestionId}
           onValueChange={onColQuestionChange}
           placeholder="열 질문 선택"
           searchPlaceholder="질문 검색..."

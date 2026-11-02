@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { Button } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { LocalDateTime } from '@/components/ui/local-date-time';
 import { EmptyState } from '@/features/operations/empty-state';
@@ -29,9 +29,9 @@ export function UploadHistoryTable({ surveyId, rows }: UploadHistoryTableProps) 
             description="엑셀 파일을 업로드해 조사 대상 명단을 적재하세요."
           />
           <div className="mt-4 flex justify-center">
-            <Button render={<Link href={internalOperationsPaths(surveyId).contactsUploadNew} />}>
+            <Link href={internalOperationsPaths(surveyId).contactsUploadNew} className={buttonVariants()}>
                 엑셀 업로드
-              </Button>
+              </Link>
           </div>
         </CardContent>
       </Card>

@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation';
 import { ArrowLeft, Eye, Pencil } from 'lucide-react';
 
 import { SurveyResponseFlow } from '@/features/survey-response/survey-response-flow';
-import { Button } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button';
 import {
   getSurveyById,
   getSurveyForResponse,
@@ -42,19 +42,25 @@ export default async function SurveyPreviewPage({ params }: PageProps) {
       <main className="min-h-screen bg-gray-50">
         <nav className="border-b border-gray-200 bg-white px-6 py-4">
           <div className="mx-auto flex max-w-4xl items-center justify-between">
-            <Button variant="ghost" size="sm" render={<Link href={`/surveys/${surveyId}/operations/overview`} />}>
+            <Link
+              href={`/surveys/${surveyId}/operations/overview`}
+              className={buttonVariants({ variant: 'ghost', size: 'sm' })}
+            >
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 현황으로
-              </Button>
+              </Link>
             <div className="flex items-center gap-2">
               {survey.previewToken && (
                 <CopyPreviewLinkButton previewToken={survey.previewToken} />
               )}
               {!isExternal && (
-                <Button variant="outline" size="sm" render={<Link href={`/surveys/${surveyId}/edit`} />}>
+                <Link
+                  href={`/surveys/${surveyId}/edit`}
+                  className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                >
                     <Pencil className="mr-2 h-4 w-4" />
                     설문 편집
-                  </Button>
+                  </Link>
               )}
             </div>
           </div>
@@ -88,16 +94,22 @@ export default async function SurveyPreviewPage({ params }: PageProps) {
             </span>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <Button variant="outline" size="sm" render={<Link href={`/surveys/${surveyId}/operations/overview`} />}>
+            <Link
+              href={`/surveys/${surveyId}/operations/overview`}
+              className={buttonVariants({ variant: 'outline', size: 'sm' })}
+            >
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 현황으로
-              </Button>
+              </Link>
             {survey.previewToken && <CopyPreviewLinkButton previewToken={survey.previewToken} />}
             {!isExternal && (
-              <Button variant="outline" size="sm" render={<Link href={`/surveys/${surveyId}/edit`} />}>
+              <Link
+                href={`/surveys/${surveyId}/edit`}
+                className={buttonVariants({ variant: 'outline', size: 'sm' })}
+              >
                   <Pencil className="mr-2 h-4 w-4" />
                   설문 편집
-                </Button>
+                </Link>
             )}
           </div>
         </div>

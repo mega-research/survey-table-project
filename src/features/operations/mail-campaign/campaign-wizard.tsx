@@ -330,7 +330,13 @@ export function CampaignWizard({
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="template">메일 템플릿</Label>
-            <Select value={templateId} onValueChange={changeTemplate}>
+            <Select
+              items={[...templates.map((t) => ({ value: t.id, label: t.name }))]}
+              value={templateId || null}
+              onValueChange={(value) => {
+                if (value !== null) changeTemplate(value);
+              }}
+            >
               <SelectTrigger id="template">
                 <SelectValue placeholder="템플릿 선택" />
               </SelectTrigger>

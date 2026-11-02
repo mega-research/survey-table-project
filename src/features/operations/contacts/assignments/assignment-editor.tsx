@@ -18,7 +18,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { prepareContactClauseValue } from '@/features/operations/contacts/contacts-filter-bar';
 import { ValueWidget } from '@/features/operations/contacts/value-widget';
@@ -307,9 +307,12 @@ export function AssignmentEditor({
 
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
-            <Button variant="outline" size="sm" render={<Link href={assignmentsHref(surveyId)} />}>
+            <Link
+              href={assignmentsHref(surveyId)}
+              className={buttonVariants({ variant: 'outline', size: 'sm' })}
+            >
               목록
-            </Button>
+            </Link>
             <button
               type="button"
               className="text-sm text-red-600 hover:text-red-700"

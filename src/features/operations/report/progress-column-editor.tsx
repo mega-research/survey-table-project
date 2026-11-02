@@ -228,10 +228,18 @@ export function ProgressColumnEditor({ surveyId, initialScheme, contactScheme }:
                 <td className="px-3 py-2 font-mono text-xs text-slate-500">attrs.{c.key}</td>
                 <td className="px-3 py-2 text-center">
                   <Select
-                    value={levels[c.key] != null ? String(levels[c.key]) : '_none'}
-                    onValueChange={(v) =>
-                      setLevel(c.key, v === '_none' ? null : (Number(v) as GroupLevel))
-                    }
+                    items={[
+                      { value: '_none', label: '없음' },
+                      ...GROUP_LEVELS.map((l) => ({
+                        value: String(l),
+                        label: GROUP_LEVEL_LABELS[l],
+                      })),
+                    ]}
+                    value={(levels[c.key] != null ? String(levels[c.key]) : '_none') || null}
+                    onValueChange={(v) => {
+                      if (v !== null)
+                        setLevel(c.key, v === '_none' ? null : (Number(v) as GroupLevel));
+                    }}
                   >
                     <SelectTrigger className="mx-auto h-8 w-[110px] text-sm">
                       <SelectValue />

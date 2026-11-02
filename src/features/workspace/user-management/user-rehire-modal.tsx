@@ -133,9 +133,20 @@ export function UserRehireModal({ user, onClose }: Props) {
                 <Label htmlFor="rehire-team" className={FIELD_LABEL}>
                   새 소속 팀 *
                 </Label>
-                {/* 미선택은 빈 문자열로 계속 제어한다 — 붙였다 뗐다 하면 Select 가 비제어로
+                {/* 미선택은 null 로 계속 제어한다 — undefined 로 떼면 Select 가 비제어로
                   전환돼 트리거가 빈칸으로 굳는다(reassignment/assignment-fields 의 같은 주석). */}
-                <Select value={teamId ?? ''} onValueChange={setTeamId}>
+                <Select
+                  items={[
+                    ...(teams.data?.teams ?? []).map((team) => ({
+                      value: team.id,
+                      label: team.name,
+                    })),
+                  ]}
+                  value={teamId || null}
+                  onValueChange={(value) => {
+                    if (value !== null) setTeamId(value);
+                  }}
+                >
                   <SelectTrigger id="rehire-team" className={FIELD_INPUT}>
                     <SelectValue placeholder={teams.isLoading ? '불러오는 중...' : '팀 선택'} />
                   </SelectTrigger>
@@ -153,7 +164,18 @@ export function UserRehireModal({ user, onClose }: Props) {
                 <Label htmlFor="rehire-team-role" className={FIELD_LABEL}>
                   팀 역할 *
                 </Label>
-                <Select value={teamRole} onValueChange={(next) => setTeamRole(next as TeamRole)}>
+                <Select
+                  items={[
+                    ...(Object.keys(ROLE_LABEL) as TeamRole[]).map((value) => ({
+                      value: value,
+                      label: ROLE_LABEL[value],
+                    })),
+                  ]}
+                  value={teamRole || null}
+                  onValueChange={(next) => {
+                    if (next !== null) setTeamRole(next as TeamRole);
+                  }}
+                >
                   <SelectTrigger id="rehire-team-role" className={FIELD_INPUT}>
                     <SelectValue />
                   </SelectTrigger>

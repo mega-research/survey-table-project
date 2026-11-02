@@ -6,7 +6,7 @@ import { AlertCircle, ArrowLeft, CheckCircle, Loader2, Lock, Monitor } from 'luc
 import Link from 'next/link';
 
 import { formatLocalDateTime } from '@/lib/date-formatters';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { DEFAULT_SURVEY_LOCALE, type SurveyLocale, toInlineLocale } from '@/types/survey-locale';
 import type { SystemStringKey } from '@/utils/system-strings';
@@ -118,10 +118,10 @@ function InvalidLinkScreen({
           <p className="mb-6 text-gray-600">
             <SystemText k={body} locale={locale} />
           </p>
-          <Button render={<Link href="/" />}>
+          <Link href="/" className={buttonVariants()}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             <SystemText k="screen.goHome" locale={locale} />
-          </Button>
+          </Link>
         </CardContent>
       </Card>
     </div>

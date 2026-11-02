@@ -20,7 +20,7 @@ import { toast } from 'sonner';
 import { useShallow } from 'zustand/react/shallow';
 
 import { SurveyDocumentPanel } from '@/features/survey-builder/survey-document/survey-document-panel';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TestModeControl } from '@/features/operations/test-mode-control';
@@ -361,10 +361,10 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
           </div>
           <h2 className="mb-2 text-xl font-semibold text-gray-900">설문을 찾을 수 없습니다</h2>
           <p className="mb-6 text-gray-500">요청하신 설문이 존재하지 않거나 삭제되었습니다.</p>
-          <Button render={<Link href="/surveys" />}>
+          <Link href="/surveys" className={buttonVariants()}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             목록으로 돌아가기
-          </Button>
+          </Link>
         </div>
       </div>
     );

@@ -95,8 +95,16 @@ export function ExpressionOperandPicker({
   return (
     <div className="space-y-2 rounded-md border border-slate-200 p-2">
       <Select
-        value={value?.kind ?? ''}
-        onValueChange={(v) => setKind(v as ExpressionOperand['kind'])}
+        items={[
+          ...(Object.keys(KIND_LABELS) as Array<ExpressionOperand['kind']>)
+            // depth 0 의 산술은 ComparisonClauseEditor 의 inline 셀렉트가 담당. 2-deep 케이스는 depth >= 1 에서만 노출.
+            .filter((k) => k !== 'binop' || (canNestBinop && currentDepth >= 1))
+            .map((k) => ({ value: k, label: KIND_LABELS[k] })),
+        ]}
+        value={value?.kind || null}
+        onValueChange={(v) => {
+          if (v !== null) setKind(v as ExpressionOperand['kind']);
+        }}
       >
         <SelectTrigger id={`${idPrefix}-kind`} className="w-full">
           <SelectValue placeholder="operand 선택" />
@@ -211,8 +219,11 @@ function CellPickerSub({
   return (
     <div className="space-y-2">
       <Select
-        value={value.questionId}
-        onValueChange={(qId) => onChange({ kind: 'cell', questionId: qId, cellId: '' })}
+        items={[...tableQuestions.map((q) => ({ value: q.id, label: q.title }))]}
+        value={value.questionId || null}
+        onValueChange={(qId) => {
+          if (qId !== null) onChange({ kind: 'cell', questionId: qId, cellId: '' });
+        }}
       >
         <SelectTrigger id={`${idPrefix}-q`}>
           <SelectValue placeholder="질문 선택" />
@@ -230,8 +241,11 @@ function CellPickerSub({
       </Select>
       {value.questionId && (
         <Select
-          value={value.cellId}
-          onValueChange={(cId) => onChange({ ...value, cellId: cId })}
+          items={[...inputCells.map((c) => ({ value: c.cellId, label: c.label }))]}
+          value={value.cellId || null}
+          onValueChange={(cId) => {
+            if (cId !== null) onChange({ ...value, cellId: cId });
+          }}
         >
           <SelectTrigger id={`${idPrefix}-c`}>
             <SelectValue placeholder="셀 선택" />
@@ -272,8 +286,20 @@ function QuestionPickerSub({
   );
   return (
     <Select
-      value={value.questionId}
-      onValueChange={(qId) => onChange({ kind: 'question', questionId: qId })}
+      items={[
+        ...eligible.map((q) => ({
+          value: q.id,
+          label: (
+            <>
+              {q.title} ({q.type})
+            </>
+          ),
+        })),
+      ]}
+      value={value.questionId || null}
+      onValueChange={(qId) => {
+        if (qId !== null) onChange({ kind: 'question', questionId: qId });
+      }}
     >
       <SelectTrigger id={`${idPrefix}-q`}>
         <SelectValue placeholder="질문 선택" />
@@ -305,8 +331,11 @@ function AttrPickerSub({
 }) {
   return (
     <Select
-      value={value.attrsKey}
-      onValueChange={(k) => onChange({ kind: 'attr', attrsKey: k })}
+      items={[...attrColumns.map((k) => ({ value: k, label: k }))]}
+      value={value.attrsKey || null}
+      onValueChange={(k) => {
+        if (k !== null) onChange({ kind: 'attr', attrsKey: k });
+      }}
     >
       <SelectTrigger id={`${idPrefix}-attr`}>
         <SelectValue placeholder="컨택 속성 선택" />
@@ -365,8 +394,11 @@ function LookupSub({
           <div className="space-y-1">
             <Label className="text-xs text-slate-600">값 컬럼</Label>
             <Select
-              value={value.valueColumn}
-              onValueChange={(col) => onChange({ ...value, valueColumn: col })}
+              items={[...valueCandidates.map((c) => ({ value: c, label: c }))]}
+              value={value.valueColumn || null}
+              onValueChange={(col) => {
+                if (col !== null) onChange({ ...value, valueColumn: col });
+              }}
             >
               <SelectTrigger id={`${idPrefix}-vcol`}>
                 <SelectValue placeholder="컬럼 선택" />
@@ -411,8 +443,16 @@ function BinopSub({
         idPrefix={`${idPrefix}-l`}
       />
       <Select
-        value={value.op}
-        onValueChange={(op) => onChange({ ...value, op: op as '+' | '-' | '*' | '/' })}
+        items={[
+          { value: '+', label: '+' },
+          { value: '-', label: '-' },
+          { value: '*', label: '×' },
+          { value: '/', label: '÷' },
+        ]}
+        value={value.op || null}
+        onValueChange={(op) => {
+          if (op !== null) onChange({ ...value, op: op as '+' | '-' | '*' | '/' });
+        }}
       >
         <SelectTrigger className="w-24">
           <SelectValue />

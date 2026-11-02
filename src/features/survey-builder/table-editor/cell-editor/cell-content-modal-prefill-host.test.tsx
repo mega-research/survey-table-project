@@ -89,14 +89,14 @@ describe('셀 모달 — prefill 설정과 호스트 문항 유형', () => {
     renderModal('table', inputCell({ defaultValueTemplate: '{{회사}}' }));
 
     expect(screen.getByLabelText(/응답값 prefill/)).toHaveValue('{{회사}}');
-    expect(screen.getByLabelText('응답자가 고칠 수 있게')).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: '응답자가 고칠 수 있게' })).toBeInTheDocument();
   });
 
   it('보기 문항의 내장 표에서는 prefill 설정을 내놓지 않는다', () => {
     renderModal('radio', inputCell());
 
     expect(screen.queryByLabelText(/응답값 prefill/)).toBeNull();
-    expect(screen.queryByLabelText('응답자가 고칠 수 있게')).toBeNull();
+    expect(screen.queryByRole('switch', { name: '응답자가 고칠 수 있게' })).toBeNull();
   });
 
   it('보기 문항의 내장 표에 이미 적힌 템플릿은 지울 수 있게 칸과 경고만 보인다', () => {
@@ -106,6 +106,6 @@ describe('셀 모달 — prefill 설정과 호스트 문항 유형', () => {
     expect(
       screen.getByText(/보기·순위 문항의 표에서는 prefill 이 채워지지 않습니다/),
     ).toBeInTheDocument();
-    expect(screen.queryByLabelText('응답자가 고칠 수 있게')).toBeNull();
+    expect(screen.queryByRole('switch', { name: '응답자가 고칠 수 있게' })).toBeNull();
   });
 });

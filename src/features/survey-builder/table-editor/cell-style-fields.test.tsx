@@ -21,7 +21,7 @@ describe('CellStyleFields', () => {
     );
 
     await user.click(screen.getByRole('switch', { name: '텍스트 굵게' }));
-    expect(onBold).toHaveBeenCalledWith(true);
+    expect(onBold).toHaveBeenCalledWith(true, expect.anything());
 
     await user.type(screen.getByLabelText('배경색 HEX'), 'abc');
     await user.tab();

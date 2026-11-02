@@ -2,15 +2,15 @@
 
 import { useEffect, useEffectEvent, useState } from 'react';
 
-import { ArrowRight, Check, ChevronsUpDown, GitBranch, Info, XCircle } from 'lucide-react';
+import { ArrowRight, GitBranch, Info, XCircle } from 'lucide-react';
 
 import {
+  Combobox,
   ComboboxContent,
   ComboboxEmpty,
+  ComboboxInput,
   ComboboxItem,
   ComboboxList,
-  ComboboxRoot,
-  ComboboxSearchInput,
   ComboboxTrigger,
 } from '@/components/ui/combobox';
 import { Label } from '@/components/ui/label';
@@ -175,7 +175,7 @@ export function BranchRuleEditor({
           <div className="space-y-2">
             <Label className="text-xs font-medium text-gray-600">이동할 질문 선택</Label>
             {availableQuestions.length > 0 ? (
-              <ComboboxRoot<QuestionChoice>
+              <Combobox<QuestionChoice>
                 items={questionChoices}
                 value={questionChoices.find((c) => c.question.id === targetQuestionId) ?? null}
                 onValueChange={(choice) => {
@@ -229,20 +229,10 @@ export function BranchRuleEditor({
                         : '질문을 선택하세요'}
                     </span>
                   </div>
-                  <ChevronsUpDown
-                    className={cn(
-                      'ml-2 h-4 w-4 flex-shrink-0 transition-transform',
-                      open ? 'rotate-180' : 'rotate-0',
-                      targetQuestionId ? 'text-blue-600' : 'text-gray-400',
-                    )}
-                  />
                 </ComboboxTrigger>
                 <ComboboxContent className="w-[500px] rounded-xl border-2 shadow-xl">
-                  <ComboboxSearchInput
-                    placeholder="질문 번호나 제목으로 검색..."
-                    wrapperClassName="bg-gray-50"
-                    className="border-0 bg-transparent text-sm placeholder:text-gray-500 focus:ring-0"
-                  />
+                  {/* 선택 표시(체크)와 펼침 표시(꺾쇠)는 공식 Combobox 가 그린다 */}
+                  <ComboboxInput showTrigger={false} placeholder="질문 번호나 제목으로 검색..." />
                   <ComboboxEmpty className="py-6 text-gray-500">
                     <div className="flex flex-col items-center gap-2">
                       <ArrowRight className="h-8 w-8 text-gray-300" />
@@ -276,12 +266,6 @@ export function BranchRuleEditor({
                           }`}
                         >
                           <div className="flex w-full items-start gap-3">
-                            <Check
-                              className={cn(
-                                'mt-1 h-4 w-4 flex-shrink-0 transition-opacity',
-                                isSelected ? 'text-blue-600 opacity-100' : 'opacity-0',
-                              )}
-                            />
                             <div className="min-w-0 flex-1">
                               <div className="mb-1 flex items-center gap-2">
                                 <span
@@ -336,7 +320,7 @@ export function BranchRuleEditor({
                     }}
                   </ComboboxList>
                 </ComboboxContent>
-              </ComboboxRoot>
+              </Combobox>
             ) : (
               <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
                 <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />

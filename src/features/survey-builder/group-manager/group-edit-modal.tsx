@@ -133,8 +133,14 @@ export function GroupEditModal({
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">상위 그룹 (선택)</label>
             <Select
+              items={[
+                { value: 'none', label: '없음 (최상위 그룹)' },
+                ...availableParents.map((g) => ({ value: g.id, label: g.name })),
+              ]}
               value={parentGroupId || 'none'}
-              onValueChange={(value) => setParentGroupId(value === 'none' ? undefined : value)}
+              onValueChange={(value) => {
+                if (value !== null) setParentGroupId(value === 'none' ? undefined : value);
+              }}
             >
               <SelectTrigger className="bg-white">
                 <SelectValue placeholder="상위 그룹 선택" />

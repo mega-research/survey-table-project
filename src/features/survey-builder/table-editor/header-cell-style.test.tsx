@@ -196,7 +196,7 @@ describe('TableHeaderSection 열별 스타일', () => {
 
     expect(await screen.findByRole('button', { name: '헤더 스타일' })).toBeInTheDocument();
     expect(screen.queryByLabelText('배경색 HEX')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('텍스트 굵게')).not.toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: '텍스트 굵게' })).not.toBeInTheDocument();
   });
 
   it('이미 지정된 스타일이 팝오버 초기값으로 나타난다', async () => {
@@ -213,7 +213,7 @@ describe('TableHeaderSection 열별 스타일', () => {
     await userEvent.click(await screen.findByRole('button', { name: '헤더 스타일' }));
 
     expect(await screen.findByLabelText('배경색 HEX')).toHaveValue('#112233');
-    expect(screen.getByLabelText('텍스트 굵게')).toBeChecked();
+    expect(screen.getByRole('switch', { name: '텍스트 굵게' })).toBeChecked();
   });
 });
 

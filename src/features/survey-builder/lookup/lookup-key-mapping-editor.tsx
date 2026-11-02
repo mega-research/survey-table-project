@@ -77,8 +77,14 @@ export function LookupKeyMappingEditor({ availableLutColumns, value, onChange }:
             className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-2"
           >
             <Select
+              items={[
+                { value: NONE_SENTINEL, label: '— 미선택 —' },
+                ...availableLutColumns.map((c) => ({ value: c, label: c })),
+              ]}
               value={row.lutKey || NONE_SENTINEL}
-              onValueChange={(v) => handleSetLutKey(idx, v === NONE_SENTINEL ? '' : v)}
+              onValueChange={(v) => {
+                if (v !== null) handleSetLutKey(idx, v === NONE_SENTINEL ? '' : v);
+              }}
             >
               <SelectTrigger>
                 <SelectValue placeholder="LUT 컬럼 선택" />
@@ -97,10 +103,14 @@ export function LookupKeyMappingEditor({ availableLutColumns, value, onChange }:
             <span className="text-muted-foreground text-xs">=</span>
             <div className="flex items-center gap-1">
               <Select
-                value={selectorValue}
-                onValueChange={(v) =>
-                  handleSetAttrsKey(idx, v === CUSTOM_SENTINEL ? '' : v)
-                }
+                items={[
+                  ...contactColumns.map((c) => ({ value: c.key, label: c.label ?? c.key })),
+                  { value: CUSTOM_SENTINEL, label: '직접 입력…' },
+                ]}
+                value={selectorValue || null}
+                onValueChange={(v) => {
+                  if (v !== null) handleSetAttrsKey(idx, v === CUSTOM_SENTINEL ? '' : v);
+                }}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="컨택 attrs" />

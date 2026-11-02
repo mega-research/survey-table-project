@@ -280,7 +280,7 @@ describe('ChoiceOptCellTab — 단독 선택 보기 토글', () => {
     );
     const toggle = screen.getByRole('switch', { name: '단독 선택 보기' });
     await userEvent.click(toggle);
-    expect(onExclusiveChoiceChange).toHaveBeenCalledWith(true);
+    expect(onExclusiveChoiceChange).toHaveBeenCalledWith(true, expect.anything());
   });
 
   it('라디오 그룹에 속한 셀에서는 보이지 않는다', () => {

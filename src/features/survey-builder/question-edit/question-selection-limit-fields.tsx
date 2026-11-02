@@ -144,13 +144,25 @@ export function QuestionSelectionLimitFields({
                 참조 문항
               </Label>
               <Select
-                value={source.questionId}
-                onValueChange={(questionId) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    maxSelectionsSource: { ...(prev.maxSelectionsSource ?? {}), questionId },
-                  }))
-                }
+                items={[
+                  ...numericQuestions.map((q) => ({
+                    value: q.id,
+                    label: (
+                      <>
+                        {q.questionCode ? `${q.questionCode}. ` : ''}
+                        {q.title}
+                      </>
+                    ),
+                  })),
+                ]}
+                value={source.questionId || null}
+                onValueChange={(questionId) => {
+                  if (questionId !== null)
+                    setFormData((prev) => ({
+                      ...prev,
+                      maxSelectionsSource: { ...(prev.maxSelectionsSource ?? {}), questionId },
+                    }));
+                }}
               >
                 <SelectTrigger id="max-selections-source-question" className="w-full">
                   <SelectValue placeholder="숫자 문항 선택" />

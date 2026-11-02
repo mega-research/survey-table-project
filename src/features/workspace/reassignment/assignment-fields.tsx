@@ -77,10 +77,16 @@ export function DestinationTeamField({ fields, width }: { fields: Fields; width:
   return (
     <label className="flex flex-col gap-[6px]">
       <FieldLabel>목적지 팀</FieldLabel>
-      {/* 미선택은 빈 문자열로 **계속 제어**한다. value 를 붙였다 뗐다 하면 Select 가 제어 →
+      {/* 미선택은 null 로 **계속 제어**한다. value 를 undefined 로 떼면 Select 가 제어 →
           비제어로 전환돼 옛 값을 안에 남기고 트리거가 빈칸으로 굳는다(placeholder 도 안 나온다).
-          빈 문자열은 Select 래퍼가 「선택 없음」으로 알아보는 값이라 placeholder 가 그대로 뜬다. */}
-      <Select value={fields.teamId ?? ''} onValueChange={fields.setTeamId}>
+          Base UI Select 는 null 일 때만 placeholder 를 그린다(빈 문자열은 값으로 친다). */}
+      <Select
+        items={[...fields.teams.map((team) => ({ value: team.id, label: team.name }))]}
+        value={fields.teamId || null}
+        onValueChange={(value) => {
+          if (value !== null) fields.setTeamId(value);
+        }}
+      >
         <SelectTrigger className={`${SELECT_TRIGGER} ${width}`} aria-label="목적지 팀">
           <SelectValue placeholder={fields.teamsLoading ? '불러오는 중...' : '팀 선택'} />
         </SelectTrigger>
@@ -109,8 +115,21 @@ export function NewOwnerField({ fields, width }: { fields: Fields; width: string
     <label className="flex flex-col gap-[6px]">
       <FieldLabel>새 소유자</FieldLabel>
       <Select
-        value={fields.ownerUserId ?? ''}
-        onValueChange={fields.setOwnerUserId}
+        items={[
+          ...fields.candidates.map((candidate) => ({
+            value: candidate.userId,
+            label: (
+              <>
+                {candidate.name}
+                {candidate.role === 'leader' ? ' · 팀장' : ''}
+              </>
+            ),
+          })),
+        ]}
+        value={fields.ownerUserId || null}
+        onValueChange={(value) => {
+          if (value !== null) fields.setOwnerUserId(value);
+        }}
         disabled={disabled}
       >
         <SelectTrigger className={`${SELECT_TRIGGER} ${width}`} aria-label="새 소유자">
@@ -144,8 +163,16 @@ export function VisibilityField({ fields, width }: { fields: Fields; width: stri
     <label className="flex flex-col gap-[6px]">
       <FieldLabel>공개 범위</FieldLabel>
       <Select
-        value={fields.visibility}
-        onValueChange={(next) => fields.setVisibility(next as SurveyVisibility)}
+        items={[
+          ...surveyVisibilityValues.map((value) => ({
+            value: value,
+            label: SURVEY_VISIBILITY_LABEL[value],
+          })),
+        ]}
+        value={fields.visibility || null}
+        onValueChange={(next) => {
+          if (next !== null) fields.setVisibility(next as SurveyVisibility);
+        }}
       >
         <SelectTrigger className={`${SELECT_TRIGGER} ${width}`} aria-label="공개 범위">
           <SelectValue />

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { Button } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { buildDownloadCandidates } from '@/lib/operations/contacts-export-format';
 import type { ContactsListPageData } from '@/shared/contracts/contacts-io';
@@ -119,19 +119,18 @@ export function ContactsListView({
                 disabled={data.isTestScope}
               />
               {/* 이월 응답은 명단과 다른 경로다 — 명단 업로드의 replace 는 개별 링크를 재발급한다. */}
-              <Button
-                variant="outline"
-                size="sm"
-                render={<Link href={`${paths.contacts}/prior-answers`} />}
+              <Link
+                href={`${paths.contacts}/prior-answers`}
+                className={buttonVariants({ variant: 'outline', size: 'sm' })}
               >
                 이월 응답 임포트
-              </Button>
-              <Button
-                size="sm"
-                render={<Link href={contactDetailHref(paths.contacts, 'new', listQuery)} />}
+              </Link>
+              <Link
+                href={contactDetailHref(paths.contacts, 'new', listQuery)}
+                className={buttonVariants({ size: 'sm' })}
               >
                 + 조사 대상 추가
-              </Button>
+              </Link>
             </>
           )}
         </div>

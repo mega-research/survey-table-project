@@ -66,8 +66,8 @@ describe('HeaderFilterPopover', () => {
     renderPopover({ renameOnApply: { from: 'q', to: 'rq' } });
 
     await user.click(screen.getByRole('button', { name: '기업유형 필터' }));
-    await waitFor(() => expect(screen.getByLabelText('상장')).toBeInTheDocument());
-    await user.click(screen.getByLabelText('상장'));
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: '상장' })).toBeInTheDocument());
+    await user.click(screen.getByRole('checkbox', { name: '상장' }));
     await user.click(screen.getByRole('button', { name: '적용' }));
 
     const p = pushedParams();
@@ -82,8 +82,8 @@ describe('HeaderFilterPopover', () => {
     renderPopover({ resetParams: ['recipPage'] });
 
     await user.click(screen.getByRole('button', { name: '기업유형 필터' }));
-    await waitFor(() => expect(screen.getByLabelText('상장')).toBeInTheDocument());
-    await user.click(screen.getByLabelText('상장'));
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: '상장' })).toBeInTheDocument());
+    await user.click(screen.getByRole('checkbox', { name: '상장' }));
     await user.click(screen.getByRole('button', { name: '적용' }));
 
     expect(pushedParams().get('recipPage')).toBeNull();
@@ -95,9 +95,9 @@ describe('HeaderFilterPopover', () => {
     renderPopover();
 
     await user.click(screen.getByRole('button', { name: '기업유형 필터' }));
-    await waitFor(() => expect(screen.getByLabelText('상장')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: '상장' })).toBeInTheDocument());
 
-    await user.click(screen.getByLabelText('상장'));
+    await user.click(screen.getByRole('checkbox', { name: '상장' }));
     await user.click(screen.getByRole('button', { name: '적용' }));
 
     const p = pushedParams();
@@ -119,7 +119,7 @@ describe('HeaderFilterPopover', () => {
     });
 
     await user.click(screen.getByRole('button', { name: '상태 필터' }));
-    await user.click(screen.getByLabelText('이탈'));
+    await user.click(screen.getByRole('checkbox', { name: '이탈' }));
     await user.click(screen.getByRole('button', { name: '적용' }));
 
     expect(listMock).not.toHaveBeenCalled();
@@ -144,7 +144,7 @@ describe('HeaderFilterPopover', () => {
     });
 
     await user.click(screen.getByRole('button', { name: '상태 필터' }));
-    await user.click(screen.getByLabelText('이탈'));
+    await user.click(screen.getByRole('checkbox', { name: '이탈' }));
     await user.click(screen.getByRole('button', { name: '적용' }));
 
     const p = pushedParams();
@@ -193,7 +193,7 @@ describe('HeaderFilterPopover', () => {
     await user.click(screen.getByRole('button', { name: '전화번호 필터' }));
     const input = await screen.findByPlaceholderText('정확한 값 입력 (부분 검색 불가)');
     await user.type(input, '010-1234-5678');
-    await user.click(screen.getByLabelText('— 제외하고 보기'));
+    await user.click(screen.getByRole('checkbox', { name: '— 제외하고 보기' }));
     expect(input).toBeDisabled();
     await user.click(screen.getByRole('button', { name: '적용' }));
 
@@ -207,8 +207,8 @@ describe('HeaderFilterPopover', () => {
     renderPopover({ source: 'pii.mobile', label: '전화번호', piiType: 'mobile' });
 
     await user.click(screen.getByRole('button', { name: '전화번호 필터' }));
-    const emptyOnly = await screen.findByLabelText('— 인 것만 보기');
-    const excludeEmpty = screen.getByLabelText('— 제외하고 보기');
+    const emptyOnly = await screen.findByRole('checkbox', { name: '— 인 것만 보기' });
+    const excludeEmpty = screen.getByRole('checkbox', { name: '— 제외하고 보기' });
 
     await user.click(emptyOnly);
     await user.click(excludeEmpty);
@@ -226,7 +226,7 @@ describe('HeaderFilterPopover', () => {
     renderPopover();
 
     await user.click(screen.getByRole('button', { name: '기업유형 필터' }));
-    await user.click(await screen.findByLabelText('상장'));
+    await user.click(await screen.findByRole('checkbox', { name: '상장' }));
     await user.click(screen.getByRole('button', { name: '적용' }));
 
     // 경고 다이얼로그가 먼저 뜨고 아직 push 되지 않는다.

@@ -631,8 +631,10 @@ export function UploadWizard({
               <div className="flex items-center gap-3">
                 <Label>시트 선택</Label>
                 <Select
-                  value={sheetName}
+                  items={[...preview.sheetNames.map((s) => ({ value: s, label: s }))]}
+                  value={sheetName || null}
                   onValueChange={(v) => {
+                    if (v === null) return;
                     setSheetName(v);
                     setPreview(null);
                     setStep('file');
@@ -833,8 +835,16 @@ export function UploadWizard({
                               </div>
                             ) : (
                               <Select
-                                value={pii ?? '_none'}
-                                onValueChange={(v) => updatePii(h, v as PiiFieldType | '_none')}
+                                items={[
+                                  ...PII_OPTIONS.map((opt) => ({
+                                    value: opt.value,
+                                    label: opt.label,
+                                  })),
+                                ]}
+                                value={(pii ?? '_none') || null}
+                                onValueChange={(v) => {
+                                  if (v !== null) updatePii(h, v as PiiFieldType | '_none');
+                                }}
                               >
                                 <SelectTrigger className="w-full">
                                   <SelectValue />
@@ -900,17 +910,25 @@ export function UploadWizard({
                               </span>
                             ) : (
                               <Select
+                                items={[
+                                  { value: '_none', label: '없음' },
+                                  ...GROUP_LEVELS.map((l) => ({
+                                    value: String(l),
+                                    label: GROUP_LEVEL_LABELS[l],
+                                  })),
+                                ]}
                                 value={
-                                  mapping.groupLevels[h] != null
+                                  (mapping.groupLevels[h] != null
                                     ? String(mapping.groupLevels[h])
-                                    : '_none'
+                                    : '_none') || null
                                 }
-                                onValueChange={(v) =>
-                                  setHeaderGroupLevel(
-                                    h,
-                                    v === '_none' ? null : (Number(v) as GroupLevel),
-                                  )
-                                }
+                                onValueChange={(v) => {
+                                  if (v !== null)
+                                    setHeaderGroupLevel(
+                                      h,
+                                      v === '_none' ? null : (Number(v) as GroupLevel),
+                                    );
+                                }}
                               >
                                 <SelectTrigger
                                   className="w-full"

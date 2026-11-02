@@ -323,7 +323,26 @@ export function RankingDropdownStack({
             isMobile && 'py-3 text-base',
           );
           const selectPopupEl = (
-            <Select value={currentValue} onValueChange={(v) => handleSelect(rank, v)}>
+            <Select
+              items={[
+                ...options.map((opt) => ({
+                  value: opt.value,
+                  label: substituteTokens(opt.label, attrs, quotes),
+                })),
+                ...(allowOther
+                  ? [
+                      {
+                        value: RANKING_OTHER_VALUE,
+                        label: systemText('ranking.otherDirect', locale),
+                      },
+                    ]
+                  : []),
+              ]}
+              value={currentValue || null}
+              onValueChange={(v) => {
+                if (v !== null) handleSelect(rank, v);
+              }}
+            >
               <SelectTrigger
                 id={inputIdScope ? `${inputIdScope}-${rank}` : undefined}
                 aria-label={systemText('ranking.selectRank', locale, { rank })}

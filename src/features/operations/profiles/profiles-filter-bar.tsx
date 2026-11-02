@@ -90,8 +90,13 @@ export function ProfilesFilterBar({
             상태 필터
           </label>
           <Select
-            value={status}
+            items={[
+              ...STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+              ...(showDeleted ? [{ value: 'deleted', label: '삭제됨' }] : []),
+            ]}
+            value={status || null}
             onValueChange={(v) => {
+              if (v === null) return;
               if ((STATUS_FILTERS as readonly string[]).includes(v)) {
                 setStatus(v as StatusFilter);
               }

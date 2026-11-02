@@ -115,7 +115,18 @@ export function ContactAssignmentSelect({
     <div className="flex items-start gap-3">
       <div className="w-40 shrink-0 pt-2 text-xs text-slate-600">컨택원</div>
       <div className="flex-1">
-        <Select value={value} onValueChange={handleChange} disabled={isPending}>
+        <Select
+          items={[
+            ...options.map((o) => ({ value: o.id, label: o.name })),
+            { value: NONE_VALUE, label: ASSIGNMENT_NONE_LABEL },
+            { value: NEW_VALUE, label: '+ 새 컨택원' },
+          ]}
+          value={value || null}
+          onValueChange={(value) => {
+            if (value !== null) handleChange(value);
+          }}
+          disabled={isPending}
+        >
           <SelectTrigger className="h-9 w-[240px]" aria-label="컨택원">
             <SelectValue />
           </SelectTrigger>

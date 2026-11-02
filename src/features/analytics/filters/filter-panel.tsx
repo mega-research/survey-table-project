@@ -152,10 +152,14 @@ export function FilterPanel({ questions, responses, filter, onFilterChange }: Fi
                   <div className="mb-4 flex items-center gap-2">
                     <span className="text-sm text-gray-500">조건 결합:</span>
                     <Select
-                      value={filter.groupLogic}
-                      onValueChange={(value: string) =>
-                        handleGroupLogicChange(value as FilterLogic)
-                      }
+                      items={[
+                        { value: 'AND', label: 'AND (모두 만족)' },
+                        { value: 'OR', label: 'OR (하나라도)' },
+                      ]}
+                      value={filter.groupLogic || null}
+                      onValueChange={(value) => {
+                        if (value !== null) handleGroupLogicChange(value as FilterLogic);
+                      }}
                     >
                       <SelectTrigger className="w-[120px]">
                         <SelectValue />

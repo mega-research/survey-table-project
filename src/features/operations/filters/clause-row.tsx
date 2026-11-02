@@ -58,8 +58,14 @@ export function ClauseRow({
         <span className="w-[88px] shrink-0 px-3 text-sm leading-10 text-slate-500">조건</span>
       ) : (
         <Select
-          value={clause.op}
-          onValueChange={(v) => onChange({ ...clause, op: v as 'AND' | 'OR' })}
+          items={[
+            { value: 'AND', label: 'AND' },
+            { value: 'OR', label: 'OR' },
+          ]}
+          value={clause.op || null}
+          onValueChange={(v) => {
+            if (v !== null) onChange({ ...clause, op: v as 'AND' | 'OR' });
+          }}
         >
           <SelectTrigger className="h-10 w-[88px] font-bold text-blue-700">
             <SelectValue />
@@ -71,11 +77,21 @@ export function ClauseRow({
         </Select>
       )}
       <Select
-        value={clause.source}
-        onValueChange={(s) =>
-          // source 변경 시 이전 mode 의 value 는 의미 없음 — 페이지별 기본값으로 초기화.
-          onChange({ ...clause, source: s, value: defaultValueForSource(s) })
-        }
+        items={[
+          ...columnCandidates.map((c) => ({
+            value: c.source,
+            label: (
+              <>
+                {c.label}
+                <PiiExactMarker source={c.source} />
+              </>
+            ),
+          })),
+        ]}
+        value={clause.source || null}
+        onValueChange={(s) => {
+          if (s !== null) onChange({ ...clause, source: s, value: defaultValueForSource(s) });
+        }}
       >
         <SelectTrigger className="h-10 w-[180px]">
           <SelectValue placeholder="컬럼 선택" />

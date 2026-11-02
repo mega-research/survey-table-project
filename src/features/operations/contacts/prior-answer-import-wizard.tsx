@@ -34,7 +34,7 @@ import { runAsyncAction } from '@/utils/run-async-action';
 
 type Step = 'file' | 'mapping' | 'result';
 
-/** 문항을 고르지 않았음을 나타내는 Select 값 — 빈 문자열은 Select 래퍼가 「고르지 않음」(placeholder)으로 읽어 항목 값으로 쓸 수 없다. */
+/** 문항을 고르지 않았음을 나타내는 Select 값 — 항목 값이라 빈 문자열이 아닌 표식을 쓴다(빈 값은 value 에서 null 로 보내 placeholder 를 그린다). */
 const UNMAPPED = '_unmapped';
 
 interface VerdictBadge {
@@ -367,8 +367,13 @@ export function PriorAnswerImportWizard({
               <div className="space-y-2 rounded-md border border-gray-200 bg-gray-50 p-3">
                 <Label htmlFor="prior-format">파일 양식</Label>
                 <Select
-                  value={format}
+                  items={[
+                    { value: 'raw', label: '우리 Raw Data 양식' },
+                    { value: 'mapped', label: '임의 엑셀 (문항 잇기)' },
+                  ]}
+                  value={format || null}
                   onValueChange={(v) => {
+                    if (v === null) return;
                     const next = v as PriorAnswerSheetFormat;
                     setFormat(next);
                     // Raw 양식은 헤더가 3행으로 고정이다 (제목 / 셀·옵션 라벨 / 변수명).
@@ -396,8 +401,10 @@ export function PriorAnswerImportWizard({
                 <div className="space-y-1">
                   <Label htmlFor="prior-sheet">시트</Label>
                   <Select
-                    value={sheetName}
+                    items={[...preview.sheetNames.map((name) => ({ value: name, label: name }))]}
+                    value={sheetName || null}
                     onValueChange={(next) => {
+                      if (next === null) return;
                       setSheetName(next);
                       void loadPreview({ file, sheetName: next, headerRowCount });
                     }}
@@ -437,8 +444,16 @@ export function PriorAnswerImportWizard({
                 <div className="space-y-1">
                   <Label htmlFor="prior-match-column">조사 대상을 찾을 열</Label>
                   <Select
-                    value={matchColumnIndex === null ? UNMAPPED : String(matchColumnIndex)}
-                    onValueChange={(v) => setMatchColumnIndex(v === UNMAPPED ? null : Number(v))}
+                    items={[
+                      { value: UNMAPPED, label: '선택 안 함' },
+                      ...columnLabels.map((label, col) => ({ value: String(col), label: label })),
+                    ]}
+                    value={
+                      (matchColumnIndex === null ? UNMAPPED : String(matchColumnIndex)) || null
+                    }
+                    onValueChange={(v) => {
+                      if (v !== null) setMatchColumnIndex(v === UNMAPPED ? null : Number(v));
+                    }}
                   >
                     <SelectTrigger id="prior-match-column">
                       <SelectValue placeholder="열 선택" />
@@ -459,8 +474,13 @@ export function PriorAnswerImportWizard({
                 <div className="space-y-1">
                   <Label htmlFor="prior-match-field">명단에서 맞출 항목</Label>
                   <Select
-                    value={matchAttrsKey ?? UNMAPPED}
+                    items={[
+                      { value: UNMAPPED, label: '선택 안 함' },
+                      ...matchFields.map((field) => ({ value: field.key, label: field.label })),
+                    ]}
+                    value={(matchAttrsKey ?? UNMAPPED) || null}
                     onValueChange={(v) => {
+                      if (v === null) return;
                       const key = v === UNMAPPED ? null : v;
                       setMatchAttrsKey(key);
                       // 항목을 고른 뒤에야 헤더 이름과 맞춰볼 수 있다 — 파일 분석 시점에는
@@ -560,15 +580,28 @@ export function PriorAnswerImportWizard({
                               </td>
                               <td className="px-3 py-2">
                                 <Select
-                                  value={mapping[key] ?? UNMAPPED}
-                                  onValueChange={(next) =>
-                                    setMapping((prev) => {
-                                      const copy = { ...prev };
-                                      if (next === UNMAPPED) delete copy[key];
-                                      else copy[key] = next;
-                                      return copy;
-                                    })
-                                  }
+                                  items={[
+                                    { value: UNMAPPED, label: '잇지 않음' },
+                                    ...preview.questions.map((q) => ({
+                                      value: q.id,
+                                      label: (
+                                        <>
+                                          {q.questionCode ? `${q.questionCode} · ` : ''}
+                                          {q.title}
+                                        </>
+                                      ),
+                                    })),
+                                  ]}
+                                  value={(mapping[key] ?? UNMAPPED) || null}
+                                  onValueChange={(next) => {
+                                    if (next !== null)
+                                      setMapping((prev) => {
+                                        const copy = { ...prev };
+                                        if (next === UNMAPPED) delete copy[key];
+                                        else copy[key] = next;
+                                        return copy;
+                                      });
+                                  }}
                                 >
                                   <SelectTrigger className="h-8">
                                     <SelectValue placeholder="잇지 않음" />
@@ -823,10 +856,18 @@ function ImportSummary({
                       <span className="text-xs text-slate-500">{v.count}건</span>
                       {onAlias && (
                         <Select
-                          value={aliases?.[m.questionId]?.[v.value] ?? UNMAPPED}
-                          onValueChange={(next) =>
-                            onAlias(m.questionId, v.value, next === UNMAPPED ? null : next)
-                          }
+                          items={[
+                            { value: UNMAPPED, label: '잇지 않음' },
+                            ...(options?.[m.questionId] ?? []).map((option) => ({
+                              value: option.value,
+                              label: option.label,
+                            })),
+                          ]}
+                          value={(aliases?.[m.questionId]?.[v.value] ?? UNMAPPED) || null}
+                          onValueChange={(next) => {
+                            if (next !== null)
+                              onAlias(m.questionId, v.value, next === UNMAPPED ? null : next);
+                          }}
                         >
                           <SelectTrigger className="h-7 w-56 text-xs">
                             <SelectValue placeholder="이 값을 어느 선택지로" />

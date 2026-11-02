@@ -89,8 +89,14 @@ export function ExpressionConditionEditor({
         <div key={idx} className="space-y-2">
           {idx > 0 && (
             <Select
-              value={config.joinOps[idx - 1] ?? 'AND'}
-              onValueChange={(v) => updateJoinOp(idx - 1, v as 'AND' | 'OR')}
+              items={[
+                { value: 'AND', label: 'AND' },
+                { value: 'OR', label: 'OR' },
+              ]}
+              value={(config.joinOps[idx - 1] ?? 'AND') || null}
+              onValueChange={(v) => {
+                if (v !== null) updateJoinOp(idx - 1, v as 'AND' | 'OR');
+              }}
             >
               <SelectTrigger className="w-24">
                 <SelectValue />
@@ -186,7 +192,16 @@ function InlineArithmeticOperand({
       />
       <div className="flex items-center gap-2">
         <Label className="text-xs text-slate-600">산술</Label>
-        <Select value={arithOp} onValueChange={handleArithChange}>
+        <Select
+          items={[
+            { value: 'none', label: '없음' },
+            ...ARITH_OPS.map((op) => ({ value: op, label: ARITH_OP_LABELS[op] })),
+          ]}
+          value={arithOp || null}
+          onValueChange={(value) => {
+            if (value !== null) handleArithChange(value);
+          }}
+        >
           <SelectTrigger className="w-24">
             <SelectValue />
           </SelectTrigger>
@@ -236,9 +251,13 @@ function ComparisonClauseEditor({
       </div>
       <div>
         <Label className="text-xs text-slate-600">비교</Label>
-        <Select value={comparison.op} onValueChange={(v) =>
-          onChange({ ...comparison, op: v as ExpressionComparison['op'] })
-        }>
+        <Select
+          items={[...COMPARISON_OPS.map((op) => ({ value: op, label: COMPARISON_OP_LABELS[op] }))]}
+          value={comparison.op || null}
+          onValueChange={(v) => {
+            if (v !== null) onChange({ ...comparison, op: v as ExpressionComparison['op'] });
+          }}
+        >
           <SelectTrigger className="w-32">
             <SelectValue />
           </SelectTrigger>

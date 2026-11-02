@@ -21,7 +21,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { CONTACT_METHOD_LABEL, type ContactColumnDef, type ContactColumnScheme, type ContactMethod } from '@/shared/contracts/contacts';
 import { LocalDateTime } from '@/components/ui/local-date-time';
 import { attrsKeyOf, piiKeyOf } from '@/lib/operations/contacts-format';
@@ -302,20 +302,18 @@ export function ContactInfoCard({
                 요구가 갈리면 외주에게 여는 주소가 없는 버튼이 생긴다. */}
             {canEditResponses &&
               (responseId ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 px-2 text-xs"
-                  render={
-                    <Link
-                      href={operationsPaths(basePath).profileEdit(responseId)}
-                      target="_blank"
-                      rel="noreferrer"
-                    />
-                  }
+                <Link
+                  href={operationsPaths(basePath).profileEdit(responseId)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={buttonVariants({
+                    variant: 'outline',
+                    size: 'sm',
+                    className: 'h-7 px-2 text-xs',
+                  })}
                 >
                   응답 수정
-                </Button>
+                </Link>
               ) : (
                 <Button
                   size="sm"

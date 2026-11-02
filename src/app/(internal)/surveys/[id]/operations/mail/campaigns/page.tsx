@@ -4,7 +4,7 @@ import { Plus } from 'lucide-react';
 
 import { CampaignsList } from '@/features/operations/mail-campaign/campaigns-list';
 import { UnsubscribedSegment } from '@/features/operations/mail-campaign/unsubscribed-segment';
-import { Button } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button';
 import {
   listCampaignsForSurvey,
   listUnsubscribedContacts,
@@ -71,10 +71,13 @@ export default async function MailCampaignsListPage({ params, searchParams }: Pr
               {campaigns.total.toLocaleString('ko-KR')}건.
             </p>
           </div>
-          <Button render={<Link href={`/surveys/${surveyId}/operations/mail/campaigns/new`} />}>
+          <Link
+            href={`/surveys/${surveyId}/operations/mail/campaigns/new`}
+            className={buttonVariants()}
+          >
             <Plus className="mr-1.5 h-4 w-4" />
             발송 등록
-          </Button>
+          </Link>
         </div>
         <CampaignsList
           surveyId={surveyId}

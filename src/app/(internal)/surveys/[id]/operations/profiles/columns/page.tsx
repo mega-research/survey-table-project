@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
-import { Button } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button';
 import { ProfileColumnEditor } from '@/features/operations/profiles/profile-column-editor';
 import { getContactColumnScheme } from '@/server/read-models/contacts';
 import {
@@ -51,12 +51,12 @@ export default async function ProfilesColumnsPage({ params }: PageProps) {
           <h2 className="text-xl font-bold text-gray-900">응답 내역 컬럼 설정</h2>
           <p className="text-sm text-slate-500">응답 내역 표의 컬럼 순서·라벨·표시 여부</p>
         </div>
-        <Button
-          variant="outline"
-          render={<Link href={`/surveys/${surveyId}/operations/profiles`} />}
+        <Link
+          href={`/surveys/${surveyId}/operations/profiles`}
+          className={buttonVariants({ variant: 'outline' })}
         >
           ← 응답 내역으로
-        </Button>
+        </Link>
       </div>
 
       <ProfileColumnEditor

@@ -100,7 +100,7 @@ describe('빌더 응답 인용 컨트롤', () => {
   it('토글이 꺼져 있으면 인용 이름·문구 입력칸이 전혀 없다', () => {
     render(<Harness question={radioQuestion} initial={radioFormData} />);
 
-    expect(screen.getByLabelText('응답 인용')).not.toBeChecked();
+    expect(screen.getByRole('switch', { name: '응답 인용' })).not.toBeChecked();
     expect(screen.queryByLabelText('인용 이름')).not.toBeInTheDocument();
     expect(screen.queryAllByLabelText('인용 문구')).toHaveLength(0);
   });
@@ -108,7 +108,7 @@ describe('빌더 응답 인용 컨트롤', () => {
   it('토글을 켜면 인용 이름·안내·옵션별 인용 문구 입력칸이 등장한다', () => {
     render(<Harness question={radioQuestion} initial={radioFormData} />);
 
-    fireEvent.click(screen.getByLabelText('응답 인용'));
+    fireEvent.click(screen.getByRole('switch', { name: '응답 인용' }));
 
     expect(screen.getByLabelText('인용 이름')).toBeInTheDocument();
     // 인용 결과 없음 안내 — 빈 인용과 유령 인용을 한 문단으로 다룬다
@@ -120,7 +120,7 @@ describe('빌더 응답 인용 컨트롤', () => {
 
   it('인용 이름을 입력하면 참조 토큰이 실시간으로 갱신된다', () => {
     render(<Harness question={radioQuestion} initial={radioFormData} />);
-    fireEvent.click(screen.getByLabelText('응답 인용'));
+    fireEvent.click(screen.getByRole('switch', { name: '응답 인용' }));
 
     // 이름을 입력하기 전에는 자리표시 토큰
     expect(screen.getByText('{{{인용이름}}}')).toBeInTheDocument();
@@ -132,7 +132,7 @@ describe('빌더 응답 인용 컨트롤', () => {
 
   it('주관식 옵션에만 {{입력}} 힌트를 붙인다', () => {
     render(<Harness question={radioQuestion} initial={radioFormData} />);
-    fireEvent.click(screen.getByLabelText('응답 인용'));
+    fireEvent.click(screen.getByRole('switch', { name: '응답 인용' }));
 
     // 옵션 2개 중 allowTextInput 인 하나만 힌트를 갖는다
     expect(screen.getAllByText(/\{\{입력\}\} 을 쓰면/)).toHaveLength(1);
@@ -140,7 +140,7 @@ describe('빌더 응답 인용 컨트롤', () => {
 
   it('옵션 인용 문구 입력이 옵션 객체의 answerQuoteText 로 반영된다', () => {
     render(<Harness question={radioQuestion} initial={radioFormData} />);
-    fireEvent.click(screen.getByLabelText('응답 인용'));
+    fireEvent.click(screen.getByRole('switch', { name: '응답 인용' }));
 
     const inputs = screen.getAllByLabelText('인용 문구');
     fireEvent.change(inputs[0] as HTMLElement, { target: { value: '전기차를' } });
@@ -150,7 +150,7 @@ describe('빌더 응답 인용 컨트롤', () => {
 
   it('토글을 껐다 다시 켜도 옵션 인용 문구가 남아 있다', () => {
     render(<Harness question={radioQuestion} initial={radioFormData} />);
-    const toggle = screen.getByLabelText('응답 인용');
+    const toggle = screen.getByRole('switch', { name: '응답 인용' });
 
     fireEvent.click(toggle);
     fireEvent.change(screen.getAllByLabelText('인용 문구')[0] as HTMLElement, {
@@ -167,7 +167,7 @@ describe('빌더 응답 인용 컨트롤', () => {
   it('단답형은 옵션이 없어 질문 자체에 인용 문구 입력칸이 붙는다', () => {
     render(<Harness question={textQuestion} initial={{ title: '거주 지역' }} />);
 
-    fireEvent.click(screen.getByLabelText('응답 인용'));
+    fireEvent.click(screen.getByRole('switch', { name: '응답 인용' }));
 
     const field = screen.getByLabelText('인용 문구');
     expect(field).toBeInTheDocument();
@@ -181,14 +181,14 @@ describe('빌더 응답 인용 컨트롤', () => {
     const textarea = { ...textQuestion, id: 'q3', type: 'textarea' } as unknown as Question;
     render(<Harness question={textarea} initial={{ title: '자유 의견' }} />);
 
-    expect(screen.queryByLabelText('응답 인용')).not.toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: '응답 인용' })).not.toBeInTheDocument();
   });
 
   it('표 질문에는 질문 레벨 컨트롤이 나타나지 않는다 — 인용 이름은 셀이 소유한다', () => {
     const table = { ...textQuestion, id: 'q4', type: 'table' } as unknown as Question;
     render(<Harness question={table} initial={{ title: '항목별 인원' }} />);
 
-    expect(screen.queryByLabelText('응답 인용')).not.toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: '응답 인용' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('인용 이름')).not.toBeInTheDocument();
   });
 });

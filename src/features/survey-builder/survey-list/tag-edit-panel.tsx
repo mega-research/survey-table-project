@@ -222,9 +222,8 @@ export function TagEditPanel({ tag, onClose }: TagEditPanelProps) {
             <AlertDialogCancel>취소</AlertDialogCancel>
             <AlertDialogAction
               disabled={deleting}
-              onClick={(event) => {
+              onClick={() => {
                 // 지우기가 끝난 뒤 닫는다 — 실패하면 대화상자가 남아 다시 누를 수 있다.
-                event.preventBaseUIHandler();
                 void confirmDelete();
               }}
               className="bg-[#D93025] text-white hover:bg-[#B3261E]"

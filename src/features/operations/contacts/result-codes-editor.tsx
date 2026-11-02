@@ -242,10 +242,12 @@ export function ResultCodesEditor({ surveyId, initialCodes }: ResultCodesEditorP
                 </td>
                 <td className="px-3 py-2">
                   <Select
-                    value={c.tone ?? 'slate'}
-                    onValueChange={(v) =>
-                      update(i, { tone: v as NonNullable<ContactResultCode['tone']> })
-                    }
+                    items={[...TONE_OPTIONS.map((t) => ({ value: t, label: t }))]}
+                    value={(c.tone ?? 'slate') || null}
+                    onValueChange={(v) => {
+                      if (v !== null)
+                        update(i, { tone: v as NonNullable<ContactResultCode['tone']> });
+                    }}
                   >
                     <SelectTrigger className="h-8 w-28">
                       <SelectValue />
@@ -261,8 +263,23 @@ export function ResultCodesEditor({ surveyId, initialCodes }: ResultCodesEditorP
                 </td>
                 <td className="px-3 py-2">
                   <Select
-                    value={resolveCodeStatus(c)}
-                    onValueChange={(v) => update(i, { status: v as ResultCodeStatus })}
+                    items={[
+                      ...(['positive', 'neutral', 'negative'] as ResultCodeStatus[]).map((s) => ({
+                        value: s,
+                        label: (
+                          <>
+                            <span className="inline-flex items-center gap-2">
+                              <StatusDot status={s} />
+                              {STATUS_LABEL[s]}
+                            </span>
+                          </>
+                        ),
+                      })),
+                    ]}
+                    value={resolveCodeStatus(c) || null}
+                    onValueChange={(v) => {
+                      if (v !== null) update(i, { status: v as ResultCodeStatus });
+                    }}
                   >
                     <SelectTrigger className="h-8 w-24">
                       <SelectValue>

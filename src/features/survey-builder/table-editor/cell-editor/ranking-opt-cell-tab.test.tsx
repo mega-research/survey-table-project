@@ -169,12 +169,16 @@ describe('RankingOptCellTab — 상세 기재(선택 시 텍스트 입력 받기
 
     await userEvent.click(screen.getByRole('switch', { name: /선택 시 텍스트 입력 받기/ }));
 
-    expect(onAllowTextInputChange).toHaveBeenCalledWith(true);
+    expect(onAllowTextInputChange).toHaveBeenCalledWith(true, expect.anything());
   });
 
   it('기타 모드에서는 상세 기재 스위치가 비활성이다 — 기타는 _etc 로 따로 받는다', () => {
     render(<RankingOptCellTab {...makeProps({ isOtherRankingCell: true })} />);
 
-    expect(screen.getByRole('switch', { name: /선택 시 텍스트 입력 받기/ })).toBeDisabled();
+    // 공식 Switch 는 span(role=switch)이라 disabled 속성 대신 aria-disabled 로 알린다.
+    expect(screen.getByRole('switch', { name: /선택 시 텍스트 입력 받기/ })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
   });
 });

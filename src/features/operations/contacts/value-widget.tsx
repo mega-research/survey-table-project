@@ -164,7 +164,17 @@ function ValueInput({
 
   if (source === FILTER_SOURCE.CONTACT_OWNER) {
     return (
-      <Select value={value} onValueChange={onChange}>
+      <Select
+        items={[
+          ...withNoneOption(assignmentOptions.map((o) => ({ value: o.id, label: o.name }))).map(
+            (o) => ({ value: o.value, label: o.label }),
+          ),
+        ]}
+        value={value || null}
+        onValueChange={(value) => {
+          if (value !== null) onChange(value);
+        }}
+      >
         <SelectTrigger id={inputId} className="w-[260px] h-10">
           <SelectValue placeholder="컨택원 선택" />
         </SelectTrigger>
@@ -183,7 +193,18 @@ function ValueInput({
 
   if (source === FILTER_SOURCE.CONTACT_RESULT) {
     return (
-      <Select value={value} onValueChange={onChange}>
+      <Select
+        items={[
+          ...contactResultFilterOptions(resultCodeOptions).map((o) => ({
+            value: o.value,
+            label: o.label,
+          })),
+        ]}
+        value={value || null}
+        onValueChange={(value) => {
+          if (value !== null) onChange(value);
+        }}
+      >
         <SelectTrigger id={inputId} className="w-[260px] h-10">
           <SelectValue placeholder="결과코드 선택" />
         </SelectTrigger>
@@ -200,7 +221,13 @@ function ValueInput({
 
   if (source === FILTER_SOURCE.EMAIL) {
     return (
-      <Select value={value || 'delivered'} onValueChange={onChange}>
+      <Select
+        items={[...MAIL_FILTER_OPTIONS.map((o) => ({ value: o.value, label: o.label }))]}
+        value={value || 'delivered'}
+        onValueChange={(value) => {
+          if (value !== null) onChange(value);
+        }}
+      >
         <SelectTrigger id={inputId} className="w-[260px] h-10">
           <SelectValue />
         </SelectTrigger>
@@ -219,7 +246,18 @@ function ValueInput({
     // 레거시 값 노출 규칙은 webFilterOptionsFor 주석 참조. 사용자가 새 옵션을
     // 고르는 순간부터 레거시 항목은 목록에서 사라진다.
     return (
-      <Select value={value || 'completed'} onValueChange={onChange}>
+      <Select
+        items={[
+          ...webFilterOptionsFor(value ? [value] : []).map((o) => ({
+            value: o.value,
+            label: o.label,
+          })),
+        ]}
+        value={value || 'completed'}
+        onValueChange={(value) => {
+          if (value !== null) onChange(value);
+        }}
+      >
         <SelectTrigger id={inputId} className="w-[260px] h-10">
           <SelectValue />
         </SelectTrigger>

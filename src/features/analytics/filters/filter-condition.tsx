@@ -4,7 +4,6 @@ import { X } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Combobox } from '@/components/ui/combobox';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -19,6 +18,7 @@ import {
   getOperatorLabel,
   isFilterableQuestion,
 } from '@/features/analytics/filters/filter';
+import { SearchableSelect } from '@/features/analytics/searchable-select';
 import type { Question } from '@/types/survey';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 
@@ -85,7 +85,7 @@ export function FilterConditionRow({
       )}
 
       {/* 질문 선택 - Combobox */}
-      <Combobox
+      <SearchableSelect
         options={questionComboboxOptions}
         value={condition.questionId}
         onValueChange={(value) => onUpdate({ questionId: value })}
@@ -98,8 +98,11 @@ export function FilterConditionRow({
 
       {/* 연산자 선택 - Select 유지 (옵션 적음) */}
       <Select
-        value={condition.operator}
-        onValueChange={(value: string) => onUpdate({ operator: value as FilterOperator })}
+        items={[...availableOperators.map((op) => ({ value: op, label: getOperatorLabel(op) }))]}
+        value={condition.operator || null}
+        onValueChange={(value) => {
+          if (value !== null) onUpdate({ operator: value as FilterOperator });
+        }}
         disabled={!selectedQuestion}
       >
         <SelectTrigger className="w-[140px] bg-white">
@@ -173,7 +176,7 @@ function FilterValueInput({
 
   if (useComboboxForValues) {
     return (
-      <Combobox
+      <SearchableSelect
         options={valueComboboxOptions}
         value={singleValue}
         onValueChange={(value) => onUpdate({ value })}
@@ -187,7 +190,13 @@ function FilterValueInput({
   }
 
   return (
-    <Select value={singleValue} onValueChange={(value: string) => onUpdate({ value })}>
+    <Select
+      items={[...options.map((opt) => ({ value: opt.value, label: opt.label }))]}
+      value={singleValue || null}
+      onValueChange={(value) => {
+        if (value !== null) onUpdate({ value });
+      }}
+    >
       <SelectTrigger className="w-[180px] bg-white">
         <SelectValue placeholder="값 선택" />
       </SelectTrigger>

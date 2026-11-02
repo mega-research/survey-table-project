@@ -5,15 +5,15 @@ import { useState } from 'react';
 import { Tag } from 'lucide-react';
 
 import {
+  Combobox,
   ComboboxCollection,
   ComboboxContent,
   ComboboxEmpty,
   ComboboxGroup,
-  ComboboxGroupLabel,
+  ComboboxInput,
   ComboboxItem,
+  ComboboxLabel,
   ComboboxList,
-  ComboboxRoot,
-  ComboboxSearchInput,
   ComboboxTrigger,
 } from '@/components/ui/combobox';
 
@@ -40,7 +40,7 @@ export function PopoverVariableMenu({ catalog, onPick }: Props) {
   ].filter((g) => g.items.length > 0);
 
   return (
-    <ComboboxRoot<VariableDef>
+    <Combobox<VariableDef>
       items={groups}
       value={null}
       onValueChange={(v) => {
@@ -56,14 +56,14 @@ export function PopoverVariableMenu({ catalog, onPick }: Props) {
         <Tag className="h-4 w-4" />
       </ComboboxTrigger>
       <ComboboxContent className="w-[280px]">
-        <ComboboxSearchInput placeholder="변수 검색..." />
+        <ComboboxInput showTrigger={false} placeholder="변수 검색..." />
         {catalog.length > 0 && (
-          <ComboboxEmpty className="py-6">일치하는 변수가 없습니다.</ComboboxEmpty>
+          <ComboboxEmpty>일치하는 변수가 없습니다.</ComboboxEmpty>
         )}
         <ComboboxList className="max-h-[280px]">
           {(group: VariableGroup) => (
             <ComboboxGroup key={group.heading} items={group.items}>
-              <ComboboxGroupLabel>{group.heading}</ComboboxGroupLabel>
+              <ComboboxLabel>{group.heading}</ComboboxLabel>
               <ComboboxCollection>
                 {(v: VariableDef) => (
                   <ComboboxItem key={`${v.category}-${v.key}`} value={v}>
@@ -83,6 +83,6 @@ export function PopoverVariableMenu({ catalog, onPick }: Props) {
           </div>
         )}
       </ComboboxContent>
-    </ComboboxRoot>
+    </Combobox>
   );
 }

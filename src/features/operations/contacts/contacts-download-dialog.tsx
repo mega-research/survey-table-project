@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
@@ -96,9 +96,14 @@ export function ContactsDownloadDialog({ surveyId, candidates }: Props) {
 
         <DialogFooter>
           {href ? (
-            <Button size="sm" render={<a href={href} download onClick={() => setOpen(false)} />}>
+            <a
+              href={href}
+              download
+              onClick={() => setOpen(false)}
+              className={buttonVariants({ size: 'sm' })}
+            >
               선택 다운로드
-            </Button>
+            </a>
           ) : (
             <Button size="sm" disabled>
               선택 다운로드

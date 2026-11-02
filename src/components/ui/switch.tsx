@@ -1,34 +1,31 @@
-'use client';
+"use client"
 
-import * as React from 'react';
+import { Switch as SwitchPrimitive } from "@base-ui/react/switch"
+import { cn } from "cn"
 
-import { Switch as SwitchPrimitive } from '@base-ui/react/switch';
-
-import { cn } from '@/lib/utils';
-
-// onCheckedChange 는 켜짐 여부 하나만 넘긴다 — Base UI 가 덧붙이는 eventDetails 를 쓰는 쪽이 없고,
-// 콜백을 그대로 prop 으로 흘려보내는 화면이 많아 그 인자가 위로 새지 않게 한다.
-type SwitchProps = Omit<React.ComponentProps<typeof SwitchPrimitive.Root>, 'className' | 'onCheckedChange'> & {
-  className?: string | undefined;
-  onCheckedChange?: ((checked: boolean) => void) | undefined;
-};
-
-// Checkbox 와 같은 이유로 네이티브 button 으로 그린다(형제 <Label htmlFor>).
-function Switch({ className, onCheckedChange, ...props }: SwitchProps) {
+function Switch({
+  className,
+  size = "default",
+  ...props
+}: SwitchPrimitive.Root.Props & {
+  size?: "sm" | "default"
+}) {
   return (
     <SwitchPrimitive.Root
-      onCheckedChange={(checked) => onCheckedChange?.(checked)}
-      nativeButton
-      render={<button type="button" />}
+      data-slot="switch"
+      data-size={size}
       className={cn(
-        'peer focus-visible:ring-ring focus-visible:ring-offset-background inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 data-[checked]:bg-blue-500 data-[unchecked]:bg-gray-200',
-        className,
+        "peer group/switch relative inline-flex shrink-0 items-center rounded-full border border-transparent shadow-xs transition-all outline-none group-has-[:focus-visible]/field-label:border-transparent group-has-[:focus-visible]/field-label:ring-0 after:absolute after:-inset-x-3 after:-inset-y-2 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 data-[size=default]:h-[18.4px] data-[size=default]:w-[32px] data-[size=sm]:h-[14px] data-[size=sm]:w-[24px] dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 data-checked:bg-primary data-unchecked:bg-input dark:data-unchecked:bg-input/80 data-disabled:cursor-not-allowed data-disabled:opacity-50",
+        className
       )}
       {...props}
     >
-      <SwitchPrimitive.Thumb className="pointer-events-none block h-4 w-4 rounded-full bg-white shadow-lg ring-0 transition-transform data-[checked]:translate-x-4 data-[unchecked]:translate-x-0" />
+      <SwitchPrimitive.Thumb
+        data-slot="switch-thumb"
+        className="pointer-events-none block rounded-full bg-background ring-0 transition-transform group-data-[size=default]/switch:size-4 group-data-[size=sm]/switch:size-3 group-data-[size=default]/switch:data-checked:translate-x-[calc(100%-2px)] group-data-[size=sm]/switch:data-checked:translate-x-[calc(100%-2px)] dark:data-checked:bg-primary-foreground group-data-[size=default]/switch:data-unchecked:translate-x-0 group-data-[size=sm]/switch:data-unchecked:translate-x-0 dark:data-unchecked:bg-foreground"
+      />
     </SwitchPrimitive.Root>
-  );
+  )
 }
 
-export { Switch };
+export { Switch }

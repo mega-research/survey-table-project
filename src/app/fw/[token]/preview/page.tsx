@@ -2,7 +2,7 @@ import Link from 'next/link';
 
 import { ArrowLeft, Eye } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button';
 import { fieldworkLinkOperationsBase } from '@/features/operations/operations-paths';
 import { SurveyResponseFlow } from '@/features/survey-response/survey-response-flow';
 import { assertFieldworkLinkPageAccess } from '@/server/page-fieldwork-link-access';
@@ -37,10 +37,10 @@ export default async function FieldworkLinkPreviewPage({ params }: PageProps) {
   const backHref = fieldworkLinkOperationsBase(token);
 
   const backButton = (
-    <Button variant="outline" size="sm" render={<Link href={backHref} />}>
+    <Link href={backHref} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
       <ArrowLeft className="mr-2 h-4 w-4" />
       현황으로
-    </Button>
+    </Link>
   );
 
   if (!preview) {

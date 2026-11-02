@@ -194,8 +194,11 @@ function GroupBlock({ value, onChange, depth, ownQuestion, allQuestions }: Group
     >
       <div className="flex items-center gap-2">
         <Select
-          value={value.op}
-          onValueChange={(op) => onChange({ ...value, op: op as CalcOperator })}
+          items={[...OPERATOR_OPTIONS.map((o) => ({ value: o.value, label: o.label }))]}
+          value={value.op || null}
+          onValueChange={(op) => {
+            if (op !== null) onChange({ ...value, op: op as CalcOperator });
+          }}
         >
           <SelectTrigger className="h-8 w-20 text-sm" aria-label="그룹 연산자">
             <SelectValue />

@@ -2,7 +2,7 @@ import Link from 'next/link';
 
 import { asc, eq } from 'drizzle-orm';
 
-import { Button } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { db } from '@/db';
 import { questions as questionsTable } from '@/db/schema';
@@ -244,12 +244,12 @@ export async function ProfilesScreen({
           </p>
         </div>
         {canConfigureColumns && (
-          <Button
-            variant="outline"
-            render={<Link href={operationsPaths(basePath).profilesColumns} />}
+          <Link
+            href={operationsPaths(basePath).profilesColumns}
+            className={buttonVariants({ variant: 'outline' })}
           >
             컬럼 설정
-          </Button>
+          </Link>
         )}
       </div>
 

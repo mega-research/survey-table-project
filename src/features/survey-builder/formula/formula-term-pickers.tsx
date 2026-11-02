@@ -104,8 +104,16 @@ export function CellRefPicker({
   return (
     <div className="flex flex-1 flex-wrap items-center gap-2">
       <Select
-        value={selectedQuestionId}
-        onValueChange={(qId) => onChange(makeCellExpr(qId, '', ownQuestion.id))}
+        items={[
+          ...tableQuestions.map((q) => ({
+            value: q.id,
+            label: q.id === ownQuestion.id ? `이 질문 (${questionLabel(q)})` : questionLabel(q),
+          })),
+        ]}
+        value={selectedQuestionId || null}
+        onValueChange={(qId) => {
+          if (qId !== null) onChange(makeCellExpr(qId, '', ownQuestion.id));
+        }}
       >
         <SelectTrigger className="h-8 w-52 text-sm">
           <SelectValue placeholder="질문 선택" />
@@ -120,8 +128,11 @@ export function CellRefPicker({
       </Select>
 
       <Select
-        value={value.cellId}
-        onValueChange={(cId) => onChange(makeCellExpr(selectedQuestionId, cId, ownQuestion.id))}
+        items={[...cells.map((c) => ({ value: c.cellId, label: c.label }))]}
+        value={value.cellId || null}
+        onValueChange={(cId) => {
+          if (cId !== null) onChange(makeCellExpr(selectedQuestionId, cId, ownQuestion.id));
+        }}
       >
         <SelectTrigger className="h-8 w-52 text-sm">
           <SelectValue placeholder="셀 선택" />
@@ -160,8 +171,11 @@ export function QuestionRefPicker({ value, onChange, allQuestions }: QuestionRef
   return (
     <div className="flex-1">
       <Select
-        value={value.questionId}
-        onValueChange={(qId) => onChange({ kind: 'question', questionId: qId })}
+        items={[...eligible.map((q) => ({ value: q.id, label: questionLabel(q) }))]}
+        value={value.questionId || null}
+        onValueChange={(qId) => {
+          if (qId !== null) onChange({ kind: 'question', questionId: qId });
+        }}
       >
         <SelectTrigger className="h-8 w-full max-w-sm text-sm">
           <SelectValue placeholder="숫자형 단답 질문 선택" />
@@ -278,10 +292,14 @@ export function LookupTermEditor({ value, onChange }: LookupTermEditorProps) {
               </div>
             ) : (
               <Select
+                items={[
+                  { value: NONE_SENTINEL, label: '— 미선택 —' },
+                  ...valueCandidates.map((c) => ({ value: c, label: c })),
+                ]}
                 value={value.valueColumn || NONE_SENTINEL}
-                onValueChange={(v) =>
-                  onChange({ ...value, valueColumn: v === NONE_SENTINEL ? '' : v })
-                }
+                onValueChange={(v) => {
+                  if (v !== null) onChange({ ...value, valueColumn: v === NONE_SENTINEL ? '' : v });
+                }}
               >
                 <SelectTrigger className="h-8 w-64 text-sm">
                   <SelectValue placeholder="값 컬럼 선택" />
@@ -402,8 +420,14 @@ export function AggEditor({ value, onChange, ownQuestion, allQuestions }: AggEdi
     <div className="flex-1 space-y-2 rounded border bg-white p-2">
       <div className="flex items-center gap-2">
         <Select
-          value={value.fn}
-          onValueChange={(fn) => onChange({ ...value, fn: fn as AggExpr['fn'] })}
+          items={[
+            { value: 'sum', label: 'SUM (합계)' },
+            { value: 'avg', label: 'AVG (평균)' },
+          ]}
+          value={value.fn || null}
+          onValueChange={(fn) => {
+            if (fn !== null) onChange({ ...value, fn: fn as AggExpr['fn'] });
+          }}
         >
           <SelectTrigger className="h-8 w-28 text-sm">
             <SelectValue />
@@ -536,8 +560,13 @@ export function AttrTermEditor({ value, onChange }: AttrTermEditorProps) {
   return (
     <div className="flex-1 space-y-2">
       <Select
-        value={isCustom ? CUSTOM_ATTR_SENTINEL : value.attrsKey}
+        items={[
+          ...attrKeys.map((k) => ({ value: k, label: k })),
+          { value: CUSTOM_ATTR_SENTINEL, label: '직접 입력…' },
+        ]}
+        value={(isCustom ? CUSTOM_ATTR_SENTINEL : value.attrsKey) || null}
         onValueChange={(k) => {
+          if (k === null) return;
           if (k === CUSTOM_ATTR_SENTINEL) {
             setForceCustom(true);
             return;

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 const TEST_MODE_UPLOAD_MESSAGE = '테스트 모드에서는 실제 조사대상자를 업로드할 수 없습니다.';
@@ -17,9 +17,9 @@ interface ContactUploadActionProps {
 export function ContactUploadAction({ href, label, disabled }: ContactUploadActionProps) {
   if (!disabled) {
     return (
-      <Button variant="outline" size="sm" render={<Link href={href} />}>
+      <Link href={href} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
         {label}
-      </Button>
+      </Link>
     );
   }
 
