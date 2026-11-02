@@ -1,3 +1,4 @@
+import { DrizzleQueryError } from 'drizzle-orm/errors';
 import { describe, expect, it } from 'vitest';
 
 import { createLogger, REDACT_PATHS } from '@/lib/logger';
@@ -89,6 +90,21 @@ describe('logger err serializer (DrizzleQueryError 대응)', () => {
     expect(serialized['message']).not.toContain('김철수');
     expect(String(serialized['stack'])).not.toContain('01012345678');
     expect(JSON.stringify(serialized)).not.toContain('민감값');
+  });
+
+  it('실제 DrizzleQueryError — SQL·바인딩 개수·스택 프레임은 남기고 값만 지운다', () => {
+    const { lines, stream } = captureStream();
+    const logger = createLogger(stream);
+    const sql = 'select * from "contacts" where "name" ilike $1 limit $2';
+    const err = new DrizzleQueryError(sql, ['%홍길동%', 50], new Error('canceling statement'));
+
+    logger.error({ err }, 'db 실패');
+
+    const serialized = lastLog(lines)['err'] as Record<string, unknown>;
+    // pino 는 message 뒤에 원인 메시지를 잇는다 — 그것도 살아야 한다
+    expect(serialized['message']).toBe(`Failed query: ${sql}\nparams: [Stripped 2 values]: canceling statement`);
+    expect(String(serialized['stack'])).toContain('params: [Stripped 2 values]\n    at ');
+    expect(JSON.stringify(serialized)).not.toContain('홍길동');
   });
 });
 
