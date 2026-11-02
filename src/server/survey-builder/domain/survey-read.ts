@@ -1,5 +1,3 @@
-import type { SurveyDocumentView } from '@/shared/contracts/survey-builder-io';
-export type { SurveyDocumentView };
 import * as z from 'zod';
 
 import type {
@@ -9,14 +7,19 @@ import type {
   Survey as SurveyRow,
   SurveyVersion,
 } from '@/db/schema';
-import type {
-  SurveyControl,
-  SurveyListItem,
-  SurveyListResult,
-  SurveySummaryItem,
+import type { SurveyDocumentView } from '@/shared/contracts/survey-builder-io';
+import {
+  type SurveyControl,
+  type SurveyListItem,
+  SurveyListPageInputSchema,
+  type SurveyListPageResult,
+  type SurveyListResult,
+  type SurveySummaryItem,
 } from '@/shared/contracts/survey-builder-io';
 import type { VariableDef } from '@/shared/contracts/template-variables';
 import type { Survey as SurveyType } from '@/types/survey';
+
+export type { SurveyDocumentView };
 
 // types/survey 의 SurveyType(컴포넌트 기대 타입)과 DB row 타입을 함께 re-export.
 // 런타임 import 0 — 전부 type-only.
@@ -39,28 +42,24 @@ export const ResponseIdInput = z.object({ responseId: z.string(), surveyId: z.st
 export type ResponseIdInput = z.infer<typeof ResponseIdInput>;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// list (getSurveyListWithCounts)
+// 목록 행 · 전체 목록 결과 (getSurveyListWithCounts — 분석 페이지 RSC 가 직접 부른다)
 // ─────────────────────────────────────────────────────────────────────────────
 
 // 행·응답 모양은 UI(목록 화면·상세 검색)도 쓰므로 계약 소관 — 여기서 다시 내보낸다(티켓 08).
 export type { SurveyListItem, SurveyListResult };
-export const SurveyListItemSchema = z.custom<SurveyListItem>();
 
-/** 목록 조회 입력 — 화면이 기억하는 작업 범위. 유효성은 서버가 다시 판정한다. */
-export const SurveyListInput = z.object({
-  scope: z.string().nullish(),
-  /**
-   * 휴지통 조회 (티켓 17) — 슈퍼어드민의 시스템 전체 보기에서만 통과한다.
-   *
-   * 별도 표면이 아니라 같은 목록의 모드인 이유는 화면이 하나이기 때문이다. 카드·정렬·검색·
-   * 페이지네이션이 전부 같고 다른 것은 조회 조건과 카드 액션뿐이라, 표면을 가르면 목록
-   * 파이프라인이 두 벌이 된다.
-   */
-  deleted: z.boolean().optional(),
-});
-export type SurveyListInput = z.infer<typeof SurveyListInput>;
+// ─────────────────────────────────────────────────────────────────────────────
+// listPage (listSurveyPage) — 서버 페이지네이션 (설문 즐겨찾기·태그 티켓 03)
+// ─────────────────────────────────────────────────────────────────────────────
 
-export const SurveyListOutput = z.custom<SurveyListResult>();
+/**
+ * 입력 스키마는 계약 소관이다 — 화면의 주소 ↔ 조건 변환이 같은 어휘를 써야 해서. 요청 객체는
+ * DB 쓰기로 가지 않고 `.strict()` 라 모르는 키는 거부된다.
+ */
+export const SurveyListPageInput = SurveyListPageInputSchema;
+export type SurveyListPageInput = z.infer<typeof SurveyListPageInput>;
+export type { SurveyListPageResult };
+export const SurveyListPageOutput = z.custom<SurveyListPageResult>();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // listSummaries (listSurveySummaries) — 사이드바 참여 트리용, 응답 수 없음
@@ -180,7 +179,6 @@ export const SurveyForResponseInput = SurveyIdInput.extend({
   inviteToken: z.string().optional(),
 });
 export type SurveyForResponseInput = z.infer<typeof SurveyForResponseInput>;
-
 
 /**
  * forResponse(getSurveyForResponse). 반환 { survey, versionId, control, documentView } | null.

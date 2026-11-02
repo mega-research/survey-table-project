@@ -1,10 +1,18 @@
 import { createRouterClient } from '@orpc/server';
+import { ORPCError } from '@orpc/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
+import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
+import { INITIAL_SURVEY_LIST_PAGE_QUERY } from '@/shared/contracts/survey-builder-io';
+
+import * as responseSvc from '../services/response-read';
+import * as surveySvc from '../services/survey-read';
+import { read } from './read';
 
 vi.mock('../services/survey-read', () => ({
   getSurveyListWithCounts: vi.fn(),
+  listSurveyPage: vi.fn(),
   listSurveySummaries: vi.fn(),
   getSurveyById: vi.fn(),
   getSurveyWithDetails: vi.fn(),
@@ -27,20 +35,22 @@ vi.mock('../services/response-read', () => ({
   exportResponsesAsCsv: vi.fn(),
 }));
 
-import { ORPCError } from '@orpc/server';
-
-import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
-
-import * as responseSvc from '../services/response-read';
-import * as surveySvc from '../services/survey-read';
-import { read } from './read';
-
 // UUID 픽스처는 v4 형태로 통일.
 const SURVEY_ID = '11111111-2222-4333-8444-555555555555';
 const RESPONSE_ID = '22222222-3333-4444-8555-666666666666';
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false , userType: 'internal'} };
+  return {
+    db: {} as never,
+    user: {
+      id: 'admin-1',
+      email: 'a@b.com',
+      name: '관리자',
+      status: 'active',
+      isSuperadmin: false,
+      userType: 'internal',
+    },
+  };
 }
 
 function anonContext(): ORPCContext {
@@ -51,36 +61,47 @@ describe('surveyBuilder.read procedures', () => {
   beforeEach(() => vi.clearAllMocks());
   afterEach(() => vi.unstubAllEnvs());
 
-  it('list는 세션 사용자와 요청 범위를 그대로 넘긴다', async () => {
-    const result = { scope: { kind: 'system' }, teams: [], canSeeSystemScope: true, surveys: [] };
-    vi.mocked(surveySvc.getSurveyListWithCounts).mockResolvedValue(result as never);
+  it('listPage 는 세션 사용자와 조건을 그대로 넘긴다', async () => {
+    const result = { scope: { kind: 'system' }, teams: [], items: [], total: 0 };
+    vi.mocked(surveySvc.listSurveyPage).mockResolvedValue(result as never);
     const context = authedContext();
     const client = createRouterClient({ read }, { context });
-    const res = await client.read.list({ scope: 'team-1' });
-    expect(surveySvc.getSurveyListWithCounts).toHaveBeenCalledWith(context.user, 'team-1', {
-      deleted: false,
-    });
+    const input = { ...INITIAL_SURVEY_LIST_PAGE_QUERY, scope: 'team-1', q: '실태', page: 2 };
+    const res = await client.read.listPage(input);
+    expect(surveySvc.listSurveyPage).toHaveBeenCalledWith(context.user, input);
     expect(res).toEqual(result);
   });
 
-  it('list 는 범위 미지정을 null 로 넘긴다 — 서버가 기본 범위를 정한다', async () => {
-    vi.mocked(surveySvc.getSurveyListWithCounts).mockResolvedValue({
-      scope: { kind: 'none' },
-      teams: [],
-      canSeeSystemScope: false,
-      surveys: [],
-    } as never);
-    const context = authedContext();
-    const client = createRouterClient({ read }, { context });
-    await client.read.list({});
-    expect(surveySvc.getSurveyListWithCounts).toHaveBeenCalledWith(context.user, null, {
-      deleted: false,
-    });
+  it('listPage 는 모르는 키를 거부한다 — 입력이 그대로 조건이 되므로 조용히 버리지 않는다', async () => {
+    const client = createRouterClient({ read }, { context: authedContext() });
+    await expect(
+      client.read.listPage({
+        ...INITIAL_SURVEY_LIST_PAGE_QUERY,
+        scope: null,
+        ownerUserId: 'x',
+      } as never),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(surveySvc.listSurveyPage).not.toHaveBeenCalled();
+  });
+
+  it('listPage 는 주소에서 온 id 가 UUID 꼴이 아니면 DB 까지 보내지 않는다', async () => {
+    const client = createRouterClient({ read }, { context: authedContext() });
+    await expect(
+      client.read.listPage({ ...INITIAL_SURVEY_LIST_PAGE_QUERY, scope: null, groupId: 'abc' }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(surveySvc.listSurveyPage).not.toHaveBeenCalled();
   });
 
   it('listSummaries 는 세션 사용자와 요청 범위를 요약 조회에 넘긴다 — 응답 수 조회를 타지 않는다', async () => {
     const rows = [
-      { id: SURVEY_ID, title: '설문', cardTitle: null, teamId: 't-1', teamName: '1팀', surveyGroupId: null },
+      {
+        id: SURVEY_ID,
+        title: '설문',
+        cardTitle: null,
+        teamId: 't-1',
+        teamName: '1팀',
+        surveyGroupId: null,
+      },
     ];
     vi.mocked(surveySvc.listSurveySummaries).mockResolvedValue(rows as never);
     const context = authedContext();
@@ -125,7 +146,10 @@ describe('surveyBuilder.read procedures', () => {
     vi.mocked(surveySvc.isSlugAvailable).mockResolvedValue(true as never);
     const client = createRouterClient({ read }, { context: authedContext() });
     const res = await client.read.slugAvailable({ slug: 'my-slug', excludeSurveyId: SURVEY_ID });
-    expect(surveySvc.isSlugAvailable).toHaveBeenCalledWith({ slug: 'my-slug', excludeSurveyId: SURVEY_ID });
+    expect(surveySvc.isSlugAvailable).toHaveBeenCalledWith({
+      slug: 'my-slug',
+      excludeSurveyId: SURVEY_ID,
+    });
     expect(res).toBe(true);
   });
 
@@ -259,7 +283,14 @@ describe('surveyBuilder.read procedures', () => {
       {
         context: {
           db: {} as never,
-          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false, userType: 'guest' },
+          user: {
+            id: 'guest-1',
+            email: 'g@b.com',
+            name: '게스트',
+            status: 'active',
+            isSuperadmin: false,
+            userType: 'guest',
+          },
         },
       },
     );

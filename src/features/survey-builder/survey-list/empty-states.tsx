@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 
-import { FileText, FolderOpen, Plus, Search, Trash2, UsersRound } from 'lucide-react';
+import { FileText, FolderOpen, Plus, Search, Trash2, UsersRound, X } from 'lucide-react';
 
 /**
  * 팀 미배치 빈 상태 (.pen FLOW 9-1) — 조회 자체를 하지 않는다.
@@ -18,12 +18,12 @@ export function NoTeamEmptyState() {
       </span>
       <h3 className="text-[17px] font-semibold text-[#1C1C1E]">소속 팀이 없습니다</h3>
       <p className="max-w-[420px] text-[13.5px] leading-relaxed text-[#6E6E73]">
-        관리자에게 팀 배정을 요청하세요. 팀이 배정되기 전에는 초대받은 설문을 포함해 어떤
-        설문도 볼 수 없습니다.
+        관리자에게 팀 배정을 요청하세요. 팀이 배정되기 전에는 초대받은 설문을 포함해 어떤 설문도 볼
+        수 없습니다.
       </p>
       <Link
         href="/profile"
-        className="mt-1 h-9 rounded-[9px] border border-[#E5E5EA] bg-white px-4 leading-9 text-[13px] font-medium text-[#374151] hover:bg-[#F5F5F7]"
+        className="mt-1 h-9 rounded-[9px] border border-[#E5E5EA] bg-white px-4 text-[13px] leading-9 font-medium text-[#374151] hover:bg-[#F5F5F7]"
       >
         프로필 보기
       </Link>
@@ -31,22 +31,52 @@ export function NoTeamEmptyState() {
   );
 }
 
-/** 검색/필터 결과 없음 — 초기화 버튼으로 전체 상태를 되돌린다. */
-export function NoResultsEmptyState({ onReset }: { onReset: () => void }) {
+/**
+ * 조건에 맞는 설문 없음 — 걸린 조건을 하나씩 푸는 단추와 「모두 풀기」.
+ *
+ * 그룹·팀 좁힘은 주소가 가리키는 화면이라 여기서 풀지 않는다(그 화면이 비었으면 다른 빈 상태다).
+ */
+export function NoResultsEmptyState({
+  conditions,
+  onClearAll,
+}: {
+  conditions: { key: string; label: string; onClear: () => void }[];
+  onClearAll: () => void;
+}) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">
       <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[#F5F5F7]">
         <Search className="h-6 w-6 text-[#9CA3AF]" />
       </span>
-      <h3 className="text-[16px] font-semibold text-[#1C1C1E]">검색 결과가 없습니다</h3>
-      <p className="text-[13.5px] text-[#6E6E73]">다른 검색어나 필터 조건으로 시도해 보세요.</p>
-      <button
-        type="button"
-        onClick={onReset}
-        className="mt-1 h-9 rounded-[9px] border border-[#E5E5EA] bg-white px-4 text-[13px] font-medium text-[#374151] hover:bg-[#F5F5F7]"
-      >
-        초기화
-      </button>
+      <h3 className="text-[16px] font-semibold text-[#1C1C1E]">조건에 맞는 설문이 없습니다</h3>
+      {conditions.length > 0 && (
+        <>
+          <p className="text-[13.5px] text-[#6E6E73]">걸린 조건을 풀어 보세요.</p>
+          <div className="mt-1 flex flex-wrap items-center justify-center gap-2">
+            {conditions.map((condition) => (
+              <button
+                key={condition.key}
+                type="button"
+                onClick={condition.onClear}
+                aria-label={`${condition.label} 조건 풀기`}
+                className="flex h-8 items-center gap-1.5 rounded-full border border-[#E5E5EA] bg-white px-3 text-[13px] text-[#374151] hover:bg-[#F5F5F7]"
+              >
+                {condition.label}
+                <X className="h-3.5 w-3.5 text-[#9CA3AF]" aria-hidden />
+              </button>
+            ))}
+            {conditions.length > 1 && (
+              <button
+                type="button"
+                onClick={onClearAll}
+                className="h-8 rounded-full px-3 text-[13px] font-medium text-[#2E4FCE] hover:underline"
+              >
+                모두 풀기
+              </button>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -65,8 +95,7 @@ export function NoSurveysEmptyState({ canCreate }: { canCreate: boolean }) {
           href="/surveys/create"
           className="mt-1 flex h-9 items-center gap-1.5 rounded-[9px] bg-[#2E4FCE] px-4 text-[13px] font-semibold text-white hover:bg-[#2743AE]"
         >
-          <Plus className="h-4 w-4" />
-          새 설문 만들기
+          <Plus className="h-4 w-4" />새 설문 만들기
         </Link>
       )}
     </div>

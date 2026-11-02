@@ -24,7 +24,7 @@ import {
   hasOpenResponseForContact,
 } from '@/server/read-models/responses';
 import { isValidTestToken } from '@/server/read-models/survey-control';
-import { querySurveyListPage } from '@/server/read-models/survey-list-page';
+import { type SurveyListSource, querySurveyListPage } from '@/server/read-models/survey-list-page';
 import { getSurveyOwnerEmail } from '@/server/read-models/survey-owner-email';
 import { countDeletedSurveys, getDeletedSurveys } from '@/server/read-models/survey-structure';
 import {
@@ -239,8 +239,12 @@ export async function listSurveyPage(
   ]);
   const base = { scope, teams, canSeeSystemScope: subject.isSuperadmin, deletedCount };
 
-  // 아무것도 보지 않는 범위(팀 미배치)는 조회 없이 빈 페이지다.
-  if (!input.deleted && filter.kind === 'none') {
+  const { scope: _requested, deleted, ...query } = input;
+  let source: SurveyListSource;
+  if (deleted) {
+    source = { kind: 'deleted' };
+  } else if (filter.kind === 'none') {
+    // 아무것도 보지 않는 범위(팀 미배치)는 조회 없이 빈 페이지다.
     return {
       ...base,
       items: [],
@@ -251,13 +255,10 @@ export async function listSurveyPage(
       owners: [],
       activeTeam: null,
     };
+  } else {
+    source = { kind: 'scoped', filter };
   }
-
-  const { scope: _requested, deleted, ...query } = input;
-  const result = await querySurveyListPage({
-    ...query,
-    source: deleted ? { kind: 'deleted' } : { kind: 'scoped', filter: filter as Exclude<typeof filter, { kind: 'none' }> },
-  });
+  const result = await querySurveyListPage({ ...query, source });
 
   const pageIds = result.rows.map((row) => row.id);
   // 목록은 실데이터만 센다 — 응답 수(notTestResponse)와 같은 파티션.

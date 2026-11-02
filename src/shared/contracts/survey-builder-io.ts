@@ -285,8 +285,10 @@ export interface SurveyListOwner {
  * 숫자 기준이 둘이다 — `lifecycleCounts`·`owners` 는 범위·그룹·팀 좁힘까지만 적용해 센다(검색·
  * 상세 검색·목록 상태 무관). `total` 은 모든 조건을 적용한 결과 수다.
  */
-export interface SurveyListPageResult
-  extends Pick<SurveyListResult, 'scope' | 'teams' | 'canSeeSystemScope' | 'deletedCount'> {
+export interface SurveyListPageResult extends Pick<
+  SurveyListResult,
+  'scope' | 'teams' | 'canSeeSystemScope' | 'deletedCount'
+> {
   items: SurveyListItem[];
   total: number;
   /** 요청한 page 가 범위를 넘으면 마지막 페이지로 접힌 값. */

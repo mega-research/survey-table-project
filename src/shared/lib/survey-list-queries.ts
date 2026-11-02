@@ -1,3 +1,4 @@
+import type { SurveyListPageQuery } from '@/shared/contracts/survey-builder-io';
 import { SYSTEM_SCOPE, type WorkScope } from '@/shared/contracts/workspace';
 
 import { orpc } from './rpc';
@@ -5,15 +6,25 @@ import { orpc } from './rpc';
 /**
  * 설문 목록 조회의 공유 조각 — 키와 조회 옵션.
  *
- * 두 묶음이 같은 범위의 설문을 본다 — 설문 목록 화면(survey-builder)과 실사팀 사이드바의 참여
- * 트리(workspace). feature 끼리 직접 import 할 수 없으므로 키와 옵션만 여기에 둔다
- * (survey-group-queries 와 같은 탈출구). 사이드바는 응답 수 없는 요약 조회(listSummaries)를 쓰고,
- * 서버가 목록과 같은 범위 조건을 써서 본문 카드 수와 갈리지 않는다. mutation 은 survey-builder 에 남는다.
+ * 두 묶음이 같은 범위의 설문을 본다 — 설문 목록 화면(survey-builder, 페이지 조회 listPage)과
+ * 실사팀 사이드바의 참여 트리(workspace, 요약 조회 listSummaries). feature 끼리 직접 import 할 수
+ * 없으므로 키와 옵션만 여기에 둔다(survey-group-queries 와 같은 탈출구). 서버가 두 조회에 같은 범위
+ * 조건을 써서 사이드바 숫자와 본문 카드 수가 갈리지 않는다. mutation 은 survey-builder 에 남는다.
  */
 export const surveyKeys = {
   all: ['surveys'] as const,
   lists: () => [...surveyKeys.all, 'list'] as const,
-  list: (filters?: string) => [...surveyKeys.lists(), filters] as const,
+  /**
+   * 목록 페이지 전부 — 별·태그 같은 카드 단위 낙관적 갱신이 `setQueriesData` 로 훑을 접두.
+   * `lists()` 로 훑으면 모양이 다른 요약 캐시(배열)까지 잡히니 이 키로 좁힐 것.
+   */
+  pages: () => [...surveyKeys.lists(), 'page'] as const,
+  /**
+   * 목록 한 페이지 — 범위 + 조건 전체가 키다(조건이 곧 조회). `lists()` 아래라 설문 생성·이동·
+   * 삭제·공유 설정이 접는 무효화를 그대로 받는다.
+   */
+  page: (scope: string | null, query: SurveyListPageQuery) =>
+    [...surveyKeys.pages(), scope, query] as const,
   /**
    * 사이드바 요약 — 일부러 `lists()` 아래에 둔다. 설문 생성·이동·삭제·공유 설정이 접는
    * `surveyKeys.lists()` 무효화가 그대로 요약까지 닿아, mutation 마다 줄을 더하지 않아도 된다.
@@ -37,21 +48,16 @@ export function surveyListScopeParam(scope: WorkScope | null): string | null {
 }
 
 /**
- * 설문 목록 조회 — 작업 범위로 좁힌 결과 + 고를 수 있는 범위 (티켓 07).
+ * 설문 목록 한 페이지 — 서버가 거르고 정렬하고 나눈 결과 + 고를 수 있는 범위(티켓 03).
  *
- * scope 는 화면이 고른 값일 뿐이라 서버가 멤버십으로 다시 판정한다. 응답의 scope 가
- * 요청과 다를 수 있으므로(해산된 팀 등) 화면은 응답 쪽을 정답으로 삼아야 한다.
+ * scope 는 화면이 고른 값일 뿐이라 서버가 멤버십으로 다시 판정한다. 응답의 scope 가 요청과 다를
+ * 수 있으므로(해산된 팀 등) 화면은 응답 쪽을 정답으로 삼아야 한다. 휴지통은 조건의 `deleted` 라
+ * 키가 저절로 갈린다.
  */
-export function surveyListQueryOptions(scope?: string | null, deleted = false) {
+export function surveyListPageQueryOptions(scope: string | null, query: SurveyListPageQuery) {
   return {
-    // 휴지통은 조회 조건이 다르므로 키가 갈려야 한다 — 같은 키를 쓰면 모드를 오갈 때마다
-    // 서로의 캐시를 덮어써 목록이 한 번씩 반대편 내용으로 번쩍인다(티켓 17).
-    // 일반 목록의 키는 종전 그대로 둔다(범위 미지정이면 undefined) — 접미사를 늘 붙이면
-    // 기존 캐시가 통째로 갈려 아무 이득 없이 첫 진입이 한 번 더 왕복한다.
-    queryKey: deleted
-      ? surveyKeys.list(`${scope ?? ''}|deleted`)
-      : surveyKeys.list(scope ?? undefined),
-    queryFn: () => orpc.surveyBuilder.read.list.call({ scope: scope ?? null, deleted }),
+    queryKey: surveyKeys.page(scope, query),
+    queryFn: () => orpc.surveyBuilder.read.listPage.call({ ...query, scope }),
     staleTime: 30_000,
     refetchOnWindowFocus: false,
   };

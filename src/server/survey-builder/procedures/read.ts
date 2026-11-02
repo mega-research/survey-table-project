@@ -11,8 +11,8 @@ import {
   SlugAvailableInput,
   SlugAvailableOutput,
   SurveyIdInput,
-  SurveyListInput,
-  SurveyListOutput,
+  SurveyListPageInput,
+  SurveyListPageOutput,
   SurveyResponseArrayOutput,
   SurveyResponseOutput,
   SurveyRowOutput,
@@ -34,19 +34,23 @@ import * as surveySvc from '../services/survey-read';
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * 설문 목록 — 작업 범위로 좁힌다(티켓 07).
+ * 설문 목록 한 페이지 — 서버가 거르고 정렬하고 24개씩 나눈다(설문 즐겨찾기·태그 티켓 03).
  *
- * 입력의 scope 는 화면이 기억하는 값일 뿐이라 서버가 멤버십으로 다시 판정한다. 일반
- * 사용자의 system 요청은 거부되고, 내 팀이 아닌 teamId 는 첫 활성 팀으로 접힌다.
+ * 입력의 scope 는 화면이 기억하는 값일 뿐이라 서버가 멤버십으로 다시 판정한다. 일반 사용자의
+ * system 요청은 거부되고, 내 팀이 아닌 teamId 는 첫 활성 팀으로 접힌다. 휴지통(deleted)은
+ * 슈퍼어드민의 시스템 범위에서만 열린다.
+ *
+ * 전체 목록 조회(구 `read.list`)는 RPC 표면에서 걷었다 — 남은 소비자(분석 페이지)는 RSC 가
+ * 서비스를 직접 부른다.
  */
-const list = authed
-  .input(SurveyListInput)
-  .output(SurveyListOutput)
+const listPage = authed
+  .input(SurveyListPageInput)
+  .output(SurveyListPageOutput)
   .handler(({ context, input }) =>
     surveySvc
-      .getSurveyListWithCounts(context.user, input.scope ?? null, { deleted: input.deleted === true })
-      // 일반 사용자의 system 요청은 코어가 거부한다 — 매핑이 없으면 그 거부가 500 이 된다.
-      // 휴지통 요청(deleted)의 거부도 같은 자리에서 옮긴다(SurveyAccessError → FORBIDDEN).
+      .listSurveyPage(context.user, input)
+      // 일반 사용자의 system 요청(WorkScopeError)·휴지통 거부(SurveyAccessError)를 FORBIDDEN 으로 —
+      // 매핑이 없으면 그 거부가 500 이 된다.
       .catch((error: unknown) => {
         throw toRpcSurveyAccessError(toRpcWorkScopeError(error));
       }),
@@ -175,9 +179,7 @@ const exportCsv = authed
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** 보관함 질문 태그 목록. */
-const allTags = authed
-  .output(AllTagsOutput)
-  .handler(() => surveySvc.getAllTags());
+const allTags = authed.output(AllTagsOutput).handler(() => surveySvc.getAllTags());
 
 /** 빌더 변수 메뉴(prefill) 카탈로그. */
 const variableCatalog = authed
@@ -189,7 +191,7 @@ const variableCatalog = authed
   });
 
 export const read = {
-  list,
+  listPage,
   listSummaries,
   byId,
   withDetails,

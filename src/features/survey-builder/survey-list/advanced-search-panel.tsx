@@ -10,8 +10,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-
-import type { SurveyListAdvancedFilters, SurveyListDateField } from './survey-list-pipeline';
+import type {
+  SurveyListAdvancedFilters,
+  SurveyListDateField,
+} from '@/shared/contracts/survey-builder-io';
 
 const DATE_FIELD_OPTIONS: { key: SurveyListDateField; label: string }[] = [
   { key: 'updatedAt', label: '수정일' },
@@ -48,7 +50,7 @@ export function AdvancedSearchPanel({
   owners,
 }: AdvancedSearchPanelProps) {
   return (
-    <div className="absolute right-0 top-full z-20 mt-2 w-[400px] rounded-xl border border-[#E5E5EA] bg-white p-5 shadow-[0_10px_28px_rgba(13,27,76,0.15)]">
+    <div className="absolute top-full right-0 z-20 mt-2 w-[400px] rounded-xl border border-[#E5E5EA] bg-white p-5 shadow-[0_10px_28px_rgba(13,27,76,0.15)]">
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-[14px] font-semibold text-[#1C1C1E]">상세 검색</h3>
         <div className="flex items-center gap-3">

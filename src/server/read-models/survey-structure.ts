@@ -186,9 +186,9 @@ export function surveyListColumns(viewerId: string | null, leaderTeamIds: readon
 }
 
 /**
- * 작업 범위가 보는 설문의 WHERE — 목록(`getScopedSurveys`)과 사이드바 요약
- * (`getScopedSurveySummaries`)이 함께 쓴다. 아무것도 보지 않는 범위(`kind: 'none'`)는 호출 쪽이
- * 조회 전에 빈 결과로 끝낸다.
+ * 작업 범위가 보는 설문의 WHERE — 전체 목록(`getScopedSurveys`)·사이드바 요약
+ * (`getScopedSurveySummaries`)·목록 페이지(`survey-list-page`)가 함께 쓴다. 아무것도 보지
+ * 않는 범위(`kind: 'none'`)는 호출 쪽이 조회 전에 빈 결과로 끝낸다.
  */
 export function scopedSurveyWhere(filter: Exclude<SurveyScopeFilter, { kind: 'none' }>): SQL {
   const conditions: SQL[] = [isNull(surveys.deletedAt)];
@@ -293,7 +293,7 @@ export async function getScopedSurveySummaries(filter: SurveyScopeFilter) {
  * 사이드바에 없어 열 수 없는 폴더였기 때문이다. **협업 그룹이 생기면서 그 전제가 사라졌다**:
  * 내가 볼 수 있는 설문이 담긴 타 팀 그룹은 이제 사이드바에 선다(listCollaboratingGroups).
  * 범위로 계속 접으면 사이드바가 「협업 폴더 1」이라 말하는데 눌러서 열면 언제나 빈 화면이다
- * (그룹 화면은 이 값으로 좁힌다 — survey-list-pipeline 의 narrowToGroup).
+ * (그룹 화면은 이 값으로 좁힌다 — survey-list-page 의 그룹 좁힘).
  *
  * 두 조회가 **같은 술어**를 쓰는 것이 이 결합의 근거다: 목록에 보이는 타 팀 설문은
  * `participatesInSurvey`·`leadsParticipantTeam` 로 들어온 것이고, 협업 그룹 조회도 같은

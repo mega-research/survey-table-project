@@ -4,8 +4,9 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
+import type { SurveyListLifecycleFilter } from '@/shared/contracts/survey-builder-io';
+
 import { ListToolbar } from './list-toolbar';
-import type { SurveyListLifecycleFilter } from './survey-list-pipeline';
 
 function Harness({
   onLifecycleChange,

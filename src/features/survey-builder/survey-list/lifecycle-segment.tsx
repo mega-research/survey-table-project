@@ -3,8 +3,7 @@
 import { type KeyboardEvent, useRef } from 'react';
 
 import { cn } from '@/lib/utils';
-
-import type { SurveyListLifecycleFilter } from './survey-list-pipeline';
+import type { SurveyListLifecycleFilter } from '@/shared/contracts/survey-builder-io';
 
 // `closed` 의 라벨은 「종료」다(ADR-0030). 「완료」는 응답 상태의 어휘라 카드의 「완료 N건」 옆에서
 // 무엇의 완료인지 읽히지 않는다. 종료는 종료 스위치와 마감일 경과를 함께 담는다(목록 상태).

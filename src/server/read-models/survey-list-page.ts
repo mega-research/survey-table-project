@@ -1,26 +1,15 @@
-import {
-  type SQL,
-  and,
-  asc,
-  count,
-  desc,
-  eq,
-  gte,
-  isNotNull,
-  lte,
-  sql,
-} from 'drizzle-orm';
+import { type SQL, and, asc, count, desc, eq, gte, isNotNull, lte, sql } from 'drizzle-orm';
 import type { PgSelect } from 'drizzle-orm/pg-core';
 import 'server-only';
 
 import { db } from '@/db';
 import { surveyGroups, surveyResponses, surveys, teams, users } from '@/db/schema';
+import { surveyListLifecycleSql } from '@/server/read-models/survey-list-lifecycle';
 import {
   scopedSurveyWhere,
   surveyListColumns,
   visibleGroupId,
 } from '@/server/read-models/survey-structure';
-import { surveyListLifecycleSql } from '@/server/read-models/survey-list-lifecycle';
 import { notDeletedResponse, notTestResponse } from '@/server/response-filters';
 import type { SurveyScopeFilter } from '@/server/work-scope';
 import {
@@ -47,8 +36,7 @@ import {
 
 /** 목록의 원천 — 작업 범위가 보는 설문, 또는 휴지통(슈퍼어드민 시스템 범위 전용, 판정은 호출자). */
 export type SurveyListSource =
-  | { kind: 'scoped'; filter: Exclude<SurveyScopeFilter, { kind: 'none' }> }
-  | { kind: 'deleted' };
+  { kind: 'scoped'; filter: Exclude<SurveyScopeFilter, { kind: 'none' }> } | { kind: 'deleted' };
 
 export type SurveyListPageParams = Omit<SurveyListPageQuery, 'deleted'> & {
   source: SurveyListSource;
@@ -66,7 +54,9 @@ export interface SurveyListPageRows {
 
 /** 원천 조건. */
 function sourceWhere(source: SurveyListSource): SQL {
-  return source.kind === 'deleted' ? isNotNull(surveys.deletedAt) : scopedSurveyWhere(source.filter);
+  return source.kind === 'deleted'
+    ? isNotNull(surveys.deletedAt)
+    : scopedSurveyWhere(source.filter);
 }
 
 /**
@@ -200,10 +190,7 @@ async function resolveActiveTeam(
 }
 
 /** 원천 + 그룹·팀·미분류 좁힘 — 세그먼트 숫자·소유자 목록의 기준. */
-function narrowedWhere(
-  params: SurveyListPageParams,
-  activeTeam: { id: string } | null,
-): SQL {
+function narrowedWhere(params: SurveyListPageParams, activeTeam: { id: string } | null): SQL {
   const conditions: SQL[] = [sourceWhere(params.source)];
   if (params.groupId) conditions.push(sql`${groupColumn(params.source)} = ${params.groupId}`);
   if (activeTeam) {
@@ -247,9 +234,9 @@ async function listOwners(where: SQL): Promise<SurveyListOwner[]> {
 }
 
 async function countMatches(where: SQL): Promise<number> {
-  const [row] = await withListJoins(
-    db.select({ value: count() }).from(surveys).$dynamic(),
-  ).where(where);
+  const [row] = await withListJoins(db.select({ value: count() }).from(surveys).$dynamic()).where(
+    where,
+  );
   return row?.value ?? 0;
 }
 

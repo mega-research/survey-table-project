@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { type ReactNode, useEffect, useEffectEvent, useState } from 'react';
 
 import { Search, SlidersHorizontal, Trash2 } from 'lucide-react';
 
@@ -12,9 +12,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import {
+  SURVEY_LIST_SEARCH_MAX_LENGTH,
+  type SurveyListLifecycleFilter,
+  type SurveyListSortBy,
+} from '@/shared/contracts/survey-builder-io';
 
 import { LifecycleSegment } from './lifecycle-segment';
-import type { SurveyListLifecycleFilter, SurveyListSortBy } from './survey-list-pipeline';
 
 // 문의 칩(.pen FLOW 6 「칩 문의」)은 Plan 3 게이트로 미노출 — 어휘 자체를 뺐다(티켓 08).
 
@@ -32,7 +36,9 @@ interface ListToolbarProps {
   onLifecycleChange: (next: SurveyListLifecycleFilter) => void;
   /** 모든 조건을 적용한 결과 수 — 둘째 줄 오른쪽 「N개」. */
   resultCount: number;
+  /** 주소에 걸린 검색어. */
   searchQuery: string;
+  /** 치기를 멈추면(250ms) 한 번 부른다 — 글자마다 서버 조회가 돌지 않게. */
   onSearchQueryChange: (query: string) => void;
   sortBy: SurveyListSortBy;
   onSortByChange: (sortBy: SurveyListSortBy) => void;
@@ -79,17 +85,11 @@ export function ListToolbar({
   return (
     <div className="flex flex-col gap-3">
       <div className="relative flex items-center gap-2">
-        <div className="relative min-w-0 flex-1">
-          <Search className="absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => onSearchQueryChange(e.target.value)}
-            placeholder={searchPlaceholder}
-            aria-label="설문 검색"
-            className="h-10 w-full rounded-[10px] border border-[#E5E5EA] bg-white pr-3 pl-10 text-[13.5px] text-[#1C1C1E] placeholder:text-[#9CA3AF] focus:border-[#2E4FCE] focus:outline-none"
-          />
-        </div>
+        <SearchInput
+          value={searchQuery}
+          onCommit={onSearchQueryChange}
+          placeholder={searchPlaceholder}
+        />
 
         <button
           type="button"
@@ -154,6 +154,60 @@ export function ListToolbar({
           </Select>
         </div>
       </div>
+    </div>
+  );
+}
+
+const SEARCH_DEBOUNCE_MS = 250;
+
+/**
+ * 검색창 — 치는 글자는 여기 머물고, 멈추면 한 번 올린다(목록이 서버 조회라 글자마다 왕복하지 않게).
+ *
+ * 바깥 값(주소)이 바뀌면 따라간다 — 뒤로 가기·「조건 풀기」가 검색어를 바꾼 경우. 단 내가 방금
+ * 올린 값이 돌아온 것이면 건드리지 않는다: 그 사이 더 친 글자를 덮어 지우게 된다.
+ */
+function SearchInput({
+  value,
+  onCommit,
+  placeholder,
+}: {
+  value: string;
+  onCommit: (value: string) => void;
+  placeholder: string;
+}) {
+  const [draft, setDraft] = useState(value);
+  const [seen, setSeen] = useState(value);
+  const [sent, setSent] = useState(value);
+  if (value !== seen) {
+    setSeen(value);
+    if (value !== sent) {
+      setSent(value);
+      setDraft(value);
+    }
+  }
+
+  const commit = useEffectEvent((next: string) => {
+    setSent(next);
+    onCommit(next);
+  });
+  useEffect(() => {
+    if (draft === sent) return;
+    const timer = setTimeout(() => commit(draft), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [draft, sent]);
+
+  return (
+    <div className="relative min-w-0 flex-1">
+      <Search className="absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
+      <input
+        type="text"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        placeholder={placeholder}
+        aria-label="설문 검색"
+        maxLength={SURVEY_LIST_SEARCH_MAX_LENGTH}
+        className="h-10 w-full rounded-[10px] border border-[#E5E5EA] bg-white pr-3 pl-10 text-[13.5px] text-[#1C1C1E] placeholder:text-[#9CA3AF] focus:border-[#2E4FCE] focus:outline-none"
+      />
     </div>
   );
 }
