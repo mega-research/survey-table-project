@@ -115,6 +115,16 @@ survey_favorites           # 즐겨찾기 = 한 사람이 설문 하나에 켜�
 ├── userId (FK **cascade**), surveyId (FK **cascade**), createdAt
 └── PK(userId, surveyId) · INDEX(surveyId)  # 행 있음 = 켜짐. 쓰기는 결과 상태 지정(충돌 무시 삽입 / 삭제).
                            # 읽기는 언제나 user_id = 요청자. soft delete 는 행을 남긴다(복구하면 별이 돌아온다)
+
+personal_survey_tags       # 내 태그 = 한 사람이 만든 키워드 이름 + 색 (0150, 티켓 07). 만든 사람만 본다
+├── id, userId (FK **cascade**), name, color, createdAt, updatedAt
+└── UNIQUE(userId, lower(btrim(name))) · CHECK(char_length(btrim(name)) 1~20) · CHECK(color 8색)
+                           # 색 어휘는 shared/contracts/workspace 배열 · 스키마 check() · 0150 CHECK 세 사본(대조 테스트 있음)
+                           # 300개 한도는 코드 — 만들기(createTag)가 사용자 advisory lock 아래서 센다
+
+personal_survey_tag_links  # 내 태그 연결 (0150) — 행 있음 = 붙음, 쓰기는 결과 상태 지정
+├── tagId (FK **cascade**), surveyId (FK **cascade**), createdAt
+└── PK(tagId, surveyId) · INDEX(surveyId)  # soft delete 는 행을 남긴다
 ```
 
 > `survey_id` 만 CASCADE 인 이유: 현행 설문 삭제가 하드 삭제라(`deleteSurvey` → `tx.delete`)
