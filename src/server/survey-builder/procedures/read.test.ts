@@ -14,6 +14,7 @@ vi.mock('../services/survey-read', () => ({
   getSurveyListWithCounts: vi.fn(),
   listSurveyPage: vi.fn(),
   listSurveySummaries: vi.fn(),
+  suggestSurveys: vi.fn(),
   getSurveyById: vi.fn(),
   getSurveyWithDetails: vi.fn(),
   isSlugAvailable: vi.fn(),
@@ -124,6 +125,38 @@ describe('surveyBuilder.read procedures', () => {
     const client = createRouterClient({ read }, { context: anonContext() });
     await expect(client.read.listSummaries({})).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
     expect(surveySvc.listSurveySummaries).not.toHaveBeenCalled();
+  });
+
+  it('suggest 는 세션 사용자와 범위·검색어만 넘긴다', async () => {
+    const rows = [{ id: SURVEY_ID, cardTitle: '설문', ownerName: '김', lifecycle: 'draft' }];
+    vi.mocked(surveySvc.suggestSurveys).mockResolvedValue(rows as never);
+    const context = authedContext();
+    const client = createRouterClient({ read }, { context });
+    const res = await client.read.suggest({ scope: 'team-1', q: 'a사 실' });
+    expect(surveySvc.suggestSurveys).toHaveBeenCalledWith(context.user, {
+      scope: 'team-1',
+      q: 'a사 실',
+    });
+    expect(res).toEqual(rows);
+  });
+
+  it('suggest 는 목록과 같은 검색어 상한·모르는 키를 거부한다', async () => {
+    const client = createRouterClient({ read }, { context: authedContext() });
+    await expect(
+      client.read.suggest({ scope: null, q: '1 2 3 4 5 6 7 8 9' }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(
+      client.read.suggest({ scope: null, q: 'a', groupId: null } as never),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(surveySvc.suggestSurveys).not.toHaveBeenCalled();
+  });
+
+  it('suggest 는 비로그인이면 UNAUTHORIZED', async () => {
+    const client = createRouterClient({ read }, { context: anonContext() });
+    await expect(client.read.suggest({ scope: null, q: 'a' })).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+    expect(surveySvc.suggestSurveys).not.toHaveBeenCalled();
   });
 
   it('byId는 surveyId를 풀어 getSurveyById에 위임한다', async () => {

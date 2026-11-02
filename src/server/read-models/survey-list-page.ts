@@ -23,11 +23,13 @@ import { notDeletedResponse, notTestResponse } from '@/server/response-filters';
 import type { SurveyScopeFilter } from '@/server/work-scope';
 import {
   SURVEY_LIST_PAGE_SIZE,
+  SURVEY_SUGGEST_LIMIT,
   type SurveyListAdvancedFilters,
   type SurveyListLifecycleFilter,
   type SurveyListOwner,
   type SurveyListPageQuery,
   type SurveyListSortBy,
+  type SurveySuggestion,
   splitSurveyListSearchWords,
 } from '@/shared/contracts/survey-builder-io';
 
@@ -324,4 +326,29 @@ export async function querySurveyListPage(
   const rows = page === requestedPage ? optimisticRows : await selectPage(params, where, page);
 
   return { rows, total, page, totalPages, lifecycleCounts, favoriteCount, owners, activeTeam };
+}
+
+/**
+ * 자동완성 설문 후보 (티켓 05) — 범위 안에서 검색어가 맞는 설문을 최근 수정순으로 최대 5건.
+ *
+ * 목록 페이지와 **같은 원천 조건(`scopedSurveyWhere`)과 같은 검색 조각(`surveyListSearchSql`)**을 쓴다 —
+ * 후보에 뜬 설문이 Enter 로 연 목록에 없거나, 목록에 없는 설문이 후보로 새는 일이 없게. 검색 조각이
+ * 소유자 이름을 읽으므로 `users` 조인을 건다. 응답 수는 세지 않는다. 빈 검색어는 호출자가 거른다.
+ */
+export async function querySurveySuggestions(
+  filter: Exclude<SurveyScopeFilter, { kind: 'none' }>,
+  search: SQL,
+): Promise<SurveySuggestion[]> {
+  return db
+    .select({
+      id: surveys.id,
+      cardTitle: cardTitleSql,
+      ownerName: users.name,
+      lifecycle: surveyListLifecycleSql(),
+    })
+    .from(surveys)
+    .leftJoin(users, eq(users.id, surveys.ownerUserId))
+    .where(and(scopedSurveyWhere(filter), search))
+    .orderBy(desc(surveys.updatedAt), desc(surveys.createdAt), asc(surveys.id))
+    .limit(SURVEY_SUGGEST_LIMIT);
 }

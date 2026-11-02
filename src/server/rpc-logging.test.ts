@@ -6,6 +6,7 @@ import { serializeError } from '@/lib/logger/err-serializer';
 import {
   INITIAL_SURVEY_LIST_PAGE_QUERY,
   SurveyListPageInputSchema,
+  SurveySuggestInputSchema,
 } from '@/shared/contracts/survey-builder-io';
 import { CreatePersonalTagInput } from '@/shared/contracts/workspace-io';
 
@@ -96,6 +97,7 @@ const testRouter = {
   }),
   adminOnly: authed.handler(() => 'ok'),
   listPage: pub.input(SurveyListPageInputSchema).handler(() => []),
+  suggest: pub.input(SurveySuggestInputSchema).handler(() => []),
   createTag: pub.input(CreatePersonalTagInput).handler(() => null),
   boomWithDetail: pub.handler(() => {
     throw Object.assign(new Error('해당 설문에 존재하지 않는 질문입니다.'), {
@@ -268,6 +270,22 @@ describe('rpcLoggingMiddleware', () => {
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
 
     // pino 가 실제로 쓰는 모양(err 는 err 직렬화기를 거친다)으로 펼쳐 찾는다.
+    const written = [...logged.info.mock.calls, ...logged.error.mock.calls].map(([fields]) => {
+      const { err, ...rest } = fields as Record<string, unknown>;
+      return JSON.stringify({ ...rest, err: err instanceof Error ? serializeError(err) : err });
+    });
+    expect(written).toHaveLength(2);
+    for (const line of written) expect(line).not.toContain(secret);
+  });
+
+  it('자동완성 검색어도 성공·입력 거부 어느 쪽에서도 로그에 실리지 않는다 (설문 목록 티켓 05)', async () => {
+    const client = createRouterClient(testRouter, { context: ctx('admin-1') });
+    const secret = '발주처비밀낱말';
+    await client.suggest({ scope: null, q: secret });
+    await expect(
+      client.suggest({ scope: null, q: `${secret} 2 3 4 5 6 7 8 9` }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
     const written = [...logged.info.mock.calls, ...logged.error.mock.calls].map(([fields]) => {
       const { err, ...rest } = fields as Record<string, unknown>;
       return JSON.stringify({ ...rest, err: err instanceof Error ? serializeError(err) : err });

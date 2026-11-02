@@ -1,12 +1,24 @@
 import { useState } from 'react';
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { SurveyListLifecycleFilter } from '@/shared/contracts/survey-builder-io';
 
 import { ListToolbar } from './list-toolbar';
+
+// 자동완성 설문 후보는 search-combobox.test 가 본다 — 여기서는 조회 없이 빈 후보.
+vi.mock('../queries/use-survey-suggestions', () => ({
+  useSurveySuggestions: () => ({ suggestions: null, isPending: false }),
+}));
+
+const SUGGEST_PROPS = {
+  suggestScope: null,
+  owners: [],
+  onPickOwner: vi.fn(),
+  onPickSurvey: vi.fn(),
+};
 
 function Harness({
   onLifecycleChange,
@@ -29,6 +41,7 @@ function Harness({
       resultCount={23}
       searchQuery=""
       onSearchQueryChange={vi.fn()}
+      {...SUGGEST_PROPS}
       sortBy="updatedAt"
       onSortByChange={vi.fn()}
       searchPlaceholder="설문 검색"
@@ -156,6 +169,7 @@ describe('ListToolbar — 검색창 상한', () => {
         resultCount={0}
         searchQuery=""
         onSearchQueryChange={onSearch}
+        {...SUGGEST_PROPS}
         sortBy="updatedAt"
         onSortByChange={vi.fn()}
         searchPlaceholder="설문 검색"
@@ -167,7 +181,7 @@ describe('ListToolbar — 검색창 상한', () => {
         favorites={null}
       />,
     );
-    return { input: screen.getByRole('textbox', { name: '설문 검색' }), onSearch };
+    return { input: screen.getByRole('combobox', { name: '설문 검색' }), onSearch };
   }
 
   it('9번째 단어는 입력되지 않고 상한을 알린다 — 서버가 거부할 검색어를 보내지 않는다', async () => {
@@ -176,8 +190,9 @@ describe('ListToolbar — 검색창 상한', () => {
     await user.type(input, '가 나 다 라 마 바 사 아 자');
     expect(input).toHaveValue('가 나 다 라 마 바 사 아 ');
     expect(screen.getByRole('status')).toHaveTextContent('8단어');
-    await waitFor(() => expect(onSearch).toHaveBeenCalledWith('가 나 다 라 마 바 사 아 '));
-    expect(onSearch).toHaveBeenCalledTimes(1);
+    // 상한 안의 검색어는 Enter 로 그대로 적용된다.
+    await user.keyboard('{Enter}');
+    expect(onSearch).toHaveBeenCalledExactlyOnceWith('가 나 다 라 마 바 사 아 ');
 
     // 상한 안으로 돌아오면 알림이 걷힌다.
     await user.type(input, '{Backspace}{Backspace}');

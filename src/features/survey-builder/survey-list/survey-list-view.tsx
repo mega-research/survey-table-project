@@ -366,6 +366,13 @@ export function SurveyListView() {
             resultCount={total}
             searchQuery={query.q}
             onSearchQueryChange={(q) => updateQuery({ q }, 'replace')}
+            suggestScope={requestedScope}
+            owners={owners}
+            // 소유자 후보는 상세 검색의 소유자 조건으로 건다 — 고르는 칸이라 push(뒤로 가기로 되돌린다).
+            onPickOwner={(ownerUserId, q) =>
+              updateQuery({ q, advanced: { ...query.advanced, ownerUserId } })
+            }
+            onPickSurvey={(surveyId) => router.push(`/surveys/${surveyId}/edit`)}
             sortBy={query.sort}
             onSortByChange={(sort) => updateQuery({ sort })}
             searchPlaceholder={
