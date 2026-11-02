@@ -49,6 +49,9 @@ export function TagPickerPanel({ attachedIds, tags, onToggle, onCreate }: TagPic
   const [tooLong, setTooLong] = useState(false);
   const [creating, setCreating] = useState(false);
   const [editingTagId, setEditingTagId] = useState<string | null>(null);
+  // 붙은 태그를 위로 모으는 순서는 창을 열 때 한 번 정한다 — 창 안에서 붙이고 떼도 줄이 튀지 않게.
+  // 창(팝오버 내용)은 닫힐 때 내려가므로 다시 열면 그때의 붙은 태그로 다시 정해진다.
+  const [pinnedIds] = useState(() => [...attachedIds]);
 
   const attached = new Set(attachedIds);
   const byId = new Map(tags.map((t) => [t.id, t]));
@@ -56,7 +59,7 @@ export function TagPickerPanel({ attachedIds, tags, onToggle, onCreate }: TagPic
     const found = byId.get(id);
     return found ? [found] : [];
   });
-  const view = resolveTagPicker(tags, query, tags.length);
+  const view = resolveTagPicker(tags, query, tags.length, pinnedIds);
   const optionCount = view.matches.length + (view.create ? 1 : 0);
   const defaultIndex = view.create ? view.matches.length : view.matches.length > 0 ? 0 : null;
   const effectiveIndex =

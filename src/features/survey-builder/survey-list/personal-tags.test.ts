@@ -119,6 +119,15 @@ describe('resolveTagPicker — 태그 창', () => {
       limitReached: true,
     });
   });
+
+  it('창을 열 때 붙어 있던 태그가 붙인 순서로 위에 서고, 나머지는 내 태그 순서다', () => {
+    expect(resolveTagPicker(ALL, '', 4, ['c', 'a']).matches).toEqual([C, A, B, D]);
+  });
+
+  it('위로 올린 태그도 검색어에 맞을 때만 — 지워진 id 는 건너뛴다', () => {
+    expect(resolveTagPicker(ALL, '실태', 4, ['gone', 'a', 'c']).matches).toEqual([C]);
+    expect(resolveTagPicker(ALL, '', 4, ['gone', 'd']).matches).toEqual([D, A, B, C]);
+  });
 });
 
 describe('편집 패널 이름 칸 (티켓 08)', () => {

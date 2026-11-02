@@ -90,7 +90,10 @@ export function keepKnownTagIds(
 }
 
 export interface TagPickerView {
-  /** 이름에 검색어가 든 내 태그(검색어가 없으면 전부) — 내 태그 목록 순서 그대로. */
+  /**
+   * 이름에 검색어가 든 내 태그(검색어가 없으면 전부) — 위로 올릴 태그(`pinnedIds`)가 그 순서로 먼저,
+   * 나머지는 내 태그 목록 순서.
+   */
   matches: PersonalTagItem[];
   /** 「만들기 [이름]」에 쓸 이름 — 같은 이름이 없고 이름 규칙을 지킬 때만. */
   create: string | null;
@@ -103,21 +106,41 @@ export interface TagPickerView {
  *
  * 맞는 태그를 위에, 「만들기」를 맨 아래에 둔다. 같은 이름(공백·대소문자 무시)이 이미 있으면
  * 만들지 않는다 — 서버도 그 태그를 돌려준다.
+ *
+ * `pinnedIds` 는 붙은 태그를 위로 모으는 순서다(시안 F6 ①). 부르는 쪽이 **창을 열 때의** 붙은 태그를
+ * 넘긴다 — 지금 붙은 태그를 넘기면 창 안에서 붙이고 뗄 때마다 줄이 튄다.
  */
 export function resolveTagPicker(
   tags: readonly PersonalTagItem[],
   query: string,
   myTagCount: number,
+  pinnedIds: readonly string[] = [],
 ): TagPickerView {
   const key = personalTagNameKey(query);
-  if (key === '') return { matches: [...tags], create: null, limitReached: false };
+  const ordered = pinFirst(tags, pinnedIds);
+  if (key === '') return { matches: ordered, create: null, limitReached: false };
 
-  const matches = tags.filter((t) => personalTagNameKey(t.name).includes(key));
+  const matches = ordered.filter((t) => personalTagNameKey(t.name).includes(key));
   const exact = tags.some((t) => personalTagNameKey(t.name) === key);
   const checked = normalizePersonalTagName(query);
   if (exact || !checked.ok) return { matches, create: null, limitReached: false };
   if (isPersonalTagLimitReached(myTagCount)) return { matches, create: null, limitReached: true };
   return { matches, create: checked.name, limitReached: false };
+}
+
+/** `pinnedIds` 의 태그를 그 순서로 앞에 — 목록에 없는 id 는 건너뛰고, 나머지는 원래 순서. */
+function pinFirst(
+  tags: readonly PersonalTagItem[],
+  pinnedIds: readonly string[],
+): PersonalTagItem[] {
+  if (pinnedIds.length === 0) return [...tags];
+  const byId = new Map(tags.map((t) => [t.id, t]));
+  const pinned = [...new Set(pinnedIds)].flatMap((id) => {
+    const found = byId.get(id);
+    return found ? [found] : [];
+  });
+  const pinnedSet = new Set(pinned.map((t) => t.id));
+  return [...pinned, ...tags.filter((t) => !pinnedSet.has(t.id))];
 }
 
 /** 편집 패널 색 견본 — 연한 바탕 + 같은 계열 테두리(시안 F6 ③). */

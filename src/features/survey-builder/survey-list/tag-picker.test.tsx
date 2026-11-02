@@ -121,4 +121,22 @@ describe('태그 창', () => {
     const dot = create.querySelector('[aria-hidden].rounded-full');
     expect(dot).toHaveClass('bg-[#22C55E]');
   });
+
+  it('붙은 태그가 위에 모인다 — 창이 열려 있는 동안 붙이고 떼도 줄 순서는 그대로다', async () => {
+    const props = {
+      attachedIds: ['c'],
+      tags: [A, B, C],
+      onToggle: vi.fn(),
+      onCreate: vi.fn(async () => null),
+    };
+    const { rerender } = render(<TagPickerPanel {...props} />);
+    const names = () => screen.getAllByRole('option').map((o) => o.textContent);
+    expect(names()).toEqual(['정기조사', 'A사', '이번주 마감']);
+
+    // 열린 창에서 A사를 붙이고 정기조사를 뗐다 — 줄이 튀지 않는다.
+    rerender(<TagPickerPanel {...props} attachedIds={['a']} />);
+    expect(names()).toEqual(['정기조사', 'A사', '이번주 마감']);
+    expect(screen.getByRole('option', { name: '정기조사' })).toHaveAttribute('aria-selected', 'false');
+    expect(screen.getByRole('option', { name: 'A사' })).toHaveAttribute('aria-selected', 'true');
+  });
 });
