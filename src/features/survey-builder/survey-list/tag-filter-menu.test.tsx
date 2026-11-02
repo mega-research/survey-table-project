@@ -1,12 +1,20 @@
 import { useState } from 'react';
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { PersonalTagItem } from '@/shared/contracts/workspace-io';
+import type { MinePersonalTagsOutput, PersonalTagItem } from '@/shared/contracts/workspace-io';
 
+import { personalTagKeys } from '../queries/use-personal-marks';
 import { TagFilterMenu } from './tag-filter-menu';
+
+// 「⋯」 편집 패널(티켓 08)은 내 태그 캐시를 읽는다 — 조회·쓰기는 일어나지 않게 막아 둔다.
+vi.mock('@/shared/lib/rpc', () => ({
+  client: { workspace: { personalMarks: { updateTag: vi.fn(), deleteTag: vi.fn() } } },
+  orpc: { workspace: { personalMarks: { mine: { call: vi.fn() } } } },
+}));
 
 /**
  * 「# 태그」 목록 (설문 즐겨찾기·태그 티켓 09, 시안 F8-d) — 내 태그 전체를 많이 쓴 순·가나다순으로
@@ -40,7 +48,13 @@ function setup(initial: string[] = []) {
       />
     );
   }
-  render(<Harness />);
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  queryClient.setQueryData<MinePersonalTagsOutput>(personalTagKeys.mine(), { tags: TAGS });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <Harness />
+    </QueryClientProvider>,
+  );
   return { onToggle, onClear, user: userEvent.setup() };
 }
 
@@ -114,9 +128,15 @@ describe('TagFilterMenu', () => {
     expect(screen.getByRole('button', { name: '태그 2' })).toBeInTheDocument();
   });
 
-  it('줄마다 「⋯」 편집 단추가 있다(편집 패널은 티켓 08)', async () => {
-    const { user } = setup();
+  it('줄마다 「⋯」 편집 단추가 있고 누르면 그 태그의 편집 패널이 열린다 — 체크는 그대로', async () => {
+    const { onToggle, user } = setup();
     await open(user);
-    expect(screen.getByRole('button', { name: '실태조사 태그 편집' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '실태조사 편집' }));
+    expect(screen.getByRole('button', { name: '실태조사 편집' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(await screen.findByRole('textbox', { name: '태그 이름' })).toHaveValue('실태조사');
+    expect(onToggle).not.toHaveBeenCalled();
   });
 });

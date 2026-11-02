@@ -2,7 +2,7 @@
 
 import { useId, useState } from 'react';
 
-import { ChevronDown, Ellipsis, Hash, Search } from 'lucide-react';
+import { ChevronDown, Hash, Search } from 'lucide-react';
 
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -11,6 +11,7 @@ import { SURVEY_LIST_TAG_FILTER_MAX } from '@/shared/contracts/survey-builder-io
 import type { PersonalTagItem } from '@/shared/contracts/workspace-io';
 
 import { PERSONAL_TAG_DOT_CLASS, type TagFilterSort, resolveTagFilterList } from './personal-tags';
+import { TagEditMenu } from './tag-edit-panel';
 
 interface TagFilterMenuProps {
   /** 내 태그 전부(`workspace.personalMarks.mine`) — 붙은 설문이 0개인 태그도 나온다. */
@@ -158,18 +159,15 @@ export function TagFilterMenu({
                     {tag.linkCount}
                   </span>
                 </label>
-                <button
-                  type="button"
-                  aria-label={`${tag.name} 태그 편집`}
-                  aria-expanded={editing}
-                  onClick={() => setEditingTagId(editing ? null : tag.id)}
-                  className={cn(
-                    'flex h-6 w-6 shrink-0 items-center justify-center rounded text-[#6E6E73] hover:bg-[#E5E5EA] focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-[#2E4FCE]/40 focus-visible:outline-none',
-                    editing ? 'opacity-100' : 'opacity-0 group-hover/row:opacity-100',
-                  )}
-                >
-                  <Ellipsis className="h-4 w-4" />
-                </button>
+                {/* 「⋯」 — 태그 창과 같은 편집 패널(이름·색·삭제, 티켓 08). 한 번에 한 태그만. */}
+                <TagEditMenu
+                  tag={tag}
+                  open={editing}
+                  onOpenChange={(next) =>
+                    setEditingTagId((cur) => (next ? tag.id : cur === tag.id ? null : cur))
+                  }
+                  className="opacity-0 group-hover/row:opacity-100"
+                />
               </li>
             );
           })}

@@ -9,6 +9,7 @@ import { PERSONAL_TAG_NAME_MAX_LENGTH } from '@/shared/contracts/workspace';
 import type { PersonalTagItem } from '@/shared/contracts/workspace-io';
 
 import { PERSONAL_TAG_DOT_CLASS, resolveTagPicker } from './personal-tags';
+import { TagEditMenu } from './tag-edit-panel';
 
 /**
  * 걸린 검색 칩과 맞물린 태그의 꼴(티켓 09) — 연한 파랑 바탕. 검색창 안 칩과 카드의 맞물린 태그가
@@ -70,7 +71,10 @@ const LIMIT_MESSAGE = '태그 이름은 20자까지입니다';
  * 접근성은 combobox + listbox(다중 선택) 패턴이다 — 칸에 포커스가 머문 채 ↑↓ 로 줄을 고르고
  * Enter 로 누른다. 아무 줄도 고르지 않았으면 Enter 는 「만들기」(없으면 첫 줄)를 누른다.
  *
- * 줄마다 마우스를 올리면 「⋯」(편집 패널, 티켓 08)가 붙는다 — `TagPickerOption` 오른쪽 끝 자리.
+ * 줄마다 마우스를 올리면 「⋯」가 보이고, 누르면 옆에 편집 패널(티켓 08)이 열린다. 한 번에 한
+ * 태그만 — `editingTagId` 하나가 쥐고, 다른 줄의 「⋯」를 누르면 패널이 그 태그로 옮겨 간다.
+ * 「⋯」는 `role=option` 밖(줄 묶음 안의 형제)에 둔다 — 줄을 누르는 것(붙이기·떼기)과 갈리고,
+ * 줄의 읽히는 이름이 태그 이름 그대로 남는다.
  */
 export function TagPickerPanel({ attachedIds, tags, onToggle, onCreate }: TagPickerPanelProps) {
   const listId = useId();
@@ -78,6 +82,7 @@ export function TagPickerPanel({ attachedIds, tags, onToggle, onCreate }: TagPic
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [tooLong, setTooLong] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [editingTagId, setEditingTagId] = useState<string | null>(null);
 
   const attached = new Set(attachedIds);
   const byId = new Map(tags.map((t) => [t.id, t]));
@@ -189,21 +194,39 @@ export function TagPickerPanel({ attachedIds, tags, onToggle, onCreate }: TagPic
           </p>
         ) : null}
         <div id={listId} role="listbox" aria-label="내 태그" aria-multiselectable>
-          {view.matches.map((t, index) => (
-            <TagPickerOption
-              key={t.id}
-              id={optionId(index)}
-              active={effectiveIndex === index}
-              selected={attached.has(t.id)}
-              onPress={() => press(index)}
-              onHover={() => setActiveIndex(index)}
-            >
-              <PersonalTagLabel tag={t} />
-              {attached.has(t.id) && (
-                <Check aria-hidden className="ml-auto h-4 w-4 shrink-0 text-[#2E4FCE]" />
-              )}
-            </TagPickerOption>
-          ))}
+          {view.matches.map((t, index) => {
+            const editing = editingTagId === t.id;
+            return (
+              <div
+                key={t.id}
+                className={cn(
+                  'group/row flex items-center gap-1 rounded-md pr-1',
+                  editing && 'bg-[#F2F2F7]',
+                )}
+              >
+                <TagPickerOption
+                  id={optionId(index)}
+                  active={effectiveIndex === index}
+                  selected={attached.has(t.id)}
+                  onPress={() => press(index)}
+                  onHover={() => setActiveIndex(index)}
+                >
+                  <PersonalTagLabel tag={t} />
+                  {attached.has(t.id) && (
+                    <Check aria-hidden className="ml-auto h-4 w-4 shrink-0 text-[#2E4FCE]" />
+                  )}
+                </TagPickerOption>
+                <TagEditMenu
+                  tag={t}
+                  open={editing}
+                  onOpenChange={(open) =>
+                    setEditingTagId((cur) => (open ? t.id : cur === t.id ? null : cur))
+                  }
+                  className="opacity-0 group-hover/row:opacity-100"
+                />
+              </div>
+            );
+          })}
           {view.create && (
             <TagPickerOption
               id={optionId(view.matches.length)}
@@ -268,7 +291,7 @@ function TagPickerOption({
       onClick={onPress}
       onMouseMove={onHover}
       className={cn(
-        'flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-2 py-1',
+        'flex min-h-9 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md px-2 py-1',
         active && 'bg-[#F2F4FB]',
       )}
     >

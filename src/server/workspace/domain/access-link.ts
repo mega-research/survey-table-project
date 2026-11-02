@@ -90,7 +90,10 @@ export function normalizeAccessLinkPassword(raw: string): string {
 const PasswordField = z
   .string()
   .trim()
-  .min(ACCESS_LINK_PASSWORD_MIN_LENGTH, `비밀번호는 ${ACCESS_LINK_PASSWORD_MIN_LENGTH}자 이상이어야 합니다.`)
+  .min(
+    ACCESS_LINK_PASSWORD_MIN_LENGTH,
+    `비밀번호는 ${ACCESS_LINK_PASSWORD_MIN_LENGTH}자 이상이어야 합니다.`,
+  )
   .max(64, '비밀번호는 64자까지 가능합니다.');
 
 /**

@@ -28,15 +28,19 @@ import {
   CreatePersonalTagInput,
   PersonalMarkTargetGoneError,
   PersonalTagLimitError,
+  PersonalTagNameTakenError,
   PersonalTagNotFoundError,
+  UpdatePersonalTagInput,
 } from '@/server/workspace/domain/personal-marks';
 import { personalMarks } from '@/server/workspace/procedures/personal-marks';
 import {
   createTag,
+  deleteTag,
   listMyTags,
   lockPersonalTags,
   setFavorite,
   setTagLink,
+  updateTag,
 } from '@/server/workspace/services/personal-marks';
 import {
   PERSONAL_TAG_LIMIT,
@@ -345,7 +349,10 @@ describe.skipIf(!isLocalDb)('개인 표시 — 내 태그 (real local DB)', () =
   });
 
   it('RPC — 볼 수 없는 설문에 만들며 붙이기 → NOT_FOUND, 태그도 안 생긴다', async () => {
-    const rpc = createRouterClient({ personalMarks }, { context: internalActorContext({ id: T_ME }) });
+    const rpc = createRouterClient(
+      { personalMarks },
+      { context: internalActorContext({ id: T_ME }) },
+    );
 
     await expect(
       rpc.personalMarks.createTag({ name: '남의 설문 태그', attachToSurveyId: TS.foreign }),
@@ -356,7 +363,10 @@ describe.skipIf(!isLocalDb)('개인 표시 — 내 태그 (real local DB)', () =
 
   it('RPC — 남의 태그 id 로 붙이기 → NOT_FOUND, 내 목록에는 내 태그만', async () => {
     const othersTag = await seedTag(T_OTHER, '남의 RPC 태그');
-    const rpc = createRouterClient({ personalMarks }, { context: internalActorContext({ id: T_ME }) });
+    const rpc = createRouterClient(
+      { personalMarks },
+      { context: internalActorContext({ id: T_ME }) },
+    );
 
     await expect(
       rpc.personalMarks.setTagLink({ surveyId: TS.link, tagId: othersTag, on: true }),
@@ -444,5 +454,208 @@ describe.skipIf(!isLocalDb)('개인 표시 — 내 태그 300개 한도 경합 (
     const result = await createTag(USER, { name: '키워드0', attachToSurveyId: null });
     expect(result.created).toBe(false);
     expect(await tagRowsOf(USER)).toHaveLength(PERSONAL_TAG_LIMIT);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 내 태그 고치기·지우기 (티켓 08) — 이름 충돌 · 소유 · 연쇄 삭제 · 나중 값
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe.skipIf(!isLocalDb)('개인 표시 — 내 태그 고치기·지우기 (real local DB)', () => {
+  const ME_E = crypto.randomUUID();
+  const OTHER_E = crypto.randomUUID();
+  const TEAM_E = crypto.randomUUID();
+  const SURVEYS_E = [crypto.randomUUID(), crypto.randomUUID()];
+
+  async function tagRow(tagId: string) {
+    const [row] = await db
+      .select({
+        name: personalSurveyTagsTable.name,
+        color: personalSurveyTagsTable.color,
+        updatedAt: personalSurveyTagsTable.updatedAt,
+      })
+      .from(personalSurveyTagsTable)
+      .where(eq(personalSurveyTagsTable.id, tagId));
+    return row;
+  }
+
+  beforeAll(async () => {
+    if (!isLocalDb) return;
+    await db.insert(usersTable).values(
+      [ME_E, OTHER_E].map((id) => ({
+        id,
+        name: `edit-${id.slice(0, 6)}`,
+        email: `personal-tags-edit-${id}@example.com`,
+        emailVerified: true,
+        status: 'active' as const,
+        isSuperadmin: false,
+        userType: 'internal' as const,
+      })),
+    );
+    await db.insert(teamsTable).values({ id: TEAM_E, name: `edit-${TEAM_E.slice(0, 8)}` });
+    await db.insert(teamMembersTable).values({ teamId: TEAM_E, userId: ME_E, role: 'member' });
+    await db.insert(surveysTable).values(
+      SURVEYS_E.map((id) => ({
+        id,
+        title: `edit ${id.slice(0, 6)}`,
+        teamId: TEAM_E,
+        ownerUserId: ME_E,
+        createdBy: ME_E,
+        visibility: 'team' as const,
+        assignmentStatus: 'assigned' as const,
+      })),
+    );
+  });
+
+  afterAll(async () => {
+    if (!isLocalDb) return;
+    const users = [ME_E, OTHER_E];
+    await db.delete(personalSurveyTagsTable).where(inArray(personalSurveyTagsTable.userId, users));
+    await db.delete(surveysTable).where(inArray(surveysTable.id, SURVEYS_E));
+    await db.delete(teamMembersTable).where(inArray(teamMembersTable.userId, users));
+    await db.delete(teamsTable).where(eq(teamsTable.id, TEAM_E));
+    await db.delete(usersTable).where(inArray(usersTable.id, users));
+  });
+
+  it('다른 내 태그와 같은 이름(공백·대소문자 무시)으로 고치기 → 이름 충돌, 이름은 그대로', async () => {
+    await seedTag(ME_E, 'B기관');
+    const target = await seedTag(ME_E, '바꿀 태그');
+
+    await expect(
+      updateTag(ME_E, UpdatePersonalTagInput.parse({ tagId: target, name: ' b기관 ' })),
+    ).rejects.toBeInstanceOf(PersonalTagNameTakenError);
+    expect((await tagRow(target))?.name).toBe('바꿀 태그');
+  });
+
+  it('남의 태그와 같은 이름은 충돌이 아니다 — 내 것만 본다', async () => {
+    await seedTag(OTHER_E, '남의 이름');
+    const target = await seedTag(ME_E, '내 이름');
+
+    const result = await updateTag(ME_E, { tagId: target, name: '남의 이름' });
+    expect(result).toMatchObject({ id: target, name: '남의 이름' });
+  });
+
+  it('자기 이름의 대소문자만 바꾸는 것은 충돌이 아니다', async () => {
+    const target = await seedTag(ME_E, 'abc사');
+    await expect(updateTag(ME_E, { tagId: target, name: 'ABC사' })).resolves.toMatchObject({
+      name: 'ABC사',
+    });
+  });
+
+  it('색만 고치면 이름은 그대로, 고친 시각이 움직인다 — 붙은 수와 함께 돌려준다', async () => {
+    const target = await seedTag(ME_E, '색 바꿀 태그', 'blue');
+    await setTagLink(ME_E, { surveyId: SURVEYS_E[0]!, tagId: target, on: true });
+    const before = await tagRow(target);
+
+    const result = await updateTag(ME_E, { tagId: target, color: 'teal' });
+
+    expect(result).toEqual({ id: target, name: '색 바꿀 태그', color: 'teal', linkCount: 1 });
+    const after = await tagRow(target);
+    expect(after?.updatedAt.getTime()).toBeGreaterThan(before!.updatedAt.getTime());
+  });
+
+  it('같은 태그를 두 번 고치면 나중 값이 남는다 — 동시에 보내도 잠금 뒤에 줄 선다', async () => {
+    const target = await seedTag(ME_E, '두 번', 'blue');
+
+    await updateTag(ME_E, { tagId: target, name: '첫째', color: 'red' });
+    await updateTag(ME_E, { tagId: target, name: '둘째' });
+    expect(await tagRow(target)).toMatchObject({ name: '둘째', color: 'red' });
+
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => (release = resolve));
+    let holderReady!: (pid: number) => void;
+    const ready = new Promise<number>((resolve) => (holderReady = resolve));
+    const holder = db.transaction(async (tx) => {
+      await lockPersonalTags(tx, ME_E);
+      holderReady(await backendPid(tx));
+      await released;
+    });
+    const holderPid = await ready;
+    const first = updateTag(ME_E, { tagId: target, color: 'green' });
+    await waitForLockWaitersBehind(holderPid, 1, '첫 고치기가 사용자 잠금 뒤에 줄 서지 않았습니다');
+    const second = updateTag(ME_E, { tagId: target, color: 'purple' });
+    await waitForLockWaitersBehind(
+      holderPid,
+      2,
+      '둘째 고치기가 사용자 잠금 뒤에 줄 서지 않았습니다',
+    );
+    release();
+    await holder;
+    await Promise.all([first, second]);
+    expect((await tagRow(target))?.color).toBe('purple');
+  });
+
+  it('남의 태그·없는 태그 고치기 → NOT_FOUND, 남의 태그는 그대로', async () => {
+    const othersTag = await seedTag(OTHER_E, '남의 고칠 태그', 'blue');
+
+    await expect(updateTag(ME_E, { tagId: othersTag, name: '가로챔' })).rejects.toBeInstanceOf(
+      PersonalTagNotFoundError,
+    );
+    await expect(updateTag(ME_E, { tagId: othersTag, color: 'red' })).rejects.toBeInstanceOf(
+      PersonalTagNotFoundError,
+    );
+    await expect(
+      updateTag(ME_E, { tagId: crypto.randomUUID(), name: '없음' }),
+    ).rejects.toBeInstanceOf(PersonalTagNotFoundError);
+    expect(await tagRow(othersTag)).toMatchObject({ name: '남의 고칠 태그', color: 'blue' });
+  });
+
+  it('지우면 태그와 연결이 함께 사라진다 — 다른 태그의 연결은 남는다', async () => {
+    const doomed = await seedTag(ME_E, '지울 태그');
+    const kept = await seedTag(ME_E, '남길 태그');
+    for (const surveyId of SURVEYS_E) {
+      await setTagLink(ME_E, { surveyId, tagId: doomed, on: true });
+      await setTagLink(ME_E, { surveyId, tagId: kept, on: true });
+    }
+
+    await expect(deleteTag(ME_E, { tagId: doomed })).resolves.toEqual({ tagId: doomed });
+
+    expect(await tagRow(doomed)).toBeUndefined();
+    const links = await db
+      .select({ tagId: personalSurveyTagLinksTable.tagId })
+      .from(personalSurveyTagLinksTable)
+      .where(inArray(personalSurveyTagLinksTable.tagId, [doomed, kept]));
+    expect(links.map((l) => l.tagId)).toEqual([kept, kept]);
+    expect((await listMyTags(ME_E)).tags.map((t) => t.id)).not.toContain(doomed);
+  });
+
+  it('남의 태그·없는 태그 지우기 → NOT_FOUND, 남의 태그와 연결은 남는다', async () => {
+    const othersTag = await seedTag(OTHER_E, '남의 지울 태그');
+    await db
+      .insert(personalSurveyTagLinksTable)
+      .values({ tagId: othersTag, surveyId: SURVEYS_E[1]! });
+
+    await expect(deleteTag(ME_E, { tagId: othersTag })).rejects.toBeInstanceOf(
+      PersonalTagNotFoundError,
+    );
+    await expect(deleteTag(ME_E, { tagId: crypto.randomUUID() })).rejects.toBeInstanceOf(
+      PersonalTagNotFoundError,
+    );
+    expect(await tagRow(othersTag)).toBeDefined();
+    expect(await linkRows(SURVEYS_E[1]!)).toContainEqual({ tagId: othersTag });
+  });
+
+  it('RPC — 이름 충돌은 CONFLICT 「이미 같은 이름의 태그가 있습니다」, 남의 태그는 NOT_FOUND', async () => {
+    await seedTag(ME_E, 'RPC 기존');
+    const mineTag = await seedTag(ME_E, 'RPC 바꿀');
+    const othersTag = await seedTag(OTHER_E, 'RPC 남의');
+    const rpc = createRouterClient(
+      { personalMarks },
+      { context: internalActorContext({ id: ME_E }) },
+    );
+
+    await expect(
+      rpc.personalMarks.updateTag({ tagId: mineTag, name: 'rpc 기존' }),
+    ).rejects.toMatchObject({ code: 'CONFLICT', message: '이미 같은 이름의 태그가 있습니다' });
+    await expect(
+      rpc.personalMarks.updateTag({ tagId: othersTag, color: 'red' }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(rpc.personalMarks.deleteTag({ tagId: othersTag })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+    await expect(rpc.personalMarks.deleteTag({ tagId: mineTag })).resolves.toEqual({
+      tagId: mineTag,
+    });
+    expect(await tagRow(othersTag)).toBeDefined();
   });
 });

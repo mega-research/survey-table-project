@@ -7,6 +7,7 @@ import {
   resolveCardTags,
   resolveTagFilterList,
   resolveTagPicker,
+  resolveTagRename,
 } from './personal-tags';
 
 // 카드 태그 줄과 태그 창의 표시 규칙 (설문 즐겨찾기·태그 티켓 07).
@@ -117,5 +118,32 @@ describe('resolveTagPicker — 태그 창', () => {
       create: null,
       limitReached: true,
     });
+  });
+});
+
+describe('편집 패널 이름 칸 (티켓 08)', () => {
+  const MINE = [tag('a', 'A사'), tag('b', 'B기관')];
+
+  it('공백만 다른 지금 이름이면 보내지 않는다', () => {
+    expect(resolveTagRename(' B기관 ', MINE[1]!, MINE)).toEqual({ kind: 'unchanged' });
+  });
+
+  it('자기 이름의 대소문자만 바꾸는 것은 겹침이 아니다', () => {
+    const abc = tag('c', 'abc');
+    expect(resolveTagRename('ABC', abc, [...MINE, abc])).toEqual({ kind: 'save', name: 'ABC' });
+  });
+
+  it('다른 내 태그와 공백·대소문자만 다르면 겹침', () => {
+    expect(resolveTagRename(' a사', MINE[1]!, MINE)).toMatchObject({
+      kind: 'invalid',
+      reason: 'taken',
+      message: '이미 같은 이름의 태그가 있습니다',
+    });
+  });
+
+  it('비었거나 20자를 넘으면 이유와 함께 거부, 아니면 걷은 이름으로 보낸다', () => {
+    expect(resolveTagRename('  ', MINE[1]!, MINE)).toMatchObject({ reason: 'empty' });
+    expect(resolveTagRename('가'.repeat(21), MINE[1]!, MINE)).toMatchObject({ reason: 'too_long' });
+    expect(resolveTagRename(' C기관 ', MINE[1]!, MINE)).toEqual({ kind: 'save', name: 'C기관' });
   });
 });

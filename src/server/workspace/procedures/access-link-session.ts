@@ -28,26 +28,20 @@
 import { cookies } from 'next/headers';
 
 import {
-  authenticateAccessLink,
-  authenticateClientLink,
-  type AccessLinkSessionCookie,
-} from '@/server/access-link';
-import { pub, withRateLimit } from '@/server/orpc';
-import {
-  AccessLinkAuthOutput,
-  WorkspaceActionOutput,
-} from '@/shared/contracts/workspace-io';
-import {
   accessLinkCookieName,
   accessLinkCookiePath,
   isAccessLinkToken,
 } from '@/lib/auth/access-link-session';
-import type { AccessLinkKind } from '@/shared/contracts/workspace';
-
 import {
-  AccessLinkAuthInput,
-  AccessLinkSignOutInput,
-} from '../domain/access-link';
+  type AccessLinkSessionCookie,
+  authenticateAccessLink,
+  authenticateClientLink,
+} from '@/server/access-link';
+import { pub, withRateLimit } from '@/server/orpc';
+import type { AccessLinkKind } from '@/shared/contracts/workspace';
+import { AccessLinkAuthOutput, WorkspaceActionOutput } from '@/shared/contracts/workspace-io';
+
+import { AccessLinkAuthInput, AccessLinkSignOutInput } from '../domain/access-link';
 
 /**
  * 쿠키 속성 — **경로는 종류가 정한다**(`accessLinkCookiePath`).
