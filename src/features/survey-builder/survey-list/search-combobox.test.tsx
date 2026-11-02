@@ -389,6 +389,61 @@ describe('SearchCombobox — 내 태그 후보', () => {
     expect(screen.queryByRole('group', { name: '내 태그' })).toBeNull();
   });
 
+  it('창이 열리면 첫 태그 줄이 가리켜져 있어 Enter 로 바로 고른다 — 맞던 단어는 지우고 남은 단어만', async () => {
+    const { input, user, onPickTag, onCommit } = setupTags();
+    await user.type(input, 'a사 실');
+    const first = screen.getByRole('option', { name: /^A사설문 6개/ });
+    expect(input).toHaveAttribute('aria-activedescendant', first.id);
+    expect(first).toHaveAttribute('aria-selected', 'true');
+    expect(first).toHaveTextContent('Enter 로 필터 추가');
+
+    await user.keyboard('{Enter}');
+    expect(onPickTag).toHaveBeenCalledExactlyOnceWith('t1', '실');
+    expect(onCommit).not.toHaveBeenCalled();
+    expect(input).toHaveValue('실');
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('태그 줄을 누르면 고른다 — 둘 다 맞으면 검색어가 빈다', async () => {
+    const { input, user, onPickTag } = setupTags();
+    await user.type(input, 'a사 협력');
+    await user.click(screen.getByRole('option', { name: /A사 협력사/ }));
+    expect(onPickTag).toHaveBeenCalledExactlyOnceWith('t2', '');
+    expect(input).toHaveValue('');
+  });
+
+  it('↑↓ 는 칸을 넘어 이어진다 — 태그 끝에서 ↓ 면 설문 첫 줄, 처음에서 ↑ 면 모두 보기', async () => {
+    const { input, user } = setupTags();
+    await user.type(input, 'a사');
+    await user.keyboard('{ArrowDown}{ArrowDown}');
+    expect(input).toHaveAttribute(
+      'aria-activedescendant',
+      screen.getByRole('option', { name: /A사 2026/ }).id,
+    );
+    await user.keyboard('{ArrowUp}{ArrowUp}{ArrowUp}');
+    expect(input).toHaveAttribute(
+      'aria-activedescendant',
+      screen.getByRole('option', { name: /모두 보기/ }).id,
+    );
+  });
+
+  it('태그 후보가 없으면 아무 줄도 가리키지 않고 Enter 는 지금 검색어를 적용한다', async () => {
+    const { input, user, onCommit, onPickSurvey } = setupTags();
+    await user.type(input, '2026');
+    expect(input).not.toHaveAttribute('aria-activedescendant');
+    await user.keyboard('{Enter}');
+    expect(onCommit).toHaveBeenCalledExactlyOnceWith('2026');
+    expect(onPickSurvey).not.toHaveBeenCalled();
+  });
+
+  it('Esc 는 창만 닫고 태그를 고르지 않는다', async () => {
+    const { input, user, onPickTag } = setupTags();
+    await user.type(input, 'a사');
+    await user.keyboard('{Escape}');
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+    expect(onPickTag).not.toHaveBeenCalled();
+  });
+
   it('이미 칩으로 걸린 태그는 후보에 없다', async () => {
     const { input, user } = setupTags({ chipTags: [MY_TAGS[0]!] });
     await user.type(input, 'a사');

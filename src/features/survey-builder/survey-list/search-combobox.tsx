@@ -101,7 +101,8 @@ interface SearchComboboxProps {
  *
  * 접근성은 combobox 패턴이다 — 포커스는 늘 입력칸에 있고, ↑↓ 가 `aria-activedescendant` 로 후보를
  * 가리키며, Enter 가 가리킨 후보를 고른다(가리킨 것이 없으면 검색 적용). Esc 는 창만 닫고, 다시
- * 치면 열린다. 후보 줄은 mousedown 을 막아 클릭해도 입력칸의 포커스가 빠지지 않는다.
+ * 치면 열린다. 후보 줄은 mousedown 을 막아 클릭해도 입력칸의 포커스가 빠지지 않는다. 「내 태그」
+ * 후보가 있으면 열릴 때 첫 태그 줄을 가리켜 Enter 가 곧 태그 고르기다(티켓 10).
  *
  * 상한(단어 8개·100자)을 넘기는 입력은 받지 않는다(티켓 04) — 서버 입력 스키마가 같은 기준으로
  * 거부한다.
@@ -159,7 +160,13 @@ export function SearchCombobox({
   const sections = open ? buildSections(draft, tagHits, owners, suggestions, isPending) : [];
   const allOption: SuggestOption = { kind: 'all', key: 'all' };
   const flat = open ? [...sections.flatMap((s) => s.options), allOption] : [];
-  const activeIndex = flat.findIndex((o) => o.key === activeKey);
+  // 가리킨 줄 — 고른 적이 없으면(또는 가리킨 줄이 사라졌으면) 첫 태그 줄(시안 F8-b 「Enter 로 필터
+  // 추가」). 태그 후보는 브라우저가 바로 거르므로 맨 위 칸이 늦게 와 밀리는 일이 없다. 태그 후보가
+  // 없으면 아무 줄도 가리키지 않는다 — Enter 가 지금 검색어 적용으로 남는다(설문 첫 줄을 미리 가리키면
+  // Enter 가 그 설문 편집으로 가 버린다).
+  const chosenIndex = flat.findIndex((o) => o.key === activeKey);
+  const activeIndex = chosenIndex >= 0 ? chosenIndex : flat.findIndex((o) => o.kind === 'tag');
+  const resolvedActiveKey = activeIndex >= 0 ? flat[activeIndex]!.key : null;
   const optionId = (key: string) => `${baseId}-opt-${key}`;
 
   function close() {
@@ -380,7 +387,7 @@ export function SearchCombobox({
                   section={section}
                   idPrefix={baseId}
                   optionId={optionId}
-                  activeKey={activeIndex >= 0 ? activeKey : null}
+                  activeKey={resolvedActiveKey}
                   onSelect={select}
                   onHover={setActiveKey}
                 />
@@ -389,12 +396,12 @@ export function SearchCombobox({
                 <div
                   id={optionId('all')}
                   role="option"
-                  aria-selected={activeKey === 'all'}
+                  aria-selected={resolvedActiveKey === 'all'}
                   onClick={() => select(allOption)}
                   onMouseEnter={() => setActiveKey('all')}
                   className={cn(
                     'min-w-0 cursor-pointer truncate rounded-lg px-2 py-1.5 text-[13px] font-medium text-[#2E4FCE]',
-                    activeKey === 'all' && 'bg-[#EEF2FF]',
+                    resolvedActiveKey === 'all' && 'bg-[#EEF2FF]',
                   )}
                 >
                   「{draft.trim()}」 검색 결과 모두 보기
