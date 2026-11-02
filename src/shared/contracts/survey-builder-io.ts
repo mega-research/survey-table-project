@@ -222,11 +222,27 @@ export type SurveyListVisibilityFilter = (typeof surveyListVisibilityFilterValue
 
 /** 느슨한 UUID 꼴(8-4-4-4-12) — 주소에서 온 id 를 DB 까지 보내기 전에 거른다(uuid 컬럼 22P02 방지). */
 export const LOOSE_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-/** 상세 검색 날짜 — YYYY-MM-DD, 한국 시간 하루로 읽는다. */
-export const SURVEY_LIST_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const SURVEY_LIST_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/**
+ * 상세 검색 날짜인가 — YYYY-MM-DD 꼴이고 달력에 실제로 있는 날(윤년 포함)이어야 한다. 한국 시간 하루로 읽는다.
+ *
+ * 꼴만 보면 `2026-99-99` 가 SQL `::date` 변환에서 깨져 500 이 된다. 입력 스키마(거부)와 주소 읽기(그 조건만
+ * 버림)가 이 함수 하나를 같이 쓴다.
+ */
+export function isSurveyListDate(raw: string): boolean {
+  const m = SURVEY_LIST_DATE_PATTERN.exec(raw);
+  if (!m) return false;
+  const [year, month, day] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  if (month < 1 || month > 12 || day < 1) return false;
+  // 다음 달 0일 = 이번 달 마지막 날. UTC 로 계산해 실행 환경의 시간대와 무관하다.
+  return day <= new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
 
 const uuidLike = z.string().regex(LOOSE_UUID_PATTERN);
-const listDate = z.string().regex(SURVEY_LIST_DATE_PATTERN);
+const listDate = z
+  .string()
+  .refine(isSurveyListDate, { message: '날짜는 YYYY-MM-DD 꼴의 실제 날짜여야 합니다' });
 const responseBound = z.number().int().min(0).max(1_000_000_000);
 
 export const SurveyListAdvancedFiltersSchema = z.object({

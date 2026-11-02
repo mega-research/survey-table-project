@@ -155,6 +155,17 @@ describe('주소 ↔ 목록 조건', () => {
     expect(parse('page=2.5').page).toBe(1);
   });
 
+  it('달력에 없는 날짜는 오류 화면 대신 그 기간 조건만 버린다 — 나머지 조건은 그대로', () => {
+    const query = parse('q=a&from=2026-02-29&to=2026-04-31&rmin=3');
+    expect(query.advanced.dateFrom).toBeNull();
+    expect(query.advanced.dateTo).toBeNull();
+    expect(query.q).toBe('a');
+    expect(query.advanced.responsesMin).toBe(3);
+    expect(parse('from=2026-99-99&to=2026-13-01').advanced).toEqual(INITIAL_ADVANCED_FILTERS);
+    const leap = parse('from=2028-02-29&to=2028-03-01').advanced;
+    expect([leap.dateFrom, leap.dateTo]).toEqual(['2028-02-29', '2028-03-01']);
+  });
+
   it('검색어는 상한 글자 수에서 자른다', () => {
     expect(parse(`q=${'가'.repeat(150)}`).q).toHaveLength(100);
   });

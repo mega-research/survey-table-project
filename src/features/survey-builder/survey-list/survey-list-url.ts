@@ -11,12 +11,12 @@ import {
   INITIAL_ADVANCED_FILTERS,
   INITIAL_SURVEY_LIST_PAGE_QUERY,
   LOOSE_UUID_PATTERN,
-  SURVEY_LIST_DATE_PATTERN,
   SURVEY_LIST_SEARCH_MAX_LENGTH,
   SURVEY_LIST_SEARCH_MAX_WORDS,
   SURVEY_LIST_TAG_FILTER_MAX,
   type SurveyListAdvancedFilters,
   type SurveyListPageQuery,
+  isSurveyListDate,
   splitSurveyListSearchWords,
   surveyListDateFieldValues,
   surveyListLifecycleFilterValues,
@@ -61,8 +61,9 @@ function uuidOrNull(raw: string | null): string | null {
   return raw !== null && LOOSE_UUID_PATTERN.test(raw) ? raw : null;
 }
 
+/** 달력에 없는 날짜(`2026-02-30`)도 그 조건만 버린다 — 서버가 거부할 주소로 조회하지 않게. */
 function dateOrNull(raw: string | null): string | null {
-  return raw !== null && SURVEY_LIST_DATE_PATTERN.test(raw) ? raw : null;
+  return raw !== null && isSurveyListDate(raw) ? raw : null;
 }
 
 function nonNegativeIntOrNull(raw: string | null): number | null {

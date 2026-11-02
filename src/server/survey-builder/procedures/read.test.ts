@@ -1,7 +1,15 @@
 import { createRouterClient } from '@orpc/server';
+import { ORPCError } from '@orpc/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
+import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
+import { INITIAL_SURVEY_LIST_PAGE_QUERY } from '@/shared/contracts/survey-builder-io';
+
+import { SurveyListQueryError } from '../domain/survey-read';
+import * as responseSvc from '../services/response-read';
+import * as surveySvc from '../services/survey-read';
+import { read } from './read';
 
 vi.mock('../services/survey-read', () => ({
   getSurveyListWithCounts: vi.fn(),
@@ -32,22 +40,22 @@ vi.mock('../services/response-read', () => ({
   exportResponsesAsCsv: vi.fn(),
 }));
 
-import { ORPCError } from '@orpc/server';
-
-import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
-import { INITIAL_SURVEY_LIST_PAGE_QUERY } from '@/shared/contracts/survey-builder-io';
-
-import { SurveyListQueryError } from '../domain/survey-read';
-import * as responseSvc from '../services/response-read';
-import * as surveySvc from '../services/survey-read';
-import { read } from './read';
-
 // UUID 픽스처는 v4 형태로 통일.
 const SURVEY_ID = '11111111-2222-4333-8444-555555555555';
 const RESPONSE_ID = '22222222-3333-4444-8555-666666666666';
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false , userType: 'internal'} };
+  return {
+    db: {} as never,
+    user: {
+      id: 'admin-1',
+      email: 'a@b.com',
+      name: '관리자',
+      status: 'active',
+      isSuperadmin: false,
+      userType: 'internal',
+    },
+  };
 }
 
 function anonContext(): ORPCContext {
@@ -87,6 +95,41 @@ describe('surveyBuilder.read procedures', () => {
       client.read.listPage({ ...INITIAL_SURVEY_LIST_PAGE_QUERY, scope: null, groupId: 'abc' }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     expect(surveySvc.listSurveyPage).not.toHaveBeenCalled();
+  });
+
+  it('listPage 는 달력에 없는 기간 날짜를 DB 까지 보내지 않는다 — ::date 변환 500 대신 BAD_REQUEST', async () => {
+    const client = createRouterClient({ read }, { context: authedContext() });
+    for (const bad of ['2026-99-99', '2026-02-29', '2026-04-31', '2026-13-01']) {
+      await expect(
+        client.read.listPage({
+          ...INITIAL_SURVEY_LIST_PAGE_QUERY,
+          scope: null,
+          advanced: { ...INITIAL_SURVEY_LIST_PAGE_QUERY.advanced, dateFrom: bad },
+        }),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+      await expect(
+        client.read.listPage({
+          ...INITIAL_SURVEY_LIST_PAGE_QUERY,
+          scope: null,
+          advanced: { ...INITIAL_SURVEY_LIST_PAGE_QUERY.advanced, dateTo: bad },
+        }),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    }
+    expect(surveySvc.listSurveyPage).not.toHaveBeenCalled();
+
+    vi.mocked(surveySvc.listSurveyPage).mockResolvedValue({} as never);
+    await client.read
+      .listPage({
+        ...INITIAL_SURVEY_LIST_PAGE_QUERY,
+        scope: null,
+        advanced: {
+          ...INITIAL_SURVEY_LIST_PAGE_QUERY.advanced,
+          dateFrom: '2028-02-29',
+          dateTo: '2028-03-01',
+        },
+      })
+      .catch(() => undefined);
+    expect(surveySvc.listSurveyPage).toHaveBeenCalledTimes(1);
   });
 
   it('listPage — 내 것이 아닌 태그로 거르면 설문이 아니라 태그를 못 찾았다고 한다(NOT_FOUND)', async () => {
@@ -195,7 +238,10 @@ describe('surveyBuilder.read procedures', () => {
     vi.mocked(surveySvc.isSlugAvailable).mockResolvedValue(true as never);
     const client = createRouterClient({ read }, { context: authedContext() });
     const res = await client.read.slugAvailable({ slug: 'my-slug', excludeSurveyId: SURVEY_ID });
-    expect(surveySvc.isSlugAvailable).toHaveBeenCalledWith({ slug: 'my-slug', excludeSurveyId: SURVEY_ID });
+    expect(surveySvc.isSlugAvailable).toHaveBeenCalledWith({
+      slug: 'my-slug',
+      excludeSurveyId: SURVEY_ID,
+    });
     expect(res).toBe(true);
   });
 
@@ -329,7 +375,14 @@ describe('surveyBuilder.read procedures', () => {
       {
         context: {
           db: {} as never,
-          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false, userType: 'guest' },
+          user: {
+            id: 'guest-1',
+            email: 'g@b.com',
+            name: '게스트',
+            status: 'active',
+            isSuperadmin: false,
+            userType: 'guest',
+          },
         },
       },
     );
