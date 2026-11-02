@@ -54,12 +54,16 @@ export default async function SurveyListPage({
   );
 }
 
-/** 같은 이름이 여러 번 오면 첫 값을 쓴다 — 화면의 useSearchParams().get 과 같은 규칙. */
+/**
+ * 같은 이름이 여러 번 오면 모두 순서대로 담는다 — 화면의 useSearchParams 와 같은 모양이라 `get` 은
+ * 첫 값, `getAll` 은 전부(검색 칩 `tag` 가 여러 번 온다)를 읽는다.
+ */
 function toUrlSearchParams(raw: Record<string, string | string[] | undefined>): URLSearchParams {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(raw)) {
-    const first = Array.isArray(value) ? value[0] : value;
-    if (first !== undefined) params.set(key, first);
+    for (const one of Array.isArray(value) ? value : value === undefined ? [] : [value]) {
+      params.append(key, one);
+    }
   }
   return params;
 }

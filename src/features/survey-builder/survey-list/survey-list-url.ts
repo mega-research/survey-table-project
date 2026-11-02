@@ -14,6 +14,7 @@ import {
   SURVEY_LIST_DATE_PATTERN,
   SURVEY_LIST_SEARCH_MAX_LENGTH,
   SURVEY_LIST_SEARCH_MAX_WORDS,
+  SURVEY_LIST_TAG_FILTER_MAX,
   type SurveyListAdvancedFilters,
   type SurveyListPageQuery,
   splitSurveyListSearchWords,
@@ -31,6 +32,8 @@ export const SURVEY_LIST_URL_PARAMS = {
   q: 'q',
   lifecycle: 'status',
   favorites: 'fav',
+  /** 검색 칩 — 태그마다 한 번씩(`tag=a&tag=b`), 칩 순서대로. */
+  tagIds: 'tag',
   sort: 'sort',
   dateField: 'date',
   dateFrom: 'from',
@@ -47,6 +50,7 @@ const P = SURVEY_LIST_URL_PARAMS;
 
 interface SearchParamsLike {
   get(name: string): string | null;
+  getAll(name: string): string[];
 }
 
 function oneOf<T extends string>(values: readonly T[], raw: string | null): T | null {
@@ -77,6 +81,12 @@ function searchWithinLimits(raw: string | null): string {
     : q;
 }
 
+/** 주소의 검색 칩 — 꼴이 맞는 id 만, 중복 없이, 앞에서부터 상한까지(서버가 거부할 주소로 조회하지 않게). */
+function tagIdsWithinLimits(raw: string[]): string[] {
+  const ids = [...new Set(raw.filter((id) => LOOSE_UUID_PATTERN.test(id)))];
+  return ids.slice(0, SURVEY_LIST_TAG_FILTER_MAX);
+}
+
 /** 주소 → 조건. */
 export function parseSurveyListQuery(params: SearchParamsLike): SurveyListPageQuery {
   const teamId = uuidOrNull(params.get(P.teamId));
@@ -105,6 +115,8 @@ export function parseSurveyListQuery(params: SearchParamsLike): SurveyListPageQu
     advanced,
     // 휴지통에는 즐겨찾기 조건이 없다(서버도 그 조합을 거부한다) — 함께 오면 즐겨찾기를 접는다.
     favorites: !deleted && params.get(P.favorites) === '1',
+    // 태그 조건도 같다. 지워진 태그(다른 탭) 칩은 여기서 알 수 없다 — 화면이 내 태그 목록과 대조해 푼다.
+    tagIds: deleted ? [] : tagIdsWithinLimits(params.getAll(P.tagIds)),
     sort: oneOf(surveyListSortValues, params.get(P.sort)) ?? INITIAL_SURVEY_LIST_PAGE_QUERY.sort,
     page: page !== null && page >= 1 ? page : 1,
     deleted,
@@ -124,6 +136,7 @@ export function serializeSurveyListQuery(query: SurveyListPageQuery): string {
   if (query.q !== '') out.set(P.q, query.q);
   if (query.lifecycle !== d.lifecycle) out.set(P.lifecycle, query.lifecycle);
   if (query.favorites) out.set(P.favorites, '1');
+  for (const tagId of query.tagIds) out.append(P.tagIds, tagId);
   if (query.sort !== d.sort) out.set(P.sort, query.sort);
   if (a.dateField !== INITIAL_ADVANCED_FILTERS.dateField) out.set(P.dateField, a.dateField);
   if (a.dateFrom) out.set(P.dateFrom, a.dateFrom);
@@ -135,6 +148,10 @@ export function serializeSurveyListQuery(query: SurveyListPageQuery): string {
   if (query.deleted) out.set(P.deleted, '1');
   if (query.page !== 1) out.set(P.page, String(query.page));
   return out.toString();
+}
+
+function sameTagIds(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((id, i) => id === b[i]);
 }
 
 function sameAdvanced(a: SurveyListAdvancedFilters, b: SurveyListAdvancedFilters): boolean {
@@ -153,6 +170,7 @@ export function changeSurveyListQuery(
   const conditionChanged = (Object.keys(patch) as (keyof SurveyListPageQuery)[]).some((key) => {
     if (key === 'page') return false;
     if (key === 'advanced') return !sameAdvanced(query.advanced, next.advanced);
+    if (key === 'tagIds') return !sameTagIds(query.tagIds, next.tagIds);
     return query[key] !== next[key];
   });
   if (conditionChanged) return { ...next, page: 1 };
@@ -161,12 +179,38 @@ export function changeSurveyListQuery(
 }
 
 /**
- * 걸러 내는 조건(검색·목록 상태·상세 검색·즐겨찾기)이 걸려 있는가. 결과 0개 화면이 「조건 풀기」 단추를
+ * 검색 칩 더하기 (티켓 09) — 끝에 붙인다. 이미 걸렸거나 상한(10개)이면 그대로. 「# 태그」 목록의
+ * 체크·카드 태그 누르기·자동완성의 태그 고르기(티켓 10)가 이 함수로 칩을 더한다.
+ */
+export function addTagFilter(query: SurveyListPageQuery, tagId: string): SurveyListPageQuery {
+  if (query.tagIds.includes(tagId) || query.tagIds.length >= SURVEY_LIST_TAG_FILTER_MAX) {
+    return query;
+  }
+  return changeSurveyListQuery(query, { tagIds: [...query.tagIds, tagId] });
+}
+
+/** 검색 칩 빼기 — 칩의 × 와 「# 태그」 목록의 체크 풀기. 걸려 있지 않으면 그대로. */
+export function removeTagFilter(query: SurveyListPageQuery, tagId: string): SurveyListPageQuery {
+  if (!query.tagIds.includes(tagId)) return query;
+  return changeSurveyListQuery(query, { tagIds: query.tagIds.filter((id) => id !== tagId) });
+}
+
+/**
+ * 검색창 「모두 지우기」 — 검색창 안의 칩과 글자만 지운다. 즐겨찾기·목록 상태·상세 검색은 각자
+ * 자리에서 푼다(PRD 「모두 지우기는 검색창 안 칩·글자만」).
+ */
+export function clearSearchBox(query: SurveyListPageQuery): SurveyListPageQuery {
+  return changeSurveyListQuery(query, { q: '', tagIds: [] });
+}
+
+/**
+ * 걸러 내는 조건(검색·검색 칩·목록 상태·상세 검색·즐겨찾기)이 걸려 있는가. 결과 0개 화면이 「조건 풀기」 단추를
  * 낼지 정한다 — 그룹·팀 좁힘은 주소가 가리키는 화면이라 그 단추로 풀지 않는다.
  */
 export function hasNarrowingFilters(query: SurveyListPageQuery): boolean {
   return (
     query.q.trim() !== '' ||
+    query.tagIds.length > 0 ||
     query.lifecycle !== 'all' ||
     query.favorites ||
     !sameAdvanced(query.advanced, INITIAL_ADVANCED_FILTERS)
@@ -174,12 +218,13 @@ export function hasNarrowingFilters(query: SurveyListPageQuery): boolean {
 }
 
 /**
- * 「조건 풀기」(결과 0개 화면) — 검색·목록 상태·상세 검색·즐겨찾기를 되돌린다(그룹·팀·휴지통·정렬은
+ * 「조건 풀기」(결과 0개 화면) — 검색·검색 칩·목록 상태·상세 검색·즐겨찾기를 되돌린다(그룹·팀·휴지통·정렬은
  * 그대로). 검색창의 「모두 지우기」(칩과 글자만)와는 다른 단추다.
  */
 export function clearNarrowingFilters(query: SurveyListPageQuery): SurveyListPageQuery {
   return changeSurveyListQuery(query, {
     q: '',
+    tagIds: [],
     lifecycle: 'all',
     advanced: INITIAL_ADVANCED_FILTERS,
     favorites: false,

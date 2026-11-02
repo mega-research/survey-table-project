@@ -7,16 +7,21 @@ import {
 } from '@/shared/contracts/survey-builder-io';
 
 import {
+  addTagFilter,
   changeSurveyListQuery,
   clearNarrowingFilters,
+  clearSearchBox,
   hasNarrowingFilters,
   parseSurveyListQuery,
+  removeTagFilter,
   serializeSurveyListQuery,
 } from './survey-list-url';
 
 const GROUP = '11111111-2222-4333-8444-555555555555';
 const TEAM = '22222222-3333-4444-8555-666666666666';
 const OWNER = '33333333-4444-4555-8666-777777777777';
+const TAG_A = '44444444-5555-4666-8777-888888888888';
+const TAG_B = '55555555-6666-4777-8888-999999999999';
 
 function parse(search: string): SurveyListPageQuery {
   return parseSurveyListQuery(new URLSearchParams(search));
@@ -38,6 +43,7 @@ const FULL: SurveyListPageQuery = {
     responsesMax: 300,
   },
   favorites: true,
+  tagIds: [TAG_A, TAG_B],
   sort: 'responses',
   page: 3,
   deleted: false,
@@ -57,7 +63,7 @@ describe('주소 ↔ 목록 조건', () => {
 
   it('주소 이름은 사람이 읽을 수 있는 짧은 이름이다', () => {
     expect(serializeSurveyListQuery(FULL)).toBe(
-      `team=${TEAM}&ungrouped=1&q=2026+%EC%8B%A4%ED%83%9C&status=closed&fav=1&sort=responses` +
+      `team=${TEAM}&ungrouped=1&q=2026+%EC%8B%A4%ED%83%9C&status=closed&fav=1&tag=${TAG_A}&tag=${TAG_B}&sort=responses` +
         `&date=endDate&from=2026-01-01&to=2026-12-31&owner=${OWNER}&vis=invite_only&rmin=0&rmax=300&page=3`,
     );
   });
@@ -79,6 +85,24 @@ describe('주소 ↔ 목록 조건', () => {
   it('휴지통에는 즐겨찾기 조건이 없다 — 함께 오면 즐겨찾기를 접는다', () => {
     expect(parse('fav=1')).toEqual({ ...INITIAL_SURVEY_LIST_PAGE_QUERY, favorites: true });
     expect(parse('trash=1&fav=1')).toEqual({ ...INITIAL_SURVEY_LIST_PAGE_QUERY, deleted: true });
+  });
+
+  it('검색 칩은 tag 를 여러 번 남기고 그 순서로 읽는다 — 잘못된 꼴·중복은 빼고 10개까지', () => {
+    expect(parse(`tag=${TAG_B}&tag=${TAG_A}`).tagIds).toEqual([TAG_B, TAG_A]);
+    expect(parse(`tag=${TAG_A}&tag=abc&tag=${TAG_A}`).tagIds).toEqual([TAG_A]);
+    const twelve = Array.from(
+      { length: 12 },
+      (_, i) => `${String(i).padStart(8, '0')}-0000-4000-8000-000000000000`,
+    );
+    const parsed = parse(twelve.map((id) => `tag=${id}`).join('&')).tagIds;
+    expect(parsed).toEqual(twelve.slice(0, 10));
+  });
+
+  it('휴지통에는 태그 조건이 없다 — 함께 오면 태그를 접는다', () => {
+    expect(parse(`trash=1&tag=${TAG_A}`)).toEqual({
+      ...INITIAL_SURVEY_LIST_PAGE_QUERY,
+      deleted: true,
+    });
   });
 
   it('미분류는 팀 좁힘과 함께일 때만 뜻이 있다', () => {
@@ -122,6 +146,12 @@ describe('조건 바꾸기', () => {
     ).toBe(1);
   });
 
+  it('검색 칩이 바뀌면 1페이지, 같은 칩 목록이면 그대로다', () => {
+    expect(changeSurveyListQuery(onPage3, { tagIds: [TAG_A] }).page).toBe(1);
+    const tagged = { ...onPage3, tagIds: [TAG_A] };
+    expect(changeSurveyListQuery(tagged, { tagIds: [TAG_A] })).toBe(tagged);
+  });
+
   it('페이지만 바꾸면 그 페이지로 간다', () => {
     expect(changeSurveyListQuery(onPage3, { page: 5 })).toEqual({ ...onPage3, page: 5 });
   });
@@ -131,9 +161,43 @@ describe('조건 바꾸기', () => {
   });
 });
 
+describe('검색 칩 더하기·빼기', () => {
+  const onPage2 = { ...INITIAL_SURVEY_LIST_PAGE_QUERY, page: 2, tagIds: [TAG_A] };
+
+  it('더하면 끝에 붙고 1페이지로 간다 — 이미 걸린 태그면 그대로', () => {
+    expect(addTagFilter(onPage2, TAG_B)).toEqual({ ...onPage2, tagIds: [TAG_A, TAG_B], page: 1 });
+    expect(addTagFilter(onPage2, TAG_A)).toBe(onPage2);
+  });
+
+  it('10개가 걸려 있으면 더하지 않는다', () => {
+    const ten = Array.from(
+      { length: 10 },
+      (_, i) => `${String(i).padStart(8, '0')}-0000-4000-8000-000000000000`,
+    );
+    const full = { ...INITIAL_SURVEY_LIST_PAGE_QUERY, tagIds: ten };
+    expect(addTagFilter(full, TAG_A)).toBe(full);
+  });
+
+  it('빼면 그 칩만 빠지고 1페이지로 간다 — 걸려 있지 않으면 그대로', () => {
+    expect(removeTagFilter({ ...onPage2, tagIds: [TAG_A, TAG_B] }, TAG_A)).toEqual({
+      ...onPage2,
+      tagIds: [TAG_B],
+      page: 1,
+    });
+    expect(removeTagFilter(onPage2, TAG_B)).toBe(onPage2);
+  });
+});
+
+describe('검색창 「모두 지우기」', () => {
+  it('칩과 글자만 지우고 즐겨찾기·목록 상태·상세 검색·정렬은 남긴다', () => {
+    expect(clearSearchBox(FULL)).toEqual({ ...FULL, q: '', tagIds: [], page: 1 });
+  });
+});
+
 describe('걸린 조건이 있는가 — 결과 0개 화면의 「조건 풀기」 단추', () => {
-  it('검색·목록 상태·상세 검색·즐겨찾기 중 하나라도 걸리면 참', () => {
+  it('검색·검색 칩·목록 상태·상세 검색·즐겨찾기 중 하나라도 걸리면 참', () => {
     expect(hasNarrowingFilters({ ...INITIAL_SURVEY_LIST_PAGE_QUERY, favorites: true })).toBe(true);
+    expect(hasNarrowingFilters({ ...INITIAL_SURVEY_LIST_PAGE_QUERY, tagIds: [TAG_A] })).toBe(true);
     expect(hasNarrowingFilters(INITIAL_SURVEY_LIST_PAGE_QUERY)).toBe(false);
     expect(hasNarrowingFilters({ ...INITIAL_SURVEY_LIST_PAGE_QUERY, q: '실태' })).toBe(true);
     expect(hasNarrowingFilters({ ...INITIAL_SURVEY_LIST_PAGE_QUERY, lifecycle: 'draft' })).toBe(
@@ -161,7 +225,7 @@ describe('걸린 조건이 있는가 — 결과 0개 화면의 「조건 풀기�
 });
 
 describe('조건 풀기', () => {
-  it('검색·목록 상태·상세 검색·즐겨찾기만 되돌리고 그룹·팀·휴지통·정렬은 남긴다', () => {
+  it('검색·검색 칩·목록 상태·상세 검색·즐겨찾기만 되돌리고 그룹·팀·휴지통·정렬은 남긴다', () => {
     expect(clearNarrowingFilters(FULL)).toEqual({
       ...INITIAL_SURVEY_LIST_PAGE_QUERY,
       teamId: TEAM,

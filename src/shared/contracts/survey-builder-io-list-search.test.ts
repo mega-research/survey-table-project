@@ -42,3 +42,18 @@ describe('검색어 상한 — 단어 8개, 100자', () => {
     expect(parse('가'.repeat(101))).toBe(false);
   });
 });
+
+describe('검색 칩 상한 — 태그 10개, 중복 없음 (티켓 09)', () => {
+  const ids = Array.from(
+    { length: 11 },
+    (_, i) => `${String(i).padStart(8, '0')}-0000-4000-8000-000000000000`,
+  );
+  const input = (tagIds: string[]) => ({ ...INITIAL_SURVEY_LIST_PAGE_QUERY, scope: null, tagIds });
+
+  it('10개까지 받고 11개·중복·잘못된 꼴은 거부한다', () => {
+    expect(SurveyListPageInputSchema.safeParse(input(ids.slice(0, 10))).success).toBe(true);
+    expect(SurveyListPageInputSchema.safeParse(input(ids)).success).toBe(false);
+    expect(SurveyListPageInputSchema.safeParse(input([ids[0]!, ids[0]!])).success).toBe(false);
+    expect(SurveyListPageInputSchema.safeParse(input(['abc'])).success).toBe(false);
+  });
+});
