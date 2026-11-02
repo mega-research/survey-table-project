@@ -50,7 +50,7 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 | 데이터 페칭    | TanStack Query                               | 5.90.11         |
 | RPC            | oRPC (server/client/tanstack-query/openapi)  | 1.14.4          |
 | 스키마 검증    | Zod                                          | 4.4.3           |
-| 인증           | Better Auth (email+password, drizzle 어댑터) | 1.7.14          |
+| 인증           | Better Auth (email+password, drizzle 어댑터) | 1.7.1           |
 | 테이블         | TanStack Table                               | 8.21.3          |
 | 텍스트 측정    | @chenglou/pretext                            | 0.0.5           |
 | 리치 에디터    | TipTap                                       | 3.31.3          |
