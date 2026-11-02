@@ -12,6 +12,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 
 import { db } from '@/db';
 import {
+  surveyFavorites as surveyFavoritesTable,
   surveyGroups as surveyGroupsTable,
   surveyParticipants as surveyParticipantsTable,
   surveyResponses as surveyResponsesTable,
@@ -265,6 +266,15 @@ describe.skipIf(!isLocalDb)('설문 목록 페이지 조회 (real local DB)', ()
     ]);
     await seedResponses(S.popular, 5);
     await seedResponses(bulk[0]!, 2);
+    // 별 — viewer 는 보이는 설문 셋(A팀 둘 + 초대받은 B팀 하나)과 볼 수 없는 설문 둘(타 팀·삭제)에,
+    // 동료는 따로 둘에 켰다. 볼 수 없는 설문의 별은 관문이 생기기 전·권한을 잃기 전의 잔존 행이다.
+    await db.insert(surveyFavoritesTable).values([
+      ...[bulk[3]!, S.grouped, S.invited, S.otherTeam, S.deleted].map((surveyId) => ({
+        userId: VIEWER_ID,
+        surveyId,
+      })),
+      ...[bulk[5]!, S.closed].map((surveyId) => ({ userId: COLLEAGUE_ID, surveyId })),
+    ]);
   });
 
   afterAll(async () => {
@@ -480,6 +490,7 @@ describe.skipIf(!isLocalDb)('설문 목록 페이지 조회 (real local DB)', ()
         { advanced: { ...INITIAL_ADVANCED_FILTERS, visibility: 'invite_only' } },
         { advanced: { ...INITIAL_ADVANCED_FILTERS, ownerUserId: OUTSIDER_ID } },
         { scope: TEAM_B },
+        { favorites: true },
       ];
       for (const variant of variants) {
         const first = await listSurveyPage(viewer, query(variant));
@@ -527,6 +538,74 @@ describe.skipIf(!isLocalDb)('설문 목록 페이지 조회 (real local DB)', ()
       await expect(listSurveyPage(viewer, query({ scope: SYSTEM_SCOPE }))).rejects.toBeInstanceOf(
         WorkScopeError,
       );
+    });
+  });
+
+  describe('즐겨찾기', () => {
+    const myVisibleFavorites = [bulk[3]!, S.grouped, S.invited];
+
+    async function allPages(over: Partial<SurveyListPageInput>) {
+      const first = await listSurveyPage(viewer, query(over));
+      const rest = [];
+      for (let p = 2; p <= first.totalPages; p++) {
+        rest.push(await listSurveyPage(viewer, query({ ...over, page: p })));
+      }
+      return [first, ...rest].flatMap((r) => r.items);
+    }
+
+    it('즐겨찾기만 켜면 내가 별을 켠 보이는 설문만, 목록 순서 그대로 나온다', async () => {
+      const favorites = await listSurveyPage(viewer, query({ favorites: true }));
+      const plainOrder = (await allPages({})).map((s) => s.id);
+
+      expect(favorites.total).toBe(3);
+      expect(favorites.items.map((s) => s.id)).toEqual(
+        plainOrder.filter((id) => myVisibleFavorites.includes(id)),
+      );
+      expect(favorites.items.every((s) => s.isFavorite)).toBe(true);
+    });
+
+    it('항목마다 내 별 여부가 실린다 — 동료가 켠 별은 내 목록에서 꺼져 있다', async () => {
+      const items = await allPages({});
+      const starred = items.filter((s) => s.isFavorite).map((s) => s.id);
+
+      expect(new Set(starred)).toEqual(new Set(myVisibleFavorites));
+      expect(items.find((s) => s.id === bulk[5])!.isFavorite).toBe(false);
+      expect(items.find((s) => s.id === S.closed)!.isFavorite).toBe(false);
+    });
+
+    it('동료의 별은 내 즐겨찾기 결과에 들어오지 않는다', async () => {
+      const favorites = await allPages({ favorites: true });
+      expect(favorites.map((s) => s.id)).not.toContain(bulk[5]);
+      expect(favorites.map((s) => s.id)).not.toContain(S.closed);
+    });
+
+    it('즐겨찾기 숫자는 범위·그룹·팀 좁힘 기준이라 검색·상태·즐겨찾기 조건에 흔들리지 않는다', async () => {
+      const plain = await listSurveyPage(viewer, query());
+      const filtered = await listSurveyPage(
+        viewer,
+        query({ q: '묶음', lifecycle: 'draft', favorites: true }),
+      );
+      const grouped = await listSurveyPage(viewer, query({ groupId: GROUP_A }));
+      const team = await listSurveyPage(viewer, query({ teamId: TEAM_B }));
+
+      expect(plain.favoriteCount).toBe(3);
+      expect(filtered.favoriteCount).toBe(3);
+      expect(filtered.items.map((s) => s.id)).toEqual([bulk[3]]);
+      expect(grouped.favoriteCount).toBe(1);
+      expect(team.favoriteCount).toBe(1);
+    });
+
+    it('동료에게는 동료의 별만 보인다', async () => {
+      const colleague = { id: COLLEAGUE_ID, isSuperadmin: false, userType: 'internal' as const };
+      const result = await listSurveyPage(colleague, query({ favorites: true }));
+      expect(new Set(result.items.map((s) => s.id))).toEqual(new Set([bulk[5], S.closed]));
+      expect(result.favoriteCount).toBe(2);
+    });
+
+    it('휴지통에서는 즐겨찾기 조건을 받지 않는다', async () => {
+      await expect(
+        listSurveyPage(superadmin, query({ scope: SYSTEM_SCOPE, deleted: true, favorites: true })),
+      ).rejects.toBeInstanceOf(SurveyAccessError);
     });
   });
 
