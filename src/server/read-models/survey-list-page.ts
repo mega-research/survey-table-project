@@ -3,7 +3,7 @@ import type { PgSelect } from 'drizzle-orm/pg-core';
 import 'server-only';
 
 import { db } from '@/db';
-import { surveyGroups, surveyResponses, surveys, teams, users } from '@/db/schema';
+import { surveyFavorites, surveyGroups, surveyResponses, surveys, teams, users } from '@/db/schema';
 import { surveyListLifecycleSql } from '@/server/read-models/survey-list-lifecycle';
 import {
   scopedSurveyWhere,
@@ -30,7 +30,10 @@ import {
 // 조건은 세 겹이다.
 //   ① 원천(source)   — 작업 범위(`scopedSurveyWhere`) 또는 휴지통(`deleted_at IS NOT NULL`)
 //   ② 좁힘(narrowing) — 그룹 화면·팀 좁힘·미분류. 여기까지가 세그먼트 숫자·소유자 목록의 기준
-//   ③ 거르기(filters) — 검색·목록 상태·상세 검색. `total` 과 페이지 항목은 셋 모두를 적용한다
+//   ③ 거르기(filters) — 검색·목록 상태·상세 검색·즐겨찾기. `total` 과 페이지 항목은 셋 모두를 적용한다
+//
+// 즐겨찾기(티켓 06)는 요청자 본인의 행만 본다(`viewerId`) — 동료의 별은 조건에도 숫자에도
+// 카드 표시에도 들어오지 않는다. 표는 workspace 도메인 소유지만 타 도메인 테이블 직접 쿼리로 읽는다.
 //
 // 응답 수는 여기서 세지 않는다 — 페이지 항목의 응답 수는 서비스가 그 id 만으로 센다. 예외는
 // 응답순 정렬과 상세 검색 「응답 수 범위」로, 범위 전체의 응답 수가 있어야 해서 그때만 상관
@@ -43,6 +46,8 @@ export type SurveyListSource =
 
 export type SurveyListPageParams = Omit<SurveyListPageQuery, 'deleted'> & {
   source: SurveyListSource;
+  /** 요청자 — 개인 표시(즐겨찾기)를 읽는 유일한 기준. 휴지통 원천에도 있다. */
+  viewerId: string;
 };
 
 export interface SurveyListPageRows {
@@ -51,6 +56,7 @@ export interface SurveyListPageRows {
   page: number;
   totalPages: number;
   lifecycleCounts: Record<SurveyListLifecycleFilter, number>;
+  favoriteCount: number;
   owners: SurveyListOwner[];
   activeTeam: { id: string; name: string | null } | null;
 }
@@ -106,6 +112,11 @@ export function surveyListSearchSql(q: string): SQL | undefined {
   const words = splitSurveyListSearchWords(q);
   if (words.length === 0) return undefined;
   return and(...words.map(surveyListWordMatchSql));
+}
+
+/** 요청자가 이 설문에 별을 켰는가 — PK(user_id, survey_id) 한 번 찾기. */
+function isFavoriteSql(viewerId: string): SQL<boolean> {
+  return sql<boolean>`exists (select 1 from ${surveyFavorites} where ${surveyFavorites.userId} = ${viewerId} and ${surveyFavorites.surveyId} = ${surveys.id})`;
 }
 
 const DATE_COLUMNS = {
@@ -172,6 +183,7 @@ function selectPage(params: SurveyListPageParams, where: SQL, page: number) {
       .select({
         ...surveyListColumns(viewerId, leaderTeamIds),
         surveyGroupId: groupColumn(source),
+        isFavorite: isFavoriteSql(params.viewerId),
       })
       .from(surveys)
       .$dynamic(),
@@ -244,6 +256,12 @@ async function listOwners(where: SQL): Promise<SurveyListOwner[]> {
     .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
 }
 
+/** 원천이 휴지통이면 별을 세지 않는다 — 휴지통에는 즐겨찾기 단추가 없다. */
+async function countFavorites(params: SurveyListPageParams, narrowed: SQL): Promise<number> {
+  if (params.source.kind === 'deleted') return 0;
+  return countMatches(and(narrowed, isFavoriteSql(params.viewerId))!);
+}
+
 async function countMatches(where: SQL): Promise<number> {
   const [row] = await withListJoins(db.select({ value: count() }).from(surveys).$dynamic()).where(
     where,
@@ -273,12 +291,14 @@ export async function querySurveyListPage(
     filters.push(sql`${surveyListLifecycleSql()} = ${params.lifecycle}`);
   }
   filters.push(...advancedConditions(params.advanced));
+  if (params.favorites) filters.push(isFavoriteSql(params.viewerId));
   const where = and(...filters)!;
 
   const requestedPage = Math.max(1, params.page);
-  const [total, lifecycleCounts, owners, optimisticRows] = await Promise.all([
+  const [total, lifecycleCounts, favoriteCount, owners, optimisticRows] = await Promise.all([
     countMatches(where),
     countLifecycles(narrowed),
+    countFavorites(params, narrowed),
     listOwners(narrowed),
     selectPage(params, where, requestedPage),
   ]);
@@ -286,7 +306,7 @@ export async function querySurveyListPage(
   const page = Math.min(requestedPage, totalPages);
   const rows = page === requestedPage ? optimisticRows : await selectPage(params, where, page);
 
-  return { rows, total, page, totalPages, lifecycleCounts, owners, activeTeam };
+  return { rows, total, page, totalPages, lifecycleCounts, favoriteCount, owners, activeTeam };
 }
 
 /**

@@ -110,6 +110,11 @@ survey_ownership_events    # 설문 소유 팀·소유자 이동 감사 (0118, �
 ├── fromOwnerId, toOwnerId, fromTeamId, toTeamId (전부 FK restrict, nullable)
 ├── changedBy (FK restrict), metadata (JSONB — 사건 시점 설문 제목·팀 이름·공개 범위)
 └── createdAt              (INDEX (surveyId, createdAt DESC))
+
+survey_favorites           # 즐겨찾기 = 한 사람이 설문 하나에 켜는 개인 표시 (0149, 설문 즐겨찾기·태그 티켓 06)
+├── userId (FK **cascade**), surveyId (FK **cascade**), createdAt
+└── PK(userId, surveyId) · INDEX(surveyId)  # 행 있음 = 켜짐. 쓰기는 결과 상태 지정(충돌 무시 삽입 / 삭제).
+                           # 읽기는 언제나 user_id = 요청자. soft delete 는 행을 남긴다(복구하면 별이 돌아온다)
 ```
 
 > `survey_id` 만 CASCADE 인 이유: 현행 설문 삭제가 하드 삭제라(`deleteSurvey` → `tx.delete`)

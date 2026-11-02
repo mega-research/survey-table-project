@@ -30,6 +30,7 @@ export const SURVEY_LIST_URL_PARAMS = {
   ungrouped: 'ungrouped',
   q: 'q',
   lifecycle: 'status',
+  favorites: 'fav',
   sort: 'sort',
   dateField: 'date',
   dateFrom: 'from',
@@ -79,6 +80,7 @@ function searchWithinLimits(raw: string | null): string {
 /** 주소 → 조건. */
 export function parseSurveyListQuery(params: SearchParamsLike): SurveyListPageQuery {
   const teamId = uuidOrNull(params.get(P.teamId));
+  const deleted = params.get(P.deleted) === '1';
   const page = nonNegativeIntOrNull(params.get(P.page));
   const advanced: SurveyListAdvancedFilters = {
     dateField:
@@ -101,9 +103,11 @@ export function parseSurveyListQuery(params: SearchParamsLike): SurveyListPageQu
       oneOf(surveyListLifecycleFilterValues, params.get(P.lifecycle)) ??
       INITIAL_SURVEY_LIST_PAGE_QUERY.lifecycle,
     advanced,
+    // 휴지통에는 즐겨찾기 조건이 없다(서버도 그 조합을 거부한다) — 함께 오면 즐겨찾기를 접는다.
+    favorites: !deleted && params.get(P.favorites) === '1',
     sort: oneOf(surveyListSortValues, params.get(P.sort)) ?? INITIAL_SURVEY_LIST_PAGE_QUERY.sort,
     page: page !== null && page >= 1 ? page : 1,
-    deleted: params.get(P.deleted) === '1',
+    deleted,
   };
 }
 
@@ -119,6 +123,7 @@ export function serializeSurveyListQuery(query: SurveyListPageQuery): string {
   }
   if (query.q !== '') out.set(P.q, query.q);
   if (query.lifecycle !== d.lifecycle) out.set(P.lifecycle, query.lifecycle);
+  if (query.favorites) out.set(P.favorites, '1');
   if (query.sort !== d.sort) out.set(P.sort, query.sort);
   if (a.dateField !== INITIAL_ADVANCED_FILTERS.dateField) out.set(P.dateField, a.dateField);
   if (a.dateFrom) out.set(P.dateFrom, a.dateFrom);
@@ -156,22 +161,27 @@ export function changeSurveyListQuery(
 }
 
 /**
- * 걸러 내는 조건(검색·목록 상태·상세 검색)이 걸려 있는가. 결과 0개 화면이 「조건 풀기」 단추를
+ * 걸러 내는 조건(검색·목록 상태·상세 검색·즐겨찾기)이 걸려 있는가. 결과 0개 화면이 「조건 풀기」 단추를
  * 낼지 정한다 — 그룹·팀 좁힘은 주소가 가리키는 화면이라 그 단추로 풀지 않는다.
  */
 export function hasNarrowingFilters(query: SurveyListPageQuery): boolean {
   return (
     query.q.trim() !== '' ||
     query.lifecycle !== 'all' ||
+    query.favorites ||
     !sameAdvanced(query.advanced, INITIAL_ADVANCED_FILTERS)
   );
 }
 
-/** 「조건 풀기」 — 검색·목록 상태·상세 검색만 되돌린다(그룹·팀·휴지통·정렬은 그대로). */
+/**
+ * 「조건 풀기」(결과 0개 화면) — 검색·목록 상태·상세 검색·즐겨찾기를 되돌린다(그룹·팀·휴지통·정렬은
+ * 그대로). 검색창의 「모두 지우기」(칩과 글자만)와는 다른 단추다.
+ */
 export function clearNarrowingFilters(query: SurveyListPageQuery): SurveyListPageQuery {
   return changeSurveyListQuery(query, {
     q: '',
     lifecycle: 'all',
     advanced: INITIAL_ADVANCED_FILTERS,
+    favorites: false,
   });
 }

@@ -20,6 +20,7 @@ import {
 import { surveyListPageQueryOptions, surveyListScopeParam } from '@/shared/lib/survey-list-queries';
 import { useWorkScopeOptional } from '@/shared/lib/work-scope-context';
 
+import { useSetFavorite } from '../queries/use-personal-marks';
 import { useMoveSurveyToGroup, useSurveyGroups } from '../queries/use-survey-groups';
 import { useDeleteSurvey, useDuplicateSurvey, useRestoreSurvey } from '../queries/use-surveys';
 import { AdvancedSearchPanel } from './advanced-search-panel';
@@ -101,6 +102,7 @@ export function SurveyListView() {
   const { mutate: deleteSurvey } = useDeleteSurvey();
   const { mutate: restoreSurvey, isPending: isRestoring } = useRestoreSurvey();
   const { mutate: duplicateSurvey, isPending: isDuplicating } = useDuplicateSurvey();
+  const setFavorite = useSetFavorite();
 
   const requestedGroupId = query.groupId;
   const ungroupedOnly = query.ungrouped;
@@ -161,10 +163,11 @@ export function SurveyListView() {
   // 팀 좁힘은 서버가 실제로 건 경우에만 제목을 바꾼다 — 지목한 팀 설문이 없으면 좁히지 않는다.
   const activeTeam = data?.activeTeam ?? null;
   const counts = data?.lifecycleCounts ?? { all: 0, draft: 0, running: 0, closed: 0 };
+  const favoriteCount = data?.favoriteCount ?? 0;
   const owners = data?.owners ?? [];
   const total = data?.total ?? 0;
 
-  /** 결과 0개 화면이 푸는 조건 — 검색·목록 상태·상세 검색. 그룹·팀 좁힘은 주소가 가리키는 화면이다. */
+  /** 결과 0개 화면이 푸는 조건 — 검색·목록 상태·즐겨찾기·상세 검색. 그룹·팀 좁힘은 주소가 가리키는 화면이다. */
   const activeConditions = [
     ...(query.q.trim() !== ''
       ? [{ key: 'q', label: `검색어 「${query.q.trim()}」`, onClear: () => updateQuery({ q: '' }) }]
@@ -177,6 +180,9 @@ export function SurveyListView() {
             onClear: () => updateQuery({ lifecycle: 'all' }),
           },
         ]
+      : []),
+    ...(query.favorites
+      ? [{ key: 'favorites', label: '즐겨찾기', onClear: () => updateQuery({ favorites: false }) }]
       : []),
     ...(hasNarrowingFilters({ ...INITIAL_SURVEY_LIST_PAGE_QUERY, advanced: query.advanced })
       ? [
@@ -365,9 +371,21 @@ export function SurveyListView() {
             onToggleAdvanced={() => setAdvancedOpen(!advancedOpen)}
             deletedCount={data?.deletedCount ?? null}
             showDeleted={showDeleted}
-            // 모드를 바꾸면 목록이 통째로 갈리므로 목록 상태·검색어도 함께 되돌린다 — 남겨두면
+            // 모드를 바꾸면 목록이 통째로 갈리므로 목록 상태·검색어·즐겨찾기도 함께 되돌린다 — 남겨두면
             // 휴지통이 「진행중 + 검색어」로 좁혀진 채 열려 비어 보인다.
-            onToggleDeleted={(deleted) => updateQuery({ deleted, lifecycle: 'all', q: '' })}
+            onToggleDeleted={(deleted) =>
+              updateQuery({ deleted, lifecycle: 'all', q: '', favorites: false })
+            }
+            // 휴지통에는 즐겨찾기 조건이 없다 — 단추 자체를 그리지 않는다(서버도 그 조합을 거부한다).
+            favorites={
+              showDeleted
+                ? null
+                : {
+                    on: query.favorites,
+                    count: favoriteCount,
+                    onToggle: (favorites) => updateQuery({ favorites }),
+                  }
+            }
             advancedPanel={
               advancedOpen && (
                 <AdvancedSearchPanel
@@ -433,6 +451,8 @@ export function SurveyListView() {
                     <SurveyCard
                       key={survey.id}
                       survey={survey}
+                      isFavorite={survey.isFavorite}
+                      onFavoriteChange={(on) => setFavorite(survey.id, on)}
                       viewer={{ scope, currentUserId, isSuperadmin, leaderTeamIds }}
                       onDelete={handleDelete}
                       onDuplicate={handleDuplicate}

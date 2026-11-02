@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { SurveyListItem } from '@/shared/contracts/survey-builder-io';
@@ -38,10 +39,18 @@ function item(over: Partial<SurveyListItem> = {}): SurveyListItem {
   };
 }
 
-function renderCard(survey: SurveyListItem) {
+function renderCard(
+  survey: SurveyListItem,
+  favorite: { isFavorite: boolean; onFavoriteChange: (on: boolean) => void } = {
+    isFavorite: false,
+    onFavoriteChange: vi.fn(),
+  },
+) {
   return render(
     <SurveyCard
       survey={survey}
+      isFavorite={favorite.isFavorite}
+      onFavoriteChange={favorite.onFavoriteChange}
       viewer={{
         scope: { kind: 'team', teamId: 'team-1' },
         currentUserId: 'u-1',
@@ -107,5 +116,37 @@ describe('SurveyCard — 응답수 줄', () => {
     renderCard(item({ responseCount: 20, completedResponseCount: 12, fieldworkCompletedCount: 3 }));
     expect(screen.getByText(/온라인 응답 완료 12건 · 실사 완료 처리 3건/)).toBeInTheDocument();
     expect(screen.queryByText(/전체 응답/)).toBeNull();
+  });
+});
+
+/**
+ * 카드의 별 (설문 즐겨찾기·태그 티켓 06) — 제목 줄 오른쪽(케밥 왼쪽)에 늘 보인다. 누르는 즉시
+ * 바라는 상태를 올린다 — 낙관적 갱신·마지막 의도 전송은 목록 화면의 훅이 진다.
+ */
+describe('SurveyCard — 즐겨찾기 별', () => {
+  it('꺼진 별은 「즐겨찾기 추가」 단추이고 누르면 켜기를 올린다', async () => {
+    const onFavoriteChange = vi.fn();
+    renderCard(item(), { isFavorite: false, onFavoriteChange });
+
+    const star = screen.getByRole('button', { name: '즐겨찾기 추가' });
+    expect(star).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.setup().click(star);
+    expect(onFavoriteChange).toHaveBeenCalledWith(true);
+  });
+
+  it('켜진 별은 「즐겨찾기 해제」 단추이고 누르면 끄기를 올린다', async () => {
+    const onFavoriteChange = vi.fn();
+    renderCard(item(), { isFavorite: true, onFavoriteChange });
+
+    const star = screen.getByRole('button', { name: '즐겨찾기 해제' });
+    expect(star).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.setup().click(star);
+    expect(onFavoriteChange).toHaveBeenCalledWith(false);
+  });
+
+  it('편집 권한이 없는 설문에도 별이 선다', () => {
+    // 동료 소유 + 참여자 아님 — 수정 버튼은 잠기지만 별은 볼 수 있으면 켤 수 있다.
+    renderCard(item({ ownerUserId: 'u-2', visibility: 'invite_only', isParticipant: true }));
+    expect(screen.getByRole('button', { name: '즐겨찾기 추가' })).toBeEnabled();
   });
 });

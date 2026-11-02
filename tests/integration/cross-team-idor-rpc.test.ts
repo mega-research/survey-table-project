@@ -879,6 +879,15 @@ const SURFACES: Record<string, SurfaceSpec> = {
     capability: 'survey.manageAccess',
     input: { surveyId: S, visibility: 'invite_only' },
   },
+
+  // ── 개인 표시(즐겨찾기) ────────────────────────────────────────────────
+  // 편집 권한이 없어도 볼 수 있으면 켤 수 있다 — 요구는 survey.view 하나. 볼 수 없는 설문 id 로
+  // 켜면 존재를 알리지 않고(NOT_FOUND) 행도 안 생긴다(db 목이 쓰기를 사고로 만든다).
+  'workspace.personalMarks.setFavorite': {
+    gate: 'rpc',
+    capability: 'survey.view',
+    input: { surveyId: S, on: true },
+  },
 };
 
 /**

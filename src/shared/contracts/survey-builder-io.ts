@@ -255,6 +255,7 @@ export const INITIAL_ADVANCED_FILTERS: SurveyListAdvancedFilters = {
  *
  * - `groupId` · `teamId` · `ungrouped` — 그룹 화면·실사팀 팀 좁힘(기존 주소 규칙 `?group=`·`?team=`·`&ungrouped=1`).
  *   `ungrouped` 는 팀 좁힘이 걸렸을 때만 뜻이 있다.
+ * - `favorites` — 내가 별을 켠 설문만(티켓 06). 휴지통과 함께 오면 거부한다.
  * - `deleted` — 휴지통(슈퍼어드민 시스템 범위 전용, 아니면 거부).
  */
 export const SurveyListPageQuerySchema = z.object({
@@ -269,6 +270,7 @@ export const SurveyListPageQuerySchema = z.object({
     }),
   lifecycle: z.enum(surveyListLifecycleFilterValues),
   advanced: SurveyListAdvancedFiltersSchema,
+  favorites: z.boolean(),
   sort: z.enum(surveyListSortValues),
   page: z.number().int().min(1).max(1_000_000),
   deleted: z.boolean(),
@@ -282,6 +284,7 @@ export const INITIAL_SURVEY_LIST_PAGE_QUERY: SurveyListPageQuery = {
   q: '',
   lifecycle: 'all',
   advanced: INITIAL_ADVANCED_FILTERS,
+  favorites: false,
   sort: 'updatedAt',
   page: 1,
   deleted: false,
@@ -300,22 +303,35 @@ export interface SurveyListOwner {
 }
 
 /**
+ * 목록 페이지의 카드 한 장 — 목록 행 + 요청자 본인의 개인 표시(티켓 06·07).
+ *
+ * 개인 표시는 사람마다 다른 값이라 공용 목록 행(`SurveyListItem`, 분석 페이지도 쓴다)에 넣지 않고
+ * 페이지 응답에서만 더한다. 내 태그(티켓 07)의 `myTagIds` 도 이 자리에 붙는다.
+ */
+export interface SurveyListPageItem extends SurveyListItem {
+  /** 내가 별을 켰는가 — 동료의 별은 보이지 않는다. 휴지통 행은 늘 false. */
+  isFavorite: boolean;
+}
+
+/**
  * 목록 페이지 응답.
  *
- * 숫자 기준이 둘이다 — `lifecycleCounts`·`owners` 는 범위·그룹·팀 좁힘까지만 적용해 센다(검색·
+ * 숫자 기준이 둘이다 — `lifecycleCounts`·`favoriteCount`·`owners` 는 범위·그룹·팀 좁힘까지만 적용해 센다(검색·
  * 상세 검색·목록 상태 무관). `total` 은 모든 조건을 적용한 결과 수다.
  */
 export interface SurveyListPageResult extends Pick<
   SurveyListResult,
   'scope' | 'teams' | 'canSeeSystemScope' | 'deletedCount'
 > {
-  items: SurveyListItem[];
+  items: SurveyListPageItem[];
   total: number;
   /** 요청한 page 가 범위를 넘으면 마지막 페이지로 접힌 값. */
   page: number;
   /** 결과가 0개여도 1. */
   totalPages: number;
   lifecycleCounts: Record<SurveyListLifecycleFilter, number>;
+  /** 내 별 개수 — `lifecycleCounts` 와 같은 기준(범위·그룹·팀 좁힘까지). 휴지통에서는 0. */
+  favoriteCount: number;
   owners: SurveyListOwner[];
   /**
    * 실제로 걸린 팀 좁힘 — 화면 제목(「팀 이름 · 미분류」)용. 지목한 팀의 설문이 범위에 하나도

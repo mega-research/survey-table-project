@@ -4,6 +4,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -309,5 +310,34 @@ export const fieldworkOrgs = pgTable(
     uniqueIndex('fieldwork_orgs_active_name_uq')
       .on(t.name)
       .where(sql`${t.status} = 'active'`),
+  ],
+);
+
+/**
+ * 설문 즐겨찾기 — 한 사람이 설문 하나에 켜는 **개인 표시** (마이그레이션 0149, 설문 즐겨찾기·태그 티켓 06).
+ *
+ * 행이 있으면 켜짐, 없으면 꺼짐 — 상태 컬럼이 없다. 쓰기는 결과 상태 지정이다(켜기는
+ * `ON CONFLICT DO NOTHING` 삽입, 끄기는 삭제)라 연타·재시도가 같은 결과로 수렴한다.
+ * 나에게만 보인다: 읽는 자리는 언제나 `user_id = 요청자` 로 건다.
+ *
+ * FK 는 둘 다 cascade — 개인 정리 데이터라 감사 가치가 없다. 설문 soft delete 는 행을 남겨
+ * 복구하면 별이 돌아온다. 쓰기는 `server/workspace/services/personal-marks`, 읽기(목록 조건·
+ * 카드 표시)는 `server/read-models/survey-list-page` 가 「타 도메인 테이블 직접 쿼리」로 한다.
+ */
+export const surveyFavorites = pgTable(
+  'survey_favorites',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    surveyId: uuid('survey_id')
+      .notNull()
+      .references(() => surveys.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ name: 'survey_favorites_pk', columns: [t.userId, t.surveyId] }),
+    // 설문 하드 삭제의 cascade 가 이 표를 훑지 않게 — PK 첫 칸이 user_id 라 그 방향은 못 받는다.
+    index('survey_favorites_survey_idx').on(t.surveyId),
   ],
 );

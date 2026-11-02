@@ -239,6 +239,9 @@ export async function listSurveyPage(
   // 휴지통 규칙은 전체 목록과 같다 — 슈퍼어드민의 시스템 전체 보기 전용, 그 밖의 요청은 거부.
   const canSeeDeleted = subject.isSuperadmin && scope.kind === 'system';
   if (input.deleted && !canSeeDeleted) throw new SurveyAccessError('forbidden');
+  // 휴지통에서는 즐겨찾기 조건을 받지 않는다(화면에도 단추가 없다) — 의미 없는 조합을 조용히
+  // 0건으로 접지 않고 거부한다.
+  if (input.deleted && input.favorites) throw new SurveyAccessError('forbidden');
 
   const [teams, deletedCount] = await Promise.all([
     listSelectableTeams(subject),
@@ -259,13 +262,14 @@ export async function listSurveyPage(
       page: 1,
       totalPages: 1,
       lifecycleCounts: { all: 0, draft: 0, running: 0, closed: 0 },
+      favoriteCount: 0,
       owners: [],
       activeTeam: null,
     };
   } else {
     source = { kind: 'scoped', filter };
   }
-  const result = await querySurveyListPage({ ...query, source });
+  const result = await querySurveyListPage({ ...query, source, viewerId: subject.userId });
 
   const pageIds = result.rows.map((row) => row.id);
   // 목록은 실데이터만 센다 — 응답 수(notTestResponse)와 같은 파티션.
@@ -276,13 +280,16 @@ export async function listSurveyPage(
 
   return {
     ...base,
-    items: result.rows.map((row) =>
-      toSurveyListItem(row, responseCounts.get(row.id), fieldworkCounts.get(row.id)),
-    ),
+    items: result.rows.map((row) => ({
+      ...toSurveyListItem(row, responseCounts.get(row.id), fieldworkCounts.get(row.id)),
+      // 휴지통 카드에는 별이 없다 — 행이 남아 있어도(soft delete 는 별을 지우지 않는다) 끈 것으로 싣는다.
+      isFavorite: source.kind === 'deleted' ? false : row.isFavorite,
+    })),
     total: result.total,
     page: result.page,
     totalPages: result.totalPages,
     lifecycleCounts: result.lifecycleCounts,
+    favoriteCount: result.favoriteCount,
     owners: result.owners,
     activeTeam: result.activeTeam,
   };
