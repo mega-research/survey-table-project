@@ -46,15 +46,25 @@ export function isUniqueViolation(e: unknown): boolean {
   return matchesUniqueViolation(e, 0);
 }
 
-/** drizzle 이 감싼 에러까지 내려가 Postgres SQLSTATE 를 읽는다. 없으면 null. */
-function pgErrorCode(e: unknown): string | null {
+/**
+ * drizzle 이 감싼 에러까지 내려가 SQLSTATE(`code`)를 가진 Postgres 에러 객체를 찾는다. 없으면 null.
+ * postgres-js 의 PostgresError 는 서버 응답 필드(code·severity·routine·table_name …)를 그대로 싣는다.
+ */
+export function findPostgresError(e: unknown): (Record<string, unknown> & { code: string }) | null {
   let cur: unknown = e;
   for (let depth = 0; depth < 5 && cur != null && typeof cur === 'object'; depth++) {
     const code = (cur as { code?: unknown }).code;
-    if (typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code)) return code;
+    if (typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code)) {
+      return cur as Record<string, unknown> & { code: string };
+    }
     cur = (cur as { cause?: unknown }).cause;
   }
   return null;
+}
+
+/** drizzle 이 감싼 에러까지 내려가 Postgres SQLSTATE 를 읽는다. 없으면 null. */
+function pgErrorCode(e: unknown): string | null {
+  return findPostgresError(e)?.code ?? null;
 }
 
 /**
