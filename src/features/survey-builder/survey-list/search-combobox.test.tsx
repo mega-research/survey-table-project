@@ -18,8 +18,8 @@ const OWNERS = [
 ];
 
 const SURVEYS: SurveySuggestion[] = [
-  { id: 's1', cardTitle: 'A사 2026 고객 실태조사', ownerName: '김은철', lifecycle: 'running' },
-  { id: 's2', cardTitle: 'A사 2025 고객 실태조사', ownerName: '방휘연', lifecycle: 'closed' },
+  { id: 's1', displayTitle: 'A사 2026 고객 실태조사', ownerName: '김은철', lifecycle: 'running' },
+  { id: 's2', displayTitle: 'A사 2025 고객 실태조사', ownerName: '방휘연', lifecycle: 'closed' },
 ];
 
 function setup({ value = '' }: { value?: string } = {}) {

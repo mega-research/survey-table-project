@@ -29,7 +29,6 @@ import {
   querySurveyListPage,
   querySurveySuggestions,
   selectOwnedTagIds,
-  surveyListSearchSql,
 } from '@/server/read-models/survey-list-page';
 import { getSurveyOwnerEmail } from '@/server/read-models/survey-owner-email';
 import { countDeletedSurveys, getDeletedSurveys } from '@/server/read-models/survey-structure';
@@ -262,7 +261,7 @@ export async function listSurveyPage(
   const { scope: _requested, deleted, ...query } = input;
   let source: SurveyListSource;
   if (deleted) {
-    source = { kind: 'deleted' };
+    source = { kind: 'deleted', viewerId: subject.userId };
   } else if (filter.kind === 'none') {
     // 아무것도 보지 않는 범위(팀 미배치)는 조회 없이 빈 페이지다.
     return {
@@ -279,7 +278,7 @@ export async function listSurveyPage(
   } else {
     source = { kind: 'scoped', filter };
   }
-  const result = await querySurveyListPage({ ...query, source, viewerId: subject.userId });
+  const result = await querySurveyListPage({ ...query, source });
 
   const pageIds = result.rows.map((row) => row.id);
   // 목록은 실데이터만 센다 — 응답 수(notTestResponse)와 같은 파티션.
@@ -337,9 +336,8 @@ export async function suggestSurveys(
   const subject = await loadAccountAccessSubject(user);
   const scope = resolveWorkScopeFor(subject, input.scope);
   const filter = buildSurveyScopeFilter(subject, scope);
-  const search = surveyListSearchSql(input.q, subject.userId);
-  if (!search || filter.kind === 'none') return [];
-  return querySurveySuggestions(filter, search);
+  if (filter.kind === 'none') return [];
+  return querySurveySuggestions(filter, input.q);
 }
 
 /** 스위처가 고를 수 있는 팀 — 내 활성 소속. 슈퍼어드민은 전 팀을 고를 수 있다. */

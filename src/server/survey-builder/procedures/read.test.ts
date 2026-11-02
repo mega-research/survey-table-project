@@ -152,7 +152,7 @@ describe('surveyBuilder.read procedures', () => {
   });
 
   it('suggest 는 세션 사용자와 범위·검색어만 넘긴다', async () => {
-    const rows = [{ id: SURVEY_ID, cardTitle: '설문', ownerName: '김', lifecycle: 'draft' }];
+    const rows = [{ id: SURVEY_ID, displayTitle: '설문', ownerName: '김', lifecycle: 'draft' }];
     vi.mocked(surveySvc.suggestSurveys).mockResolvedValue(rows as never);
     const context = authedContext();
     const client = createRouterClient({ read }, { context });

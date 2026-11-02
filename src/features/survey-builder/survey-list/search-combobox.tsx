@@ -567,7 +567,7 @@ function OptionContent({ option, active }: { option: SuggestOption; active: bool
       return (
         <>
           <FileText className="h-4 w-4 shrink-0 text-[#9CA3AF]" aria-hidden />
-          <span className="min-w-0 flex-1 truncate">{survey.cardTitle}</span>
+          <span className="min-w-0 flex-1 truncate">{survey.displayTitle}</span>
           <span className="shrink-0 text-[12px] text-[#9CA3AF]">{meta}</span>
         </>
       );

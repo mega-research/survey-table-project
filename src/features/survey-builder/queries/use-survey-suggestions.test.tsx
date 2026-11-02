@@ -16,7 +16,7 @@ vi.mock('@/shared/lib/rpc', () => ({
 const call = vi.mocked(orpc.surveyBuilder.read.suggest.call);
 
 function row(id: string): SurveySuggestion {
-  return { id, cardTitle: `설문 ${id}`, ownerName: '김은철', lifecycle: 'running' };
+  return { id, displayTitle: `설문 ${id}`, ownerName: '김은철', lifecycle: 'running' };
 }
 
 /** 부를 때마다 끝나지 않은 요청 하나 — 테스트가 골라서 끝낸다. */

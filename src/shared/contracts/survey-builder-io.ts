@@ -376,12 +376,12 @@ export type SurveySuggestInput = z.infer<typeof SurveySuggestInputSchema>;
 /**
  * 자동완성 설문 후보 한 행 — 넷뿐이다(응답 수 집계 없음).
  *
- * `cardTitle` 은 **카드에 보이는 이름**이다(카드 제목이 없으면 설문지 제목, `surveyCardTitle` 과 같은
- * 규칙) — `SurveyListItem.cardTitle` 처럼 null 이 오지 않는다.
+ * `displayTitle` 은 **카드에 보이는 이름**이다(카드 제목이 없으면 설문지 제목, `surveyCardTitle` 과 같은
+ * 규칙) — null 이 올 수 있는 `SurveyListItem.cardTitle`(카드 제목 칸 그대로)과 다른 값이라 이름을 갈랐다.
  */
 export interface SurveySuggestion {
   id: string;
-  cardTitle: string;
+  displayTitle: string;
   ownerName: string | null;
   lifecycle: SurveyListLifecycle;
 }

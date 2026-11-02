@@ -25,6 +25,7 @@ import {
   teams,
   users,
 } from '@/db/schema';
+import { escapeLikePattern } from '@/lib/operations/filter-shared';
 import { surveyListLifecycleSql } from '@/server/read-models/survey-list-lifecycle';
 import {
   scopedSurveyWhere,
@@ -62,14 +63,19 @@ import {
 // 서브쿼리(`responseCountSql`)를 붙인다.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** 목록의 원천 — 작업 범위가 보는 설문, 또는 휴지통(슈퍼어드민 시스템 범위 전용, 판정은 호출자). */
+type ScopedFilter = Exclude<SurveyScopeFilter, { kind: 'none' }>;
+
+/**
+ * 목록의 원천 — 작업 범위가 보는 설문, 또는 휴지통(슈퍼어드민 시스템 범위 전용, 판정은 호출자).
+ *
+ * 요청자는 원천이 쥔다 — 범위 목록은 범위 필터의 `viewerId`, 휴지통은 `viewerId`. 개인 표시(별·태그)와
+ * 참여 칸을 읽는 기준은 `viewerOf` 하나다(따로 받으면 두 값이 갈릴 수 있다).
+ */
 export type SurveyListSource =
-  { kind: 'scoped'; filter: Exclude<SurveyScopeFilter, { kind: 'none' }> } | { kind: 'deleted' };
+  { kind: 'scoped'; filter: ScopedFilter } | { kind: 'deleted'; viewerId: string };
 
 export type SurveyListPageParams = Omit<SurveyListPageQuery, 'deleted'> & {
   source: SurveyListSource;
-  /** 요청자 — 개인 표시(즐겨찾기)를 읽는 유일한 기준. 휴지통 원천에도 있다. */
-  viewerId: string;
 };
 
 export interface SurveyListPageRows {
@@ -81,6 +87,11 @@ export interface SurveyListPageRows {
   favoriteCount: number;
   owners: SurveyListOwner[];
   activeTeam: { id: string; name: string | null } | null;
+}
+
+/** 원천의 요청자. */
+function viewerOf(source: SurveyListSource): string {
+  return source.kind === 'scoped' ? source.filter.viewerId : source.viewerId;
 }
 
 /** 원천 조건. */
@@ -108,9 +119,13 @@ const cardTitleSql = sql<string>`coalesce(${surveys.cardTitle}, ${surveys.title}
  */
 const responseCountSql = sql<number>`(select count(*) from ${surveyResponses} where ${surveyResponses.surveyId} = ${surveys.id} and ${notDeletedResponse} and ${notTestResponse})`;
 
-/** LIKE 패턴 안의 글자를 글자 그대로 — `\`·`%`·`_` 를 이스케이프한다(기본 이스케이프 문자 `\`). */
-export function escapeLikePattern(text: string): string {
-  return text.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+/**
+ * 요청자 태그의 연결 — `from 연결 join 태그 where 태그.user_id = 요청자`. 검색(태그 이름)·카드 태그 id·
+ * 검색 칩 세 서브쿼리가 이 조각에서 출발한다 — 하나라도 user_id 조건을 빠뜨리면 동료의 태그가 샌다.
+ * 뒤에 `and …` 로 조건을 잇는다.
+ */
+function fromMyTagLinks(viewerId: string): SQL {
+  return sql`from ${personalSurveyTagLinks} join ${personalSurveyTags} on ${personalSurveyTags.id} = ${personalSurveyTagLinks.tagId} where ${personalSurveyTags.userId} = ${viewerId}`;
 }
 
 /**
@@ -126,18 +141,18 @@ function surveyListWordMatchSql(word: string, tagViewerId: string | null): SQL {
   const pattern = `%${escapeLikePattern(word)}%`;
   const fields = sql`${surveys.cardTitle} ilike ${pattern} or ${surveys.title} ilike ${pattern} or ${surveys.description} ilike ${pattern} or ${users.name} ilike ${pattern}`;
   if (tagViewerId === null) return sql`(${fields})`;
-  const myTagName = sql`exists (select 1 from ${personalSurveyTagLinks} join ${personalSurveyTags} on ${personalSurveyTags.id} = ${personalSurveyTagLinks.tagId} where ${personalSurveyTagLinks.surveyId} = ${surveys.id} and ${personalSurveyTags.userId} = ${tagViewerId} and ${personalSurveyTags.name} ilike ${pattern})`;
+  const myTagName = sql`exists (select 1 ${fromMyTagLinks(tagViewerId)} and ${personalSurveyTagLinks.surveyId} = ${surveys.id} and ${personalSurveyTags.name} ilike ${pattern})`;
   return sql`(${fields} or ${myTagName})`;
 }
 
 /**
  * 검색 조각 — 검색어를 공백으로 나눈 단어마다 `surveyListWordMatchSql`, 단어끼리 AND. 빈 검색어면
- * 조건 없음. 목록 페이지와 자동완성(티켓 05)이 같은 조각을 쓰도록 여기 하나만 둔다. `viewerId` 는
- * 내 태그 이름을 볼 요청자다.
+ * 조건 없음. 목록 페이지와 자동완성(티켓 05)이 같은 조각을 쓰도록 여기 하나만 둔다. `tagViewerId` 는
+ * 내 태그 이름을 볼 요청자다(휴지통은 null).
  *
  * 단어 수·글자 수 상한은 입력 스키마가 막는다(`SurveyListPageQuerySchema`) — 여기서는 받은 대로 쓴다.
  */
-export function surveyListSearchSql(q: string, tagViewerId: string | null): SQL | undefined {
+function surveyListSearchSql(q: string, tagViewerId: string | null): SQL | undefined {
   const words = splitSurveyListSearchWords(q);
   if (words.length === 0) return undefined;
   return and(...words.map((word) => surveyListWordMatchSql(word, tagViewerId)));
@@ -155,7 +170,7 @@ function isFavoriteSql(viewerId: string): SQL<boolean> {
 function myTagIdsSql(viewerId: string): SQL<string[]> {
   return sql<
     string[]
-  >`coalesce((select json_agg(${personalSurveyTagLinks.tagId} order by ${personalSurveyTagLinks.createdAt}, ${personalSurveyTagLinks.tagId}) from ${personalSurveyTagLinks} join ${personalSurveyTags} on ${personalSurveyTags.id} = ${personalSurveyTagLinks.tagId} where ${personalSurveyTagLinks.surveyId} = ${surveys.id} and ${personalSurveyTags.userId} = ${viewerId}), '[]'::json)`;
+  >`coalesce((select json_agg(${personalSurveyTagLinks.tagId} order by ${personalSurveyTagLinks.createdAt}, ${personalSurveyTagLinks.tagId}) ${fromMyTagLinks(viewerId)} and ${personalSurveyTagLinks.surveyId} = ${surveys.id}), '[]'::json)`;
 }
 
 /**
@@ -164,7 +179,7 @@ function myTagIdsSql(viewerId: string): SQL<string[]> {
  * (소유 확인은 서비스가 먼저 해서 거부하지만, 조건 자체도 요청자 것만 본다). id 는 중복 없이 온다(입력 스키마).
  */
 function allTagsAttachedSql(viewerId: string, tagIds: readonly string[]): SQL {
-  return sql`${surveys.id} in (select ${personalSurveyTagLinks.surveyId} from ${personalSurveyTagLinks} join ${personalSurveyTags} on ${personalSurveyTags.id} = ${personalSurveyTagLinks.tagId} where ${personalSurveyTags.userId} = ${viewerId} and ${inArray(personalSurveyTagLinks.tagId, [...tagIds])} group by ${personalSurveyTagLinks.surveyId} having count(*) = ${tagIds.length})`;
+  return sql`${surveys.id} in (select ${personalSurveyTagLinks.surveyId} ${fromMyTagLinks(viewerId)} and ${inArray(personalSurveyTagLinks.tagId, [...tagIds])} group by ${personalSurveyTagLinks.surveyId} having count(*) = ${tagIds.length})`;
 }
 
 /** 요청자 소유인 태그 id — 서비스가 검색 칩의 소유를 확인할 때 쓴다(남의 것·없는 것은 빠진다). */
@@ -238,16 +253,17 @@ function withListJoins<T extends PgSelect>(qb: T) {
 
 function selectPage(params: SurveyListPageParams, where: SQL, page: number) {
   const { source } = params;
-  const viewerId = source.kind === 'scoped' ? source.filter.viewerId : null;
+  const viewerId = viewerOf(source);
+  // 휴지통 카드는 참여 칸을 읽지 않는다 — 복구 말고 할 수 있는 일이 없다(`surveyListColumns`).
   const leaderTeamIds =
     source.kind === 'scoped' && source.filter.kind === 'team' ? source.filter.leaderTeamIds : [];
   return withListJoins(
     db
       .select({
-        ...surveyListColumns(viewerId, leaderTeamIds),
+        ...surveyListColumns(source.kind === 'scoped' ? viewerId : null, leaderTeamIds),
         surveyGroupId: groupColumn(source),
-        isFavorite: isFavoriteSql(params.viewerId),
-        myTagIds: myTagIdsSql(params.viewerId),
+        isFavorite: isFavoriteSql(viewerId),
+        myTagIds: myTagIdsSql(viewerId),
       })
       .from(surveys)
       .$dynamic(),
@@ -323,7 +339,7 @@ async function listOwners(where: SQL): Promise<SurveyListOwner[]> {
 /** 원천이 휴지통이면 별을 세지 않는다 — 휴지통에는 즐겨찾기 단추가 없다. */
 async function countFavorites(params: SurveyListPageParams, narrowed: SQL): Promise<number> {
   if (params.source.kind === 'deleted') return 0;
-  return countMatches(and(narrowed, isFavoriteSql(params.viewerId))!);
+  return countMatches(and(narrowed, isFavoriteSql(viewerOf(params.source)))!);
 }
 
 async function countMatches(where: SQL): Promise<number> {
@@ -348,18 +364,16 @@ export async function querySurveyListPage(
   const activeTeam = await resolveActiveTeam(params.source, params.teamId);
   const narrowed = narrowedWhere(params, activeTeam);
 
+  const viewerId = viewerOf(params.source);
   const filters: SQL[] = [narrowed];
-  const search = surveyListSearchSql(
-    params.q,
-    params.source.kind === 'deleted' ? null : params.viewerId,
-  );
+  const search = surveyListSearchSql(params.q, params.source.kind === 'deleted' ? null : viewerId);
   if (search) filters.push(search);
   if (params.lifecycle !== 'all') {
     filters.push(sql`${surveyListLifecycleSql()} = ${params.lifecycle}`);
   }
   filters.push(...advancedConditions(params.advanced));
-  if (params.favorites) filters.push(isFavoriteSql(params.viewerId));
-  if (params.tagIds.length > 0) filters.push(allTagsAttachedSql(params.viewerId, params.tagIds));
+  if (params.favorites) filters.push(isFavoriteSql(viewerId));
+  if (params.tagIds.length > 0) filters.push(allTagsAttachedSql(viewerId, params.tagIds));
   const where = and(...filters)!;
 
   const requestedPage = Math.max(1, params.page);
@@ -382,16 +396,18 @@ export async function querySurveyListPage(
  *
  * 목록 페이지와 **같은 원천 조건(`scopedSurveyWhere`)과 같은 검색 조각(`surveyListSearchSql`)**을 쓴다 —
  * 후보에 뜬 설문이 Enter 로 연 목록에 없거나, 목록에 없는 설문이 후보로 새는 일이 없게. 검색 조각이
- * 소유자 이름을 읽으므로 `users` 조인을 건다. 응답 수는 세지 않는다. 빈 검색어는 호출자가 거른다.
+ * 소유자 이름을 읽으므로 `users` 조인을 건다. 응답 수는 세지 않는다. 빈 검색어면 조회 없이 빈 후보다.
  */
 export async function querySurveySuggestions(
-  filter: Exclude<SurveyScopeFilter, { kind: 'none' }>,
-  search: SQL,
+  filter: ScopedFilter,
+  q: string,
 ): Promise<SurveySuggestion[]> {
+  const search = surveyListSearchSql(q, filter.viewerId);
+  if (!search) return [];
   return db
     .select({
       id: surveys.id,
-      cardTitle: cardTitleSql,
+      displayTitle: cardTitleSql,
       ownerName: users.name,
       lifecycle: surveyListLifecycleSql(),
     })

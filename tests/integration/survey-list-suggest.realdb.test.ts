@@ -141,7 +141,7 @@ describe.skipIf(!isLocalDb)('설문 자동완성 후보 (real local DB)', () => 
     expect(result.map((s) => s.id)).toEqual(recent.slice(0, 5));
     expect(result[0]).toEqual({
       id: recent[0],
-      cardTitle: `${RUN} 실태조사 m0`,
+      displayTitle: `${RUN} 실태조사 m0`,
       ownerName: `${RUN} 팀원`,
       lifecycle: 'draft',
     });
@@ -150,7 +150,7 @@ describe.skipIf(!isLocalDb)('설문 자동완성 후보 (real local DB)', () => 
   it('검색 의미는 목록과 같다 — 단어끼리 AND, 카드 제목·설문지 제목·소유자 이름', async () => {
     expect((await suggest(`${RUN} 가가 응답자용`)).map((s) => s.id)).toEqual([S.carded]);
     // 카드 제목이 있으면 후보 이름은 카드 제목이다.
-    expect((await suggest(`${RUN} 응답자용`))[0]?.cardTitle).toBe(`${RUN} 가가 카드`);
+    expect((await suggest(`${RUN} 응답자용`))[0]?.displayTitle).toBe(`${RUN} 가가 카드`);
     expect((await suggest(`강동료 ${RUN}`)).map((s) => s.id)).toEqual([S.colleagues]);
   });
 
