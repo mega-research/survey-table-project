@@ -17,7 +17,7 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 | 라우트 트리 · 운영 콘솔·게스트·링크 콘솔 주소                                                                    | `src/app/AGENTS.md`                      |
 | 운영 집계·파티션 · 진척 보고 분류 키                                                                             | `src/server/operations/AGENTS.md`        |
 | 메일 발송 주소·대체 발송                                                                                         | `src/server/mail/AGENTS.md`              |
-| 서버 트리 · 설문 관문·procedure 베이스·capability 코어 · soft delete · 테스트 모드                               | `src/server/AGENTS.md`                   |
+| 서버 트리 · 설문 관문·procedure 베이스·capability 코어 · soft delete · 테스트 모드 · 설문 목록 조회              | `src/server/AGENTS.md`                   |
 | 팀·소유권·참여자·공개 범위·그룹·재배치 · 외주/클라이언트 링크 · 설문 종료 · 대리 응답 · 옛 게스트/실사 계정 모델 | `src/server/workspace/AGENTS.md`         |
 | 계정 수명주기 · 프로필 · 계정 발급 입구                                                                          | `src/server/auth/AGENTS.md`              |
 | 세션(Better Auth) · 1차 게이트(proxy) · 로그인 · 유형별 목적지                                                   | `src/lib/auth/AGENTS.md`                 |
@@ -115,8 +115,8 @@ src/
 │   ├── lib/survey-group-queries.ts # 설문 그룹 쿼리 키 + 목록 조회 옵션 (티켓 12) — 사이드바 트리(workspace)와
 │   │                              # 목록·모달(survey-builder)이 같은 캐시를 봐야 해서 여기 산다. mutation 은
 │   │                              # 설문 목록 키까지 접어야 해 survey-builder/queries 소유(공유→feature 역전 금지)
-│   ├── lib/survey-list-queries.ts # 설문 목록 쿼리 키 + 조회 옵션 — 목록 화면(survey-builder)과 실사팀 사이드바의
-│   │                              # 참여 트리(workspace)가 같은 응답에서 세야 해서 여기 산다(0139). mutation 은 survey-builder
+│   ├── lib/survey-list-queries.ts # 설문 목록 쿼리 키 + 조회 옵션 — 목록 화면(survey-builder, listPage)과 실사팀 사이드바
+│   │                              # 참여 트리(workspace, listSummaries)가 같은 lists() 무효화를 받아서 여기 산다. mutation 은 survey-builder
 │   ├── lib/survey-control.ts   # 설문 운영 제어 공용 로직
 │   ├── lib/image-utils.ts      # 브라우저 이미지 리사이즈·압축 (업로드 전 최적화)
 │   └── types/test-attempt.ts
@@ -488,7 +488,7 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 
 12. **로컬 테스트 DB 는 워크트리 공용이다**: `question-demand-survey`·`tracking-survey`·`workspace-roles-v2` 가 같은 Supabase 컨테이너 하나(`project_id = survey-table-project`, 54322)를 쓴다. `config.toml` 이 추적 파일이라 포트·project_id 를 워크트리별로 가를 수 없다. `db:setup-test` 는 **전체 드롭 + 그 워크트리 마이그레이션만 재생**이므로 형제의 스키마를 통째로 덮는다. `pnpm test:integration` 앞에 `scripts/check-test-db-schema.mjs` 가드가 붙어 있어 스키마가 이 브랜치 것이 아니면 **재생하라는 메시지 하나로 멈춘다** — 그 가드가 없던 동안 47파일 전멸이 코드 회귀처럼 보였다. 가드는 DB 에 마커를 심지 않는다(심으면 `db:drift` 가 레포에 없는 객체로 잡는다) — 마이그레이션 파일에서 기대 테이블을 뽑아 대조하고, 판정이 애매하면 통과시킨다.
 
-    **마이그레이션 번호는 그보다 조용한 축이다.** 브랜치들이 같은 base 에서 갈라지면 같은 번호를 서로 다른 뜻으로 선점할 수 있고(실제로 0101·0102 가 그랬다), CI 게이트는 **태그 전체**만 보므로 접두 중복을 잡지 못한다(`0003_*`·`0009_*`·`0019_*` 가 이미 공존한다). 새 마이그레이션 번호는 **세 워크트리의 최댓값 + 1** 로 잡고, 재생 순서는 파일명이 아니라 `manual-migrations.json` **배열**이므로 **두 번째로 병합하는 쪽은 배열 끝에 append** 한다(번호순 삽입 금지).
+    **마이그레이션 번호는 그보다 조용한 축이다** — 같은 base 에서 갈라진 브랜치가 같은 번호를 서로 다른 뜻으로 선점할 수 있다(실제로 0101·0102). 번호는 **세 워크트리의 최댓값 + 1**, 배열 append 규칙은 아래 「마이그레이션 번호」.
 
 13. **drizzle 함정**: timestamptz optimistic lock은 PG μs ↔ JS ms 정밀도 차로 거짓 충돌 (version int 또는 string mode 사용). `ANY(${arr})` 바인딩 금지 (length=1 silent unwrap) → `inArray`/`sql.join`. jsonb 컬럼에 `JSON.stringify` 바인딩 금지 (이중 인코딩) → 객체 그대로 전달.
 
@@ -537,7 +537,7 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 - 그래서 번호와 배열 순서가 어긋나 보일 수 있다. 만지는 객체가 서로소면 정상이다
 - **배열 순서를 지켜야 하는 쌍**: 0128 과 0129 는 같은 CHECK(`mobile_table_display_mode`)를 차례로 갈아끼운다 — 0128 을 뒤에 재생하면 `item-cards` 가 빠진다
 - **배포 전후가 갈리는 쌍**: 0142(이관 이력 표)는 앱 배포 **전**, 0143(`response_answers` 삭제 등)은 배포 **뒤** — 거꾸로 하면 구버전 앱의 완료 제출이 실패한다. 0145(언어별 설문 글자 `surveys.localized_messages`)도 배포 **전**이다(새 앱이 읽는다, nullable 이라 2단계 불필요)
-- **승격 때 프로덕션에 적용할 것**(staging 에만 있는 번호): 역할 모델 v2 는 **0112~0122** 다(0111 은 선반영 재현용이라 적용 금지 — 파일 머리 참조). 팀 종류(실사팀 표시) **0139** 는 teams 를 만지므로 역할 v2 와 함께 간다. 외주·클라이언트 링크는 **0126·0127·0133·0134 를 함께** 적용하고, 0134 는 테이블 개명이라 옛 코드와 양립하지 않아 **앱 배포 직전에** 적용한다
+- **승격 때 프로덕션에 적용할 것**(staging 에만 있는 번호): 역할 모델 v2 는 **0112~0122** 다(0111 은 선반영 재현용이라 적용 금지 — 파일 머리 참조). 팀 종류(실사팀 표시) **0139** 는 teams 를 만지므로 역할 v2 와 함께 간다. 외주·클라이언트 링크는 **0126·0127·0133·0134 를 함께** 적용하고, 0134 는 테이블 개명이라 옛 코드와 양립하지 않아 **앱 배포 직전에** 적용한다. 설문 즐겨찾기·내 태그 **0149·0150** 은 새 테이블만 만들어 앱 배포 **전**에 적용한다(목록 제목순이 쓰는 `ko-x-icu` 정렬이 프로덕션에 있는지도 함께 본다)
 - 번호를 옮긴 이력은 문서에 두지 않는다 — 역할 v2 의 옛 번호 매핑(0101→0111 …)은 병합 커밋 `c7197701` 의 `AGENTS.md`, 외주 링크 0128→0133 은 0133 파일 머리에 있다. 이미 적용한 DB 는 번호와 무관하다(적용 이력 표가 없다)
 
 ---
