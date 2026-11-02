@@ -65,6 +65,13 @@ describe('SearchCombobox — 설문·소유자 자동완성 (시안 F8-b)', () =
     useSuggestions.mockReturnValue({ suggestions: SURVEYS, isPending: false });
   });
 
+  it('포커스 표시는 검색 상자 테두리 하나다 — 입력칸 자체의 전역 포커스 링은 끈다', () => {
+    const { input } = setup();
+    // 전역 `*:focus-visible` 링은 레이어 밖 규칙이라 important 로만 덮인다.
+    expect(input.className).toContain('focus-visible:[box-shadow:none]!');
+    expect(input.parentElement).toHaveClass('focus-within:border-[#2E4FCE]');
+  });
+
   it('글자를 치면 후보 목록이 열리고 combobox 가 그 목록을 가리킨다', async () => {
     const { input, user } = setup();
     expect(input).toHaveAttribute('aria-expanded', 'false');

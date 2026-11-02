@@ -145,7 +145,9 @@ export function TagPickerPanel({ attachedIds, tags, onToggle, onCreate }: TagPic
           value={query}
           onChange={(e) => handleChange(e.target.value)}
           onKeyDown={handleKeyDown}
-          className="h-7 w-full bg-transparent text-[13.5px] text-[#1C1C1E] outline-none placeholder:text-[#9CA3AF]"
+          // 포커스 링(전역 `*:focus-visible`)이 글자에 붙지 않게 안쪽 여백을 두고, 바깥 여백을 그만큼 당겨
+          // 글자 줄은 위 칩과 맞춘다.
+          className="-mx-2 h-7 w-[calc(100%+1rem)] rounded-md bg-transparent px-2 text-[13.5px] text-[#1C1C1E] outline-none placeholder:text-[#9CA3AF]"
         />
         {tooLong && (
           <p role="status" className="text-[12px] text-[#D93025]">

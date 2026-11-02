@@ -348,7 +348,9 @@ export function SearchCombobox({
           placeholder={chipTags.length > 0 ? undefined : placeholder}
           maxLength={SURVEY_LIST_SEARCH_MAX_LENGTH}
           autoComplete="off"
-          className="h-8 min-w-[80px] flex-1 bg-transparent text-[13.5px] text-[#1C1C1E] placeholder:text-[#9CA3AF] focus:outline-none"
+          // 포커스 표시는 바깥 상자의 파란 테두리 하나다 — 전역 `*:focus-visible` 링(레이어 밖 규칙이라
+          // important 로만 덮인다)이 입력칸에 한 겹 더 그려지지 않게 끈다.
+          className="h-8 min-w-[80px] flex-1 bg-transparent text-[13.5px] text-[#1C1C1E] placeholder:text-[#9CA3AF] focus:outline-none focus-visible:[box-shadow:none]!"
         />
         {showClearAll && (
           <button

@@ -139,4 +139,10 @@ describe('태그 창', () => {
     expect(screen.getByRole('option', { name: '정기조사' })).toHaveAttribute('aria-selected', 'false');
     expect(screen.getByRole('option', { name: 'A사' })).toHaveAttribute('aria-selected', 'true');
   });
+
+  it('이름 칸의 포커스 링이 글자에 붙지 않는다 — 칸에 안쪽 여백이 있고 글자 줄은 칩과 맞춘다', () => {
+    renderPanel();
+    const input = screen.getByRole('combobox', { name: '검색하거나 새 태그 이름 입력' });
+    expect(input).toHaveClass('px-2', '-mx-2', 'rounded-md');
+  });
 });
