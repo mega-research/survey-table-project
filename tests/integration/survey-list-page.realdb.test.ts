@@ -12,6 +12,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 
 import { db } from '@/db';
 import {
+  personalSurveyTagLinks as personalSurveyTagLinksTable,
+  personalSurveyTags as personalSurveyTagsTable,
   surveyFavorites as surveyFavoritesTable,
   surveyGroups as surveyGroupsTable,
   surveyParticipants as surveyParticipantsTable,
@@ -606,6 +608,54 @@ describe.skipIf(!isLocalDb)('설문 목록 페이지 조회 (real local DB)', ()
       await expect(
         listSurveyPage(superadmin, query({ scope: SYSTEM_SCOPE, deleted: true, favorites: true })),
       ).rejects.toBeInstanceOf(SurveyAccessError);
+    });
+  });
+
+  describe('내 태그 id (티켓 07)', () => {
+    const MY_TAG_1 = crypto.randomUUID();
+    const MY_TAG_2 = crypto.randomUUID();
+    const COLLEAGUE_TAG = crypto.randomUUID();
+
+    beforeAll(async () => {
+      if (!isLocalDb) return;
+      await db.insert(personalSurveyTagsTable).values([
+        { id: MY_TAG_1, userId: VIEWER_ID, name: `${RUN}-첫태그`, color: 'blue' },
+        { id: MY_TAG_2, userId: VIEWER_ID, name: `${RUN}-둘째`, color: 'red' },
+        { id: COLLEAGUE_TAG, userId: COLLEAGUE_ID, name: `${RUN}-동료`, color: 'green' },
+      ]);
+      // 붙인 순서가 카드 표시 순서다 — 둘째 태그를 먼저 붙였다.
+      await db.insert(personalSurveyTagLinksTable).values([
+        { tagId: MY_TAG_2, surveyId: bulk[3]!, createdAt: new Date(BASE) },
+        { tagId: MY_TAG_1, surveyId: bulk[3]!, createdAt: new Date(BASE + DAY) },
+        { tagId: COLLEAGUE_TAG, surveyId: bulk[3]!, createdAt: new Date(BASE) },
+        { tagId: MY_TAG_1, surveyId: S.deleted, createdAt: new Date(BASE) },
+      ]);
+    });
+
+    async function itemsOf(user: typeof viewer) {
+      const first = await listSurveyPage(user, query());
+      const rest = [];
+      for (let p = 2; p <= first.totalPages; p++) {
+        rest.push(await listSurveyPage(user, query({ page: p })));
+      }
+      return [first, ...rest].flatMap((r) => r.items);
+    }
+
+    it('항목마다 내가 붙인 태그 id 가 붙인 순서로 실린다 — 동료 태그는 없다, 없으면 빈 배열', async () => {
+      const items = await itemsOf(viewer);
+      expect(items.find((s) => s.id === bulk[3])?.myTagIds).toEqual([MY_TAG_2, MY_TAG_1]);
+      expect(items.filter((s) => s.id !== bulk[3]).every((s) => s.myTagIds.length === 0)).toBe(
+        true,
+      );
+
+      const colleague = { id: COLLEAGUE_ID, isSuperadmin: false, userType: 'internal' as const };
+      const theirs = await itemsOf(colleague);
+      expect(theirs.find((s) => s.id === bulk[3])?.myTagIds).toEqual([COLLEAGUE_TAG]);
+    });
+
+    it('휴지통 행에는 태그 id 를 싣지 않는다 — 행이 남아 있어도', async () => {
+      const trash = await listSurveyPage(superadmin, query({ scope: SYSTEM_SCOPE, deleted: true }));
+      expect(trash.items.find((s) => s.id === S.deleted)?.myTagIds).toEqual([]);
     });
   });
 

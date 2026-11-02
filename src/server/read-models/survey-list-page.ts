@@ -3,7 +3,16 @@ import type { PgSelect } from 'drizzle-orm/pg-core';
 import 'server-only';
 
 import { db } from '@/db';
-import { surveyFavorites, surveyGroups, surveyResponses, surveys, teams, users } from '@/db/schema';
+import {
+  personalSurveyTagLinks,
+  personalSurveyTags,
+  surveyFavorites,
+  surveyGroups,
+  surveyResponses,
+  surveys,
+  teams,
+  users,
+} from '@/db/schema';
 import { surveyListLifecycleSql } from '@/server/read-models/survey-list-lifecycle';
 import {
   scopedSurveyWhere,
@@ -30,8 +39,9 @@ import {
 //   ② 좁힘(narrowing) — 그룹 화면·팀 좁힘·미분류. 여기까지가 세그먼트 숫자·소유자 목록의 기준
 //   ③ 거르기(filters) — 검색·목록 상태·상세 검색·즐겨찾기. `total` 과 페이지 항목은 셋 모두를 적용한다
 //
-// 즐겨찾기(티켓 06)는 요청자 본인의 행만 본다(`viewerId`) — 동료의 별은 조건에도 숫자에도
-// 카드 표시에도 들어오지 않는다. 표는 workspace 도메인 소유지만 타 도메인 테이블 직접 쿼리로 읽는다.
+// 즐겨찾기(티켓 06)·내 태그(티켓 07)는 요청자 본인의 행만 본다(`viewerId`) — 동료의 별·태그는
+// 조건에도 숫자에도 카드 표시에도 들어오지 않는다. 표는 workspace 도메인 소유지만 타 도메인 테이블
+// 직접 쿼리로 읽는다.
 //
 // 응답 수는 여기서 세지 않는다 — 페이지 항목의 응답 수는 서비스가 그 id 만으로 센다. 예외는
 // 응답순 정렬과 상세 검색 「응답 수 범위」로, 범위 전체의 응답 수가 있어야 해서 그때만 상관
@@ -117,6 +127,14 @@ function isFavoriteSql(viewerId: string): SQL<boolean> {
   return sql<boolean>`exists (select 1 from ${surveyFavorites} where ${surveyFavorites.userId} = ${viewerId} and ${surveyFavorites.surveyId} = ${surveys.id})`;
 }
 
+/**
+ * 요청자가 이 설문에 붙인 태그 id — 붙인 순서(연결 생성순, 같으면 태그 id). 동료의 태그는
+ * 들어오지 않는다(태그의 user_id 로 건다). 카드가 이름·색을 내 태그 목록(`mine`)에서 찾아 그린다.
+ */
+function myTagIdsSql(viewerId: string): SQL<string[]> {
+  return sql<string[]>`coalesce((select json_agg(${personalSurveyTagLinks.tagId} order by ${personalSurveyTagLinks.createdAt}, ${personalSurveyTagLinks.tagId}) from ${personalSurveyTagLinks} join ${personalSurveyTags} on ${personalSurveyTags.id} = ${personalSurveyTagLinks.tagId} where ${personalSurveyTagLinks.surveyId} = ${surveys.id} and ${personalSurveyTags.userId} = ${viewerId}), '[]'::json)`;
+}
+
 const DATE_COLUMNS = {
   updatedAt: surveys.updatedAt,
   createdAt: surveys.createdAt,
@@ -182,6 +200,7 @@ function selectPage(params: SurveyListPageParams, where: SQL, page: number) {
         ...surveyListColumns(viewerId, leaderTeamIds),
         surveyGroupId: groupColumn(source),
         isFavorite: isFavoriteSql(params.viewerId),
+        myTagIds: myTagIdsSql(params.viewerId),
       })
       .from(surveys)
       .$dynamic(),

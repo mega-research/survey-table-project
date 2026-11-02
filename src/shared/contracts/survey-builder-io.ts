@@ -306,11 +306,16 @@ export interface SurveyListOwner {
  * 목록 페이지의 카드 한 장 — 목록 행 + 요청자 본인의 개인 표시(티켓 06·07).
  *
  * 개인 표시는 사람마다 다른 값이라 공용 목록 행(`SurveyListItem`, 분석 페이지도 쓴다)에 넣지 않고
- * 페이지 응답에서만 더한다. 내 태그(티켓 07)의 `myTagIds` 도 이 자리에 붙는다.
+ * 페이지 응답에서만 더한다.
  */
 export interface SurveyListPageItem extends SurveyListItem {
   /** 내가 별을 켰는가 — 동료의 별은 보이지 않는다. 휴지통 행은 늘 false. */
   isFavorite: boolean;
+  /**
+   * 내가 이 설문에 붙인 태그 id — 붙인 순서. 이름·색은 내 태그 목록(`workspace.personalMarks.mine`)
+   * 에서 찾는다(이름을 고쳐도 목록 한 곳만 바뀌면 된다). 휴지통 행은 늘 빈 배열.
+   */
+  myTagIds: string[];
 }
 
 /**

@@ -275,8 +275,9 @@ export async function listSurveyPage(
     ...base,
     items: result.rows.map((row) => ({
       ...toSurveyListItem(row, responseCounts.get(row.id), fieldworkCounts.get(row.id)),
-      // 휴지통 카드에는 별이 없다 — 행이 남아 있어도(soft delete 는 별을 지우지 않는다) 끈 것으로 싣는다.
+      // 휴지통 카드에는 별·태그가 없다 — 행이 남아 있어도(soft delete 는 지우지 않는다) 비워 싣는다.
       isFavorite: source.kind === 'deleted' ? false : row.isFavorite,
+      myTagIds: source.kind === 'deleted' ? [] : row.myTagIds,
     })),
     total: result.total,
     page: result.page,
