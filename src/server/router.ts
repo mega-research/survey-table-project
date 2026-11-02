@@ -46,6 +46,7 @@ import { guests } from '@/server/workspace/procedures/guests';
 import { members } from '@/server/workspace/procedures/members';
 import { ownership } from '@/server/workspace/procedures/ownership';
 import { participants } from '@/server/workspace/procedures/participants';
+import { personalMarks } from '@/server/workspace/procedures/personal-marks';
 import { reassignment } from '@/server/workspace/procedures/reassignment';
 import { sharing } from '@/server/workspace/procedures/sharing';
 import { surveyGroups } from '@/server/workspace/procedures/survey-groups';
@@ -132,6 +133,8 @@ export const router = {
     reassignment,
     // 공유 설정 — 공개 범위 (.pen FLOW 4-2). 실사 블록은 티켓 24.
     sharing,
+    // 개인 표시 — 즐겨찾기(설문 즐겨찾기·태그 티켓 06). 나에게만 보이는 정리 표시, 내 태그는 티켓 07.
+    personalMarks,
     // 설문 참여자 — 팀 경계를 넘는 유일한 접근 경로 (.pen FLOW 4-2, 티켓 18).
     participants,
     // 클라이언트(게스트) 부여 + 현황 탭 화이트리스트 (.pen FLOW 4-2, 티켓 21).
