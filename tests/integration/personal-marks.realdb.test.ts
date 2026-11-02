@@ -14,12 +14,33 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
 import {
+  personalSurveyTagLinks as personalSurveyTagLinksTable,
+  personalSurveyTags as personalSurveyTagsTable,
   surveyFavorites as surveyFavoritesTable,
   surveys as surveysTable,
+  teamMembers as teamMembersTable,
   teams as teamsTable,
   users as usersTable,
 } from '@/db/schema';
-import { setFavorite } from '@/server/workspace/services/personal-marks';
+import {
+  CreatePersonalTagInput,
+  PersonalTagLimitError,
+  PersonalTagNotFoundError,
+} from '@/server/workspace/domain/personal-marks';
+import {
+  createTag,
+  listMyTags,
+  lockPersonalTags,
+  setFavorite,
+  setTagLink,
+} from '@/server/workspace/services/personal-marks';
+import {
+  PERSONAL_TAG_LIMIT,
+  type PersonalTagColor,
+  personalTagColorValues,
+} from '@/shared/contracts/workspace';
+
+import { backendPid, waitForLockWaitersBehind } from '../helpers/lock-waiters';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
@@ -133,5 +154,269 @@ describe.skipIf(!isLocalDb)('개인 표시 — 즐겨찾기 쓰기 (real local D
       .where(eq(surveysTable.id, S.softDeleted));
 
     expect(await favoriteRows(S.softDeleted, ME)).toHaveLength(1);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 내 태그 (티켓 07) — 연결 맞추기 · 만들기(+붙이기) · 한도 경합 · 소유
+// ─────────────────────────────────────────────────────────────────────────────
+
+const T_ME = crypto.randomUUID();
+const T_OTHER = crypto.randomUUID();
+const T_FOREIGN_OWNER = crypto.randomUUID();
+const T_COLOR = crypto.randomUUID();
+const T_TEAM = crypto.randomUUID();
+const T_FOREIGN_TEAM = crypto.randomUUID();
+const TS = {
+  link: crypto.randomUUID(),
+  attach: crypto.randomUUID(),
+  hardDeleted: crypto.randomUUID(),
+  softDeleted: crypto.randomUUID(),
+  /** 다른 팀 설문 — T_ME 는 볼 수 없다. */
+  foreign: crypto.randomUUID(),
+};
+const tagSurveyIds = Object.values(TS);
+
+async function tagRowsOf(userId: string) {
+  return db
+    .select({ id: personalSurveyTagsTable.id, name: personalSurveyTagsTable.name })
+    .from(personalSurveyTagsTable)
+    .where(eq(personalSurveyTagsTable.userId, userId));
+}
+
+async function linkRows(surveyId: string) {
+  return db
+    .select({ tagId: personalSurveyTagLinksTable.tagId })
+    .from(personalSurveyTagLinksTable)
+    .where(eq(personalSurveyTagLinksTable.surveyId, surveyId));
+}
+
+/** 태그 행을 바로 심는다 — 만들기 경로를 거치지 않는 준비용. */
+async function seedTag(userId: string, name: string, color: PersonalTagColor = 'blue') {
+  const [row] = await db
+    .insert(personalSurveyTagsTable)
+    .values({ userId, name, color })
+    .returning({ id: personalSurveyTagsTable.id });
+  return row!.id;
+}
+
+describe.skipIf(!isLocalDb)('개인 표시 — 내 태그 (real local DB)', () => {
+  beforeAll(async () => {
+    if (!isLocalDb) return;
+    await db.insert(usersTable).values(
+      [T_ME, T_OTHER, T_FOREIGN_OWNER, T_COLOR].map((id) => ({
+        id,
+        name: `tag-${id.slice(0, 6)}`,
+        email: `personal-tags-${id}@example.com`,
+        emailVerified: true,
+        status: 'active' as const,
+        isSuperadmin: false,
+        userType: 'internal' as const,
+      })),
+    );
+    await db.insert(teamsTable).values([
+      { id: T_TEAM, name: `tag-${T_TEAM.slice(0, 8)}` },
+      { id: T_FOREIGN_TEAM, name: `tag-${T_FOREIGN_TEAM.slice(0, 8)}` },
+    ]);
+    await db.insert(teamMembersTable).values([
+      { teamId: T_TEAM, userId: T_ME, role: 'member' as const },
+      { teamId: T_FOREIGN_TEAM, userId: T_FOREIGN_OWNER, role: 'member' as const },
+    ]);
+    await db.insert(surveysTable).values(
+      tagSurveyIds.map((id) => {
+        const foreign = id === TS.foreign;
+        return {
+          id,
+          title: `tag ${id.slice(0, 6)}`,
+          teamId: foreign ? T_FOREIGN_TEAM : T_TEAM,
+          ownerUserId: foreign ? T_FOREIGN_OWNER : T_ME,
+          createdBy: foreign ? T_FOREIGN_OWNER : T_ME,
+          visibility: 'team' as const,
+          assignmentStatus: 'assigned' as const,
+        };
+      }),
+    );
+  });
+
+  afterAll(async () => {
+    if (!isLocalDb) return;
+    const users = [T_ME, T_OTHER, T_FOREIGN_OWNER, T_COLOR];
+    // 태그·연결은 사람 → 태그 → 연결 cascade 로 함께 사라진다.
+    await db.delete(personalSurveyTagsTable).where(inArray(personalSurveyTagsTable.userId, users));
+    await db.delete(surveysTable).where(inArray(surveysTable.id, tagSurveyIds));
+    await db.delete(teamMembersTable).where(inArray(teamMembersTable.userId, users));
+    await db.delete(teamsTable).where(inArray(teamsTable.id, [T_TEAM, T_FOREIGN_TEAM]));
+    await db.delete(usersTable).where(inArray(usersTable.id, users));
+  });
+
+  it('연결 켜기를 두 번 보내도 행은 하나다 — 끄기 두 번도 오류 없이 행이 없다', async () => {
+    const tagId = await seedTag(T_ME, '연결 멱등');
+
+    const first = await setTagLink(T_ME, { surveyId: TS.link, tagId, on: true });
+    const second = await setTagLink(T_ME, { surveyId: TS.link, tagId, on: true });
+    expect(first).toEqual({ surveyId: TS.link, tagId, on: true });
+    expect(second).toEqual({ surveyId: TS.link, tagId, on: true });
+    expect(await linkRows(TS.link)).toEqual([{ tagId }]);
+
+    await setTagLink(T_ME, { surveyId: TS.link, tagId, on: false });
+    await expect(setTagLink(T_ME, { surveyId: TS.link, tagId, on: false })).resolves.toEqual({
+      surveyId: TS.link,
+      tagId,
+      on: false,
+    });
+    expect(await linkRows(TS.link)).toEqual([]);
+  });
+
+  it('남의 태그 id 로 붙이기·떼기 → 없는 태그와 같은 NOT_FOUND, 행도 안 생긴다', async () => {
+    const othersTag = await seedTag(T_OTHER, '남의 태그');
+
+    await expect(
+      setTagLink(T_ME, { surveyId: TS.link, tagId: othersTag, on: true }),
+    ).rejects.toBeInstanceOf(PersonalTagNotFoundError);
+    await expect(
+      setTagLink(T_ME, { surveyId: TS.link, tagId: othersTag, on: false }),
+    ).rejects.toBeInstanceOf(PersonalTagNotFoundError);
+    await expect(
+      setTagLink(T_ME, { surveyId: TS.link, tagId: crypto.randomUUID(), on: true }),
+    ).rejects.toBeInstanceOf(PersonalTagNotFoundError);
+    expect(await linkRows(TS.link)).toEqual([]);
+  });
+
+  it('만들기 + 붙이기 — 새 태그가 생기고 그 설문에 붙는다, 내 목록에 붙은 수와 함께 보인다', async () => {
+    const result = await createTag(T_ME, { name: '실태조사', attachToSurveyId: TS.attach });
+
+    expect(result.created).toBe(true);
+    expect(result.tag).toMatchObject({ name: '실태조사', linkCount: 1 });
+    expect(await linkRows(TS.attach)).toEqual([{ tagId: result.tag.id }]);
+
+    const mine = await listMyTags(T_ME);
+    expect(mine.tags).toContainEqual(result.tag);
+    // 남의 태그는 내 목록에 없다.
+    expect(mine.tags.map((t) => t.name)).not.toContain('남의 태그');
+  });
+
+  it('「A사」가 있을 때 「 a사 」 만들기 → 새로 만들지 않고 기존 태그를 돌려주며 붙인다', async () => {
+    const existing = await seedTag(T_ME, 'A사');
+
+    // 이름 정규화는 입력 경계(zod)가 한다 — procedure 가 넘기는 값 그대로 부른다.
+    const result = await createTag(
+      T_ME,
+      CreatePersonalTagInput.parse({ name: ' a사 ', attachToSurveyId: TS.attach }),
+    );
+
+    expect(result).toMatchObject({ created: false, tag: { id: existing, name: 'A사' } });
+    expect((await tagRowsOf(T_ME)).filter((t) => t.name.toLowerCase() === 'a사')).toHaveLength(1);
+    expect(await linkRows(TS.attach)).toContainEqual({ tagId: existing });
+  });
+
+  it('새 태그 색은 내 태그에서 가장 적게 쓴 색(같으면 어휘 순서)이다 — 남의 태그 색은 세지 않는다', async () => {
+    for (const [name, color] of [
+      ['파랑1', 'blue'],
+      ['빨강1', 'red'],
+      ['빨강2', 'red'],
+      ['초록1', 'green'],
+    ] as const) {
+      await seedTag(T_COLOR, name, color);
+    }
+    // 남의 태그가 보라를 잔뜩 써도 T_COLOR 의 배정과 무관하다.
+    await seedTag(T_OTHER, '남의 보라1', 'purple');
+    await seedTag(T_OTHER, '남의 보라2', 'purple');
+
+    const first = await createTag(T_COLOR, { name: '새1', attachToSurveyId: null });
+    expect(first.tag).toMatchObject({ color: 'purple', linkCount: 0 });
+
+    for (const color of ['amber', 'teal', 'pink', 'gray'] as const) {
+      await seedTag(T_COLOR, `채움-${color}`, color);
+    }
+    // 이제 빨강만 2개, 나머지 1개씩 — 동점 중 어휘 첫 색.
+    const second = await createTag(T_COLOR, { name: '새2', attachToSurveyId: null });
+    expect(second.tag.color).toBe('blue');
+  });
+
+  it('붙일 설문이 사라져 붙이기가 실패하면 태그도 안 생긴다 — 만들기와 붙이기는 한 트랜잭션', async () => {
+    await expect(
+      createTag(T_ME, { name: '고아 될 태그', attachToSurveyId: crypto.randomUUID() }),
+    ).rejects.toThrow();
+    expect((await tagRowsOf(T_ME)).map((t) => t.name)).not.toContain('고아 될 태그');
+  });
+
+  it('설문 하드 삭제 → 연결이 사라진다, soft delete → 남는다', async () => {
+    const tagId = await seedTag(T_ME, '삭제 연쇄');
+    await setTagLink(T_ME, { surveyId: TS.hardDeleted, tagId, on: true });
+    await setTagLink(T_ME, { surveyId: TS.softDeleted, tagId, on: true });
+
+    await db.delete(surveysTable).where(eq(surveysTable.id, TS.hardDeleted));
+    await db
+      .update(surveysTable)
+      .set({ deletedAt: new Date() })
+      .where(eq(surveysTable.id, TS.softDeleted));
+
+    expect(await linkRows(TS.hardDeleted)).toEqual([]);
+    expect(await linkRows(TS.softDeleted)).toEqual([{ tagId }]);
+  });
+});
+
+describe.skipIf(!isLocalDb)('개인 표시 — 내 태그 300개 한도 경합 (real local DB)', () => {
+  const USER = crypto.randomUUID();
+
+  beforeAll(async () => {
+    if (!isLocalDb) return;
+    await db.insert(usersTable).values({
+      id: USER,
+      name: `cap-${USER.slice(0, 6)}`,
+      email: `personal-tags-cap-${USER}@example.com`,
+      emailVerified: true,
+      status: 'active' as const,
+      isSuperadmin: false,
+      userType: 'internal' as const,
+    });
+    await db.insert(personalSurveyTagsTable).values(
+      Array.from({ length: PERSONAL_TAG_LIMIT - 1 }, (_, i) => ({
+        userId: USER,
+        name: `키워드${i}`,
+        color: personalTagColorValues[i % personalTagColorValues.length]!,
+      })),
+    );
+  });
+
+  afterAll(async () => {
+    if (!isLocalDb) return;
+    await db.delete(usersTable).where(eq(usersTable.id, USER));
+  });
+
+  it('299개에서 만들기 둘을 동시에 → 300개, 하나는 한도 거부', async () => {
+    // 같은 사용자 잠금을 먼저 쥐고, 두 만들기가 그 뒤에 줄 선 것을 확인한 뒤 놓는다 — 둘이 같은
+    // 「299개」를 보고 둘 다 넣는 경합을 잠금이 실제로 막는지 본다.
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => (release = resolve));
+    let holderReady!: (pid: number) => void;
+    const ready = new Promise<number>((resolve) => (holderReady = resolve));
+    const holder = db.transaction(async (tx) => {
+      await lockPersonalTags(tx, USER);
+      holderReady(await backendPid(tx));
+      await released;
+    });
+    const holderPid = await ready;
+
+    const attempts = [
+      createTag(USER, { name: '동시1', attachToSurveyId: null }),
+      createTag(USER, { name: '동시2', attachToSurveyId: null }),
+    ];
+    await waitForLockWaitersBehind(holderPid, 2, '두 만들기가 사용자 잠금 뒤에 줄 서지 않았습니다');
+    release();
+    await holder;
+
+    const settled = await Promise.allSettled(attempts);
+    expect(settled.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    const rejected = settled.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0]!.reason).toBeInstanceOf(PersonalTagLimitError);
+    expect(await tagRowsOf(USER)).toHaveLength(PERSONAL_TAG_LIMIT);
+  });
+
+  it('한도에서도 이미 있는 이름은 기존 태그를 돌려준다 — 새로 만드는 것이 아니다', async () => {
+    const result = await createTag(USER, { name: '키워드0', attachToSurveyId: null });
+    expect(result.created).toBe(false);
+    expect(await tagRowsOf(USER)).toHaveLength(PERSONAL_TAG_LIMIT);
   });
 });

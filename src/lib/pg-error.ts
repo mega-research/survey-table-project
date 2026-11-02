@@ -58,6 +58,14 @@ function pgErrorCode(e: unknown): string | null {
 }
 
 /**
+ * Postgres 외래 키 위반 (SQLSTATE 23503) — 확인한 뒤 쓰기 전에 참조 대상 행이 사라진 경우.
+ * drizzle 이 감싼 에러도 cause 사슬로 읽는다.
+ */
+export function isForeignKeyViolation(e: unknown): boolean {
+  return pgErrorCode(e) === '23503';
+}
+
+/**
  * 다시 실행하면 풀리는 트랜잭션 충돌 — 교착(40P01)과 직렬화 실패(40001).
  * Postgres 가 한쪽 트랜잭션을 통째로 되돌린 것이라 같은 작업을 처음부터 다시 돌려도 안전하다.
  */

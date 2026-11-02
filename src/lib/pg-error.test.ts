@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { isUniqueViolation, retryOnTxConflict } from './pg-error';
+import { isForeignKeyViolation, isUniqueViolation, retryOnTxConflict } from './pg-error';
 
 describe('isUniqueViolation', () => {
   it('드라이버 원본 에러의 SQLSTATE 를 읽는다', () => {
@@ -90,5 +90,16 @@ describe('retryOnTxConflict', () => {
       ),
     ).rejects.toThrow('Failed query');
     expect(calls).toBe(2);
+  });
+});
+
+describe('isForeignKeyViolation', () => {
+  it('drizzle 이 감싼 23503 을 cause 사슬로 읽고, 다른 SQLSTATE 는 아니다', () => {
+    const wrapped = Object.assign(new Error('Failed query: insert ...'), {
+      cause: Object.assign(new Error('violates foreign key constraint'), { code: '23503' }),
+    });
+    expect(isForeignKeyViolation(wrapped)).toBe(true);
+    expect(isForeignKeyViolation(Object.assign(new Error('dup'), { code: '23505' }))).toBe(false);
+    expect(isForeignKeyViolation(new Error('plain'))).toBe(false);
   });
 });
