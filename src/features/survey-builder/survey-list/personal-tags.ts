@@ -78,3 +78,50 @@ export function resolveTagPicker(
   if (isPersonalTagLimitReached(myTagCount)) return { matches, create: null, limitReached: true };
   return { matches, create: checked.name, limitReached: false };
 }
+
+/** 편집 패널 색 견본 — 연한 바탕 + 같은 계열 테두리(시안 F6 ③). */
+export const PERSONAL_TAG_SWATCH_CLASS: Record<PersonalTagColor, string> = {
+  blue: 'border-[#3B82F6] bg-[#DBEAFE]',
+  red: 'border-[#EF4444] bg-[#FEE2E2]',
+  green: 'border-[#22C55E] bg-[#DCFCE7]',
+  purple: 'border-[#8B5CF6] bg-[#EDE9FE]',
+  amber: 'border-[#F59E0B] bg-[#FEF3C7]',
+  teal: 'border-[#14B8A6] bg-[#CCFBF1]',
+  pink: 'border-[#EC4899] bg-[#FCE7F3]',
+  gray: 'border-[#9CA3AF] bg-[#F3F4F6]',
+};
+
+export type TagRenameDecision =
+  | { kind: 'unchanged' }
+  | { kind: 'invalid'; reason: 'empty' | 'too_long' | 'taken'; message: string }
+  | { kind: 'save'; name: string };
+
+const RENAME_MESSAGE = {
+  empty: '태그 이름을 입력하세요',
+  too_long: '태그 이름은 20자까지입니다',
+  taken: '이미 같은 이름의 태그가 있습니다',
+} as const;
+
+/**
+ * 편집 패널의 이름 칸 — 보낼지, 왜 못 보내는지 (티켓 08).
+ *
+ * 앞뒤 공백을 걷은 이름이 지금과 글자 그대로 같으면 보내지 않는다. 다른 내 태그와 같은
+ * 이름(공백·대소문자 무시)이면 겹침이다 — 자기 이름의 대소문자만 바꾸는 것은 겹침이 아니다.
+ * 서버도 같은 규칙으로 CONFLICT 를 낸다(다른 탭에서 만든 이름은 서버가 잡는다).
+ */
+export function resolveTagRename(
+  draft: string,
+  tag: Pick<PersonalTagItem, 'id' | 'name'>,
+  tags: readonly Pick<PersonalTagItem, 'id' | 'name'>[],
+): TagRenameDecision {
+  const checked = normalizePersonalTagName(draft);
+  if (!checked.ok) {
+    return { kind: 'invalid', reason: checked.reason, message: RENAME_MESSAGE[checked.reason] };
+  }
+  if (checked.name === tag.name) return { kind: 'unchanged' };
+  const key = personalTagNameKey(checked.name);
+  if (tags.some((t) => t.id !== tag.id && personalTagNameKey(t.name) === key)) {
+    return { kind: 'invalid', reason: 'taken', message: RENAME_MESSAGE.taken };
+  }
+  return { kind: 'save', name: checked.name };
+}
