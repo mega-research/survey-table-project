@@ -16,6 +16,8 @@ import {
   SurveyResponseArrayOutput,
   SurveyResponseOutput,
   SurveyRowOutput,
+  SurveySuggestInput,
+  SurveySuggestOutput,
   SurveySummaryListInput,
   SurveySummaryListOutput,
   SurveyVersionListOutput,
@@ -68,6 +70,24 @@ const listSummaries = authed
   .handler(({ context, input }) =>
     surveySvc
       .listSurveySummaries(context.user, input.scope ?? null)
+      // 일반 사용자의 system 요청 거부(WorkScopeError)를 FORBIDDEN 으로 — 목록과 같은 매핑.
+      .catch((error: unknown) => {
+        throw toRpcSurveyAccessError(toRpcWorkScopeError(error));
+      }),
+  );
+
+/**
+ * 자동완성 설문 후보 — 작업 범위 + 검색어 → 최대 5건(설문 즐겨찾기·태그 티켓 05).
+ *
+ * 목록 페이지와 같은 범위 필터·같은 검색 조각을 타므로 볼 수 없는 설문은 후보에 안 나온다.
+ * 응답 수는 세지 않는다. 서버 캐시 없음 — 같은 검색어는 화면의 TanStack Query 가 기억한다.
+ */
+const suggest = authed
+  .input(SurveySuggestInput)
+  .output(SurveySuggestOutput)
+  .handler(({ context, input }) =>
+    surveySvc
+      .suggestSurveys(context.user, input)
       // 일반 사용자의 system 요청 거부(WorkScopeError)를 FORBIDDEN 으로 — 목록과 같은 매핑.
       .catch((error: unknown) => {
         throw toRpcSurveyAccessError(toRpcWorkScopeError(error));
@@ -193,6 +213,7 @@ const variableCatalog = authed
 export const read = {
   listPage,
   listSummaries,
+  suggest,
   byId,
   withDetails,
   slugAvailable,

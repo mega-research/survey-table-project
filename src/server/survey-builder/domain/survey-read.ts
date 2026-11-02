@@ -14,6 +14,8 @@ import {
   SurveyListPageInputSchema,
   type SurveyListPageResult,
   type SurveyListResult,
+  SurveySuggestInputSchema,
+  type SurveySuggestion,
   type SurveySummaryItem,
 } from '@/shared/contracts/survey-builder-io';
 import type { VariableDef } from '@/shared/contracts/template-variables';
@@ -72,6 +74,16 @@ export const SurveySummaryListInput = z.object({ scope: z.string().nullish() });
 export type SurveySummaryListInput = z.infer<typeof SurveySummaryListInput>;
 
 export const SurveySummaryListOutput = z.custom<SurveySummaryItem[]>();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// suggest (suggestSurveys) — 자동완성 설문 후보, 응답 수 없음 (설문 즐겨찾기·태그 티켓 05)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 입력 스키마는 계약 소관 — 검색어 상한을 목록 조건과 공유한다. `.strict()`. */
+export const SurveySuggestInput = SurveySuggestInputSchema;
+export type SurveySuggestInput = z.infer<typeof SurveySuggestInput>;
+export type { SurveySuggestion };
+export const SurveySuggestOutput = z.custom<SurveySuggestion[]>();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // byId (getSurveyById) — surveys.$inferSelect | undefined

@@ -324,6 +324,38 @@ export interface SurveyListPageResult extends Pick<
   activeTeam: { id: string; name: string | null } | null;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 설문 자동완성 후보 (surveyBuilder.read.suggest) — 설문 즐겨찾기·태그 티켓 05
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 자동완성 「설문」 칸의 최대 후보 수. */
+export const SURVEY_SUGGEST_LIMIT = 5;
+
+/**
+ * suggest RPC 입력 — 작업 범위 + 검색어뿐. 검색어 상한은 목록 조건과 같은 칸을 그대로 쓴다
+ * (화면이 같은 기준으로 입력을 막는다). 그룹·팀 좁힘은 받지 않는다 — 후보는 범위 전체에서 찾는다.
+ */
+export const SurveySuggestInputSchema = z
+  .object({
+    scope: z.string().nullable(),
+    q: SurveyListPageQuerySchema.shape.q,
+  })
+  .strict();
+export type SurveySuggestInput = z.infer<typeof SurveySuggestInputSchema>;
+
+/**
+ * 자동완성 설문 후보 한 행 — 넷뿐이다(응답 수 집계 없음).
+ *
+ * `cardTitle` 은 **카드에 보이는 이름**이다(카드 제목이 없으면 설문지 제목, `surveyCardTitle` 과 같은
+ * 규칙) — `SurveyListItem.cardTitle` 처럼 null 이 오지 않는다.
+ */
+export interface SurveySuggestion {
+  id: string;
+  cardTitle: string;
+  ownerName: string | null;
+  lifecycle: SurveyListLifecycle;
+}
+
 /**
  * Diff 기반 설문 저장(saveSurveyDiff) 페이로드.
  *

@@ -24,7 +24,12 @@ import {
   hasOpenResponseForContact,
 } from '@/server/read-models/responses';
 import { isValidTestToken } from '@/server/read-models/survey-control';
-import { type SurveyListSource, querySurveyListPage } from '@/server/read-models/survey-list-page';
+import {
+  type SurveyListSource,
+  querySurveyListPage,
+  querySurveySuggestions,
+  surveyListSearchSql,
+} from '@/server/read-models/survey-list-page';
 import { getSurveyOwnerEmail } from '@/server/read-models/survey-owner-email';
 import { countDeletedSurveys, getDeletedSurveys } from '@/server/read-models/survey-structure';
 import {
@@ -66,6 +71,8 @@ import type {
   SurveyForResponseResult,
   SurveyIdRow,
   SurveyListResult,
+  SurveySuggestInput,
+  SurveySuggestion,
   SurveySummaryItem,
 } from '../domain/survey-read';
 
@@ -296,6 +303,25 @@ export async function listSurveySummaries(
   const subject = await loadAccountAccessSubject(user);
   const scope = resolveWorkScopeFor(subject, requestedScope ?? null);
   return getScopedSurveySummaries(buildSurveyScopeFilter(subject, scope));
+}
+
+/**
+ * 자동완성 설문 후보 (설문 즐겨찾기·태그 티켓 05) — 작업 범위 + 검색어 → 최대 5건.
+ *
+ * 범위 해석은 목록 페이지와 같다(일반 사용자의 system 요청은 WorkScopeError). 검색 의미도 같은
+ * 조각이다. 빈 검색어·아무것도 보지 않는 범위는 조회 없이 빈 후보다. 캐시는 두지 않는다 —
+ * 권한이 사람마다 달라 서버 캐시는 사람별로 갈리고, 같은 검색어는 화면의 TanStack Query 가 기억한다.
+ */
+export async function suggestSurveys(
+  user: SurveyAccessUser,
+  input: SurveySuggestInput,
+): Promise<SurveySuggestion[]> {
+  const subject = await loadAccountAccessSubject(user);
+  const scope = resolveWorkScopeFor(subject, input.scope);
+  const filter = buildSurveyScopeFilter(subject, scope);
+  const search = surveyListSearchSql(input.q);
+  if (!search || filter.kind === 'none') return [];
+  return querySurveySuggestions(filter, search);
 }
 
 /** 스위처가 고를 수 있는 팀 — 내 활성 소속. 슈퍼어드민은 전 팀을 고를 수 있다. */
