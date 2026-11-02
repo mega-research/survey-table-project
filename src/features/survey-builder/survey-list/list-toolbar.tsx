@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 
 import { SlidersHorizontal, Star, Trash2 } from 'lucide-react';
 
@@ -19,7 +19,8 @@ import type {
 } from '@/shared/contracts/survey-builder-io';
 
 import { LifecycleSegment } from './lifecycle-segment';
-import { SearchCombobox } from './search-combobox';
+import { type SearchChips, SearchCombobox } from './search-combobox';
+import { TagFilterMenu } from './tag-filter-menu';
 
 // 문의 칩(.pen FLOW 6 「칩 문의」)은 Plan 3 게이트로 미노출 — 어휘 자체를 뺐다(티켓 08).
 
@@ -74,13 +75,20 @@ interface ListToolbarProps {
    * **null 이면 단추를 그리지 않는다** — 휴지통에는 즐겨찾기 조건이 없다.
    */
   favorites: { on: boolean; count: number; onToggle: (next: boolean) => void } | null;
+  /** 검색창 안 칩(티켓 09) — 걸린 태그 필터 + 「모두 지우기」(칩·글자만). */
+  searchChips: SearchChips;
+  /**
+   * 「# 태그 ▾」 목록(티켓 09) — 체크가 곧 검색창 칩. **null 이면 단추를 그리지 않는다** — 휴지통에는
+   * 태그 조건이 없다.
+   */
+  tagFilter: ComponentProps<typeof TagFilterMenu> | null;
 }
 
 /**
  * 목록 툴바 (시안 F8-a).
  *
- * 첫 줄 — 검색창(넓게, 자동완성 F8-b) · 즐겨찾기 · 상세 검색. 둘째 줄 — 왼쪽 목록 상태 세그먼트(+ 휴지통),
- * 오른쪽 「N개 · 정렬 ▾」. 「# 태그」 단추는 후속 티켓이 즐겨찾기와 상세 검색 사이에 더한다.
+ * 첫 줄 — 검색창(넓게, 자동완성 F8-b · 검색 칩 F8-c) · 즐겨찾기 · 「# 태그 ▾」(F8-d) · 상세 검색. 둘째 줄 —
+ * 왼쪽 목록 상태 세그먼트(+ 휴지통), 오른쪽 「N개 · 정렬 ▾」.
  */
 export function ListToolbar({
   counts,
@@ -103,6 +111,8 @@ export function ListToolbar({
   showDeleted,
   onToggleDeleted,
   favorites,
+  searchChips,
+  tagFilter,
 }: ListToolbarProps) {
   return (
     <div className="flex flex-col gap-3">
@@ -117,6 +127,7 @@ export function ListToolbar({
           owners={owners}
           onPickOwner={onPickOwner}
           onPickSurvey={onPickSurvey}
+          chips={searchChips}
         />
 
         {favorites && (
@@ -142,6 +153,8 @@ export function ListToolbar({
             <span className="text-[#6E6E73] tabular-nums max-lg:sr-only">{favorites.count}</span>
           </button>
         )}
+
+        {tagFilter && <TagFilterMenu {...tagFilter} />}
 
         <button
           type="button"

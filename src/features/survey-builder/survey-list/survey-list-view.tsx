@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Folder, Loader2, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -22,6 +22,7 @@ import { surveyListPageQueryOptions, surveyListScopeParam } from '@/shared/lib/s
 import { useWorkScopeOptional } from '@/shared/lib/work-scope-context';
 
 import {
+  personalTagKeys,
   useCreatePersonalTag,
   useMyPersonalTags,
   useSetFavorite,
@@ -42,12 +43,16 @@ import {
 import { GroupManageModal } from './groups/group-manage-modal';
 import { GroupViewFooterNote, GroupViewHeader } from './groups/group-view-header';
 import { ListToolbar } from './list-toolbar';
+import { keepKnownTagIds } from './personal-tags';
 import { SurveyCard } from './survey-card';
 import {
+  addTagFilter,
   changeSurveyListQuery,
   clearNarrowingFilters,
+  clearSearchBox,
   hasNarrowingFilters,
   parseSurveyListQuery,
+  removeTagFilter,
   serializeSurveyListQuery,
 } from './survey-list-url';
 
@@ -78,30 +83,62 @@ export function SurveyListView() {
   // 조건의 정본은 주소다(티켓 03) — 새로고침·뒤로 가기·링크 공유에서 살아 있어야 하고, 서버
   // 페이지네이션에서는 조건이 곧 조회 키다. 그룹 화면(`?group=`)·팀 좁힘(`?team=`)도 같은 주소에 있다.
   const searchParams = useSearchParams();
-  const urlQuery = useMemo(() => parseSurveyListQuery(searchParams), [searchParams]);
+  const parsedQuery = useMemo(() => parseSurveyListQuery(searchParams), [searchParams]);
+
+  // 내 태그 — 작업 범위와 무관한 한 목록(팀을 바꿔도 같다). 카드·검색 칩·「# 태그」 목록이 id 로
+  // 이름·색을 여기서 찾는다.
+  const { data: myTagsData, isError: myTagsError } = useMyPersonalTags();
+  const myTags = myTagsData?.tags ?? EMPTY_TAGS;
+
+  // 검색 칩(티켓 09) — 주소에 있어도 내 태그 목록에 없는 태그(다른 탭에서 지움)는 풀린다. 서버는 없는
+  // 태그 id 를 거부하므로 그 칩으로 조회하지 않는다. 내 태그 목록이 오기 전에는 주소 그대로 둔다
+  // (서버 페이지가 미리 받은 목록의 키와 같아야 한다).
+  const urlQuery = useMemo<SurveyListPageQuery>(() => {
+    if (!myTagsData || parsedQuery.tagIds.length === 0) return parsedQuery;
+    const known = keepKnownTagIds(parsedQuery.tagIds, myTagsData.tags);
+    return known.length === parsedQuery.tagIds.length
+      ? parsedQuery
+      : changeSurveyListQuery(parsedQuery, { tagIds: known });
+  }, [parsedQuery, myTagsData]);
   const query = useMemo<SurveyListPageQuery>(
     () => (urlQuery.deleted && !canSeeDeleted ? { ...urlQuery, deleted: false } : urlQuery),
     [urlQuery, canSeeDeleted],
   );
   const showDeleted = query.deleted;
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   /**
-   * 조건을 바꿔 주소에 올린다. 페이지가 아닌 조건이 바뀌면 1페이지로 돌아간다.
-   * 치는 칸(검색·상세 검색)은 replace — 글자마다 뒤로 가기 기록이 쌓이지 않게. 고르는 칸(목록
-   * 상태·정렬·페이지·휴지통)은 push — 뒤로 가기가 직전 조건으로 돌아간다.
+   * 조건을 주소에 올린다. 치는 칸(검색·상세 검색)은 replace — 글자마다 뒤로 가기 기록이 쌓이지
+   * 않게. 고르는 칸(목록 상태·정렬·페이지·휴지통·검색 칩)은 push — 뒤로 가기가 직전 조건으로 돌아간다.
    */
-  function updateQuery(patch: Partial<SurveyListPageQuery>, mode: 'push' | 'replace' = 'push') {
-    const next = changeSurveyListQuery(urlQuery, patch);
+  function navigateTo(next: SurveyListPageQuery, mode: 'push' | 'replace' = 'push') {
     if (next === urlQuery) return;
     const search = serializeSurveyListQuery(next);
     router[mode](search ? `/surveys?${search}` : '/surveys', { scroll: false });
   }
 
+  /** 조건을 바꿔 주소에 올린다. 페이지가 아닌 조건이 바뀌면 1페이지로 돌아간다. */
+  function updateQuery(patch: Partial<SurveyListPageQuery>, mode: 'push' | 'replace' = 'push') {
+    navigateTo(changeSurveyListQuery(urlQuery, patch), mode);
+  }
+
+  // 지워진 태그 칩을 풀었으면 주소도 맞춘다 — 남겨 두면 새로고침·공유 링크가 같은 칩을 다시 건다.
+  const staleTagChips = urlQuery !== parsedQuery;
+  useEffect(() => {
+    if (!staleTagChips) return;
+    const search = serializeSurveyListQuery(urlQuery);
+    router.replace(search ? `/surveys?${search}` : '/surveys', { scroll: false });
+  }, [staleTagChips, urlQuery, router]);
+
+  // 내 태그 목록이 오기 전에는 검색 칩이 걸린 조회를 미룬다 — 지워진 태그 칩이면 서버가 거부해
+  // 오류 화면이 번쩍인다. 서버 페이지가 미리 받은 목록이 있으면 그것을 그대로 보인다.
+  const waitingForTags = parsedQuery.tagIds.length > 0 && !myTagsData && !myTagsError;
+
   const { data, isLoading, error, isPlaceholderData } = useQuery({
     ...surveyListPageQueryOptions(requestedScope, query),
     // 팀 미배치는 조회 자체를 하지 않는다 — 서버도 빈 목록을 주지만 왕복부터 없앤다.
-    enabled: !isUnassigned,
+    enabled: !isUnassigned && !waitingForTags,
     // 페이지·조건을 바꾸는 동안 이전 결과를 흐리게 남긴다 — 빈 화면으로 깜빡이지 않게.
     placeholderData: keepPreviousData,
   });
@@ -109,9 +146,6 @@ export function SurveyListView() {
   const { mutate: restoreSurvey, isPending: isRestoring } = useRestoreSurvey();
   const { mutate: duplicateSurvey, isPending: isDuplicating } = useDuplicateSurvey();
   const setFavorite = useSetFavorite();
-  // 내 태그 — 작업 범위와 무관한 한 목록(팀을 바꿔도 같다). 카드는 id 만 받고 이름·색을 여기서 찾는다.
-  const { data: myTagsData } = useMyPersonalTags();
-  const myTags = myTagsData?.tags ?? EMPTY_TAGS;
   const setTagLink = useSetTagLink();
   const createTag = useCreatePersonalTag();
 
@@ -147,6 +181,14 @@ export function SurveyListView() {
     router.replace('/surveys', { scroll: false });
   }, [scopeKey, router]);
 
+  // 검색 칩이 걸린 조회가 실패하면 내 태그 목록을 다시 읽는다 — 다른 탭에서 지운 태그가 아직 이
+  // 탭의 목록에 남아 있으면(목록은 1분 동안 다시 읽지 않는다) 서버가 거부한다. 다시 읽은 목록에서
+  // 그 태그가 빠지면 칩이 풀리고 조회 키가 바뀌어 목록이 돌아온다.
+  const tagQueryFailed = error !== null && query.tagIds.length > 0;
+  useEffect(() => {
+    if (tagQueryFailed) void queryClient.invalidateQueries({ queryKey: personalTagKeys.mine() });
+  }, [tagQueryFailed, queryClient]);
+
   const items = useMemo(() => data?.items ?? [], [data]);
   const groupList = useMemo(() => groups ?? [], [groups]);
   // **관리 표면은 내 팀 그룹만 받는다.** 목록에는 협업 그룹(타 팀 폴더)이 함께 오는데, 그것은
@@ -178,11 +220,23 @@ export function SurveyListView() {
   const owners = data?.owners ?? [];
   const total = data?.total ?? 0;
 
-  /** 결과 0개 화면이 푸는 조건 — 검색·목록 상태·즐겨찾기·상세 검색. 그룹·팀 좁힘은 주소가 가리키는 화면이다. */
+  // 검색 칩 — 주소의 순서대로, 이름·색은 내 태그 목록에서(지워진 태그는 위에서 이미 풀렸다).
+  const myTagsById = new Map(myTags.map((t) => [t.id, t]));
+  const chipTags = query.tagIds.flatMap((id) => {
+    const found = myTagsById.get(id);
+    return found ? [found] : [];
+  });
+
+  /** 결과 0개 화면이 푸는 조건 — 검색·검색 칩·목록 상태·즐겨찾기·상세 검색. 그룹·팀 좁힘은 주소가 가리키는 화면이다. */
   const activeConditions = [
     ...(query.q.trim() !== ''
       ? [{ key: 'q', label: `검색어 「${query.q.trim()}」`, onClear: () => updateQuery({ q: '' }) }]
       : []),
+    ...chipTags.map((tag) => ({
+      key: `tag-${tag.id}`,
+      label: `태그 「${tag.name}」`,
+      onClear: () => navigateTo(removeTagFilter(urlQuery, tag.id)),
+    })),
     ...(query.lifecycle !== 'all'
       ? [
           {
@@ -266,6 +320,7 @@ export function SurveyListView() {
   // 카드가 번쩍인다. 없는 그룹이라 주소를 정리하는 중에도 빈 결과를 그리지 않는다.
   const showLoading =
     isLoading ||
+    (waitingForTags && !data) ||
     (requestedGroupId !== null && teamScopeId !== null && groupsPending) ||
     groupMissing;
   const currentUserId = workScope?.currentUserId ?? null;
@@ -382,10 +437,10 @@ export function SurveyListView() {
             onToggleAdvanced={() => setAdvancedOpen(!advancedOpen)}
             deletedCount={data?.deletedCount ?? null}
             showDeleted={showDeleted}
-            // 모드를 바꾸면 목록이 통째로 갈리므로 목록 상태·검색어·즐겨찾기도 함께 되돌린다 — 남겨두면
-            // 휴지통이 「진행중 + 검색어」로 좁혀진 채 열려 비어 보인다.
+            // 모드를 바꾸면 목록이 통째로 갈리므로 목록 상태·검색어·즐겨찾기·검색 칩도 함께 되돌린다 —
+            // 남겨두면 휴지통이 「진행중 + 검색어」로 좁혀진 채 열려 비어 보인다.
             onToggleDeleted={(deleted) =>
-              updateQuery({ deleted, lifecycle: 'all', q: '', favorites: false })
+              updateQuery({ deleted, lifecycle: 'all', q: '', favorites: false, tagIds: [] })
             }
             // 휴지통에는 즐겨찾기 조건이 없다 — 단추 자체를 그리지 않는다(서버도 그 조합을 거부한다).
             favorites={
@@ -395,6 +450,26 @@ export function SurveyListView() {
                     on: query.favorites,
                     count: favoriteCount,
                     onToggle: (favorites) => updateQuery({ favorites }),
+                  }
+            }
+            searchChips={{
+              tags: chipTags,
+              onRemove: (tagId) => navigateTo(removeTagFilter(urlQuery, tagId)),
+              // 칩과 글자만 — 즐겨찾기·목록 상태·상세 검색은 각자 자리에서 푼다.
+              onClearAll: () => navigateTo(clearSearchBox(urlQuery)),
+            }}
+            // 휴지통에는 태그 조건이 없다 — 단추 자체를 그리지 않는다(서버도 그 조합을 거부한다).
+            tagFilter={
+              showDeleted
+                ? null
+                : {
+                    tags: myTags,
+                    selectedIds: query.tagIds,
+                    onToggle: (tagId, on) =>
+                      navigateTo(
+                        on ? addTagFilter(urlQuery, tagId) : removeTagFilter(urlQuery, tagId),
+                      ),
+                    onClearSelection: () => updateQuery({ tagIds: [] }),
                   }
             }
             advancedPanel={
@@ -469,6 +544,8 @@ export function SurveyListView() {
                         tags: myTags,
                         onToggle: (tagId, on) => setTagLink(survey.id, tagId, on),
                         onCreate: (name) => createTag(survey.id, name),
+                        activeTagIds: query.tagIds,
+                        onFilterByTag: (tagId) => navigateTo(addTagFilter(urlQuery, tagId)),
                       }}
                       viewer={{ scope, currentUserId, isSuperadmin, leaderTeamIds }}
                       onDelete={handleDelete}
@@ -519,7 +596,7 @@ export function SurveyListView() {
 
 const EMPTY_TAGS: readonly PersonalTagItem[] = [];
 
-/** 검색창 안내 — 단어마다 이 칸들 중 하나에 들면 맞는다(내 태그 이름 매칭은 티켓 09). */
+/** 검색창 안내 — 단어마다 이 칸들 중 하나에 들면 맞는다(내 태그는 요청자 본인의 태그 이름). */
 const SEARCH_PLACEHOLDER = '설문 이름, 설명, 소유자, 내 태그 — 여러 단어는 띄어서';
 
 const LIFECYCLE_LABELS = { draft: '작성중', running: '진행중', closed: '종료' } as const;

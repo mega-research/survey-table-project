@@ -225,3 +225,78 @@ describe('SearchCombobox — 설문·소유자 자동완성 (시안 F8-b)', () =
     expect(useSuggestions).toHaveBeenLastCalledWith(expect.objectContaining({ enabled: false }));
   });
 });
+
+/**
+ * 검색창 안 칩 (설문 즐겨찾기·태그 티켓 09, 시안 F8-c) — 걸린 태그 필터의 유일한 표현. 칩마다 ×,
+ * 오른쪽 끝 「모두 지우기」는 칩과 글자만 지운다. 넘치면 「+N」으로 접는다.
+ */
+describe('SearchCombobox — 검색 칩', () => {
+  const TAGS = [
+    { id: 't1', name: 'A사', color: 'blue' as const, linkCount: 6 },
+    { id: 't2', name: '2026', color: 'gray' as const, linkCount: 23 },
+    { id: 't3', name: '실태조사', color: 'green' as const, linkCount: 17 },
+    { id: 't4', name: '만족도', color: 'amber' as const, linkCount: 9 },
+    { id: 't5', name: '해운물류', color: 'teal' as const, linkCount: 3 },
+  ];
+
+  beforeEach(() => {
+    useSuggestions.mockReset();
+    useSuggestions.mockReturnValue({ suggestions: null, isPending: false });
+  });
+
+  function setupChips(tags = TAGS.slice(0, 2), value = '') {
+    const onRemove = vi.fn();
+    const onClearAll = vi.fn();
+    const onCommit = vi.fn();
+    render(
+      <SearchCombobox
+        value={value}
+        onCommit={onCommit}
+        placeholder="설문 검색"
+        suggestScope="team-1"
+        suggestEnabled
+        owners={[]}
+        onPickOwner={vi.fn()}
+        onPickSurvey={vi.fn()}
+        chips={{ tags, onRemove, onClearAll }}
+      />,
+    );
+    return {
+      input: screen.getByRole('combobox', { name: '설문 검색' }),
+      onRemove,
+      onClearAll,
+      onCommit,
+      user: userEvent.setup(),
+    };
+  }
+
+  it('칩마다 이름과 「… 필터 빼기」 단추가 있고, 누르면 그 태그만 뺀다', async () => {
+    const { onRemove, user } = setupChips();
+    expect(screen.getByText('A사')).toBeInTheDocument();
+    expect(screen.getByText('2026')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'A사 필터 빼기' }));
+    expect(onRemove).toHaveBeenCalledExactlyOnceWith('t1');
+  });
+
+  it('「모두 지우기」는 칩과 친 글자를 함께 지운다', async () => {
+    const { input, onClearAll, onCommit, user } = setupChips(TAGS.slice(0, 1), '실태');
+    expect(input).toHaveValue('실태');
+    await user.click(screen.getByRole('button', { name: '모두 지우기' }));
+    expect(onClearAll).toHaveBeenCalledOnce();
+    expect(onCommit).not.toHaveBeenCalled();
+    expect(input).toHaveValue('');
+  });
+
+  it('칩도 글자도 없으면 「모두 지우기」가 없다', () => {
+    setupChips([]);
+    expect(screen.queryByRole('button', { name: '모두 지우기' })).toBeNull();
+  });
+
+  it('칩이 넘치면 「+N」으로 접고, 누르면 모두 펼친다', async () => {
+    const { user } = setupChips(TAGS);
+    // 넓은 화면 기준 앞 3개만 — 나머지 2개는 접힌다.
+    expect(screen.queryByRole('button', { name: '해운물류 필터 빼기' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: '검색 칩 2개 더 보기' }));
+    expect(screen.getByRole('button', { name: '해운물류 필터 빼기' })).toBeInTheDocument();
+  });
+});

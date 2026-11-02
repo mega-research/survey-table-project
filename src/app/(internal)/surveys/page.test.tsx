@@ -112,6 +112,18 @@ describe('설문 목록 페이지 — 첫 목록 미리 받기', () => {
     expect(cache.queries[0]?.queryKey).toEqual(surveyKeys.page('team-1', query));
   });
 
+  it('여러 번 온 검색 칩(tag)은 모두 순서대로 조건에 담는다', async () => {
+    cookieValue.mockReturnValue('team-1');
+    listSurveyPage.mockResolvedValue(listResult({ kind: 'team', teamId: 'team-1' }));
+    const tagA = '44444444-5555-4666-8777-888888888888';
+    const tagB = '55555555-6666-4777-8888-999999999999';
+    const cache = await renderedCache({ tag: [tagA, tagB] });
+
+    const query = { ...Q, tagIds: [tagA, tagB] };
+    expect(listSurveyPage).toHaveBeenCalledWith(expect.anything(), { ...query, scope: 'team-1' });
+    expect(cache.queries[0]?.queryKey).toEqual(surveyKeys.page('team-1', query));
+  });
+
   it('미리 받기가 실패해도 페이지를 막지 않는다 — 캐시가 비어 화면이 종전대로 조회한다', async () => {
     listSurveyPage.mockRejectedValue(new Error('db down'));
 

@@ -2,7 +2,7 @@
 
 import { type KeyboardEvent, useId, useState } from 'react';
 
-import { FileText, Search, UserRound } from 'lucide-react';
+import { FileText, Search, UserRound, X } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import {
@@ -14,9 +14,11 @@ import {
   isSurveyListSearchWithinLimits,
   splitSurveyListSearchWords,
 } from '@/shared/contracts/survey-builder-io';
+import type { PersonalTagItem } from '@/shared/contracts/workspace-io';
 
 import { useSurveySuggestions } from '../queries/use-survey-suggestions';
 import { dropWordsMatching, matchOwnerSuggestions } from './search-suggest';
+import { ACTIVE_TAG_LABEL_CLASS, PersonalTagLabel } from './tag-picker';
 
 const LIFECYCLE_LABELS: Record<SurveyListLifecycle, string> = {
   draft: '작성중',
@@ -42,6 +44,22 @@ interface SuggestSection {
   placeholder?: string;
 }
 
+/**
+ * 검색창 안 칩(티켓 09) — 걸린 태그 필터. 칩 순서는 주소의 `tag` 순서, 이름·색은 내 태그 목록에서
+ * 찾은 것(지워진 태그는 화면이 미리 뺀다).
+ */
+export interface SearchChips {
+  tags: readonly PersonalTagItem[];
+  /** 칩 하나 빼기(×). */
+  onRemove: (tagId: string) => void;
+  /** 「모두 지우기」 — 칩과 글자만 지운다(즐겨찾기·목록 상태·상세 검색은 그대로). */
+  onClearAll: () => void;
+}
+
+/** 넓은 화면(lg 이상)에서 펼쳐 두는 칩 수 — 넘치면 「+N」. 좁은 폭에서는 1개만 둔다. */
+const CHIPS_VISIBLE_WIDE = 3;
+const CHIPS_VISIBLE_NARROW = 1;
+
 interface SearchComboboxProps {
   /** 주소에 걸린(목록에 적용된) 검색어. */
   value: string;
@@ -58,6 +76,8 @@ interface SearchComboboxProps {
   onPickOwner: (ownerId: string, remainingQuery: string) => void;
   /** 설문 후보를 골랐다 — 그 설문 편집으로 간다. */
   onPickSurvey: (surveyId: string) => void;
+  /** 검색창 안 칩 — 없으면 칩도 「모두 지우기」도 없다. */
+  chips?: SearchChips;
 }
 
 /**
@@ -83,8 +103,10 @@ export function SearchCombobox({
   owners,
   onPickOwner,
   onPickSurvey,
+  chips,
 }: SearchComboboxProps) {
   const [draft, setDraft] = useState(value);
+  const [chipsExpanded, setChipsExpanded] = useState(false);
   const [limitHit, setLimitHit] = useState(false);
   const [focused, setFocused] = useState(false);
   const [dismissed, setDismissed] = useState(false);
@@ -188,44 +210,120 @@ export function SearchCombobox({
     }
   }
 
+  const chipTags = chips?.tags ?? [];
+  const showClearAll = chips !== undefined && (chipTags.length > 0 || draft !== '');
+
+  function clearAll() {
+    setDraft('');
+    setSent('');
+    setLimitHit(false);
+    close();
+    chips?.onClearAll();
+  }
+
   return (
     <div className="relative min-w-0 flex-1">
-      <Search className="absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
-      <input
-        type="text"
-        role="combobox"
-        aria-label="설문 검색"
-        aria-expanded={open}
-        aria-controls={listboxId}
-        aria-autocomplete="list"
-        aria-activedescendant={activeIndex >= 0 ? optionId(flat[activeIndex]!.key) : undefined}
-        value={draft}
-        onChange={(e) => {
-          const next = e.target.value;
-          const fits = isSurveyListSearchWithinLimits(next);
-          setLimitHit(!fits);
-          if (!fits) return;
-          setDraft(next);
-          setDismissed(false);
-          setActiveKey(null);
-          // 다 지우면 Enter 를 기다리지 않고 전체 목록으로 — 빈 검색어는 고를 후보도 없다.
-          if (splitSurveyListSearchWords(next).length === 0 && sent !== '') commit('');
-        }}
-        onKeyDown={handleKeyDown}
-        onFocus={() => setFocused(true)}
-        onBlur={() => {
-          setFocused(false);
-          setActiveKey(null);
-          setLimitHit(false);
-        }}
-        placeholder={placeholder}
-        maxLength={SURVEY_LIST_SEARCH_MAX_LENGTH}
-        autoComplete="off"
+      {/* 테두리는 칩·입력칸·「모두 지우기」를 감싼 상자에 있다 — 칩이 검색창 안에 들어 있게 보인다. */}
+      <div
         className={cn(
-          'h-10 w-full rounded-[10px] border border-[#E5E5EA] bg-white pr-3 pl-10 text-[13.5px] text-[#1C1C1E] placeholder:text-[#9CA3AF] focus:border-[#2E4FCE] focus:outline-none',
+          'flex min-h-10 w-full items-center gap-1.5 rounded-[10px] border border-[#E5E5EA] bg-white py-1 pr-2 pl-10 focus-within:border-[#2E4FCE]',
+          chipsExpanded && 'flex-wrap',
           open && 'border-[#2E4FCE]',
         )}
-      />
+      >
+        <Search className="absolute top-5 left-3.5 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
+        {chipTags.map((tag, index) => {
+          if (!chipsExpanded && index >= CHIPS_VISIBLE_WIDE) return null;
+          return (
+            <PersonalTagLabel
+              key={tag.id}
+              tag={tag}
+              className={cn(
+                'max-w-[160px] shrink-0',
+                ACTIVE_TAG_LABEL_CLASS,
+                !chipsExpanded && index >= CHIPS_VISIBLE_NARROW && 'max-lg:hidden',
+              )}
+            >
+              <button
+                type="button"
+                aria-label={`${tag.name} 필터 빼기`}
+                onClick={() => chips?.onRemove(tag.id)}
+                className="-mr-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded text-[#2743AE]/70 hover:bg-[#D6E0FF] hover:text-[#1C1C1E]"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </PersonalTagLabel>
+          );
+        })}
+        {!chipsExpanded && (
+          <>
+            {chipTags.length > CHIPS_VISIBLE_WIDE && (
+              <ChipOverflowButton
+                count={chipTags.length - CHIPS_VISIBLE_WIDE}
+                className="max-lg:hidden"
+                onClick={() => setChipsExpanded(true)}
+              />
+            )}
+            {chipTags.length > CHIPS_VISIBLE_NARROW && (
+              <ChipOverflowButton
+                count={chipTags.length - CHIPS_VISIBLE_NARROW}
+                className="lg:hidden"
+                onClick={() => setChipsExpanded(true)}
+              />
+            )}
+          </>
+        )}
+        {chipsExpanded && chipTags.length > CHIPS_VISIBLE_NARROW && (
+          <button
+            type="button"
+            onClick={() => setChipsExpanded(false)}
+            className="shrink-0 rounded-md px-1.5 text-[12.5px] leading-6 text-[#6E6E73] hover:bg-[#F5F5F7]"
+          >
+            접기
+          </button>
+        )}
+        <input
+          type="text"
+          role="combobox"
+          aria-label="설문 검색"
+          aria-expanded={open}
+          aria-controls={listboxId}
+          aria-autocomplete="list"
+          aria-activedescendant={activeIndex >= 0 ? optionId(flat[activeIndex]!.key) : undefined}
+          value={draft}
+          onChange={(e) => {
+            const next = e.target.value;
+            const fits = isSurveyListSearchWithinLimits(next);
+            setLimitHit(!fits);
+            if (!fits) return;
+            setDraft(next);
+            setDismissed(false);
+            setActiveKey(null);
+            // 다 지우면 Enter 를 기다리지 않고 전체 목록으로 — 빈 검색어는 고를 후보도 없다.
+            if (splitSurveyListSearchWords(next).length === 0 && sent !== '') commit('');
+          }}
+          onKeyDown={handleKeyDown}
+          onFocus={() => setFocused(true)}
+          onBlur={() => {
+            setFocused(false);
+            setActiveKey(null);
+            setLimitHit(false);
+          }}
+          placeholder={chipTags.length > 0 ? undefined : placeholder}
+          maxLength={SURVEY_LIST_SEARCH_MAX_LENGTH}
+          autoComplete="off"
+          className="h-8 min-w-[80px] flex-1 bg-transparent text-[13.5px] text-[#1C1C1E] placeholder:text-[#9CA3AF] focus:outline-none"
+        />
+        {showClearAll && (
+          <button
+            type="button"
+            onClick={clearAll}
+            className="shrink-0 rounded-md px-1.5 text-[12.5px] leading-6 text-[#6E6E73] hover:bg-[#F5F5F7] hover:text-[#1C1C1E]"
+          >
+            모두 지우기
+          </button>
+        )}
+      </div>
 
       {(limitHit || open) && (
         <div className="absolute top-full left-0 z-20 mt-1.5 flex w-full max-w-[620px] flex-col gap-1">
@@ -281,6 +379,31 @@ export function SearchCombobox({
         </div>
       )}
     </div>
+  );
+}
+
+/** 접힌 칩 수 — 누르면 칩을 모두 펼친다. */
+function ChipOverflowButton({
+  count,
+  className,
+  onClick,
+}: {
+  count: number;
+  className: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={`검색 칩 ${count}개 더 보기`}
+      onClick={onClick}
+      className={cn(
+        'shrink-0 rounded-md bg-[#EAF0FF] px-1.5 text-[12.5px] leading-6 text-[#2743AE] hover:bg-[#D6E0FF]',
+        className,
+      )}
+    >
+      +{count}
+    </button>
   );
 }
 

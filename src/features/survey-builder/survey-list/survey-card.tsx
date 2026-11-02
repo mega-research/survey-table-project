@@ -19,8 +19,8 @@ import {
   Lock,
   MessageCircle,
   Pencil,
-  Share2,
   Plus,
+  Share2,
   Star,
   Tag,
   TextCursorInput,
@@ -54,7 +54,7 @@ import {
   canManageSurveyAccessCard,
   canManageSurveyGroupCard,
 } from './survey-list-capability';
-import { PersonalTagLabel, TagPickerPanel } from './tag-picker';
+import { ACTIVE_TAG_LABEL_CLASS, PersonalTagLabel, TagPickerPanel } from './tag-picker';
 
 /**
  * 카드의 내 태그 — 나에게만 보이는 개인 표시(티켓 07). 낙관적 갱신·연타 처리는 목록 화면의
@@ -67,6 +67,10 @@ export interface CardTagging {
   tags: readonly PersonalTagItem[];
   onToggle: (tagId: string, on: boolean) => void;
   onCreate: (name: string) => Promise<PersonalTagItem | null>;
+  /** 걸린 검색 칩(티켓 09) — 같은 태그는 연한 파랑으로 맨 앞에 선다. */
+  activeTagIds: readonly string[];
+  /** 걸리지 않은 카드 태그를 눌렀다 — 그 태그를 검색 칩으로 더한다. */
+  onFilterByTag: (tagId: string) => void;
 }
 
 interface SurveyCardProps {
@@ -153,7 +157,8 @@ export function SurveyCard({
   // 케밥 「태그」로 열 때 — 메뉴가 닫히며 포커스를 케밥으로 돌려놓으면 막 열린 태그 창이 바깥
   // 포커스로 보고 닫힌다. 메뉴가 닫힌 뒤에 연다.
   const openTagsAfterMenu = useRef(false);
-  const cardTags = resolveCardTags(tagging.myTagIds, tagging.tags);
+  const cardTags = resolveCardTags(tagging.myTagIds, tagging.tags, tagging.activeTagIds);
+  const activeTagIds = new Set(tagging.activeTagIds);
   const displayTitle = surveyCardTitle(survey);
   const isPending = survey.assignmentStatus === 'assignment_pending';
   const surveyUrl = getSurveyAccessUrl(
@@ -306,29 +311,65 @@ export function SurveyCard({
                 </button>
               )}
             </div>
-            {/* 카드 태그 줄 — 최대 2개 + 「+N」, 회색 바탕 + 색 점. 줄 전체가 태그 창을 연다.
-                걸린 검색 칩과 같은 태그를 맨 앞·연한 파랑으로 세우는 것(티켓 09)은 resolveCardTags 와
-                PersonalTagLabel 의 className 으로 한다. */}
+            {/* 카드 태그 줄 — 최대 2개 + 「+N」, 회색 바탕 + 색 점. 걸린 검색 칩과 같은 태그는 연한 파랑으로
+                맨 앞에 서고(티켓 09), 다른 태그를 누르면 그 태그가 검색 칩으로 더해진다. 「+N」과 줄의 빈 자리는
+                태그 창을 연다 — 키보드로는 「태그 편집」 단추(「+N」 자리, 없으면 마우스를 올리면 보이는 연필). */}
             {cardTags.shown.length > 0 && (
-              <button
-                type="button"
-                aria-label="태그 편집"
-                aria-expanded={tagsOpen}
-                onClick={() => setTagsOpen(true)}
+              <div
+                role="group"
+                aria-label="내 태그"
+                onClick={(event) => {
+                  if (event.target === event.currentTarget) setTagsOpen(true);
+                }}
                 className={cn(
-                  '-mx-1 flex min-w-0 items-center gap-1.5 rounded-md px-1 py-0.5 text-left hover:bg-[#F5F5F7] focus-visible:ring-2 focus-visible:ring-[#2E4FCE]/40 focus-visible:outline-none',
+                  '-mx-1 flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 hover:bg-[#F5F5F7]',
                   tagsOpen && 'ring-2 ring-[#2E4FCE]/40',
                 )}
               >
-                {cardTags.shown.map((t) => (
-                  <PersonalTagLabel key={t.id} tag={t} className="min-w-0" />
-                ))}
-                {cardTags.hiddenCount > 0 && (
-                  <span className="shrink-0 rounded-md bg-[#F2F2F7] px-1.5 py-0.5 text-[12.5px] leading-5 text-[#6E6E73]">
-                    +{cardTags.hiddenCount}
-                  </span>
+                {cardTags.shown.map((t) =>
+                  activeTagIds.has(t.id) ? (
+                    <PersonalTagLabel
+                      key={t.id}
+                      tag={t}
+                      className={cn('min-w-0 cursor-default', ACTIVE_TAG_LABEL_CLASS)}
+                    />
+                  ) : (
+                    <button
+                      key={t.id}
+                      type="button"
+                      aria-label={`${t.name} 태그로 거르기`}
+                      title={`「${t.name}」 태그로 거르기`}
+                      onClick={() => tagging.onFilterByTag(t.id)}
+                      className="flex min-w-0 rounded-md focus-visible:ring-2 focus-visible:ring-[#2E4FCE]/40 focus-visible:outline-none"
+                    >
+                      <PersonalTagLabel
+                        tag={t}
+                        className="min-w-0 hover:bg-[#E5E5EA] hover:text-[#1C1C1E]"
+                      />
+                    </button>
+                  ),
                 )}
-              </button>
+                <button
+                  type="button"
+                  aria-label="태그 편집"
+                  aria-expanded={tagsOpen}
+                  onClick={() => setTagsOpen(true)}
+                  className={cn(
+                    'flex h-6 shrink-0 items-center rounded-md px-1.5 text-[12.5px] leading-5 text-[#6E6E73] hover:bg-[#E5E5EA] hover:text-[#1C1C1E] focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-[#2E4FCE]/40 focus-visible:outline-none',
+                    cardTags.hiddenCount > 0
+                      ? 'bg-[#F2F2F7]'
+                      : tagsOpen
+                        ? 'opacity-100'
+                        : 'opacity-0 group-hover/card:opacity-100',
+                  )}
+                >
+                  {cardTags.hiddenCount > 0 ? (
+                    `+${cardTags.hiddenCount}`
+                  ) : (
+                    <Pencil aria-hidden className="h-3 w-3" />
+                  )}
+                </button>
+              </div>
             )}
           </div>
         </PopoverAnchor>

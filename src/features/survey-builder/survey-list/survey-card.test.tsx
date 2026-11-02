@@ -46,7 +46,14 @@ function renderCard(
     isFavorite: false,
     onFavoriteChange: vi.fn(),
   },
-  tagging: CardTagging = { myTagIds: [], tags: [], onToggle: vi.fn(), onCreate: vi.fn() },
+  tagging: CardTagging = {
+    myTagIds: [],
+    tags: [],
+    onToggle: vi.fn(),
+    onCreate: vi.fn(),
+    activeTagIds: [],
+    onFilterByTag: vi.fn(),
+  },
 ) {
   return render(
     <SurveyCard
@@ -165,20 +172,39 @@ describe('SurveyCard — 내 태그 줄', () => {
     { id: 'b', name: '2026', color: 'red', linkCount: 1 },
     { id: 'c', name: '실태조사', color: 'green', linkCount: 1 },
   ];
-  const tagging = (myTagIds: string[]): CardTagging => ({
+  const tagging = (myTagIds: string[], activeTagIds: string[] = []): CardTagging => ({
     myTagIds,
     tags,
     onToggle: vi.fn(),
     onCreate: vi.fn(),
+    activeTagIds,
+    onFilterByTag: vi.fn(),
   });
 
-  it('붙인 순서대로 2개와 「+N」을 보인다', () => {
+  it('붙인 순서대로 2개와 「+N」을 보인다 — 「+N」은 태그 창을 여는 단추다', () => {
     renderCard(item(), undefined, tagging(['c', 'a', 'b']));
-    const row = screen.getByRole('button', { name: '태그 편집' });
+    const row = screen.getByRole('group', { name: '내 태그' });
     expect(row).toHaveTextContent('실태조사');
     expect(row).toHaveTextContent('A사');
-    expect(row).toHaveTextContent('+1');
     expect(row).not.toHaveTextContent('2026');
+    expect(screen.getByRole('button', { name: '태그 편집' })).toHaveTextContent('+1');
+  });
+
+  /** 검색 칩과 맞물리기 (티켓 09, 시안 F8-c) — 왜 이 카드가 보이는지 바로 보이게. */
+  it('걸린 검색 칩과 같은 태그는 맨 앞에 서고 누를 단추가 아니다', () => {
+    renderCard(item(), undefined, tagging(['c', 'a', 'b'], ['b']));
+    const row = screen.getByRole('group', { name: '내 태그' });
+    expect(row.textContent).toMatch(/^2026실태조사/);
+    expect(screen.queryByRole('button', { name: '2026 태그로 거르기' })).toBeNull();
+    expect(screen.getByRole('button', { name: '실태조사 태그로 거르기' })).toBeInTheDocument();
+  });
+
+  it('다른 태그를 누르면 그 태그를 검색 칩으로 더한다 — 태그 창은 열리지 않는다', async () => {
+    const props = tagging(['c', 'a'], []);
+    renderCard(item(), undefined, props);
+    await userEvent.setup().click(screen.getByRole('button', { name: 'A사 태그로 거르기' }));
+    expect(props.onFilterByTag).toHaveBeenCalledExactlyOnceWith('a');
+    expect(screen.queryByRole('listbox', { name: '내 태그' })).toBeNull();
   });
 
   it('태그가 없으면 줄이 없고 「+ 태그」 단추만 있다', () => {

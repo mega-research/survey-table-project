@@ -20,14 +20,25 @@ const SUGGEST_PROPS = {
   onPickSurvey: vi.fn(),
 };
 
+const SEARCH_CHIPS = { tags: [], onRemove: vi.fn(), onClearAll: vi.fn() };
+
+const TAG_FILTER = {
+  tags: [{ id: 't1', name: 'A사', color: 'blue' as const, linkCount: 6 }],
+  selectedIds: [],
+  onToggle: vi.fn(),
+  onClearSelection: vi.fn(),
+};
+
 function Harness({
   onLifecycleChange,
   initial = 'all',
   favorites = null,
+  tagFilter = null,
 }: {
   onLifecycleChange: (next: SurveyListLifecycleFilter) => void;
   initial?: SurveyListLifecycleFilter;
   favorites?: { on: boolean; count: number; onToggle: (next: boolean) => void } | null;
+  tagFilter?: typeof TAG_FILTER | null;
 }) {
   const [lifecycle, setLifecycle] = useState<SurveyListLifecycleFilter>(initial);
   return (
@@ -51,6 +62,8 @@ function Harness({
       showDeleted={false}
       onToggleDeleted={vi.fn()}
       favorites={favorites}
+      searchChips={SEARCH_CHIPS}
+      tagFilter={tagFilter}
     />
   );
 }
@@ -158,6 +171,32 @@ describe('ListToolbar — 즐겨찾기 단추', () => {
   });
 });
 
+/**
+ * 「# 태그 ▾」 (티켓 09, 시안 F8-d) — 즐겨찾기와 상세 검색 사이. 휴지통에서는 단추가 없다(목록 화면이
+ * `tagFilter={null}` 로 내린다).
+ */
+describe('ListToolbar — 태그 단추', () => {
+  it('즐겨찾기와 상세 검색 사이에 선다', () => {
+    render(
+      <Harness
+        onLifecycleChange={vi.fn()}
+        favorites={{ on: false, count: 0, onToggle: vi.fn() }}
+        tagFilter={TAG_FILTER}
+      />,
+    );
+    const names = screen
+      .getAllByRole('button')
+      .map((b) => b.textContent?.trim())
+      .filter((t) => t === '즐겨찾기 0' || t === '태그' || t === '상세 검색');
+    expect(names).toEqual(['즐겨찾기 0', '태그', '상세 검색']);
+  });
+
+  it('null 이면 단추가 없다 — 휴지통', () => {
+    render(<Harness onLifecycleChange={vi.fn()} tagFilter={null} />);
+    expect(screen.queryByRole('button', { name: /^태그/ })).toBeNull();
+  });
+});
+
 describe('ListToolbar — 검색창 상한', () => {
   function renderSearch() {
     const onSearch = vi.fn();
@@ -179,6 +218,8 @@ describe('ListToolbar — 검색창 상한', () => {
         showDeleted={false}
         onToggleDeleted={vi.fn()}
         favorites={null}
+        searchChips={SEARCH_CHIPS}
+        tagFilter={null}
       />,
     );
     return { input: screen.getByRole('combobox', { name: '설문 검색' }), onSearch };
