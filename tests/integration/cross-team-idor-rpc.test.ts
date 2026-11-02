@@ -933,6 +933,8 @@ const OTHER_BOUNDARY_SURFACES: Record<string, string> = {
   'library.questionCategories.remove': '보관함 분류 — 조직 공용',
   'media.fileCleanup.cancel': 'R2 유예 삭제 큐 — 설문이 아니라 키 단위 전역 자원',
   'mail.billing.deleteLatest': '메일 비용 정산 — 설문 스코프가 아닌 전역 장부',
+  'surveyBuilder.read.listPage':
+    'groupId 는 목록 좁힘 조건일 뿐 — 원천이 작업 범위 필터라 범위 밖 설문은 어떤 id 로도 안 나온다(survey-list-page.realdb)',
 };
 
 /**
