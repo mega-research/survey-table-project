@@ -8,6 +8,7 @@ import {
 
 import {
   addTagFilter,
+  applyTrashAccess,
   changeSurveyListQuery,
   clearNarrowingFilters,
   clearSearchBox,
@@ -83,9 +84,14 @@ describe('주소 ↔ 목록 조건', () => {
     expect(parse(`group=${GROUP}`)).toMatchObject({ groupId: GROUP });
   });
 
-  it('휴지통에는 즐겨찾기 조건이 없다 — 함께 오면 즐겨찾기를 접는다', () => {
+  it('주소 읽기는 휴지통과 즐겨찾기·태그를 함께 둔다 — 접는 것은 휴지통이 실제로 열릴 때다', () => {
     expect(parse('fav=1')).toEqual({ ...INITIAL_SURVEY_LIST_PAGE_QUERY, favorites: true });
-    expect(parse('trash=1&fav=1')).toEqual({ ...INITIAL_SURVEY_LIST_PAGE_QUERY, deleted: true });
+    expect(parse(`trash=1&fav=1&tag=${TAG_A}`)).toEqual({
+      ...INITIAL_SURVEY_LIST_PAGE_QUERY,
+      deleted: true,
+      favorites: true,
+      tagIds: [TAG_A],
+    });
   });
 
   it('검색 칩은 tag 를 여러 번 남기고 그 순서로 읽는다 — 잘못된 꼴·중복은 빼고 10개까지', () => {
@@ -99,10 +105,31 @@ describe('주소 ↔ 목록 조건', () => {
     expect(parsed).toEqual(twelve.slice(0, 10));
   });
 
-  it('휴지통에는 태그 조건이 없다 — 함께 오면 태그를 접는다', () => {
-    expect(parse(`trash=1&tag=${TAG_A}`)).toEqual({
-      ...INITIAL_SURVEY_LIST_PAGE_QUERY,
-      deleted: true,
+  describe('applyTrashAccess — 휴지통을 실제로 열 때만 즐겨찾기·태그를 접는다', () => {
+    const trashWithMarks = parse(`trash=1&fav=1&tag=${TAG_A}&q=지운`);
+
+    it('휴지통을 볼 수 있으면 휴지통을 열고 즐겨찾기·태그를 접는다 — 글자 검색은 남는다', () => {
+      expect(applyTrashAccess(trashWithMarks, true)).toEqual({
+        ...INITIAL_SURVEY_LIST_PAGE_QUERY,
+        deleted: true,
+        q: '지운',
+      });
+    });
+
+    it('휴지통을 볼 수 없으면 휴지통만 끄고 즐겨찾기·태그는 그대로 건다', () => {
+      expect(applyTrashAccess(trashWithMarks, false)).toEqual({
+        ...INITIAL_SURVEY_LIST_PAGE_QUERY,
+        favorites: true,
+        tagIds: [TAG_A],
+        q: '지운',
+      });
+    });
+
+    it('바꿀 것이 없으면 같은 객체다 — 조회 키가 흔들리지 않게', () => {
+      const plain = parse(`fav=1&tag=${TAG_A}`);
+      expect(applyTrashAccess(plain, false)).toBe(plain);
+      const trash = parse('trash=1');
+      expect(applyTrashAccess(trash, true)).toBe(trash);
     });
   });
 

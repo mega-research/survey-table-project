@@ -47,6 +47,7 @@ import { keepKnownTagIds } from './personal-tags';
 import { SurveyCard } from './survey-card';
 import {
   addTagFilter,
+  applyTrashAccess,
   changeSurveyListQuery,
   clearNarrowingFilters,
   clearSearchBox,
@@ -102,7 +103,7 @@ export function SurveyListView() {
       : changeSurveyListQuery(parsedQuery, { tagIds: known });
   }, [parsedQuery, myTagsData]);
   const query = useMemo<SurveyListPageQuery>(
-    () => (urlQuery.deleted && !canSeeDeleted ? { ...urlQuery, deleted: false } : urlQuery),
+    () => applyTrashAccess(urlQuery, canSeeDeleted),
     [urlQuery, canSeeDeleted],
   );
   const showDeleted = query.deleted;

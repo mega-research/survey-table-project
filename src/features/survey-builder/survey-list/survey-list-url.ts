@@ -113,14 +113,35 @@ export function parseSurveyListQuery(params: SearchParamsLike): SurveyListPageQu
       oneOf(surveyListLifecycleFilterValues, params.get(P.lifecycle)) ??
       INITIAL_SURVEY_LIST_PAGE_QUERY.lifecycle,
     advanced,
-    // 휴지통에는 즐겨찾기 조건이 없다(서버도 그 조합을 거부한다) — 함께 오면 즐겨찾기를 접는다.
-    favorites: !deleted && params.get(P.favorites) === '1',
-    // 태그 조건도 같다. 지워진 태그(다른 탭) 칩은 여기서 알 수 없다 — 화면이 내 태그 목록과 대조해 푼다.
-    tagIds: deleted ? [] : tagIdsWithinLimits(params.getAll(P.tagIds)),
+    // 휴지통과 함께 와도 여기서는 접지 않는다 — 휴지통이 실제로 열리는지는 범위·권한을 아는 쪽이
+    // 정한다(`applyTrashAccess`). 지워진 태그(다른 탭) 칩도 여기서 알 수 없다 — 화면이 내 태그 목록과
+    // 대조해 푼다.
+    favorites: params.get(P.favorites) === '1',
+    tagIds: tagIdsWithinLimits(params.getAll(P.tagIds)),
     sort: oneOf(surveyListSortValues, params.get(P.sort)) ?? INITIAL_SURVEY_LIST_PAGE_QUERY.sort,
     page: page !== null && page >= 1 ? page : 1,
     deleted,
   };
+}
+
+/**
+ * 휴지통 적용 — 휴지통은 슈퍼어드민의 시스템 전체 보기에만 있고(`canSeeDeleted`), 휴지통에는 즐겨찾기·
+ * 태그 조건이 없다(서버가 그 조합을 거부한다).
+ *
+ * - 볼 수 있으면 휴지통을 열고 즐겨찾기·태그를 접는다.
+ * - 볼 수 없으면 휴지통만 끄고 즐겨찾기·태그는 그대로 건다 — 주소를 읽을 때 먼저 접으면 휴지통이
+ *   적용되지 않는 사람의 별·태그 조건이 조용히 사라진다.
+ *
+ * 바꿀 것이 없으면 같은 객체를 돌려준다(조회 키가 흔들리지 않게).
+ */
+export function applyTrashAccess(
+  query: SurveyListPageQuery,
+  canSeeDeleted: boolean,
+): SurveyListPageQuery {
+  if (!query.deleted) return query;
+  if (!canSeeDeleted) return { ...query, deleted: false };
+  if (!query.favorites && query.tagIds.length === 0) return query;
+  return { ...query, favorites: false, tagIds: [] };
 }
 
 /** 조건 → 주소 쿼리 문자열(앞의 `?` 없이). 기본값은 생략하고 순서는 고정이다. */

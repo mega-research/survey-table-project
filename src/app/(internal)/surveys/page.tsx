@@ -4,7 +4,10 @@ import { cookies } from 'next/headers';
 
 import { HydrationBoundary, QueryClient, dehydrate } from '@tanstack/react-query';
 
-import { parseSurveyListQuery } from '@/features/survey-builder/survey-list/survey-list-url';
+import {
+  applyTrashAccess,
+  parseSurveyListQuery,
+} from '@/features/survey-builder/survey-list/survey-list-url';
 import { SurveyListView } from '@/features/survey-builder/survey-list/survey-list-view';
 import { requireAdminPage } from '@/lib/auth/require-admin-page';
 import { logger } from '@/lib/logger';
@@ -35,7 +38,12 @@ export default async function SurveyListPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const user = await requireAdminPage();
-  const query = parseSurveyListQuery(toUrlSearchParams(await searchParams));
+  // 휴지통 적용은 화면과 같은 함수로 — 휴지통은 슈퍼어드민만 연다. 슈퍼어드민이라도 시스템 범위가
+  // 아니면 서버가 거부해 미리 받기만 건너뛴다(화면이 휴지통을 끈 조건으로 조회한다).
+  const query = applyTrashAccess(
+    parseSurveyListQuery(toUrlSearchParams(await searchParams)),
+    user.isSuperadmin,
+  );
   const queryClient = new QueryClient();
   const initial = await loadInitialSurveyPage(user, query);
   if (initial) {
