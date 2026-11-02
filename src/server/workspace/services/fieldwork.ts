@@ -60,7 +60,9 @@ export async function listSurveyFieldwork(surveyId: string): Promise<SurveyField
     .from(surveyParticipants)
     .innerJoin(users, eq(users.id, surveyParticipants.userId))
     .innerJoin(fieldworkOrgs, eq(fieldworkOrgs.id, users.fieldworkOrgId))
-    .where(and(eq(surveyParticipants.surveyId, surveyId), eq(surveyParticipants.kind, 'fieldwork')))
+    .where(
+      and(eq(surveyParticipants.surveyId, surveyId), eq(surveyParticipants.kind, 'fieldwork')),
+    )
     .orderBy(asc(surveyParticipants.createdAt));
 
   return withRole(rows);

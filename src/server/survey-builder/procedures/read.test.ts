@@ -1,15 +1,7 @@
 import { createRouterClient } from '@orpc/server';
-import { ORPCError } from '@orpc/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
-import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
-import { INITIAL_SURVEY_LIST_PAGE_QUERY } from '@/shared/contracts/survey-builder-io';
-
-import { SurveyListQueryError } from '../domain/survey-read';
-import * as responseSvc from '../services/response-read';
-import * as surveySvc from '../services/survey-read';
-import { read } from './read';
 
 vi.mock('../services/survey-read', () => ({
   getSurveyListWithCounts: vi.fn(),
@@ -40,22 +32,22 @@ vi.mock('../services/response-read', () => ({
   exportResponsesAsCsv: vi.fn(),
 }));
 
+import { ORPCError } from '@orpc/server';
+
+import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
+import { INITIAL_SURVEY_LIST_PAGE_QUERY } from '@/shared/contracts/survey-builder-io';
+
+import { SurveyListQueryError } from '../domain/survey-read';
+import * as responseSvc from '../services/response-read';
+import * as surveySvc from '../services/survey-read';
+import { read } from './read';
+
 // UUID 픽스처는 v4 형태로 통일.
 const SURVEY_ID = '11111111-2222-4333-8444-555555555555';
 const RESPONSE_ID = '22222222-3333-4444-8555-666666666666';
 
 function authedContext(): ORPCContext {
-  return {
-    db: {} as never,
-    user: {
-      id: 'admin-1',
-      email: 'a@b.com',
-      name: '관리자',
-      status: 'active',
-      isSuperadmin: false,
-      userType: 'internal',
-    },
-  };
+  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false , userType: 'internal'} };
 }
 
 function anonContext(): ORPCContext {
@@ -203,10 +195,7 @@ describe('surveyBuilder.read procedures', () => {
     vi.mocked(surveySvc.isSlugAvailable).mockResolvedValue(true as never);
     const client = createRouterClient({ read }, { context: authedContext() });
     const res = await client.read.slugAvailable({ slug: 'my-slug', excludeSurveyId: SURVEY_ID });
-    expect(surveySvc.isSlugAvailable).toHaveBeenCalledWith({
-      slug: 'my-slug',
-      excludeSurveyId: SURVEY_ID,
-    });
+    expect(surveySvc.isSlugAvailable).toHaveBeenCalledWith({ slug: 'my-slug', excludeSurveyId: SURVEY_ID });
     expect(res).toBe(true);
   });
 
@@ -340,14 +329,7 @@ describe('surveyBuilder.read procedures', () => {
       {
         context: {
           db: {} as never,
-          user: {
-            id: 'guest-1',
-            email: 'g@b.com',
-            name: '게스트',
-            status: 'active',
-            isSuperadmin: false,
-            userType: 'guest',
-          },
+          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false, userType: 'guest' },
         },
       },
     );

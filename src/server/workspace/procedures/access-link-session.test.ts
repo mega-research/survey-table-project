@@ -17,8 +17,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
-import { accessLinkSession } from './access-link-session';
-
 const cookieStore = vi.hoisted(() => ({
   set: vi.fn(),
   delete: vi.fn(),
@@ -30,6 +28,8 @@ vi.mock('@/server/access-link', () => ({
   authenticateAccessLink: core.authenticate,
   authenticateClientLink: core.authenticateClient,
 }));
+
+import { accessLinkSession } from './access-link-session';
 
 const TOKEN = 'uNk2IUsrRx_Zk-R0';
 

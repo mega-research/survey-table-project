@@ -6,9 +6,9 @@ import { surveyParticipants, surveys, users } from '@/db/schema';
 import { escapeLikePattern } from '@/lib/operations/filter-shared';
 import { isUniqueViolation } from '@/lib/pg-error';
 import {
-  type SurveyAccessUser,
   loadSurveyCapabilities,
   participantAccessLevelFor,
+  type SurveyAccessUser,
 } from '@/server/survey-access';
 
 import {
@@ -142,9 +142,7 @@ export async function addSurveyParticipant(
   // 등급은 초대자의 권한이 정한다(0123) — 참여자 열 전부를 가진 초대자만 full 을 만든다.
   // 관문(survey.invite)은 procedure 가 지났지만 서비스를 직접 부르는 경로도 같은 규칙을 지도록
   // 여기서 판정한다. 팀원이 자기 자신·동료를 초대해 응답 원문을 얻던 우회가 이 한 줄에 걸려 있다.
-  const accessLevel = participantAccessLevelFor(
-    await loadSurveyCapabilities(actor, input.surveyId),
-  );
+  const accessLevel = participantAccessLevelFor(await loadSurveyCapabilities(actor, input.surveyId));
 
   return db.transaction(async (tx) => {
     const [survey] = await tx

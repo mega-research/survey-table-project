@@ -203,7 +203,9 @@ const exportCsv = authed
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** 보관함 질문 태그 목록. */
-const allTags = authed.output(AllTagsOutput).handler(() => surveySvc.getAllTags());
+const allTags = authed
+  .output(AllTagsOutput)
+  .handler(() => surveySvc.getAllTags());
 
 /** 빌더 변수 메뉴(prefill) 카탈로그. */
 const variableCatalog = authed

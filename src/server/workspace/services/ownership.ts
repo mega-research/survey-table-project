@@ -117,7 +117,10 @@ export async function listTransferCandidates(
  *  ② 타 팀 참여자이고 활성 팀이 **하나** → 설문이 그 팀으로 따라간다(+ 그룹 미분류).
  *  ③ 활성 팀이 0개이거나 둘 이상 → 거부. 시스템이 고르면 설문이 엉뚱한 팀 목록에 나타난다.
  */
-async function readActiveMembershipTeamIds(tx: DbTransaction, userId: string): Promise<string[]> {
+async function readActiveMembershipTeamIds(
+  tx: DbTransaction,
+  userId: string,
+): Promise<string[]> {
   const rows = await tx
     .select({ teamId: teamMembers.teamId })
     .from(teamMembers)
@@ -126,7 +129,9 @@ async function readActiveMembershipTeamIds(tx: DbTransaction, userId: string): P
   return rows.map((r) => r.teamId);
 }
 
-type OwningTeamPick = { ok: true; teamId: string } | { ok: false; reason: 'no_team' | 'ambiguous' };
+type OwningTeamPick =
+  | { ok: true; teamId: string }
+  | { ok: false; reason: 'no_team' | 'ambiguous' };
 
 /**
  * 위 세 갈래를 **값으로만** 판정한다.
@@ -135,7 +140,10 @@ type OwningTeamPick = { ok: true; teamId: string } | { ok: false; reason: 'no_te
  * (어느 팀을 잠글지 고르려고), 한 번은 잠근 뒤(판정하려고). 앞의 것이 던지면 잠금 밖에서
  * 읽은 값으로 사용자에게 사유를 말하게 된다. **사유는 언제나 잠근 값에서 나와야 한다.**
  */
-function pickOwningTeam(surveyTeamId: string | null, membershipTeamIds: string[]): OwningTeamPick {
+function pickOwningTeam(
+  surveyTeamId: string | null,
+  membershipTeamIds: string[],
+): OwningTeamPick {
   if (surveyTeamId && membershipTeamIds.includes(surveyTeamId)) {
     return { ok: true, teamId: surveyTeamId };
   }
@@ -169,7 +177,9 @@ async function planTeamLocks(
   if (!pre) throw new OwnershipSurveyNotFoundError();
 
   const pick = pickOwningTeam(pre.teamId, await readActiveMembershipTeamIds(tx, newOwnerUserId));
-  const ids = [pre.teamId, pick.ok ? pick.teamId : null].filter((id): id is string => id !== null);
+  const ids = [pre.teamId, pick.ok ? pick.teamId : null].filter(
+    (id): id is string => id !== null,
+  );
   // **id 오름차순** — 해산(dissolveTeam)·재배치(assignSurveys)·담기와 같은 순서다. 입력
   // 순서로 잠그면 두 이전이 서로 반대 방향으로 겹칠 때 사이클이 생긴다.
   return [...new Set(ids)].sort();

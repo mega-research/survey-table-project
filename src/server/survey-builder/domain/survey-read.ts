@@ -1,3 +1,5 @@
+import type { SurveyDocumentView } from '@/shared/contracts/survey-builder-io';
+export type { SurveyDocumentView };
 import * as z from 'zod';
 
 import type {
@@ -7,7 +9,6 @@ import type {
   Survey as SurveyRow,
   SurveyVersion,
 } from '@/db/schema';
-import type { SurveyDocumentView } from '@/shared/contracts/survey-builder-io';
 import {
   type SurveyControl,
   type SurveyListItem,
@@ -20,8 +21,6 @@ import {
 } from '@/shared/contracts/survey-builder-io';
 import type { VariableDef } from '@/shared/contracts/template-variables';
 import type { Survey as SurveyType } from '@/types/survey';
-
-export type { SurveyDocumentView };
 
 // types/survey 의 SurveyType(컴포넌트 기대 타입)과 DB row 타입을 함께 re-export.
 // 런타임 import 0 — 전부 type-only.
@@ -205,6 +204,7 @@ export const SurveyForResponseInput = SurveyIdInput.extend({
   inviteToken: z.string().optional(),
 });
 export type SurveyForResponseInput = z.infer<typeof SurveyForResponseInput>;
+
 
 /**
  * forResponse(getSurveyForResponse). 반환 { survey, versionId, control, documentView } | null.

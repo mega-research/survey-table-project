@@ -18,12 +18,12 @@ export function NoTeamEmptyState() {
       </span>
       <h3 className="text-[17px] font-semibold text-[#1C1C1E]">소속 팀이 없습니다</h3>
       <p className="max-w-[420px] text-[13.5px] leading-relaxed text-[#6E6E73]">
-        관리자에게 팀 배정을 요청하세요. 팀이 배정되기 전에는 초대받은 설문을 포함해 어떤 설문도 볼
-        수 없습니다.
+        관리자에게 팀 배정을 요청하세요. 팀이 배정되기 전에는 초대받은 설문을 포함해 어떤
+        설문도 볼 수 없습니다.
       </p>
       <Link
         href="/profile"
-        className="mt-1 h-9 rounded-[9px] border border-[#E5E5EA] bg-white px-4 text-[13px] leading-9 font-medium text-[#374151] hover:bg-[#F5F5F7]"
+        className="mt-1 h-9 rounded-[9px] border border-[#E5E5EA] bg-white px-4 leading-9 text-[13px] font-medium text-[#374151] hover:bg-[#F5F5F7]"
       >
         프로필 보기
       </Link>
@@ -95,7 +95,8 @@ export function NoSurveysEmptyState({ canCreate }: { canCreate: boolean }) {
           href="/surveys/create"
           className="mt-1 flex h-9 items-center gap-1.5 rounded-[9px] bg-[#2E4FCE] px-4 text-[13px] font-semibold text-white hover:bg-[#2743AE]"
         >
-          <Plus className="h-4 w-4" />새 설문 만들기
+          <Plus className="h-4 w-4" />
+          새 설문 만들기
         </Link>
       )}
     </div>

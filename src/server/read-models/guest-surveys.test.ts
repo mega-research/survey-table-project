@@ -43,7 +43,9 @@ describe('resolveGuestSurveyLifecycle', () => {
   });
 
   it('마감일이 지난 설문도 종료다 (종전 동작)', () => {
-    expect(resolveGuestSurveyLifecycle(row({ endDate: new Date(NOW - 1000) }), NOW)).toBe('closed');
+    expect(
+      resolveGuestSurveyLifecycle(row({ endDate: new Date(NOW - 1000) }), NOW),
+    ).toBe('closed');
   });
 
   it('중단만 걸려 있으면 일시중지다', () => {
@@ -56,9 +58,9 @@ describe('resolveGuestSurveyLifecycle', () => {
     );
     expect(resolveGuestSurveyLifecycle(row({ currentVersionId: null }), NOW)).toBe('draft');
     // 종료는 발행된 적 있는 설문에만 선다 — 버전이 없으면 열 것이 없으므로 미발행이 먼저다.
-    expect(
-      resolveGuestSurveyLifecycle(row({ status: 'closed', currentVersionId: null }), NOW),
-    ).toBe('draft');
+    expect(resolveGuestSurveyLifecycle(row({ status: 'closed', currentVersionId: null }), NOW)).toBe(
+      'draft',
+    );
   });
 });
 

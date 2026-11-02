@@ -1,6 +1,6 @@
-import { ORPCError, createRouterClient } from '@orpc/server';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createRouterClient, ORPCError } from '@orpc/server';
 import * as z from 'zod';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { serializeError } from '@/lib/logger/err-serializer';
 import {
@@ -11,8 +11,6 @@ import {
 import { CreatePersonalTagInput } from '@/shared/contracts/workspace-io';
 
 import type { ORPCContext } from './context';
-import { authed, base, pub } from './orpc';
-import { isSentryCaptured } from './rpc-error-policy';
 
 // pino 실인스턴스 대신 스파이 — 미들웨어가 넘기는 바인딩 객체만 검증한다.
 const logged = vi.hoisted(() => ({
@@ -49,6 +47,9 @@ vi.mock('@/lib/logger', () => ({
   createLogger: vi.fn(),
   REDACT_PATHS: [],
 }));
+
+import { authed, base, pub } from './orpc';
+import { isSentryCaptured } from './rpc-error-policy';
 
 beforeEach(() => {
   logged.info.mockReset();
@@ -221,11 +222,7 @@ describe('rpcLoggingMiddleware', () => {
     });
 
     expect(sentry.captureException).toHaveBeenCalledTimes(1);
-    expect(sentry.tags[0]).toMatchObject({
-      rpc: 'boom',
-      code: 'INTERNAL_SERVER_ERROR',
-      role: 'anonymous',
-    });
+    expect(sentry.tags[0]).toMatchObject({ rpc: 'boom', code: 'INTERNAL_SERVER_ERROR', role: 'anonymous' });
     expect(sentry.transactionNames[0]).toBe('rpc boom');
     expect(isSentryCaptured(thrown)).toBe(true);
   });

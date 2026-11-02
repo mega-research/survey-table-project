@@ -5,7 +5,10 @@ import { db } from '@/db';
 import { surveyParticipants, surveys, users } from '@/db/schema';
 import { escapeLikePattern } from '@/lib/operations/filter-shared';
 import { isUniqueViolation } from '@/lib/pg-error';
-import { DEFAULT_SURVEY_GUEST_TABS, normalizeSurveyGuestTabs } from '@/shared/contracts/workspace';
+import {
+  DEFAULT_SURVEY_GUEST_TABS,
+  normalizeSurveyGuestTabs,
+} from '@/shared/contracts/workspace';
 
 import {
   type AddSurveyGuestInput,

@@ -18,17 +18,18 @@
  * ①이 예전에는 500 이었다(WorkScopeError 에 RPC 매핑이 없었다). 데이터가 새지는 않았지만
  * "거부" 가 아니라 크래시였고 Sentry 에도 예상 못 한 오류로 쌓였다 — 티켓 15 가 매핑을 붙였다.
  */
-import { createRouterClient } from '@orpc/server';
-import { internalActorContext } from '@tests/helpers/rpc-context';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+
+import { createRouterClient } from '@orpc/server';
 import { describe, expect, it, vi } from 'vitest';
 
-import { read } from '@/server/survey-builder/procedures/read';
 import { surveys } from '@/server/survey-builder/procedures/surveys';
-import { WorkScopeError, resolveWorkScope, resolveWorkScopeFor } from '@/server/work-scope';
+import { read } from '@/server/survey-builder/procedures/read';
+import { resolveWorkScope, resolveWorkScopeFor, WorkScopeError } from '@/server/work-scope';
 import { INITIAL_SURVEY_LIST_PAGE_QUERY } from '@/shared/contracts/survey-builder-io';
 import { SYSTEM_SCOPE, WORK_SCOPE_COOKIE } from '@/shared/contracts/workspace';
+import { internalActorContext } from '@tests/helpers/rpc-context';
 
 const REPO_ROOT = resolve(__dirname, '..', '..');
 
@@ -80,10 +81,7 @@ vi.mock('@/db', () => {
     db: {
       ...executor,
       transaction: async (cb: (tx: unknown) => Promise<unknown>) => cb(executor),
-      query: new Proxy(
-        {},
-        { get: () => ({ findFirst: async () => null, findMany: async () => [] }) },
-      ),
+      query: new Proxy({}, { get: () => ({ findFirst: async () => null, findMany: async () => [] }) }),
     },
   };
 });
