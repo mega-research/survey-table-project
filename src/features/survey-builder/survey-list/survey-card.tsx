@@ -20,6 +20,7 @@ import {
   MessageCircle,
   Pencil,
   Share2,
+  Star,
   TextCursorInput,
   Trash2,
 } from 'lucide-react';
@@ -52,6 +53,10 @@ import {
 
 interface SurveyCardProps {
   survey: SurveyListItem;
+  /** 내가 별을 켰는가 — 나에게만 보이는 개인 표시(티켓 06). */
+  isFavorite: boolean;
+  /** 바라는 상태를 올린다. 낙관적 갱신·연타 처리는 목록 화면의 `useSetFavorite` 가 진다. */
+  onFavoriteChange: (on: boolean) => void;
   /** 지금 목록을 보고 있는 사람 — 버튼 노출 근사 셋이 함께 본다. */
   viewer: SurveyCardViewer;
   onDelete: (surveyId: string) => void;
@@ -106,6 +111,8 @@ function responseLine(survey: SurveyListItem, scope: WorkScope): string {
  */
 export function SurveyCard({
   survey,
+  isFavorite,
+  onFavoriteChange,
   viewer,
   onDelete,
   onDuplicate,
@@ -151,74 +158,89 @@ export function SurveyCard({
           </h3>
         </div>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              aria-label="더보기"
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[#9CA3AF] hover:bg-[#F5F5F7] hover:text-[#1C1C1E]"
-            >
-              <EllipsisVertical className="h-4 w-4" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem asChild disabled={!canEdit}>
-              <Link href={`/surveys/${survey.id}/edit`}>
-                <Pencil className="h-3.5 w-3.5" />
-                수정
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem disabled={!canEdit} onSelect={() => setCardTitleOpen(true)}>
-              <TextCursorInput className="h-3.5 w-3.5" />
-              카드 제목 변경
-            </DropdownMenuItem>
-            {/* 공유 설정 모달을 연다 — 공개 범위·참여자·클라이언트·실사를 함께 다루므로 「초대」가 아니라 「공유」다. */}
-            <DropdownMenuItem onSelect={() => setSharingOpen(true)}>
-              <Share2 className="h-3.5 w-3.5" />
-              공유
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => {
-                navigator.clipboard.writeText(`${window.location.origin}${surveyUrl}`);
-                toast.success('링크가 복사되었습니다');
-              }}
-            >
-              <LinkIcon className="h-3.5 w-3.5" />
-              링크 복사
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href={surveyUrl} target="_blank">
-                <ExternalLink className="h-3.5 w-3.5" />
-                설문 열기
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem disabled={isDuplicating} onSelect={() => onDuplicate(survey.id)}>
-              {isDuplicating ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <CopyPlus className="h-3.5 w-3.5" />
-              )}
-              복제
-            </DropdownMenuItem>
-            {onMoveToGroup && (
-              <GroupMoveSubmenu
-                groups={groups}
-                currentGroupId={survey.surveyGroupId}
-                disabled={!canMoveGroup}
-                onMove={(groupId) => onMoveToGroup(survey.id, groupId)}
-              />
+        <div className="flex shrink-0 items-center gap-0.5">
+          {/* 별은 늘 보인다 — 편집 권한과 무관하게 볼 수 있는 설문이면 켤 수 있다(관문 survey.view). */}
+          <button
+            type="button"
+            aria-pressed={isFavorite}
+            aria-label={isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}
+            onClick={() => onFavoriteChange(!isFavorite)}
+            className={cn(
+              'flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#F5F5F7] focus-visible:ring-2 focus-visible:ring-[#2E4FCE]/40 focus-visible:outline-none',
+              isFavorite ? 'text-[#F5A524]' : 'text-[#9CA3AF] hover:text-[#1C1C1E]',
             )}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              disabled={!canDelete}
-              className="text-red-600 focus:text-red-600"
-              onSelect={() => onDelete(survey.id)}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              삭제
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+          >
+            <Star className={cn('h-4 w-4', isFavorite && 'fill-current')} />
+          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label="더보기"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[#9CA3AF] hover:bg-[#F5F5F7] hover:text-[#1C1C1E]"
+              >
+                <EllipsisVertical className="h-4 w-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem asChild disabled={!canEdit}>
+                <Link href={`/surveys/${survey.id}/edit`}>
+                  <Pencil className="h-3.5 w-3.5" />
+                  수정
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={!canEdit} onSelect={() => setCardTitleOpen(true)}>
+                <TextCursorInput className="h-3.5 w-3.5" />
+                카드 제목 변경
+              </DropdownMenuItem>
+              {/* 공유 설정 모달을 연다 — 공개 범위·참여자·클라이언트·실사를 함께 다루므로 「초대」가 아니라 「공유」다. */}
+              <DropdownMenuItem onSelect={() => setSharingOpen(true)}>
+                <Share2 className="h-3.5 w-3.5" />
+                공유
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  navigator.clipboard.writeText(`${window.location.origin}${surveyUrl}`);
+                  toast.success('링크가 복사되었습니다');
+                }}
+              >
+                <LinkIcon className="h-3.5 w-3.5" />
+                링크 복사
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href={surveyUrl} target="_blank">
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  설문 열기
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={isDuplicating} onSelect={() => onDuplicate(survey.id)}>
+                {isDuplicating ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <CopyPlus className="h-3.5 w-3.5" />
+                )}
+                복제
+              </DropdownMenuItem>
+              {onMoveToGroup && (
+                <GroupMoveSubmenu
+                  groups={groups}
+                  currentGroupId={survey.surveyGroupId}
+                  disabled={!canMoveGroup}
+                  onMove={(groupId) => onMoveToGroup(survey.id, groupId)}
+                />
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={!canDelete}
+                className="text-red-600 focus:text-red-600"
+                onSelect={() => onDelete(survey.id)}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                삭제
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
       <p className="truncate text-[14px] text-[#6E6E73]">{responseLine(survey, scope)}</p>

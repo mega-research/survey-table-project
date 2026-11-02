@@ -11,9 +11,11 @@ import { ListToolbar } from './list-toolbar';
 function Harness({
   onLifecycleChange,
   initial = 'all',
+  favorites = null,
 }: {
   onLifecycleChange: (next: SurveyListLifecycleFilter) => void;
   initial?: SurveyListLifecycleFilter;
+  favorites?: { on: boolean; count: number; onToggle: (next: boolean) => void } | null;
 }) {
   const [lifecycle, setLifecycle] = useState<SurveyListLifecycleFilter>(initial);
   return (
@@ -35,6 +37,7 @@ function Harness({
       deletedCount={null}
       showDeleted={false}
       onToggleDeleted={vi.fn()}
+      favorites={favorites}
     />
   );
 }
@@ -108,5 +111,38 @@ describe('ListToolbar — 둘째 줄 오른쪽', () => {
     renderToolbar();
     expect(screen.getByText('23개')).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: '정렬' })).toBeInTheDocument();
+  });
+});
+
+/**
+ * 즐겨찾기 단추 (설문 즐겨찾기·태그 티켓 06, 시안 F8-a·c) — 검색창과 상세 검색 사이. 켜면 별 켠
+ * 설문만 본다. 휴지통에서는 단추 자체가 없다(목록 화면이 `favorites={null}` 로 내린다).
+ */
+describe('ListToolbar — 즐겨찾기 단추', () => {
+  it('내 별 개수와 함께 서고, 누르면 즐겨찾기만 보기를 켠다', async () => {
+    const onToggle = vi.fn();
+    render(
+      <Harness onLifecycleChange={vi.fn()} favorites={{ on: false, count: 3, onToggle }} />,
+    );
+
+    const button = screen.getByRole('button', { name: '즐겨찾기 3' });
+    expect(button).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.setup().click(button);
+    expect(onToggle).toHaveBeenCalledWith(true);
+  });
+
+  it('켜져 있으면 눌림 상태이고 누르면 끈다', async () => {
+    const onToggle = vi.fn();
+    render(<Harness onLifecycleChange={vi.fn()} favorites={{ on: true, count: 3, onToggle }} />);
+
+    const button = screen.getByRole('button', { name: '즐겨찾기 3' });
+    expect(button).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.setup().click(button);
+    expect(onToggle).toHaveBeenCalledWith(false);
+  });
+
+  it('null 이면 단추가 없다 — 휴지통', () => {
+    render(<Harness onLifecycleChange={vi.fn()} favorites={null} />);
+    expect(screen.queryByRole('button', { name: /즐겨찾기/ })).toBeNull();
   });
 });

@@ -2,7 +2,7 @@
 
 import { type ReactNode, useEffect, useEffectEvent, useState } from 'react';
 
-import { Search, SlidersHorizontal, Trash2 } from 'lucide-react';
+import { Search, SlidersHorizontal, Star, Trash2 } from 'lucide-react';
 
 import {
   Select,
@@ -57,13 +57,18 @@ interface ListToolbarProps {
   deletedCount: number | null;
   showDeleted: boolean;
   onToggleDeleted: (next: boolean) => void;
+  /**
+   * 즐겨찾기만 보기(티켓 06) — 켜짐 · 내 별 개수(범위·그룹·팀 좁힘 기준) · 바꾸기.
+   * **null 이면 단추를 그리지 않는다** — 휴지통에는 즐겨찾기 조건이 없다.
+   */
+  favorites: { on: boolean; count: number; onToggle: (next: boolean) => void } | null;
 }
 
 /**
  * 목록 툴바 (시안 F8-a).
  *
- * 첫 줄 — 검색창(넓게) · 상세 검색. 둘째 줄 — 왼쪽 목록 상태 세그먼트(+ 휴지통), 오른쪽
- * 「N개 · 정렬 ▾」. 즐겨찾기·태그 단추는 후속 티켓이 첫 줄의 검색창 오른쪽에 더한다.
+ * 첫 줄 — 검색창(넓게) · 즐겨찾기 · 상세 검색. 둘째 줄 — 왼쪽 목록 상태 세그먼트(+ 휴지통), 오른쪽
+ * 「N개 · 정렬 ▾」. 「# 태그」 단추는 후속 티켓이 즐겨찾기와 상세 검색 사이에 더한다.
  */
 export function ListToolbar({
   counts,
@@ -81,6 +86,7 @@ export function ListToolbar({
   deletedCount,
   showDeleted,
   onToggleDeleted,
+  favorites,
 }: ListToolbarProps) {
   return (
     <div className="flex flex-col gap-3">
@@ -90,6 +96,30 @@ export function ListToolbar({
           onCommit={onSearchQueryChange}
           placeholder={searchPlaceholder}
         />
+
+        {favorites && (
+          <button
+            type="button"
+            aria-pressed={favorites.on}
+            onClick={() => favorites.onToggle(!favorites.on)}
+            className={cn(
+              'flex h-10 shrink-0 items-center gap-1.5 rounded-[10px] border px-3.5 text-[13.5px] transition-colors',
+              favorites.on
+                ? 'border-[#F5A524] bg-[#FFF8E6] font-medium text-[#1C1C1E]'
+                : 'border-[#E5E5EA] bg-white text-[#374151] hover:bg-[#F5F5F7]',
+            )}
+          >
+            <Star
+              className={cn(
+                'h-3.5 w-3.5',
+                favorites.on ? 'fill-[#F5A524] text-[#F5A524]' : 'text-[#6E6E73]',
+              )}
+            />
+            {/* 좁은 폭에서는 별만 남긴다 — 글자·숫자는 화면에서만 숨기고 읽기에는 남긴다. */}
+            <span className="max-lg:sr-only">즐겨찾기</span>{' '}
+            <span className="text-[#6E6E73] tabular-nums max-lg:sr-only">{favorites.count}</span>
+          </button>
+        )}
 
         <button
           type="button"
