@@ -106,7 +106,8 @@
   로만, 태그는 언제나 `user_id = 요청자` 를 WHERE 에 걸어 **남의 태그 id 는 없는 태그와 같은 NOT_FOUND**
   다. 설문을 받는 표면(`setFavorite`·`setTagLink`·`createTag` 의 `attachToSurveyId`)은 첫 줄에서 `survey.view`
   관문을 지나고, `tagId` 만 받는 `updateTag`·`deleteTag` 는 IDOR 인벤토리 `OTHER_BOUNDARY_SURFACES` 에 있다.
-  별·연결은 결과 상태 지정(켜기 = 충돌 무시 삽입, 끄기 = 삭제)이라 멱등이다. 300개 한도와 이름 충돌은
+  별·연결은 결과 상태 지정(켜기 = 충돌 무시 삽입, 끄기 = 삭제)이라 멱등이다. 관문 뒤에 설문·태그가 사라져
+  켜기가 외래 키(23503)에서 깨지면 `PersonalMarkTargetGoneError` → NOT_FOUND 다(500 이 아니다). 300개 한도와 이름 충돌은
   `createTag`·`updateTag` 가 사용자 advisory lock(`lockPersonalTags`) 아래서 본다 — 만들기는 같은 이름이면
   있던 태그를 돌려주고, 이름 바꾸기는 CONFLICT(유일 인덱스 위반도 같은 에러로 접는다). 새 태그 색은
   서버가 내 태그에서 가장 덜 쓴 색으로 정한다(`pickPersonalTagColor`). 목록이 이 표들을 읽는 자리는

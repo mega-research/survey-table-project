@@ -19,8 +19,8 @@ src/
 │   ├── survey-builder/         # 설문 편집기 + 설문 목록 (195개) — importer 그래프의 닫힌 묶음대로 폴더화
 │   │   ├── survey-list/        # 설문 목록 (survey-list-view 진입점, 티켓 08 — .pen FLOW 6)
 │   │   │                       # 툴바(검색창 search-combobox — 검색 칩·자동완성 · 즐겨찾기 · 「# 태그」 tag-filter-menu · 상세 검색
-│   │   │                       # · 목록 상태 세그먼트·정렬)·카드(별·태그 줄)·태그 창 tag-picker(+ tag-edit-panel) (페이지네이션은 components/ui/list-pagination)
-│   │   │                       # 거르기·정렬·페이지는 서버(read.listPage) — 조건의 정본은 주소(survey-list-url 이 주소 ↔ 조건 변환)
+│   │   │                       # · 목록 상태 세그먼트·정렬)·카드(별·태그 줄)·태그 창 tag-picker(+ tag-edit-panel) · 공용 태그 꼴 personal-tag-label (페이지네이션은 components/ui/list-pagination)
+│   │   │                       # 거르기·정렬·페이지는 서버(read.listPage) — 조건의 정본은 주소(survey-list-url 이 주소 ↔ 조건 변환, 휴지통 적용 applyTrashAccess)
 │   │   │                       # 표시 규칙만 순수 함수로 남는다(personal-tags·search-suggest) ·버튼 노출 근사(survey-list-capability — 판정은 서버)
 │   │   │   └── groups/         # 설문 그룹 UI (티켓 12 — .pen FLOW 2): 관리 모달(CRUD·dnd 정렬)·
 │   │   │                       # 담기 패널(미분류 전용)·삭제 확인·카드 케밥 이동 서브메뉴·그룹 화면 머리
