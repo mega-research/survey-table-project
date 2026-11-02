@@ -41,11 +41,7 @@ export function TableInsertMenu({ editor }: Props) {
 
   function insertTable(rows: number, cols: number) {
     if (rows <= 0 || cols <= 0) return;
-    editor
-      .chain()
-      .focus()
-      .insertTable({ rows, cols, withHeaderRow: false })
-      .run();
+    editor.chain().focus().insertTable({ rows, cols, withHeaderRow: false }).run();
     setOpen(false);
     resetState();
   }
@@ -69,10 +65,8 @@ export function TableInsertMenu({ editor }: Props) {
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
-      <PopoverTrigger asChild>
-        <Button type="button" variant="ghost" size="sm" title="표 삽입">
-          <TableIcon className="h-4 w-4" />
-        </Button>
+      <PopoverTrigger render={<Button type="button" variant="ghost" size="sm" title="표 삽입" />}>
+        <TableIcon className="h-4 w-4" />
       </PopoverTrigger>
       <PopoverContent className="w-[260px] p-3" align="start">
         {mode === 'grid' ? (
@@ -135,7 +129,9 @@ export function TableInsertMenu({ editor }: Props) {
             </div>
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <Label htmlFor="rows" className="w-10 text-xs">행</Label>
+                <Label htmlFor="rows" className="w-10 text-xs">
+                  행
+                </Label>
                 <Input
                   id="rows"
                   type="number"
@@ -147,7 +143,9 @@ export function TableInsertMenu({ editor }: Props) {
                 />
               </div>
               <div className="flex items-center gap-2">
-                <Label htmlFor="cols" className="w-10 text-xs">열</Label>
+                <Label htmlFor="cols" className="w-10 text-xs">
+                  열
+                </Label>
                 <Input
                   id="cols"
                   type="number"

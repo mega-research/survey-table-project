@@ -37,11 +37,9 @@ export default async function FieldworkLinkPreviewPage({ params }: PageProps) {
   const backHref = fieldworkLinkOperationsBase(token);
 
   const backButton = (
-    <Button variant="outline" size="sm" asChild>
-      <Link href={backHref}>
-        <ArrowLeft className="mr-2 h-4 w-4" />
-        현황으로
-      </Link>
+    <Button variant="outline" size="sm" render={<Link href={backHref} />}>
+      <ArrowLeft className="mr-2 h-4 w-4" />
+      현황으로
     </Button>
   );
 

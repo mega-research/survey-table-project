@@ -276,7 +276,7 @@ export function RankingDropdownStack({
           const triggerWidthStyle =
             isHorizontal && !isMobile ? { width: RANKING_HORIZONTAL_ITEM_WIDTH } : undefined;
 
-          // compact(셀 컨텍스트)는 네이티브 select 유지. full(질문 레벨)은 Radix Select 로
+          // compact(셀 컨텍스트)는 네이티브 select 유지. full(질문 레벨)은 Select(Base UI) 로
           // 교체해 모바일에서 트리거를 키우고, 열린 목록에 max-height + 스크롤을 적용한다.
           const nativeSelectEl = (
             <select
@@ -322,7 +322,7 @@ export function RankingDropdownStack({
             'data-[highlighted]:ring-2 data-[highlighted]:ring-blue-100 data-[highlighted]:ring-inset',
             isMobile && 'py-3 text-base',
           );
-          const radixSelectEl = (
+          const selectPopupEl = (
             <Select value={currentValue} onValueChange={(v) => handleSelect(rank, v)}>
               <SelectTrigger
                 id={inputIdScope ? `${inputIdScope}-${rank}` : undefined}
@@ -344,10 +344,10 @@ export function RankingDropdownStack({
               >
                 <SelectValue placeholder={systemText('input.selectPlaceholder', locale)} />
               </SelectTrigger>
-              {/* Radix SelectContent 는 max-h(가용 높이) + overflow-y-auto + 스크롤 버튼 내장.
+              {/* SelectContent 는 max-h(가용 높이) + 목록 스크롤 + 스크롤 버튼 내장.
                 높이는 320px(max-h-80)로 캡해 컴팩트하게, 너비는 트리거 너비에 고정해
                 옵션이 화면 밖으로 넘치지 않게 한다. */}
-              <SelectContent className="max-h-80 w-[var(--radix-select-trigger-width)]">
+              <SelectContent className="max-h-80 w-[var(--anchor-width)]">
                 {options.map((opt) => (
                   <SelectItem
                     key={opt.id}
@@ -371,7 +371,7 @@ export function RankingDropdownStack({
             </Select>
           );
 
-          const selectEl = compact ? nativeSelectEl : radixSelectEl;
+          const selectEl = compact ? nativeSelectEl : selectPopupEl;
 
           return (
             <div

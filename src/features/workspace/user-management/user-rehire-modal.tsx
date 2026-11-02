@@ -133,7 +133,7 @@ export function UserRehireModal({ user, onClose }: Props) {
                 <Label htmlFor="rehire-team" className={FIELD_LABEL}>
                   새 소속 팀 *
                 </Label>
-                {/* 미선택은 빈 문자열로 계속 제어한다 — 붙였다 뗐다 하면 Radix 가 비제어로
+                {/* 미선택은 빈 문자열로 계속 제어한다 — 붙였다 뗐다 하면 Select 가 비제어로
                   전환돼 트리거가 빈칸으로 굳는다(reassignment/assignment-fields 의 같은 주석). */}
                 <Select value={teamId ?? ''} onValueChange={setTeamId}>
                   <SelectTrigger id="rehire-team" className={FIELD_INPUT}>

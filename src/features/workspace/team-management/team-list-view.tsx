@@ -78,11 +78,11 @@ function TeamCard({ team, onDissolve }: { team: TeamListItem; onDissolve: () => 
             <MoreVertical className="h-4 w-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="min-w-[150px]">
-            <DropdownMenuItem asChild>
-              <Link href={`/teams/${team.id}`}>팀 상세</Link>
+            <DropdownMenuItem render={<Link href={`/teams/${team.id}`} />}>
+              팀 상세
             </DropdownMenuItem>
             {/* 실사팀 표시는 사이드바 모양만 바꾼다 — 권한은 그대로다(0139). */}
-            <DropdownMenuItem onSelect={toggleKind} disabled={kindPending}>
+            <DropdownMenuItem onClick={toggleKind} disabled={kindPending}>
               {isFieldwork ? '일반 팀으로 되돌리기' : '실사팀으로 지정'}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
@@ -90,8 +90,8 @@ function TeamCard({ team, onDissolve }: { team: TeamListItem; onDissolve: () => 
                 없는 액션이라 hover 로만 드러나면 안 된다. 말줄임표도 목업 그대로: 누르는 즉시
                 일어나지 않고 확인 단계가 하나 더 있다는 뜻이다. */}
             <DropdownMenuItem
-              onSelect={onDissolve}
-              className="justify-between bg-[#FEF2F2] font-semibold text-[#EF4444] focus:bg-[#FEE2E2] focus:text-[#EF4444]"
+              onClick={onDissolve}
+              className="justify-between bg-[#FEF2F2] font-semibold text-[#EF4444] data-[highlighted]:bg-[#FEE2E2] data-[highlighted]:text-[#EF4444]"
             >
               팀 해산…
               <TriangleAlert className="h-3.5 w-3.5" />

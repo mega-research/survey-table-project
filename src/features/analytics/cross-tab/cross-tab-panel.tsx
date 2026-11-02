@@ -73,21 +73,21 @@ export function CrossTabPanel({ questions, responses }: CrossTabPanelProps) {
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <div className="border-b border-gray-100 p-4">
           <div className="flex items-center justify-between">
-            <CollapsibleTrigger asChild>
-              <button className="flex items-center gap-2 hover:opacity-80">
-                <Grid3X3 className="h-5 w-5 text-purple-500" />
-                <h3 className="font-semibold text-gray-900">교차분석</h3>
-                {crossTabResult && (
-                  <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-100">
-                    n={crossTabResult.grandTotal}
-                  </Badge>
-                )}
-                {isOpen ? (
-                  <ChevronUp className="ml-1 h-4 w-4 text-gray-400" />
-                ) : (
-                  <ChevronDown className="ml-1 h-4 w-4 text-gray-400" />
-                )}
-              </button>
+            <CollapsibleTrigger
+              render={<button className="flex items-center gap-2 hover:opacity-80" />}
+            >
+              <Grid3X3 className="h-5 w-5 text-purple-500" />
+              <h3 className="font-semibold text-gray-900">교차분석</h3>
+              {crossTabResult && (
+                <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-100">
+                  n={crossTabResult.grandTotal}
+                </Badge>
+              )}
+              {isOpen ? (
+                <ChevronUp className="ml-1 h-4 w-4 text-gray-400" />
+              ) : (
+                <ChevronDown className="ml-1 h-4 w-4 text-gray-400" />
+              )}
             </CollapsibleTrigger>
 
             {/* 뷰 모드 전환 */}

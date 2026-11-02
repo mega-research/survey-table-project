@@ -27,12 +27,10 @@ export default async function MailTemplatesListPage({ params }: Props) {
             조사 대상 목록에 발송할 메일 템플릿을 관리합니다.
           </p>
         </div>
-        <Button asChild>
-          <Link href={`/surveys/${surveyId}/operations/mail/templates/new`}>
+        <Button render={<Link href={`/surveys/${surveyId}/operations/mail/templates/new`} />}>
             <Plus className="mr-1.5 h-4 w-4" />
             새 템플릿
-          </Link>
-        </Button>
+          </Button>
       </div>
       <MailTemplateList surveyId={surveyId} templates={templates} />
     </main>

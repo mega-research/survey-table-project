@@ -42,23 +42,19 @@ export default async function SurveyPreviewPage({ params }: PageProps) {
       <main className="min-h-screen bg-gray-50">
         <nav className="border-b border-gray-200 bg-white px-6 py-4">
           <div className="mx-auto flex max-w-4xl items-center justify-between">
-            <Button variant="ghost" size="sm" asChild>
-              <Link href={`/surveys/${surveyId}/operations/overview`}>
+            <Button variant="ghost" size="sm" render={<Link href={`/surveys/${surveyId}/operations/overview`} />}>
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 현황으로
-              </Link>
-            </Button>
+              </Button>
             <div className="flex items-center gap-2">
               {survey.previewToken && (
                 <CopyPreviewLinkButton previewToken={survey.previewToken} />
               )}
               {!isExternal && (
-                <Button variant="outline" size="sm" asChild>
-                  <Link href={`/surveys/${surveyId}/edit`}>
+                <Button variant="outline" size="sm" render={<Link href={`/surveys/${surveyId}/edit`} />}>
                     <Pencil className="mr-2 h-4 w-4" />
                     설문 편집
-                  </Link>
-                </Button>
+                  </Button>
               )}
             </div>
           </div>
@@ -92,20 +88,16 @@ export default async function SurveyPreviewPage({ params }: PageProps) {
             </span>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <Button variant="outline" size="sm" asChild>
-              <Link href={`/surveys/${surveyId}/operations/overview`}>
+            <Button variant="outline" size="sm" render={<Link href={`/surveys/${surveyId}/operations/overview`} />}>
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 현황으로
-              </Link>
-            </Button>
+              </Button>
             {survey.previewToken && <CopyPreviewLinkButton previewToken={survey.previewToken} />}
             {!isExternal && (
-              <Button variant="outline" size="sm" asChild>
-                <Link href={`/surveys/${surveyId}/edit`}>
+              <Button variant="outline" size="sm" render={<Link href={`/surveys/${surveyId}/edit`} />}>
                   <Pencil className="mr-2 h-4 w-4" />
                   설문 편집
-                </Link>
-              </Button>
+                </Button>
             )}
           </div>
         </div>

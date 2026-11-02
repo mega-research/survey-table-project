@@ -87,14 +87,12 @@ export function DynamicRowSelectorModal({
             <ListChecks className="h-5 w-5" />
             {label || systemText('table.selectItems', locale)}
           </DialogTitle>
-          <DialogDescription asChild>
-            <div className="text-sm text-muted-foreground">
+          <DialogDescription render={<div className="text-sm text-muted-foreground" />}>
               {systemText('table.selectItemsHint', locale)}
               <Badge variant="secondary" className="ml-2">
                 {systemText('table.selectedCount', locale, { count: localSelected.size })}
               </Badge>
-            </div>
-          </DialogDescription>
+            </DialogDescription>
         </DialogHeader>
 
         <div className="min-h-0 space-y-1 overflow-y-scroll px-6 py-1 [scrollbar-gutter:stable] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-track]:bg-transparent hover:[&::-webkit-scrollbar-thumb]:bg-gray-400">

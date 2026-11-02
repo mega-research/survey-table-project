@@ -531,12 +531,8 @@ html {
   scrollbar-gutter: stable;
 }
 
-/* 위 gutter 와 짝 — Radix 의 스크롤 잠금(react-remove-scroll-bar)은 사라질 스크롤바 폭만큼
-   body 에 margin-right 를 더하는데, gutter 가 이미 그 자리를 잡고 있어 모달을 열 때마다
-   본문이 한 번 더 좁아진다. 보정 margin 만 걷는다(선택자 우선순위로 !important 를 이긴다). */
-html body[data-scroll-locked] {
-  margin-right: 0 !important;
-}
+/* 모달의 스크롤 잠금(Base UI)은 html 의 scrollbar-gutter 를 stable 로 두고 overflow 만 막아,
+   위 gutter 와 겹쳐도 본문 폭이 바뀌지 않는다 — Radix 시절의 body margin 보정은 필요 없다. */
 
 /* 인쇄 시 테이블 sticky 해제 — 종이에서는 의미 없음 */
 @media print {

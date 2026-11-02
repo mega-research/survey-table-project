@@ -44,8 +44,8 @@ export default async function ReportColumnsPage({ params }: PageProps) {
           <h2 className="text-xl font-bold text-gray-900">진척률 컬럼 설정</h2>
           <p className="text-sm text-slate-500">진척률 표의 그룹 메타 컬럼 순서·라벨·표시 여부</p>
         </div>
-        <Button asChild variant="outline">
-          <Link href={`/surveys/${surveyId}/operations/report`}>← 진척률로</Link>
+        <Button variant="outline" render={<Link href={`/surveys/${surveyId}/operations/report`} />}>
+          ← 진척률로
         </Button>
       </div>
 

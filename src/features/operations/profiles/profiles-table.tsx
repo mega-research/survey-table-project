@@ -222,13 +222,15 @@ export function ProfilesTable({
             if (!value) return '—';
             return (
               <Tooltip>
-                <TooltipTrigger asChild>
-                  <span
-                    className="inline-block truncate align-bottom"
-                    style={{ maxWidth: `${ENTRY_PARAM_DISPLAY_LEN + 1}ch` }}
-                  >
-                    {value}
-                  </span>
+                <TooltipTrigger
+                  render={
+                    <span
+                      className="inline-block truncate align-bottom"
+                      style={{ maxWidth: `${ENTRY_PARAM_DISPLAY_LEN + 1}ch` }}
+                    />
+                  }
+                >
+                  {value}
                 </TooltipTrigger>
                 <TooltipContent className="font-mono">{value}</TooltipContent>
               </Tooltip>
@@ -420,7 +422,7 @@ export function ProfilesTable({
   }
 
   return (
-    <TooltipProvider delayDuration={150}>
+    <TooltipProvider delay={150}>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>

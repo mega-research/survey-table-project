@@ -22,7 +22,7 @@ function pushedParams(): URLSearchParams {
 
 describe('ContactsFilterBar web 컬럼 신규 선택 기본값', () => {
   beforeAll(() => {
-    // Radix Select 가 jsdom 에 없는 API 를 호출한다 — 열기/포커스 이동용 최소 폴리필.
+    // Select 가 jsdom 에 없는 API 를 호출한다 — 열기/포커스 이동용 최소 폴리필.
     Element.prototype.scrollIntoView = vi.fn();
     Element.prototype.hasPointerCapture = vi.fn(() => false) as never;
     Element.prototype.setPointerCapture = vi.fn();

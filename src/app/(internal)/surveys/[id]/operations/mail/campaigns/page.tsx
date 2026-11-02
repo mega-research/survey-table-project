@@ -71,11 +71,9 @@ export default async function MailCampaignsListPage({ params, searchParams }: Pr
               {campaigns.total.toLocaleString('ko-KR')}건.
             </p>
           </div>
-          <Button asChild>
-            <Link href={`/surveys/${surveyId}/operations/mail/campaigns/new`}>
-              <Plus className="mr-1.5 h-4 w-4" />
-              발송 등록
-            </Link>
+          <Button render={<Link href={`/surveys/${surveyId}/operations/mail/campaigns/new`} />}>
+            <Plus className="mr-1.5 h-4 w-4" />
+            발송 등록
           </Button>
         </div>
         <CampaignsList

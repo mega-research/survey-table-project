@@ -31,27 +31,24 @@ export function SurveyOpenMenu({
   const menu = useHoverMenu();
   return (
     <DropdownMenu open={menu.open} onOpenChange={menu.setOpen} modal={false}>
-      <DropdownMenuTrigger asChild>
-        <Button {...menu.triggerProps} type="button" variant="outline" size="sm">
-          <FileText className="mr-2 h-4 w-4" />
-          설문 열기
-          <ChevronDown className="ml-1 h-4 w-4" />
-        </Button>
+      <DropdownMenuTrigger
+        {...menu.triggerProps}
+        render={<Button type="button" variant="outline" size="sm" />}
+      >
+        <FileText className="mr-2 h-4 w-4" />
+        설문 열기
+        <ChevronDown className="ml-1 h-4 w-4" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-[180px]" {...menu.contentProps}>
+      <DropdownMenuContent align="end" className="min-w-[180px]">
         {previewHref && (
-          <DropdownMenuItem asChild>
-            <Link href={previewHref}>
-              <Eye className="mr-2 h-4 w-4" />
-              설문 보기
-            </Link>
+          <DropdownMenuItem render={<Link href={previewHref} />}>
+            <Eye className="mr-2 h-4 w-4" />
+            설문 보기
           </DropdownMenuItem>
         )}
-        <DropdownMenuItem asChild>
-          <Link href={editHref}>
-            <Pencil className="mr-2 h-4 w-4" />
-            설문 편집
-          </Link>
+        <DropdownMenuItem render={<Link href={editHref} />}>
+          <Pencil className="mr-2 h-4 w-4" />
+          설문 편집
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

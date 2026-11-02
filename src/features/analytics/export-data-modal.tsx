@@ -268,11 +268,9 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-2">
-          <FileSpreadsheet className="h-4 w-4" />
-          엑셀 다운로드
-        </Button>
+      <DialogTrigger render={<Button variant="outline" size="sm" className="gap-2" />}>
+        <FileSpreadsheet className="h-4 w-4" />
+        엑셀 다운로드
       </DialogTrigger>
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>

@@ -50,11 +50,7 @@ export function ContactsDownloadDialog({ surveyId, candidates }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          다운로드
-        </Button>
-      </DialogTrigger>
+      <DialogTrigger render={<Button variant="outline" size="sm" />}>다운로드</DialogTrigger>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>조사 대상 다운로드</DialogTitle>
@@ -100,10 +96,8 @@ export function ContactsDownloadDialog({ surveyId, candidates }: Props) {
 
         <DialogFooter>
           {href ? (
-            <Button asChild size="sm">
-              <a href={href} download onClick={() => setOpen(false)}>
-                선택 다운로드
-              </a>
+            <Button size="sm" render={<a href={href} download onClick={() => setOpen(false)} />}>
+              선택 다운로드
             </Button>
           ) : (
             <Button size="sm" disabled>

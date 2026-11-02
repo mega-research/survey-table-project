@@ -148,8 +148,9 @@ describe('TagFilterMenu', () => {
     stubRect(dialog, { left: 1000, top: 100, width: 340, height: 400 });
     stubRect(edit, { left: 1300, top: 260, width: 24, height: 24 });
     await user.click(edit);
-    await screen.findByRole('textbox', { name: '태그 이름' });
-    const wrapper = document.querySelector<HTMLElement>('[data-radix-popper-content-wrapper]:last-of-type');
+    const nameInput = await screen.findByRole('textbox', { name: '태그 이름' });
+    // 가장 가까운 data-side 는 Popup 이고, 자리를 잡는 것은 그 부모인 Positioner 다.
+    const wrapper = nameInput.closest<HTMLElement>('[data-side]')?.parentElement ?? null;
     // 뒤집힌 패널의 오른쪽 끝이 「⋯」(1300)가 아니라 목록 왼쪽 끝(1000)에서 8px 띄운 자리다 — 줄 높이는 그 줄.
     await waitFor(() => expect(wrapper?.style.transform).toBe('translate(992px, 260px)'));
   });

@@ -51,41 +51,43 @@ export function SidebarProfile({ user, memberships, collapsed }: Props) {
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          title={`${user.name} · ${roleLabel}`}
-          className={cn(
-            'flex items-center gap-2.5 border-t border-white/20 pt-3 text-left transition-opacity hover:opacity-90',
-            collapsed ? 'justify-center' : 'justify-between',
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            title={`${user.name} · ${roleLabel}`}
+            className={cn(
+              'flex items-center gap-2.5 border-t border-white/20 pt-3 text-left transition-opacity hover:opacity-90',
+              collapsed ? 'justify-center' : 'justify-between',
+            )}
+          />
+        }
+      >
+        <span className="flex min-w-0 items-center gap-2.5">
+          {user.image ? (
+            // eslint-disable-next-line @next/next/no-img-element -- R2 아바타 URL, next/image 도메인 설정 밖.
+            <img
+              src={user.image}
+              alt=""
+              className="h-[30px] w-[30px] shrink-0 rounded-full object-cover"
+            />
+          ) : (
+            <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-[#E0E7FF] text-[12px] font-semibold text-[#2743AE]">
+              {initial}
+            </span>
           )}
-        >
-          <span className="flex min-w-0 items-center gap-2.5">
-            {user.image ? (
-              // eslint-disable-next-line @next/next/no-img-element -- R2 아바타 URL, next/image 도메인 설정 밖.
-              <img
-                src={user.image}
-                alt=""
-                className="h-[30px] w-[30px] shrink-0 rounded-full object-cover"
-              />
-            ) : (
-              <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-[#E0E7FF] text-[12px] font-semibold text-[#2743AE]">
-                {initial}
+          {!collapsed && (
+            <span className="min-w-0">
+              <span className="block truncate text-[13px] font-medium text-white/90">
+                {user.name}
               </span>
-            )}
-            {!collapsed && (
-              <span className="min-w-0">
-                <span className="block truncate text-[13px] font-medium text-white/90">
-                  {user.name}
-                </span>
-                <span className="block truncate text-[11px] font-normal text-white/50">
-                  {roleLabel}
-                </span>
+              <span className="block truncate text-[11px] font-normal text-white/50">
+                {roleLabel}
               </span>
-            )}
-          </span>
-          {!collapsed && <ChevronUp className="h-3.5 w-3.5 shrink-0 text-white/45" />}
-        </button>
+            </span>
+          )}
+        </span>
+        {!collapsed && <ChevronUp className="h-3.5 w-3.5 shrink-0 text-white/45" />}
       </PopoverTrigger>
       <PopoverContent
         align="start"

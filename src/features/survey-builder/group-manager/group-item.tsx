@@ -96,17 +96,19 @@ export function SortableGroupItem({
           </div>
         </div>
         <Popover>
-          <PopoverTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 p-0"
-              onClick={(e) => {
-                e.stopPropagation();
-              }}
-            >
-              <MoreVertical className="h-4 w-4" />
-            </Button>
+          <PopoverTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={(e) => {
+                  e.stopPropagation();
+                }}
+              />
+            }
+          >
+            <MoreVertical className="h-4 w-4" />
           </PopoverTrigger>
           <PopoverContent className="w-40 p-1" align="end" onClick={(e) => e.stopPropagation()}>
             <div className="flex flex-col">

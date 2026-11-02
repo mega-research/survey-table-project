@@ -89,7 +89,7 @@ async function openEditModal(user: ReturnType<typeof userEvent.setup>) {
 
 describe('GroupManager — 그룹 편집 저장', () => {
   beforeAll(() => {
-    // Radix Popover·Select 가 jsdom 에 없는 API 를 호출한다 — 최소 폴리필.
+    // Popover·Select 가 jsdom 에 없는 API 를 호출한다 — 최소 폴리필.
     Element.prototype.scrollIntoView = vi.fn();
     Element.prototype.hasPointerCapture = vi.fn(() => false) as never;
     Element.prototype.setPointerCapture = vi.fn();

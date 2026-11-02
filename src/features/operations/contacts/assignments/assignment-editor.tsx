@@ -307,8 +307,8 @@ export function AssignmentEditor({
 
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
-            <Button asChild variant="outline" size="sm">
-              <Link href={assignmentsHref(surveyId)}>목록</Link>
+            <Button variant="outline" size="sm" render={<Link href={assignmentsHref(surveyId)} />}>
+              목록
             </Button>
             <button
               type="button"
@@ -327,7 +327,7 @@ export function AssignmentEditor({
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>{savedName}의 배정을 조건 결과로 바꿉니다</AlertDialogTitle>
-              <AlertDialogDescription asChild>
+              <AlertDialogDescription render={<div />}>
                 {summary ? <ApplySummary name={savedName} summary={summary} /> : <span />}
               </AlertDialogDescription>
             </AlertDialogHeader>

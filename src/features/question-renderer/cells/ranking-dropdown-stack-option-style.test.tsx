@@ -22,7 +22,7 @@ const options: QuestionOption[] = [
 ];
 
 describe('RankingDropdownStack 옵션 스타일', () => {
-  it('Radix 옵션 목록과 선택된 트리거에 옵션 스타일을 표시한다', () => {
+  it('Select 옵션 목록과 선택된 트리거에 옵션 스타일을 표시한다', () => {
     const { rerender } = render(
       <RankingDropdownStack
         answers={[]}

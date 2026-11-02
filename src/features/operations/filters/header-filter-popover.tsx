@@ -247,17 +247,19 @@ export function HeaderFilterPopover({
   return (
     <>
       <Popover open={open} onOpenChange={handleOpenChange}>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            aria-label={`${label} 필터`}
-            onMouseEnter={() => setWarm(true)}
-            className={`inline-flex items-center rounded p-0.5 hover:text-slate-900 ${
-              activeEntry ? 'text-blue-600' : 'text-slate-400'
-            }`}
-          >
-            <Filter className="h-3.5 w-3.5" fill={activeEntry ? 'currentColor' : 'none'} />
-          </button>
+        <PopoverTrigger
+          render={
+            <button
+              type="button"
+              aria-label={`${label} 필터`}
+              onMouseEnter={() => setWarm(true)}
+              className={`inline-flex items-center rounded p-0.5 hover:text-slate-900 ${
+                activeEntry ? 'text-blue-600' : 'text-slate-400'
+              }`}
+            />
+          }
+        >
+          <Filter className="h-3.5 w-3.5" fill={activeEntry ? 'currentColor' : 'none'} />
         </PopoverTrigger>
         <PopoverContent align="start" className="w-64 p-3">
           <div className="mb-2 text-xs font-semibold text-slate-500">{label} 필터</div>

@@ -92,22 +92,22 @@ export function ProfilesRowActions({
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" aria-label={`응답 #${idx} 액션`}>
-            <MoreHorizontal className="h-4 w-4" />
-          </Button>
+        <DropdownMenuTrigger
+          render={<Button variant="ghost" size="sm" aria-label={`응답 #${idx} 액션`} />}
+        >
+          <MoreHorizontal className="h-4 w-4" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           {view === 'active' ? (
             <>
-              <DropdownMenuItem onSelect={() => setDialog('edit')}>수정</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setDialog('edit')}>수정</DropdownMenuItem>
               {canManage && (
                 <>
-                  <DropdownMenuItem onSelect={() => setDialog('delete')}>삭제</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setDialog('delete')}>삭제</DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
-                    onSelect={() => setDialog('reset')}
-                    className="text-red-600 focus:text-red-700"
+                    onClick={() => setDialog('reset')}
+                    className="text-red-600 data-[highlighted]:text-red-700"
                   >
                     초기화
                   </DropdownMenuItem>
@@ -117,7 +117,7 @@ export function ProfilesRowActions({
           ) : (
             <DropdownMenuItem
               disabled={isPending}
-              onSelect={() => runConfirmed(client.surveyResponse.manage.restore)}
+              onClick={() => runConfirmed(client.surveyResponse.manage.restore)}
             >
               복원
             </DropdownMenuItem>

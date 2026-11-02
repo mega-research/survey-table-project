@@ -519,19 +519,15 @@ export function CellContentModal({
   return (
     <Dialog
       open={isOpen}
+      // X 버튼이나 ESC만 닫기 가능 (배경 클릭은 disablePointerDismissal 로 막음)
+      disablePointerDismissal
       onOpenChange={(open) => {
-        // X 버튼이나 ESC만 닫기 가능 (배경 클릭은 onInteractOutside에서 막음)
         if (!open && !isSaving) {
           handleCancel();
         }
       }}
     >
-      <DialogContent
-        className="max-h-[90vh] max-w-2xl overflow-y-auto"
-        onInteractOutside={(e) => {
-          e.preventDefault();
-        }}
-      >
+      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>셀 내용 편집</DialogTitle>
         </DialogHeader>

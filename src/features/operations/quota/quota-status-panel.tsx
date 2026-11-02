@@ -101,39 +101,36 @@ export function QuotaStatusPanel({ status, isTestScope = false }: Props) {
       <CardContent className="px-5 py-4">
         <Collapsible open={open} onOpenChange={setOpen}>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <CollapsibleTrigger asChild>
-              <button type="button" className="flex items-center gap-2 hover:opacity-80">
-                <ChevronDown
+            <CollapsibleTrigger
+              render={<button type="button" className="flex items-center gap-2 hover:opacity-80" />}
+            >
+              <ChevronDown
+                className={cn('h-4 w-4 text-slate-400 transition-transform', open && 'rotate-180')}
+              />
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                쿼터 현황
+                <span
                   className={cn(
-                    'h-4 w-4 text-slate-400 transition-transform',
-                    open && 'rotate-180',
+                    'rounded px-1.5 py-0.5 text-[11px] font-bold',
+                    status.enabled ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-500',
                   )}
-                />
-                <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                  쿼터 현황
-                  <span
-                    className={cn(
-                      'rounded px-1.5 py-0.5 text-[11px] font-bold',
-                      status.enabled ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-500',
-                    )}
-                  >
-                    {status.enabled ? '집행 중' : '집계만'}
+                >
+                  {status.enabled ? '집행 중' : '집계만'}
+                </span>
+                {isTestScope && (
+                  <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-bold text-amber-600">
+                    테스트 응답 집계
                   </span>
-                  {isTestScope && (
-                    <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-bold text-amber-600">
-                      테스트 응답 집계
-                    </span>
-                  )}
-                  {status.summary.unclassified > 0 && (
-                    <span
-                      className="rounded bg-rose-50 px-1.5 py-0.5 text-[11px] font-bold text-rose-600"
-                      title="어느 조건에도 분류되지 않아 쿼터에 걸리지 않고 완료된 응답입니다. 키워드·값 누락을 확인하세요."
-                    >
-                      미분류 {numberFormatter.format(status.summary.unclassified)}
-                    </span>
-                  )}
-                </h3>
-              </button>
+                )}
+                {status.summary.unclassified > 0 && (
+                  <span
+                    className="rounded bg-rose-50 px-1.5 py-0.5 text-[11px] font-bold text-rose-600"
+                    title="어느 조건에도 분류되지 않아 쿼터에 걸리지 않고 완료된 응답입니다. 키워드·값 누락을 확인하세요."
+                  >
+                    미분류 {numberFormatter.format(status.summary.unclassified)}
+                  </span>
+                )}
+              </h3>
             </CollapsibleTrigger>
             {open && hasCells && (
               <div

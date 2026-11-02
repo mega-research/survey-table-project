@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -39,7 +39,7 @@ function renderBar(
 
 describe('ProfilesFilterBar — 공용 필터바 wrapper', () => {
   beforeAll(() => {
-    // Radix Select 가 jsdom 에 없는 API 를 호출한다 — 최소 폴리필.
+    // Select 가 jsdom 에 없는 API 를 호출한다 — 최소 폴리필.
     Element.prototype.scrollIntoView = vi.fn();
     Element.prototype.hasPointerCapture = vi.fn(() => false) as never;
     Element.prototype.setPointerCapture = vi.fn();
@@ -74,8 +74,8 @@ describe('ProfilesFilterBar — 공용 필터바 wrapper', () => {
     await user.click(screen.getByRole('button', { name: '+ 조건 추가' }));
     // 두 번째 절: 첫 후보(system.all)로 초기화 — 값만 입력
     const group = screen.getByRole('group', { name: '조건 2' });
-    const input = group.querySelector('input');
-    if (!input) throw new Error('조건 2 입력 없음');
+    // Base UI Select 는 숨은 input 을 함께 그리므로 글자 칸은 역할로 찾는다.
+    const input = within(group).getByRole('textbox');
     await user.type(input, '서울');
     await user.click(screen.getByRole('button', { name: '검색' }));
 

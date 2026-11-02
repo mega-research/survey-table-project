@@ -77,9 +77,9 @@ export function DestinationTeamField({ fields, width }: { fields: Fields; width:
   return (
     <label className="flex flex-col gap-[6px]">
       <FieldLabel>목적지 팀</FieldLabel>
-      {/* 미선택은 빈 문자열로 **계속 제어**한다. value 를 붙였다 뗐다 하면 Radix 가 제어 →
+      {/* 미선택은 빈 문자열로 **계속 제어**한다. value 를 붙였다 뗐다 하면 Select 가 제어 →
           비제어로 전환돼 옛 값을 안에 남기고 트리거가 빈칸으로 굳는다(placeholder 도 안 나온다).
-          빈 문자열은 Radix 가 「선택 없음」으로 알아보는 값이라 placeholder 가 그대로 뜬다. */}
+          빈 문자열은 Select 래퍼가 「선택 없음」으로 알아보는 값이라 placeholder 가 그대로 뜬다. */}
       <Select value={fields.teamId ?? ''} onValueChange={fields.setTeamId}>
         <SelectTrigger className={`${SELECT_TRIGGER} ${width}`} aria-label="목적지 팀">
           <SelectValue placeholder={fields.teamsLoading ? '불러오는 중...' : '팀 선택'} />

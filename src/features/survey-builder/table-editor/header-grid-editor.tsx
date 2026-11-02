@@ -582,18 +582,14 @@ export function HeaderGridEditor({ headerGrid, columnCount, onChange }: HeaderGr
                 )}
 
                 <Popover>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
+                  <PopoverTrigger render={<button type="button"
                       aria-label="헤더 셀 스타일"
                       title="헤더 셀 스타일"
                       // 셀 컨테이너의 onMouseDown 이 드래그 선택을 시작시키므로 반드시 차단한다
                       onMouseDown={(e) => e.stopPropagation()}
-                      className="absolute top-0.5 right-0.5 z-10 flex h-5 w-5 items-center justify-center rounded bg-white/80 text-gray-400 opacity-0 transition-opacity hover:text-gray-700 group-hover:opacity-100 focus:opacity-100"
-                    >
+                      className="absolute top-0.5 right-0.5 z-10 flex h-5 w-5 items-center justify-center rounded bg-white/80 text-gray-400 opacity-0 transition-opacity hover:text-gray-700 group-hover:opacity-100 focus:opacity-100" />}>
                       <Palette className="h-3 w-3" />
-                    </button>
-                  </PopoverTrigger>
+                    </PopoverTrigger>
                   <PopoverContent
                     className="w-80"
                     side="bottom"

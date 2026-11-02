@@ -1,61 +1,23 @@
 'use client';
 
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useState } from 'react';
 
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 
 /**
  * 운영 헤더의 호버 메뉴 — 테스트 모드와 설문 중단·종료가 같은 모양으로 연다.
  *
- * 버튼은 아무것도 바꾸지 않고 메뉴만 연다(호버·클릭). 대각선 이동 중 닫힘을 막기 위해
- * mouseleave 후 200ms 지연 뒤 닫고, 트리거/콘텐츠 어느 쪽이든 재진입하면 취소한다.
- * 호버로 이미 열린 메뉴를 클릭이 다시 닫지 않게 트리거의 pointerdown 을 막고, 버튼 위 클릭은
- * 메뉴 바깥 클릭으로 치지 않는다. DropdownMenu 는 `modal={false}` 로 써야 한다 — 호버로 연
- * 메뉴가 배경을 잠그면 mouseleave 닫힘이 어색하다.
+ * 버튼은 아무것도 바꾸지 않고 메뉴만 연다(호버·클릭). `triggerProps` 는 DropdownMenuTrigger 에
+ * 펼친다 — Base UI 의 호버 열기(openOnHover)가 대각선 이동 중 닫힘을 막는 지연(closeDelay)과,
+ * 호버로 연 메뉴를 클릭이 다시 닫지 않게 하는 처리를 맡는다. DropdownMenu 는 `modal={false}` 로
+ * 써야 한다 — 호버로 연 메뉴가 배경을 잠그면 마우스가 떠날 때의 닫힘이 어색하다.
  */
 export function useHoverMenu() {
   const [open, setOpen] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const closeTimer = useRef<number | null>(null);
-
-  const openMenu = () => {
-    if (closeTimer.current !== null) {
-      window.clearTimeout(closeTimer.current);
-      closeTimer.current = null;
-    }
-    setOpen(true);
-  };
-
-  const scheduleClose = () => {
-    if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
-    closeTimer.current = window.setTimeout(() => setOpen(false), 200);
-  };
-
-  useEffect(
-    () => () => {
-      if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
-    },
-    [],
-  );
-
   return {
     open,
     setOpen,
-    triggerProps: {
-      ref: triggerRef,
-      onMouseEnter: openMenu,
-      onMouseLeave: scheduleClose,
-      onPointerDown: (e: React.PointerEvent) => {
-        if (open) e.preventDefault();
-      },
-    },
-    contentProps: {
-      onMouseEnter: openMenu,
-      onMouseLeave: scheduleClose,
-      onPointerDownOutside: (e: { target: EventTarget | null; preventDefault: () => void }) => {
-        if (triggerRef.current?.contains(e.target as Node)) e.preventDefault();
-      },
-    },
+    triggerProps: { openOnHover: true, delay: 0, closeDelay: 200 },
   };
 }
 
@@ -89,10 +51,8 @@ export function ToggleMenuItem({
       role="menuitemcheckbox"
       aria-checked={checked}
       disabled={disabled}
-      onSelect={(e) => {
-        e.preventDefault();
-        onToggle();
-      }}
+      closeOnClick={false}
+      onClick={onToggle}
       className="items-start gap-2"
     >
       <span className="mt-0.5">{icon}</span>

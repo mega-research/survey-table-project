@@ -108,11 +108,9 @@ export function DemandSummaryTable({ surveyId, rows }: Props) {
                 ? '필요율 낮은 순'
                 : '필요율 높은 순'}
           </Button>
-          <Button variant="outline" size="sm" asChild>
-            <a href={exportHref}>
-              <Download className="mr-1 h-3 w-3" />
-              엑셀
-            </a>
+          <Button variant="outline" size="sm" render={<a href={exportHref} />}>
+            <Download className="mr-1 h-3 w-3" />
+            엑셀
           </Button>
         </div>
       </div>

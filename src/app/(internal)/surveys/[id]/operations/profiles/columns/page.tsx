@@ -51,8 +51,11 @@ export default async function ProfilesColumnsPage({ params }: PageProps) {
           <h2 className="text-xl font-bold text-gray-900">응답 내역 컬럼 설정</h2>
           <p className="text-sm text-slate-500">응답 내역 표의 컬럼 순서·라벨·표시 여부</p>
         </div>
-        <Button asChild variant="outline">
-          <Link href={`/surveys/${surveyId}/operations/profiles`}>← 응답 내역으로</Link>
+        <Button
+          variant="outline"
+          render={<Link href={`/surveys/${surveyId}/operations/profiles`} />}
+        >
+          ← 응답 내역으로
         </Button>
       </div>
 

@@ -96,21 +96,21 @@ export function FilterPanel({ questions, responses, filter, onFilterChange }: Fi
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <div className="border-b border-gray-100 p-4">
           <div className="flex items-center justify-between">
-            <CollapsibleTrigger asChild>
-              <button className="flex items-center gap-2 hover:opacity-80">
-                <Filter className="h-5 w-5 text-blue-500" />
-                <h3 className="font-semibold text-gray-900">필터</h3>
-                {activeCount > 0 && (
-                  <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100">
-                    {activeCount}개 조건
-                  </Badge>
-                )}
-                {isOpen ? (
-                  <ChevronUp className="ml-1 h-4 w-4 text-gray-400" />
-                ) : (
-                  <ChevronDown className="ml-1 h-4 w-4 text-gray-400" />
-                )}
-              </button>
+            <CollapsibleTrigger
+              render={<button className="flex items-center gap-2 hover:opacity-80" />}
+            >
+              <Filter className="h-5 w-5 text-blue-500" />
+              <h3 className="font-semibold text-gray-900">필터</h3>
+              {activeCount > 0 && (
+                <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100">
+                  {activeCount}개 조건
+                </Badge>
+              )}
+              {isOpen ? (
+                <ChevronUp className="ml-1 h-4 w-4 text-gray-400" />
+              ) : (
+                <ChevronDown className="ml-1 h-4 w-4 text-gray-400" />
+              )}
             </CollapsibleTrigger>
 
             {/* 필터 결과 요약 */}

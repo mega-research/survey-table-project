@@ -17,8 +17,8 @@ interface ContactUploadActionProps {
 export function ContactUploadAction({ href, label, disabled }: ContactUploadActionProps) {
   if (!disabled) {
     return (
-      <Button asChild variant="outline" size="sm">
-        <Link href={href}>{label}</Link>
+      <Button variant="outline" size="sm" render={<Link href={href} />}>
+        {label}
       </Button>
     );
   }
@@ -26,16 +26,18 @@ export function ContactUploadAction({ href, label, disabled }: ContactUploadActi
   return (
     <TooltipProvider>
       <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            aria-disabled="true"
-            onClick={(event) => event.preventDefault()}
-          >
-            {label}
-          </Button>
+        <TooltipTrigger
+          render={
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              aria-disabled="true"
+              onClick={(event) => event.preventDefault()}
+            />
+          }
+        >
+          {label}
         </TooltipTrigger>
         <TooltipContent>{TEST_MODE_UPLOAD_MESSAGE}</TooltipContent>
       </Tooltip>

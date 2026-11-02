@@ -5,7 +5,7 @@
  * 화면이 고정할 것은 그 한 몸이라는 사실과, 새 소속 팀이 선택이 아니라는 것이다 — 팀 없이
  * 되살리면 로그인만 되는 미배치로 돌아와 재배치 센터로 다시 흘러간다.
  */
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { selectOption } from '@tests/helpers/select';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -49,8 +49,14 @@ const USER: UserListItem = {
   createdAt: '2026-08-26T00:00:00.000Z',
 };
 
-function renderModal(overrides: Partial<UserListItem> = {}) {
-  return render(<UserRehireModal user={{ ...USER, ...overrides }} onClose={onClose} />);
+// Base UI Dialog 는 열린 다음 틱에 첫 포커스를 옮긴다 — 그 전에 타이핑을 시작하면 글자가
+// 옮겨 간 포커스를 따라 다른 곳으로 샌다. 포커스가 창 안에 자리 잡을 때까지 기다린다.
+async function renderModal(overrides: Partial<UserListItem> = {}) {
+  const result = render(<UserRehireModal user={{ ...USER, ...overrides }} onClose={onClose} />);
+  await waitFor(() =>
+    expect(screen.getByRole('dialog')).toContainElement(document.activeElement as HTMLElement),
+  );
+  return result;
 }
 
 beforeEach(() => {
@@ -61,7 +67,7 @@ beforeEach(() => {
 describe('UserRehireModal', () => {
   it('새 소속 팀을 고르지 않으면 서버까지 보내지 않는다', async () => {
     const user = userEvent.setup();
-    renderModal();
+    await renderModal();
     await user.type(screen.getByLabelText('새 임시 비밀번호'), 'rehire-pw-12');
     await user.click(screen.getByRole('button', { name: '재입사 처리' }));
 
@@ -74,7 +80,7 @@ describe('UserRehireModal', () => {
     // 채울 수 없는 필수 칸을 보여주면 그 계정은 영영 못 돌아오는 것처럼 보인다.
     // guest·fieldwork 는 멤버십 자체가 금지고 슈퍼어드민은 팀 소속과 무관하다.
     const user = userEvent.setup();
-    renderModal({ userType: 'guest' });
+    await renderModal({ userType: 'guest' });
 
     expect(screen.queryByLabelText(/새 소속 팀/)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/팀 역할/)).not.toBeInTheDocument();
@@ -87,13 +93,13 @@ describe('UserRehireModal', () => {
     );
   });
 
-  it('슈퍼어드민 퇴사자도 팀 없이 되살린다', () => {
-    renderModal({ isSuperadmin: true });
+  it('슈퍼어드민 퇴사자도 팀 없이 되살린다', async () => {
+    await renderModal({ isSuperadmin: true });
     expect(screen.queryByLabelText(/새 소속 팀/)).not.toBeInTheDocument();
   });
 
-  it('이전 멤버십을 복구하지 않는다는 것을 말한다 (ADR-0010)', () => {
-    renderModal();
+  it('이전 멤버십을 복구하지 않는다는 것을 말한다 (ADR-0010)', async () => {
+    await renderModal();
     expect(
       screen.getByText('이전 팀 멤버십과 설문 초대는 자동 복구하지 않습니다.'),
     ).toBeInTheDocument();
@@ -102,7 +108,7 @@ describe('UserRehireModal', () => {
 
   it('임시 비밀번호와 직책을 rehire 로 함께 보낸다', async () => {
     const user = userEvent.setup();
-    renderModal();
+    await renderModal();
     await user.type(screen.getByLabelText('새 임시 비밀번호'), 'rehire-pw-12');
     await user.type(screen.getByLabelText('직책'), '선임연구원');
     await selectOption(user, /새 소속 팀/, TEAM_NAME);
@@ -123,7 +129,7 @@ describe('UserRehireModal', () => {
     // 보낸 값이 곧 저장될 값이라, 채우지 않으면 비밀번호만 입력하고 제출한 순간
     // 멀쩡한 직책이 조용히 지워진다.
     const user = userEvent.setup();
-    renderModal({ jobTitle: '책임연구원' });
+    await renderModal({ jobTitle: '책임연구원' });
     expect(screen.getByLabelText('직책')).toHaveValue('책임연구원');
 
     await user.type(screen.getByLabelText('새 임시 비밀번호'), 'rehire-pw-12');
@@ -142,7 +148,7 @@ describe('UserRehireModal', () => {
 
   it('직책을 비우고 제출하면 지운다', async () => {
     const user = userEvent.setup();
-    renderModal({ jobTitle: '책임연구원' });
+    await renderModal({ jobTitle: '책임연구원' });
     await user.clear(screen.getByLabelText('직책'));
     await user.type(screen.getByLabelText('새 임시 비밀번호'), 'rehire-pw-12');
     await selectOption(user, /새 소속 팀/, TEAM_NAME);
@@ -160,7 +166,7 @@ describe('UserRehireModal', () => {
 
   it('8자 미만 임시 비밀번호는 서버까지 보내지 않는다', async () => {
     const user = userEvent.setup();
-    renderModal();
+    await renderModal();
     await user.type(screen.getByLabelText('새 임시 비밀번호'), 'short7c');
     await user.type(screen.getByLabelText('직책'), '선임연구원');
     await selectOption(user, /새 소속 팀/, TEAM_NAME);
@@ -173,7 +179,7 @@ describe('UserRehireModal', () => {
   it('서버 실패는 모달을 열어둔 채 문구로 보여준다', async () => {
     mutateAsync.mockRejectedValue(new Error('허용되지 않은 계정 상태 전이입니다.'));
     const user = userEvent.setup();
-    renderModal();
+    await renderModal();
     await user.type(screen.getByLabelText('새 임시 비밀번호'), 'rehire-pw-12');
     await selectOption(user, /새 소속 팀/, TEAM_NAME);
     await user.click(screen.getByRole('button', { name: '재입사 처리' }));

@@ -98,27 +98,29 @@ export function UserRowActions({ user, onRehire, onDepart, onResetPassword, onEd
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 w-8 p-0 text-[#9CA3AF] hover:text-[#3A3A3C]"
-            aria-label={`${user.name} 액션`}
-          >
-            <MoreVertical className="h-4 w-4" />
-          </Button>
+        <DropdownMenuTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 text-[#9CA3AF] hover:text-[#3A3A3C]"
+              aria-label={`${user.name} 액션`}
+            />
+          }
+        >
+          <MoreVertical className="h-4 w-4" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={() => onEdit(user)}>정보 편집</DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => onResetPassword(user)}>
-            비밀번호 재설정
-          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onEdit(user)}>정보 편집</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onResetPassword(user)}>비밀번호 재설정</DropdownMenuItem>
           {actions.length > 0 && <DropdownMenuSeparator />}
           {actions.map((action) => (
             <DropdownMenuItem
               key={action}
-              onSelect={() => openAction(action)}
-              className={action === 'depart' ? 'text-red-600 focus:text-red-700' : undefined}
+              onClick={() => openAction(action)}
+              className={
+                action === 'depart' ? 'text-red-600 data-[highlighted]:text-red-700' : undefined
+              }
             >
               {USER_STATUS_ACTION_LABEL[action]}
             </DropdownMenuItem>

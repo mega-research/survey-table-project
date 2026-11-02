@@ -138,8 +138,12 @@ export function ProgressFilterBar({
           setValue('');
         }}
       />
-      <Button asChild variant="outline" className="ml-auto h-10">
-        <Link href={operationsPaths(basePath).reportColumns}>컬럼 설정</Link>
+      <Button
+        variant="outline"
+        className="ml-auto h-10"
+        render={<Link href={operationsPaths(basePath).reportColumns} />}
+      >
+        컬럼 설정
       </Button>
     </form>
   );

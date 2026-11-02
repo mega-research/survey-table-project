@@ -22,8 +22,8 @@ if (!('ResizeObserver' in globalThis)) {
   } as unknown as typeof ResizeObserver;
 }
 
-// Radix Select·Dropdown 은 Pointer Events API 를 쓰는데 jsdom 이 그 일부를 구현하지 않는다.
-// 없으면 트리거 클릭이 "hasPointerCapture is not a function" 으로 죽어 목록이 열리지 않는다.
+// Select·Menu 같은 팝업 부품은 Pointer Events API·scrollIntoView 를 쓰는데 jsdom 이 그 일부를
+// 구현하지 않는다. 없으면 트리거 클릭이나 강조 항목 스크롤이 "is not a function" 으로 죽는다.
 // 프로덕션 코드가 아니라 jsdom 의 빈틈을 메우는 것이라 setup 이 자리다.
 if (typeof Element !== 'undefined') {
   Element.prototype.hasPointerCapture ??= () => false;

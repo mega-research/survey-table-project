@@ -11,7 +11,7 @@ const BASE =
 const INACTIVE = 'text-gray-700 hover:bg-gray-100';
 const ACTIVE = 'bg-gray-100 text-gray-900 ring-1 ring-inset ring-gray-300';
 
-// forwardRef + button props spread — Radix PopoverTrigger asChild 등 데이터/aria/onClick 주입에 대응.
+// forwardRef + button props spread — Trigger 의 render={<ToolBtn />} 가 넣는 데이터/aria/onClick 을 받는다.
 export const ToolBtn = forwardRef<HTMLButtonElement, ToolBtnProps>(function ToolBtn(
   { children, active, className, ...rest },
   ref,

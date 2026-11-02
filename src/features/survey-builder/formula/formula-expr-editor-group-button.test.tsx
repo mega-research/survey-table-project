@@ -49,7 +49,8 @@ describe('수식 편집기 — 하위 그룹 버튼', () => {
   it('「항 추가」 메뉴에는 하위 그룹이 더 이상 없다 — 두 곳에 두면 어느 쪽이 맞는지 흐려진다', async () => {
     renderEditor(undefined);
     await userEvent.click(screen.getByRole('button', { name: /항 추가/ }));
-    expect(screen.getByRole('menuitem', { name: '셀 참조' })).toBeInTheDocument();
+    // Base UI 메뉴는 누른 다음 틱에 열린다.
+    expect(await screen.findByRole('menuitem', { name: '셀 참조' })).toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: '하위 그룹' })).toBeNull();
   });
 });

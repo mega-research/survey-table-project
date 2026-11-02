@@ -140,7 +140,7 @@ export function OperationsTabStrip({
           <NavigationMenuItem>
             <NavigationMenuTrigger
               className={cn(
-                'flex h-auto items-center gap-1 rounded-none border-b-2 bg-transparent px-4 py-3 text-sm transition-colors hover:bg-transparent data-[state=open]:bg-transparent',
+                'flex h-auto items-center gap-1 rounded-none border-b-2 bg-transparent px-4 py-3 text-sm transition-colors hover:bg-transparent data-[popup-open]:bg-transparent',
                 isFieldworkActive
                   ? 'border-blue-600 font-semibold text-blue-600 hover:text-blue-600'
                   : 'border-transparent text-slate-500 hover:text-slate-900',
@@ -184,7 +184,7 @@ export function OperationsTabStrip({
           <NavigationMenuItem>
             <NavigationMenuTrigger
               className={cn(
-                'flex h-auto items-center gap-1 rounded-none border-b-2 bg-transparent px-4 py-3 text-sm transition-colors hover:bg-transparent data-[state=open]:bg-transparent',
+                'flex h-auto items-center gap-1 rounded-none border-b-2 bg-transparent px-4 py-3 text-sm transition-colors hover:bg-transparent data-[popup-open]:bg-transparent',
                 isContactsActive
                   ? 'border-blue-600 font-semibold text-blue-600 hover:text-blue-600'
                   : 'border-transparent text-slate-500 hover:text-slate-900',
@@ -223,7 +223,7 @@ export function OperationsTabStrip({
           <NavigationMenuItem>
             <NavigationMenuTrigger
               className={cn(
-                'flex h-auto items-center gap-1 rounded-none border-b-2 bg-transparent px-4 py-3 text-sm transition-colors hover:bg-transparent data-[state=open]:bg-transparent',
+                'flex h-auto items-center gap-1 rounded-none border-b-2 bg-transparent px-4 py-3 text-sm transition-colors hover:bg-transparent data-[popup-open]:bg-transparent',
                 isMailActive
                   ? 'border-blue-600 font-semibold text-blue-600 hover:text-blue-600'
                   : 'border-transparent text-slate-500 hover:text-slate-900',

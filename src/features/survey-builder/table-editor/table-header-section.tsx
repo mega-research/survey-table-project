@@ -151,13 +151,15 @@ const ColumnHeader = React.memo(function ColumnHeader({
 
       {/* 설정 버튼 — 열 너비가 좁아도 항상 클릭 가능하도록 absolute 고정 */}
       <Popover>
-        <PopoverTrigger asChild>
-          <button
-            className="absolute top-1.5 right-1 z-10 flex h-6 w-6 items-center justify-center rounded bg-gray-50 text-gray-400 shadow-sm transition-colors hover:bg-gray-200 hover:text-gray-700"
-            title="열 설정"
-          >
-            <Settings2 className="h-3.5 w-3.5" />
-          </button>
+        <PopoverTrigger
+          render={
+            <button
+              className="absolute top-1.5 right-1 z-10 flex h-6 w-6 items-center justify-center rounded bg-gray-50 text-gray-400 shadow-sm transition-colors hover:bg-gray-200 hover:text-gray-700"
+              title="열 설정"
+            />
+          }
+        >
+          <Settings2 className="h-3.5 w-3.5" />
         </PopoverTrigger>
         <PopoverContent className="w-48 p-1" side="bottom" align="end">
           <div className="space-y-0.5">
@@ -200,23 +202,25 @@ const ColumnHeader = React.memo(function ColumnHeader({
 
             {/* 헤더 스타일 — 메뉴가 비대해지지 않도록 중첩 팝오버로 분리 */}
             <Popover>
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="헤더 스타일"
-                  className={`${MENU_BUTTON_BASE} text-gray-600 hover:bg-gray-100`}
-                >
-                  <Palette className="h-3 w-3" /> 헤더 스타일
-                  {(column.backgroundColor || column.textColor) && (
-                    <span
-                      aria-hidden
-                      className="ml-auto flex h-3.5 w-3.5 items-center justify-center rounded-sm border border-gray-300 text-[8px] leading-none"
-                      style={{ ...getCellBackgroundStyle(column), ...getCellTextStyle(column) }}
-                    >
-                      가
-                    </span>
-                  )}
-                </button>
+              <PopoverTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label="헤더 스타일"
+                    className={`${MENU_BUTTON_BASE} text-gray-600 hover:bg-gray-100`}
+                  />
+                }
+              >
+                <Palette className="h-3 w-3" /> 헤더 스타일
+                {(column.backgroundColor || column.textColor) && (
+                  <span
+                    aria-hidden
+                    className="ml-auto flex h-3.5 w-3.5 items-center justify-center rounded-sm border border-gray-300 text-[8px] leading-none"
+                    style={{ ...getCellBackgroundStyle(column), ...getCellTextStyle(column) }}
+                  >
+                    가
+                  </span>
+                )}
               </PopoverTrigger>
               <PopoverContent className="w-80" side="right" align="start">
                 <CellStyleFields

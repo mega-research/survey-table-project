@@ -119,13 +119,18 @@ export function ContactsListView({
                 disabled={data.isTestScope}
               />
               {/* 이월 응답은 명단과 다른 경로다 — 명단 업로드의 replace 는 개별 링크를 재발급한다. */}
-              <Button asChild variant="outline" size="sm">
-                <Link href={`${paths.contacts}/prior-answers`}>이월 응답 임포트</Link>
+              <Button
+                variant="outline"
+                size="sm"
+                render={<Link href={`${paths.contacts}/prior-answers`} />}
+              >
+                이월 응답 임포트
               </Button>
-              <Button asChild size="sm">
-                <Link href={contactDetailHref(paths.contacts, 'new', listQuery)}>
-                  + 조사 대상 추가
-                </Link>
+              <Button
+                size="sm"
+                render={<Link href={contactDetailHref(paths.contacts, 'new', listQuery)} />}
+              >
+                + 조사 대상 추가
               </Button>
             </>
           )}

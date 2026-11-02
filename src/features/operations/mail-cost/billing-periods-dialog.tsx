@@ -89,11 +89,9 @@ export function BillingPeriodsDialog({ periods }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          <Plus className="mr-1.5 h-4 w-4" />
-          요금제·결제일 관리
-        </Button>
+      <DialogTrigger render={<Button variant="outline" size="sm" />}>
+        <Plus className="mr-1.5 h-4 w-4" />
+        요금제·결제일 관리
       </DialogTrigger>
       <DialogContent className="max-w-4xl">
         <DialogHeader>

@@ -212,42 +212,45 @@ export function TableValidationEditor({
         return (
           <Card key={rule.id} className="border-l-4 border-l-blue-500">
             <Collapsible open={isExpanded} onOpenChange={() => toggleRuleExpanded(rule.id)}>
-              <CollapsibleTrigger asChild>
-                <CardHeader className="cursor-pointer transition-colors hover:bg-gray-50">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      {isExpanded ? (
-                        <ChevronUp className="h-4 w-4 text-gray-500" />
-                      ) : (
-                        <ChevronDown className="h-4 w-4 text-gray-500" />
+              <CollapsibleTrigger
+                nativeButton={false}
+                render={
+                  <CardHeader className="cursor-pointer transition-colors hover:bg-gray-50" />
+                }
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {isExpanded ? (
+                      <ChevronUp className="h-4 w-4 text-gray-500" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4 text-gray-500" />
+                    )}
+                    <CardTitle className="text-base">
+                      규칙 {index + 1}
+                      {rule.description && (
+                        <span className="ml-2 text-sm font-normal">- {rule.description}</span>
                       )}
-                      <CardTitle className="text-base">
-                        규칙 {index + 1}
-                        {rule.description && (
-                          <span className="ml-2 text-sm font-normal">- {rule.description}</span>
-                        )}
-                        {!rule.description && (
-                          <span className="ml-2 text-sm font-normal text-gray-500">
-                            ({validationTypes.find((t) => t.value === rule.type)?.label})
-                          </span>
-                        )}
-                      </CardTitle>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeRule(rule.id);
-                        }}
-                        className="text-red-600 hover:bg-red-50 hover:text-red-700"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+                      {!rule.description && (
+                        <span className="ml-2 text-sm font-normal text-gray-500">
+                          ({validationTypes.find((t) => t.value === rule.type)?.label})
+                        </span>
+                      )}
+                    </CardTitle>
                   </div>
-                </CardHeader>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeRule(rule.id);
+                      }}
+                      className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <CardContent className="space-y-4">

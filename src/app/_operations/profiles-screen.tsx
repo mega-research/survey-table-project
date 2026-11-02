@@ -244,8 +244,11 @@ export async function ProfilesScreen({
           </p>
         </div>
         {canConfigureColumns && (
-          <Button asChild variant="outline">
-            <Link href={operationsPaths(basePath).profilesColumns}>컬럼 설정</Link>
+          <Button
+            variant="outline"
+            render={<Link href={operationsPaths(basePath).profilesColumns} />}
+          >
+            컬럼 설정
           </Button>
         )}
       </div>

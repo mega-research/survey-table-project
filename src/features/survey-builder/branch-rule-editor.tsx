@@ -5,20 +5,27 @@ import { useEffect, useEffectEvent, useState } from 'react';
 import { ArrowRight, Check, ChevronsUpDown, GitBranch, Info, XCircle } from 'lucide-react';
 
 import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from '@/components/ui/command';
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxRoot,
+  ComboboxSearchInput,
+  ComboboxTrigger,
+} from '@/components/ui/combobox';
 import { Label } from '@/components/ui/label';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Switch } from '@/components/ui/switch';
 import { cn, generateId } from '@/lib/utils';
 import { BranchAction, BranchRule, Question } from '@/types/survey';
 
 type EndOutcome = NonNullable<BranchRule['endOutcome']>;
+
+// 이동할 질문 고르기의 항목 — 검색은 번호·제목·설명을 한 글자로 이어 붙인 것에 대해 한다.
+interface QuestionChoice {
+  question: Question;
+  questionNumber: string;
+  searchText: string;
+}
 
 interface BranchRuleEditorProps {
   branchRule?: BranchRule | undefined;
@@ -42,6 +49,14 @@ export function BranchRuleEditor({
   // 현재 질문 이후의 질문만 필터링
   const currentIndex = allQuestions.findIndex((q) => q.id === currentQuestionId);
   const availableQuestions = allQuestions.filter((_, index) => index > currentIndex);
+  const questionChoices: QuestionChoice[] = availableQuestions.map((q, index) => {
+    const questionNumber = `Q${currentIndex + index + 2}`;
+    return {
+      question: q,
+      questionNumber,
+      searchText: `${questionNumber} ${q.title || '제목 없음'} ${q.description || ''}`,
+    };
+  });
 
   // branchRule prop이 변경될 때 state 동기화 — effect 대신 렌더 중 조정 패턴
   const [prevBranchRule, setPrevBranchRule] = useState(branchRule);
@@ -160,182 +175,168 @@ export function BranchRuleEditor({
           <div className="space-y-2">
             <Label className="text-xs font-medium text-gray-600">이동할 질문 선택</Label>
             {availableQuestions.length > 0 ? (
-              <Popover open={open} onOpenChange={setOpen}>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    role="combobox"
-                    aria-expanded={open}
-                    aria-haspopup="listbox"
-                    aria-controls="branch-rule-question-listbox"
-                    aria-label={
-                      targetQuestionId
-                        ? `선택된 질문: ${
-                            availableQuestions.find((q) => q.id === targetQuestionId)?.title || ''
-                          }`
-                        : '이동할 질문을 선택하세요'
-                    }
-                    className={cn(
-                      'flex min-h-[48px] w-full items-center justify-between rounded-xl border-2 px-4 py-3 text-left text-sm shadow-sm transition-all hover:shadow-md focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none',
-                      targetQuestionId
-                        ? 'border-blue-500 bg-gradient-to-r from-blue-50 to-blue-100 text-blue-700'
-                        : 'border-gray-300 bg-white hover:border-blue-400 hover:bg-gray-50',
-                    )}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        setOpen(!open);
-                      }
-                    }}
-                  >
-                    <div className="flex flex-1 items-center gap-3">
-                      <ArrowRight
-                        className={cn(
-                          'h-4 w-4 flex-shrink-0',
-                          targetQuestionId ? 'text-blue-600' : 'text-gray-400',
-                        )}
-                      />
-                      <span
-                        className={cn(
-                          'font-medium',
-                          targetQuestionId ? 'text-blue-700' : 'text-gray-500',
-                        )}
-                      >
-                        {targetQuestionId
-                          ? (() => {
-                              const selectedQuestion = availableQuestions.find(
-                                (q) => q.id === targetQuestionId,
-                              );
-                              if (!selectedQuestion) return '질문을 선택하세요';
-                              const index = availableQuestions.indexOf(selectedQuestion);
-                              const title = selectedQuestion.title || '제목 없음';
-                              const displayTitle =
-                                title.length > 60 ? title.substring(0, 60) + '...' : title;
-                              return `Q${currentIndex + index + 2}. ${displayTitle}`;
-                            })()
-                          : '질문을 선택하세요'}
-                      </span>
-                    </div>
-                    <ChevronsUpDown
+              <ComboboxRoot<QuestionChoice>
+                items={questionChoices}
+                value={questionChoices.find((c) => c.question.id === targetQuestionId) ?? null}
+                onValueChange={(choice) => {
+                  if (choice) setTargetQuestionId(choice.question.id);
+                }}
+                itemToStringLabel={(choice) => choice.searchText}
+                isItemEqualToValue={(a, b) => a.question.id === b.question.id}
+                open={open}
+                onOpenChange={setOpen}
+              >
+                <ComboboxTrigger
+                  aria-label={
+                    targetQuestionId
+                      ? `선택된 질문: ${
+                          availableQuestions.find((q) => q.id === targetQuestionId)?.title || ''
+                        }`
+                      : '이동할 질문을 선택하세요'
+                  }
+                  className={cn(
+                    'flex min-h-[48px] w-full items-center justify-between rounded-xl border-2 px-4 py-3 text-left text-sm shadow-sm transition-all hover:shadow-md focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none',
+                    targetQuestionId
+                      ? 'border-blue-500 bg-gradient-to-r from-blue-50 to-blue-100 text-blue-700'
+                      : 'border-gray-300 bg-white hover:border-blue-400 hover:bg-gray-50',
+                  )}
+                >
+                  <div className="flex flex-1 items-center gap-3">
+                    <ArrowRight
                       className={cn(
-                        'ml-2 h-4 w-4 flex-shrink-0 transition-transform',
-                        open ? 'rotate-180' : 'rotate-0',
+                        'h-4 w-4 flex-shrink-0',
                         targetQuestionId ? 'text-blue-600' : 'text-gray-400',
                       )}
                     />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[500px] border-2 p-0 shadow-xl" align="start">
-                  <Command className="rounded-xl">
-                    <div className="border-b bg-gray-50 px-3 py-2">
-                      <CommandInput
-                        placeholder="질문 번호나 제목으로 검색..."
-                        className="border-0 bg-transparent text-sm placeholder:text-gray-500 focus:ring-0"
-                      />
+                    <span
+                      className={cn(
+                        'font-medium',
+                        targetQuestionId ? 'text-blue-700' : 'text-gray-500',
+                      )}
+                    >
+                      {targetQuestionId
+                        ? (() => {
+                            const selectedQuestion = availableQuestions.find(
+                              (q) => q.id === targetQuestionId,
+                            );
+                            if (!selectedQuestion) return '질문을 선택하세요';
+                            const index = availableQuestions.indexOf(selectedQuestion);
+                            const title = selectedQuestion.title || '제목 없음';
+                            const displayTitle =
+                              title.length > 60 ? title.substring(0, 60) + '...' : title;
+                            return `Q${currentIndex + index + 2}. ${displayTitle}`;
+                          })()
+                        : '질문을 선택하세요'}
+                    </span>
+                  </div>
+                  <ChevronsUpDown
+                    className={cn(
+                      'ml-2 h-4 w-4 flex-shrink-0 transition-transform',
+                      open ? 'rotate-180' : 'rotate-0',
+                      targetQuestionId ? 'text-blue-600' : 'text-gray-400',
+                    )}
+                  />
+                </ComboboxTrigger>
+                <ComboboxContent className="w-[500px] rounded-xl border-2 shadow-xl">
+                  <ComboboxSearchInput
+                    placeholder="질문 번호나 제목으로 검색..."
+                    wrapperClassName="bg-gray-50"
+                    className="border-0 bg-transparent text-sm placeholder:text-gray-500 focus:ring-0"
+                  />
+                  <ComboboxEmpty className="py-6 text-gray-500">
+                    <div className="flex flex-col items-center gap-2">
+                      <ArrowRight className="h-8 w-8 text-gray-300" />
+                      <p className="text-sm">검색 결과가 없습니다</p>
+                      <p className="text-xs text-gray-400">다른 키워드로 검색해보세요</p>
                     </div>
-                    <CommandList id="branch-rule-question-listbox" className="max-h-64">
-                      <CommandEmpty className="py-6 text-center text-gray-500">
-                        <div className="flex flex-col items-center gap-2">
-                          <ArrowRight className="h-8 w-8 text-gray-300" />
-                          <p className="text-sm">검색 결과가 없습니다</p>
-                          <p className="text-xs text-gray-400">다른 키워드로 검색해보세요</p>
-                        </div>
-                      </CommandEmpty>
-                      <CommandGroup>
-                        {availableQuestions.map((q, index) => {
-                          const title = q.title || '제목 없음';
-                          const description = q.description || '';
-                          const displayTitle =
-                            title.length > 80 ? title.substring(0, 80) + '...' : title;
-                          const displayDescription =
-                            description.length > 120
-                              ? description.substring(0, 120) + '...'
-                              : description;
-                          const questionNumber = `Q${currentIndex + index + 2}`;
-                          const isSelected = targetQuestionId === q.id;
+                  </ComboboxEmpty>
+                  <ComboboxList className="max-h-64">
+                    {(choice: QuestionChoice) => {
+                      const { question: q, questionNumber } = choice;
+                      const title = q.title || '제목 없음';
+                      const description = q.description || '';
+                      const displayTitle =
+                        title.length > 80 ? title.substring(0, 80) + '...' : title;
+                      const displayDescription =
+                        description.length > 120
+                          ? description.substring(0, 120) + '...'
+                          : description;
+                      const isSelected = targetQuestionId === q.id;
 
-                          return (
-                            <CommandItem
-                              key={q.id}
-                              value={`${questionNumber} ${title} ${description}`}
-                              onSelect={() => {
-                                setTargetQuestionId(q.id);
-                                setOpen(false);
-                              }}
+                      return (
+                        <ComboboxItem
+                          key={q.id}
+                          value={choice}
+                          className={cn(
+                            'cursor-pointer px-4 py-3 transition-all hover:bg-blue-50 data-[highlighted]:bg-blue-50 data-[highlighted]:text-inherit',
+                            isSelected && 'border-l-4 border-blue-500 bg-blue-100',
+                          )}
+                          aria-label={`질문 ${questionNumber}: ${title}${
+                            description ? ` - ${description}` : ''
+                          }`}
+                        >
+                          <div className="flex w-full items-start gap-3">
+                            <Check
                               className={cn(
-                                'cursor-pointer px-4 py-3 transition-all hover:bg-blue-50 focus:bg-blue-50 focus:outline-none',
-                                isSelected && 'border-l-4 border-blue-500 bg-blue-100',
+                                'mt-1 h-4 w-4 flex-shrink-0 transition-opacity',
+                                isSelected ? 'text-blue-600 opacity-100' : 'opacity-0',
                               )}
-                              role="option"
-                              aria-selected={isSelected}
-                              aria-label={`질문 ${questionNumber}: ${title}${
-                                description ? ` - ${description}` : ''
-                              }`}
-                            >
-                              <div className="flex w-full items-start gap-3">
-                                <Check
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="mb-1 flex items-center gap-2">
+                                <span
                                   className={cn(
-                                    'mt-1 h-4 w-4 flex-shrink-0 transition-opacity',
-                                    isSelected ? 'text-blue-600 opacity-100' : 'opacity-0',
+                                    'rounded-full px-2 py-1 text-xs font-bold',
+                                    isSelected
+                                      ? 'bg-blue-600 text-white'
+                                      : 'bg-gray-200 text-gray-600',
                                   )}
-                                />
-                                <div className="min-w-0 flex-1">
-                                  <div className="mb-1 flex items-center gap-2">
-                                    <span
-                                      className={cn(
-                                        'rounded-full px-2 py-1 text-xs font-bold',
-                                        isSelected
-                                          ? 'bg-blue-600 text-white'
-                                          : 'bg-gray-200 text-gray-600',
-                                      )}
-                                    >
-                                      {questionNumber}
-                                    </span>
-                                    <span
-                                      className={cn(
-                                        'rounded-full px-2 py-1 text-xs capitalize',
-                                        q.type === 'text' && 'bg-sky-100 text-sky-700',
-                                        q.type === 'textarea' && 'bg-green-100 text-green-700',
-                                        q.type === 'radio' && 'bg-purple-100 text-purple-700',
-                                        q.type === 'checkbox' && 'bg-orange-100 text-orange-700',
-                                        q.type === 'select' && 'bg-pink-100 text-pink-700',
-                                        q.type === 'table' && 'bg-indigo-100 text-indigo-700',
-                                        ![
-                                          'text',
-                                          'textarea',
-                                          'radio',
-                                          'checkbox',
-                                          'select',
-                                          'table',
-                                        ].includes(q.type) && 'bg-gray-100 text-gray-700',
-                                      )}
-                                    >
-                                      {q.type}
-                                    </span>
-                                  </div>
-                                  <p
-                                    className={cn(
-                                      'mb-1 text-sm leading-tight font-medium',
-                                      isSelected ? 'text-blue-900' : 'text-gray-900',
-                                    )}
-                                  >
-                                    {displayTitle}
-                                  </p>
-                                  {description && (
-                                    <p className="text-xs leading-relaxed text-gray-500">
-                                      {displayDescription}
-                                    </p>
+                                >
+                                  {questionNumber}
+                                </span>
+                                <span
+                                  className={cn(
+                                    'rounded-full px-2 py-1 text-xs capitalize',
+                                    q.type === 'text' && 'bg-sky-100 text-sky-700',
+                                    q.type === 'textarea' && 'bg-green-100 text-green-700',
+                                    q.type === 'radio' && 'bg-purple-100 text-purple-700',
+                                    q.type === 'checkbox' && 'bg-orange-100 text-orange-700',
+                                    q.type === 'select' && 'bg-pink-100 text-pink-700',
+                                    q.type === 'table' && 'bg-indigo-100 text-indigo-700',
+                                    ![
+                                      'text',
+                                      'textarea',
+                                      'radio',
+                                      'checkbox',
+                                      'select',
+                                      'table',
+                                    ].includes(q.type) && 'bg-gray-100 text-gray-700',
                                   )}
-                                </div>
+                                >
+                                  {q.type}
+                                </span>
                               </div>
-                            </CommandItem>
-                          );
-                        })}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
+                              <p
+                                className={cn(
+                                  'mb-1 text-sm leading-tight font-medium',
+                                  isSelected ? 'text-blue-900' : 'text-gray-900',
+                                )}
+                              >
+                                {displayTitle}
+                              </p>
+                              {description && (
+                                <p className="text-xs leading-relaxed text-gray-500">
+                                  {displayDescription}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </ComboboxItem>
+                      );
+                    }}
+                  </ComboboxList>
+                </ComboboxContent>
+              </ComboboxRoot>
             ) : (
               <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
                 <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />

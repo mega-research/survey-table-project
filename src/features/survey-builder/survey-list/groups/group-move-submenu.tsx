@@ -55,8 +55,10 @@ export function GroupMoveSubmenu({
             return (
               <DropdownMenuItem
                 key={group.id}
-                onSelect={() => onMove(group.id)}
-                className={cn(isCurrent && 'bg-[#EEF2FF] text-[#2743AE] focus:bg-[#EEF2FF]')}
+                onClick={() => onMove(group.id)}
+                className={cn(
+                  isCurrent && 'bg-[#EEF2FF] text-[#2743AE] data-[highlighted]:bg-[#EEF2FF]',
+                )}
               >
                 <Folder className={cn('h-3.5 w-3.5', isCurrent && 'text-[#2743AE]')} />
                 <span className={cn('truncate', isCurrent && 'font-semibold')}>{group.name}</span>
@@ -68,7 +70,7 @@ export function GroupMoveSubmenu({
         <DropdownMenuSeparator />
         <DropdownMenuItem
           disabled={currentGroupId === null}
-          onSelect={() => onMove(null)}
+          onClick={() => onMove(null)}
           className="text-[#6E6E73]"
         >
           <FolderMinus className="h-3.5 w-3.5" />

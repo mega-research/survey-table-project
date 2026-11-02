@@ -270,8 +270,12 @@ export function FilterBarCore({
         {trailing}
         {resetControl}
         {columnsSettingsHref && (
-          <Button asChild variant="outline" className="ml-auto h-10">
-            <Link href={columnsSettingsHref}>컬럼 설정</Link>
+          <Button
+            variant="outline"
+            className="ml-auto h-10"
+            render={<Link href={columnsSettingsHref} />}
+          >
+            컬럼 설정
           </Button>
         )}
       </div>

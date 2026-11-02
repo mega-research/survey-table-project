@@ -738,22 +738,19 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
   return (
     <Dialog
       open={isOpen}
-      onOpenChange={(open) => {
-        // X 버튼으로만 닫기 가능 (배경 클릭과 Escape는 차단)
+      // X 버튼으로만 닫기 가능 (배경 클릭과 Escape는 차단)
+      disablePointerDismissal
+      onOpenChange={(open, eventDetails) => {
+        if (eventDetails.reason === 'escape-key') {
+          eventDetails.cancel();
+          return;
+        }
         if (!open && !isSaving) {
           onClose();
         }
       }}
     >
-      <DialogContent
-        className={`${modalSize} flex max-h-[95vh] flex-col p-0`}
-        onInteractOutside={(e) => {
-          e.preventDefault();
-        }}
-        onEscapeKeyDown={(event) => {
-          event.preventDefault();
-        }}
-      >
+      <DialogContent className={`${modalSize} flex max-h-[95vh] flex-col p-0`}>
         {/* 고정 헤더 */}
         <DialogHeader className="flex-shrink-0 border-b border-gray-200 px-6 py-4">
           <DialogTitle className="flex items-center justify-between">

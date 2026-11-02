@@ -3,7 +3,7 @@
  *
  * Task 7 fix round 1 — 리뷰가 지적한 소비처 누락: RankingQuestion 의 플랫 옵션 목록(opt.label)·
  * 그룹 헤딩(g.label)·내장 테이블 모바일 카드(opt?.label 체인), RankingDropdownStack 의 실제
- * 순위 선택 드롭다운 옵션(native/Radix 둘 다)에 인용 토큰 치환이 빠져 있었다.
+ * 순위 선택 드롭다운 옵션(native/Select 둘 다)에 인용 토큰 치환이 빠져 있었다.
  */
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
@@ -217,7 +217,7 @@ describe('RankingDropdownStack — 순위 선택 드롭다운 옵션 인용 치�
     expect(screen.getByRole('option', { name: '홍길동님 옵션' })).toBeInTheDocument();
   });
 
-  it('Radix Select 옵션의 인용 토큰을 치환한다', () => {
+  it('Select 옵션의 인용 토큰을 치환한다', () => {
     mobileFlag = false;
     render(
       <ContactAttrsProvider attrs={{}} quotes={{ 이름: '홍길동' }}>

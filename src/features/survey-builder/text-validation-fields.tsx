@@ -58,27 +58,29 @@ export function TextValidationFields({
       className="rounded-lg border border-gray-200"
       data-testid={`${idPrefix}-text-validation`}
     >
-      <CollapsibleTrigger asChild>
-        <button
-          type="button"
-          className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors hover:bg-gray-50"
-          aria-expanded={open}
+      <CollapsibleTrigger
+        render={
+          <button
+            type="button"
+            className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors hover:bg-gray-50"
+            aria-expanded={open}
+          />
+        }
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          {open ? (
+            <ChevronUp className="h-4 w-4 shrink-0 text-gray-500" />
+          ) : (
+            <ChevronDown className="h-4 w-4 shrink-0 text-gray-500" />
+          )}
+          <span className="text-sm font-medium">응답 품질 검사</span>
+        </span>
+        <span
+          className={cn('truncate text-xs', hasAny ? 'text-gray-700' : 'text-gray-400')}
+          data-testid={`${idPrefix}-text-validation-summary`}
         >
-          <span className="flex min-w-0 items-center gap-2">
-            {open ? (
-              <ChevronUp className="h-4 w-4 shrink-0 text-gray-500" />
-            ) : (
-              <ChevronDown className="h-4 w-4 shrink-0 text-gray-500" />
-            )}
-            <span className="text-sm font-medium">응답 품질 검사</span>
-          </span>
-          <span
-            className={cn('truncate text-xs', hasAny ? 'text-gray-700' : 'text-gray-400')}
-            data-testid={`${idPrefix}-text-validation-summary`}
-          >
-            {locked ? '평문 모드 전용' : summarizeTextValidation(config)}
-          </span>
-        </button>
+          {locked ? '평문 모드 전용' : summarizeTextValidation(config)}
+        </span>
       </CollapsibleTrigger>
       <CollapsibleContent>
         <div className="space-y-3 border-t border-gray-100 px-3 pt-3 pb-3">

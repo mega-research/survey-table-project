@@ -394,36 +394,38 @@ export function TestModeControl({ surveyId, initial }: Props) {
     <>
       {/* 버튼은 아무 동작이 없고 메뉴만 연다(호버·클릭). modal={false}: 호버 오픈 중 배경 잠금이 없어야 mouseleave 닫힘이 자연스럽다 */}
       <DropdownMenu open={testMenu.open} onOpenChange={setTestMenuOpen} modal={false}>
-        <DropdownMenuTrigger asChild>
-          <Button
-            {...testMenu.triggerProps}
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={isPending || state === null}
-            className={
-              viewingTest
-                ? 'border-amber-600 bg-amber-500 text-white hover:bg-amber-600 hover:text-white'
-                : envOn
-                  ? 'border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100'
-                  : undefined
-            }
-          >
-            <FlaskConical className="mr-2 h-4 w-4" />
-            {viewingTest ? '테스트 데이터 보는 중' : '테스트 모드'}
-            {envOn ? (
-              <span
-                className={`ml-2 rounded px-1.5 py-0.5 text-[11px] leading-none font-bold text-white ${
-                  viewingTest ? 'bg-amber-700' : 'bg-amber-500'
-                }`}
-              >
-                ON
-              </span>
-            ) : null}
-            <ChevronDown className="ml-1 h-4 w-4" />
-          </Button>
+        <DropdownMenuTrigger
+          {...testMenu.triggerProps}
+          render={
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isPending || state === null}
+              className={
+                viewingTest
+                  ? 'border-amber-600 bg-amber-500 text-white hover:bg-amber-600 hover:text-white'
+                  : envOn
+                    ? 'border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                    : undefined
+              }
+            />
+          }
+        >
+          <FlaskConical className="mr-2 h-4 w-4" />
+          {viewingTest ? '테스트 데이터 보는 중' : '테스트 모드'}
+          {envOn ? (
+            <span
+              className={`ml-2 rounded px-1.5 py-0.5 text-[11px] leading-none font-bold text-white ${
+                viewingTest ? 'bg-amber-700' : 'bg-amber-500'
+              }`}
+            >
+              ON
+            </span>
+          ) : null}
+          <ChevronDown className="ml-1 h-4 w-4" />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-[340px]" {...testMenu.contentProps}>
+        <DropdownMenuContent align="end" className="w-[340px]">
           <ToggleMenuItem
             icon={<Power className="h-4 w-4" />}
             label="테스트 모드"
@@ -433,7 +435,7 @@ export function TestModeControl({ surveyId, initial }: Props) {
             onToggle={envOn ? requestDisableTestMode : enableTestMode}
           />
           <DropdownMenuSeparator />
-          <DropdownMenuItem disabled={!envOn || !testLink} onSelect={copyTestLink}>
+          <DropdownMenuItem disabled={!envOn || !testLink} onClick={copyTestLink}>
             <Copy className="mr-2 h-4 w-4" />
             테스트 링크 복사
           </DropdownMenuItem>
@@ -449,7 +451,7 @@ export function TestModeControl({ surveyId, initial }: Props) {
           />
           <DropdownMenuItem
             disabled={!envOn || (state?.testTargetCount ?? 0) > 0}
-            onSelect={openGenerator}
+            onClick={openGenerator}
           >
             <UserPlus className="mr-2 h-4 w-4" />
             <span className="flex flex-col">
@@ -482,18 +484,16 @@ export function TestModeControl({ surveyId, initial }: Props) {
                 ? `테스트 대상자 ${state.testTargetCount}명과 응답 ${state.testResponseCount}건을 삭제할까요?`
                 : `테스트 응답 ${state?.testResponseCount ?? 0}건을 삭제할까요?`}
             </AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="space-y-2">
-                <p>
-                  테스트 모드에서 수집된 응답은 통계·집계에서 항상 제외됩니다. 삭제하면 복구할 수
-                  없으니, 보관하려면 “보관하고 끄기”를 선택하세요.
-                </p>
-                <p>다른 관리자가 진행 중인 테스트와 발송된 테스트 링크도 중단됩니다.</p>
-                <p>
-                  테스트 데이터를 모두 삭제하고 진행 중인 발송을 중단합니다. 이미 발송된 메일은
-                  취소할 수 없습니다.
-                </p>
-              </div>
+            <AlertDialogDescription render={<div className="space-y-2" />}>
+              <p>
+                테스트 모드에서 수집된 응답은 통계·집계에서 항상 제외됩니다. 삭제하면 복구할 수
+                없으니, 보관하려면 “보관하고 끄기”를 선택하세요.
+              </p>
+              <p>다른 관리자가 진행 중인 테스트와 발송된 테스트 링크도 중단됩니다.</p>
+              <p>
+                테스트 데이터를 모두 삭제하고 진행 중인 발송을 중단합니다. 이미 발송된 메일은 취소할
+                수 없습니다.
+              </p>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -507,11 +507,11 @@ export function TestModeControl({ surveyId, initial }: Props) {
             >
               보관하고 끄기
             </Button>
-            {/* preventDefault: Radix Action 의 자동 닫힘을 막아 실패 시 다이얼로그를 유지한다 */}
+            {/* preventBaseUIHandler: Action(Base UI Close) 의 자동 닫힘을 막아 실패 시 다이얼로그를 유지한다 */}
             <AlertDialogAction
               disabled={isPending}
               onClick={(e) => {
-                e.preventDefault();
+                e.preventBaseUIHandler();
                 disableTestMode('delete');
               }}
             >

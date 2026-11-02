@@ -259,14 +259,14 @@ function GroupBlock({ value, onChange, depth, ownQuestion, allQuestions }: Group
 
       <div className="flex items-center gap-2">
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button type="button" variant="outline" size="sm" className="h-8">
-              <Plus className="mr-1 h-3.5 w-3.5" />항 추가
-            </Button>
+          <DropdownMenuTrigger
+            render={<Button type="button" variant="outline" size="sm" className="h-8" />}
+          >
+            <Plus className="mr-1 h-3.5 w-3.5" />항 추가
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
             {ADD_TERM_KINDS.map((kind) => (
-              <DropdownMenuItem key={kind} onSelect={() => addTerm(kind)}>
+              <DropdownMenuItem key={kind} onClick={() => addTerm(kind)}>
                 {TERM_KIND_LABELS[kind]}
               </DropdownMenuItem>
             ))}

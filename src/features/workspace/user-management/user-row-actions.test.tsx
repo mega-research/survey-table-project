@@ -52,6 +52,8 @@ function renderActions(status: UserListItem['status'] = 'active') {
 
 async function openMenu(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: '김새로 액션' }));
+  // Base UI 메뉴는 누른 다음 틱에 열린다.
+  await screen.findByRole('menu');
 }
 
 beforeEach(() => {

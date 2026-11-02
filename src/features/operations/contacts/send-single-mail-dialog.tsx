@@ -182,23 +182,25 @@ export function SendSingleMailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={(e) => {
-            // 이 버튼은 <summary>(details toggle) 안에 렌더링된다. 스펙상 클릭의 activation
-            // target 은 가장 가까운 activatable 조상(이 button 자신)으로 해석되므로 summary
-            // 의 접힘 토글 자체는 원래 발동하지 않는다 — stopPropagation 은 그 토글을 막기
-            // 위한 것이 아니라, summary/조상에 걸릴 수 있는 다른 커스텀 클릭 핸들러(위임 등)로
-            // 이벤트가 새는 것을 막는 방어용이다. DialogTrigger 자체의 open 토글(같은 엘리먼트,
-            // 버블링 이전에 실행됨)은 그대로 둔다.
-            e.stopPropagation();
-          }}
-        >
-          메일 보내기
-        </Button>
+      <DialogTrigger
+        render={
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={(e) => {
+              // 이 버튼은 <summary>(details toggle) 안에 렌더링된다. 스펙상 클릭의 activation
+              // target 은 가장 가까운 activatable 조상(이 button 자신)으로 해석되므로 summary
+              // 의 접힘 토글 자체는 원래 발동하지 않는다 — stopPropagation 은 그 토글을 막기
+              // 위한 것이 아니라, summary/조상에 걸릴 수 있는 다른 커스텀 클릭 핸들러(위임 등)로
+              // 이벤트가 새는 것을 막는 방어용이다. DialogTrigger 자체의 open 토글(같은 엘리먼트,
+              // 버블링 이전에 실행됨)은 그대로 둔다.
+              e.stopPropagation();
+            }}
+          />
+        }
+      >
+        메일 보내기
       </DialogTrigger>
       <DialogContent className="flex max-h-[90vh] max-w-[720px] flex-col gap-0 p-0">
         <DialogHeader className="border-b border-gray-200 px-6 pt-6 pb-4">

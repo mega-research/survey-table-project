@@ -44,16 +44,18 @@ export function GroupNameDesignSettings({
 
   return (
     <Collapsible className="rounded-lg border border-gray-200">
-      <CollapsibleTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="w-full justify-between px-3 py-2.5"
-        >
-          디자인 설정
-          <ChevronDown className="h-4 w-4 text-gray-400" />
-        </Button>
+      <CollapsibleTrigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="w-full justify-between px-3 py-2.5"
+          />
+        }
+      >
+        디자인 설정
+        <ChevronDown className="h-4 w-4 text-gray-400" />
       </CollapsibleTrigger>
       <CollapsibleContent className="space-y-4 border-t border-gray-100 px-3 py-3">
         {/* 배경 너비 */}

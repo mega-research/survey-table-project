@@ -48,16 +48,18 @@ export function DeleteTemplateButton({ surveyId, templateId, templateName }: Pro
 
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
-      <AlertDialogTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          aria-label={`${templateName} 삭제`}
-          className="text-gray-400 hover:bg-red-50 hover:text-red-600"
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
+      <AlertDialogTrigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label={`${templateName} 삭제`}
+            className="text-gray-400 hover:bg-red-50 hover:text-red-600"
+          />
+        }
+      >
+        <Trash2 className="h-4 w-4" />
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
@@ -71,7 +73,7 @@ export function DeleteTemplateButton({ surveyId, templateId, templateName }: Pro
           <AlertDialogCancel disabled={pending}>취소</AlertDialogCancel>
           <AlertDialogAction
             onClick={(e) => {
-              e.preventDefault();
+              e.preventBaseUIHandler();
               onConfirm();
             }}
             disabled={pending}

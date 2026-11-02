@@ -214,14 +214,10 @@ export const EditorTableRow = React.memo(function EditorTableRow({
               <Zap className={`h-2.5 w-2.5 shrink-0 ${GROUP_COLORS[dynamicRowConfigs.findIndex((g) => g.groupId === row.showWhenDynamicGroupId) % GROUP_COLORS.length]?.replace('bg-', 'text-') || 'text-amber-500'}`} />
             )}
             <Popover>
-              <PopoverTrigger asChild>
-                <button
-                  className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-700"
-                  title="행 설정"
-                >
+              <PopoverTrigger render={<button className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-700"
+                  title="행 설정" />}>
                   <Settings2 className="h-3 w-3" />
-                </button>
-              </PopoverTrigger>
+                </PopoverTrigger>
               <PopoverContent className="max-h-[60vh] w-auto min-w-32 overflow-y-auto p-1" side="right" align="start">
                 <div className="space-y-0.5">
                   <div className="px-2 py-1.5">
@@ -383,15 +379,11 @@ export const EditorTableRow = React.memo(function EditorTableRow({
                   <EditorCellContent cell={cell} />
                 </div>
                 <Popover open={openPopoverCellId === cell.id} onOpenChange={(open) => setOpenPopoverCellId(open ? cell.id : null)}>
-                  <PopoverTrigger asChild>
-                    <button
-                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-gray-400 opacity-0 transition-opacity hover:bg-gray-200 hover:text-gray-700 group-hover:opacity-100 data-[state=open]:opacity-100"
+                  <PopoverTrigger render={<button className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-gray-400 opacity-0 transition-opacity hover:bg-gray-200 hover:text-gray-700 group-hover:opacity-100 data-[popup-open]:opacity-100"
                       onClick={(e) => e.stopPropagation()}
-                      title="셀 설정"
-                    >
+                      title="셀 설정" />}>
                       <Settings2 className="h-3 w-3" />
-                    </button>
-                  </PopoverTrigger>
+                    </PopoverTrigger>
                   <PopoverContent className="w-40 p-1" side="bottom" align="end" onClick={(e) => e.stopPropagation()}>
                     <div className="space-y-0.5">
                       <button onClick={() => { onCopyCell(rowIndex, cellIndex); setOpenPopoverCellId(null); }} className="flex w-full items-center gap-2 rounded px-2 py-1 text-xs text-gray-600 hover:bg-gray-100">

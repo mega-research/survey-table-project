@@ -61,27 +61,29 @@ export function TagFilterMenu({
         if (!next) setEditingTagId(null);
       }}
     >
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            'flex h-10 shrink-0 items-center gap-1.5 rounded-[10px] border px-3.5 text-[13.5px] transition-colors',
-            open || selectedIds.length > 0
-              ? 'border-[#2E4FCE] bg-[#EEF2FF] text-[#2743AE]'
-              : 'border-[#E5E5EA] bg-white text-[#374151] hover:bg-[#F5F5F7]',
-          )}
-        >
-          <Hash className="h-3.5 w-3.5" />
-          {/* 좁은 폭에서는 아이콘만 남긴다 — 글자·숫자는 화면에서만 숨기고 읽기에는 남긴다. */}
-          <span className="max-lg:sr-only">태그</span>
-          {selectedIds.length > 0 && (
-            <>
-              {' '}
-              <span className="tabular-nums max-lg:sr-only">{selectedIds.length}</span>
-            </>
-          )}
-          <ChevronDown className="h-3.5 w-3.5 text-[#9CA3AF] max-lg:hidden" />
-        </button>
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            className={cn(
+              'flex h-10 shrink-0 items-center gap-1.5 rounded-[10px] border px-3.5 text-[13.5px] transition-colors',
+              open || selectedIds.length > 0
+                ? 'border-[#2E4FCE] bg-[#EEF2FF] text-[#2743AE]'
+                : 'border-[#E5E5EA] bg-white text-[#374151] hover:bg-[#F5F5F7]',
+            )}
+          />
+        }
+      >
+        <Hash className="h-3.5 w-3.5" />
+        {/* 좁은 폭에서는 아이콘만 남긴다 — 글자·숫자는 화면에서만 숨기고 읽기에는 남긴다. */}
+        <span className="max-lg:sr-only">태그</span>
+        {selectedIds.length > 0 && (
+          <>
+            {' '}
+            <span className="tabular-nums max-lg:sr-only">{selectedIds.length}</span>
+          </>
+        )}
+        <ChevronDown className="h-3.5 w-3.5 text-[#9CA3AF] max-lg:hidden" />
       </PopoverTrigger>
       <PopoverContent
         ref={panelRef}
@@ -144,7 +146,7 @@ export function TagFilterMenu({
                   checked={checked}
                   disabled={!checked && full}
                   onCheckedChange={(next) => onToggle(tag.id, next === true)}
-                  className="border-[#C7C7CC] data-[state=checked]:border-[#2E4FCE] data-[state=checked]:bg-[#2E4FCE] [&_svg]:h-3 [&_svg]:w-3"
+                  className="border-[#C7C7CC] data-[checked]:border-[#2E4FCE] data-[checked]:bg-[#2E4FCE] [&_svg]:h-3 [&_svg]:w-3"
                 />
                 <label
                   htmlFor={checkboxId}

@@ -302,14 +302,19 @@ export function ContactInfoCard({
                 요구가 갈리면 외주에게 여는 주소가 없는 버튼이 생긴다. */}
             {canEditResponses &&
               (responseId ? (
-                <Button asChild size="sm" variant="outline" className="h-7 px-2 text-xs">
-                  <Link
-                    href={operationsPaths(basePath).profileEdit(responseId)}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    응답 수정
-                  </Link>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 px-2 text-xs"
+                  render={
+                    <Link
+                      href={operationsPaths(basePath).profileEdit(responseId)}
+                      target="_blank"
+                      rel="noreferrer"
+                    />
+                  }
+                >
+                  응답 수정
                 </Button>
               ) : (
                 <Button

@@ -139,26 +139,28 @@ export function SurveyStatusControl({ surveyId, initial }: Props) {
   return (
     <>
       <DropdownMenu open={menu.open} onOpenChange={menu.setOpen} modal={false}>
-        <DropdownMenuTrigger asChild>
-          <Button
-            {...menu.triggerProps}
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={isPending}
-            className={buttonTone}
-          >
-            <ButtonIcon className="mr-2 h-4 w-4" />
-            {isClosed ? '설문 종료' : isPaused ? '설문 중단' : '설문 중'}
-            {isClosed && isPaused ? (
-              <span className="ml-2 rounded bg-rose-500 px-1.5 py-0.5 text-[11px] leading-none font-bold text-white">
-                중단
-              </span>
-            ) : null}
-            <ChevronDown className="ml-1 h-4 w-4" />
-          </Button>
+        <DropdownMenuTrigger
+          {...menu.triggerProps}
+          render={
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isPending}
+              className={buttonTone}
+            />
+          }
+        >
+          <ButtonIcon className="mr-2 h-4 w-4" />
+          {isClosed ? '설문 종료' : isPaused ? '설문 중단' : '설문 중'}
+          {isClosed && isPaused ? (
+            <span className="ml-2 rounded bg-rose-500 px-1.5 py-0.5 text-[11px] leading-none font-bold text-white">
+              중단
+            </span>
+          ) : null}
+          <ChevronDown className="ml-1 h-4 w-4" />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-[340px]" {...menu.contentProps}>
+        <DropdownMenuContent align="end" className="w-[340px]">
           <ToggleMenuItem
             icon={<CirclePause className="h-4 w-4" />}
             label="설문 중단"
@@ -180,7 +182,7 @@ export function SurveyStatusControl({ surveyId, initial }: Props) {
             }}
           />
           {isPaused && (
-            <DropdownMenuItem disabled={isPending} onSelect={() => openMessageDialog('edit')}>
+            <DropdownMenuItem disabled={isPending} onClick={() => openMessageDialog('edit')}>
               <PencilLine className="mr-2 h-4 w-4" />
               중단 안내 문구 수정
             </DropdownMenuItem>
@@ -253,11 +255,11 @@ export function SurveyStatusControl({ surveyId, initial }: Props) {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isPending}>취소</AlertDialogCancel>
-            {/* preventDefault: Radix Action 의 자동 닫힘을 막아 실패 시 다이얼로그를 유지한다 */}
+            {/* preventBaseUIHandler: Action(Base UI Close) 의 자동 닫힘을 막아 실패 시 다이얼로그를 유지한다 */}
             <AlertDialogAction
               disabled={isPending}
               onClick={(e) => {
-                e.preventDefault();
+                e.preventBaseUIHandler();
                 resume();
               }}
             >
@@ -274,7 +276,7 @@ export function SurveyStatusControl({ surveyId, initial }: Props) {
             <AlertDialogTitle>
               {isClosed ? '설문 종료를 취소할까요?' : '설문을 종료할까요?'}
             </AlertDialogTitle>
-            <AlertDialogDescription asChild>
+            <AlertDialogDescription render={<div />}>
               {isClosed ? (
                 <div className="space-y-2 text-sm text-gray-600">
                   <p>종료를 취소하면 새 응답을 다시 받습니다.</p>
@@ -295,11 +297,11 @@ export function SurveyStatusControl({ surveyId, initial }: Props) {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isPending}>닫기</AlertDialogCancel>
-            {/* preventDefault: Radix Action 의 자동 닫힘을 막아 실패 시 확인 창을 유지한다 */}
+            {/* preventBaseUIHandler: Action(Base UI Close) 의 자동 닫힘을 막아 실패 시 확인 창을 유지한다 */}
             <AlertDialogAction
               disabled={isPending}
               onClick={(e) => {
-                e.preventDefault();
+                e.preventBaseUIHandler();
                 applyClosed(!isClosed);
               }}
             >

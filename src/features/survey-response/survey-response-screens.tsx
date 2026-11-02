@@ -118,11 +118,9 @@ function InvalidLinkScreen({
           <p className="mb-6 text-gray-600">
             <SystemText k={body} locale={locale} />
           </p>
-          <Button asChild>
-            <Link href="/">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              <SystemText k="screen.goHome" locale={locale} />
-            </Link>
+          <Button render={<Link href="/" />}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            <SystemText k="screen.goHome" locale={locale} />
           </Button>
         </CardContent>
       </Card>

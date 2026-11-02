@@ -34,7 +34,7 @@ import { runAsyncAction } from '@/utils/run-async-action';
 
 type Step = 'file' | 'mapping' | 'result';
 
-/** 문항을 고르지 않았음을 나타내는 Select 값 — 빈 문자열은 Radix Select 가 허용하지 않는다. */
+/** 문항을 고르지 않았음을 나타내는 Select 값 — 빈 문자열은 Select 래퍼가 「고르지 않음」(placeholder)으로 읽어 항목 값으로 쓸 수 없다. */
 const UNMAPPED = '_unmapped';
 
 interface VerdictBadge {

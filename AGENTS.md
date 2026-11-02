@@ -44,7 +44,7 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 | 프레임워크     | Next.js (App Router, Turbopack)              | 16.4.2          |
 | UI 라이브러리  | React (React Compiler)                       | 19.2.3          |
 | 스타일링       | TailwindCSS                                  | 4.x             |
-| 컴포넌트       | shadcn/ui (Radix UI)                         | -               |
+| 컴포넌트       | shadcn/ui (Base UI — @base-ui/react)         | 1.9.0           |
 | 상태관리       | Zustand + Immer                              | 5.0.8 / 11.1.3  |
 | 데이터 페칭    | TanStack Query                               | 5.90.11         |
 | RPC            | oRPC (server/client/tanstack-query/openapi)  | 1.14.4          |

@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { GlobalErrorDialog } from '@/components/ui/global-error-dialog';
 import { useErrorDialogStore } from '@/stores/error-dialog-store';
 
-// jsdom 에서 Radix UI 포인터 API가 없어 에러가 발생하므로 최소 스텁 주입.
+// jsdom 에서 포인터 API가 없어 에러가 발생하므로 최소 스텁 주입.
 if (!Element.prototype.hasPointerCapture) {
   Element.prototype.hasPointerCapture = () => false;
 }

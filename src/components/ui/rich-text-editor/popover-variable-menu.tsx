@@ -5,14 +5,17 @@ import { useState } from 'react';
 import { Tag } from 'lucide-react';
 
 import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from '@/components/ui/command';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+  ComboboxCollection,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxGroup,
+  ComboboxGroupLabel,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxRoot,
+  ComboboxSearchInput,
+  ComboboxTrigger,
+} from '@/components/ui/combobox';
 
 import { ToolBtn } from './toolbar-primitives';
 import type { VariableDef } from './types';
@@ -22,67 +25,64 @@ interface Props {
   onPick: (key: string) => void;
 }
 
+interface VariableGroup {
+  heading: string;
+  items: VariableDef[];
+}
+
+// 고르면 끼워 넣고 닫는 동작이라 선택 상태를 남기지 않는다(value 는 늘 null).
 export function PopoverVariableMenu({ catalog, onPick }: Props) {
   const [open, setOpen] = useState(false);
 
-  const attrs = catalog.filter((v) => v.category === 'attrs');
-  const system = catalog.filter((v) => v.category === 'system');
-
-  const handlePick = (key: string) => {
-    onPick(key);
-    setOpen(false);
-  };
+  const groups: VariableGroup[] = [
+    { heading: '컨택 데이터 (attrs)', items: catalog.filter((v) => v.category === 'attrs') },
+    { heading: '시스템', items: catalog.filter((v) => v.category === 'system') },
+  ].filter((g) => g.items.length > 0);
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <ToolBtn title="변수">
-          <Tag className="h-4 w-4" />
-        </ToolBtn>
-      </PopoverTrigger>
-      <PopoverContent className="w-[280px] p-0" align="start">
-        <Command>
-          <CommandInput placeholder="변수 검색..." />
-          <CommandList className="max-h-[280px]">
-            <CommandEmpty>일치하는 변수가 없습니다.</CommandEmpty>
-            {attrs.length > 0 && (
-              <CommandGroup heading="컨택 데이터 (attrs)">
-                {attrs.map((v) => (
-                  <CommandItem
-                    key={v.key}
-                    value={`attrs-${v.key}`}
-                    onSelect={() => handlePick(v.key)}
-                  >
+    <ComboboxRoot<VariableDef>
+      items={groups}
+      value={null}
+      onValueChange={(v) => {
+        if (!v) return;
+        onPick(v.key);
+        setOpen(false);
+      }}
+      itemToStringLabel={(v) => `${v.key} ${v.label}`}
+      open={open}
+      onOpenChange={setOpen}
+    >
+      <ComboboxTrigger render={<ToolBtn title="변수" />}>
+        <Tag className="h-4 w-4" />
+      </ComboboxTrigger>
+      <ComboboxContent className="w-[280px]">
+        <ComboboxSearchInput placeholder="변수 검색..." />
+        {catalog.length > 0 && (
+          <ComboboxEmpty className="py-6">일치하는 변수가 없습니다.</ComboboxEmpty>
+        )}
+        <ComboboxList className="max-h-[280px]">
+          {(group: VariableGroup) => (
+            <ComboboxGroup key={group.heading} items={group.items}>
+              <ComboboxGroupLabel>{group.heading}</ComboboxGroupLabel>
+              <ComboboxCollection>
+                {(v: VariableDef) => (
+                  <ComboboxItem key={`${v.category}-${v.key}`} value={v}>
                     <span className="font-mono text-xs text-amber-700">{`{{${v.key}}}`}</span>
                     <span className="ml-2 text-xs text-gray-500">{v.label}</span>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            )}
-            {system.length > 0 && (
-              <CommandGroup heading="시스템">
-                {system.map((v) => (
-                  <CommandItem
-                    key={v.key}
-                    value={`system-${v.key}`}
-                    onSelect={() => handlePick(v.key)}
-                  >
-                    <span className="font-mono text-xs text-amber-700">{`{{${v.key}}}`}</span>
-                    <span className="ml-2 text-xs text-gray-500">{v.label}</span>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            )}
-            {catalog.length === 0 && (
-              <div className="p-4 text-center text-xs text-gray-500">
-                이 설문에 컨택 attrs 가 등록되지 않았습니다.
-                <br />
-                <span className="text-gray-400">컨택리스트 → 리스트 업로드부터.</span>
-              </div>
-            )}
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
+                  </ComboboxItem>
+                )}
+              </ComboboxCollection>
+            </ComboboxGroup>
+          )}
+        </ComboboxList>
+        {catalog.length === 0 && (
+          <div className="p-4 text-center text-xs text-gray-500">
+            이 설문에 컨택 attrs 가 등록되지 않았습니다.
+            <br />
+            <span className="text-gray-400">컨택리스트 → 리스트 업로드부터.</span>
+          </div>
+        )}
+      </ComboboxContent>
+    </ComboboxRoot>
   );
 }

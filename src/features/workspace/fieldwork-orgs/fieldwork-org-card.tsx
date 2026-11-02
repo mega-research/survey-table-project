@@ -117,22 +117,24 @@ export function FieldworkOrgCard({ org, defaultExpanded = false, onEdit, onIssue
         </Button>
 
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              className="h-8 w-8 p-0 text-[#6E6E73]"
-              aria-label={`${org.name} 업체 메뉴`}
-            >
-              <MoreVertical className="h-4 w-4" />
-            </Button>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-8 w-8 p-0 text-[#6E6E73]"
+                aria-label={`${org.name} 업체 메뉴`}
+              />
+            }
+          >
+            <MoreVertical className="h-4 w-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-[160px]">
-            <DropdownMenuItem onSelect={() => onEdit(org)}>업체 설정</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onEdit(org)}>업체 설정</DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
-              onSelect={() => setConfirmingArchive(true)}
-              className="text-red-600 focus:text-red-600"
+              onClick={() => setConfirmingArchive(true)}
+              className="text-red-600 data-[highlighted]:text-red-600"
             >
               업체 종료
             </DropdownMenuItem>

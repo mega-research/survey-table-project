@@ -29,11 +29,9 @@ export function UploadHistoryTable({ surveyId, rows }: UploadHistoryTableProps) 
             description="엑셀 파일을 업로드해 조사 대상 명단을 적재하세요."
           />
           <div className="mt-4 flex justify-center">
-            <Button asChild>
-              <Link href={internalOperationsPaths(surveyId).contactsUploadNew}>
+            <Button render={<Link href={internalOperationsPaths(surveyId).contactsUploadNew} />}>
                 엑셀 업로드
-              </Link>
-            </Button>
+              </Button>
           </div>
         </CardContent>
       </Card>

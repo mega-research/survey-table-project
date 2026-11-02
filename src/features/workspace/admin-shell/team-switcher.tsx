@@ -61,18 +61,20 @@ export function TeamSwitcher({ memberships, collapsed }: Props) {
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          title={label}
-          className={cn(
-            'flex items-center gap-2 rounded-[10px] border border-white/28 px-[13px] py-[10px] text-[13.5px] font-medium text-white transition-colors hover:bg-white/10',
-            collapsed ? 'justify-center px-0' : 'justify-between',
-          )}
-        >
-          {!collapsed && <span className="truncate">{label}</span>}
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-white/50" />
-        </button>
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            title={label}
+            className={cn(
+              'flex items-center gap-2 rounded-[10px] border border-white/28 px-[13px] py-[10px] text-[13.5px] font-medium text-white transition-colors hover:bg-white/10',
+              collapsed ? 'justify-center px-0' : 'justify-between',
+            )}
+          />
+        }
+      >
+        {!collapsed && <span className="truncate">{label}</span>}
+        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-white/50" />
       </PopoverTrigger>
       <PopoverContent
         align="start"

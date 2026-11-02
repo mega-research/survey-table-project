@@ -153,16 +153,17 @@ export function ConditionCard({
             });
           }}
         >
-          <CollapsibleTrigger asChild>
-            <div className="cursor-pointer px-6 pb-2 transition-colors hover:bg-gray-50">
-              <div className="flex items-center gap-2 text-sm text-gray-600">
-                {isExpanded ? (
-                  <ChevronDown className="h-4 w-4" />
-                ) : (
-                  <ChevronRight className="h-4 w-4" />
-                )}
-                <span>상세 설정 {isExpanded ? '접기' : '펼치기'}</span>
-              </div>
+          <CollapsibleTrigger
+            nativeButton={false}
+            render={<div className="cursor-pointer px-6 pb-2 transition-colors hover:bg-gray-50" />}
+          >
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              {isExpanded ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+              <span>상세 설정 {isExpanded ? '접기' : '펼치기'}</span>
             </div>
           </CollapsibleTrigger>
           <CollapsibleContent>
