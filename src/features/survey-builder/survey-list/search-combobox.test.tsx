@@ -300,3 +300,103 @@ describe('SearchCombobox — 검색 칩', () => {
     expect(screen.getByRole('button', { name: '해운물류 필터 빼기' })).toBeInTheDocument();
   });
 });
+
+/**
+ * 자동완성 「내 태그」 칸 (설문 즐겨찾기·태그 티켓 10, 시안 F8-b) — 맨 위 칸. 내 태그 목록에서 브라우저가
+ * 거르고, 고르면 검색 칩이 되며 그 태그에 맞던 단어는 지워진다.
+ */
+describe('SearchCombobox — 내 태그 후보', () => {
+  const MY_TAGS = [
+    { id: 't1', name: 'A사', color: 'blue' as const, linkCount: 6 },
+    { id: 't2', name: 'A사 협력사', color: 'green' as const, linkCount: 2 },
+    { id: 't3', name: '만족도', color: 'amber' as const, linkCount: 9 },
+  ];
+
+  beforeEach(() => {
+    useSuggestions.mockReset();
+    useSuggestions.mockReturnValue({ suggestions: SURVEYS, isPending: false });
+  });
+
+  function setupTags({
+    chipTags = [] as typeof MY_TAGS,
+    owners = OWNERS as { id: string; name: string }[],
+  } = {}) {
+    const onPickTag = vi.fn();
+    const onPickOwner = vi.fn();
+    const onPickSurvey = vi.fn();
+    const onCommit = vi.fn();
+    function Harness() {
+      const [applied, setApplied] = useState('');
+      return (
+        <SearchCombobox
+          value={applied}
+          onCommit={(q) => {
+            setApplied(q);
+            onCommit(q);
+          }}
+          placeholder="설문 검색"
+          suggestScope="team-1"
+          suggestEnabled
+          owners={owners}
+          onPickOwner={onPickOwner}
+          onPickSurvey={onPickSurvey}
+          chips={{ tags: chipTags, onRemove: vi.fn(), onClearAll: vi.fn() }}
+          tagSuggestions={{
+            tags: MY_TAGS,
+            onPick: (tagId, q) => {
+              setApplied(q);
+              onPickTag(tagId, q);
+            },
+          }}
+        />
+      );
+    }
+    render(<Harness />);
+    return {
+      input: screen.getByRole('combobox', { name: '설문 검색' }),
+      onPickTag,
+      onPickOwner,
+      onPickSurvey,
+      onCommit,
+      user: userEvent.setup(),
+    };
+  }
+
+  it('맞는 내 태그가 설문 수와 함께 맨 위 칸에 보인다', async () => {
+    const { input, user } = setupTags();
+    await user.type(input, 'a사 실');
+    const tags = screen.getByRole('group', { name: '내 태그' });
+    const rows = within(tags).getAllByRole('option');
+    expect(rows.map((o) => o.textContent)).toEqual([
+      expect.stringContaining('A사설문 6개'),
+      expect.stringContaining('A사 협력사설문 2개'),
+    ]);
+    expect(optionNames()[0]).toContain('A사');
+  });
+
+  it('칸 순서는 내 태그 → 소유자 → 설문', async () => {
+    const { input, user } = setupTags({ owners: [{ id: 'u9', name: 'A사담당' }] });
+    await user.type(input, 'a사');
+    const groupNames = screen
+      .getAllByRole('group')
+      .map((g) => document.getElementById(g.getAttribute('aria-labelledby')!)?.textContent);
+    expect(groupNames).toEqual(['내 태그', '소유자', '설문']);
+  });
+
+  it('맞는 태그가 없으면 칸을 그리지 않는다', async () => {
+    const { input, user } = setupTags();
+    await user.type(input, '2026');
+    expect(screen.queryByRole('group', { name: '내 태그' })).toBeNull();
+  });
+
+  it('이미 칩으로 걸린 태그는 후보에 없다', async () => {
+    const { input, user } = setupTags({ chipTags: [MY_TAGS[0]!] });
+    await user.type(input, 'a사');
+    const tags = screen.getByRole('group', { name: '내 태그' });
+    expect(
+      within(tags)
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual([expect.stringContaining('A사 협력사')]);
+  });
+});

@@ -2,7 +2,7 @@
 
 import { type KeyboardEvent, useId, useState } from 'react';
 
-import { FileText, Search, UserRound, X } from 'lucide-react';
+import { FileText, Hash, Search, UserRound, X } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import {
@@ -17,7 +17,7 @@ import {
 import type { PersonalTagItem } from '@/shared/contracts/workspace-io';
 
 import { useSurveySuggestions } from '../queries/use-survey-suggestions';
-import { dropWordsMatching, matchOwnerSuggestions } from './search-suggest';
+import { dropWordsMatching, matchOwnerSuggestions, matchTagSuggestions } from './search-suggest';
 import { ACTIVE_TAG_LABEL_CLASS, PersonalTagLabel } from './tag-picker';
 
 const LIFECYCLE_LABELS: Record<SurveyListLifecycle, string> = {
@@ -28,10 +28,10 @@ const LIFECYCLE_LABELS: Record<SurveyListLifecycle, string> = {
 
 /**
  * 후보 한 줄 — 칸(section)마다 종류가 다르다. 키보드 이동은 칸을 가로질러 **한 줄로 편 목록**
- * 위에서 하고, 바닥의 「모두 보기」가 그 목록의 마지막 줄이다. 티켓 10 의 「내 태그」 칸은 이
- * 합집합에 `{ kind: 'tag' }` 를 더하고 `buildSections` 맨 앞에 칸을 끼우면 된다.
+ * 위에서 하고, 바닥의 「모두 보기」가 그 목록의 마지막 줄이다.
  */
 type SuggestOption =
+  | { kind: 'tag'; key: string; tag: PersonalTagItem }
   | { kind: 'owner'; key: string; owner: SurveyListOwner }
   | { kind: 'survey'; key: string; survey: SurveySuggestion }
   | { kind: 'all'; key: 'all' };
@@ -56,6 +56,16 @@ export interface SearchChips {
   onClearAll: () => void;
 }
 
+/**
+ * 자동완성 「내 태그」 칸(티켓 10) — 후보 재료와 고르기. 고르면 검색 칩이 되고 그 태그에 맞던
+ * 단어를 뺀 검색어가 함께 온다(「a사 실」 → [A사] + 「실」).
+ */
+export interface TagSuggestions {
+  /** 내 태그 전부(`mine`) — 브라우저가 거른다. 이미 칩으로 걸린 것은 `chips.tags` 로 뺀다. */
+  tags: readonly PersonalTagItem[];
+  onPick: (tagId: string, remainingQuery: string) => void;
+}
+
 /** 넓은 화면(lg 이상)에서 펼쳐 두는 칩 수 — 넘치면 「+N」. 좁은 폭에서는 1개만 둔다. */
 const CHIPS_VISIBLE_WIDE = 3;
 const CHIPS_VISIBLE_NARROW = 1;
@@ -78,6 +88,8 @@ interface SearchComboboxProps {
   onPickSurvey: (surveyId: string) => void;
   /** 검색창 안 칩 — 없으면 칩도 「모두 지우기」도 없다. */
   chips?: SearchChips;
+  /** 「내 태그」 후보 — 없으면 그 칸이 없다. */
+  tagSuggestions?: TagSuggestions;
 }
 
 /**
@@ -104,6 +116,7 @@ export function SearchCombobox({
   onPickOwner,
   onPickSurvey,
   chips,
+  tagSuggestions,
 }: SearchComboboxProps) {
   const [draft, setDraft] = useState(value);
   const [chipsExpanded, setChipsExpanded] = useState(false);
@@ -134,7 +147,16 @@ export function SearchCombobox({
     enabled: open,
   });
 
-  const sections = open ? buildSections(draft, owners, suggestions, isPending) : [];
+  const chipTags = chips?.tags ?? [];
+  const tagHits =
+    open && tagSuggestions
+      ? matchTagSuggestions(
+          tagSuggestions.tags,
+          draft,
+          chipTags.map((t) => t.id),
+        )
+      : [];
+  const sections = open ? buildSections(draft, tagHits, owners, suggestions, isPending) : [];
   const allOption: SuggestOption = { kind: 'all', key: 'all' };
   const flat = open ? [...sections.flatMap((s) => s.options), allOption] : [];
   const activeIndex = flat.findIndex((o) => o.key === activeKey);
@@ -160,6 +182,14 @@ export function SearchCombobox({
         close();
         onPickSurvey(option.survey.id);
         return;
+      case 'tag': {
+        const remaining = dropWordsMatching(draft, option.tag.name);
+        setDraft(remaining);
+        setSent(remaining);
+        close();
+        tagSuggestions?.onPick(option.tag.id, remaining);
+        return;
+      }
       case 'owner': {
         const remaining = dropWordsMatching(draft, option.owner.name);
         setDraft(remaining);
@@ -210,7 +240,6 @@ export function SearchCombobox({
     }
   }
 
-  const chipTags = chips?.tags ?? [];
   const showClearAll = chips !== undefined && (chipTags.length > 0 || draft !== '');
 
   function clearAll() {
@@ -407,14 +436,22 @@ function ChipOverflowButton({
   );
 }
 
-/** 칸 순서 — 「소유자」(맞을 때만) → 「설문」. 티켓 10 이 맨 앞에 「내 태그」를 더한다. */
+/** 칸 순서 — 「내 태그」 → 「소유자」 → 「설문」, 맞는 것이 없는 칸은 그리지 않는다(설문은 찾는 중이면 선다). */
 function buildSections(
   draft: string,
+  tagHits: readonly PersonalTagItem[],
   owners: readonly SurveyListOwner[],
   suggestions: SurveySuggestion[] | null,
   isPending: boolean,
 ): SuggestSection[] {
   const sections: SuggestSection[] = [];
+  if (tagHits.length > 0) {
+    sections.push({
+      key: 'tags',
+      label: '내 태그',
+      options: tagHits.map((tag) => ({ kind: 'tag', key: `tag-${tag.id}`, tag })),
+    });
+  }
   const ownerHits = matchOwnerSuggestions(owners, draft);
   if (ownerHits.length > 0) {
     sections.push({
@@ -490,6 +527,21 @@ function SuggestSectionView({
 
 function OptionContent({ option, active }: { option: SuggestOption; active: boolean }) {
   switch (option.kind) {
+    case 'tag':
+      return (
+        <>
+          <Hash className="h-4 w-4 shrink-0 text-[#9CA3AF]" aria-hidden />
+          <span className="flex min-w-0 flex-1 items-center gap-2">
+            <PersonalTagLabel tag={option.tag} className="max-w-[240px] min-w-0" />
+            <span className="shrink-0 text-[12px] text-[#9CA3AF]">
+              설문 {option.tag.linkCount}개
+            </span>
+          </span>
+          {active && (
+            <span className="shrink-0 text-[12px] text-[#6E6E73]">Enter 로 필터 추가</span>
+          )}
+        </>
+      );
     case 'owner':
       return (
         <>
