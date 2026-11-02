@@ -29,6 +29,7 @@ function item(over: Partial<SurveyListItem> = {}): SurveyListItem {
     endDate: null,
     isPublic: true,
     status: 'published',
+    lifecycle: 'running',
     teamId: 'team-1',
     teamName: '연구1본부 - 1팀',
     visibility: 'team',

@@ -166,6 +166,7 @@ export async function getSurveyListWithCounts(
       isPublic: survey.isPublic,
       // text 컬럼이라 어휘로 접는다 — 캐스트 대신 로더 정규화(JSONB 드리프트 관례와 동일 취지).
       status: normalizeSurveyStatus(survey.status),
+      lifecycle: survey.lifecycle,
       teamId: survey.teamId,
       teamName: survey.teamName,
       visibility: survey.visibility,

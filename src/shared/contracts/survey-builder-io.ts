@@ -93,6 +93,11 @@ export interface SurveyListItem {
   endDate: Date | null;
   isPublic: boolean;
   status: SurveyStatus;
+  /**
+   * 목록 상태(작성중·진행중·종료) — 서버가 SQL 식(`surveyListLifecycleSql`)으로 판정해 싣는다.
+   * 세그먼트 숫자·거르기가 이 값을 본다. 카드 배지는 여전히 `status`·`isPublic` 을 본다.
+   */
+  lifecycle: SurveyListLifecycle;
   /** 소속 팀. 배치 대기 설문은 null 이다(티켓 07). */
   teamId: string | null;
   teamName: string | null;

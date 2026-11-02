@@ -29,6 +29,7 @@ import {
 } from '@/db/schema';
 import { retentionTimestampToDate } from '@/lib/survey/pii-retention';
 import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
+import { surveyListLifecycleSql } from '@/server/read-models/survey-list-lifecycle';
 import type { SurveyScopeFilter } from '@/server/work-scope';
 import { isCodedChoiceType } from '@/types/question-types';
 import type {
@@ -172,6 +173,8 @@ function surveyListColumns(viewerId: string | null, leaderTeamIds: readonly stri
     endDate: surveys.endDate,
     isPublic: surveys.isPublic,
     status: surveys.status,
+    // 목록 상태 — 세그먼트 숫자·거르기가 본다. 판정식은 게스트 홈의 TS 판정과 같은 표로 묶여 있다.
+    lifecycle: surveyListLifecycleSql(),
     teamId: surveys.teamId,
     teamName: teams.name,
     visibility: surveys.visibility,
