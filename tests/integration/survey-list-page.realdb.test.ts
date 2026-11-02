@@ -319,13 +319,13 @@ describe.skipIf(!isLocalDb)('설문 목록 페이지 조회 (real local DB)', ()
     });
   });
 
-  describe('검색 — 카드 제목 부분일치(여러 단어 검색은 티켓 04)', () => {
-    it('카드 제목으로 찾고, 카드 제목이 없으면 설문지 제목으로 찾는다 — 대소문자 무시', async () => {
+  // 여러 단어·설명·소유자 이름은 survey-list-search.realdb.test.ts (티켓 04).
+  describe('검색', () => {
+    it('카드 제목으로도, 카드 제목 뒤의 설문지 제목으로도 찾는다 — 대소문자 무시', async () => {
       const byCard = await listSurveyPage(viewer, query({ q: '가가 카드' }));
       expect(byCard.items.map((s) => s.id)).toEqual([S.carded]);
-      // 카드 제목이 있으면 설문지 제목은 검색 대상이 아니다(카드에 보이는 이름으로 찾는다).
       const byHiddenTitle = await listSurveyPage(viewer, query({ q: '응답자용 긴 제목' }));
-      expect(byHiddenTitle.total).toBe(0);
+      expect(byHiddenTitle.items.map((s) => s.id)).toEqual([S.carded]);
       const upper = await listSurveyPage(viewer, query({ q: RUN.toUpperCase() + ' 묶음 07' }));
       expect(upper.items.map((s) => s.id)).toEqual([bulk[7]]);
     });
