@@ -55,7 +55,7 @@ import {
   parseSurveyListQuery,
   pickTagSuggestion,
   removeTagFilter,
-  serializeSurveyListQuery,
+  surveyListHref,
 } from './survey-list-url';
 
 /**
@@ -116,8 +116,7 @@ export function SurveyListView() {
    */
   function navigateTo(next: SurveyListPageQuery, mode: 'push' | 'replace' = 'push') {
     if (next === urlQuery) return;
-    const search = serializeSurveyListQuery(next);
-    router[mode](search ? `/surveys?${search}` : '/surveys', { scroll: false });
+    router[mode](surveyListHref(next), { scroll: false });
   }
 
   /** 조건을 바꿔 주소에 올린다. 페이지가 아닌 조건이 바뀌면 1페이지로 돌아간다. */
@@ -129,8 +128,7 @@ export function SurveyListView() {
   const staleTagChips = urlQuery !== parsedQuery;
   useEffect(() => {
     if (!staleTagChips) return;
-    const search = serializeSurveyListQuery(urlQuery);
-    router.replace(search ? `/surveys?${search}` : '/surveys', { scroll: false });
+    router.replace(surveyListHref(urlQuery), { scroll: false });
   }, [staleTagChips, urlQuery, router]);
 
   // 내 태그 목록이 오기 전에는 검색 칩이 걸린 조회를 미룬다 — 지워진 태그 칩이면 서버가 거부해
@@ -512,11 +510,7 @@ export function SurveyListView() {
           ) : total === 0 ? (
             <NoResultsEmptyState
               conditions={activeConditions}
-              onClearAll={() => {
-                const next = clearNarrowingFilters(urlQuery);
-                const search = serializeSurveyListQuery(next);
-                router.push(search ? `/surveys?${search}` : '/surveys', { scroll: false });
-              }}
+              onClearAll={() => navigateTo(clearNarrowingFilters(urlQuery))}
             />
           ) : (
             <>

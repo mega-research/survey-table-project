@@ -171,6 +171,12 @@ export function serializeSurveyListQuery(query: SurveyListPageQuery): string {
   return out.toString();
 }
 
+/** 조건 → 목록 주소(`/surveys?…`, 조건이 모두 기본값이면 `/surveys`). 화면이 주소를 올리는 유일한 조립. */
+export function surveyListHref(query: SurveyListPageQuery): string {
+  const search = serializeSurveyListQuery(query);
+  return search ? `/surveys?${search}` : '/surveys';
+}
+
 function sameTagIds(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((id, i) => id === b[i]);
 }

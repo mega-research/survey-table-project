@@ -17,6 +17,7 @@ import {
   pickTagSuggestion,
   removeTagFilter,
   serializeSurveyListQuery,
+  surveyListHref,
 } from './survey-list-url';
 
 const GROUP = '11111111-2222-4333-8444-555555555555';
@@ -131,6 +132,13 @@ describe('주소 ↔ 목록 조건', () => {
       const trash = parse('trash=1');
       expect(applyTrashAccess(trash, true)).toBe(trash);
     });
+  });
+
+  it('목록 주소 — 기본값뿐이면 물음표 없이 /surveys', () => {
+    expect(surveyListHref(INITIAL_SURVEY_LIST_PAGE_QUERY)).toBe('/surveys');
+    expect(surveyListHref({ ...INITIAL_SURVEY_LIST_PAGE_QUERY, q: '실태', page: 2 })).toBe(
+      '/surveys?q=%EC%8B%A4%ED%83%9C&page=2',
+    );
   });
 
   it('미분류는 팀 좁힘과 함께일 때만 뜻이 있다', () => {
