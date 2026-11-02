@@ -6,9 +6,12 @@ import * as z from 'zod';
 import { fieldworkRoleValues, userStatusValues } from './auth';
 import {
   type ClientLinkTabs,
+  PERSONAL_TAG_MESSAGE,
   type SurveyGuestTabs,
   accessLinkKindValues,
   fieldworkOrgStatusValues,
+  normalizePersonalTagName,
+  personalTagColorValues,
   surveyParticipantAccessLevelValues,
   surveyParticipantKindValues,
   surveyVisibilityValues,
@@ -459,6 +462,114 @@ export const SetSurveyVisibilityInput = z.object({
   visibility: SurveyVisibilitySchema,
 });
 export type SetSurveyVisibilityInput = z.infer<typeof SetSurveyVisibilityInput>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 개인 표시 — 즐겨찾기 (설문 즐겨찾기·태그 티켓 06, workspace.personalMarks)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 한 사람이 자기 화면을 정리하는 표시라 나에게만 보인다. 토글이 아니라 **결과 상태 지정**이다 —
+// 화면은 바라는 상태(`on`)를 보내고 서버는 그 상태로 맞춘다. 연타·재시도·탭 두 개가 같은
+// 결과로 수렴하는 근거다. 내 태그(티켓 07)도 같은 모듈에 붙는다.
+
+export const SetFavoriteInput = z.object({
+  surveyId: z.uuid(),
+  on: z.boolean(),
+});
+export type SetFavoriteInput = z.infer<typeof SetFavoriteInput>;
+
+/** 맞춘 뒤의 상태 — 입력의 `on` 그대로다(이미 그 상태였어도 같다). */
+export const SetFavoriteOutput = z.object({
+  surveyId: z.uuid(),
+  on: z.boolean(),
+});
+export type SetFavoriteOutput = z.infer<typeof SetFavoriteOutput>;
+
+// ── 내 태그 (티켓 07) ─────────────────────────────────────────────────────
+//
+// 태그 소유는 언제나 요청자다 — 입력에 사용자 칸이 없고, 남의 태그 id 는 없는 태그와 같은
+// NOT_FOUND 다. 태그 이름은 로그에 싣지 않는다: 거부 사유(issue message)에도 이름을 넣지 않는다.
+
+/** 태그 이름 칸 — `normalizePersonalTagName` 하나가 정한다(앞뒤 공백 제거·1~20자). */
+export const PersonalTagNameField = z
+  .string()
+  .max(200)
+  .transform((raw, ctx) => {
+    const checked = normalizePersonalTagName(raw);
+    if (!checked.ok) {
+      ctx.addIssue({ code: 'custom', message: PERSONAL_TAG_MESSAGE[checked.reason] });
+      return z.NEVER;
+    }
+    return checked.name;
+  });
+
+export const PersonalTagColorSchema = z.enum(personalTagColorValues);
+
+/** 내 태그 한 줄 — `linkCount` 는 내가 붙인 설문 수(볼 수 없게 된 설문도 센다). */
+export const PersonalTagItem = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  color: PersonalTagColorSchema,
+  linkCount: z.number().int().nonnegative(),
+});
+export type PersonalTagItem = z.infer<typeof PersonalTagItem>;
+
+/** 내 태그 전부 — 태그 창·카드 표시·자동완성이 함께 쓴다. 순서는 화면이 정한다. */
+export const MinePersonalTagsOutput = z.object({ tags: z.array(PersonalTagItem) });
+export type MinePersonalTagsOutput = z.infer<typeof MinePersonalTagsOutput>;
+
+/** 태그 연결 맞추기 — 즐겨찾기와 같은 결과 상태 지정. */
+export const SetTagLinkInput = z.object({
+  surveyId: z.uuid(),
+  tagId: z.uuid(),
+  on: z.boolean(),
+});
+export type SetTagLinkInput = z.infer<typeof SetTagLinkInput>;
+
+export const SetTagLinkOutput = SetTagLinkInput;
+export type SetTagLinkOutput = z.infer<typeof SetTagLinkOutput>;
+
+/**
+ * 태그 만들기(+ 붙이기). 같은 이름(공백·대소문자 무시)이 이미 있으면 새로 만들지 않고 그 태그를
+ * 돌려준다(`created: false`) — 같은 Enter 두 번이 태그 하나로 수렴한다. 붙일 설문이 있으면 같은
+ * 트랜잭션에서 붙인다.
+ */
+export const CreatePersonalTagInput = z.object({
+  name: PersonalTagNameField,
+  attachToSurveyId: z.uuid().nullable(),
+});
+export type CreatePersonalTagInput = z.infer<typeof CreatePersonalTagInput>;
+
+export const CreatePersonalTagOutput = z.object({
+  tag: PersonalTagItem,
+  created: z.boolean(),
+});
+export type CreatePersonalTagOutput = z.infer<typeof CreatePersonalTagOutput>;
+
+/**
+ * 태그 고치기 (티켓 08) — 이름·색 중 보낸 것만 바꾼다. 이름 정규화는 만들기와 같은 칸이 한다.
+ * 다른 내 태그와 이름이 겹치면(공백·대소문자 무시) CONFLICT 다 — 만들기처럼 기존 태그로 접지 않는다.
+ */
+export const UpdatePersonalTagInput = z
+  .object({
+    tagId: z.uuid(),
+    name: PersonalTagNameField.optional(),
+    color: PersonalTagColorSchema.optional(),
+  })
+  .refine((v) => v.name !== undefined || v.color !== undefined, {
+    message: '바꿀 이름이나 색이 없습니다.',
+  });
+export type UpdatePersonalTagInput = z.infer<typeof UpdatePersonalTagInput>;
+
+/** 고친 뒤의 한 줄 — 태그 창·카드가 캐시를 이 값으로 맞춘다. */
+export const UpdatePersonalTagOutput = PersonalTagItem;
+export type UpdatePersonalTagOutput = z.infer<typeof UpdatePersonalTagOutput>;
+
+/** 태그 지우기 (티켓 08) — 붙어 있던 연결은 FK 연쇄로 함께 사라진다. 되돌리기는 없다. */
+export const DeletePersonalTagInput = z.object({ tagId: z.uuid() });
+export type DeletePersonalTagInput = z.infer<typeof DeletePersonalTagInput>;
+
+export const DeletePersonalTagOutput = DeletePersonalTagInput;
+export type DeletePersonalTagOutput = z.infer<typeof DeletePersonalTagOutput>;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 설문 참여자 (.pen FLOW 4-2 참여자 블록, 티켓 18)

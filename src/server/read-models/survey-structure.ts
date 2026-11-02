@@ -29,6 +29,7 @@ import {
 } from '@/db/schema';
 import { retentionTimestampToDate } from '@/lib/survey/pii-retention';
 import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
+import { surveyListLifecycleSql } from '@/server/read-models/survey-list-lifecycle';
 import type { SurveyScopeFilter } from '@/server/work-scope';
 import { isCodedChoiceType } from '@/types/question-types';
 import type {
@@ -132,7 +133,7 @@ export function participatesInSurvey(viewerId: string, options: { fullOnly?: boo
  * import 시점에 스키마가 필요해져, `@/db/schema` 를 부분 모킹하는 테스트가 이 모듈을
  * 체인에 들이는 순간 「No "teams" export」로 깨진다. 쿼리를 만들 때 부르면 종전과 같다.
  */
-function surveyListColumns(viewerId: string | null, leaderTeamIds: readonly string[] = []) {
+export function surveyListColumns(viewerId: string | null, leaderTeamIds: readonly string[] = []) {
   return {
     /**
      * 내가 이 설문의 참여자인가 (티켓 18) — 카드의 버튼 노출 근사가 본다.
@@ -172,6 +173,8 @@ function surveyListColumns(viewerId: string | null, leaderTeamIds: readonly stri
     endDate: surveys.endDate,
     isPublic: surveys.isPublic,
     status: surveys.status,
+    // 목록 상태 — 세그먼트 숫자·거르기가 본다. 판정식은 게스트 홈의 TS 판정과 같은 표로 묶여 있다.
+    lifecycle: surveyListLifecycleSql(),
     teamId: surveys.teamId,
     teamName: teams.name,
     visibility: surveys.visibility,
@@ -183,17 +186,11 @@ function surveyListColumns(viewerId: string | null, leaderTeamIds: readonly stri
 }
 
 /**
- * 작업 범위로 좁힌 설문 목록 (역할 모델 v2 티켓 07).
- *
- * 판정은 하지 않는다 — 무엇을 보게 되는지는 이미 buildSurveyScopeFilter 가 정했고 여기는
- * 그 조건을 SQL 로 옮길 뿐이다. 이 함수가 "팀장인가" 를 다시 물으면 매트릭스가 두 벌이 된다.
- *
- * 팀 범위에서 배치 대기 설문을 빼는 것은 조건이 아니라 정의다 — 배치 대기는 team_id 가
- * NULL 이라 어느 팀 범위에도 걸리지 않는다. 시스템 범위만 그것을 본다.
+ * 작업 범위가 보는 설문의 WHERE — 전체 목록(`getScopedSurveys`)·사이드바 요약
+ * (`getScopedSurveySummaries`)·목록 페이지(`survey-list-page`)가 함께 쓴다. 아무것도 보지
+ * 않는 범위(`kind: 'none'`)는 호출 쪽이 조회 전에 빈 결과로 끝낸다.
  */
-export async function getScopedSurveys(filter: SurveyScopeFilter) {
-  if (filter.kind === 'none') return [];
-
+export function scopedSurveyWhere(filter: Exclude<SurveyScopeFilter, { kind: 'none' }>): SQL {
   const conditions: SQL[] = [isNull(surveys.deletedAt)];
   if (filter.kind === 'team') {
     // 팀 범위가 보는 것 = 그 팀 설문 + **내가 초대받은 설문**(팀 무관, 티켓 18).
@@ -226,6 +223,22 @@ export async function getScopedSurveys(filter: SurveyScopeFilter) {
     conditions.push(visible);
   }
 
+  return and(...conditions)!;
+}
+
+/**
+ * 작업 범위로 좁힌 설문 목록 (역할 모델 v2 티켓 07).
+ *
+ * 판정은 하지 않는다 — 무엇을 보게 되는지는 이미 buildSurveyScopeFilter 가 정했고 여기는
+ * 그 조건을 SQL 로 옮길 뿐이다. 이 함수가 "팀장인가" 를 다시 물으면 매트릭스가 두 벌이 된다.
+ *
+ * 팀 범위에서 배치 대기 설문을 빼는 것은 조건이 아니라 정의다 — 배치 대기는 team_id 가
+ * NULL 이라 어느 팀 범위에도 걸리지 않는다. 시스템 범위만 그것을 본다.
+ */
+export async function getScopedSurveys(filter: SurveyScopeFilter) {
+  if (filter.kind === 'none') return [];
+  const where = scopedSurveyWhere(filter);
+
   return db
     .select({
       ...surveyListColumns(filter.viewerId, filter.kind === 'team' ? filter.leaderTeamIds : []),
@@ -238,7 +251,35 @@ export async function getScopedSurveys(filter: SurveyScopeFilter) {
     .leftJoin(teams, eq(teams.id, surveys.teamId))
     .leftJoin(users, eq(users.id, surveys.ownerUserId))
     .leftJoin(surveyGroups, eq(surveyGroups.id, surveys.surveyGroupId))
-    .where(and(...conditions))
+    .where(where)
+    .orderBy(desc(surveys.createdAt));
+}
+
+/**
+ * 사이드바 요약 (설문 즐겨찾기·태그 티켓 02) — `getScopedSurveys` 와 **같은 범위 조건**, 좁은 투영.
+ *
+ * 참여 트리는 팀 → 그룹 → 미분류 묶음만 센다. 목록 행의 참여 여부 서브쿼리·소유자 조인을 싣지
+ * 않고, 응답 수 집계는 호출 쪽도 하지 않는다. 범위 조건을 따로 적으면 사이드바 숫자와 본문
+ * 카드 수가 갈리므로 `scopedSurveyWhere` 하나를 공유하고, 그룹 열도 같은 접기(`visibleGroupId`)를
+ * 쓴다 — 목록이 미분류로 접는 설문을 사이드바가 폴더로 세면 누른 폴더에서 카드가 모자란다.
+ */
+export async function getScopedSurveySummaries(filter: SurveyScopeFilter) {
+  if (filter.kind === 'none') return [];
+  const where = scopedSurveyWhere(filter);
+
+  return db
+    .select({
+      id: surveys.id,
+      title: surveys.title,
+      cardTitle: surveys.cardTitle,
+      teamId: surveys.teamId,
+      teamName: teams.name,
+      surveyGroupId: visibleGroupId(),
+    })
+    .from(surveys)
+    .leftJoin(teams, eq(teams.id, surveys.teamId))
+    .leftJoin(surveyGroups, eq(surveyGroups.id, surveys.surveyGroupId))
+    .where(where)
     .orderBy(desc(surveys.createdAt));
 }
 
@@ -252,13 +293,13 @@ export async function getScopedSurveys(filter: SurveyScopeFilter) {
  * 사이드바에 없어 열 수 없는 폴더였기 때문이다. **협업 그룹이 생기면서 그 전제가 사라졌다**:
  * 내가 볼 수 있는 설문이 담긴 타 팀 그룹은 이제 사이드바에 선다(listCollaboratingGroups).
  * 범위로 계속 접으면 사이드바가 「협업 폴더 1」이라 말하는데 눌러서 열면 언제나 빈 화면이다
- * (그룹 화면은 이 값으로 좁힌다 — survey-list-pipeline 의 narrowToGroup).
+ * (그룹 화면은 이 값으로 좁힌다 — survey-list-page 의 그룹 좁힘).
  *
  * 두 조회가 **같은 술어**를 쓰는 것이 이 결합의 근거다: 목록에 보이는 타 팀 설문은
  * `participatesInSurvey`·`leadsParticipantTeam` 로 들어온 것이고, 협업 그룹 조회도 같은
  * 조각으로 그 설문이 담긴 그룹을 세운다. 그래서 여기서 남긴 id 는 갈 곳이 있다.
  */
-function visibleGroupId(): SQL<string | null> {
+export function visibleGroupId(): SQL<string | null> {
   const sameTeam = sql`${surveys.teamId} is not distinct from ${surveyGroups.teamId}`;
   return sql<string | null>`case when ${sameTeam} then ${surveys.surveyGroupId} else null end`;
 }

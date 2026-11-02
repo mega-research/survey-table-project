@@ -1,10 +1,21 @@
 import { createRouterClient } from '@orpc/server';
+import { ORPCError } from '@orpc/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
+import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
+import { INITIAL_SURVEY_LIST_PAGE_QUERY } from '@/shared/contracts/survey-builder-io';
+
+import { SurveyListQueryError } from '../domain/survey-read';
+import * as responseSvc from '../services/response-read';
+import * as surveySvc from '../services/survey-read';
+import { read } from './read';
 
 vi.mock('../services/survey-read', () => ({
   getSurveyListWithCounts: vi.fn(),
+  listSurveyPage: vi.fn(),
+  listSurveySummaries: vi.fn(),
+  suggestSurveys: vi.fn(),
   getSurveyById: vi.fn(),
   getSurveyWithDetails: vi.fn(),
   isSlugAvailable: vi.fn(),
@@ -14,8 +25,11 @@ vi.mock('../services/survey-read', () => ({
   getVariableCatalogForSurvey: vi.fn(),
 }));
 
-// capability 관문(티켓 09) — 실물은 DB 를 읽으므로 모킹. 기본은 통과.
-vi.mock('@/server/rpc-survey-access', () => ({ assertSurveyCapabilityRpc: vi.fn() }));
+// capability 관문(티켓 09) — 실물은 DB 를 읽으므로 모킹. 기본은 통과. 거부 매핑은 실물을 쓴다.
+vi.mock('@/server/rpc-survey-access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/server/rpc-survey-access')>()),
+  assertSurveyCapabilityRpc: vi.fn(),
+}));
 
 vi.mock('../services/response-read', () => ({
   getResponsesBySurvey: vi.fn(),
@@ -26,20 +40,22 @@ vi.mock('../services/response-read', () => ({
   exportResponsesAsCsv: vi.fn(),
 }));
 
-import { ORPCError } from '@orpc/server';
-
-import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
-
-import * as responseSvc from '../services/response-read';
-import * as surveySvc from '../services/survey-read';
-import { read } from './read';
-
 // UUID 픽스처는 v4 형태로 통일.
 const SURVEY_ID = '11111111-2222-4333-8444-555555555555';
 const RESPONSE_ID = '22222222-3333-4444-8555-666666666666';
 
 function authedContext(): ORPCContext {
-  return { db: {} as never, user: { id: 'admin-1', email: 'a@b.com', name: '관리자', status: 'active', isSuperadmin: false , userType: 'internal'} };
+  return {
+    db: {} as never,
+    user: {
+      id: 'admin-1',
+      email: 'a@b.com',
+      name: '관리자',
+      status: 'active',
+      isSuperadmin: false,
+      userType: 'internal',
+    },
+  };
 }
 
 function anonContext(): ORPCContext {
@@ -50,31 +66,156 @@ describe('surveyBuilder.read procedures', () => {
   beforeEach(() => vi.clearAllMocks());
   afterEach(() => vi.unstubAllEnvs());
 
-  it('list는 세션 사용자와 요청 범위를 그대로 넘긴다', async () => {
-    const result = { scope: { kind: 'system' }, teams: [], canSeeSystemScope: true, surveys: [] };
-    vi.mocked(surveySvc.getSurveyListWithCounts).mockResolvedValue(result as never);
+  it('listPage 는 세션 사용자와 조건을 그대로 넘긴다', async () => {
+    const result = { scope: { kind: 'system' }, teams: [], items: [], total: 0 };
+    vi.mocked(surveySvc.listSurveyPage).mockResolvedValue(result as never);
     const context = authedContext();
     const client = createRouterClient({ read }, { context });
-    const res = await client.read.list({ scope: 'team-1' });
-    expect(surveySvc.getSurveyListWithCounts).toHaveBeenCalledWith(context.user, 'team-1', {
-      deleted: false,
-    });
+    const input = { ...INITIAL_SURVEY_LIST_PAGE_QUERY, scope: 'team-1', q: '실태', page: 2 };
+    const res = await client.read.listPage(input);
+    expect(surveySvc.listSurveyPage).toHaveBeenCalledWith(context.user, input);
     expect(res).toEqual(result);
   });
 
-  it('list 는 범위 미지정을 null 로 넘긴다 — 서버가 기본 범위를 정한다', async () => {
-    vi.mocked(surveySvc.getSurveyListWithCounts).mockResolvedValue({
-      scope: { kind: 'none' },
-      teams: [],
-      canSeeSystemScope: false,
-      surveys: [],
-    } as never);
+  it('listPage 는 모르는 키를 거부한다 — 입력이 그대로 조건이 되므로 조용히 버리지 않는다', async () => {
+    const client = createRouterClient({ read }, { context: authedContext() });
+    await expect(
+      client.read.listPage({
+        ...INITIAL_SURVEY_LIST_PAGE_QUERY,
+        scope: null,
+        ownerUserId: 'x',
+      } as never),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(surveySvc.listSurveyPage).not.toHaveBeenCalled();
+  });
+
+  it('listPage 는 주소에서 온 id 가 UUID 꼴이 아니면 DB 까지 보내지 않는다', async () => {
+    const client = createRouterClient({ read }, { context: authedContext() });
+    await expect(
+      client.read.listPage({ ...INITIAL_SURVEY_LIST_PAGE_QUERY, scope: null, groupId: 'abc' }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(surveySvc.listSurveyPage).not.toHaveBeenCalled();
+  });
+
+  it('listPage 는 달력에 없는 기간 날짜를 DB 까지 보내지 않는다 — ::date 변환 500 대신 BAD_REQUEST', async () => {
+    const client = createRouterClient({ read }, { context: authedContext() });
+    for (const bad of ['2026-99-99', '2026-02-29', '2026-04-31', '2026-13-01']) {
+      await expect(
+        client.read.listPage({
+          ...INITIAL_SURVEY_LIST_PAGE_QUERY,
+          scope: null,
+          advanced: { ...INITIAL_SURVEY_LIST_PAGE_QUERY.advanced, dateFrom: bad },
+        }),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+      await expect(
+        client.read.listPage({
+          ...INITIAL_SURVEY_LIST_PAGE_QUERY,
+          scope: null,
+          advanced: { ...INITIAL_SURVEY_LIST_PAGE_QUERY.advanced, dateTo: bad },
+        }),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    }
+    expect(surveySvc.listSurveyPage).not.toHaveBeenCalled();
+
+    vi.mocked(surveySvc.listSurveyPage).mockResolvedValue({} as never);
+    await client.read
+      .listPage({
+        ...INITIAL_SURVEY_LIST_PAGE_QUERY,
+        scope: null,
+        advanced: {
+          ...INITIAL_SURVEY_LIST_PAGE_QUERY.advanced,
+          dateFrom: '2028-02-29',
+          dateTo: '2028-03-01',
+        },
+      })
+      .catch(() => undefined);
+    expect(surveySvc.listSurveyPage).toHaveBeenCalledTimes(1);
+  });
+
+  it('listPage — 내 것이 아닌 태그로 거르면 설문이 아니라 태그를 못 찾았다고 한다(NOT_FOUND)', async () => {
+    vi.mocked(surveySvc.listSurveyPage).mockRejectedValue(
+      new SurveyListQueryError('tag_not_found'),
+    );
+    const client = createRouterClient({ read }, { context: authedContext() });
+    await expect(
+      client.read.listPage({ ...INITIAL_SURVEY_LIST_PAGE_QUERY, scope: null }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND', message: '태그를 찾을 수 없습니다.' });
+  });
+
+  it('listPage — 휴지통에 즐겨찾기·태그 조건은 권한이 아니라 입력 오류다(BAD_REQUEST)', async () => {
+    vi.mocked(surveySvc.listSurveyPage).mockRejectedValue(
+      new SurveyListQueryError('trash_with_personal_marks'),
+    );
+    const client = createRouterClient({ read }, { context: authedContext() });
+    await expect(
+      client.read.listPage({ ...INITIAL_SURVEY_LIST_PAGE_QUERY, scope: null }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+
+  it('listSummaries 는 세션 사용자와 요청 범위를 요약 조회에 넘긴다 — 응답 수 조회를 타지 않는다', async () => {
+    const rows = [
+      {
+        id: SURVEY_ID,
+        title: '설문',
+        cardTitle: null,
+        teamId: 't-1',
+        teamName: '1팀',
+        surveyGroupId: null,
+      },
+    ];
+    vi.mocked(surveySvc.listSurveySummaries).mockResolvedValue(rows as never);
     const context = authedContext();
     const client = createRouterClient({ read }, { context });
-    await client.read.list({});
-    expect(surveySvc.getSurveyListWithCounts).toHaveBeenCalledWith(context.user, null, {
-      deleted: false,
+    const res = await client.read.listSummaries({ scope: 'team-1' });
+    expect(surveySvc.listSurveySummaries).toHaveBeenCalledWith(context.user, 'team-1');
+    expect(surveySvc.getSurveyListWithCounts).not.toHaveBeenCalled();
+    expect(res).toEqual(rows);
+  });
+
+  it('listSummaries 는 범위 미지정을 null 로 넘긴다', async () => {
+    vi.mocked(surveySvc.listSurveySummaries).mockResolvedValue([] as never);
+    const context = authedContext();
+    const client = createRouterClient({ read }, { context });
+    await client.read.listSummaries({});
+    expect(surveySvc.listSurveySummaries).toHaveBeenCalledWith(context.user, null);
+  });
+
+  it('listSummaries 는 비로그인이면 UNAUTHORIZED', async () => {
+    const client = createRouterClient({ read }, { context: anonContext() });
+    await expect(client.read.listSummaries({})).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    expect(surveySvc.listSurveySummaries).not.toHaveBeenCalled();
+  });
+
+  it('suggest 는 세션 사용자와 범위·검색어만 넘긴다', async () => {
+    const rows = [{ id: SURVEY_ID, displayTitle: '설문', ownerName: '김', lifecycle: 'draft' }];
+    vi.mocked(surveySvc.suggestSurveys).mockResolvedValue(rows as never);
+    const context = authedContext();
+    const client = createRouterClient({ read }, { context });
+    const res = await client.read.suggest({ scope: 'team-1', q: 'a사 실' });
+    expect(surveySvc.suggestSurveys).toHaveBeenCalledWith(context.user, {
+      scope: 'team-1',
+      q: 'a사 실',
     });
+    expect(res).toEqual(rows);
+  });
+
+  it('suggest 는 목록과 같은 검색어 상한·모르는 키를 거부한다', async () => {
+    const client = createRouterClient({ read }, { context: authedContext() });
+    await expect(
+      client.read.suggest({ scope: null, q: '1 2 3 4 5 6 7 8 9' }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(
+      client.read.suggest({ scope: null, q: 'a', groupId: null } as never),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(surveySvc.suggestSurveys).not.toHaveBeenCalled();
+  });
+
+  it('suggest 는 비로그인이면 UNAUTHORIZED', async () => {
+    const client = createRouterClient({ read }, { context: anonContext() });
+    await expect(client.read.suggest({ scope: null, q: 'a' })).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+    expect(surveySvc.suggestSurveys).not.toHaveBeenCalled();
   });
 
   it('byId는 surveyId를 풀어 getSurveyById에 위임한다', async () => {
@@ -97,7 +238,10 @@ describe('surveyBuilder.read procedures', () => {
     vi.mocked(surveySvc.isSlugAvailable).mockResolvedValue(true as never);
     const client = createRouterClient({ read }, { context: authedContext() });
     const res = await client.read.slugAvailable({ slug: 'my-slug', excludeSurveyId: SURVEY_ID });
-    expect(surveySvc.isSlugAvailable).toHaveBeenCalledWith({ slug: 'my-slug', excludeSurveyId: SURVEY_ID });
+    expect(surveySvc.isSlugAvailable).toHaveBeenCalledWith({
+      slug: 'my-slug',
+      excludeSurveyId: SURVEY_ID,
+    });
     expect(res).toBe(true);
   });
 
@@ -231,7 +375,14 @@ describe('surveyBuilder.read procedures', () => {
       {
         context: {
           db: {} as never,
-          user: { id: 'guest-1', email: 'g@b.com', name: '게스트', status: 'active', isSuperadmin: false, userType: 'guest' },
+          user: {
+            id: 'guest-1',
+            email: 'g@b.com',
+            name: '게스트',
+            status: 'active',
+            isSuperadmin: false,
+            userType: 'guest',
+          },
         },
       },
     );

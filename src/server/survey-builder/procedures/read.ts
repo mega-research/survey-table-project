@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import * as z from 'zod';
 
 import { authed } from '@/server/orpc';
@@ -11,11 +12,16 @@ import {
   SlugAvailableInput,
   SlugAvailableOutput,
   SurveyIdInput,
-  SurveyListInput,
-  SurveyListOutput,
+  SurveyListPageInput,
+  SurveyListPageOutput,
+  SurveyListQueryError,
   SurveyResponseArrayOutput,
   SurveyResponseOutput,
   SurveyRowOutput,
+  SurveySuggestInput,
+  SurveySuggestOutput,
+  SurveySummaryListInput,
+  SurveySummaryListOutput,
   SurveyVersionListOutput,
   SurveyWithDetailsOutput,
   VariableCatalogOutput,
@@ -32,22 +38,64 @@ import * as surveySvc from '../services/survey-read';
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * 설문 목록 — 작업 범위로 좁힌다(티켓 07).
+ * 목록 조회(페이지·사이드바 요약·자동완성)의 거부 → RPC 에러. 매핑이 없으면 그 거부가 500 이 된다.
  *
- * 입력의 scope 는 화면이 기억하는 값일 뿐이라 서버가 멤버십으로 다시 판정한다. 일반
- * 사용자의 system 요청은 거부되고, 내 팀이 아닌 teamId 는 첫 활성 팀으로 접힌다.
+ * - 일반 사용자의 system 요청(`WorkScopeError`)·휴지통 권한 없음(`SurveyAccessError`) → FORBIDDEN
+ * - 내 것이 아닌 태그로 거르기(`SurveyListQueryError` tag_not_found) → NOT_FOUND, 태그 문구
+ * - 휴지통에 즐겨찾기·태그 조건(`SurveyListQueryError` trash_with_personal_marks) → BAD_REQUEST
  */
-const list = authed
-  .input(SurveyListInput)
-  .output(SurveyListOutput)
+function rethrowListError(error: unknown): never {
+  if (error instanceof SurveyListQueryError) {
+    throw error.reason === 'tag_not_found'
+      ? new ORPCError('NOT_FOUND', { message: '태그를 찾을 수 없습니다.' })
+      : new ORPCError('BAD_REQUEST', {
+          message: '휴지통에서는 즐겨찾기·태그로 거를 수 없습니다.',
+        });
+  }
+  throw toRpcSurveyAccessError(toRpcWorkScopeError(error));
+}
+
+/**
+ * 설문 목록 한 페이지 — 서버가 거르고 정렬하고 24개씩 나눈다(설문 즐겨찾기·태그 티켓 03).
+ *
+ * 입력의 scope 는 화면이 기억하는 값일 뿐이라 서버가 멤버십으로 다시 판정한다. 일반 사용자의
+ * system 요청은 거부되고, 내 팀이 아닌 teamId 는 첫 활성 팀으로 접힌다. 휴지통(deleted)은
+ * 슈퍼어드민의 시스템 범위에서만 열린다.
+ *
+ * 전체 목록 조회(구 `read.list`)는 RPC 표면에서 걷었다 — 남은 소비자(분석 페이지)는 RSC 가
+ * 서비스를 직접 부른다.
+ */
+const listPage = authed
+  .input(SurveyListPageInput)
+  .output(SurveyListPageOutput)
   .handler(({ context, input }) =>
-    surveySvc
-      .getSurveyListWithCounts(context.user, input.scope ?? null, { deleted: input.deleted === true })
-      // 일반 사용자의 system 요청은 코어가 거부한다 — 매핑이 없으면 그 거부가 500 이 된다.
-      // 휴지통 요청(deleted)의 거부도 같은 자리에서 옮긴다(SurveyAccessError → FORBIDDEN).
-      .catch((error: unknown) => {
-        throw toRpcSurveyAccessError(toRpcWorkScopeError(error));
-      }),
+    surveySvc.listSurveyPage(context.user, input).catch(rethrowListError),
+  );
+
+/**
+ * 사이드바 요약 — 목록과 같은 작업 범위 필터, 응답 수 없음(설문 즐겨찾기·태그 티켓 02).
+ *
+ * 실사팀 사이드바의 참여 트리가 팀 → 그룹 → 미분류 묶음을 센다. 목록이 페이지 단위로
+ * 바뀌어도 사이드바가 범위 전체를 세도록 목록 조회와 분리했다.
+ */
+const listSummaries = authed
+  .input(SurveySummaryListInput)
+  .output(SurveySummaryListOutput)
+  .handler(({ context, input }) =>
+    surveySvc.listSurveySummaries(context.user, input.scope ?? null).catch(rethrowListError),
+  );
+
+/**
+ * 자동완성 설문 후보 — 작업 범위 + 검색어 → 최대 5건(설문 즐겨찾기·태그 티켓 05).
+ *
+ * 목록 페이지와 같은 범위 필터·같은 검색 조각을 타므로 볼 수 없는 설문은 후보에 안 나온다.
+ * 응답 수는 세지 않는다. 서버 캐시 없음 — 같은 검색어는 화면의 TanStack Query 가 기억한다.
+ */
+const suggest = authed
+  .input(SurveySuggestInput)
+  .output(SurveySuggestOutput)
+  .handler(({ context, input }) =>
+    surveySvc.suggestSurveys(context.user, input).catch(rethrowListError),
   );
 
 /** 설문 단일 조회(cache). */
@@ -169,7 +217,9 @@ const variableCatalog = authed
   });
 
 export const read = {
-  list,
+  listPage,
+  listSummaries,
+  suggest,
   byId,
   withDetails,
   slugAvailable,

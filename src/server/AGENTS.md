@@ -52,7 +52,7 @@ src/
 │       ├── procedures/         # oRPC procedure (authed/scoped/pub, 얇은 위임) + colocated *.test.ts
 │       └── services/           # 비즈 로직 + drizzle (server-only, requireAuth/revalidatePath 없음)
 │                               # 도메인 간 직접 import 금지(ESLint), 내부는 상대경로. 타 도메인 테이블 직접 쿼리는 허용
-│   ├── read-models/            # 여러 도메인 테이블을 **읽기만** 하는 projection (설문 구조 · 버전 스냅샷 · 응답 · 보관함 분류 · 컨택 read model · 초대 조회 · 결과코드 · 쿼터 모수 · 설문 제어 플래그 · 템플릿 변수 카탈로그 · 응답내역 컬럼 스킴 · ID 목록 토큰 조회 contact-id-lists · 조사 대상 필터 해석 contact-filter-resolution(하위 파서 contacts-filter-parse) · 조사 대상 목록 조립 contacts-list-page · 컨택원 선택지 contact-assignment-options · 발송 주소 send-address · 앵커 행→스냅샷 매퍼 anchor-row · 팀 멤버십 · 활성 팀 목록 · 설문 소유자 이메일 · 실사 홈 설문 목록)
+│   ├── read-models/            # 여러 도메인 테이블을 **읽기만** 하는 projection (설문 구조 · 버전 스냅샷 · 응답 · 보관함 분류 · 컨택 read model · 초대 조회 · 결과코드 · 쿼터 모수 · 설문 제어 플래그 · 템플릿 변수 카탈로그 · 응답내역 컬럼 스킴 · ID 목록 토큰 조회 contact-id-lists · 조사 대상 필터 해석 contact-filter-resolution(하위 파서 contacts-filter-parse) · 조사 대상 목록 조립 contacts-list-page · 컨택원 선택지 contact-assignment-options · 발송 주소 send-address · 앵커 행→스냅샷 매퍼 anchor-row · 팀 멤버십 · 활성 팀 목록 · 설문 소유자 이메일 · 실사 홈 설문 목록 · 설문 목록 한 페이지·자동완성 survey-list-page · 목록 상태 SQL 식 survey-list-lifecycle)
 │   │                           # 자기완결 — 도메인을 import 하지 않는다(ESLint). 구 src/data
 │   │                           # survey-structure 의 getSurveyById 는 React cache — **사본을 만들지 말 것**(cache 가 갈리면 RSC dedupe 가 깨진다)
 │   │                           # version-snapshot 의 snapshotQuestions 는 비배열을 빈 배열로 접는다 — "구조가 깨졌다" 와 "질문이 없다" 를
@@ -96,8 +96,8 @@ src/
   달면 삭제 7일 뒤 파일이 지워지고 그 뒤의 복구는 이미지·첨부가 빠진 설문을 되살린다
   (`reference-surface.test.ts` 가 이 자리를 못 박는다). 옛 `deleteKeyRefsBySourceIds` 는
   뺐다 — 「행이 소멸하는데 인덱스만 남는다」는 전제가 사라졌다.
-  화면은 **시스템 전체 보기 툴바의 「삭제됨 N」 칩**이다. 상태 칩의 다섯 번째 값이 아니라
-  별개의 모드다(칩은 받아온 목록을 접고 이쪽은 조회를 바꾼다). `deletedCount` 가 **null 이면
+  화면은 **시스템 전체 보기 툴바의 「삭제됨 N」 칩**이다. 목록 상태 세그먼트 옆에 서지만
+  별개의 모드다(세그먼트는 목록 안의 거르기이고 이쪽은 원천을 바꾼다 — 즐겨찾기·태그 조건을 받지 않는다). `deletedCount` 가 **null 이면
   이 화면에 휴지통이 없다** — 「비어 있는 휴지통」과 「볼 수 없는 사람」이 같은 그림이 되면
   안 되기 때문이다. 휴지통 카드(`DeletedSurveyCard`)도 별개 컴포넌트다.
   검증은 둘로 나뉜다 — `tests/integration/soft-delete-surface-inventory.test.ts`(기본 게이트,
@@ -248,3 +248,18 @@ src/
 프리필 토큰·표시 조건이 읽는 명단 값(attrs + 개인정보 열 복호화 값)을 합치는 곳은 `server/read-models/respondent-contact-attrs` 한 곳이다(CONTEXT.md 「이월 값과 본문 프리필 토큰의 우선순위」). 서버 재평가(제출의 숨은 문항 · 계산 칸 · 자격미달, 관리자 수정, 프리필 강제 복원)와 관리자 화면 · 빌더 미리보기는 개인정보 열 전부를 합치고, 응답자 브라우저로 가는 명단 조회(`contacts.attrs.lookup` · `/i/<code>`)만 발행본이 실제로 읽는 열로 좁힌다(`collectReferencedContactKeys`).
 
 **새로 "응답 화면이 보는 명단 값"을 읽는 자리를 만들면 `contactTargets.attrs` 를 직접 읽지 말고 이 로더를 쓸 것** — 서버만 개인정보 값을 못 보면 그 열을 읽는 표시 조건이 서버에서 거짓이 되어 응답자가 본 문항의 답이 제출에서 지워진다. 메일 본문 변수 · 쿼터 속성형 차원 · 내보내기는 합치지 않는다(attrs 만).
+
+## 설문 목록 조회
+
+설문 목록 화면(`/surveys`)의 거르기·정렬·페이지 나누기·숫자 세기는 서버가 한다. 표면은 `surveyBuilder.read` 의 셋이고(전부 `authed`), 거부 매핑은 procedure 의 `rethrowListError` 하나다 — 일반 사용자의 system 범위·휴지통은 FORBIDDEN, 목록 조건 거부(`SurveyListQueryError`)는 아래 「검색」.
+
+- **`listPage`** — 한 페이지(`SURVEY_LIST_PAGE_SIZE` 24). 서비스 `listSurveyPage` → `read-models/survey-list-page` 의 `querySurveyListPage`. 조건은 세 겹이다: 원천(범위 | 휴지통) → **좁힘**(그룹·팀·미분류) → 거르기(검색·검색 칩·즐겨찾기·목록 상태·상세 검색). **목록 상태별 숫자·즐겨찾기 숫자·소유자 목록은 좁힘까지만** 보고, `total`·항목은 전부 본다. 범위 WHERE 는 `survey-structure` 의 `scopedSurveyWhere` 하나를 요약 조회·분석 페이지 전체 목록과 공유한다 — 사본을 만들면 사이드바 숫자와 카드 수가 갈린다. 입력(`SurveyListPageInputSchema`)은 `.strict()` 에 **모든 칸 필수**다. 원천의 요청자는 `SurveyListSource` 가 쥔다(범위 필터의 `viewerId` | 휴지통의 `viewerId`) — 별·태그·참여 칸이 같은 값을 본다. 화면은 주소가 조건의 정본이고(`features/survey-builder/survey-list/survey-list-url`), RSC 페이지가 같은 parse + `applyTrashAccess` 로 첫 페이지를 미리 받는다.
+- **응답 수는 그 페이지 항목만 센다**(`getResponseCountsGroupedBySurvey(pageIds)`). 범위 전체 집계 서브쿼리는 응답순 정렬과 상세 검색 「응답 수 범위」일 때만 붙는다 — 느려지면 완료 수 카운터 컬럼을 별도 작업으로 검토한다. 분석 페이지는 RSC 가 `getSurveyListWithCounts`(전체 + 전체 응답 수)를 그대로 부른다. 행 조립 `toSurveyListItem` 을 둘이 공유하므로 `SurveyListItem` 에 칸을 더하면 양쪽을 채운다. 페이지 전용 칸(`isFavorite`·`myTagIds`)은 `SurveyListPageItem` 에만 있다.
+- **검색** read model 안의 `surveyListSearchSql(q, tagViewerId)` — 공백으로 나눈 단어(최대 8개·100자, 계약의 `splitSurveyListSearchWords`)마다 카드 제목 | 제목 | 설명 | 소유자 이름 | **요청자의** 태그 이름에 ILIKE(`lib/operations/filter-shared` 의 `escapeLikePattern`), 단어끼리 AND. 휴지통은 태그 이름 조각을 뺀다(카드에 태그가 없다). `users` 가 조인된 문장에서만 쓸 수 있다. 내 태그 서브쿼리 셋(검색·카드 태그 id·검색 칩)은 `fromMyTagLinks` 한 조각에서 출발한다. 검색 칩은 지정한 내 태그가 **모두** 붙은 설문이고(`allTagsAttachedSql`), 요청자 소유가 아닌 tagId 가 섞이면 조용히 빼지 않고 NOT_FOUND 「태그를 찾을 수 없습니다.」다(`SurveyListQueryError('tag_not_found')`, 빼면 결과가 넓어진다). 휴지통 + 즐겨찾기·태그는 입력 오류 BAD_REQUEST(`trash_with_personal_marks`). 즐겨찾기·태그 테이블은 workspace 소유지만 「타 도메인 테이블 직접 쿼리」로 읽는다(언제나 `user_id = 요청자`). 검색어·태그 이름은 로그에 싣지 않는다(`rpc-logging.test.ts`).
+- **`suggest`** — 자동완성 설문 후보 최대 5건(`id`·`displayTitle`·`ownerName`·`lifecycle`, 응답 수 없음), `querySurveySuggestions(filter, q)` 가 `listPage` 와 같은 검색 조각을 스스로 만든다. 내 태그·소유자 후보는 서버를 부르지 않고 브라우저가 `mine`·`owners` 에서 거른다. **서버 캐시(Redis)·잡은 두지 않는다** — 권한이 사람마다 달라 캐시가 사람별로 갈리고 무효화가 늘어나는데, 원본 조회가 이미 빠르다. 화면은 200ms 디바운스 + 앞 요청 취소 + TanStack Query 30초.
+- **`listSummaries`** — 실사팀 사이드바 참여 트리용. 응답 수 없이 id·제목·카드 제목·팀·그룹만 준다(`SurveySummaryItem`).
+- **trigram 인덱스는 일부러 없다.** 범위 안 설문 1만 개, 또는 목록·자동완성 p95 200ms 초과가 RPC 로그에 보이면 카드 제목·제목·설명에 붙인다.
+- **즐겨찾기 고정** — 범위 목록은 요청자의 별을 정렬 키 맨 앞에 둔다(`pinnedFavoritesOrder`): 별 켠 설문 먼저, 그 안은 고른 정렬과 무관하게 최신 수정순, 나머지는 고른 정렬. 휴지통과 「즐겨찾기만」에는 걸지 않는다. 별은 서버 정렬이라 페이지 경계를 넘어도 이어지고, 카드의 별을 켜면 정착 후 무효화로 다시 읽을 때 자리가 옮겨진다.
+- 제목순은 `collate "ko-x-icu"` 다 — 그 정렬이 없는 DB 에서는 깨지므로 승격 전에 프로덕션 `pg_collation` 을 확인한다.
+- **목록 상태**(CONTEXT.md)의 판정은 두 벌이다 — SQL `read-models/survey-list-lifecycle` 의 `surveyListLifecycleSql`, TS `shared/contracts/survey-builder-io` 의 `resolveSurveyListLifecycle`. 같은 표(`tests/fixtures/survey-list-lifecycle-cases.ts`)로 대조하니 판정을 바꾸면 표부터 고친다.
+- 쿼리 키는 셋 다(페이지·요약은 `shared/lib/survey-list-queries`, 자동완성은 `features/survey-builder/queries/use-survey-suggestions`) `surveyKeys.lists()` 아래라 설문 mutation 무효화를 그대로 받는다. 별·태그 낙관적 갱신의 `setQueriesData` 접두는 `surveyKeys.pages()` 다 — `lists()` 로 훑으면 모양이 다른 요약 캐시(배열)까지 잡힌다.

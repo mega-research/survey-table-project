@@ -4,6 +4,8 @@
 
 import * as Sentry from "@sentry/nextjs";
 
+import { scrubSentryEvent } from "./src/lib/logger/sentry-before-send";
+
 Sentry.init({
   ...(process.env['NEXT_PUBLIC_SENTRY_DSN'] !== undefined ? { dsn: process.env['NEXT_PUBLIC_SENTRY_DSN'] } : {}),
 
@@ -16,4 +18,9 @@ Sentry.init({
   // contact_pii 암호화 분리 설계가 텔레메트리로 우회되지 않도록 false 로 둔다.
   // https://docs.sentry.io/platforms/javascript/guides/nextjs/configuration/options/#sendDefaultPii
   sendDefaultPii: false,
+
+  // DB 쿼리 바인딩 값 스트립: DrizzleQueryError 의 message 에 보간된 params(응답 JSONB·명단 값)는
+  // sendDefaultPii 로 막히지 않는다. pino err 직렬화와 같은 규칙으로 지우고, SQL·SQLSTATE 는 남긴다.
+  // edge·client 는 DB 를 부르지 않아 걸지 않는다.
+  beforeSend: scrubSentryEvent,
 });

@@ -9,10 +9,15 @@ import type {
   Survey as SurveyRow,
   SurveyVersion,
 } from '@/db/schema';
-import type {
-  SurveyControl,
-  SurveyListItem,
-  SurveyListResult,
+import {
+  type SurveyControl,
+  type SurveyListItem,
+  SurveyListPageInputSchema,
+  type SurveyListPageResult,
+  type SurveyListResult,
+  SurveySuggestInputSchema,
+  type SurveySuggestion,
+  type SurveySummaryItem,
 } from '@/shared/contracts/survey-builder-io';
 import type { VariableDef } from '@/shared/contracts/template-variables';
 import type { Survey as SurveyType } from '@/types/survey';
@@ -38,28 +43,60 @@ export const ResponseIdInput = z.object({ responseId: z.string(), surveyId: z.st
 export type ResponseIdInput = z.infer<typeof ResponseIdInput>;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// list (getSurveyListWithCounts)
+// 목록 행 · 전체 목록 결과 (getSurveyListWithCounts — 분석 페이지 RSC 가 직접 부른다)
 // ─────────────────────────────────────────────────────────────────────────────
 
 // 행·응답 모양은 UI(목록 화면·상세 검색)도 쓰므로 계약 소관 — 여기서 다시 내보낸다(티켓 08).
 export type { SurveyListItem, SurveyListResult };
-export const SurveyListItemSchema = z.custom<SurveyListItem>();
 
-/** 목록 조회 입력 — 화면이 기억하는 작업 범위. 유효성은 서버가 다시 판정한다. */
-export const SurveyListInput = z.object({
-  scope: z.string().nullish(),
-  /**
-   * 휴지통 조회 (티켓 17) — 슈퍼어드민의 시스템 전체 보기에서만 통과한다.
-   *
-   * 별도 표면이 아니라 같은 목록의 모드인 이유는 화면이 하나이기 때문이다. 카드·정렬·검색·
-   * 페이지네이션이 전부 같고 다른 것은 조회 조건과 카드 액션뿐이라, 표면을 가르면 목록
-   * 파이프라인이 두 벌이 된다.
-   */
-  deleted: z.boolean().optional(),
-});
-export type SurveyListInput = z.infer<typeof SurveyListInput>;
+// ─────────────────────────────────────────────────────────────────────────────
+// listPage (listSurveyPage) — 서버 페이지네이션 (설문 즐겨찾기·태그 티켓 03)
+// ─────────────────────────────────────────────────────────────────────────────
 
-export const SurveyListOutput = z.custom<SurveyListResult>();
+/**
+ * 입력 스키마는 계약 소관이다 — 화면의 주소 ↔ 조건 변환이 같은 어휘를 써야 해서. 요청 객체는
+ * DB 쓰기로 가지 않고 `.strict()` 라 모르는 키는 거부된다.
+ */
+export const SurveyListPageInput = SurveyListPageInputSchema;
+export type SurveyListPageInput = z.infer<typeof SurveyListPageInput>;
+export type { SurveyListPageResult };
+export const SurveyListPageOutput = z.custom<SurveyListPageResult>();
+
+/**
+ * 목록 조건이 성립하지 않는다 — 접근 거부(`SurveyAccessError`)와 다른 축이라 따로 둔다.
+ *
+ * - `trash_with_personal_marks`: 휴지통에 즐겨찾기·태그 조건 — 화면에 없는 조합이라 입력 오류다.
+ * - `tag_not_found`: 검색 칩에 내 것이 아닌 태그(남의 것·없는 것) — 둘을 가르지 않는다(남의 태그
+ *   존재를 떠볼 수 없게). 「설문을 찾을 수 없습니다」로 접으면 무엇이 없는지 틀리게 말한다.
+ */
+export class SurveyListQueryError extends Error {
+  constructor(readonly reason: 'trash_with_personal_marks' | 'tag_not_found') {
+    super(`survey list query rejected: ${reason}`);
+    this.name = 'SurveyListQueryError';
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// listSummaries (listSurveySummaries) — 사이드바 참여 트리용, 응답 수 없음
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type { SurveySummaryItem };
+
+/** 요약 조회 입력 — 목록과 같은 작업 범위 값. 휴지통 모드는 없다(사이드바는 보이는 설문만 센다). */
+export const SurveySummaryListInput = z.object({ scope: z.string().nullish() });
+export type SurveySummaryListInput = z.infer<typeof SurveySummaryListInput>;
+
+export const SurveySummaryListOutput = z.custom<SurveySummaryItem[]>();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// suggest (suggestSurveys) — 자동완성 설문 후보, 응답 수 없음 (설문 즐겨찾기·태그 티켓 05)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 입력 스키마는 계약 소관 — 검색어 상한을 목록 조건과 공유한다. `.strict()`. */
+export const SurveySuggestInput = SurveySuggestInputSchema;
+export type SurveySuggestInput = z.infer<typeof SurveySuggestInput>;
+export type { SurveySuggestion };
+export const SurveySuggestOutput = z.custom<SurveySuggestion[]>();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // byId (getSurveyById) — surveys.$inferSelect | undefined

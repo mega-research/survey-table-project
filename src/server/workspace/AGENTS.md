@@ -99,8 +99,19 @@
   `surveys.updatedAt` 을 건드리지 않는다 — 폴더에 넣는 일은 내용 수정이 아니고, 건드리면
   「최신 수정순」 기본 정렬이 담기 한 번에 통째로 뒤집힌다. 화면 쪽은 그룹 화면이 목록의
   다른 상태가 아니라 **주소**(`/surveys?group=<id>`)이며, 사이드바 그룹 트리가 그
-  입구다. 지목한 그룹이 목록에 없으면(삭제됨·타 팀 id) 좁힘 자체를 하지 않아 빈 화면에
-  갇히지 않는다.
+  입구다. 지목한 그룹이 없으면(삭제됨·타 팀 id·시스템 범위) 화면이 주소를 `/surveys` 로
+  정리한다 — 서버는 그 그룹으로 좁혀 0건을 주므로 두면 빈 화면에 갇힌다.
+- **즐겨찾기·내 태그는 「개인 표시」 모듈이다**(`personal-marks` 의 domain·services·procedures,
+  `workspace.personalMarks.*`, CONTEXT.md). 요청자 한 사람의 행만 쓰고 읽는다 — 쓰기는 `context.user.id`
+  로만, 태그는 언제나 `user_id = 요청자` 를 WHERE 에 걸어 **남의 태그 id 는 없는 태그와 같은 NOT_FOUND**
+  다. 설문을 받는 표면(`setFavorite`·`setTagLink`·`createTag` 의 `attachToSurveyId`)은 첫 줄에서 `survey.view`
+  관문을 지나고, `tagId` 만 받는 `updateTag`·`deleteTag` 는 IDOR 인벤토리 `OTHER_BOUNDARY_SURFACES` 에 있다.
+  별·연결은 결과 상태 지정(켜기 = 충돌 무시 삽입, 끄기 = 삭제)이라 멱등이다. 관문 뒤에 설문·태그가 사라져
+  켜기가 외래 키(23503)에서 깨지면 `PersonalMarkTargetGoneError` → NOT_FOUND 다(500 이 아니다). 300개 한도와 이름 충돌은
+  `createTag`·`updateTag` 가 사용자 advisory lock(`lockPersonalTags`) 아래서 본다 — 만들기는 같은 이름이면
+  있던 태그를 돌려주고, 이름 바꾸기는 CONFLICT(유일 인덱스 위반도 같은 에러로 접는다). 새 태그 색은
+  서버가 내 태그에서 가장 덜 쓴 색으로 정한다(`shared/contracts/workspace` 의 `pickPersonalTagColor` — 태그 창 「만들기」 미리보기도 같은 함수). 목록이 이 표들을 읽는 자리는
+  `src/server/AGENTS.md` 「설문 목록 조회」.
 - **작업 범위는 `server/work-scope.ts` 가 정한다.** 팀 | 시스템 전체 보기(메가리서치) | 없음 셋이며,
   폴백은 마지막 유효 팀 → 첫 active 팀 → 없음이다(.pen FLOW 6-1). 화면이 보내는 값은 편의일 뿐이라
   서버가 멤버십으로 다시 해석한다 — 내 팀이 아닌 teamId 는 **접고**(쿠키에 남은 해산 팀으로 화면이

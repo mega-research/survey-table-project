@@ -16,10 +16,12 @@ src/
 │   │                           # UI 가 서버에서 가져올 수 있는 건 없다 — @/server 전면 금지(타입 포함), 모양은 @/shared/contracts 로
 │   │                           # 루트 잔류 기준: ① 복수 하위 묶음이 소비하는 공용 조각 ② app 라우트가 직접 여는 진입점만 — 단일 묶음만 소비하면 그 묶음 안으로
 │   │                           # 루트 개수는 목표가 아니라 이 기준의 결과다(2026-08-25 전수 실측: 72파일 중 이동 1건). 새 묶음의 진입점은 폴더 안(table-editor 방식), 기존 group-manager·condition-card 는 유지
-│   ├── survey-builder/         # 설문 편집기 + 설문 목록 (150개) — importer 그래프의 닫힌 묶음대로 폴더화
+│   ├── survey-builder/         # 설문 편집기 + 설문 목록 (195개) — importer 그래프의 닫힌 묶음대로 폴더화
 │   │   ├── survey-list/        # 설문 목록 (survey-list-view 진입점, 티켓 08 — .pen FLOW 6)
-│   │   │                       # 툴바(상태 칩·검색·정렬)·상세 검색 패널·카드 + 순수 파이프라인 (페이지네이션은 components/ui/list-pagination)
-│   │   │                       # (survey-list-pipeline)·버튼 노출 근사(survey-list-capability — 판정은 서버)
+│   │   │                       # 툴바(검색창 search-combobox — 검색 칩·자동완성 · 즐겨찾기 · 「# 태그」 tag-filter-menu · 상세 검색
+│   │   │                       # · 목록 상태 세그먼트·정렬)·카드(별·태그 줄)·태그 창 tag-picker(+ tag-edit-panel) · 공용 태그 꼴 personal-tag-label (페이지네이션은 components/ui/list-pagination)
+│   │   │                       # 거르기·정렬·페이지는 서버(read.listPage) — 조건의 정본은 주소(survey-list-url 이 주소 ↔ 조건 변환, 휴지통 적용 applyTrashAccess)
+│   │   │                       # 표시 규칙만 순수 함수로 남는다(personal-tags·search-suggest) ·버튼 노출 근사(survey-list-capability — 판정은 서버)
 │   │   │   └── groups/         # 설문 그룹 UI (티켓 12 — .pen FLOW 2): 관리 모달(CRUD·dnd 정렬)·
 │   │   │                       # 담기 패널(미분류 전용)·삭제 확인·카드 케밥 이동 서브메뉴·그룹 화면 머리
 │   │   ├── sharing/            # 공유 설정 모달 (share-settings-modal 진입점, 티켓 16 — .pen FLOW 4-2)
@@ -42,8 +44,8 @@ src/
 │   │   ├── formula/            # 수식 편집기 (cell-editor·sum-constraint 양쪽이 소비)
 │   │   ├── group-manager/      # 그룹 관리
 │   │   ├── hooks/              # 빌더 전용 훅 (use-ensure-survey-in-db·use-survey-sync·use-builder-scroll)
-│   │   ├── stores/             # survey-store(빌더 상태)·ui-store(빌더 UI 상태)·survey-list-ui-store(목록 필터·페이지)·test-response-store(미리보기 응답)·preview-response-sources — 구 src/stores
-│   │   ├── queries/            # TanStack Query 훅 use-surveys·use-survey-groups·use-survey-sharing·use-survey-participants·use-survey-guests·use-library·use-cell-library·use-survey-documents·use-survey-anchors — 구 src/hooks/queries
+│   │   ├── stores/             # survey-store(빌더 상태)·ui-store(빌더 UI 상태)·test-response-store(미리보기 응답)·preview-response-sources — 구 src/stores
+│   │   ├── queries/            # TanStack Query 훅 use-surveys·use-survey-groups·use-survey-sharing·use-survey-participants·use-survey-guests·use-library·use-cell-library·use-survey-documents·use-survey-anchors·use-survey-suggestions(자동완성)·use-personal-marks(별·태그 — 마지막 의도 낙관적 갱신) — 구 src/hooks/queries
 │   │   ├── lib/                # changeset·diff-payload·persist-question·variable-generator·saved-question-branch-logic·cell-formula/gating-diagnostics — 구 src/lib/survey-builder
 │   │   ├── utils/              # option-value-remap·prune-sum-constraints·input-mode(숫자 모드↔입력 형식 전환)
 │   │   └── (루트)               # 복수 묶음이 쓰는 공용 필드 위젯(input-format-select·option-text-settings-editor·text-validation-fields·placeholder-field 등) + app 이 직접 여는 모달·패널
@@ -76,7 +78,7 @@ src/
 │   │   │                       # + 전체 캐시 무효화 + router.refresh 를 한 곳에서 처리한다
 │   │   │                       # + sidebar-participation-tree(**실사팀 범위만** — 「설문 목록」·그룹 트리 대신 「참여 중」 →
 │   │   │                       #   소유 팀 줄(?team=) → 폴더·미분류(?ungrouped=1). 수치는 participation-tree 순수 계산이
-│   │   │                       #   본문과 같은 read.list 응답에서 센다, 0139)
+│   │   │                       #   응답 수 없는 요약 조회 read.listSummaries 에서 센다 — 서버가 목록과 같은 범위 조건, 0139)
 │   │   ├── field-styles.ts     # 폼 필드 클래스 — 사용자 관리 모달 3종과 프로필·팀 모달이 함께 쓴다(루트 잔류 기준 ①)
 │   │   ├── account-vocabulary.ts # 계정 표시 어휘(유형·상태 라벨·상태 배지) — 사용자 관리·팀 관리·실사 업체 셋이 쓴다
 │   │   ├── account-query-keys.ts # 사용자·업체 쿼리 키 — 업체 mutation 이 양쪽 캐시를 접어야 해서 루트에 있다

@@ -1,6 +1,8 @@
 'use client';
 
-import { Search, SlidersHorizontal, Trash2 } from 'lucide-react';
+import type { ComponentProps, ReactNode } from 'react';
+
+import { SlidersHorizontal, Star, Trash2 } from 'lucide-react';
 
 import {
   Select,
@@ -10,21 +12,17 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import type {
+  SurveyListLifecycleFilter,
+  SurveyListOwner,
+  SurveyListSortBy,
+} from '@/shared/contracts/survey-builder-io';
 
-import type { SurveyListSortBy, SurveyListStatusChip } from './survey-list-pipeline';
+import { LifecycleSegment } from './lifecycle-segment';
+import { type SearchChips, SearchCombobox, type TagSuggestions } from './search-combobox';
+import { TagFilterMenu } from './tag-filter-menu';
 
 // 문의 칩(.pen FLOW 6 「칩 문의」)은 Plan 3 게이트로 미노출 — 어휘 자체를 뺐다(티켓 08).
-//
-// `closed` 의 라벨은 「종료」다(ADR-0030). .pen 은 「완료」로 그렸지만 버튼이 「설문 종료」이고
-// 「완료」는 응답 상태의 어휘라, 카드의 「완료 N건」 옆에서 무엇의 완료인지 읽히지 않는다.
-// 점 색도 강조색(#2E4FCE)에서 헤더의 「종료됨」과 같은 회청으로 옮겼다 — 끝난 조사가 눈에
-// 띄어야 할 이유가 없다.
-const STATUS_CHIPS: { key: SurveyListStatusChip; label: string; dot: string | null }[] = [
-  { key: 'all', label: '전체', dot: null },
-  { key: 'draft', label: '작성중', dot: '#9CA3AF' },
-  { key: 'published', label: '진행중', dot: '#1D8A4E' },
-  { key: 'closed', label: '종료', dot: '#64748B' },
-];
 
 const SORT_OPTIONS: { key: SurveyListSortBy; label: string }[] = [
   { key: 'updatedAt', label: '최신 수정순' },
@@ -34,17 +32,35 @@ const SORT_OPTIONS: { key: SurveyListSortBy; label: string }[] = [
 ];
 
 interface ListToolbarProps {
-  counts: Record<SurveyListStatusChip, number>;
-  statusChip: SurveyListStatusChip;
-  onStatusChipChange: (chip: SurveyListStatusChip) => void;
+  /** 목록 상태별 숫자 — 범위·그룹·팀 좁힘까지만 적용해 센다(검색·상세 검색과 무관). */
+  counts: Record<SurveyListLifecycleFilter, number>;
+  lifecycle: SurveyListLifecycleFilter;
+  onLifecycleChange: (next: SurveyListLifecycleFilter) => void;
+  /** 모든 조건을 적용한 결과 수 — 둘째 줄 오른쪽 「N개」. */
+  resultCount: number;
+  /** 주소에 걸린 검색어. */
   searchQuery: string;
+  /**
+   * 검색어를 목록에 적용할 때 한 번 부른다 — Enter·자동완성의 「검색 결과 모두 보기」, 그리고
+   * 입력칸을 다 비웠을 때. 치는 동안에는 부르지 않는다(후보 창이 미리 보여 준다).
+   */
   onSearchQueryChange: (query: string) => void;
+  /** 자동완성 설문 후보를 찾을 작업 범위 — 목록 조회와 같은 값. */
+  suggestScope: string | null;
+  /** 범위 안 소유자 — 자동완성 「소유자」 칸의 재료(목록 페이지 응답). */
+  owners: readonly SurveyListOwner[];
+  /** 자동완성에서 소유자를 골랐다 — 상세 검색 소유자 조건 + 남은 검색어로 목록을 바꾼다. */
+  onPickOwner: (ownerId: string, remainingQuery: string) => void;
+  /** 자동완성에서 설문을 골랐다 — 그 설문 편집으로 간다. */
+  onPickSurvey: (surveyId: string) => void;
   sortBy: SurveyListSortBy;
   onSortByChange: (sortBy: SurveyListSortBy) => void;
   /** 그룹 화면은 검색이 그 그룹 안에서만 좁혀진다 — 문구가 동작을 반대로 안내하면 안 된다. */
   searchPlaceholder: string;
   advancedOpen: boolean;
   onToggleAdvanced: () => void;
+  /** 상세 검색 패널 — 첫 줄 아래(상세 검색 단추 밑)에 뜨도록 첫 줄 안에 꽂는다. */
+  advancedPanel?: ReactNode;
   /**
    * 삭제된 설문 건수 — **null 이면 휴지통 칩 자체를 그리지 않는다**(티켓 17).
    *
@@ -54,111 +70,164 @@ interface ListToolbarProps {
   deletedCount: number | null;
   showDeleted: boolean;
   onToggleDeleted: (next: boolean) => void;
+  /**
+   * 즐겨찾기만 보기(티켓 06) — 켜짐 · 내 별 개수(범위·그룹·팀 좁힘 기준) · 바꾸기.
+   * **null 이면 단추를 그리지 않는다** — 휴지통에는 즐겨찾기 조건이 없다.
+   */
+  favorites: { on: boolean; count: number; onToggle: (next: boolean) => void } | null;
+  /** 검색창 안 칩(티켓 09) — 걸린 태그 필터 + 「모두 지우기」(칩·글자만). */
+  searchChips: SearchChips;
+  /** 자동완성 「내 태그」 칸(티켓 10) — 내 태그 목록과 고르기(칩 + 남은 검색어). */
+  tagSuggestions: TagSuggestions;
+  /**
+   * 「# 태그 ▾」 목록(티켓 09) — 체크가 곧 검색창 칩. **null 이면 단추를 그리지 않는다** — 휴지통에는
+   * 태그 조건이 없다.
+   */
+  tagFilter: ComponentProps<typeof TagFilterMenu> | null;
 }
 
-/** 목록 툴바 (.pen FLOW 6) — 상태 칩 · 검색 · 정렬 · 상세 검색 토글. */
+/**
+ * 목록 툴바 (시안 F8-a).
+ *
+ * 첫 줄 — 검색창(넓게, 자동완성 F8-b · 검색 칩 F8-c) · 즐겨찾기 · 「# 태그 ▾」(F8-d) · 상세 검색(툴바가
+ * 좁으면 검색창 아래 줄로 내려간다). 둘째 줄 —
+ * 왼쪽 목록 상태 세그먼트(+ 휴지통), 오른쪽 「N개 · 정렬 ▾」.
+ */
 export function ListToolbar({
   counts,
-  statusChip,
-  onStatusChipChange,
+  lifecycle,
+  onLifecycleChange,
+  resultCount,
   searchQuery,
   onSearchQueryChange,
+  suggestScope,
+  owners,
+  onPickOwner,
+  onPickSurvey,
   sortBy,
   onSortByChange,
   searchPlaceholder,
   advancedOpen,
   onToggleAdvanced,
+  advancedPanel,
   deletedCount,
   showDeleted,
   onToggleDeleted,
+  favorites,
+  searchChips,
+  tagSuggestions,
+  tagFilter,
 }: ListToolbarProps) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="flex items-center gap-1.5">
-        {STATUS_CHIPS.map((chip) => {
-          const active = statusChip === chip.key;
-          return (
+    // 첫 줄의 배치는 화면 폭이 아니라 툴바 폭으로 가른다 — 사이드바를 펴고 접는 데 따라 남는 자리가
+    // 달라진다. 좁으면(@2xl 미만) 검색창이 한 줄 전체를 쓰고 단추는 다음 줄로 내려간다(390px 에서
+    // 검색창이 ~50px 로 줄어 칩이 넘치던 것).
+    <div className="@container flex flex-col gap-3">
+      <div className="relative flex flex-wrap items-center gap-2">
+        <SearchCombobox
+          className="w-full @2xl:w-auto @2xl:flex-1"
+          value={searchQuery}
+          onCommit={onSearchQueryChange}
+          placeholder={searchPlaceholder}
+          suggestScope={suggestScope}
+          // 휴지통에서는 후보 창을 열지 않는다 — 후보는 삭제되지 않은 설문에서만 찾는다.
+          suggestEnabled={!showDeleted}
+          owners={owners}
+          onPickOwner={onPickOwner}
+          onPickSurvey={onPickSurvey}
+          chips={searchChips}
+          tagSuggestions={tagSuggestions}
+        />
+
+        {favorites && (
+          <button
+            type="button"
+            aria-pressed={favorites.on}
+            onClick={() => favorites.onToggle(!favorites.on)}
+            className={cn(
+              'flex h-10 shrink-0 items-center gap-1.5 rounded-[10px] border px-3.5 text-[13.5px] transition-colors',
+              favorites.on
+                ? 'border-[#F5A524] bg-[#FFF8E6] font-medium text-[#1C1C1E]'
+                : 'border-[#E5E5EA] bg-white text-[#374151] hover:bg-[#F5F5F7]',
+            )}
+          >
+            <Star
+              className={cn(
+                'h-3.5 w-3.5',
+                favorites.on ? 'fill-[#F5A524] text-[#F5A524]' : 'text-[#6E6E73]',
+              )}
+            />
+            {/* 좁은 폭에서는 별만 남긴다 — 글자·숫자는 화면에서만 숨기고 읽기에는 남긴다. */}
+            <span className="max-lg:sr-only">즐겨찾기</span>{' '}
+            <span className="text-[#6E6E73] tabular-nums max-lg:sr-only">{favorites.count}</span>
+          </button>
+        )}
+
+        {tagFilter && <TagFilterMenu {...tagFilter} />}
+
+        <button
+          type="button"
+          onClick={onToggleAdvanced}
+          aria-expanded={advancedOpen}
+          className={cn(
+            'flex h-10 shrink-0 items-center gap-1.5 rounded-[10px] border px-3.5 text-[13.5px] transition-colors',
+            advancedOpen
+              ? 'border-[#2E4FCE] bg-[#EEF2FF] text-[#2743AE]'
+              : 'border-[#E5E5EA] bg-white text-[#374151] hover:bg-[#F5F5F7]',
+          )}
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5" />
+          상세 검색
+        </button>
+        {advancedPanel}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <LifecycleSegment value={lifecycle} counts={counts} onChange={onLifecycleChange} />
+
+        {/* 휴지통은 세그먼트와 나란히 서지만 성격이 다르다 — 세그먼트는 지금 목록 안의 거르기이고
+            이쪽은 목록의 원천을 삭제된 설문으로 바꾼다(티켓 17). 구분선으로 그 경계를 보이게 둔다. */}
+        {deletedCount !== null && (
+          <>
+            <span className="h-4 w-px bg-[#E5E5EA]" aria-hidden />
             <button
-              key={chip.key}
               type="button"
-              onClick={() => onStatusChipChange(chip.key)}
+              aria-pressed={showDeleted}
+              onClick={() => onToggleDeleted(!showDeleted)}
               className={cn(
                 'flex h-8 items-center gap-1.5 rounded-full px-3 text-[13px] transition-colors',
-                active
-                  ? 'bg-[#2E4FCE] font-semibold text-white'
+                showDeleted
+                  ? 'bg-[#B91C1C] font-semibold text-white'
                   : 'border border-[#E5E5EA] bg-white text-[#374151] hover:bg-[#F5F5F7]',
               )}
             >
-              {chip.dot && !active && (
-                <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: chip.dot }} />
-              )}
-              {chip.label} {counts[chip.key]}
+              <Trash2 className="h-3.5 w-3.5" />
+              삭제됨 {deletedCount}
             </button>
-          );
-        })}
-      </div>
-
-      {/* 휴지통은 칩과 나란히 서지만 성격이 다르다 — 칩은 받아온 목록을 접고 이쪽은 조회를
-          바꾼다(티켓 17). 구분선으로 그 경계를 보이게 둔다. */}
-      {deletedCount !== null && (
-        <>
-          <span className="h-4 w-px bg-[#E5E5EA]" aria-hidden />
-          <button
-            type="button"
-            aria-pressed={showDeleted}
-            onClick={() => onToggleDeleted(!showDeleted)}
-            className={cn(
-              'flex h-8 items-center gap-1.5 rounded-full px-3 text-[13px] transition-colors',
-              showDeleted
-                ? 'bg-[#B91C1C] font-semibold text-white'
-                : 'border border-[#E5E5EA] bg-white text-[#374151] hover:bg-[#F5F5F7]',
-            )}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            삭제됨 {deletedCount}
-          </button>
-        </>
-      )}
-
-      <div className="flex-1" />
-
-      <div className="relative w-[280px]">
-        <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => onSearchQueryChange(e.target.value)}
-          placeholder={searchPlaceholder}
-          className="h-9 w-full rounded-[9px] border border-[#E5E5EA] bg-white pl-9 pr-3 text-[13px] text-[#1C1C1E] placeholder:text-[#9CA3AF] focus:border-[#2E4FCE] focus:outline-none"
-        />
-      </div>
-
-      <Select value={sortBy} onValueChange={(v) => onSortByChange(v as SurveyListSortBy)}>
-        <SelectTrigger className="h-9 w-[152px] shrink-0 rounded-[9px] border-[#E5E5EA] text-[13px]">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {SORT_OPTIONS.map((opt) => (
-            <SelectItem key={opt.key} value={opt.key}>
-              {opt.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-
-      <button
-        type="button"
-        onClick={onToggleAdvanced}
-        className={cn(
-          'flex h-9 shrink-0 items-center gap-1.5 rounded-[9px] border px-3 text-[13px] transition-colors',
-          advancedOpen
-            ? 'border-[#2E4FCE] bg-[#EEF2FF] text-[#2743AE]'
-            : 'border-[#E5E5EA] bg-white text-[#374151] hover:bg-[#F5F5F7]',
+          </>
         )}
-      >
-        <SlidersHorizontal className="h-3.5 w-3.5" />
-        상세 검색
-      </button>
+
+        <div className="flex-1" />
+
+        <div className="flex items-center gap-1 text-[13px] text-[#6E6E73]">
+          <span className="tabular-nums">{resultCount}개</span>
+          <Select value={sortBy} onValueChange={(v) => onSortByChange(v as SurveyListSortBy)}>
+            <SelectTrigger
+              aria-label="정렬"
+              className="h-8 w-auto shrink-0 gap-1 border-0 bg-transparent px-2 text-[13px] text-[#1C1C1E] shadow-none hover:bg-[#F5F5F7] focus-visible:ring-2 focus-visible:ring-[#2E4FCE]/40"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent align="end">
+              {SORT_OPTIONS.map((opt) => (
+                <SelectItem key={opt.key} value={opt.key}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
     </div>
   );
 }

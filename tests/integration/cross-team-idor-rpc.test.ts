@@ -879,6 +879,28 @@ const SURFACES: Record<string, SurfaceSpec> = {
     capability: 'survey.manageAccess',
     input: { surveyId: S, visibility: 'invite_only' },
   },
+
+  // ── 개인 표시(즐겨찾기) ────────────────────────────────────────────────
+  // 편집 권한이 없어도 볼 수 있으면 켤 수 있다 — 요구는 survey.view 하나. 볼 수 없는 설문 id 로
+  // 켜면 존재를 알리지 않고(NOT_FOUND) 행도 안 생긴다(db 목이 쓰기를 사고로 만든다).
+  'workspace.personalMarks.setFavorite': {
+    gate: 'rpc',
+    capability: 'survey.view',
+    input: { surveyId: S, on: true },
+  },
+  // 내 태그(티켓 07) — 설문 쪽은 survey.view, 태그 쪽은 서비스의 소유 확인(남의 태그 NOT_FOUND).
+  // 관문이 태그 확인보다 먼저 서므로 내 태그 id 가 아니어도 설문 거부가 먼저 나온다.
+  'workspace.personalMarks.setTagLink': {
+    gate: 'rpc',
+    capability: 'survey.view',
+    input: { surveyId: S, tagId: C, on: true },
+  },
+  // 만들며 붙이기 — 붙일 설문의 관문이 트랜잭션보다 먼저 선다(태그도 안 생긴다).
+  'workspace.personalMarks.createTag': {
+    gate: 'rpc',
+    capability: 'survey.view',
+    input: { name: '남의 팀 설문', attachToSurveyId: S },
+  },
 };
 
 /**
@@ -905,6 +927,7 @@ const ALIASED_SURVEY_SURFACES: Record<string, string> = {
   'surveyBuilder.save.saveWithDetails':
     '입력이 설문 문서 통째(z.custom)라 shape 이 없다 — 설문 id 는 그 안의 `id`',
   'surveyBuilder.read.slugAvailable': '`excludeSurveyId` — 지목이 아니라 자기 제외용',
+  'workspace.personalMarks.createTag': '붙일 설문을 `attachToSurveyId` 로 받는다(없으면 null)',
 };
 
 /**
@@ -933,6 +956,11 @@ const OTHER_BOUNDARY_SURFACES: Record<string, string> = {
   'library.questionCategories.remove': '보관함 분류 — 조직 공용',
   'media.fileCleanup.cancel': 'R2 유예 삭제 큐 — 설문이 아니라 키 단위 전역 자원',
   'mail.billing.deleteLatest': '메일 비용 정산 — 설문 스코프가 아닌 전역 장부',
+  'surveyBuilder.read.listPage':
+    'groupId 는 목록 좁힘 조건일 뿐 — 원천이 작업 범위 필터라 범위 밖 설문은 어떤 id 로도 안 나온다(survey-list-page.realdb)',
+  'workspace.personalMarks.updateTag':
+    '태그 소유는 user_id WHERE — 남의 태그 NOT_FOUND (personal-marks.realdb)',
+  'workspace.personalMarks.deleteTag': '위와 같음',
 };
 
 /**

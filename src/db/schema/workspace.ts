@@ -1,9 +1,11 @@
 import { sql } from 'drizzle-orm';
 import {
+  check,
   index,
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -15,6 +17,7 @@ import type {
   ClientLinkTabs,
   ClientResponseColumns,
   FieldworkOrgStatus,
+  PersonalTagColor,
   SurveyGuestTabs,
   SurveyParticipantAccessLevel,
   SurveyParticipantKind,
@@ -309,5 +312,93 @@ export const fieldworkOrgs = pgTable(
     uniqueIndex('fieldwork_orgs_active_name_uq')
       .on(t.name)
       .where(sql`${t.status} = 'active'`),
+  ],
+);
+
+/**
+ * 설문 즐겨찾기 — 한 사람이 설문 하나에 켜는 **개인 표시** (마이그레이션 0149, 설문 즐겨찾기·태그 티켓 06).
+ *
+ * 행이 있으면 켜짐, 없으면 꺼짐 — 상태 컬럼이 없다. 쓰기는 결과 상태 지정이다(켜기는
+ * `ON CONFLICT DO NOTHING` 삽입, 끄기는 삭제)라 연타·재시도가 같은 결과로 수렴한다.
+ * 나에게만 보인다: 읽는 자리는 언제나 `user_id = 요청자` 로 건다.
+ *
+ * FK 는 둘 다 cascade — 개인 정리 데이터라 감사 가치가 없다. 설문 soft delete 는 행을 남겨
+ * 복구하면 별이 돌아온다. 쓰기는 `server/workspace/services/personal-marks`, 읽기(목록 조건·
+ * 카드 표시)는 `server/read-models/survey-list-page` 가 「타 도메인 테이블 직접 쿼리」로 한다.
+ */
+export const surveyFavorites = pgTable(
+  'survey_favorites',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    surveyId: uuid('survey_id')
+      .notNull()
+      .references(() => surveys.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ name: 'survey_favorites_pk', columns: [t.userId, t.surveyId] }),
+    // 설문 하드 삭제의 cascade 가 이 표를 훑지 않게 — PK 첫 칸이 user_id 라 그 방향은 못 받는다.
+    index('survey_favorites_survey_idx').on(t.surveyId),
+  ],
+);
+
+/**
+ * 내 태그 — 한 사람이 만든 키워드 이름 + 색 (마이그레이션 0150, 설문 즐겨찾기·태그 티켓 07).
+ *
+ * 만든 사람만 본다 — 읽는 자리는 언제나 `user_id = 요청자` 로 건다. 이름은 사람 안에서
+ * `lower(btrim(name))` 로 유일하고(「A사」와 「 a사 」는 같은 태그), 길이 1~20자·색 8색은 DB CHECK 다.
+ * 한 사람당 300개는 코드가 막는다(만들기가 사용자 advisory lock 아래서 센다).
+ *
+ * 색 CHECK 는 어휘 배열(`personalTagColorValues`)·마이그레이션 0150 과 같은 목록의 사본이다 —
+ * 대조는 `workspace-personal-tag-color.test.ts`.
+ */
+export const personalSurveyTags = pgTable(
+  'personal_survey_tags',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    color: text('color').$type<PersonalTagColor>().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('personal_survey_tags_user_name_uq').on(t.userId, sql`lower(btrim(${t.name}))`),
+    check(
+      'personal_survey_tags_name_length_check',
+      sql`char_length(btrim(${t.name})) BETWEEN 1 AND 20`,
+    ),
+    check(
+      'personal_survey_tags_color_check',
+      sql`${t.color} IN ('blue', 'red', 'green', 'purple', 'amber', 'teal', 'pink', 'gray')`,
+    ),
+  ],
+);
+
+/**
+ * 내 태그 연결 — 태그가 설문에 붙어 있음 (마이그레이션 0150, 티켓 07).
+ *
+ * 행이 있으면 붙음. 쓰기는 즐겨찾기와 같은 결과 상태 지정이다. FK 는 둘 다 cascade(태그를 지우면
+ * 연결도, 설문을 하드 삭제하면 연결도 사라진다). 설문 soft delete 는 행을 남긴다.
+ */
+export const personalSurveyTagLinks = pgTable(
+  'personal_survey_tag_links',
+  {
+    tagId: uuid('tag_id')
+      .notNull()
+      .references(() => personalSurveyTags.id, { onDelete: 'cascade' }),
+    surveyId: uuid('survey_id')
+      .notNull()
+      .references(() => surveys.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ name: 'personal_survey_tag_links_pk', columns: [t.tagId, t.surveyId] }),
+    // 설문 하드 삭제의 cascade 가 이 표를 훑지 않게 — PK 첫 칸이 tag_id 라 그 방향은 못 받는다.
+    index('personal_survey_tag_links_survey_idx').on(t.surveyId),
   ],
 );

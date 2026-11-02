@@ -27,6 +27,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { surveys } from '@/server/survey-builder/procedures/surveys';
 import { read } from '@/server/survey-builder/procedures/read';
 import { resolveWorkScope, resolveWorkScopeFor, WorkScopeError } from '@/server/work-scope';
+import { INITIAL_SURVEY_LIST_PAGE_QUERY } from '@/shared/contracts/survey-builder-io';
 import { SYSTEM_SCOPE, WORK_SCOPE_COOKIE } from '@/shared/contracts/workspace';
 import { internalActorContext } from '@tests/helpers/rpc-context';
 
@@ -112,8 +113,26 @@ const MINIMAL_SETTINGS = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('① 입력: 일반 사용자의 system 요청은 FORBIDDEN 이다', () => {
-  it('설문 목록', async () => {
-    await expect(member.read.list({ scope: SYSTEM_SCOPE })).rejects.toMatchObject({
+  it('설문 목록 페이지', async () => {
+    await expect(
+      member.read.listPage({ ...INITIAL_SURVEY_LIST_PAGE_QUERY, scope: SYSTEM_SCOPE }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('설문 목록 페이지 — 휴지통은 일반 사용자에게 FORBIDDEN 이다', async () => {
+    await expect(
+      member.read.listPage({ ...INITIAL_SURVEY_LIST_PAGE_QUERY, scope: null, deleted: true }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('사이드바 요약 목록', async () => {
+    await expect(member.read.listSummaries({ scope: SYSTEM_SCOPE })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+  });
+
+  it('자동완성 설문 후보', async () => {
+    await expect(member.read.suggest({ scope: SYSTEM_SCOPE, q: '실태' })).rejects.toMatchObject({
       code: 'FORBIDDEN',
     });
   });

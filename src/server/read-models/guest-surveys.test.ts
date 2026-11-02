@@ -1,4 +1,10 @@
+import {
+  LIFECYCLE_NOW,
+  SURVEY_LIST_LIFECYCLE_CASES,
+} from '@tests/fixtures/survey-list-lifecycle-cases';
 import { describe, expect, it } from 'vitest';
+
+import { normalizeSurveyStatus } from '@/shared/contracts/survey-builder-io';
 
 import { resolveGuestSurveyLifecycle } from './guest-surveys';
 
@@ -55,5 +61,24 @@ describe('resolveGuestSurveyLifecycle', () => {
     expect(resolveGuestSurveyLifecycle(row({ status: 'closed', currentVersionId: null }), NOW)).toBe(
       'draft',
     );
+  });
+});
+
+/**
+ * 게스트 홈과 관리자 목록이 같은 설문을 다르게 말하지 않는다 — 목록 상태 표 전체에서
+ * 게스트의 진행 상태를 목록 상태로 접으면(일시중지 = 진행중) 표의 기대값과 같다.
+ */
+describe('resolveGuestSurveyLifecycle — 목록 상태와 같은 판정', () => {
+  it.each(SURVEY_LIST_LIFECYCLE_CASES)('$name → $expected', (c) => {
+    const guest = resolveGuestSurveyLifecycle(
+      {
+        status: normalizeSurveyStatus(c.status),
+        currentVersionId: c.currentVersionId,
+        isPaused: c.isPaused,
+        endDate: c.endDate,
+      },
+      LIFECYCLE_NOW.getTime(),
+    );
+    expect(guest === 'paused' ? 'running' : guest).toBe(c.expected);
   });
 });

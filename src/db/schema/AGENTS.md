@@ -6,7 +6,7 @@
 
 ## 데이터베이스 스키마
 
-스키마 파일은 도메인별로 분리: `auth.ts`, `workspace.ts`, `surveys.ts`, `survey-documents.ts`, `contacts.ts`, `mail.ts`, `mail-billing.ts`, `r2-lifecycle.ts`. JSONB 컬럼의 문서 형태(어휘)는 `src/shared/contracts/<domain>.ts`에 두고 스키마가 `$type<>()`로 참조한다(DB→shared 단방향). 영속 질문 필드 SSOT는 `question-persisted-fields.ts`. `users.status`·`users.user_type` 컬럼 어휘와 **허용 상태 전이표**(`USER_STATUS_TRANSITIONS`) SSOT는 `shared/contracts/auth.ts`, 사용자 관리 RPC 입출력은 `shared/contracts/auth-io.ts`. 팀 어휘(`teams.status`·`team_members.role`·감사 action)와 팀 관리 권한 술어, 그리고 `surveys.visibility` 어휘 + **화면 표기 SSOT**(`SURVEY_VISIBILITY_LABEL` — 「팀 공개」/「초대된 멤버만」, "팀 전체" 금지), `survey_participants.kind` 어휘와 제외 권한 술어(`canRemoveSurveyParticipant`)는 `shared/contracts/workspace.ts`, 팀 RPC 입출력은 `shared/contracts/workspace-io.ts`.
+스키마 파일은 도메인별로 분리: `auth.ts`, `workspace.ts`, `surveys.ts`, `survey-documents.ts`, `contacts.ts`, `mail.ts`, `mail-billing.ts`, `r2-lifecycle.ts`. JSONB 컬럼의 문서 형태(어휘)는 `src/shared/contracts/<domain>.ts`에 두고 스키마가 `$type<>()`로 참조한다(DB→shared 단방향). 영속 질문 필드 SSOT는 `question-persisted-fields.ts`. `users.status`·`users.user_type` 컬럼 어휘와 **허용 상태 전이표**(`USER_STATUS_TRANSITIONS`) SSOT는 `shared/contracts/auth.ts`, 사용자 관리 RPC 입출력은 `shared/contracts/auth-io.ts`. 팀 어휘(`teams.status`·`team_members.role`·감사 action)와 팀 관리 권한 술어, 그리고 `surveys.visibility` 어휘 + **화면 표기 SSOT**(`SURVEY_VISIBILITY_LABEL` — 「팀 공개」/「초대된 멤버만」, "팀 전체" 금지), `survey_participants.kind` 어휘와 제외 권한 술어(`canRemoveSurveyParticipant`), 내 태그 색 어휘·이름 규칙(`personalTagColorValues`·`normalizePersonalTagName`)은 `shared/contracts/workspace.ts`, 팀 RPC 입출력은 `shared/contracts/workspace-io.ts`.
 
 ### 인증 도메인 (auth.ts — Better Auth 관할)
 
@@ -110,11 +110,28 @@ survey_ownership_events    # 설문 소유 팀·소유자 이동 감사 (0118, �
 ├── fromOwnerId, toOwnerId, fromTeamId, toTeamId (전부 FK restrict, nullable)
 ├── changedBy (FK restrict), metadata (JSONB — 사건 시점 설문 제목·팀 이름·공개 범위)
 └── createdAt              (INDEX (surveyId, createdAt DESC))
+
+survey_favorites           # 즐겨찾기 = 한 사람이 설문 하나에 켜는 개인 표시 (0149, 설문 즐겨찾기·태그 티켓 06)
+├── userId (FK **cascade**), surveyId (FK **cascade**), createdAt
+└── PK(userId, surveyId) · INDEX(surveyId)  # 행 있음 = 켜짐. 쓰기는 결과 상태 지정(충돌 무시 삽입 / 삭제).
+                           # 읽기는 언제나 user_id = 요청자. soft delete 는 행을 남긴다(복구하면 별이 돌아온다)
+
+personal_survey_tags       # 내 태그 = 한 사람이 만든 키워드 이름 + 색 (0150, 티켓 07). 만든 사람만 본다
+├── id, userId (FK **cascade**), name, color, createdAt, updatedAt
+└── UNIQUE(userId, lower(btrim(name))) · CHECK(char_length(btrim(name)) 1~20) · CHECK(color 8색)
+                           # 색 어휘는 shared/contracts/workspace 배열 · 스키마 check() · 0150 CHECK 세 사본(대조 테스트 있음)
+                           # 300개 한도는 코드 — 만들기(createTag)가 사용자 advisory lock 아래서 센다
+
+personal_survey_tag_links  # 내 태그 연결 (0150) — 행 있음 = 붙음, 쓰기는 결과 상태 지정
+├── tagId (FK **cascade**), surveyId (FK **cascade**), createdAt
+└── PK(tagId, surveyId) · INDEX(surveyId)  # soft delete 는 행을 남긴다
 ```
 
 > `survey_id` 만 CASCADE 인 이유: 현행 설문 삭제가 하드 삭제라(`deleteSurvey` → `tx.delete`)
 > RESTRICT 로 걸면 감사 행 하나가 설문 삭제를 영구히 막는다. 형제 감사인 `response_edit_logs`
 > 도 같은 이유로 CASCADE 다. 나머지 FK 는 RESTRICT — 사람과 팀은 하드 삭제되지 않는다.
+> 개인 표시 세 표(`survey_favorites`·`personal_survey_tags`·`personal_survey_tag_links`)는 예외로 FK 가
+> 전부 CASCADE 다 — 감사 기록이 아니라 그 사람·설문에 딸린 표시라 함께 사라지는 것이 맞다.
 
 > 멤버 제외는 `team_members` 행을 지운다 — "누가 언제 누구를 뺐는가" 는 감사 행에만 남는다.
 > 「메가리서치」(시스템 전체 보기)는 팀이 아니라 슈퍼어드민의 가상 범위라 `teams` 에 행이 없다(ADR-0006).

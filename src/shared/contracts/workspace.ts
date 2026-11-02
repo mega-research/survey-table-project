@@ -403,7 +403,9 @@ export function normalizeClientResponseColumns(raw: unknown): ClientResponseColu
   }
   const source = raw as Record<string, unknown>;
   const version =
-    typeof source['version'] === 'number' && Number.isInteger(source['version']) && source['version'] >= 0
+    typeof source['version'] === 'number' &&
+    Number.isInteger(source['version']) &&
+    source['version'] >= 0
       ? source['version']
       : 0;
   if (!Array.isArray(source['keys'])) {
@@ -584,3 +586,104 @@ export const ACCESS_LINK_TOKEN_MAX_LENGTH = 64;
  */
 export const accessLinkKindValues = ['fieldwork', 'client'] as const;
 export type AccessLinkKind = (typeof accessLinkKindValues)[number];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 내 태그 (personal_survey_tags, 0150 — 설문 즐겨찾기·태그 티켓 07)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 한 사람이 자기 설문에 붙이는 키워드 이름 + 색. 만든 사람만 본다(설문 그룹은 팀 공용·설문당
+// 하나라 다른 개념이다). 이름 규칙·한도는 서버 입력 검증과 태그 창이 **이 함수들을** 함께 본다.
+
+/**
+ * 색 어휘 — 배열 순서가 새 태그 색 배정의 동점 순서다.
+ *
+ * 값을 늘릴 때는 세 곳을 함께 고칠 것: 이 배열 · 스키마 `check()` 의 SQL 리터럴 · 마이그레이션
+ * 0150 의 CHECK 리터럴. 셋 다 손으로 쓴 사본이고 Drizzle 의 `$type<>` 은 CHECK 를 만들지 않는다.
+ * 대조는 `src/db/schema/workspace-personal-tag-color.test.ts`.
+ */
+export const personalTagColorValues = [
+  'blue',
+  'red',
+  'green',
+  'purple',
+  'amber',
+  'teal',
+  'pink',
+  'gray',
+] as const;
+export type PersonalTagColor = (typeof personalTagColorValues)[number];
+
+/**
+ * 새 태그 색 — 내 태그에서 가장 적게 쓴 색, 같으면 어휘 순서가 앞선 색.
+ *
+ * 만들 때 색을 고르지 않게 하고, 태그가 늘어도 한 색으로 몰리지 않게 한다. `usedColors` 는 내
+ * 태그 전부의 색(중복 포함)이다. 서버의 만들기가 이 색을 저장하고, 태그 창의 「만들기」 미리보기가
+ * 같은 함수로 그 색을 미리 보인다 — 둘이 갈리면 미리보기와 다른 색의 태그가 생긴다.
+ */
+export function pickPersonalTagColor(usedColors: readonly PersonalTagColor[]): PersonalTagColor {
+  const usage = new Map<PersonalTagColor, number>(personalTagColorValues.map((c) => [c, 0]));
+  for (const color of usedColors) usage.set(color, (usage.get(color) ?? 0) + 1);
+  let best: PersonalTagColor = personalTagColorValues[0];
+  for (const color of personalTagColorValues) {
+    if ((usage.get(color) ?? 0) < (usage.get(best) ?? 0)) best = color;
+  }
+  return best;
+}
+
+export const PERSONAL_TAG_COLOR_LABEL: Record<PersonalTagColor, string> = {
+  blue: '파랑',
+  red: '빨강',
+  green: '초록',
+  purple: '보라',
+  amber: '노랑',
+  teal: '청록',
+  pink: '분홍',
+  gray: '회색',
+};
+
+/** 이름 길이 상한 — 카드에서 잘리지 않는 짧은 키워드. DB CHECK(char_length 1~20)와 같다. */
+export const PERSONAL_TAG_NAME_MAX_LENGTH = 20;
+
+/** 한 사람의 태그 한도 — 실수로 수천 개가 생기는 것만 막는다. 만들기가 사용자 잠금 아래서 센다. */
+export const PERSONAL_TAG_LIMIT = 300;
+
+/**
+ * 태그 거부 문구 — 서버(입력 검증·이름 겹침·한도)와 태그 창·편집 패널이 같은 글자를 보인다. 이름은
+ * 싣지 않는다(서버 문구는 로그에 남는다).
+ */
+export const PERSONAL_TAG_MESSAGE = {
+  empty: '태그 이름을 입력하세요',
+  too_long: `태그 이름은 ${PERSONAL_TAG_NAME_MAX_LENGTH}자까지입니다`,
+  taken: '이미 같은 이름의 태그가 있습니다',
+  limit: `태그는 ${PERSONAL_TAG_LIMIT}개까지 만들 수 있습니다`,
+} as const;
+
+export type PersonalTagNameCheck =
+  { ok: true; name: string } | { ok: false; reason: 'empty' | 'too_long' };
+
+/**
+ * 태그 이름 정규화 — 앞뒤 공백을 떼고(대소문자는 보존) 길이를 본다.
+ *
+ * 글자 수는 UTF-16 칸이 아니라 코드 포인트로 센다 — DB 의 `char_length` 와 같은 단위라야 화면이
+ * 받은 이름을 CHECK 가 거부하는 일이 없다.
+ */
+export function normalizePersonalTagName(raw: string): PersonalTagNameCheck {
+  const name = raw.trim();
+  if (name === '') return { ok: false, reason: 'empty' };
+  if ([...name].length > PERSONAL_TAG_NAME_MAX_LENGTH) return { ok: false, reason: 'too_long' };
+  return { ok: true, name };
+}
+
+/**
+ * 같은 이름인지 가르는 열쇠 — 앞뒤 공백 제거 + 소문자. DB 의 유일 인덱스
+ * `lower(btrim(name))` 와 같은 뜻이다(서버의 충돌 판정은 DB 가 하고, 화면은 「만들기」를 띄울지
+ * 정할 때만 쓴다).
+ */
+export function personalTagNameKey(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+/** 이미 한도만큼 만들었는가. */
+export function isPersonalTagLimitReached(count: number): boolean {
+  return count >= PERSONAL_TAG_LIMIT;
+}

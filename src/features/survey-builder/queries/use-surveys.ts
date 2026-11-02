@@ -4,12 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { surveyAnchorKeys } from '@/features/survey-builder/queries/use-survey-anchors';
 import { client, orpc } from '@/shared/lib/rpc';
-import { surveyKeys, surveyListQueryOptions } from '@/shared/lib/survey-list-queries';
+import { surveyKeys } from '@/shared/lib/survey-list-queries';
 import type { Survey } from '@/types/survey';
-
-export function useSurveys(scope?: string | null) {
-  return useQuery(surveyListQueryOptions(scope));
-}
 
 /**
  * 삭제 취소 (티켓 17) — 슈퍼어드민 전용 표면.

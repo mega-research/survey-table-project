@@ -1,6 +1,8 @@
 // 설문 빌더·응답 경계 계약 — UI 와 서버가 주고받는 입출력 모양.
 // 같은 폴더의 survey.ts — DB 에 저장되는 JSONB 문서 어휘. 이 파일 — 서버와 UI 사이 경계를 건너는 모양.
 // client-safe — server-only·Node·DB 의존 없음. 질문 구조 타입은 @/types/survey 소관이라 빌려 쓴다.
+import * as z from 'zod';
+
 import type { Question, QuestionGroup, Survey, SurveySettings } from '@/types/survey';
 
 import type { SurveyEndRedirects } from './survey';
@@ -20,6 +22,44 @@ export type SurveyStatus = (typeof surveyStatusValues)[number];
 /** DB text 컬럼 값을 어휘로 접는다 — 모르는 값은 draft 로(로더 정규화 관례, 캐스트 금지). */
 export function normalizeSurveyStatus(value: string): SurveyStatus {
   return value === 'published' || value === 'closed' ? value : 'draft';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 목록 상태 — 작성중 / 진행중 / 종료 (설문 목록 세그먼트 · 게스트 홈 진행 상태)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// `surveys.status` 의 어휘가 아니라 **파생값**이다. 종료 스위치를 누르지 않아도 마감일이 지난
+// 배포 설문은 「종료」로 센다 — 스위치를 깜빡한 설문이 「진행중」에 남으면 그 칸이 쓸모없어진다.
+// 응답 게이트·종료 스위치·배포 동작은 이 값을 보지 않는다(목록 표시와 거르기 전용).
+//
+// 판정은 **두 벌**이 같은 표로 묶여 있다 — 이 TS 함수와 SQL 식
+// (`server/read-models/survey-list-lifecycle` 의 `surveyListLifecycleSql`). 한쪽만 고치면
+// `tests/fixtures/survey-list-lifecycle-cases` 를 쓰는 두 스위트 중 하나가 깨진다.
+
+export const surveyListLifecycleValues = ['draft', 'running', 'closed'] as const;
+export type SurveyListLifecycle = (typeof surveyListLifecycleValues)[number];
+
+/** DB 에서 읽은 text 를 어휘로 접는다 — 모르는 값은 draft(로더 정규화 관례). */
+export function normalizeSurveyListLifecycle(value: string): SurveyListLifecycle {
+  return value === 'running' || value === 'closed' ? value : 'draft';
+}
+
+/**
+ * 목록 상태 판정 — 순서가 곧 뜻이다.
+ *
+ * 「배포 전」은 배포 버전의 유무로도 묻는다. 설문 종료(ADR-0030) 뒤로 `status` 가 published 가
+ * 아니어도 배포된 설문일 수 있어, 「배포됐는가」의 근거는 status 하나가 아니다. 배포는 status 와
+ * currentVersionId 를 한 문장으로 세우므로 정상 행에서 둘은 어긋나지 않는다.
+ * 일시 중단은 여기서 보지 않는다 — 진행중이다(게스트 홈만 그것을 「일시중지」로 더 가른다).
+ */
+export function resolveSurveyListLifecycle(
+  row: { status: SurveyStatus; currentVersionId: string | null; endDate: Date | null },
+  now: number,
+): SurveyListLifecycle {
+  if (row.status === 'draft' || row.currentVersionId === null) return 'draft';
+  if (row.status === 'closed') return 'closed';
+  if (row.endDate !== null && row.endDate.getTime() < now) return 'closed';
+  return 'running';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -55,6 +95,11 @@ export interface SurveyListItem {
   endDate: Date | null;
   isPublic: boolean;
   status: SurveyStatus;
+  /**
+   * 목록 상태(작성중·진행중·종료) — 서버가 SQL 식(`surveyListLifecycleSql`)으로 판정해 싣는다.
+   * 세그먼트 숫자·거르기가 이 값을 본다. 카드 배지는 여전히 `status`·`isPublic` 을 본다.
+   */
+  lifecycle: SurveyListLifecycle;
   /** 소속 팀. 배치 대기 설문은 null 이다(티켓 07). */
   teamId: string | null;
   teamName: string | null;
@@ -117,6 +162,244 @@ export interface SurveyListResult {
    * 삭제된 설문은 팀 경계로 좁힐 수 없어(해산된 팀의 것일 수도 있다) 팀 화면에 둘 자리가 없다.
    */
   deletedCount: number | null;
+}
+
+/**
+ * 사이드바 요약 한 행 (surveyBuilder.read.listSummaries) — 참여 트리가 팀·그룹 묶음을 세는 재료.
+ *
+ * 목록 화면의 `SurveyListItem` 과 범위 조건은 같고 **응답 수가 없다**. 목록이 페이지 단위로
+ * 바뀌어도(서버 페이지네이션) 사이드바는 범위 전체를 세야 하므로 조회를 따로 둔다. 제목은
+ * 카드 제목 표기 규칙(`surveyCardTitle`)을 그대로 쓰도록 두 칸을 함께 싣는다.
+ */
+export type SurveySummaryItem = Pick<
+  SurveyListItem,
+  'id' | 'title' | 'cardTitle' | 'teamId' | 'teamName' | 'surveyGroupId'
+>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 설문 목록 페이지 (surveyBuilder.read.listPage) — 서버 페이지네이션 (설문 즐겨찾기·태그 티켓 03)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 거르기·정렬·페이지 나누기·숫자 세기를 서버가 한다. 입력은 화면 주소의 쿼리와 1:1 이다 —
+// 변환은 화면 쪽 순수 함수(`survey-list-url`)가 하고, 이 스키마가 그 둘의 공통 어휘다.
+
+/** 한 페이지의 카드 수 — 고정. */
+export const SURVEY_LIST_PAGE_SIZE = 24;
+/** 검색어 상한(글자, 공백 포함). */
+export const SURVEY_LIST_SEARCH_MAX_LENGTH = 100;
+/** 검색어 단어 수 상한 — 단어마다 OR 묶음이 하나씩 붙으므로 SQL 크기를 묶어 둔다. */
+export const SURVEY_LIST_SEARCH_MAX_WORDS = 8;
+/** 한 번에 걸 수 있는 검색 칩(태그 조건) 수 — 서버 입력 스키마와 주소 변환이 같이 지킨다(티켓 09). */
+export const SURVEY_LIST_TAG_FILTER_MAX = 10;
+
+/** 검색어를 단어로 나눈다 — 공백(연속·앞뒤 포함)으로 자르고 빈 조각은 버린다. 서버 SQL 과 화면이 같이 쓴다. */
+export function splitSurveyListSearchWords(q: string): string[] {
+  return q.split(/\s+/).filter((word) => word !== '');
+}
+
+/** 검색어가 상한(글자 수·단어 수) 안인가 — 입력 스키마가 거부하는 기준과 화면이 입력을 막는 기준이 같다. */
+export function isSurveyListSearchWithinLimits(q: string): boolean {
+  return (
+    q.length <= SURVEY_LIST_SEARCH_MAX_LENGTH &&
+    splitSurveyListSearchWords(q).length <= SURVEY_LIST_SEARCH_MAX_WORDS
+  );
+}
+
+/** 세그먼트가 고르는 값 — 「전체」 + 목록 상태. */
+export const surveyListLifecycleFilterValues = ['all', ...surveyListLifecycleValues] as const;
+export type SurveyListLifecycleFilter = (typeof surveyListLifecycleFilterValues)[number];
+
+/** 정렬 — 방향은 값마다 고정(최신 수정·생성은 최신 먼저, 제목은 가나다, 응답은 많은 순). */
+export const surveyListSortValues = ['updatedAt', 'createdAt', 'title', 'responses'] as const;
+export type SurveyListSortBy = (typeof surveyListSortValues)[number];
+
+/** 상세 검색 「기간」의 기준 칸. */
+export const surveyListDateFieldValues = ['updatedAt', 'createdAt', 'endDate'] as const;
+export type SurveyListDateField = (typeof surveyListDateFieldValues)[number];
+
+export const surveyListVisibilityFilterValues = ['team', 'invite_only'] as const;
+export type SurveyListVisibilityFilter = (typeof surveyListVisibilityFilterValues)[number] | null;
+
+/** 느슨한 UUID 꼴(8-4-4-4-12) — 주소에서 온 id 를 DB 까지 보내기 전에 거른다(uuid 컬럼 22P02 방지). */
+export const LOOSE_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SURVEY_LIST_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/**
+ * 상세 검색 날짜인가 — YYYY-MM-DD 꼴이고 달력에 실제로 있는 날(윤년 포함)이어야 한다. 한국 시간 하루로 읽는다.
+ *
+ * 꼴만 보면 `2026-99-99` 가 SQL `::date` 변환에서 깨져 500 이 된다. 입력 스키마(거부)와 주소 읽기(그 조건만
+ * 버림)가 이 함수 하나를 같이 쓴다.
+ */
+export function isSurveyListDate(raw: string): boolean {
+  const m = SURVEY_LIST_DATE_PATTERN.exec(raw);
+  if (!m) return false;
+  const [year, month, day] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  if (month < 1 || month > 12 || day < 1) return false;
+  // 다음 달 0일 = 이번 달 마지막 날. UTC 로 계산해 실행 환경의 시간대와 무관하다.
+  return day <= new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+const uuidLike = z.string().regex(LOOSE_UUID_PATTERN);
+const listDate = z
+  .string()
+  .refine(isSurveyListDate, { message: '날짜는 YYYY-MM-DD 꼴의 실제 날짜여야 합니다' });
+const responseBound = z.number().int().min(0).max(1_000_000_000);
+
+export const SurveyListAdvancedFiltersSchema = z.object({
+  dateField: z.enum(surveyListDateFieldValues),
+  /** null 이면 미적용. */
+  dateFrom: listDate.nullable(),
+  /** 그날의 끝까지 포함한다. */
+  dateTo: listDate.nullable(),
+  ownerUserId: uuidLike.nullable(),
+  visibility: z.enum(surveyListVisibilityFilterValues).nullable(),
+  responsesMin: responseBound.nullable(),
+  responsesMax: responseBound.nullable(),
+});
+export type SurveyListAdvancedFilters = z.infer<typeof SurveyListAdvancedFiltersSchema>;
+
+export const INITIAL_ADVANCED_FILTERS: SurveyListAdvancedFilters = {
+  dateField: 'updatedAt',
+  dateFrom: null,
+  dateTo: null,
+  ownerUserId: null,
+  visibility: null,
+  responsesMin: null,
+  responsesMax: null,
+};
+
+/**
+ * 목록 페이지 조건 — 범위(scope)를 뺀 나머지. 화면 주소가 이것을 그대로 담는다.
+ *
+ * - `groupId` · `teamId` · `ungrouped` — 그룹 화면·실사팀 팀 좁힘(기존 주소 규칙 `?group=`·`?team=`·`&ungrouped=1`).
+ *   `ungrouped` 는 팀 좁힘이 걸렸을 때만 뜻이 있다.
+ * - `favorites` — 내가 별을 켠 설문만(티켓 06). 휴지통과 함께 오면 거부한다.
+ * - `tagIds` — 검색 칩(티켓 09). 모두 붙은 설문만(AND), 최대 10개, 중복 없음. 요청자 소유가 아닌 id 가
+ *   섞이면 서비스가 거부한다(조용히 빼면 결과가 넓어진다). 휴지통과 함께 오면 거부한다.
+ * - `deleted` — 휴지통(슈퍼어드민 시스템 범위 전용, 아니면 거부).
+ */
+export const SurveyListPageQuerySchema = z.object({
+  groupId: uuidLike.nullable(),
+  teamId: uuidLike.nullable(),
+  ungrouped: z.boolean(),
+  q: z
+    .string()
+    .max(SURVEY_LIST_SEARCH_MAX_LENGTH)
+    .refine((q) => splitSurveyListSearchWords(q).length <= SURVEY_LIST_SEARCH_MAX_WORDS, {
+      message: `검색 단어는 ${SURVEY_LIST_SEARCH_MAX_WORDS}개까지입니다`,
+    }),
+  lifecycle: z.enum(surveyListLifecycleFilterValues),
+  advanced: SurveyListAdvancedFiltersSchema,
+  favorites: z.boolean(),
+  tagIds: z
+    .array(uuidLike)
+    .max(SURVEY_LIST_TAG_FILTER_MAX)
+    .refine((ids) => new Set(ids).size === ids.length, { message: '같은 태그가 두 번 걸렸습니다' }),
+  sort: z.enum(surveyListSortValues),
+  page: z.number().int().min(1).max(1_000_000),
+  deleted: z.boolean(),
+});
+export type SurveyListPageQuery = z.infer<typeof SurveyListPageQuerySchema>;
+
+export const INITIAL_SURVEY_LIST_PAGE_QUERY: SurveyListPageQuery = {
+  groupId: null,
+  teamId: null,
+  ungrouped: false,
+  q: '',
+  lifecycle: 'all',
+  advanced: INITIAL_ADVANCED_FILTERS,
+  favorites: false,
+  tagIds: [],
+  sort: 'updatedAt',
+  page: 1,
+  deleted: false,
+};
+
+/** listPage RPC 입력 — 조건 + 화면이 기억하는 작업 범위(서버가 멤버십으로 다시 판정). */
+export const SurveyListPageInputSchema = SurveyListPageQuerySchema.extend({
+  scope: z.string().nullable(),
+}).strict();
+export type SurveyListPageInput = z.infer<typeof SurveyListPageInputSchema>;
+
+/** 범위 안 설문의 소유자 — 상세 검색 드롭다운(·자동완성 소유자 후보)의 재료. 이름순. */
+export interface SurveyListOwner {
+  id: string;
+  name: string;
+}
+
+/**
+ * 목록 페이지의 카드 한 장 — 목록 행 + 요청자 본인의 개인 표시(티켓 06·07).
+ *
+ * 개인 표시는 사람마다 다른 값이라 공용 목록 행(`SurveyListItem`, 분석 페이지도 쓴다)에 넣지 않고
+ * 페이지 응답에서만 더한다.
+ */
+export interface SurveyListPageItem extends SurveyListItem {
+  /** 내가 별을 켰는가 — 동료의 별은 보이지 않는다. 휴지통 행은 늘 false. */
+  isFavorite: boolean;
+  /**
+   * 내가 이 설문에 붙인 태그 id — 붙인 순서. 이름·색은 내 태그 목록(`workspace.personalMarks.mine`)
+   * 에서 찾는다(이름을 고쳐도 목록 한 곳만 바뀌면 된다). 휴지통 행은 늘 빈 배열.
+   */
+  myTagIds: string[];
+}
+
+/**
+ * 목록 페이지 응답.
+ *
+ * 숫자 기준이 둘이다 — `lifecycleCounts`·`favoriteCount`·`owners` 는 범위·그룹·팀 좁힘까지만 적용해 센다(검색·
+ * 상세 검색·목록 상태 무관). `total` 은 모든 조건을 적용한 결과 수다.
+ */
+export interface SurveyListPageResult extends Pick<
+  SurveyListResult,
+  'scope' | 'teams' | 'canSeeSystemScope' | 'deletedCount'
+> {
+  items: SurveyListPageItem[];
+  total: number;
+  /** 요청한 page 가 범위를 넘으면 마지막 페이지로 접힌 값. */
+  page: number;
+  /** 결과가 0개여도 1. */
+  totalPages: number;
+  lifecycleCounts: Record<SurveyListLifecycleFilter, number>;
+  /** 내 별 개수 — `lifecycleCounts` 와 같은 기준(범위·그룹·팀 좁힘까지). 휴지통에서는 0. */
+  favoriteCount: number;
+  owners: SurveyListOwner[];
+  /**
+   * 실제로 걸린 팀 좁힘 — 화면 제목(「팀 이름 · 미분류」)용. 지목한 팀의 설문이 범위에 하나도
+   * 없으면 좁히지 않고 null 이다(참여가 끝난 팀 주소에 갇히지 않게).
+   */
+  activeTeam: { id: string; name: string | null } | null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 설문 자동완성 후보 (surveyBuilder.read.suggest) — 설문 즐겨찾기·태그 티켓 05
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 자동완성 「설문」 칸의 최대 후보 수. */
+export const SURVEY_SUGGEST_LIMIT = 5;
+
+/**
+ * suggest RPC 입력 — 작업 범위 + 검색어뿐. 검색어 상한은 목록 조건과 같은 칸을 그대로 쓴다
+ * (화면이 같은 기준으로 입력을 막는다). 그룹·팀 좁힘은 받지 않는다 — 후보는 범위 전체에서 찾는다.
+ */
+export const SurveySuggestInputSchema = z
+  .object({
+    scope: z.string().nullable(),
+    q: SurveyListPageQuerySchema.shape.q,
+  })
+  .strict();
+export type SurveySuggestInput = z.infer<typeof SurveySuggestInputSchema>;
+
+/**
+ * 자동완성 설문 후보 한 행 — 넷뿐이다(응답 수 집계 없음).
+ *
+ * `displayTitle` 은 **카드에 보이는 이름**이다(카드 제목이 없으면 설문지 제목, `surveyCardTitle` 과 같은
+ * 규칙) — null 이 올 수 있는 `SurveyListItem.cardTitle`(카드 제목 칸 그대로)과 다른 값이라 이름을 갈랐다.
+ */
+export interface SurveySuggestion {
+  id: string;
+  displayTitle: string;
+  ownerName: string | null;
+  lifecycle: SurveyListLifecycle;
 }
 
 /**

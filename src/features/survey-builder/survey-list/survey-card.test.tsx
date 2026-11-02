@@ -1,10 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { SurveyListItem } from '@/shared/contracts/survey-builder-io';
+import type { PersonalTagItem } from '@/shared/contracts/workspace-io';
 
-import { SurveyCard } from './survey-card';
+import { type CardTagging, SurveyCard } from './survey-card';
 
 function item(over: Partial<SurveyListItem> = {}): SurveyListItem {
   return {
@@ -21,6 +23,7 @@ function item(over: Partial<SurveyListItem> = {}): SurveyListItem {
     endDate: null,
     isPublic: true,
     status: 'published',
+    lifecycle: 'running',
     teamId: 'team-1',
     teamName: '연구1본부 - 1팀',
     visibility: 'team',
@@ -37,10 +40,27 @@ function item(over: Partial<SurveyListItem> = {}): SurveyListItem {
   };
 }
 
-function renderCard(survey: SurveyListItem) {
+function renderCard(
+  survey: SurveyListItem,
+  favorite: { isFavorite: boolean; onFavoriteChange: (on: boolean) => void } = {
+    isFavorite: false,
+    onFavoriteChange: vi.fn(),
+  },
+  tagging: CardTagging = {
+    myTagIds: [],
+    tags: [],
+    onToggle: vi.fn(),
+    onCreate: vi.fn(),
+    activeTagIds: [],
+    onFilterByTag: vi.fn(),
+  },
+) {
   return render(
     <SurveyCard
       survey={survey}
+      isFavorite={favorite.isFavorite}
+      onFavoriteChange={favorite.onFavoriteChange}
+      tagging={tagging}
       viewer={{
         scope: { kind: 'team', teamId: 'team-1' },
         currentUserId: 'u-1',
@@ -106,5 +126,128 @@ describe('SurveyCard — 응답수 줄', () => {
     renderCard(item({ responseCount: 20, completedResponseCount: 12, fieldworkCompletedCount: 3 }));
     expect(screen.getByText(/온라인 응답 완료 12건 · 실사 완료 처리 3건/)).toBeInTheDocument();
     expect(screen.queryByText(/전체 응답/)).toBeNull();
+  });
+});
+
+/**
+ * 카드의 별 (설문 즐겨찾기·태그 티켓 06) — 제목 줄 오른쪽(케밥 왼쪽)에 늘 보인다. 누르는 즉시
+ * 바라는 상태를 올린다 — 낙관적 갱신·마지막 의도 전송은 목록 화면의 훅이 진다.
+ */
+describe('SurveyCard — 즐겨찾기 별', () => {
+  it('꺼진 별은 「즐겨찾기 추가」 단추이고 누르면 켜기를 올린다', async () => {
+    const onFavoriteChange = vi.fn();
+    renderCard(item(), { isFavorite: false, onFavoriteChange });
+
+    const star = screen.getByRole('button', { name: '즐겨찾기 추가' });
+    expect(star).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.setup().click(star);
+    expect(onFavoriteChange).toHaveBeenCalledWith(true);
+  });
+
+  it('켜진 별은 「즐겨찾기 해제」 단추이고 누르면 끄기를 올린다', async () => {
+    const onFavoriteChange = vi.fn();
+    renderCard(item(), { isFavorite: true, onFavoriteChange });
+
+    const star = screen.getByRole('button', { name: '즐겨찾기 해제' });
+    expect(star).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.setup().click(star);
+    expect(onFavoriteChange).toHaveBeenCalledWith(false);
+  });
+
+  it('편집 권한이 없는 설문에도 별이 선다', () => {
+    // 동료 소유 + 참여자 아님 — 수정 버튼은 잠기지만 별은 볼 수 있으면 켤 수 있다.
+    renderCard(item({ ownerUserId: 'u-2', visibility: 'invite_only', isParticipant: true }));
+    expect(screen.getByRole('button', { name: '즐겨찾기 추가' })).toBeEnabled();
+  });
+});
+
+/**
+ * 카드의 태그 줄 (설문 즐겨찾기·태그 티켓 07, 시안 F6 ①) — 응답 수 줄 아래, 최대 2개 + 「+N」.
+ * 태그가 없으면 줄이 없고 마우스를 올리면 「+ 태그」가 보인다. 줄·「+ 태그」·케밥 「태그」가 같은
+ * 태그 창을 연다.
+ */
+describe('SurveyCard — 내 태그 줄', () => {
+  const tags: PersonalTagItem[] = [
+    { id: 'a', name: 'A사', color: 'blue', linkCount: 1 },
+    { id: 'b', name: '2026', color: 'red', linkCount: 1 },
+    { id: 'c', name: '실태조사', color: 'green', linkCount: 1 },
+  ];
+  const tagging = (myTagIds: string[], activeTagIds: string[] = []): CardTagging => ({
+    myTagIds,
+    tags,
+    onToggle: vi.fn(),
+    onCreate: vi.fn(),
+    activeTagIds,
+    onFilterByTag: vi.fn(),
+  });
+
+  it('붙인 순서대로 2개와 「+N」을 보인다 — 「+N」은 태그 창을 여는 단추다', () => {
+    renderCard(item(), undefined, tagging(['c', 'a', 'b']));
+    const row = screen.getByRole('group', { name: '내 태그' });
+    expect(row).toHaveTextContent('실태조사');
+    expect(row).toHaveTextContent('A사');
+    expect(row).not.toHaveTextContent('2026');
+    expect(screen.getByRole('button', { name: '태그 편집' })).toHaveTextContent('+1');
+  });
+
+  /** 검색 칩과 맞물리기 (티켓 09, 시안 F8-c) — 왜 이 카드가 보이는지 바로 보이게. */
+  it('걸린 검색 칩과 같은 태그는 맨 앞에 서고 누를 단추가 아니다', () => {
+    renderCard(item(), undefined, tagging(['c', 'a', 'b'], ['b']));
+    const row = screen.getByRole('group', { name: '내 태그' });
+    expect(row.textContent).toMatch(/^2026실태조사/);
+    expect(screen.queryByRole('button', { name: '2026 태그로 거르기' })).toBeNull();
+    expect(screen.getByRole('button', { name: '실태조사 태그로 거르기' })).toBeInTheDocument();
+  });
+
+  it('다른 태그를 누르면 그 태그를 검색 칩으로 더한다 — 태그 창은 열리지 않는다', async () => {
+    const props = tagging(['c', 'a'], []);
+    renderCard(item(), undefined, props);
+    await userEvent.setup().click(screen.getByRole('button', { name: 'A사 태그로 거르기' }));
+    expect(props.onFilterByTag).toHaveBeenCalledExactlyOnceWith('a');
+    expect(screen.queryByRole('listbox', { name: '내 태그' })).toBeNull();
+  });
+
+  it('태그가 없으면 줄이 없고 「+ 태그」 단추만 있다', () => {
+    renderCard(item(), undefined, tagging([]));
+    expect(screen.queryByRole('button', { name: '태그 편집' })).toBeNull();
+    expect(screen.getByRole('button', { name: '태그 추가' })).toBeInTheDocument();
+  });
+
+  it('숨은 「+ 태그」는 응답 수 줄의 자리를 차지하지 않는다 — 흐름 밖에 겹쳐 뜬다', () => {
+    renderCard(item(), undefined, tagging([]));
+    const add = screen.getByRole('button', { name: '태그 추가' });
+    // 흐름 안(형제 flex 항목)이면 숨어 있어도 폭을 먹어 응답 수 글자가 일찍 잘린다(1280 실측).
+    expect(add).toHaveClass('absolute');
+    expect(add.parentElement).toHaveClass('relative');
+    expect(add.parentElement?.children).toHaveLength(2);
+    expect(screen.getByText(/온라인 응답 완료/)).toHaveClass('truncate');
+  });
+
+  it('태그 줄을 누르면 태그 창이 열리고, 목록에서 누르면 그 설문에 붙이기를 올린다', async () => {
+    const props = tagging(['a']);
+    renderCard(item(), undefined, props);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', { name: '태그 편집' }));
+    const list = await screen.findByRole('listbox', { name: '내 태그' });
+    expect(list).toBeInTheDocument();
+
+    await user.click(screen.getByRole('option', { name: '2026' }));
+    expect(props.onToggle).toHaveBeenCalledWith('b', true);
+    // 창은 닫히지 않는다.
+    expect(screen.getByRole('listbox', { name: '내 태그' })).toBeInTheDocument();
+  });
+
+  it('「+ 태그」와 케밥 「태그」도 같은 창을 연다', async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderCard(item(), undefined, tagging([]));
+    await user.click(screen.getByRole('button', { name: '태그 추가' }));
+    expect(await screen.findByRole('listbox', { name: '내 태그' })).toBeInTheDocument();
+    unmount();
+
+    renderCard(item(), undefined, tagging(['a']));
+    await user.click(screen.getByRole('button', { name: '더보기' }));
+    await user.click(await screen.findByRole('menuitem', { name: '태그' }));
+    expect(await screen.findByRole('listbox', { name: '내 태그' })).toBeInTheDocument();
   });
 });

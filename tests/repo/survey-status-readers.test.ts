@@ -42,6 +42,8 @@ const KNOWN_READERS: Record<string, string> = {
   'src/server/read-models/survey-structure.ts':
     '설문 목록 컬럼 — 표시·필터용(종료를 따로 그린다)',
   'src/server/read-models/guest-surveys.ts': '게스트 콘솔의 진행 상태 라벨 — 표시용',
+  'src/server/read-models/survey-list-lifecycle.ts':
+    '목록 상태 SQL 식 — 표시·필터용(종료 스위치와 마감일 경과를 「종료」로 따로 센다)',
 };
 
 function sourceFiles(dir: string): string[] {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import Link from 'next/link';
 
@@ -19,7 +19,10 @@ import {
   Lock,
   MessageCircle,
   Pencil,
+  Plus,
   Share2,
+  Star,
+  Tag,
   TextCursorInput,
   Trash2,
 } from 'lucide-react';
@@ -32,16 +35,19 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 import { formatLocalDate } from '@/lib/date-formatters';
 import { getSurveyAccessUrl } from '@/lib/survey-url';
 import { cn } from '@/lib/utils';
 import { type SurveyListItem, surveyCardTitle } from '@/shared/contracts/survey-builder-io';
 import { SURVEY_VISIBILITY_LABEL, type WorkScope } from '@/shared/contracts/workspace';
-import type { SurveyGroupListItem } from '@/shared/contracts/workspace-io';
+import type { PersonalTagItem, SurveyGroupListItem } from '@/shared/contracts/workspace-io';
 
 import { ShareSettingsModal } from '../sharing/share-settings-modal';
 import { CardTitleDialog } from './card-title-dialog';
 import { GroupMoveSubmenu } from './groups/group-move-submenu';
+import { ACTIVE_TAG_LABEL_CLASS, PersonalTagLabel } from './personal-tag-label';
+import { resolveCardTags } from './personal-tags';
 import {
   type SurveyCardViewer,
   canDeleteSurveyCard,
@@ -49,9 +55,32 @@ import {
   canManageSurveyAccessCard,
   canManageSurveyGroupCard,
 } from './survey-list-capability';
+import { TagPickerPanel } from './tag-picker';
+
+/**
+ * 카드의 내 태그 — 나에게만 보이는 개인 표시(티켓 07). 낙관적 갱신·연타 처리는 목록 화면의
+ * `useSetTagLink`·`useCreatePersonalTag` 가 진다.
+ */
+export interface CardTagging {
+  /** 이 설문에 붙인 내 태그 id — 붙인 순서(목록 페이지 항목의 `myTagIds`). */
+  myTagIds: readonly string[];
+  /** 내 태그 전부 — 이름·색은 여기서 찾는다. */
+  tags: readonly PersonalTagItem[];
+  onToggle: (tagId: string, on: boolean) => void;
+  onCreate: (name: string) => Promise<PersonalTagItem | null>;
+  /** 걸린 검색 칩(티켓 09) — 같은 태그는 연한 파랑으로 맨 앞에 선다. */
+  activeTagIds: readonly string[];
+  /** 걸리지 않은 카드 태그를 눌렀다 — 그 태그를 검색 칩으로 더한다. */
+  onFilterByTag: (tagId: string) => void;
+}
 
 interface SurveyCardProps {
   survey: SurveyListItem;
+  /** 내가 별을 켰는가 — 나에게만 보이는 개인 표시(티켓 06). */
+  isFavorite: boolean;
+  /** 바라는 상태를 올린다. 낙관적 갱신·연타 처리는 목록 화면의 `useSetFavorite` 가 진다. */
+  onFavoriteChange: (on: boolean) => void;
+  tagging: CardTagging;
   /** 지금 목록을 보고 있는 사람 — 버튼 노출 근사 셋이 함께 본다. */
   viewer: SurveyCardViewer;
   onDelete: (surveyId: string) => void;
@@ -106,6 +135,9 @@ function responseLine(survey: SurveyListItem, scope: WorkScope): string {
  */
 export function SurveyCard({
   survey,
+  isFavorite,
+  onFavoriteChange,
+  tagging,
   viewer,
   onDelete,
   onDuplicate,
@@ -122,6 +154,12 @@ export function SurveyCard({
   const canManageAccess = canManageSurveyAccessCard(survey, viewer);
   const [sharingOpen, setSharingOpen] = useState(false);
   const [cardTitleOpen, setCardTitleOpen] = useState(false);
+  const [tagsOpen, setTagsOpen] = useState(false);
+  // 케밥 「태그」로 열 때 — 메뉴가 닫히며 포커스를 케밥으로 돌려놓으면 막 열린 태그 창이 바깥
+  // 포커스로 보고 닫힌다. 메뉴가 닫힌 뒤에 연다.
+  const openTagsAfterMenu = useRef(false);
+  const cardTags = resolveCardTags(tagging.myTagIds, tagging.tags, tagging.activeTagIds);
+  const activeTagIds = new Set(tagging.activeTagIds);
   const displayTitle = surveyCardTitle(survey);
   const isPending = survey.assignmentStatus === 'assignment_pending';
   const surveyUrl = getSurveyAccessUrl(
@@ -135,7 +173,7 @@ export function SurveyCard({
   );
 
   return (
-    <div className="flex w-full flex-col gap-[11px] rounded-[14px] border border-[#E5E5EA] bg-white p-5">
+    <div className="group/card flex w-full flex-col gap-[11px] rounded-[14px] border border-[#E5E5EA] bg-white p-5">
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2.5">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[#E0E7FF]">
@@ -151,77 +189,207 @@ export function SurveyCard({
           </h3>
         </div>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              aria-label="더보기"
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[#9CA3AF] hover:bg-[#F5F5F7] hover:text-[#1C1C1E]"
-            >
-              <EllipsisVertical className="h-4 w-4" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem asChild disabled={!canEdit}>
-              <Link href={`/surveys/${survey.id}/edit`}>
-                <Pencil className="h-3.5 w-3.5" />
-                수정
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem disabled={!canEdit} onSelect={() => setCardTitleOpen(true)}>
-              <TextCursorInput className="h-3.5 w-3.5" />
-              카드 제목 변경
-            </DropdownMenuItem>
-            {/* 공유 설정 모달을 연다 — 공개 범위·참여자·클라이언트·실사를 함께 다루므로 「초대」가 아니라 「공유」다. */}
-            <DropdownMenuItem onSelect={() => setSharingOpen(true)}>
-              <Share2 className="h-3.5 w-3.5" />
-              공유
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => {
-                navigator.clipboard.writeText(`${window.location.origin}${surveyUrl}`);
-                toast.success('링크가 복사되었습니다');
+        <div className="flex shrink-0 items-center gap-0.5">
+          {/* 별은 늘 보인다 — 편집 권한과 무관하게 볼 수 있는 설문이면 켤 수 있다(관문 survey.view). */}
+          <button
+            type="button"
+            aria-pressed={isFavorite}
+            aria-label={isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}
+            onClick={() => onFavoriteChange(!isFavorite)}
+            className={cn(
+              'flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#F5F5F7] focus-visible:ring-2 focus-visible:ring-[#2E4FCE]/40 focus-visible:outline-none',
+              isFavorite ? 'text-[#F5A524]' : 'text-[#9CA3AF] hover:text-[#1C1C1E]',
+            )}
+          >
+            <Star className={cn('h-4 w-4', isFavorite && 'fill-current')} />
+          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label="더보기"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[#9CA3AF] hover:bg-[#F5F5F7] hover:text-[#1C1C1E]"
+              >
+                <EllipsisVertical className="h-4 w-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              onCloseAutoFocus={(event) => {
+                if (!openTagsAfterMenu.current) return;
+                openTagsAfterMenu.current = false;
+                event.preventDefault();
+                setTagsOpen(true);
               }}
             >
-              <LinkIcon className="h-3.5 w-3.5" />
-              링크 복사
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href={surveyUrl} target="_blank">
-                <ExternalLink className="h-3.5 w-3.5" />
-                설문 열기
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem disabled={isDuplicating} onSelect={() => onDuplicate(survey.id)}>
-              {isDuplicating ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <CopyPlus className="h-3.5 w-3.5" />
+              <DropdownMenuItem asChild disabled={!canEdit}>
+                <Link href={`/surveys/${survey.id}/edit`}>
+                  <Pencil className="h-3.5 w-3.5" />
+                  수정
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={!canEdit} onSelect={() => setCardTitleOpen(true)}>
+                <TextCursorInput className="h-3.5 w-3.5" />
+                카드 제목 변경
+              </DropdownMenuItem>
+              {/* 내 태그 — 볼 수 있으면 붙일 수 있다(관문 survey.view). 카드 태그 줄과 같은 창을 연다. */}
+              <DropdownMenuItem onSelect={() => (openTagsAfterMenu.current = true)}>
+                <Tag className="h-3.5 w-3.5" />
+                태그
+              </DropdownMenuItem>
+              {/* 공유 설정 모달을 연다 — 공개 범위·참여자·클라이언트·실사를 함께 다루므로 「초대」가 아니라 「공유」다. */}
+              <DropdownMenuItem onSelect={() => setSharingOpen(true)}>
+                <Share2 className="h-3.5 w-3.5" />
+                공유
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  navigator.clipboard.writeText(`${window.location.origin}${surveyUrl}`);
+                  toast.success('링크가 복사되었습니다');
+                }}
+              >
+                <LinkIcon className="h-3.5 w-3.5" />
+                링크 복사
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href={surveyUrl} target="_blank">
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  설문 열기
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={isDuplicating} onSelect={() => onDuplicate(survey.id)}>
+                {isDuplicating ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <CopyPlus className="h-3.5 w-3.5" />
+                )}
+                복제
+              </DropdownMenuItem>
+              {onMoveToGroup && (
+                <GroupMoveSubmenu
+                  groups={groups}
+                  currentGroupId={survey.surveyGroupId}
+                  disabled={!canMoveGroup}
+                  onMove={(groupId) => onMoveToGroup(survey.id, groupId)}
+                />
               )}
-              복제
-            </DropdownMenuItem>
-            {onMoveToGroup && (
-              <GroupMoveSubmenu
-                groups={groups}
-                currentGroupId={survey.surveyGroupId}
-                disabled={!canMoveGroup}
-                onMove={(groupId) => onMoveToGroup(survey.id, groupId)}
-              />
-            )}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              disabled={!canDelete}
-              className="text-red-600 focus:text-red-600"
-              onSelect={() => onDelete(survey.id)}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              삭제
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={!canDelete}
+                className="text-red-600 focus:text-red-600"
+                onSelect={() => onDelete(survey.id)}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                삭제
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
-      <p className="truncate text-[14px] text-[#6E6E73]">{responseLine(survey, scope)}</p>
+      {/* 태그 창은 응답 수 줄 + 태그 줄 묶음 아래에 붙는다(시안 F6 ①). 태그 줄이 없을 때(태그 0개)도
+          같은 자리에서 열리게 묶음 전체를 기준점으로 둔다. */}
+      <Popover open={tagsOpen} onOpenChange={setTagsOpen}>
+        <PopoverAnchor asChild>
+          <div className="flex flex-col gap-2">
+            <div className="relative flex items-center">
+              <p className="min-w-0 flex-1 truncate text-[14px] text-[#6E6E73]">
+                {responseLine(survey, scope)}
+              </p>
+              {/* 태그가 없을 때만 — 마우스를 올리거나 포커스가 오면 보인다. 줄을 따로 차지하지 않고 응답 수
+                  줄의 폭도 먹지 않게 흐름 밖에서 줄 끝에 겹쳐 뜬다(흐름 안이면 숨어 있어도 글자가 일찍
+                  잘린다). 보일 때는 흰 바탕과 왼쪽 번짐이 밑의 글자 끝을 덮는다. */}
+              {cardTags.shown.length === 0 && (
+                <button
+                  type="button"
+                  aria-label="태그 추가"
+                  onClick={() => setTagsOpen(true)}
+                  className={cn(
+                    'absolute top-1/2 right-0 flex h-6 -translate-y-1/2 items-center gap-0.5 rounded-md bg-white px-1.5 text-[12.5px] text-[#6E6E73] shadow-[-10px_0_8px_white] hover:bg-[#F5F5F7] hover:text-[#1C1C1E] focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-[#2E4FCE]/40 focus-visible:outline-none',
+                    tagsOpen ? 'opacity-100' : 'opacity-0 group-hover/card:opacity-100',
+                  )}
+                >
+                  <Plus className="h-3 w-3" />
+                  태그
+                </button>
+              )}
+            </div>
+            {/* 카드 태그 줄 — 최대 2개 + 「+N」, 회색 바탕 + 색 점. 걸린 검색 칩과 같은 태그는 연한 파랑으로
+                맨 앞에 서고(티켓 09), 다른 태그를 누르면 그 태그가 검색 칩으로 더해진다. 「+N」과 줄의 빈 자리는
+                태그 창을 연다 — 키보드로는 「태그 편집」 단추(「+N」 자리, 없으면 마우스를 올리면 보이는 연필). */}
+            {cardTags.shown.length > 0 && (
+              <div
+                role="group"
+                aria-label="내 태그"
+                onClick={(event) => {
+                  if (event.target === event.currentTarget) setTagsOpen(true);
+                }}
+                className={cn(
+                  '-mx-1 flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 hover:bg-[#F5F5F7]',
+                  tagsOpen && 'ring-2 ring-[#2E4FCE]/40',
+                )}
+              >
+                {cardTags.shown.map((t) =>
+                  activeTagIds.has(t.id) ? (
+                    <PersonalTagLabel
+                      key={t.id}
+                      tag={t}
+                      className={cn('min-w-0 cursor-default', ACTIVE_TAG_LABEL_CLASS)}
+                    />
+                  ) : (
+                    <button
+                      key={t.id}
+                      type="button"
+                      aria-label={`${t.name} 태그로 거르기`}
+                      title={`「${t.name}」 태그로 거르기`}
+                      onClick={() => tagging.onFilterByTag(t.id)}
+                      className="flex min-w-0 rounded-md focus-visible:ring-2 focus-visible:ring-[#2E4FCE]/40 focus-visible:outline-none"
+                    >
+                      <PersonalTagLabel
+                        tag={t}
+                        className="min-w-0 hover:bg-[#E5E5EA] hover:text-[#1C1C1E]"
+                      />
+                    </button>
+                  ),
+                )}
+                <button
+                  type="button"
+                  aria-label="태그 편집"
+                  aria-expanded={tagsOpen}
+                  onClick={() => setTagsOpen(true)}
+                  className={cn(
+                    'flex h-6 shrink-0 items-center rounded-md px-1.5 text-[12.5px] leading-5 text-[#6E6E73] hover:bg-[#E5E5EA] hover:text-[#1C1C1E] focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-[#2E4FCE]/40 focus-visible:outline-none',
+                    cardTags.hiddenCount > 0
+                      ? 'bg-[#F2F2F7]'
+                      : tagsOpen
+                        ? 'opacity-100'
+                        : 'opacity-0 group-hover/card:opacity-100',
+                  )}
+                >
+                  {cardTags.hiddenCount > 0 ? (
+                    `+${cardTags.hiddenCount}`
+                  ) : (
+                    <Pencil aria-hidden className="h-3 w-3" />
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
+        </PopoverAnchor>
+        <PopoverContent
+          align="start"
+          className="w-[300px] overflow-hidden p-0"
+          // 첫 포커스는 칩의 × 가 아니라 검색 칸이다(칸이 autoFocus).
+          onOpenAutoFocus={(event) => event.preventDefault()}
+        >
+          <TagPickerPanel
+            attachedIds={tagging.myTagIds}
+            tags={tagging.tags}
+            onToggle={tagging.onToggle}
+            onCreate={tagging.onCreate}
+          />
+        </PopoverContent>
+      </Popover>
 
       <div className="flex items-center justify-between gap-2">
         <span className="truncate text-[13px] text-[#9CA3AF]">
