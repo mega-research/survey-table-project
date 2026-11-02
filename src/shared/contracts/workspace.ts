@@ -595,9 +595,9 @@ export type AccessLinkKind = (typeof accessLinkKindValues)[number];
 /**
  * 색 어휘 — 배열 순서가 새 태그 색 배정의 동점 순서다.
  *
- * 값을 늘릴 때는 세 곳을 함께 고칠 것: 이 배열 · 스키마 `check()`(배열에서 만든다) · 마이그레이션
- * 0150 의 CHECK 리터럴. Drizzle 의 `$type<>` 은 CHECK 를 만들지 않는다. 대조는
- * `src/db/schema/personal-tags-color-check.test.ts`.
+ * 값을 늘릴 때는 세 곳을 함께 고칠 것: 이 배열 · 스키마 `check()` 의 SQL 리터럴 · 마이그레이션
+ * 0150 의 CHECK 리터럴. 셋 다 손으로 쓴 사본이고 Drizzle 의 `$type<>` 은 CHECK 를 만들지 않는다.
+ * 대조는 `src/db/schema/workspace-personal-tag-color.test.ts`.
  */
 export const personalTagColorValues = [
   'blue',
