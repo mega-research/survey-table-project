@@ -122,6 +122,7 @@
     "0143_drop_response_answers",
     "0144_client_link_tabs_backfill",
     "0145_survey_localized_messages",
-    "0148_client_response_columns"
+    "0148_client_response_columns",
+    "0149_survey_favorites"
   ]
 }
