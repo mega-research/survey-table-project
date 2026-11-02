@@ -292,18 +292,20 @@ export function SurveyCard({
       <Popover open={tagsOpen} onOpenChange={setTagsOpen}>
         <PopoverAnchor asChild>
           <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-2">
+            <div className="relative flex items-center">
               <p className="min-w-0 flex-1 truncate text-[14px] text-[#6E6E73]">
                 {responseLine(survey, scope)}
               </p>
-              {/* 태그가 없을 때만 — 마우스를 올리거나 포커스가 오면 보인다(줄을 따로 차지하지 않는다). */}
+              {/* 태그가 없을 때만 — 마우스를 올리거나 포커스가 오면 보인다. 줄을 따로 차지하지 않고 응답 수
+                  줄의 폭도 먹지 않게 흐름 밖에서 줄 끝에 겹쳐 뜬다(흐름 안이면 숨어 있어도 글자가 일찍
+                  잘린다). 보일 때는 흰 바탕과 왼쪽 번짐이 밑의 글자 끝을 덮는다. */}
               {cardTags.shown.length === 0 && (
                 <button
                   type="button"
                   aria-label="태그 추가"
                   onClick={() => setTagsOpen(true)}
                   className={cn(
-                    'flex h-6 shrink-0 items-center gap-0.5 rounded-md px-1.5 text-[12.5px] text-[#6E6E73] hover:bg-[#F5F5F7] hover:text-[#1C1C1E] focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-[#2E4FCE]/40 focus-visible:outline-none',
+                    'absolute top-1/2 right-0 flex h-6 -translate-y-1/2 items-center gap-0.5 rounded-md bg-white px-1.5 text-[12.5px] text-[#6E6E73] shadow-[-10px_0_8px_white] hover:bg-[#F5F5F7] hover:text-[#1C1C1E] focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-[#2E4FCE]/40 focus-visible:outline-none',
                     tagsOpen ? 'opacity-100' : 'opacity-0 group-hover/card:opacity-100',
                   )}
                 >

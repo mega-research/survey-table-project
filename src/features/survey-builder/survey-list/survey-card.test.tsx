@@ -213,6 +213,16 @@ describe('SurveyCard — 내 태그 줄', () => {
     expect(screen.getByRole('button', { name: '태그 추가' })).toBeInTheDocument();
   });
 
+  it('숨은 「+ 태그」는 응답 수 줄의 자리를 차지하지 않는다 — 흐름 밖에 겹쳐 뜬다', () => {
+    renderCard(item(), undefined, tagging([]));
+    const add = screen.getByRole('button', { name: '태그 추가' });
+    // 흐름 안(형제 flex 항목)이면 숨어 있어도 폭을 먹어 응답 수 글자가 일찍 잘린다(1280 실측).
+    expect(add).toHaveClass('absolute');
+    expect(add.parentElement).toHaveClass('relative');
+    expect(add.parentElement?.children).toHaveLength(2);
+    expect(screen.getByText(/온라인 응답 완료/)).toHaveClass('truncate');
+  });
+
   it('태그 줄을 누르면 태그 창이 열리고, 목록에서 누르면 그 설문에 붙이기를 올린다', async () => {
     const props = tagging(['a']);
     renderCard(item(), undefined, props);
