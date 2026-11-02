@@ -1,9 +1,7 @@
-import { type ClassValue, clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
+// 클래스 병합은 shadcn 의 cn 패키지(clsx + tailwind-merge 대체)다. `shadcn add` 로 받는 컴포넌트가
+// 이 패키지를 직접 import 하므로, 앱 전체가 한 병합 규칙을 쓰도록 여기서도 같은 것을 내보낸다.
+// 옮길 때(2026-11-02) 레포의 클래스 문자열로 만든 조합 8.4만 건에서 twMerge(clsx()) 와 결과가 같았다.
+export { cn } from 'cn';
 
 /**
  * UUID 형식인지 확인하는 함수

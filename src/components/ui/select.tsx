@@ -160,7 +160,7 @@ function SelectContent({
         <SelectPrimitive.Popup
           className={cn(
             // 높이 상한은 Popup 이 쥐고 List 가 남는 높이만큼 스크롤한다 — 쓰는 쪽의 max-h-* 가
-            // 이 상한을 덮어써도(tailwind-merge) 목록 끝까지 닿는다.
+            // 이 상한을 덮어써도(cn 병합) 목록 끝까지 닿는다.
             'bg-popover text-popover-foreground relative flex max-h-[min(var(--available-height,24rem),24rem)] min-w-[max(8rem,var(--anchor-width))] origin-[var(--transform-origin)] flex-col overflow-hidden rounded-md border shadow-md outline-none',
             className,
           )}
