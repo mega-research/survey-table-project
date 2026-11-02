@@ -1,8 +1,8 @@
 'use client';
 
-import { type ReactNode, useEffect, useEffectEvent, useState } from 'react';
+import type { ReactNode } from 'react';
 
-import { Search, SlidersHorizontal, Trash2 } from 'lucide-react';
+import { SlidersHorizontal, Trash2 } from 'lucide-react';
 
 import {
   Select,
@@ -12,15 +12,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import {
-  SURVEY_LIST_SEARCH_MAX_LENGTH,
-  SURVEY_LIST_SEARCH_MAX_WORDS,
-  type SurveyListLifecycleFilter,
-  type SurveyListSortBy,
-  isSurveyListSearchWithinLimits,
+import type {
+  SurveyListLifecycleFilter,
+  SurveyListOwner,
+  SurveyListSortBy,
 } from '@/shared/contracts/survey-builder-io';
 
 import { LifecycleSegment } from './lifecycle-segment';
+import { SearchCombobox } from './search-combobox';
 
 // 문의 칩(.pen FLOW 6 「칩 문의」)은 Plan 3 게이트로 미노출 — 어휘 자체를 뺐다(티켓 08).
 
@@ -40,8 +39,19 @@ interface ListToolbarProps {
   resultCount: number;
   /** 주소에 걸린 검색어. */
   searchQuery: string;
-  /** 치기를 멈추면(250ms) 한 번 부른다 — 글자마다 서버 조회가 돌지 않게. */
+  /**
+   * 검색어를 목록에 적용할 때 한 번 부른다 — Enter·자동완성의 「검색 결과 모두 보기」, 그리고
+   * 입력칸을 다 비웠을 때. 치는 동안에는 부르지 않는다(후보 창이 미리 보여 준다).
+   */
   onSearchQueryChange: (query: string) => void;
+  /** 자동완성 설문 후보를 찾을 작업 범위 — 목록 조회와 같은 값. */
+  suggestScope: string | null;
+  /** 범위 안 소유자 — 자동완성 「소유자」 칸의 재료(목록 페이지 응답). */
+  owners: readonly SurveyListOwner[];
+  /** 자동완성에서 소유자를 골랐다 — 상세 검색 소유자 조건 + 남은 검색어로 목록을 바꾼다. */
+  onPickOwner: (ownerId: string, remainingQuery: string) => void;
+  /** 자동완성에서 설문을 골랐다 — 그 설문 편집으로 간다. */
+  onPickSurvey: (surveyId: string) => void;
   sortBy: SurveyListSortBy;
   onSortByChange: (sortBy: SurveyListSortBy) => void;
   /** 그룹 화면은 검색이 그 그룹 안에서만 좁혀진다 — 문구가 동작을 반대로 안내하면 안 된다. */
@@ -64,7 +74,7 @@ interface ListToolbarProps {
 /**
  * 목록 툴바 (시안 F8-a).
  *
- * 첫 줄 — 검색창(넓게) · 상세 검색. 둘째 줄 — 왼쪽 목록 상태 세그먼트(+ 휴지통), 오른쪽
+ * 첫 줄 — 검색창(넓게, 자동완성 F8-b) · 상세 검색. 둘째 줄 — 왼쪽 목록 상태 세그먼트(+ 휴지통), 오른쪽
  * 「N개 · 정렬 ▾」. 즐겨찾기·태그 단추는 후속 티켓이 첫 줄의 검색창 오른쪽에 더한다.
  */
 export function ListToolbar({
@@ -74,6 +84,10 @@ export function ListToolbar({
   resultCount,
   searchQuery,
   onSearchQueryChange,
+  suggestScope,
+  owners,
+  onPickOwner,
+  onPickSurvey,
   sortBy,
   onSortByChange,
   searchPlaceholder,
@@ -87,10 +101,16 @@ export function ListToolbar({
   return (
     <div className="flex flex-col gap-3">
       <div className="relative flex items-center gap-2">
-        <SearchInput
+        <SearchCombobox
           value={searchQuery}
           onCommit={onSearchQueryChange}
           placeholder={searchPlaceholder}
+          suggestScope={suggestScope}
+          // 휴지통에서는 후보 창을 열지 않는다 — 후보는 삭제되지 않은 설문에서만 찾는다.
+          suggestEnabled={!showDeleted}
+          owners={owners}
+          onPickOwner={onPickOwner}
+          onPickSurvey={onPickSurvey}
         />
 
         <button
@@ -156,79 +176,6 @@ export function ListToolbar({
           </Select>
         </div>
       </div>
-    </div>
-  );
-}
-
-const SEARCH_DEBOUNCE_MS = 250;
-
-/**
- * 검색창 — 치는 글자는 여기 머물고, 멈추면 한 번 올린다(목록이 서버 조회라 글자마다 왕복하지 않게).
- *
- * 바깥 값(주소)이 바뀌면 따라간다 — 뒤로 가기·「조건 풀기」가 검색어를 바꾼 경우. 단 내가 방금
- * 올린 값이 돌아온 것이면 건드리지 않는다: 그 사이 더 친 글자를 덮어 지우게 된다.
- *
- * 상한(단어 8개·100자)을 넘기는 입력은 받지 않는다 — 서버 입력 스키마가 같은 기준으로 거부하므로
- * 넘친 검색어를 보내면 목록이 오류로 바뀐다. 막힌 순간에는 아래에 상한을 알린다.
- */
-function SearchInput({
-  value,
-  onCommit,
-  placeholder,
-}: {
-  value: string;
-  onCommit: (value: string) => void;
-  placeholder: string;
-}) {
-  const [draft, setDraft] = useState(value);
-  const [limitHit, setLimitHit] = useState(false);
-  const [seen, setSeen] = useState(value);
-  const [sent, setSent] = useState(value);
-  if (value !== seen) {
-    setSeen(value);
-    if (value !== sent) {
-      setSent(value);
-      setDraft(value);
-    }
-  }
-
-  const commit = useEffectEvent((next: string) => {
-    setSent(next);
-    onCommit(next);
-  });
-  useEffect(() => {
-    if (draft === sent) return;
-    const timer = setTimeout(() => commit(draft), SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [draft, sent]);
-
-  return (
-    <div className="relative min-w-0 flex-1">
-      <Search className="absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
-      <input
-        type="text"
-        value={draft}
-        onChange={(e) => {
-          const next = e.target.value;
-          const fits = isSurveyListSearchWithinLimits(next);
-          setLimitHit(!fits);
-          if (fits) setDraft(next);
-        }}
-        onBlur={() => setLimitHit(false)}
-        placeholder={placeholder}
-        aria-label="설문 검색"
-        maxLength={SURVEY_LIST_SEARCH_MAX_LENGTH}
-        className="h-10 w-full rounded-[10px] border border-[#E5E5EA] bg-white pr-3 pl-10 text-[13.5px] text-[#1C1C1E] placeholder:text-[#9CA3AF] focus:border-[#2E4FCE] focus:outline-none"
-      />
-      {limitHit && (
-        <p
-          role="status"
-          className="absolute top-full left-0 z-10 mt-1 rounded-md border border-[#FECACA] bg-white px-2 py-1 text-[12px] text-[#B91C1C]"
-        >
-          검색어는 {SURVEY_LIST_SEARCH_MAX_WORDS}단어, {SURVEY_LIST_SEARCH_MAX_LENGTH}자까지 쓸 수
-          있습니다
-        </p>
-      )}
     </div>
   );
 }
