@@ -73,6 +73,8 @@ const CHIPS_VISIBLE_NARROW = 1;
 interface SearchComboboxProps {
   /** 주소에 걸린(목록에 적용된) 검색어. */
   value: string;
+  /** 바깥 틀의 폭·배치 — 부르는 쪽이 줄 안에서 차지할 자리를 정한다(없으면 남는 폭 전부). */
+  className?: string;
   /** 검색어를 목록에 적용한다 — Enter·「모두 보기」, 그리고 입력칸을 다 비웠을 때. */
   onCommit: (q: string) => void;
   placeholder: string;
@@ -109,6 +111,7 @@ interface SearchComboboxProps {
  */
 export function SearchCombobox({
   value,
+  className,
   onCommit,
   placeholder,
   suggestScope,
@@ -258,12 +261,13 @@ export function SearchCombobox({
   }
 
   return (
-    <div className="relative min-w-0 flex-1">
-      {/* 테두리는 칩·입력칸·「모두 지우기」를 감싼 상자에 있다 — 칩이 검색창 안에 들어 있게 보인다. */}
+    <div className={cn('relative min-w-0', className ?? 'flex-1')}>
+      {/* 테두리는 칩·입력칸·「모두 지우기」를 감싼 상자에 있다 — 칩이 검색창 안에 들어 있게 보인다.
+          자리가 모자라면 상자 안에서 다음 줄로 접는다(좁은 폭에서 칩·「모두 지우기」가 상자 밖으로
+          넘치지 않게). 넓은 화면에서는 접힌 칩이 「+N」으로 줄어 있어 한 줄에 든다. */}
       <div
         className={cn(
-          'flex min-h-10 w-full items-center gap-1.5 rounded-[10px] border border-[#E5E5EA] bg-white py-1 pr-2 pl-10 focus-within:border-[#2E4FCE]',
-          chipsExpanded && 'flex-wrap',
+          'flex min-h-10 w-full flex-wrap items-center gap-1.5 rounded-[10px] border border-[#E5E5EA] bg-white py-1 pr-2 pl-10 focus-within:border-[#2E4FCE]',
           open && 'border-[#2E4FCE]',
         )}
       >

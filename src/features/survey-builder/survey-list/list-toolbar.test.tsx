@@ -252,3 +252,29 @@ describe('ListToolbar — 검색창 상한', () => {
     expect(screen.getByRole('status')).toBeInTheDocument();
   });
 });
+
+/**
+ * 좁은 폭(390px 실측 — 검색창이 ~50px 로 줄고 칩·「모두 지우기」가 넘쳐 가로 스크롤) — 툴바 폭이
+ * 모자라면 검색창이 첫 줄 전체를 쓰고 단추는 다음 줄로 내려간다. 사이드바 폭에 따라 남는 자리가
+ * 달라서 화면 폭이 아니라 툴바(컨테이너) 폭으로 가른다.
+ */
+describe('ListToolbar — 좁은 폭 배치', () => {
+  it('첫 줄은 접히고, 검색창은 컨테이너가 넓을 때만 단추와 한 줄을 나눈다', () => {
+    render(
+      <Harness
+        onLifecycleChange={vi.fn()}
+        favorites={{ on: false, count: 0, onToggle: vi.fn() }}
+        tagFilter={TAG_FILTER}
+      />,
+    );
+    const input = screen.getByRole('combobox', { name: '설문 검색' });
+    const box = input.parentElement!;
+    const search = box.parentElement!;
+    const row = search.parentElement!;
+    expect(row.parentElement).toHaveClass('@container');
+    expect(row).toHaveClass('flex-wrap');
+    expect(search).toHaveClass('w-full', '@2xl:w-auto', '@2xl:flex-1');
+    // 상자 안도 접힌다 — 칩·입력칸·「모두 지우기」가 상자 밖으로 넘치지 않는다.
+    expect(box).toHaveClass('flex-wrap');
+  });
+});

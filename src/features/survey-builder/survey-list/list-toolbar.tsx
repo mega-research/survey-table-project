@@ -89,7 +89,8 @@ interface ListToolbarProps {
 /**
  * 목록 툴바 (시안 F8-a).
  *
- * 첫 줄 — 검색창(넓게, 자동완성 F8-b · 검색 칩 F8-c) · 즐겨찾기 · 「# 태그 ▾」(F8-d) · 상세 검색. 둘째 줄 —
+ * 첫 줄 — 검색창(넓게, 자동완성 F8-b · 검색 칩 F8-c) · 즐겨찾기 · 「# 태그 ▾」(F8-d) · 상세 검색(툴바가
+ * 좁으면 검색창 아래 줄로 내려간다). 둘째 줄 —
  * 왼쪽 목록 상태 세그먼트(+ 휴지통), 오른쪽 「N개 · 정렬 ▾」.
  */
 export function ListToolbar({
@@ -118,9 +119,13 @@ export function ListToolbar({
   tagFilter,
 }: ListToolbarProps) {
   return (
-    <div className="flex flex-col gap-3">
-      <div className="relative flex items-center gap-2">
+    // 첫 줄의 배치는 화면 폭이 아니라 툴바 폭으로 가른다 — 사이드바를 펴고 접는 데 따라 남는 자리가
+    // 달라진다. 좁으면(@2xl 미만) 검색창이 한 줄 전체를 쓰고 단추는 다음 줄로 내려간다(390px 에서
+    // 검색창이 ~50px 로 줄어 칩이 넘치던 것).
+    <div className="@container flex flex-col gap-3">
+      <div className="relative flex flex-wrap items-center gap-2">
         <SearchCombobox
+          className="w-full @2xl:w-auto @2xl:flex-1"
           value={searchQuery}
           onCommit={onSearchQueryChange}
           placeholder={searchPlaceholder}
