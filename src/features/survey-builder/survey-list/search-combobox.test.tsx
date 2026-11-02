@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -175,6 +175,50 @@ describe('SearchCombobox — 설문·소유자 자동완성 (시안 F8-b)', () =
     expect(onPickOwner).toHaveBeenCalledExactlyOnceWith('u1', '2026');
     expect(input).toHaveValue('2026');
     expect(input).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('창이 가만히 있는 커서 밑에 펼쳐져도 그 줄을 가리키지 않는다 — Enter 는 검색 적용이다', async () => {
+    const { input, user, onCommit, onPickSurvey } = setup();
+    await user.type(input, 'a사 실');
+    // 커서는 움직이지 않았는데 줄이 커서 밑에 나타나 브라우저가 mouseenter·mousemove 를 쏜 경우.
+    const first = screen.getByRole('option', { name: /A사 2026 고객 실태조사/ });
+    fireEvent.mouseEnter(first, { clientX: 300, clientY: 200 });
+    fireEvent.mouseMove(first, { clientX: 300, clientY: 200 });
+    fireEvent.mouseMove(first, { clientX: 300, clientY: 200 });
+    expect(input).not.toHaveAttribute('aria-activedescendant');
+
+    await user.keyboard('{Enter}');
+    expect(onPickSurvey).not.toHaveBeenCalled();
+    expect(onCommit).toHaveBeenLastCalledWith('a사 실');
+  });
+
+  it('커서를 실제로 움직여 가리킨 줄은 Enter 로 고른다', async () => {
+    const { input, user, onPickSurvey } = setup();
+    await user.type(input, 'a사 실');
+    const second = screen.getByRole('option', { name: /A사 2025 고객 실태조사/ });
+    fireEvent.mouseMove(second, { clientX: 300, clientY: 240 });
+    fireEvent.mouseMove(second, { clientX: 302, clientY: 241 });
+    expect(input).toHaveAttribute('aria-activedescendant', second.id);
+
+    await user.keyboard('{Enter}');
+    expect(onPickSurvey).toHaveBeenCalledWith('s2');
+  });
+
+  it('창을 떠났다가 다시 펼쳐진 창의 첫 신호도 움직임으로 치지 않는다', async () => {
+    const { input, user, onPickSurvey } = setup();
+    await user.type(input, 'a사 실');
+    const listbox = screen.getByRole('listbox', { name: '검색 후보' });
+    const first = screen.getByRole('option', { name: /A사 2026 고객 실태조사/ });
+    fireEvent.mouseMove(first, { clientX: 300, clientY: 200 });
+    fireEvent.mouseLeave(listbox);
+    await user.keyboard('{Escape}');
+    await user.type(input, '태');
+    const again = screen.getByRole('option', { name: /A사 2025 고객 실태조사/ });
+    fireEvent.mouseEnter(again, { clientX: 500, clientY: 260 });
+    fireEvent.mouseMove(again, { clientX: 500, clientY: 260 });
+    expect(input).not.toHaveAttribute('aria-activedescendant');
+    await user.keyboard('{Enter}');
+    expect(onPickSurvey).not.toHaveBeenCalled();
   });
 
   it('Esc 로 닫고, 다시 치면 열린다', async () => {

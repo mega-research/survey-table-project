@@ -1,6 +1,6 @@
 'use client';
 
-import { type KeyboardEvent, useId, useState } from 'react';
+import { type KeyboardEvent, type MouseEvent, useId, useRef, useState } from 'react';
 
 import { FileText, Hash, Search, UserRound, X } from 'lucide-react';
 
@@ -172,9 +172,22 @@ export function SearchCombobox({
   const resolvedActiveKey = activeIndex >= 0 ? flat[activeIndex]!.key : null;
   const optionId = (key: string) => `${baseId}-opt-${key}`;
 
+  const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
+
   function close() {
     setDismissed(true);
     setActiveKey(null);
+    lastPointerRef.current = null;
+  }
+
+  // 마우스로 가리키기는 **커서가 실제로 움직였을 때만**이다. 창이 가만히 있는 커서 밑에 펼쳐지거나
+  // 후보가 늦게 와 줄이 커서 밑으로 밀려 들어와도 브라우저는 mouseenter·mousemove 를 쏜다 — 그걸
+  // 가리키기로 받으면 Enter 가 「검색 적용」이 아니라 커서 밑 설문의 편집 화면으로 가 버렸다
+  // (2026-11-02). 직전 좌표와 같으면 움직임이 아니다.
+  function hover(key: string, event: MouseEvent) {
+    const last = lastPointerRef.current;
+    lastPointerRef.current = { x: event.clientX, y: event.clientY };
+    if (last && (last.x !== event.clientX || last.y !== event.clientY)) setActiveKey(key);
   }
 
   function commit(next: string) {
@@ -339,6 +352,8 @@ export function SearchCombobox({
             setDraft(next);
             setDismissed(false);
             setActiveKey(null);
+            // 치는 동안 줄이 커서 밑으로 바뀌어 들어온다 — 그 첫 신호도 움직임이 아니다.
+            lastPointerRef.current = null;
             // 다 지우면 Enter 를 기다리지 않고 전체 목록으로 — 빈 검색어는 고를 후보도 없다.
             if (splitSurveyListSearchWords(next).length === 0 && sent !== '') commit('');
           }}
@@ -385,6 +400,11 @@ export function SearchCombobox({
               aria-label="검색 후보"
               // 후보를 눌러도 입력칸이 포커스를 잃지 않게 — 잃으면 창이 닫혀 클릭이 닿지 않는다.
               onMouseDown={(e) => e.preventDefault()}
+              // 창을 떠나면 좌표를 잊는다 — 다시 들어올 때(또는 다시 열린 창이 커서 밑에 펼쳐질 때)의
+              // 첫 신호는 움직임으로 치지 않는다.
+              onMouseLeave={() => {
+                lastPointerRef.current = null;
+              }}
               className="overflow-hidden rounded-[14px] border border-[#E5E5EA] bg-white py-1.5 shadow-[0_12px_32px_rgba(15,23,42,0.12)]"
             >
               {sections.map((section) => (
@@ -395,7 +415,7 @@ export function SearchCombobox({
                   optionId={optionId}
                   activeKey={resolvedActiveKey}
                   onSelect={select}
-                  onHover={setActiveKey}
+                  onHover={hover}
                 />
               ))}
               <div className="mt-1 flex items-center justify-between gap-3 border-t border-[#F0F0F3] px-2 pt-1.5">
@@ -404,7 +424,7 @@ export function SearchCombobox({
                   role="option"
                   aria-selected={resolvedActiveKey === 'all'}
                   onClick={() => select(allOption)}
-                  onMouseEnter={() => setActiveKey('all')}
+                  onMouseMove={(e) => hover('all', e)}
                   className={cn(
                     'min-w-0 cursor-pointer truncate rounded-lg px-2 py-1.5 text-[13px] font-medium text-[#2E4FCE]',
                     resolvedActiveKey === 'all' && 'bg-[#EEF2FF]',
@@ -502,7 +522,7 @@ function SuggestSectionView({
   optionId: (key: string) => string;
   activeKey: string | null;
   onSelect: (option: SuggestOption) => void;
-  onHover: (key: string) => void;
+  onHover: (key: string, event: MouseEvent) => void;
 }) {
   const labelId = `${idPrefix}-section-${section.key}`;
   return (
@@ -524,7 +544,7 @@ function SuggestSectionView({
             role="option"
             aria-selected={active}
             onClick={() => onSelect(option)}
-            onMouseEnter={() => onHover(option.key)}
+            onMouseMove={(e) => onHover(option.key, e)}
             className={cn(
               'flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-2 text-[13.5px] text-[#1C1C1E]',
               active && 'bg-[#EEF2FF]',
