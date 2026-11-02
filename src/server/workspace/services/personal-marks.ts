@@ -34,7 +34,8 @@ import {
  * - 켜기: `ON CONFLICT DO NOTHING` 삽입 — 이미 켜져 있으면 아무 일도 없다.
  * - 끄기: 삭제 — 켠 적이 없어도 오류가 아니다.
  *
- * 그래서 연타·재시도·탭 두 개가 마지막으로 도착한 상태로 수렴한다. `updatedAt` 은 건드리지 않는다
+ * 그래서 연타·재시도·탭 두 개가 마지막으로 도착한 상태로 수렴한다. 관문을 지난 뒤 설문이 사라져
+ * 켜기가 외래 키에서 깨지면 NOT_FOUND(`PersonalMarkTargetGoneError`)다. `updatedAt` 은 건드리지 않는다
  * — 설문 내용이 아니라 내 정리라 「최신 수정순」이 별 하나에 흔들리면 안 된다.
  */
 export async function setFavorite(
@@ -42,10 +43,16 @@ export async function setFavorite(
   input: SetFavoriteInput,
 ): Promise<SetFavoriteOutput> {
   if (input.on) {
-    await db
-      .insert(surveyFavorites)
-      .values({ userId, surveyId: input.surveyId })
-      .onConflictDoNothing();
+    try {
+      await db
+        .insert(surveyFavorites)
+        .values({ userId, surveyId: input.surveyId })
+        .onConflictDoNothing();
+    } catch (err) {
+      // 관문과 쓰기 사이에 설문이 하드 삭제됐다 — 태그 연결과 같은 NOT_FOUND 로 접는다.
+      if (isForeignKeyViolation(err)) throw new PersonalMarkTargetGoneError();
+      throw err;
+    }
   } else {
     await db
       .delete(surveyFavorites)

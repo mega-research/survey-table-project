@@ -144,6 +144,14 @@ describe.skipIf(!isLocalDb)('개인 표시 — 즐겨찾기 쓰기 (real local D
     expect(await favoriteRows(S.shared)).toEqual([{ userId: COLLEAGUE }]);
   });
 
+  it('관문과 쓰기 사이에 설문이 사라져 켜기가 외래 키에서 깨지면 NOT_FOUND 사유다 — 500 이 아니다', async () => {
+    const gone = crypto.randomUUID();
+    await expect(setFavorite(ME, { surveyId: gone, on: true })).rejects.toBeInstanceOf(
+      PersonalMarkTargetGoneError,
+    );
+    expect(await favoriteRows(gone)).toEqual([]);
+  });
+
   it('설문을 하드 삭제하면 별도 사라진다', async () => {
     await setFavorite(ME, { surveyId: S.hardDeleted, on: true });
     await setFavorite(COLLEAGUE, { surveyId: S.hardDeleted, on: true });

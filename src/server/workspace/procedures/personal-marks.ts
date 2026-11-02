@@ -49,7 +49,7 @@ const setFavorite = authed
   .output(SetFavoriteOutput)
   .handler(async ({ input, context }) => {
     await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.view');
-    return svc.setFavorite(context.user.id, input);
+    return svc.setFavorite(context.user.id, input).catch(rethrowPersonalMarksError);
   });
 
 /** 내 태그 전부 — 내 행만. 작업 범위와 무관하다(팀을 바꿔도 같은 목록). */
