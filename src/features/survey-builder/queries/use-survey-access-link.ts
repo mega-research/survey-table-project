@@ -22,6 +22,9 @@ export const surveyAccessLinkKeys = {
   // 패널이 서로의 캐시를 덮어 「클라이언트 블록에 외주 링크의 주소가 뜬다」.
   detail: (surveyId: string, kind: AccessLinkKind) =>
     [...surveyAccessLinkKeys.all, surveyId, kind] as const,
+  // 링크 변경 훅들이 `all` 을 접으므로, 링크를 종료·재발급하면 열 설정도 함께 다시 읽힌다.
+  clientResponseColumns: (surveyId: string) =>
+    [...surveyAccessLinkKeys.all, surveyId, 'client', 'response-columns'] as const,
 };
 
 export function useSurveyAccessLink(surveyId: string, kind: AccessLinkKind) {
@@ -79,6 +82,31 @@ export function useCloseAccessLink() {
 export function useSetClientLinkTab() {
   return useLinkMutation((input: { surveyId: string; tab: ClientLinkTab; enabled: boolean }) =>
     client.workspace.accessLinks.setClientTab(input),
+  );
+}
+
+/**
+ * 클라이언트 링크 응답 내역의 열 설정 — 후보·저장값·version (`.scratch/client-link-response-list`
+ * 티켓 04). 다이얼로그가 열려 있을 때만 읽는다(후보를 만들려면 설문 구조를 읽어야 한다).
+ */
+export function useClientResponseColumns(surveyId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: surveyAccessLinkKeys.clientResponseColumns(surveyId),
+    queryFn: () => orpc.workspace.accessLinks.clientResponseColumns.call({ surveyId }),
+    enabled,
+    staleTime: 0,
+    refetchOnWindowFocus: false,
+  });
+}
+
+/**
+ * 열 설정 저장 — 불러온 `version` 을 함께 보낸다. 그 사이 누가 먼저 저장했으면 CONFLICT 이고,
+ * 실패에도 접는(`onSettled`) 무효화가 새 설정을 다시 읽어 온다.
+ */
+export function useSetClientResponseColumns() {
+  return useLinkMutation(
+    (input: { surveyId: string; keys: string[]; expectedVersion: number }) =>
+      client.workspace.accessLinks.setClientResponseColumns(input),
   );
 }
 

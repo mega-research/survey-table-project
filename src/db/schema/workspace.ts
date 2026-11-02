@@ -13,6 +13,7 @@ import {
 import type {
   AccessLinkKind,
   ClientLinkTabs,
+  ClientResponseColumns,
   FieldworkOrgStatus,
   SurveyGuestTabs,
   SurveyParticipantAccessLevel,
@@ -250,6 +251,12 @@ export const surveyAccessLinks = pgTable(
      * 응답 내역)을 더한 어휘다.
      */
     clientTabs: jsonb('client_tabs').$type<ClientLinkTabs>(),
+    /**
+     * 클라이언트 링크 응답 내역의 열 `{version, keys}` — **`kind='client'` 전용**(0148 CHECK).
+     * NULL 이면 기본 열이고 version 0 이다. 읽는 쪽은 `normalizeClientResponseColumns` 로 접고,
+     * 열 키의 허용 판정은 쓰기·읽기 모두 `isClientResponseColumnAllowed` 하나를 부른다.
+     */
+    clientResponseColumns: jsonb('client_response_columns').$type<ClientResponseColumns>(),
     createdBy: uuid('created_by')
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),

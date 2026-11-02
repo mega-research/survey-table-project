@@ -4,8 +4,10 @@ import 'server-only';
 import { db } from '@/db';
 import { questions as questionsTable } from '@/db/schema';
 import { formatLocalDateTime } from '@/lib/date-formatters';
+import { logger } from '@/lib/logger';
+import { resolveClientResponseColumnKeys } from '@/lib/operations/client-response-columns-format';
 import { formatPlatformKo } from '@/lib/operations/parse-ua';
-import { hydrateProfileColumns } from '@/lib/operations/profile-columns-format';
+import { answerKeyOf, entryKeyOf } from '@/lib/operations/profile-columns-format';
 import {
   PROFILES_PAGE_SIZE,
   type StepLocation,
@@ -15,13 +17,15 @@ import {
   normalizeListArgs,
 } from '@/lib/operations/profiles-format';
 import { EXTERNAL_VIEWER_DATA_SCOPE } from '@/server/data-scope';
-import { getContactColumnScheme } from '@/server/read-models/contacts';
-import { getProfileColumnScheme } from '@/server/read-models/profile-column-scheme';
+import {
+  getActiveClientLinkResponseColumns,
+  loadClientResponseColumnMaterial,
+} from '@/server/read-models/client-response-columns';
 import { getQuestionGroupsBySurvey } from '@/server/read-models/survey-structure';
 import type { ProfilesRow } from '@/shared/contracts/operations-io';
 import type { ClientResponseCell, ClientResponsesPage } from '@/shared/contracts/workspace-io';
 
-import { getSurveyContactStats } from './contact-stats';
+import { loadProfileAnswerValues } from './profile-answer-values';
 import { listResponsesForProfiles } from './profiles';
 
 /**
@@ -41,19 +45,6 @@ import { listResponsesForProfiles } from './profiles';
  * 클라이언트의 일이 아니다).
  */
 
-/**
- * 열 — 지금은 고정이다. 클라이언트용 열 설정은 티켓 04 가 링크 행에 세운다.
- *
- * 순번 · 상태(진행 위치 포함, 2026-10-27 사용자 결정) · 시작 · 종료 · 소요시간.
- */
-const DEFAULT_COLUMN_KEYS: readonly string[] = [
-  'sys.idx',
-  'sys.status',
-  'sys.startedAt',
-  'sys.completedAt',
-  'sys.totalSeconds',
-];
-
 export async function listClientResponses(
   surveyId: string,
   params: { page?: string; status?: string },
@@ -67,17 +58,25 @@ export async function listClientResponses(
   });
   const scope = EXTERNAL_VIEWER_DATA_SCOPE;
 
-  const [contactScheme, profileScheme, { hasContacts }] = await Promise.all([
-    getContactColumnScheme(surveyId, scope),
-    getProfileColumnScheme(surveyId),
-    getSurveyContactStats(surveyId, scope),
+  // 열은 링크 행의 설정이다(티켓 04) — 연구원이 「열 설정」에서 고른 것. 저장된 키를 **지금 구조로
+  // 다시 거른다**: 저장 뒤 문항이 지워지거나 암호화로 바뀌었거나 행을 손으로 고쳤으면 그 열은
+  // 여기서 빠진다. 허용 판정은 저장과 같은 한 함수다.
+  const [material, saved] = await Promise.all([
+    loadClientResponseColumnMaterial(surveyId),
+    getActiveClientLinkResponseColumns(surveyId),
   ]);
-  // 라벨은 내부 응답 내역의 것을 쓴다 — 연구원이 내부에서 고친 이름이 클라이언트에게도 간다.
-  const labels = new Map(
-    hydrateProfileColumns(contactScheme, profileScheme).map((c) => [c.key, c.label]),
-  );
+  const { keys: resolved, dropped } = resolveClientResponseColumnKeys(saved.keys, material.sources);
+  if (dropped.length > 0) {
+    logger.warn(
+      { surveyId, keys: dropped },
+      'client response columns dropped on read — not allowed or gone',
+    );
+  }
   // 번호(ID) 열은 조사 대상이 있는 설문에서만 선다 — 내부 표·엑셀 내보내기와 같은 규칙.
-  const keys = DEFAULT_COLUMN_KEYS.filter((key) => key !== 'sys.resid' || hasContacts);
+  const keys = resolved.filter((key) => key !== 'sys.resid' || material.hasContacts);
+  // 라벨은 내부 응답 내역의 것을 쓴다 — 연구원이 내부에서 고친 이름이 클라이언트에게도 간다.
+  const labels = new Map(material.candidates.map((c) => [c.key, c.label]));
+  const answerKeys = keys.filter((key) => answerKeyOf(key) !== null);
 
   const [{ rows, total, page }, qs, groups] = await Promise.all([
     listResponsesForProfiles({
@@ -109,12 +108,23 @@ export async function listClientResponses(
   ]);
   const stepLocations = buildStepLocationMap(qs, groups);
   const totalSteps = qs.length;
+  // 응답값 열은 그 페이지 행만 읽는다(내부와 같은 로더). 암호화 저장 칸은 허용 판정이 이미 뺐다 —
+  // 이 로더는 암호문을 복호화하므로, 판정을 거치지 않은 키를 여기 넘기면 평문이 나간다.
+  const answerValues =
+    answerKeys.length > 0
+      ? await loadProfileAnswerValues(
+          rows.map((r) => r.id),
+          answerKeys,
+        )
+      : {};
 
   return {
     columns: keys.map((key) => labels.get(key) ?? key),
     rows: rows.map((row) => ({
       idx: row.idx,
-      cells: keys.map((key) => cellOf(key, row, stepLocations, totalSteps)),
+      cells: keys.map((key) =>
+        cellOf(key, row, stepLocations, totalSteps, answerValues[row.id] ?? {}),
+      ),
     })),
     total,
     page,
@@ -127,13 +137,22 @@ function text(value: string | null): ClientResponseCell {
   return { kind: 'text', text: value };
 }
 
-/** 한 칸 — 내부 표(`ProfilesTable`)가 같은 열을 그리는 규칙을 문자열로 옮긴다. */
+/**
+ * 한 칸 — 내부 표(`ProfilesTable`)가 같은 열을 그리는 규칙을 문자열로 옮긴다. 허용 판정을 지난
+ * 키만 온다 — 모르는 키는 빈 칸이다.
+ */
 function cellOf(
   key: string,
   row: ProfilesRow,
   stepLocations: ReadonlyMap<string, StepLocation>,
   totalSteps: number,
+  answers: Readonly<Record<string, string>>,
 ): ClientResponseCell {
+  // 고른 열의 값만 꺼낸다 — 행의 명단 값·이어 넘길 값 전체는 이 함수 밖으로 나가지 않는다.
+  const entryName = entryKeyOf(key);
+  if (entryName !== null) return text(row.entryParams?.[entryName] || null);
+  if (key.startsWith('attrs.')) return text(row.attrs?.[key.slice('attrs.'.length)] || null);
+  if (answerKeyOf(key) !== null) return text(answers[key] || null);
   switch (key) {
     case 'sys.idx':
       return text(String(row.idx));

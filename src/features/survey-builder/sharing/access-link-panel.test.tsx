@@ -23,6 +23,8 @@ vi.mock('../queries/use-survey-access-link', () => ({
   useRevealAccessLinkPassword: () => mutation(vi.fn()),
   useCloseAccessLink: () => mutation(close),
   useSetClientLinkTab: () => mutation(setTab),
+  useClientResponseColumns: () => ({ data: undefined, isPending: true, isError: false }),
+  useSetClientResponseColumns: () => mutation(vi.fn()),
 }));
 
 import { AccessLinkPanel } from './access-link-panel';
@@ -202,6 +204,19 @@ describe('AccessLinkPanel', () => {
     expect(screen.getByRole('checkbox', { name: '응답 현황' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: '응답 현황' })).toBeDisabled();
     expect(screen.getByRole('button', { name: '종료' })).toBeDisabled();
+  });
+
+  it('클라이언트 링크에만 응답 내역 열 설정이 있고, 누르면 다이얼로그가 열린다', async () => {
+    state.data = linkState('client');
+    const user = userEvent.setup();
+    const { unmount } = render(<AccessLinkPanel surveyId="s-1" kind="client" />);
+    await user.click(screen.getByRole('button', { name: '응답 내역 열 설정' }));
+    expect(screen.getByRole('dialog', { name: '응답 내역 열 설정' })).toBeInTheDocument();
+    unmount();
+
+    state.data = linkState('fieldwork');
+    render(<AccessLinkPanel surveyId="s-1" kind="fieldwork" />);
+    expect(screen.queryByRole('button', { name: '응답 내역 열 설정' })).toBeNull();
   });
 
   it('닫히는 조건을 종류마다 다르게 말한다', () => {

@@ -1103,6 +1103,30 @@ export const AccessLinkView = z.object({
 export type AccessLinkView = z.infer<typeof AccessLinkView>;
 
 /**
+ * 클라이언트 링크 응답 내역의 열 설정 — 고르는 화면이 받는 모양 (`.scratch/client-link-response-list`
+ * 티켓 04).
+ *
+ * `candidates` 에는 **보일 수 있는 열만** 있다 — 개인정보 열·암호화 응답 칸·IP 해시는 후보에서부터
+ * 빠진다. `keys` 는 지금 저장된 열을 같은 판정으로 거른 결과라 언제나 후보 안에 있고 순번이 맨
+ * 앞이다. `version` 을 저장 요청에 그대로 돌려보낸다(낙관 잠금).
+ */
+export const ClientResponseColumnCandidateView = z.object({
+  key: z.string(),
+  label: z.string(),
+  kind: z.enum(['sys', 'entry', 'attrs', 'answer']),
+  /** 응답값 열이면 내보내기 변수명. */
+  varName: z.string().optional(),
+});
+export type ClientResponseColumnCandidateView = z.infer<typeof ClientResponseColumnCandidateView>;
+
+export const ClientResponseColumnsOutput = z.object({
+  candidates: z.array(ClientResponseColumnCandidateView),
+  keys: z.array(z.string()),
+  version: z.number().int().min(0),
+});
+export type ClientResponseColumnsOutput = z.infer<typeof ClientResponseColumnsOutput>;
+
+/**
  * 링크 블록의 상태 — 링크가 없을 수도 있다.
  *
  * `canManage` 를 함께 싣는 이유는 화면이 판정을 다시 하지 않기 위해서다. 다만 이 블록의 읽기

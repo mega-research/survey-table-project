@@ -1,7 +1,7 @@
 /**
  * 외주 실사 링크 procedure (ADR-0026, .pen FLOW 10-2 실사 블록의 「외주」 세그먼트).
  *
- * **관문이 다섯 표면 전부 `survey.manageAccess` 다** — 소유자·소유 팀 팀장·슈퍼어드민.
+ * **관문이 모든 표면에서 `survey.manageAccess` 다** — 소유자·소유 팀 팀장·슈퍼어드민.
  * 참여자·게스트 블록이 「추가는 `survey.invite`, 해제는 `survey.manageAccess`」로 갈린 것과
  * **일부러 다르다.**
  *
@@ -20,6 +20,7 @@ import { authed } from '@/server/orpc';
 import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 import {
   AccessLinkView,
+  ClientResponseColumnsOutput,
   IssuedAccessLinkOutput,
   RevealedAccessLinkPasswordOutput,
   SurveyAccessLinkOutput,
@@ -29,9 +30,13 @@ import {
 import {
   AccessLinkAlreadyIssuedError,
   AccessLinkNotFoundError,
+  ClientResponseColumnNotAllowedError,
+  ClientResponseColumnsConflictError,
+  ClientResponseColumnsInput,
   IssueAccessLinkInput,
   ResetAccessLinkPasswordInput,
   SetClientLinkTabInput,
+  SetClientResponseColumnsInput,
   SurveyAccessLinkInput,
 } from '../domain/access-link';
 import * as svc from '../services/access-links';
@@ -49,6 +54,13 @@ function rethrowLinkError(err: unknown): never {
   }
   if (err instanceof AccessLinkNotFoundError) {
     throw new ORPCError('NOT_FOUND', { message: err.message });
+  }
+  // 낡은 화면의 열 저장 — 화면이 이 코드로 새로 불러온다.
+  if (err instanceof ClientResponseColumnsConflictError) {
+    throw new ORPCError('CONFLICT', { message: err.message });
+  }
+  if (err instanceof ClientResponseColumnNotAllowedError) {
+    throw new ORPCError('BAD_REQUEST', { message: err.message });
   }
   throw err;
 }
@@ -130,6 +142,30 @@ const setClientTab = authed
     return svc.setClientLinkTab(input).catch(rethrowLinkError);
   });
 
+/**
+ * 클라이언트 링크 응답 내역의 열 설정 — 조회 (티켓 04). 후보에는 보일 수 있는 열만 있다.
+ * 관문은 탭 저장과 같은 `survey.manageAccess` 다 — 열을 고르는 일도 이미 나간 링크의 범위를 넓힌다.
+ */
+const clientResponseColumns = authed
+  .input(ClientResponseColumnsInput)
+  .output(ClientResponseColumnsOutput)
+  .handler(async ({ input, context }) => {
+    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.manageAccess');
+    return svc.getClientResponseColumns(input.surveyId).catch(rethrowLinkError);
+  });
+
+/**
+ * 열 설정 저장 — `expectedVersion` 이 어긋나면 CONFLICT, 보일 수 없는 열이 있으면 BAD_REQUEST.
+ * 응답은 저장 뒤의 모습이라 화면이 그것으로 다시 그린다.
+ */
+const setClientResponseColumns = authed
+  .input(SetClientResponseColumnsInput)
+  .output(ClientResponseColumnsOutput)
+  .handler(async ({ input, context }) => {
+    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.manageAccess');
+    return svc.setClientResponseColumns(input).catch(rethrowLinkError);
+  });
+
 /** 종료 — 행 삭제가 아니라 상태 전환이다. 종료 뒤 재발급이 된다. */
 const close = authed
   .input(SurveyAccessLinkInput)
@@ -142,4 +178,13 @@ const close = authed
     return { success: true } as const;
   });
 
-export const accessLinks = { get, issue, resetPassword, revealPassword, setClientTab, close };
+export const accessLinks = {
+  get,
+  issue,
+  resetPassword,
+  revealPassword,
+  setClientTab,
+  clientResponseColumns,
+  setClientResponseColumns,
+  close,
+};

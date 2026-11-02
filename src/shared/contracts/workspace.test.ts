@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DEFAULT_CLIENT_LINK_TABS,
+  DEFAULT_CLIENT_RESPONSE_COLUMN_KEYS,
   clientLinkTabValues,
   normalizeClientLinkTabs,
+  normalizeClientResponseColumns,
   normalizeSurveyGuestTabs,
   surveyGuestTabValues,
 } from './workspace';
@@ -62,5 +64,40 @@ describe('normalizeClientLinkTabs', () => {
     expect(Object.keys(normalizeSurveyGuestTabs(null)).sort()).toEqual(
       [...surveyGuestTabValues].sort(),
     );
+  });
+});
+
+/** 클라이언트 링크 응답 내역의 열 설정 — 모양만 접는다(허용 판정은 읽는 쪽이 한다). */
+describe('normalizeClientResponseColumns', () => {
+  it('비어 있으면 기본 열과 version 0 이다', () => {
+    expect(normalizeClientResponseColumns(null)).toEqual({
+      version: 0,
+      keys: [...DEFAULT_CLIENT_RESPONSE_COLUMN_KEYS],
+    });
+    expect(normalizeClientResponseColumns(['sys.idx'])).toEqual({
+      version: 0,
+      keys: [...DEFAULT_CLIENT_RESPONSE_COLUMN_KEYS],
+    });
+  });
+
+  it('저장된 순서를 지키고, 순번은 언제나 맨 앞이며 중복은 앞의 것만 남는다', () => {
+    expect(
+      normalizeClientResponseColumns({
+        version: 3,
+        keys: ['entry.euid', 'sys.status', 'sys.idx', 'entry.euid', 7],
+      }),
+    ).toEqual({ version: 3, keys: ['sys.idx', 'entry.euid', 'sys.status'] });
+  });
+
+  it('순번만 남긴 설정은 기본 열로 접히지 않는다', () => {
+    expect(normalizeClientResponseColumns({ version: 1, keys: [] })).toEqual({
+      version: 1,
+      keys: ['sys.idx'],
+    });
+  });
+
+  it('version 이 정수가 아니면 0 으로 읽는다', () => {
+    expect(normalizeClientResponseColumns({ version: '2', keys: ['sys.idx'] }).version).toBe(0);
+    expect(normalizeClientResponseColumns({ version: -1, keys: ['sys.idx'] }).version).toBe(0);
   });
 });

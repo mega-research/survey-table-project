@@ -24,6 +24,8 @@ import { db } from '@/db';
 import {
   contactPii as contactPiiTable,
   contactTargets as contactTargetsTable,
+  questions as questionsTable,
+  surveyAccessLinks as surveyAccessLinksTable,
   surveyResponses as responsesTable,
   surveys as surveysTable,
   surveyVersions as versionsTable,
@@ -542,6 +544,106 @@ describe.skipIf(!isLocalDb)('클라이언트 링크 콘솔 (real local DB)', () 
       expect(statuses).toContainEqual(
         expect.objectContaining({ kind: 'status', label: '이탈', sub: expect.stringContaining('3/33') }),
       );
+    });
+
+    it('연구원이 고른 열이 순서대로 서고, 고른 이어 넘길 값만 나온다 — 고르지 않은 명단 값·IP 해시는 없다', async () => {
+      await db
+        .update(surveysTable)
+        .set({ endRedirects: { passParams: ['euid'] } })
+        .where(eq(surveysTable.id, surveyId));
+      const { token } = await issueAndEnter();
+      await admin.accessLinks.setClientTab({ surveyId, tab: 'responses', enabled: true });
+      await admin.accessLinks.setClientResponseColumns({
+        surveyId,
+        keys: ['sys.idx', 'entry.euid', 'sys.status'],
+        expectedVersion: 0,
+      });
+      const viewer = await assertClientLinkPageAccess(token, 'responses');
+
+      const page = await listClientResponses(viewer.surveyId, {});
+      const serialized = JSON.stringify(page);
+      expect(page.columns).toEqual(['순번', 'euid', '상태']);
+      // 이번에는 euid 를 골랐다 — 값이 칸에 온다.
+      const completedRow = page.rows.find((row) =>
+        row.cells.some((cell) => cell.kind === 'status' && cell.label === '완료'),
+      );
+      expect(completedRow?.cells[1]).toEqual({ kind: 'text', text: SECRET_EUID });
+      expect(serialized).not.toContain(SECRET_ATTR);
+      expect(serialized).not.toContain(SECRET_IP);
+      for (const id of responseIds) expect(serialized).not.toContain(id);
+      expect(serialized).not.toContain(targetId);
+    });
+
+    it('행에 손으로 넣은 개인정보·IP 해시·없는 열은 목록에 서지 않는다 — 읽기가 다시 거른다', async () => {
+      await issueAndEnter();
+      await db
+        .update(surveyAccessLinksTable)
+        .set({
+          clientResponseColumns: {
+            version: 9,
+            keys: ['sys.idx', 'pii.담당자', 'sys.ipHash', 'attrs.기관명', 'sys.status'],
+          },
+        })
+        .where(eq(surveyAccessLinksTable.surveyId, surveyId));
+
+      const page = await listClientResponses(surveyId, {});
+      const serialized = JSON.stringify(page);
+      // attrs.기관명 은 명단 컬럼 스킴에 없는 열이라 이 설문에서는 고를 수 없다 — 함께 빠진다.
+      expect(page.columns).toEqual(['순번', '상태']);
+      expect(serialized).not.toContain(SECRET_IP);
+      expect(serialized).not.toContain(SECRET_ATTR);
+    });
+
+    it('응답값 열은 평문 칸만 — 암호화 저장 칸은 고를 수 없고, 손으로 넣어도 값이 나가지 않는다', async () => {
+      const plainId = crypto.randomUUID();
+      const encryptedId = crypto.randomUUID();
+      await db.insert(questionsTable).values([
+        // 문항코드가 있어야 내보내기 변수가 서고, 응답값 열 후보도 그 변수에서 나온다.
+        { id: plainId, surveyId, type: 'text', title: '추천 의향 이유', order: 0, questionCode: 'Q1' },
+        {
+          id: encryptedId,
+          surveyId,
+          type: 'text',
+          title: '응답자 성명',
+          order: 1,
+          questionCode: 'Q2',
+          piiEncrypted: true,
+        },
+      ]);
+      await db
+        .update(responsesTable)
+        .set({ questionResponses: { [plainId]: '가격이 합리적', [encryptedId]: 'ENC-SECRET' } })
+        .where(eq(responsesTable.id, responseIds[0]!));
+      await issueAndEnter();
+
+      const columns = await admin.accessLinks.clientResponseColumns({ surveyId });
+      expect(columns.candidates.map((c) => c.key)).toContain(`answer.${plainId}`);
+      expect(columns.candidates.map((c) => c.key)).not.toContain(`answer.${encryptedId}`);
+      await expect(
+        admin.accessLinks.setClientResponseColumns({
+          surveyId,
+          keys: [`answer.${encryptedId}`],
+          expectedVersion: 0,
+        }),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+      await admin.accessLinks.setClientResponseColumns({
+        surveyId,
+        keys: [`answer.${plainId}`],
+        expectedVersion: 0,
+      });
+      const chosen = await listClientResponses(surveyId, {});
+      expect(chosen.columns).toEqual(['순번', '추천 의향 이유']);
+      expect(JSON.stringify(chosen)).toContain('가격이 합리적');
+
+      // 손으로 암호화 칸을 넣어도 읽기가 뺀다 — 그 로더는 암호문을 복호화한다.
+      await db
+        .update(surveyAccessLinksTable)
+        .set({ clientResponseColumns: { version: 5, keys: ['sys.idx', `answer.${encryptedId}`] } })
+        .where(eq(surveyAccessLinksTable.surveyId, surveyId));
+      const forced = await listClientResponses(surveyId, {});
+      expect(forced.columns).toEqual(['순번']);
+      expect(JSON.stringify(forced)).not.toContain('ENC-SECRET');
     });
 
     it('상태로 좁힌다 — 휴지통 보기는 없다', async () => {

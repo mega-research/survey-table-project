@@ -156,11 +156,15 @@ describe('계정 축 표면은 외주 실사 링크에게 닫혀 있다', () => 
       'workspace.accessLinkSession.authenticateClient:pub',
       'workspace.accessLinkSession.signOut:pub',
       'workspace.accessLinkSession.signOutClient:pub',
+      // 클라이언트 링크 응답 내역의 열 설정(티켓 04) — 열리면 클라이언트가 자기에게 보이는 열을
+      // 스스로 넓힌다. 탭 저장과 같은 이유로 연구원 표면이다.
+      'workspace.accessLinks.clientResponseColumns:authed',
       'workspace.accessLinks.close:authed',
       'workspace.accessLinks.get:authed',
       'workspace.accessLinks.issue:authed',
       'workspace.accessLinks.resetPassword:authed',
       'workspace.accessLinks.revealPassword:authed',
+      'workspace.accessLinks.setClientResponseColumns:authed',
       // 클라이언트 링크의 탭 저장(ADR-0029) — 이것도 연구원의 관리 표면이다. 링크 주체에게
       // 열리면 클라이언트가 자기에게 보이는 화면을 스스로 넓힌다.
       'workspace.accessLinks.setClientTab:authed',

@@ -364,6 +364,58 @@ export function normalizeClientLinkTabs(raw: unknown): ClientLinkTabs {
 }
 
 /**
+ * 클라이언트 링크 응답 내역의 열 설정 — `survey_access_links.client_response_columns` 문서
+ * (`.scratch/client-link-response-list` 티켓 04, 0148).
+ *
+ * 키는 내부 응답 내역의 열 키(`sys.*`·`entry.*`·`attrs.*`·`answer.*`)와 같은 어휘이고 순서가 곧 열
+ * 순서다. 라벨은 저장하지 않는다 — 렌더 시점에 내부 응답 내역의 라벨을 쓴다.
+ *
+ * `version` 은 낙관 잠금이다. 열은 순서가 있는 목록이라 칩처럼 「한 칸과 그 값」으로 받을 수 없어,
+ * 낡은 화면의 저장이 남이 뺀 열을 되살리지 않게 저장마다 올리고 서버가 대조한다. `updated_at` 을
+ * 쓰지 않는 이유는 탭 저장에도 바뀌어 거짓 충돌을 내기 때문이다(timestamptz 정밀도 함정도 있다).
+ */
+export interface ClientResponseColumns {
+  version: number;
+  keys: string[];
+}
+
+/** 응답 내역의 첫 열 — 언제나 있고 설정에서 뺄 수 없다(빈 표가 생기지 않는다). */
+export const CLIENT_RESPONSE_FIRST_COLUMN_KEY = 'sys.idx';
+
+/** 컬럼이 NULL 일 때의 열 — 순번 · 상태(진행 위치 포함) · 시작 · 종료 · 소요시간. */
+export const DEFAULT_CLIENT_RESPONSE_COLUMN_KEYS: readonly string[] = [
+  CLIENT_RESPONSE_FIRST_COLUMN_KEY,
+  'sys.status',
+  'sys.startedAt',
+  'sys.completedAt',
+  'sys.totalSeconds',
+];
+
+/**
+ * JSONB 컬럼 값 → 열 설정 (로더 정규화). NULL·모양이 깨진 값은 기본 열 + version 0 이다.
+ *
+ * 여기서는 **모양만** 본다 — 키가 지금 허용되는가는 설문 구조에 달려 있어 읽는 쪽이 허용 판정으로
+ * 한 번 더 거른다. 중복 키는 앞의 것만 남기고, 첫 열은 언제나 맨 앞에 둔다.
+ */
+export function normalizeClientResponseColumns(raw: unknown): ClientResponseColumns {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { version: 0, keys: [...DEFAULT_CLIENT_RESPONSE_COLUMN_KEYS] };
+  }
+  const source = raw as Record<string, unknown>;
+  const version =
+    typeof source['version'] === 'number' && Number.isInteger(source['version']) && source['version'] >= 0
+      ? source['version']
+      : 0;
+  if (!Array.isArray(source['keys'])) {
+    return { version, keys: [...DEFAULT_CLIENT_RESPONSE_COLUMN_KEYS] };
+  }
+  const rest = source['keys'].filter(
+    (key): key is string => typeof key === 'string' && key !== CLIENT_RESPONSE_FIRST_COLUMN_KEY,
+  );
+  return { version, keys: [CLIENT_RESPONSE_FIRST_COLUMN_KEY, ...new Set(rest)] };
+}
+
+/**
  * 참여자를 **제외**할 수 있는가 — 화면과 서버가 함께 보는 술어 (스펙 §7·§11-5).
  *
  * 추가는 접근 가능한 내부인 누구나 할 수 있지만 제외는 소유자·소유 팀 팀장·슈퍼어드민뿐이다.

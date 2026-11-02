@@ -16,6 +16,8 @@
  *  ⑤ 세션 폐기 — 비밀번호를 바꾸면 선 세션이 끊긴다.
  *  ⑥ 탭 — 연구원이 바꾸면 **같은 쿠키의 다음 요청**부터 반영된다.
  *  ⑦ 공존과 파티션 — 한 브라우저의 여러 세션이 섞이지 않고, 테스트 모드와 무관하게 real 이다.
+ *  ⑧ 칩 셋 — 칩 하나씩 저장되고 0144 가 옛 행을 채운다.
+ *  ⑨ 응답 내역 열 설정 — 저장 왕복 · 허용 밖 거부 · 낡은 version 은 CONFLICT · 외주 링크엔 없음.
  */
 import { createRouterClient } from '@orpc/server';
 import { readFileSync } from 'node:fs';
@@ -588,5 +590,143 @@ describe.skipIf(!isLocalDb)('클라이언트 링크 세션 (real local DB)', () 
       .from(surveyAccessLinksTable)
       .where(eq(surveyAccessLinksTable.id, linkId));
     expect(normalizeClientLinkTabs(again?.clientTabs).preview).toBe(false);
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // ⑨ 응답 내역 열 설정 (.scratch/client-link-response-list 티켓 04)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  it('새 링크는 기본 열과 version 0 이고, 저장하면 순서 그대로 version 1 로 돌아온다', async () => {
+    await issueAndSignIn();
+    const initial = await admin.accessLinks.clientResponseColumns({ surveyId });
+    expect(initial.keys).toEqual([
+      'sys.idx',
+      'sys.status',
+      'sys.startedAt',
+      'sys.completedAt',
+      'sys.totalSeconds',
+    ]);
+    expect(initial.version).toBe(0);
+    // IP 해시는 후보에서부터 없다.
+    expect(initial.candidates.map((c) => c.key)).not.toContain('sys.ipHash');
+
+    // 순번을 빼고 보내도 맨 앞에 선다.
+    const saved = await admin.accessLinks.setClientResponseColumns({
+      surveyId,
+      keys: ['sys.completedAt', 'sys.status'],
+      expectedVersion: 0,
+    });
+    expect(saved).toMatchObject({
+      keys: ['sys.idx', 'sys.completedAt', 'sys.status'],
+      version: 1,
+    });
+    expect(await admin.accessLinks.clientResponseColumns({ surveyId })).toMatchObject({
+      keys: ['sys.idx', 'sys.completedAt', 'sys.status'],
+      version: 1,
+    });
+  });
+
+  it('보일 수 없는 열이 하나라도 있으면 저장하지 않고 거부한다 — 조용히 빼지 않는다', async () => {
+    await issueAndSignIn();
+    for (const bad of ['sys.ipHash', 'pii.담당자', 'answer.00000000-0000-4000-8000-000000000000']) {
+      await expect(
+        admin.accessLinks.setClientResponseColumns({
+          surveyId,
+          keys: ['sys.status', bad],
+          expectedVersion: 0,
+        }),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    }
+    expect(await admin.accessLinks.clientResponseColumns({ surveyId })).toMatchObject({
+      version: 0,
+    });
+  });
+
+  it('두 연구원이 같은 설정을 불러와 저장하면 뒤에 저장한 쪽이 CONFLICT 다 — 남이 뺀 열이 되살아나지 않는다', async () => {
+    await issueAndSignIn();
+    const a = await admin.accessLinks.clientResponseColumns({ surveyId });
+    const b = await admin.accessLinks.clientResponseColumns({ surveyId });
+
+    // A 가 소요시간을 뺐다.
+    await admin.accessLinks.setClientResponseColumns({
+      surveyId,
+      keys: a.keys.filter((key) => key !== 'sys.totalSeconds'),
+      expectedVersion: a.version,
+    });
+    // B 의 화면은 아직 소요시간이 있는 낡은 설정이다 — 그대로 저장하면 A 가 뺀 열이 되살아난다.
+    await expect(
+      admin.accessLinks.setClientResponseColumns({
+        surveyId,
+        keys: [...b.keys, 'sys.platform'],
+        expectedVersion: b.version,
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+
+    const now = await admin.accessLinks.clientResponseColumns({ surveyId });
+    expect(now.version).toBe(1);
+    expect(now.keys).not.toContain('sys.totalSeconds');
+    expect(now.keys).not.toContain('sys.platform');
+  });
+
+  it('같은 version 의 저장이 동시에 와도 하나만 이긴다 — 행 잠금 아래에서 version 을 다시 본다', async () => {
+    await issueAndSignIn();
+    const results = await Promise.allSettled([
+      admin.accessLinks.setClientResponseColumns({
+        surveyId,
+        keys: ['sys.status'],
+        expectedVersion: 0,
+      }),
+      admin.accessLinks.setClientResponseColumns({
+        surveyId,
+        keys: ['sys.platform'],
+        expectedVersion: 0,
+      }),
+    ]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    const rejected = results.filter((r) => r.status === 'rejected');
+    expect(rejected).toHaveLength(1);
+    expect((rejected[0] as PromiseRejectedResult).reason).toMatchObject({ code: 'CONFLICT' });
+    expect((await admin.accessLinks.clientResponseColumns({ surveyId })).version).toBe(1);
+  });
+
+  it('외주 링크만 있는 설문에서는 열 설정이 없다(NotFound) — 외주 행에 쓰지 않는다', async () => {
+    await admin.accessLinks.issue({ surveyId, kind: 'fieldwork', password: PASSWORD });
+    await expect(admin.accessLinks.clientResponseColumns({ surveyId })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+    await expect(
+      admin.accessLinks.setClientResponseColumns({ surveyId, keys: [], expectedVersion: 0 }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    const rows = await db
+      .select({ columns: surveyAccessLinksTable.clientResponseColumns })
+      .from(surveyAccessLinksTable)
+      .where(eq(surveyAccessLinksTable.surveyId, surveyId));
+    expect(rows.map((r) => r.columns)).toEqual([null]);
+  });
+
+  it('열을 저장해도 선 세션은 끊기지 않고, 칩 저장이 열 설정을 건드리지 않는다', async () => {
+    const { token, cookie } = await issueAndSignIn();
+    await admin.accessLinks.setClientResponseColumns({
+      surveyId,
+      keys: ['sys.status'],
+      expectedVersion: 0,
+    });
+    expect((await resolveClientLinkActor(token, cookieHeaders(cookie))).ok).toBe(true);
+
+    await admin.accessLinks.setClientTab({ surveyId, tab: 'responses', enabled: true });
+    expect(await admin.accessLinks.clientResponseColumns({ surveyId })).toMatchObject({
+      keys: ['sys.idx', 'sys.status'],
+      version: 1,
+    });
+  });
+
+  it('외주 링크 행에는 열 설정을 담을 수 없다 — 0148 CHECK', async () => {
+    await admin.accessLinks.issue({ surveyId, kind: 'fieldwork', password: PASSWORD });
+    await expect(
+      db
+        .update(surveyAccessLinksTable)
+        .set({ clientResponseColumns: { version: 1, keys: ['sys.idx'] } })
+        .where(eq(surveyAccessLinksTable.surveyId, surveyId)),
+    ).rejects.toThrow();
   });
 });

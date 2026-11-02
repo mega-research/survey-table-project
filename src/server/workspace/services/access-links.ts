@@ -5,18 +5,29 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { db } from '@/db';
 import { surveyAccessLinks } from '@/db/schema';
 import { decryptSharedSecret, encryptSharedSecret } from '@/lib/crypto/aes';
+import { logger } from '@/lib/logger';
+import { resolveClientResponseColumnKeys } from '@/lib/operations/client-response-columns-format';
 import { isUniqueViolation } from '@/lib/pg-error';
+import {
+  type ClientResponseColumnMaterial,
+  loadClientResponseColumnMaterial,
+} from '@/server/read-models/client-response-columns';
 import {
   type AccessLinkKind,
   type ClientLinkTab,
   type ClientLinkTabs,
+  type ClientResponseColumns,
+  CLIENT_RESPONSE_FIRST_COLUMN_KEY,
   normalizeClientLinkTabs,
+  normalizeClientResponseColumns,
 } from '@/shared/contracts/workspace';
-import type { AccessLinkView } from '@/shared/contracts/workspace-io';
+import type { AccessLinkView, ClientResponseColumnsOutput } from '@/shared/contracts/workspace-io';
 
 import {
   AccessLinkAlreadyIssuedError,
   AccessLinkNotFoundError,
+  ClientResponseColumnNotAllowedError,
+  ClientResponseColumnsConflictError,
   generateAccessLinkPassword,
   generateAccessLinkToken,
 } from '../domain/access-link';
@@ -210,6 +221,99 @@ export async function setClientLinkTab(input: {
       .returning(VIEW_COLUMNS);
     if (!row) throw new AccessLinkNotFoundError();
     return toView(row);
+  });
+}
+
+/**
+ * 저장값 → 고르는 화면의 모양. 저장된 키를 지금 구조로 다시 거른다 — 저장 뒤 문항이 지워지거나
+ * 암호화로 바뀌었으면 그 열은 화면에서도 빠진다. 후보에 없는 키(조사 대상 없는 설문의 시스템ID)도
+ * 뺀다: 화면이 고를 수 없는 체크를 들고 있으면 저장 때마다 남는다.
+ */
+function toColumnsView(
+  saved: ClientResponseColumns,
+  material: ClientResponseColumnMaterial,
+): ClientResponseColumnsOutput {
+  const candidateKeys = new Set(material.candidates.map((c) => c.key));
+  const { keys } = resolveClientResponseColumnKeys(saved.keys, material.sources);
+  return {
+    candidates: material.candidates,
+    keys: keys.filter((key) => candidateKeys.has(key)),
+    version: saved.version,
+  };
+}
+
+/**
+ * 클라이언트 링크 응답 내역의 열 설정 — 후보 + 지금 저장값 + version (티켓 04).
+ * 탭과 같이 클라이언트 링크가 없으면 NotFound 다(외주 링크만 있는 설문 포함).
+ */
+export async function getClientResponseColumns(
+  surveyId: string,
+): Promise<ClientResponseColumnsOutput> {
+  const [[row], material] = await Promise.all([
+    db
+      .select({ columns: surveyAccessLinks.clientResponseColumns })
+      .from(surveyAccessLinks)
+      .where(activeLink(surveyId, 'client'))
+      .limit(1),
+    loadClientResponseColumnMaterial(surveyId),
+  ]);
+  if (!row) throw new AccessLinkNotFoundError();
+  return toColumnsView(normalizeClientResponseColumns(row.columns), material);
+}
+
+/**
+ * 열 설정 저장 — 잠근 행의 version 과 대조하고, 허용 밖 열이 하나라도 있으면 거부한다.
+ *
+ * ## 순서
+ *
+ * 1. 허용 재료(설문 구조·명단 스킴)를 **잠그기 전에** 읽는다 — 링크 행을 잡은 채 여러 테이블을
+ *    도는 시간을 줄인다. 재료가 그 사이 바뀌어도 읽기가 같은 판정으로 다시 거르므로 새지 않는다.
+ * 2. 활성 클라이언트 링크 행을 `FOR UPDATE` 로 잡고 version 을 **잠근 행에서** 다시 읽는다.
+ *    두 연구원이 같은 version 으로 저장하면 뒤에 온 쪽은 잠금을 기다린 뒤 올라간 version 을 보고
+ *    CONFLICT 다. 기다리는 사이 링크가 종료됐으면 행이 안 잡혀 NotFound(탭 저장과 같다).
+ * 3. 키 판정 — 허용 밖이 하나라도 있으면 **저장하지 않고 거부**한다. 순번은 언제나 맨 앞에 둔다.
+ *
+ * `passwordUpdatedAt` 은 건드리지 않는다 — 열을 바꾼다고 선 세션이 끊기면 안 된다. 바뀐 열은
+ * 클라이언트의 다음 화면 이동부터 보인다(목록이 매 요청 이 행을 읽는다).
+ */
+export async function setClientResponseColumns(input: {
+  surveyId: string;
+  keys: readonly string[];
+  expectedVersion: number;
+}): Promise<ClientResponseColumnsOutput> {
+  const material = await loadClientResponseColumnMaterial(input.surveyId);
+  const requested = input.keys.filter((key) => key !== CLIENT_RESPONSE_FIRST_COLUMN_KEY);
+  const { keys, dropped } = resolveClientResponseColumnKeys(requested, material.sources);
+  const candidateKeys = new Set(material.candidates.map((c) => c.key));
+  const outside = [...dropped, ...keys.filter((key) => !candidateKeys.has(key))];
+
+  return db.transaction(async (tx) => {
+    const [current] = await tx
+      .select({ id: surveyAccessLinks.id, columns: surveyAccessLinks.clientResponseColumns })
+      .from(surveyAccessLinks)
+      .where(activeLink(input.surveyId, 'client'))
+      .for('update');
+    if (!current) throw new AccessLinkNotFoundError();
+
+    const saved = normalizeClientResponseColumns(current.columns);
+    // 충돌을 먼저 본다 — 낡은 화면이 보낸 키는 판정할 가치가 없다(새로 불러와 다시 고른다).
+    if (saved.version !== input.expectedVersion) throw new ClientResponseColumnsConflictError();
+    if (outside.length > 0) {
+      logger.warn(
+        { surveyId: input.surveyId, keys: outside },
+        'client response columns rejected — not allowed for client',
+      );
+      throw new ClientResponseColumnNotAllowedError(outside);
+    }
+
+    const next: ClientResponseColumns = { version: saved.version + 1, keys };
+    const [row] = await tx
+      .update(surveyAccessLinks)
+      .set({ clientResponseColumns: next, updatedAt: new Date() })
+      .where(eq(surveyAccessLinks.id, current.id))
+      .returning({ id: surveyAccessLinks.id });
+    if (!row) throw new AccessLinkNotFoundError();
+    return toColumnsView(next, material);
   });
 }
 

@@ -24,6 +24,8 @@ import {
   useSurveyAccessLink,
 } from '../queries/use-survey-access-link';
 
+import { ClientResponseColumnsDialog } from './client-response-columns-dialog';
+
 interface AccessLinkPanelProps {
   surveyId: string;
   /** 이 패널이 다루는 링크의 종류 — 조회·발급·변경·종료가 전부 이 값으로 나간다. */
@@ -73,7 +75,7 @@ const PANEL_COPY: Record<
  * 링크 패널 — 전용 링크와 공유 비밀번호 (ADR-0026·0029, .pen FLOW 10-2).
  *
  * 실사 블록의 「외주」 세그먼트와 클라이언트 블록이 **같은 패널**을 쓴다. 클라이언트 링크에만
- * 있는 것은 탭 칩 하나다 — 보여 줄 화면을 고른다.
+ * 있는 것은 탭 칩과 응답 내역 열 설정이다 — 보여 줄 화면과 그 안의 열을 고른다.
  *
  * 화면에 **없는 것이 계약**이다.
  *  - 업체명·담당자 칸이 없다: 외주 업체도 담당자도 시스템에 등록하지 않는다.
@@ -97,6 +99,7 @@ export function AccessLinkPanel({ surveyId, kind }: AccessLinkPanelProps) {
   const [password, setPassword] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [confirmingClose, setConfirmingClose] = useState(false);
+  const [columnsOpen, setColumnsOpen] = useState(false);
   /** 직접 입력칸. 비어 있으면 서버가 만든다 — 생성 규칙을 화면이 복제하지 않는다. */
   const [draft, setDraft] = useState('');
 
@@ -253,9 +256,21 @@ export function AccessLinkPanel({ surveyId, kind }: AccessLinkPanelProps) {
               }
             }}
           />
+          {/* 응답 내역 칩이 꺼져 있어도 열은 미리 고를 수 있다 — 켜는 순간 고른 열로 열린다. */}
+          <button
+            type="button"
+            disabled={busy || !data.canManage}
+            onClick={() => setColumnsOpen(true)}
+            className="self-start text-[12px] text-[#2743AE] transition-colors hover:underline disabled:cursor-not-allowed disabled:text-[#9CA3AF]"
+          >
+            응답 내역 열 설정
+          </button>
           <p className="text-[11px] leading-[1.45] text-[#9CA3AF]">
             바꾼 내용은 클라이언트의 다음 화면부터 반영됩니다.
           </p>
+          {columnsOpen && (
+            <ClientResponseColumnsDialog surveyId={surveyId} onClose={() => setColumnsOpen(false)} />
+          )}
         </div>
       )}
 

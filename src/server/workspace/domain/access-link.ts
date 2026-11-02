@@ -147,6 +147,34 @@ export const SetClientLinkTabInput = z.object({
 export type SetClientLinkTabInput = z.infer<typeof SetClientLinkTabInput>;
 
 /**
+ * 클라이언트 링크 응답 내역의 열 설정 — 조회 (`.scratch/client-link-response-list` 티켓 04).
+ * 탭과 같이 종류를 받지 않는다 — 클라이언트 링크의 축이다.
+ */
+export const ClientResponseColumnsInput = z.object({ surveyId: z.uuid() });
+export type ClientResponseColumnsInput = z.infer<typeof ClientResponseColumnsInput>;
+
+/**
+ * 열 설정 저장 — **통째로 받고 `expectedVersion` 으로 대조한다.**
+ *
+ * 칩은 「한 칸과 그 값」으로 받아 낡은 화면이 남의 변경을 되돌리지 못하게 했다
+ * (`SetClientLinkTabInput`). 열은 순서가 있는 목록이라 한 칸씩 받기 어렵다 — 그래서 같은 성질을
+ * 낙관 버전으로 지킨다. 화면이 불러온 뒤 누가 먼저 저장했으면 이 요청은 CONFLICT 이고, 화면은
+ * 새로 불러와 남의 결과를 보여 준다. 남이 뺀 열이 조용히 되살아나지 않는다.
+ *
+ * 키 하나하나가 허용되는가는 여기서 보지 않는다 — 설문 구조에 달린 판정이라 서비스가 지금
+ * 구조를 읽고 `isClientResponseColumnAllowed` 로 본다. 여기서 막는 것은 모양뿐이다(중복·길이).
+ */
+export const SetClientResponseColumnsInput = z.object({
+  surveyId: z.uuid(),
+  keys: z
+    .array(z.string().min(1).max(300))
+    .max(200)
+    .refine((keys) => new Set(keys).size === keys.length, '같은 열이 두 번 들어 있습니다.'),
+  expectedVersion: z.number().int().min(0),
+});
+export type SetClientResponseColumnsInput = z.infer<typeof SetClientResponseColumnsInput>;
+
+/**
  * 링크 세션 표면의 입력 — **외주가 보내는 것**이라 두 칸이 전부다.
  *
  * `linkId`·`surveyId` 를 받지 않는 것이 계약이다. 화면이 그 값을 실어 보낼 수 있으면 누구든
@@ -183,5 +211,24 @@ export class AccessLinkAlreadyIssuedError extends Error {
   constructor() {
     super('이 설문에는 이미 발급된 링크가 있습니다.');
     this.name = 'AccessLinkAlreadyIssuedError';
+  }
+}
+
+/** 열 설정을 불러온 뒤 다른 사람이 먼저 저장했다 — 낙관 버전이 어긋났다. */
+export class ClientResponseColumnsConflictError extends Error {
+  constructor() {
+    super('다른 사람이 먼저 열 설정을 바꿨습니다. 새로 불러온 설정을 확인해 주세요.');
+    this.name = 'ClientResponseColumnsConflictError';
+  }
+}
+
+/**
+ * 클라이언트에게 보일 수 없는 열이 들어 있다 — 개인정보 열·암호화 응답 칸·IP 해시, 또는 지금
+ * 설문에 없는 열. **조용히 빼지 않고 거부한다** — 빼면 연구원이 고른 것과 저장된 것이 달라진다.
+ */
+export class ClientResponseColumnNotAllowedError extends Error {
+  constructor(readonly keys: readonly string[]) {
+    super('클라이언트에게 보일 수 없는 열이 들어 있습니다. 새로 불러온 뒤 다시 골라 주세요.');
+    this.name = 'ClientResponseColumnNotAllowedError';
   }
 }

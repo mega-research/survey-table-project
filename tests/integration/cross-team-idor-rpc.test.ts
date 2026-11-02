@@ -849,6 +849,17 @@ const SURFACES: Record<string, SurfaceSpec> = {
     capability: 'survey.manageAccess',
     input: { surveyId: S, tab: 'overview', enabled: true },
   },
+  // 응답 내역 열 설정도 이미 나간 링크의 범위를 넓히는 일이다 — 탭 저장과 같은 관문.
+  'workspace.accessLinks.clientResponseColumns': {
+    gate: 'rpc',
+    capability: 'survey.manageAccess',
+    input: { surveyId: S },
+  },
+  'workspace.accessLinks.setClientResponseColumns': {
+    gate: 'rpc',
+    capability: 'survey.manageAccess',
+    input: { surveyId: S, keys: ['sys.idx'], expectedVersion: 0 },
+  },
 
   // ── 소유권 이전 ─────────────────────────────────────────────────────────
   'workspace.ownership.candidates': {
