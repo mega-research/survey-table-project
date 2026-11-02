@@ -63,6 +63,20 @@ export type SurveyListPageInput = z.infer<typeof SurveyListPageInput>;
 export type { SurveyListPageResult };
 export const SurveyListPageOutput = z.custom<SurveyListPageResult>();
 
+/**
+ * 목록 조건이 성립하지 않는다 — 접근 거부(`SurveyAccessError`)와 다른 축이라 따로 둔다.
+ *
+ * - `trash_with_personal_marks`: 휴지통에 즐겨찾기·태그 조건 — 화면에 없는 조합이라 입력 오류다.
+ * - `tag_not_found`: 검색 칩에 내 것이 아닌 태그(남의 것·없는 것) — 둘을 가르지 않는다(남의 태그
+ *   존재를 떠볼 수 없게). 「설문을 찾을 수 없습니다」로 접으면 무엇이 없는지 틀리게 말한다.
+ */
+export class SurveyListQueryError extends Error {
+  constructor(readonly reason: 'trash_with_personal_marks' | 'tag_not_found') {
+    super(`survey list query rejected: ${reason}`);
+    this.name = 'SurveyListQueryError';
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // listSummaries (listSurveySummaries) — 사이드바 참여 트리용, 응답 수 없음
 // ─────────────────────────────────────────────────────────────────────────────

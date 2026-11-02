@@ -62,19 +62,20 @@ import type { VariableDef } from '@/shared/contracts/template-variables';
 import type { QuestionGroup, Question as QuestionType, Survey as SurveyType } from '@/types/survey';
 import { generateAllCellCodes } from '@/utils/table-cell-code-generator';
 
-import type {
-  SlugAvailableInput,
-  SurveyByPreviewTokenInput,
-  SurveyByPrivateTokenInput,
-  SurveyBySlugInput,
-  SurveyDocumentView,
-  SurveyForResponseInput,
-  SurveyForResponseResult,
-  SurveyIdRow,
-  SurveyListResult,
-  SurveySuggestInput,
-  SurveySuggestion,
-  SurveySummaryItem,
+import {
+  type SlugAvailableInput,
+  type SurveyByPreviewTokenInput,
+  type SurveyByPrivateTokenInput,
+  type SurveyBySlugInput,
+  type SurveyDocumentView,
+  type SurveyForResponseInput,
+  type SurveyForResponseResult,
+  type SurveyIdRow,
+  SurveyListQueryError,
+  type SurveyListResult,
+  type SurveySuggestInput,
+  type SurveySuggestion,
+  type SurveySummaryItem,
 } from '../domain/survey-read';
 
 // 이 service 는 actions/query-actions 의 requireAuth 를 제거한다.
@@ -240,16 +241,16 @@ export async function listSurveyPage(
   // 휴지통 규칙은 전체 목록과 같다 — 슈퍼어드민의 시스템 전체 보기 전용, 그 밖의 요청은 거부.
   const canSeeDeleted = subject.isSuperadmin && scope.kind === 'system';
   if (input.deleted && !canSeeDeleted) throw new SurveyAccessError('forbidden');
-  // 휴지통에서는 즐겨찾기 조건을 받지 않는다(화면에도 단추가 없다) — 의미 없는 조합을 조용히
-  // 0건으로 접지 않고 거부한다.
-  if (input.deleted && input.favorites) throw new SurveyAccessError('forbidden');
-  // 태그 조건도 같다(티켓 09). 그리고 검색 칩은 요청자 소유 태그만 — 남의 것·없는 것(다른 탭에서
-  // 지운 태그)이 섞이면 조용히 빼지 않고 거부한다. 빼면 결과가 넓어져 「거른 결과」처럼 보인다.
-  // 남의 태그 id 는 없는 태그와 같은 not_found 다(남의 태그 존재를 떠볼 수 없게).
-  if (input.deleted && input.tagIds.length > 0) throw new SurveyAccessError('forbidden');
+  // 휴지통에서는 즐겨찾기·태그 조건을 받지 않는다(화면에도 단추가 없다, 태그는 티켓 09) — 의미 없는
+  // 조합을 조용히 0건으로 접지 않고 입력 오류로 거부한다.
+  if (input.deleted && (input.favorites || input.tagIds.length > 0)) {
+    throw new SurveyListQueryError('trash_with_personal_marks');
+  }
+  // 검색 칩은 요청자 소유 태그만 — 남의 것·없는 것(다른 탭에서 지운 태그)이 섞이면 조용히 빼지 않고
+  // 거부한다. 빼면 결과가 넓어져 「거른 결과」처럼 보인다. 남의 태그 id 는 없는 태그와 같은 사유다.
   if (input.tagIds.length > 0) {
     const owned = await selectOwnedTagIds(subject.userId, input.tagIds);
-    if (input.tagIds.some((id) => !owned.has(id))) throw new SurveyAccessError('not_found');
+    if (input.tagIds.some((id) => !owned.has(id))) throw new SurveyListQueryError('tag_not_found');
   }
 
   const [teams, deletedCount] = await Promise.all([

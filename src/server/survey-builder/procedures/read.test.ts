@@ -6,6 +6,7 @@ import type { ORPCContext } from '@/server/context';
 import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 import { INITIAL_SURVEY_LIST_PAGE_QUERY } from '@/shared/contracts/survey-builder-io';
 
+import { SurveyListQueryError } from '../domain/survey-read';
 import * as responseSvc from '../services/response-read';
 import * as surveySvc from '../services/survey-read';
 import { read } from './read';
@@ -24,8 +25,11 @@ vi.mock('../services/survey-read', () => ({
   getVariableCatalogForSurvey: vi.fn(),
 }));
 
-// capability 관문(티켓 09) — 실물은 DB 를 읽으므로 모킹. 기본은 통과.
-vi.mock('@/server/rpc-survey-access', () => ({ assertSurveyCapabilityRpc: vi.fn() }));
+// capability 관문(티켓 09) — 실물은 DB 를 읽으므로 모킹. 기본은 통과. 거부 매핑은 실물을 쓴다.
+vi.mock('@/server/rpc-survey-access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/server/rpc-survey-access')>()),
+  assertSurveyCapabilityRpc: vi.fn(),
+}));
 
 vi.mock('../services/response-read', () => ({
   getResponsesBySurvey: vi.fn(),
@@ -91,6 +95,26 @@ describe('surveyBuilder.read procedures', () => {
       client.read.listPage({ ...INITIAL_SURVEY_LIST_PAGE_QUERY, scope: null, groupId: 'abc' }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     expect(surveySvc.listSurveyPage).not.toHaveBeenCalled();
+  });
+
+  it('listPage — 내 것이 아닌 태그로 거르면 설문이 아니라 태그를 못 찾았다고 한다(NOT_FOUND)', async () => {
+    vi.mocked(surveySvc.listSurveyPage).mockRejectedValue(
+      new SurveyListQueryError('tag_not_found'),
+    );
+    const client = createRouterClient({ read }, { context: authedContext() });
+    await expect(
+      client.read.listPage({ ...INITIAL_SURVEY_LIST_PAGE_QUERY, scope: null }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND', message: '태그를 찾을 수 없습니다.' });
+  });
+
+  it('listPage — 휴지통에 즐겨찾기·태그 조건은 권한이 아니라 입력 오류다(BAD_REQUEST)', async () => {
+    vi.mocked(surveySvc.listSurveyPage).mockRejectedValue(
+      new SurveyListQueryError('trash_with_personal_marks'),
+    );
+    const client = createRouterClient({ read }, { context: authedContext() });
+    await expect(
+      client.read.listPage({ ...INITIAL_SURVEY_LIST_PAGE_QUERY, scope: null }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
 
   it('listSummaries 는 세션 사용자와 요청 범위를 요약 조회에 넘긴다 — 응답 수 조회를 타지 않는다', async () => {

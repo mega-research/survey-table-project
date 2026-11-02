@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import * as z from 'zod';
 
 import { authed } from '@/server/orpc';
@@ -13,6 +14,7 @@ import {
   SurveyIdInput,
   SurveyListPageInput,
   SurveyListPageOutput,
+  SurveyListQueryError,
   SurveyResponseArrayOutput,
   SurveyResponseOutput,
   SurveyRowOutput,
@@ -36,6 +38,24 @@ import * as surveySvc from '../services/survey-read';
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
+ * 목록 조회(페이지·사이드바 요약·자동완성)의 거부 → RPC 에러. 매핑이 없으면 그 거부가 500 이 된다.
+ *
+ * - 일반 사용자의 system 요청(`WorkScopeError`)·휴지통 권한 없음(`SurveyAccessError`) → FORBIDDEN
+ * - 내 것이 아닌 태그로 거르기(`SurveyListQueryError` tag_not_found) → NOT_FOUND, 태그 문구
+ * - 휴지통에 즐겨찾기·태그 조건(`SurveyListQueryError` trash_with_personal_marks) → BAD_REQUEST
+ */
+function rethrowListError(error: unknown): never {
+  if (error instanceof SurveyListQueryError) {
+    throw error.reason === 'tag_not_found'
+      ? new ORPCError('NOT_FOUND', { message: '태그를 찾을 수 없습니다.' })
+      : new ORPCError('BAD_REQUEST', {
+          message: '휴지통에서는 즐겨찾기·태그로 거를 수 없습니다.',
+        });
+  }
+  throw toRpcSurveyAccessError(toRpcWorkScopeError(error));
+}
+
+/**
  * 설문 목록 한 페이지 — 서버가 거르고 정렬하고 24개씩 나눈다(설문 즐겨찾기·태그 티켓 03).
  *
  * 입력의 scope 는 화면이 기억하는 값일 뿐이라 서버가 멤버십으로 다시 판정한다. 일반 사용자의
@@ -49,13 +69,7 @@ const listPage = authed
   .input(SurveyListPageInput)
   .output(SurveyListPageOutput)
   .handler(({ context, input }) =>
-    surveySvc
-      .listSurveyPage(context.user, input)
-      // 일반 사용자의 system 요청(WorkScopeError)·휴지통 거부(SurveyAccessError)를 FORBIDDEN 으로 —
-      // 매핑이 없으면 그 거부가 500 이 된다.
-      .catch((error: unknown) => {
-        throw toRpcSurveyAccessError(toRpcWorkScopeError(error));
-      }),
+    surveySvc.listSurveyPage(context.user, input).catch(rethrowListError),
   );
 
 /**
@@ -68,12 +82,7 @@ const listSummaries = authed
   .input(SurveySummaryListInput)
   .output(SurveySummaryListOutput)
   .handler(({ context, input }) =>
-    surveySvc
-      .listSurveySummaries(context.user, input.scope ?? null)
-      // 일반 사용자의 system 요청 거부(WorkScopeError)를 FORBIDDEN 으로 — 목록과 같은 매핑.
-      .catch((error: unknown) => {
-        throw toRpcSurveyAccessError(toRpcWorkScopeError(error));
-      }),
+    surveySvc.listSurveySummaries(context.user, input.scope ?? null).catch(rethrowListError),
   );
 
 /**
@@ -86,12 +95,7 @@ const suggest = authed
   .input(SurveySuggestInput)
   .output(SurveySuggestOutput)
   .handler(({ context, input }) =>
-    surveySvc
-      .suggestSurveys(context.user, input)
-      // 일반 사용자의 system 요청 거부(WorkScopeError)를 FORBIDDEN 으로 — 목록과 같은 매핑.
-      .catch((error: unknown) => {
-        throw toRpcSurveyAccessError(toRpcWorkScopeError(error));
-      }),
+    surveySvc.suggestSurveys(context.user, input).catch(rethrowListError),
   );
 
 /** 설문 단일 조회(cache). */

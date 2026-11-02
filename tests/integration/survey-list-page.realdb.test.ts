@@ -607,7 +607,10 @@ describe.skipIf(!isLocalDb)('설문 목록 페이지 조회 (real local DB)', ()
     it('휴지통에서는 즐겨찾기 조건을 받지 않는다', async () => {
       await expect(
         listSurveyPage(superadmin, query({ scope: SYSTEM_SCOPE, deleted: true, favorites: true })),
-      ).rejects.toBeInstanceOf(SurveyAccessError);
+      ).rejects.toMatchObject({
+        name: 'SurveyListQueryError',
+        reason: 'trash_with_personal_marks',
+      });
     });
   });
 

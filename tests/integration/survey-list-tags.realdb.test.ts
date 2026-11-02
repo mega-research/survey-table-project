@@ -173,13 +173,13 @@ describe.skipIf(!isLocalDb)('설문 목록 태그로 거르기 (real local DB)',
       );
     });
 
-    it('동료의 태그 id 가 섞이면 조용히 빼지 않고 거부한다 — 없는 태그와 같은 not_found', async () => {
+    it('동료의 태그 id 가 섞이면 조용히 빼지 않고 거부한다 — 없는 태그와 같은 tag_not_found', async () => {
       await expect(
         listSurveyPage(viewer, query({ tagIds: [TAG.client.id, TAG.colleague.id] })),
-      ).rejects.toMatchObject({ name: 'SurveyAccessError', reason: 'not_found' });
+      ).rejects.toMatchObject({ name: 'SurveyListQueryError', reason: 'tag_not_found' });
       await expect(
         listSurveyPage(viewer, query({ tagIds: [crypto.randomUUID()] })),
-      ).rejects.toMatchObject({ name: 'SurveyAccessError', reason: 'not_found' });
+      ).rejects.toMatchObject({ name: 'SurveyListQueryError', reason: 'tag_not_found' });
       // 동료 본인에게는 동료 태그 조건이 그대로 동작한다 — 거부가 소유 때문임을 대조로 본다.
       expect(await idsOf({ tagIds: [TAG.colleague.id] }, colleague)).toEqual(
         new Set([S.colleagueTagged]),
@@ -217,7 +217,10 @@ describe.skipIf(!isLocalDb)('설문 목록 태그로 거르기 (real local DB)',
           superadmin,
           query({ scope: 'system', deleted: true, tagIds: [TAG.client.id] }),
         ),
-      ).rejects.toMatchObject({ name: 'SurveyAccessError', reason: 'forbidden' });
+      ).rejects.toMatchObject({
+        name: 'SurveyListQueryError',
+        reason: 'trash_with_personal_marks',
+      });
     });
 
     it('카드의 내 태그 id 는 태그 조건과 무관하게 붙은 것 전부다', async () => {
