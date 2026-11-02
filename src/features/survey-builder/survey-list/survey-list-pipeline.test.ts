@@ -5,7 +5,7 @@ import type { SurveyListItem } from '@/shared/contracts/survey-builder-io';
 import {
   INITIAL_ADVANCED_FILTERS,
   SURVEY_LIST_PAGE_SIZE,
-  countByStatusChip,
+  countByLifecycle,
   distinctOwners,
   filterSurveyList,
   narrowToGroup,
@@ -48,27 +48,31 @@ function item(over: Partial<SurveyListItem> = {}): SurveyListItem {
 
 const baseFilters = {
   searchQuery: '',
-  statusChip: 'all' as const,
+  lifecycle: 'all' as const,
   advanced: { ...INITIAL_ADVANCED_FILTERS },
 };
 
-describe('countByStatusChip', () => {
-  it('상태별 건수를 센다 — 전체는 모든 행', () => {
-    const counts = countByStatusChip([
-      item({ id: 'a', status: 'draft' }),
-      item({ id: 'b', status: 'published' }),
-      item({ id: 'c', status: 'published' }),
+/**
+ * 세그먼트 숫자는 **목록 상태**로 센다 — 설문 status 가 아니다. 종료 스위치를 안 눌렀어도
+ * 마감일이 지난 배포 설문(status published, 목록 상태 closed)은 「종료」다.
+ */
+describe('countByLifecycle', () => {
+  it('목록 상태별 건수를 센다 — 전체는 모든 행', () => {
+    const counts = countByLifecycle([
+      item({ id: 'a', status: 'draft', lifecycle: 'draft' }),
+      item({ id: 'b', status: 'published', lifecycle: 'running' }),
+      item({ id: 'c', status: 'published', lifecycle: 'running' }),
     ]);
-    expect(counts).toEqual({ all: 3, draft: 1, published: 2, closed: 0 });
+    expect(counts).toEqual({ all: 3, draft: 1, running: 2, closed: 0 });
   });
 
-  it('종료된 설문은 진행중이 아니라 종료로 센다 (ADR-0030)', () => {
-    const counts = countByStatusChip([
-      item({ id: 'a', status: 'published' }),
-      item({ id: 'b', status: 'closed' }),
-      item({ id: 'c', status: 'closed' }),
+  it('마감일이 지난 배포 설문은 종료 스위치가 없어도 종료로 센다', () => {
+    const counts = countByLifecycle([
+      item({ id: 'a', status: 'published', lifecycle: 'running' }),
+      item({ id: 'b', status: 'closed', lifecycle: 'closed' }),
+      item({ id: 'c', status: 'published', lifecycle: 'closed' }),
     ]);
-    expect(counts).toEqual({ all: 3, draft: 0, published: 1, closed: 2 });
+    expect(counts).toEqual({ all: 3, draft: 0, running: 1, closed: 2 });
   });
 });
 
@@ -91,29 +95,33 @@ describe('narrowToGroup', () => {
 describe('filterSurveyList', () => {
   it('그룹 좁힘은 다른 필터보다 먼저 적용된다', () => {
     const rows = [
-      item({ id: 'a', surveyGroupId: 'g-1', status: 'draft' }),
-      item({ id: 'b', surveyGroupId: 'g-2', status: 'draft' }),
+      item({ id: 'a', surveyGroupId: 'g-1', status: 'draft', lifecycle: 'draft' }),
+      item({ id: 'b', surveyGroupId: 'g-2', status: 'draft', lifecycle: 'draft' }),
     ];
-    const out = filterSurveyList(rows, { ...baseFilters, statusChip: 'draft', groupId: 'g-1' });
+    const out = filterSurveyList(rows, { ...baseFilters, lifecycle: 'draft', groupId: 'g-1' });
     expect(out.map((s) => s.id)).toEqual(['a']);
   });
 
-  it('종료 칩은 종료된 설문만 남긴다 — 진행중 칩에는 종료된 설문이 없다', () => {
+  it('종료는 종료 스위치와 마감일 경과를 함께 담는다 — 진행중에는 둘 다 없다', () => {
     const rows = [
-      item({ id: 'open', status: 'published' }),
-      item({ id: 'closed', status: 'closed' }),
+      item({ id: 'open', status: 'published', lifecycle: 'running' }),
+      item({ id: 'switched', status: 'closed', lifecycle: 'closed' }),
+      item({ id: 'past-due', status: 'published', lifecycle: 'closed' }),
     ];
     expect(
-      filterSurveyList(rows, { ...baseFilters, statusChip: 'closed' }).map((s) => s.id),
-    ).toEqual(['closed']);
+      filterSurveyList(rows, { ...baseFilters, lifecycle: 'closed' }).map((s) => s.id),
+    ).toEqual(['switched', 'past-due']);
     expect(
-      filterSurveyList(rows, { ...baseFilters, statusChip: 'published' }).map((s) => s.id),
+      filterSurveyList(rows, { ...baseFilters, lifecycle: 'running' }).map((s) => s.id),
     ).toEqual(['open']);
   });
 
-  it('상태 칩으로 좁힌다', () => {
-    const rows = [item({ id: 'a', status: 'draft' }), item({ id: 'b', status: 'published' })];
-    const out = filterSurveyList(rows, { ...baseFilters, statusChip: 'draft' });
+  it('목록 상태로 좁힌다', () => {
+    const rows = [
+      item({ id: 'a', status: 'draft', lifecycle: 'draft' }),
+      item({ id: 'b', status: 'published', lifecycle: 'running' }),
+    ];
+    const out = filterSurveyList(rows, { ...baseFilters, lifecycle: 'draft' });
     expect(out.map((s) => s.id)).toEqual(['a']);
   });
 
@@ -267,7 +275,7 @@ describe('narrowToTeam — 실사팀 사이드바의 소유 팀 좁힘', () => {
   it('filterSurveyList 가 팀 좁힘을 먼저 건다', () => {
     const out = filterSurveyList([a1, a2, b1], {
       searchQuery: '',
-      statusChip: 'all',
+      lifecycle: 'all',
       advanced: INITIAL_ADVANCED_FILTERS,
       teamId: 'team-b',
     });
@@ -282,7 +290,7 @@ describe('카드 제목 (0140) — 검색·정렬은 카드에 보이는 이름�
   it('검색은 카드 제목으로 찾는다', () => {
     const out = filterSurveyList([a, b], {
       searchQuery: '1차',
-      statusChip: 'all',
+      lifecycle: 'all',
       advanced: INITIAL_ADVANCED_FILTERS,
     });
     expect(out.map((s) => s.id)).toEqual(['a']);
@@ -291,7 +299,7 @@ describe('카드 제목 (0140) — 검색·정렬은 카드에 보이는 이름�
   it('카드 제목이 없으면 설문지 제목으로 찾는다', () => {
     const out = filterSurveyList([a, b], {
       searchQuery: '나 설문',
-      statusChip: 'all',
+      lifecycle: 'all',
       advanced: INITIAL_ADVANCED_FILTERS,
     });
     expect(out.map((s) => s.id)).toEqual(['b']);

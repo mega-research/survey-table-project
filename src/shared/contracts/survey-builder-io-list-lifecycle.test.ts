@@ -1,9 +1,8 @@
-import { describe, expect, it } from 'vitest';
-
 import {
   LIFECYCLE_NOW,
   SURVEY_LIST_LIFECYCLE_CASES,
 } from '@tests/fixtures/survey-list-lifecycle-cases';
+import { describe, expect, it } from 'vitest';
 
 import { normalizeSurveyStatus, resolveSurveyListLifecycle } from './survey-builder-io';
 
@@ -15,7 +14,11 @@ describe('resolveSurveyListLifecycle', () => {
   it.each(SURVEY_LIST_LIFECYCLE_CASES)('$name → $expected', (c) => {
     expect(
       resolveSurveyListLifecycle(
-        { status: normalizeSurveyStatus(c.status), currentVersionId: c.currentVersionId, endDate: c.endDate },
+        {
+          status: normalizeSurveyStatus(c.status),
+          currentVersionId: c.currentVersionId,
+          endDate: c.endDate,
+        },
         LIFECYCLE_NOW.getTime(),
       ),
     ).toBe(c.expected);

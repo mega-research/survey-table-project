@@ -8,13 +8,12 @@
  * 실 DB 인 이유: 비교 연산·NULL 처리·timestamptz 비교는 PostgreSQL 이 정한다. 목으로는 식이
  * 무엇이든 통과한다. 테이블 행은 만들지 않는다 — 식의 입력을 리터럴로 꽂아 판정만 본다.
  */
-import { eq, inArray, sql } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-
 import {
   LIFECYCLE_NOW,
   SURVEY_LIST_LIFECYCLE_CASES,
 } from '@tests/fixtures/survey-list-lifecycle-cases';
+import { eq, inArray, sql } from 'drizzle-orm';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
 import {
@@ -24,8 +23,8 @@ import {
   teams as teamsTable,
   users as usersTable,
 } from '@/db/schema';
-import * as surveyReadSvc from '@/server/survey-builder/services/survey-read';
 import { surveyListLifecycleSql } from '@/server/read-models/survey-list-lifecycle';
+import * as surveyReadSvc from '@/server/survey-builder/services/survey-read';
 import {
   normalizeSurveyStatus,
   resolveSurveyListLifecycle,

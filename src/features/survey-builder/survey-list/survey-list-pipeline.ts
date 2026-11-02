@@ -1,13 +1,23 @@
 // 설문 목록 렌더링 파이프라인 — 순수 계산 (역할 모델 v2 티켓 08, .pen FLOW 6 목록 툴바).
 //
-// 서버는 범위로 좁힌 전체 목록을 주고(read.list), 칩·검색·상세 검색·정렬·페이지는 화면이
+// 서버는 범위로 좁힌 전체 목록을 주고(read.list), 목록 상태·검색·상세 검색·정렬·페이지는 화면이
 // 이 함수들로 접는다. 문의 칩·미답변 문의 필터는 Plan 3 게이트로 어휘에서 뺐다.
 //
 // 그룹 필터(티켓 12)는 여기 상태가 아니라 **URL 이 정한다**(`?group=<id>`) — 그룹 화면은
 // 브레드크럼과 제목을 가진 별개의 화면이라 뒤로 가기·새로고침·링크 공유가 살아 있어야 한다.
-import { type SurveyListItem, surveyCardTitle } from '@/shared/contracts/survey-builder-io';
+import {
+  type SurveyListItem,
+  type SurveyListLifecycle,
+  surveyCardTitle,
+} from '@/shared/contracts/survey-builder-io';
 
-export type SurveyListStatusChip = 'all' | 'draft' | 'published' | 'closed';
+/**
+ * 세그먼트가 고르는 값 — 「전체」 + 목록 상태(작성중·진행중·종료).
+ *
+ * 설문 status 가 아니라 **목록 상태**다(서버가 행마다 `lifecycle` 로 싣는다). 마감일이 지난
+ * 배포 설문은 종료 스위치를 안 눌러도 「종료」에 선다.
+ */
+export type SurveyListLifecycleFilter = 'all' | SurveyListLifecycle;
 export type SurveyListSortBy = 'updatedAt' | 'createdAt' | 'title' | 'responses';
 export type SurveyListDateField = 'updatedAt' | 'createdAt' | 'endDate';
 export type SurveyListVisibilityFilter = 'team' | 'invite_only' | null;
@@ -35,7 +45,7 @@ export const INITIAL_ADVANCED_FILTERS: SurveyListAdvancedFilters = {
 
 export interface SurveyListFilterState {
   searchQuery: string;
-  statusChip: SurveyListStatusChip;
+  lifecycle: SurveyListLifecycleFilter;
   advanced: SurveyListAdvancedFilters;
   /** 그룹 화면(`?group=<id>`)의 좁힘. null 이면 그룹과 무관하게 전부 본다. */
   groupId?: string | null;
@@ -48,8 +58,8 @@ export interface SurveyListFilterState {
 /**
  * 그룹 좁힘 — 그룹 화면(`?group=<id>`)이 보는 부분집합.
  *
- * 칩 카운트·소유자 목록도 이 결과를 받아야 한다. 그룹 화면의 「전체 N」이 팀 전체를 세면
- * 화면에 3장 있는데 칩은 14 라고 말한다. 소속 팀이 다른 그룹 id 는 서버가 이미 null 로
+ * 세그먼트 숫자·소유자 목록도 이 결과를 받아야 한다. 그룹 화면의 「전체 N」이 팀 전체를 세면
+ * 화면에 3장 있는데 세그먼트는 14 라고 말한다. 소속 팀이 다른 그룹 id 는 서버가 이미 null 로
  * 접어 보내므로 여기서 팀을 다시 보지 않는다.
  */
 export function narrowToGroup(
@@ -77,14 +87,18 @@ export function narrowToTeam(
   return ungroupedOnly ? ofTeam.filter((s) => s.surveyGroupId === null) : ofTeam;
 }
 
-/** 상태 칩별 목록 건수 — 툴바 칩에 "전체 N" 형태로 표시. */
-export function countByStatusChip(items: readonly SurveyListItem[]) {
-  return {
-    all: items.length,
-    draft: items.filter((s) => s.status === 'draft').length,
-    published: items.filter((s) => s.status === 'published').length,
-    closed: items.filter((s) => s.status === 'closed').length,
-  };
+/**
+ * 목록 상태별 건수 — 세그먼트의 「전체 N」 숫자.
+ *
+ * 범위·그룹·팀 좁힘까지만 적용한 목록을 받는다(검색·상세 검색과 무관하게 지금 범위 전체에서
+ * 몇 개인지 늘 보이게). 호출부가 그 부분집합을 넘긴다.
+ */
+export function countByLifecycle(
+  items: readonly SurveyListItem[],
+): Record<SurveyListLifecycleFilter, number> {
+  const counts = { all: items.length, draft: 0, running: 0, closed: 0 };
+  for (const s of items) counts[s.lifecycle] += 1;
+  return counts;
 }
 
 function withinDateRange(raw: Date | null, from: string | null, to: string | null): boolean {
@@ -105,19 +119,20 @@ function dateFieldValue(item: SurveyListItem, field: SurveyListDateField): Date 
   return item.endDate;
 }
 
-/** 상태 칩 → 검색(제목) → 상세 검색 필터를 순서대로 적용한다(정렬은 별도, sortSurveyList). */
+/** 목록 상태 → 검색(제목) → 상세 검색 필터를 순서대로 적용한다(정렬은 별도, sortSurveyList). */
 export function filterSurveyList(
   items: readonly SurveyListItem[],
   filters: SurveyListFilterState,
 ): readonly SurveyListItem[] {
   let result: readonly SurveyListItem[] = items;
 
-  // 그룹 좁힘이 먼저다 — 칩 카운트와 같은 부분집합에서 출발해야 화면과 숫자가 어긋나지 않는다.
+  // 그룹 좁힘이 먼저다 — 세그먼트 숫자와 같은 부분집합에서 출발해야 화면과 숫자가 어긋나지 않는다.
   result = narrowToGroup(result, filters.groupId ?? null);
   result = narrowToTeam(result, filters.teamId ?? null, filters.ungroupedOnly ?? false);
 
-  if (filters.statusChip !== 'all') {
-    result = result.filter((s) => s.status === filters.statusChip);
+  if (filters.lifecycle !== 'all') {
+    const lifecycle = filters.lifecycle;
+    result = result.filter((s) => s.lifecycle === lifecycle);
   }
 
   const q = filters.searchQuery.trim().toLowerCase();

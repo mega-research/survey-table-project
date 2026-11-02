@@ -31,7 +31,7 @@ import { GroupViewFooterNote, GroupViewHeader } from './groups/group-view-header
 import { ListToolbar } from './list-toolbar';
 import { SurveyCard } from './survey-card';
 import {
-  countByStatusChip,
+  countByLifecycle,
   distinctOwners,
   filterSurveyList,
   narrowToGroup,
@@ -41,7 +41,7 @@ import {
 } from './survey-list-pipeline';
 
 /**
- * 설문 목록 (.pen FLOW 6, 역할 모델 v2 티켓 08) — 상태 칩 · 검색 · 정렬 · 상세 검색 ·
+ * 설문 목록 (.pen FLOW 6, 역할 모델 v2 티켓 08 · 시안 F8-a) — 목록 상태 세그먼트 · 검색 · 정렬 · 상세 검색 ·
  * 페이지네이션 · 카드 그리드.
  *
  * 작업 범위는 사이드바(AdminShell)가 컨텍스트로 내려준다. **쿼리 키에 범위가 들어가므로**
@@ -66,14 +66,14 @@ export function SurveyListView() {
 
   const {
     searchQuery,
-    statusChip,
+    lifecycle,
     showDeleted,
     sortBy,
     advancedOpen,
     advanced,
     page,
     setSearchQuery,
-    setStatusChip,
+    setLifecycle,
     setShowDeleted,
     setSortBy,
     setAdvancedOpen,
@@ -153,7 +153,8 @@ export function SurveyListView() {
     router.replace('/surveys');
   }, [requestedGroupId, groupsSettled, activeGroup, router]);
 
-  // 칩 카운트·소유자 목록은 그룹·팀 화면이 보는 부분집합에서 세야 화면과 숫자가 어긋나지 않는다.
+  // 세그먼트 숫자·소유자 목록은 그룹·팀 화면이 보는 부분집합에서 세야 화면과 숫자가 어긋나지 않는다.
+  // 검색·상세 검색은 숫자에 걸지 않는다 — 지금 범위 전체에서 몇 개인지 늘 보이게.
   const scopedSurveys = useMemo(
     () => narrowToTeam(narrowToGroup(allSurveys, groupId), requestedTeamId, ungroupedOnly),
     [allSurveys, groupId, requestedTeamId, ungroupedOnly],
@@ -163,7 +164,7 @@ export function SurveyListView() {
     requestedTeamId !== null
       ? (allSurveys.find((s) => s.teamId === requestedTeamId)?.teamName ?? null)
       : null;
-  const counts = useMemo(() => countByStatusChip(scopedSurveys), [scopedSurveys]);
+  const counts = useMemo(() => countByLifecycle(scopedSurveys), [scopedSurveys]);
   const owners = useMemo(() => distinctOwners(scopedSurveys), [scopedSurveys]);
 
   const filtered = useMemo(
@@ -171,7 +172,7 @@ export function SurveyListView() {
       sortSurveyList(
         filterSurveyList(allSurveys, {
           searchQuery,
-          statusChip,
+          lifecycle,
           advanced,
           groupId,
           teamId: requestedTeamId,
@@ -179,16 +180,7 @@ export function SurveyListView() {
         }),
         sortBy,
       ),
-    [
-      allSurveys,
-      searchQuery,
-      statusChip,
-      advanced,
-      groupId,
-      requestedTeamId,
-      ungroupedOnly,
-      sortBy,
-    ],
+    [allSurveys, searchQuery, lifecycle, advanced, groupId, requestedTeamId, ungroupedOnly, sortBy],
   );
 
   const {
@@ -348,32 +340,33 @@ export function SurveyListView() {
 
       {!showLoading && !error && !(requestedGroupId !== null && groupsError) && (
         <>
-          <div className="relative">
-            <ListToolbar
-              counts={counts}
-              statusChip={statusChip}
-              onStatusChipChange={setStatusChip}
-              searchQuery={searchQuery}
-              onSearchQueryChange={setSearchQuery}
-              sortBy={sortBy}
-              onSortByChange={setSortBy}
-              searchPlaceholder={activeGroup ? '그룹 내 설문 검색' : '설문 검색...'}
-              advancedOpen={advancedOpen}
-              onToggleAdvanced={() => setAdvancedOpen(!advancedOpen)}
-              deletedCount={data?.deletedCount ?? null}
-              showDeleted={showDeleted && canSeeDeleted}
-              onToggleDeleted={setShowDeleted}
-            />
-            {advancedOpen && (
-              <AdvancedSearchPanel
-                advanced={advanced}
-                onChange={setAdvanced}
-                onReset={resetAdvanced}
-                onClose={() => setAdvancedOpen(false)}
-                owners={owners}
-              />
-            )}
-          </div>
+          <ListToolbar
+            counts={counts}
+            lifecycle={lifecycle}
+            onLifecycleChange={setLifecycle}
+            resultCount={filtered.length}
+            searchQuery={searchQuery}
+            onSearchQueryChange={setSearchQuery}
+            sortBy={sortBy}
+            onSortByChange={setSortBy}
+            searchPlaceholder={activeGroup ? '그룹 내 설문 검색' : '설문 검색...'}
+            advancedOpen={advancedOpen}
+            onToggleAdvanced={() => setAdvancedOpen(!advancedOpen)}
+            deletedCount={data?.deletedCount ?? null}
+            showDeleted={showDeleted && canSeeDeleted}
+            onToggleDeleted={setShowDeleted}
+            advancedPanel={
+              advancedOpen && (
+                <AdvancedSearchPanel
+                  advanced={advanced}
+                  onChange={setAdvanced}
+                  onReset={resetAdvanced}
+                  onClose={() => setAdvancedOpen(false)}
+                  owners={owners}
+                />
+              )
+            }
+          />
 
           {scope.kind === 'none' ? (
             // 셸 밖 트리에서 서버가 미배치로 해석한 경우 — FLOW 9-1 문구로 안내한다.
