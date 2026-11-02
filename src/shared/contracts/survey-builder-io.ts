@@ -23,6 +23,44 @@ export function normalizeSurveyStatus(value: string): SurveyStatus {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 목록 상태 — 작성중 / 진행중 / 종료 (설문 목록 세그먼트 · 게스트 홈 진행 상태)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// `surveys.status` 의 어휘가 아니라 **파생값**이다. 종료 스위치를 누르지 않아도 마감일이 지난
+// 배포 설문은 「종료」로 센다 — 스위치를 깜빡한 설문이 「진행중」에 남으면 그 칸이 쓸모없어진다.
+// 응답 게이트·종료 스위치·배포 동작은 이 값을 보지 않는다(목록 표시와 거르기 전용).
+//
+// 판정은 **두 벌**이 같은 표로 묶여 있다 — 이 TS 함수와 SQL 식
+// (`server/read-models/survey-list-lifecycle` 의 `surveyListLifecycleSql`). 한쪽만 고치면
+// `tests/fixtures/survey-list-lifecycle-cases` 를 쓰는 두 스위트 중 하나가 깨진다.
+
+export const surveyListLifecycleValues = ['draft', 'running', 'closed'] as const;
+export type SurveyListLifecycle = (typeof surveyListLifecycleValues)[number];
+
+/** DB 에서 읽은 text 를 어휘로 접는다 — 모르는 값은 draft(로더 정규화 관례). */
+export function normalizeSurveyListLifecycle(value: string): SurveyListLifecycle {
+  return value === 'running' || value === 'closed' ? value : 'draft';
+}
+
+/**
+ * 목록 상태 판정 — 순서가 곧 뜻이다.
+ *
+ * 「배포 전」은 배포 버전의 유무로도 묻는다. 설문 종료(ADR-0030) 뒤로 `status` 가 published 가
+ * 아니어도 배포된 설문일 수 있어, 「배포됐는가」의 근거는 status 하나가 아니다. 배포는 status 와
+ * currentVersionId 를 한 문장으로 세우므로 정상 행에서 둘은 어긋나지 않는다.
+ * 일시 중단은 여기서 보지 않는다 — 진행중이다(게스트 홈만 그것을 「일시중지」로 더 가른다).
+ */
+export function resolveSurveyListLifecycle(
+  row: { status: SurveyStatus; currentVersionId: string | null; endDate: Date | null },
+  now: number,
+): SurveyListLifecycle {
+  if (row.status === 'draft' || row.currentVersionId === null) return 'draft';
+  if (row.status === 'closed') return 'closed';
+  if (row.endDate !== null && row.endDate.getTime() < now) return 'closed';
+  return 'running';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 설문 목록 (surveyBuilder.read.list) — 티켓 07 도입, 티켓 08 확장
 // ─────────────────────────────────────────────────────────────────────────────
 

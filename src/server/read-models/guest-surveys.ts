@@ -6,6 +6,7 @@ import { db } from '@/db';
 import { surveyParticipants, surveys, surveyVersions } from '@/db/schema';
 import {
   normalizeSurveyStatus,
+  resolveSurveyListLifecycle,
   type SurveyStatus,
 } from '@/shared/contracts/survey-builder-io';
 import { normalizeSurveyGuestTabs } from '@/shared/contracts/workspace';
@@ -146,18 +147,17 @@ async function selectGuestSurveys(
 }
 
 /**
- * 카드의 진행 상태 — 순서가 곧 뜻이다.
+ * 카드의 진행 상태 — **목록 상태 판정(`resolveSurveyListLifecycle`) 위에 일시중지만 얹는다.**
+ *
+ * 미발행·종료 판정은 관리자 설문 목록의 세그먼트와 한 함수다. 따로 두면 같은 설문이 관리자
+ * 목록에서는 「종료」, 게스트 홈에서는 「진행중」으로 갈린다(마감일 경과를 한쪽만 볼 때).
  *
  * `status` 는 어휘 타입으로 받는다. `surveys.status` 는 `$type<>` 없는 text 컬럼이라 조회
  * 결과가 string 이고, 그대로 비교하면 오타가 컴파일을 통과한다 — 호출부가
  * `normalizeSurveyStatus` 로 접어서 넘긴다(로더 정규화 관례).
  *
- * 미발행이 먼저인 이유는 그 설문에 열 것이 없기 때문이다(프리뷰는 배포 스냅샷을 본다).
- * **「발행된 적 있는가」는 배포 버전의 유무로 묻는다** — 설문 종료(ADR-0030)가 생긴 뒤로
- * `status` 는 published 가 아니어도 발행된 설문일 수 있다. 예전처럼 「published 가 아니면
- * 미발행」으로 두면 종료한 설문이 클라이언트에게 「미발행」으로 보인다.
- * 종료가 일시중지보다 먼저인 것은 끝난 조사의 중단 여부가 보는 사람에게 의미가 없어서다 —
- * 종료 스위치로 끝냈든 마감일이 지났든 같다.
+ * 일시중지는 진행중인 설문에만 선다 — 끝난 조사의 중단 여부는 보는 사람에게 의미가 없고
+ * (종료 스위치로 끝냈든 마감일이 지났든 같다), 미발행 설문에는 열 것이 없다.
  */
 export function resolveGuestSurveyLifecycle(
   row: {
@@ -168,9 +168,7 @@ export function resolveGuestSurveyLifecycle(
   },
   now: number,
 ): GuestSurveyLifecycle {
-  if (row.status === 'draft' || row.currentVersionId === null) return 'draft';
-  if (row.status === 'closed') return 'closed';
-  if (row.endDate !== null && row.endDate.getTime() < now) return 'closed';
-  if (row.isPaused) return 'paused';
-  return 'running';
+  const lifecycle = resolveSurveyListLifecycle(row, now);
+  if (lifecycle === 'running' && row.isPaused) return 'paused';
+  return lifecycle;
 }
