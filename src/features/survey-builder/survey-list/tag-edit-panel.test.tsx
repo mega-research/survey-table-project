@@ -1,3 +1,5 @@
+import { StrictMode, useRef, useState } from 'react';
+
 import { ORPCError } from '@orpc/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
@@ -7,7 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MinePersonalTagsOutput, PersonalTagItem } from '@/shared/contracts/workspace-io';
 
 import { personalTagKeys } from '../queries/use-personal-marks';
-import { TagEditPanel } from './tag-edit-panel';
+import { TagEditMenu, TagEditPanel } from './tag-edit-panel';
 
 // 태그 편집 패널 (설문 즐겨찾기·태그 티켓 08, 시안 F6 ③④) — 태그 창과 「# 태그」 목록이 함께 쓴다.
 
@@ -168,5 +170,70 @@ describe('태그 편집 패널', () => {
     expect(rpc.deleteTag).toHaveBeenCalledWith({ tagId: 'b' });
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(mine().map((t) => t.id)).toEqual(['a']);
+  });
+});
+
+describe('「⋯」 편집 메뉴', () => {
+  /** 목록 상자 + 「⋯」 하나 — 상자의 사각형을 잴 때마다 센다. */
+  function MenuHarness({ onMeasureBox }: { onMeasureBox: () => void }) {
+    const [open, setOpen] = useState(false);
+    const boxRef = useRef<HTMLDivElement>(null);
+    return (
+      <div
+        ref={(node) => {
+          boxRef.current = node;
+          if (node) {
+            node.getBoundingClientRect = () => {
+              onMeasureBox();
+              return new DOMRect(600, 100, 340, 400);
+            };
+          }
+        }}
+      >
+        <button type="button">바깥</button>
+        <TagEditMenu tag={B} open={open} onOpenChange={setOpen} besideRef={boxRef} />
+      </div>
+    );
+  }
+
+  function renderMenu() {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    queryClient.setQueryData<MinePersonalTagsOutput>(personalTagKeys.mine(), { tags: [A, B] });
+    const onMeasureBox = vi.fn();
+    render(
+      <StrictMode>
+        <QueryClientProvider client={queryClient}>
+          <MenuHarness onMeasureBox={onMeasureBox} />
+        </QueryClientProvider>
+      </StrictMode>,
+    );
+    return { onMeasureBox, user: userEvent.setup() };
+  }
+
+  it('개발 모드(StrictMode)에서도 패널은 목록 상자를 기준으로 선다 — 떨어져 나간 단추를 잡지 않는다', async () => {
+    const { user, onMeasureBox } = renderMenu();
+    await user.click(screen.getByRole('button', { name: 'B기관 편집' }));
+    expect(await screen.findByRole('textbox', { name: '태그 이름' })).toBeInTheDocument();
+    await waitFor(() => expect(onMeasureBox).toHaveBeenCalled());
+  });
+
+  it('「⋯」를 다시 누르면 닫히고 포커스는 「⋯」로 돌아온다', async () => {
+    const { user } = renderMenu();
+    const trigger = screen.getByRole('button', { name: 'B기관 편집' });
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    await user.click(trigger);
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: '태그 이름' })).toBeNull());
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).toHaveFocus();
+  });
+
+  it('바깥을 누르면 닫히고 포커스는 누른 곳에 남는다', async () => {
+    const { user } = renderMenu();
+    await user.click(screen.getByRole('button', { name: 'B기관 편집' }));
+    await screen.findByRole('textbox', { name: '태그 이름' });
+    await user.click(screen.getByRole('button', { name: '바깥' }));
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: '태그 이름' })).toBeNull());
+    expect(screen.getByRole('button', { name: '바깥' })).toHaveFocus();
   });
 });

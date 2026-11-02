@@ -14,7 +14,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 import { useLatestRef } from '@/hooks/use-latest-ref';
 import { cn } from '@/lib/utils';
 import {
@@ -258,8 +258,16 @@ interface TagEditMenuProps {
  */
 export function TagEditMenu({ tag, open, onOpenChange, className, besideRef }: TagEditMenuProps) {
   const triggerRef = useRef<HTMLButtonElement>(null);
-  // 가상 기준점 — 가로는 목록 상자, 세로는 「⋯」 줄. 펼칠 때마다 다시 잰다(목록 안 스크롤을 따라간다).
-  const besideAnchor = useMemo(
+  // 바깥을 눌러 닫혔으면 포커스를 「⋯」로 돌려보내지 않는다 — 누른 곳이 포커스를 가져가야 한다.
+  const closedByOutsideRef = useRef(false);
+  // 기준점은 언제나 이 가상 사각형 하나다 — 가로는 목록 상자(없으면 「⋯」 자신), 세로는 「⋯」 줄.
+  // 펼칠 때마다 다시 잰다(목록 안 스크롤을 따라간다).
+  //
+  // 단추를 `PopoverTrigger` 로 두지 않는 이유: Radix 는 트리거를 먼저 기준점으로 잡았다가, 따로 둔
+  // 기준점(PopoverAnchor)이 붙은 것을 안 다음 렌더에서 트리거를 다시 만든다. StrictMode(개발)에서는
+  // 그 사이 ref 재부착이 옛 단추를 기준점으로 되돌려 놓고 가상 기준점은 다시 등록되지 않아, 화면에서
+  // 떨어져 나간 단추의 (0,0) 사각형을 기준으로 패널이 화면 좌상단에 붙었다(2026-11-02).
+  const anchor = useMemo(
     () => ({
       current: {
         getBoundingClientRect: () => {
@@ -277,22 +285,45 @@ export function TagEditMenu({ tag, open, onOpenChange, className, besideRef }: T
   );
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
-      {besideRef && <PopoverAnchor virtualRef={besideAnchor} />}
-      <PopoverTrigger asChild>
-        <button
-          ref={triggerRef}
-          type="button"
-          aria-label={`${tag.name} 편집`}
-          className={cn(
-            'flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[#6E6E73] hover:bg-[#E5E5EA] hover:text-[#1C1C1E] focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-[#2E4FCE]/40 focus-visible:outline-none',
-            className,
-            open && 'bg-[#E5E8F5] text-[#2E4FCE] opacity-100',
-          )}
-        >
-          <MoreHorizontal aria-hidden className="h-4 w-4" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent side="right" align="start" sideOffset={8} className="w-auto p-0">
+      <PopoverAnchor virtualRef={anchor} />
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-label={`${tag.name} 편집`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        data-state={open ? 'open' : 'closed'}
+        onClick={() => {
+          closedByOutsideRef.current = false;
+          onOpenChange(!open);
+        }}
+        className={cn(
+          'flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[#6E6E73] hover:bg-[#E5E5EA] hover:text-[#1C1C1E] focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-[#2E4FCE]/40 focus-visible:outline-none',
+          className,
+          open && 'bg-[#E5E8F5] text-[#2E4FCE] opacity-100',
+        )}
+      >
+        <MoreHorizontal aria-hidden className="h-4 w-4" />
+      </button>
+      <PopoverContent
+        side="right"
+        align="start"
+        sideOffset={8}
+        className="w-auto p-0"
+        onInteractOutside={(event) => {
+          // 「⋯」를 다시 누른 것은 바깥이 아니다 — 여기서 닫으면 단추의 클릭이 곧바로 다시 연다.
+          if (triggerRef.current?.contains(event.target as Node)) {
+            event.preventDefault();
+            return;
+          }
+          closedByOutsideRef.current = true;
+        }}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          if (!closedByOutsideRef.current) triggerRef.current?.focus();
+          closedByOutsideRef.current = false;
+        }}
+      >
         <TagEditPanel tag={tag} onClose={() => onOpenChange(false)} />
       </PopoverContent>
     </Popover>
