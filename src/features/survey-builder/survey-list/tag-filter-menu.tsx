@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 
 import { ChevronDown, Hash, Search } from 'lucide-react';
 
@@ -46,6 +46,8 @@ export function TagFilterMenu({
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<TagFilterSort>('usage');
   const [editingTagId, setEditingTagId] = useState<string | null>(null);
+  // 편집 패널은 이 목록 전체의 옆에 선다 — 오른쪽 자리가 없어 뒤집혀도 목록을 덮지 않게.
+  const panelRef = useRef<HTMLDivElement>(null);
 
   const selected = new Set(selectedIds);
   const rows = resolveTagFilterList(tags, query, sort);
@@ -82,6 +84,7 @@ export function TagFilterMenu({
         </button>
       </PopoverTrigger>
       <PopoverContent
+        ref={panelRef}
         align="end"
         aria-label="내 태그로 거르기"
         className="flex w-[340px] flex-col overflow-hidden p-0"
@@ -167,6 +170,7 @@ export function TagFilterMenu({
                     setEditingTagId((cur) => (next ? tag.id : cur === tag.id ? null : cur))
                   }
                   className="opacity-0 group-hover/row:opacity-100"
+                  besideRef={panelRef}
                 />
               </li>
             );

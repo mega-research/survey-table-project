@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -139,4 +139,30 @@ describe('TagFilterMenu', () => {
     expect(await screen.findByRole('textbox', { name: '태그 이름' })).toHaveValue('실태조사');
     expect(onToggle).not.toHaveBeenCalled();
   });
+
+  it('편집 패널은 목록 전체의 옆에 선다 — 오른쪽 자리가 없어 뒤집혀도 목록을 덮지 않는다', async () => {
+    const { user } = setup();
+    const dialog = await open(user);
+    const edit = screen.getByRole('button', { name: '실태조사 편집' });
+    // 목록은 x 1000~1340, 「⋯」는 그 안 오른쪽 끝(1300). 화면(jsdom 1024)보다 오른쪽이라 패널은 왼쪽으로 뒤집힌다.
+    stubRect(dialog, { left: 1000, top: 100, width: 340, height: 400 });
+    stubRect(edit, { left: 1300, top: 260, width: 24, height: 24 });
+    await user.click(edit);
+    await screen.findByRole('textbox', { name: '태그 이름' });
+    const wrapper = document.querySelector<HTMLElement>('[data-radix-popper-content-wrapper]:last-of-type');
+    // 뒤집힌 패널의 오른쪽 끝이 「⋯」(1300)가 아니라 목록 왼쪽 끝(1000)에서 8px 띄운 자리다 — 줄 높이는 그 줄.
+    await waitFor(() => expect(wrapper?.style.transform).toBe('translate(992px, 260px)'));
+  });
 });
+
+function stubRect(el: Element, r: { left: number; top: number; width: number; height: number }) {
+  const rect = {
+    ...r,
+    x: r.left,
+    y: r.top,
+    right: r.left + r.width,
+    bottom: r.top + r.height,
+    toJSON: () => r,
+  };
+  vi.spyOn(el, 'getBoundingClientRect').mockReturnValue(rect as DOMRect);
+}

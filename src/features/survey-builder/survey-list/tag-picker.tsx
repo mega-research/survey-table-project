@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 
 import { Check, X } from 'lucide-react';
 
@@ -52,6 +52,8 @@ export function TagPickerPanel({ attachedIds, tags, onToggle, onCreate }: TagPic
   // 붙은 태그를 위로 모으는 순서는 창을 열 때 한 번 정한다 — 창 안에서 붙이고 떼도 줄이 튀지 않게.
   // 창(팝오버 내용)은 닫힐 때 내려가므로 다시 열면 그때의 붙은 태그로 다시 정해진다.
   const [pinnedIds] = useState(() => [...attachedIds]);
+  // 편집 패널은 이 창 전체의 옆에 선다 — 오른쪽 자리가 없어 뒤집혀도 창을 덮지 않게.
+  const panelRef = useRef<HTMLDivElement>(null);
 
   const attached = new Set(attachedIds);
   const byId = new Map(tags.map((t) => [t.id, t]));
@@ -115,7 +117,7 @@ export function TagPickerPanel({ attachedIds, tags, onToggle, onCreate }: TagPic
   }
 
   return (
-    <div className="flex flex-col">
+    <div ref={panelRef} className="flex flex-col">
       <div className="flex flex-col gap-2 border-b border-[#E5E5EA] bg-[#FAFAFA] px-3 py-2.5">
         {attachedTags.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
@@ -194,6 +196,7 @@ export function TagPickerPanel({ attachedIds, tags, onToggle, onCreate }: TagPic
                     setEditingTagId((cur) => (open ? t.id : cur === t.id ? null : cur))
                   }
                   className="opacity-0 group-hover/row:opacity-100"
+                  besideRef={panelRef}
                 />
               </div>
             );

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useRef, useState } from 'react';
+import { type RefObject, useEffect, useId, useMemo, useRef, useState } from 'react';
 
 import { Check, MoreHorizontal, Trash2 } from 'lucide-react';
 
@@ -14,7 +14,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useLatestRef } from '@/hooks/use-latest-ref';
 import { cn } from '@/lib/utils';
 import {
@@ -244,17 +244,43 @@ interface TagEditMenuProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   className?: string;
+  /**
+   * 패널이 옆에 설 상자 — 「⋯」가 든 목록(태그 창·「# 태그」 목록) 전체. 주면 패널은 이 상자의 좌우
+   * 바깥에, 높이는 「⋯」 줄에 맞춰 선다. 「⋯」 단추 옆에 세우면 오른쪽 자리가 모자라 왼쪽으로 뒤집힐 때
+   * 목록 위를 덮는다(1280·1600 실측 — 태그 이름과 바닥 안내가 가려졌다).
+   */
+  besideRef?: RefObject<HTMLElement | null>;
 }
 
 /**
  * 줄 끝 「⋯」 단추 + 옆에 뜨는 편집 패널. 줄에 마우스를 올렸을 때만 보이게 하는 것은 부르는 쪽의
  * `className`(예: `opacity-0 group-hover/row:opacity-100`)이다 — 열려 있거나 포커스가 오면 늘 보인다.
  */
-export function TagEditMenu({ tag, open, onOpenChange, className }: TagEditMenuProps) {
+export function TagEditMenu({ tag, open, onOpenChange, className, besideRef }: TagEditMenuProps) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  // 가상 기준점 — 가로는 목록 상자, 세로는 「⋯」 줄. 펼칠 때마다 다시 잰다(목록 안 스크롤을 따라간다).
+  const besideAnchor = useMemo(
+    () => ({
+      current: {
+        getBoundingClientRect: () => {
+          const row = triggerRef.current?.getBoundingClientRect() ?? new DOMRect();
+          const box = besideRef?.current?.getBoundingClientRect();
+          return box ? besideAnchorRect(box, row) : row;
+        },
+        // 스크롤 따라가기의 기준 요소 — 목록 안 스크롤에도 다시 잰다.
+        get contextElement() {
+          return triggerRef.current ?? undefined;
+        },
+      },
+    }),
+    [besideRef],
+  );
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
+      {besideRef && <PopoverAnchor virtualRef={besideAnchor} />}
       <PopoverTrigger asChild>
         <button
+          ref={triggerRef}
           type="button"
           aria-label={`${tag.name} 편집`}
           className={cn(
@@ -271,4 +297,11 @@ export function TagEditMenu({ tag, open, onOpenChange, className }: TagEditMenuP
       </PopoverContent>
     </Popover>
   );
+}
+
+type RectLike = Pick<DOMRect, 'left' | 'top' | 'width' | 'height'>;
+
+/** 가로는 상자(`box`), 세로는 줄(`row`)인 사각형 — 패널을 목록 전체의 옆, 그 줄 높이에 세운다. */
+function besideAnchorRect(box: RectLike, row: RectLike): DOMRect {
+  return new DOMRect(box.left, row.top, box.width, row.height);
 }
