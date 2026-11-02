@@ -2,10 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import type {
-  AnchorOwnerKind,
-  AnchorRect,
-} from '@/shared/contracts/survey-document-io';
+import type { AnchorOwnerKind, AnchorRect } from '@/shared/contracts/survey-document-io';
 import { client, orpc } from '@/shared/lib/rpc';
 
 export const surveyAnchorKeys = {
@@ -40,8 +37,7 @@ export function useCreateSurveyAnchor(surveyId: string) {
 export function useRemoveSurveyAnchor(surveyId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (anchorId: string) =>
-      client.surveyDocument.anchors.remove({ surveyId, anchorId }),
+    mutationFn: (anchorId: string) => client.surveyDocument.anchors.remove({ surveyId, anchorId }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: surveyAnchorKeys.list(surveyId) });
     },

@@ -1,6 +1,7 @@
+import type { ReactNode } from 'react';
+
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
-import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -53,7 +54,10 @@ function deferred<T>() {
 
 function setup(items: SurveyListPageItem[], tags: PersonalTagItem[]) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  queryClient.setQueryData(PAGE_KEY, { items, favoriteCount: 0 } as unknown as SurveyListPageResult);
+  queryClient.setQueryData(PAGE_KEY, {
+    items,
+    favoriteCount: 0,
+  } as unknown as SurveyListPageResult);
   queryClient.setQueryData<MinePersonalTagsOutput>(personalTagKeys.mine(), { tags });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
@@ -63,9 +67,8 @@ function setup(items: SurveyListPageItem[], tags: PersonalTagItem[]) {
     { wrapper },
   );
   const tagsOf = (id: string) =>
-    queryClient
-      .getQueryData<SurveyListPageResult>(PAGE_KEY)!
-      .items.find((s) => s.id === id)!.myTagIds;
+    queryClient.getQueryData<SurveyListPageResult>(PAGE_KEY)!.items.find((s) => s.id === id)!
+      .myTagIds;
   const mine = () => queryClient.getQueryData<MinePersonalTagsOutput>(personalTagKeys.mine())!.tags;
   return { queryClient, hooks: result, tagsOf, mine };
 }

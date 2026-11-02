@@ -104,9 +104,8 @@ export function useClientResponseColumns(surveyId: string, enabled: boolean) {
  * 실패에도 접는(`onSettled`) 무효화가 새 설정을 다시 읽어 온다.
  */
 export function useSetClientResponseColumns() {
-  return useLinkMutation(
-    (input: { surveyId: string; keys: string[]; expectedVersion: number }) =>
-      client.workspace.accessLinks.setClientResponseColumns(input),
+  return useLinkMutation((input: { surveyId: string; keys: string[]; expectedVersion: number }) =>
+    client.workspace.accessLinks.setClientResponseColumns(input),
   );
 }
 

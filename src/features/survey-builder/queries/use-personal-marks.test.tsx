@@ -1,6 +1,7 @@
+import type { ReactNode } from 'react';
+
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
-import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -126,9 +127,7 @@ describe('별 켜고 끄기 — 낙관적 갱신', () => {
     act(() => setFavorite(SURVEY, true));
     await act(async () => first.resolve({}));
 
-    await waitFor(() =>
-      expect(invalidate).toHaveBeenCalledWith({ queryKey: surveyKeys.pages() }),
-    );
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: surveyKeys.pages() }));
     expect(rpc.setFavorite).toHaveBeenCalledTimes(1);
     expect(starOf(SURVEY)).toBe(true);
   });

@@ -2,11 +2,16 @@
 
 import { useRef } from 'react';
 
+import { ORPCError } from '@orpc/client';
 import { type QueryClient, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 import { getErrorMessage } from '@/lib/get-error-message';
-import type { SurveyListPageItem, SurveyListPageResult } from '@/shared/contracts/survey-builder-io';
+import type {
+  SurveyListPageItem,
+  SurveyListPageResult,
+} from '@/shared/contracts/survey-builder-io';
+import type { PersonalTagColor } from '@/shared/contracts/workspace';
 import type { MinePersonalTagsOutput, PersonalTagItem } from '@/shared/contracts/workspace-io';
 import { client, orpc } from '@/shared/lib/rpc';
 import { surveyKeys } from '@/shared/lib/survey-list-queries';
@@ -237,5 +242,131 @@ export function useCreatePersonalTag(): (
       toast.error(getErrorMessage(error, '태그를 만들지 못했습니다.'));
       return null;
     }
+  };
+}
+
+/** 내 태그 한 줄만 바꾼다 — 카드 태그 줄·검색 칩은 이름·색을 이 캐시에서 찾으므로 바로 따라온다. */
+function patchMyTag(
+  queryClient: QueryClient,
+  tagId: string,
+  patch: (tag: PersonalTagItem) => PersonalTagItem,
+): void {
+  queryClient.setQueryData<MinePersonalTagsOutput>(personalTagKeys.mine(), (old) =>
+    old ? { tags: old.tags.map((t) => (t.id === tagId ? patch(t) : t)) } : old,
+  );
+}
+
+/** 고칠 것 — 보낸 칸만 바뀐다. 이름은 화면이 앞뒤 공백을 걷어 보낸다(서버도 같은 정규화). */
+export interface PersonalTagEdit {
+  name?: string;
+  color?: PersonalTagColor;
+}
+
+/**
+ * 고치기 결과 — 이름 충돌(CONFLICT)이면 그 문구를 돌려줘 편집 패널이 이름 칸 아래에 보인다.
+ * 그 밖의 실패는 훅이 토스트로 보였으므로 `nameError` 가 null 이다.
+ */
+export type PersonalTagEditResult = { ok: true } | { ok: false; nameError: string | null };
+
+/**
+ * 태그 이름·색 고치기 (티켓 08) — `(tagId, edit)`.
+ *
+ * - **누르는 즉시** 내 태그 캐시의 그 줄을 바꾼다(색 견본은 따로 확인 단추가 없다).
+ * - **같은 태그의 요청은 차례로 보낸다** — 색을 연달아 누르면 앞 요청이 끝난 뒤 다음을 보내
+ *   도착 순서가 뒤집히지 않는다. 서버도 사용자 잠금 순서대로 써서 나중 값이 남는다.
+ * - 실패하면 이 요청이 바꾼 칸을(그 사이 다른 값으로 바뀌지 않았다면) 되돌린다. 이름 충돌은
+ *   토스트 없이 결과로 돌려주고, 그 밖의 실패는 토스트로 보인다.
+ * - 끝나면(성공·실패 모두) 내 태그와 목록 페이지를 다시 읽는다 — 다른 탭에서 지운 태그는
+ *   여기서 사라진다.
+ */
+export function useUpdatePersonalTag(): (
+  tagId: string,
+  edit: PersonalTagEdit,
+) => Promise<PersonalTagEditResult> {
+  const queryClient = useQueryClient();
+  const queues = useRef(new Map<string, Promise<unknown>>());
+
+  return (tagId, edit) => {
+    const before = queryClient
+      .getQueryData<MinePersonalTagsOutput>(personalTagKeys.mine())
+      ?.tags.find((t) => t.id === tagId);
+    void queryClient.cancelQueries({ queryKey: personalTagKeys.mine() });
+    patchMyTag(queryClient, tagId, (t) => ({
+      ...t,
+      ...(edit.name !== undefined ? { name: edit.name } : {}),
+      ...(edit.color !== undefined ? { color: edit.color } : {}),
+    }));
+
+    const rollback = () => {
+      if (!before) return;
+      patchMyTag(queryClient, tagId, (t) => ({
+        ...t,
+        ...(edit.name !== undefined && t.name === edit.name ? { name: before.name } : {}),
+        ...(edit.color !== undefined && t.color === edit.color ? { color: before.color } : {}),
+      }));
+    };
+
+    const run = async (): Promise<PersonalTagEditResult> => {
+      try {
+        await client.workspace.personalMarks.updateTag({ tagId, ...edit });
+        return { ok: true };
+      } catch (error) {
+        rollback();
+        if (error instanceof ORPCError && error.code === 'CONFLICT') {
+          return { ok: false, nameError: error.message };
+        }
+        toast.error(getErrorMessage(error, '태그를 고치지 못했습니다.'));
+        return { ok: false, nameError: null };
+      } finally {
+        void queryClient.invalidateQueries({ queryKey: personalTagKeys.mine() });
+        void queryClient.invalidateQueries({ queryKey: surveyKeys.pages() });
+      }
+    };
+
+    // 앞 요청이 없으면 바로 보낸다 — 있으면 그 뒤에 잇는다.
+    const previous = queues.current.get(tagId);
+    const next = previous ? previous.then(run, run) : run();
+    queues.current.set(tagId, next);
+    void next.finally(() => {
+      if (queues.current.get(tagId) === next) queues.current.delete(tagId);
+    });
+    return next;
+  };
+}
+
+/**
+ * 태그 지우기 (티켓 08) — `(tagId) => 지워졌는가`. 확인을 거친 뒤라 낙관적으로 그리지 않고, 끝나면
+ * 내 태그와 카드 태그 줄에서 뺀 뒤 둘 다 다시 읽는다. 이미 없는 태그(NOT_FOUND — 다른 탭에서
+ * 먼저 지움)는 바라던 결과라 같은 성공으로 접는다.
+ */
+export function useDeletePersonalTag(): (tagId: string) => Promise<boolean> {
+  const queryClient = useQueryClient();
+  return async (tagId) => {
+    try {
+      await client.workspace.personalMarks.deleteTag({ tagId });
+    } catch (error) {
+      if (!(error instanceof ORPCError && error.code === 'NOT_FOUND')) {
+        toast.error(getErrorMessage(error, '태그를 지우지 못했습니다.'));
+        return false;
+      }
+    }
+    queryClient.setQueryData<MinePersonalTagsOutput>(personalTagKeys.mine(), (old) =>
+      old ? { tags: old.tags.filter((t) => t.id !== tagId) } : old,
+    );
+    queryClient.setQueriesData<SurveyListPageResult>({ queryKey: surveyKeys.pages() }, (old) =>
+      old && old.items.some((s) => s.myTagIds.includes(tagId))
+        ? {
+            ...old,
+            items: old.items.map((s) =>
+              s.myTagIds.includes(tagId)
+                ? { ...s, myTagIds: s.myTagIds.filter((id) => id !== tagId) }
+                : s,
+            ),
+          }
+        : old,
+    );
+    void queryClient.invalidateQueries({ queryKey: personalTagKeys.mine() });
+    void queryClient.invalidateQueries({ queryKey: surveyKeys.pages() });
+    return true;
   };
 }
