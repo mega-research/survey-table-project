@@ -9,6 +9,8 @@
  * (`cross-team-idor-rpc.test.ts`)가 본다. 목록 쪽(즐겨찾기만 조건·내 별 여부·숫자)은
  * `survey-list-page.realdb.test.ts`.
  */
+import { createRouterClient } from '@orpc/server';
+import { internalActorContext } from '@tests/helpers/rpc-context';
 import { and, eq, inArray } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -24,9 +26,11 @@ import {
 } from '@/db/schema';
 import {
   CreatePersonalTagInput,
+  PersonalMarkTargetGoneError,
   PersonalTagLimitError,
   PersonalTagNotFoundError,
 } from '@/server/workspace/domain/personal-marks';
+import { personalMarks } from '@/server/workspace/procedures/personal-marks';
 import {
   createTag,
   listMyTags,
@@ -336,8 +340,30 @@ describe.skipIf(!isLocalDb)('개인 표시 — 내 태그 (real local DB)', () =
   it('붙일 설문이 사라져 붙이기가 실패하면 태그도 안 생긴다 — 만들기와 붙이기는 한 트랜잭션', async () => {
     await expect(
       createTag(T_ME, { name: '고아 될 태그', attachToSurveyId: crypto.randomUUID() }),
-    ).rejects.toThrow();
+    ).rejects.toBeInstanceOf(PersonalMarkTargetGoneError);
     expect((await tagRowsOf(T_ME)).map((t) => t.name)).not.toContain('고아 될 태그');
+  });
+
+  it('RPC — 볼 수 없는 설문에 만들며 붙이기 → NOT_FOUND, 태그도 안 생긴다', async () => {
+    const rpc = createRouterClient({ personalMarks }, { context: internalActorContext({ id: T_ME }) });
+
+    await expect(
+      rpc.personalMarks.createTag({ name: '남의 설문 태그', attachToSurveyId: TS.foreign }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect((await tagRowsOf(T_ME)).map((t) => t.name)).not.toContain('남의 설문 태그');
+    expect(await linkRows(TS.foreign)).toEqual([]);
+  });
+
+  it('RPC — 남의 태그 id 로 붙이기 → NOT_FOUND, 내 목록에는 내 태그만', async () => {
+    const othersTag = await seedTag(T_OTHER, '남의 RPC 태그');
+    const rpc = createRouterClient({ personalMarks }, { context: internalActorContext({ id: T_ME }) });
+
+    await expect(
+      rpc.personalMarks.setTagLink({ surveyId: TS.link, tagId: othersTag, on: true }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    const { tags } = await rpc.personalMarks.mine();
+    expect(tags.map((t) => t.id)).not.toContain(othersTag);
+    expect(tags.length).toBe((await tagRowsOf(T_ME)).length);
   });
 
   it('설문 하드 삭제 → 연결이 사라진다, soft delete → 남는다', async () => {

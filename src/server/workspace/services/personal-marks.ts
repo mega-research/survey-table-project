@@ -9,6 +9,7 @@ import {
   type CreatePersonalTagInput,
   type CreatePersonalTagOutput,
   type MinePersonalTagsOutput,
+  PersonalMarkTargetGoneError,
   PersonalTagLimitError,
   PersonalTagNotFoundError,
   type SetFavoriteInput,
@@ -65,8 +66,7 @@ async function assertOwnTag(userId: string, tagId: string): Promise<void> {
  * 태그 연결 맞추기 — 즐겨찾기와 같은 결과 상태 지정 (티켓 07).
  *
  * 설문을 볼 수 있는지는 procedure 의 `survey.view` 관문이, 태그가 내 것인지는 여기가 본다.
- * 확인과 쓰기 사이에 태그가 지워지면 켜기는 FK 에서 깨진다 — 그것도 없는 태그와 같은 NOT_FOUND
- * 로 접는다.
+ * 확인과 쓰기 사이에 태그나 설문이 지워지면 켜기는 FK 에서 깨진다 — 그것도 NOT_FOUND 로 접는다.
  */
 export async function setTagLink(
   userId: string,
@@ -80,7 +80,7 @@ export async function setTagLink(
         .values({ tagId: input.tagId, surveyId: input.surveyId })
         .onConflictDoNothing();
     } catch (err) {
-      if (isForeignKeyViolation(err)) throw new PersonalTagNotFoundError();
+      if (isForeignKeyViolation(err)) throw new PersonalMarkTargetGoneError();
       throw err;
     }
   } else {
@@ -175,10 +175,16 @@ export async function createTag(
     }
 
     if (input.attachToSurveyId) {
-      await tx
-        .insert(personalSurveyTagLinks)
-        .values({ tagId, surveyId: input.attachToSurveyId })
-        .onConflictDoNothing();
+      try {
+        await tx
+          .insert(personalSurveyTagLinks)
+          .values({ tagId, surveyId: input.attachToSurveyId })
+          .onConflictDoNothing();
+      } catch (err) {
+        // 던지면 트랜잭션이 되돌아가 방금 만든 태그도 남지 않는다.
+        if (isForeignKeyViolation(err)) throw new PersonalMarkTargetGoneError();
+        throw err;
+      }
     }
 
     const [tag] = await tx

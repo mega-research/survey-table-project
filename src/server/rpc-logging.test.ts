@@ -7,6 +7,7 @@ import {
   INITIAL_SURVEY_LIST_PAGE_QUERY,
   SurveyListPageInputSchema,
 } from '@/shared/contracts/survey-builder-io';
+import { CreatePersonalTagInput } from '@/shared/contracts/workspace-io';
 
 import type { ORPCContext } from './context';
 import { authed, base, pub } from './orpc';
@@ -95,6 +96,7 @@ const testRouter = {
   }),
   adminOnly: authed.handler(() => 'ok'),
   listPage: pub.input(SurveyListPageInputSchema).handler(() => []),
+  createTag: pub.input(CreatePersonalTagInput).handler(() => null),
   boomWithDetail: pub.handler(() => {
     throw Object.assign(new Error('해당 설문에 존재하지 않는 질문입니다.'), {
       sentryContext: { versionId: 'v1', missingQuestionIds: ['q1'] },
@@ -266,6 +268,23 @@ describe('rpcLoggingMiddleware', () => {
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
 
     // pino 가 실제로 쓰는 모양(err 는 err 직렬화기를 거친다)으로 펼쳐 찾는다.
+    const written = [...logged.info.mock.calls, ...logged.error.mock.calls].map(([fields]) => {
+      const { err, ...rest } = fields as Record<string, unknown>;
+      return JSON.stringify({ ...rest, err: err instanceof Error ? serializeError(err) : err });
+    });
+    expect(written).toHaveLength(2);
+    for (const line of written) expect(line).not.toContain(secret);
+  });
+
+  it('태그 이름은 성공·입력 거부 어느 쪽에서도 로그에 실리지 않는다 (설문 목록 티켓 07)', async () => {
+    const client = createRouterClient(testRouter, { context: ctx('admin-1') });
+    const secret = '비밀발주처';
+    await client.createTag({ name: secret, attachToSurveyId: null });
+    // 21자 — 이름 칸이 거부한다(BAD_REQUEST). 거부 사유에도 이름이 남지 않아야 한다.
+    await expect(
+      client.createTag({ name: secret.repeat(5), attachToSurveyId: null }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
     const written = [...logged.info.mock.calls, ...logged.error.mock.calls].map(([fields]) => {
       const { err, ...rest } = fields as Record<string, unknown>;
       return JSON.stringify({ ...rest, err: err instanceof Error ? serializeError(err) : err });

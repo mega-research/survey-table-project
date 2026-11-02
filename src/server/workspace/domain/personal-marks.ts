@@ -49,3 +49,14 @@ export class PersonalTagLimitError extends Error {
     this.name = 'PersonalTagLimitError';
   }
 }
+
+/**
+ * 확인과 쓰기 사이에 설문이나 태그가 사라져 연결을 쓰지 못했다(외래 키 위반). 관문의 존재 은닉과
+ * 같은 NOT_FOUND 로 돌려준다 — 만들며 붙이기였다면 트랜잭션이 태그까지 되돌린다.
+ */
+export class PersonalMarkTargetGoneError extends Error {
+  constructor() {
+    super('설문이나 태그를 찾을 수 없습니다.');
+    this.name = 'PersonalMarkTargetGoneError';
+  }
+}
