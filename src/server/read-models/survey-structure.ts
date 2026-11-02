@@ -133,7 +133,7 @@ export function participatesInSurvey(viewerId: string, options: { fullOnly?: boo
  * import 시점에 스키마가 필요해져, `@/db/schema` 를 부분 모킹하는 테스트가 이 모듈을
  * 체인에 들이는 순간 「No "teams" export」로 깨진다. 쿼리를 만들 때 부르면 종전과 같다.
  */
-function surveyListColumns(viewerId: string | null, leaderTeamIds: readonly string[] = []) {
+export function surveyListColumns(viewerId: string | null, leaderTeamIds: readonly string[] = []) {
   return {
     /**
      * 내가 이 설문의 참여자인가 (티켓 18) — 카드의 버튼 노출 근사가 본다.
@@ -190,7 +190,7 @@ function surveyListColumns(viewerId: string | null, leaderTeamIds: readonly stri
  * (`getScopedSurveySummaries`)이 함께 쓴다. 아무것도 보지 않는 범위(`kind: 'none'`)는 호출 쪽이
  * 조회 전에 빈 결과로 끝낸다.
  */
-function scopedSurveyWhere(filter: Exclude<SurveyScopeFilter, { kind: 'none' }>): SQL {
+export function scopedSurveyWhere(filter: Exclude<SurveyScopeFilter, { kind: 'none' }>): SQL {
   const conditions: SQL[] = [isNull(surveys.deletedAt)];
   if (filter.kind === 'team') {
     // 팀 범위가 보는 것 = 그 팀 설문 + **내가 초대받은 설문**(팀 무관, 티켓 18).
@@ -299,7 +299,7 @@ export async function getScopedSurveySummaries(filter: SurveyScopeFilter) {
  * `participatesInSurvey`·`leadsParticipantTeam` 로 들어온 것이고, 협업 그룹 조회도 같은
  * 조각으로 그 설문이 담긴 그룹을 세운다. 그래서 여기서 남긴 id 는 갈 곳이 있다.
  */
-function visibleGroupId(): SQL<string | null> {
+export function visibleGroupId(): SQL<string | null> {
   const sameTeam = sql`${surveys.teamId} is not distinct from ${surveyGroups.teamId}`;
   return sql<string | null>`case when ${sameTeam} then ${surveys.surveyGroupId} else null end`;
 }

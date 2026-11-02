@@ -24,6 +24,7 @@ import {
   hasOpenResponseForContact,
 } from '@/server/read-models/responses';
 import { isValidTestToken } from '@/server/read-models/survey-control';
+import { querySurveyListPage } from '@/server/read-models/survey-list-page';
 import { getSurveyOwnerEmail } from '@/server/read-models/survey-owner-email';
 import { countDeletedSurveys, getDeletedSurveys } from '@/server/read-models/survey-structure';
 import {
@@ -44,7 +45,12 @@ import {
 } from '@/server/survey-access';
 import { buildSurveyScopeFilter, resolveWorkScopeFor } from '@/server/work-scope';
 import { ensureTestVersion } from '@/server/workflows/test-version';
-import { normalizeSurveyStatus } from '@/shared/contracts/survey-builder-io';
+import {
+  type SurveyListItem,
+  type SurveyListPageInput,
+  type SurveyListPageResult,
+  normalizeSurveyStatus,
+} from '@/shared/contracts/survey-builder-io';
 import type { SurveyAnchorSnapshot } from '@/shared/contracts/survey-document';
 import type { VariableDef } from '@/shared/contracts/template-variables';
 import type { QuestionGroup, Question as QuestionType, Survey as SurveyType } from '@/types/survey';
@@ -152,38 +158,125 @@ export async function getSurveyListWithCounts(
     teams,
     canSeeSystemScope: subject.isSuperadmin,
     deletedCount,
-    surveys: surveyList.map((survey) => ({
-      id: survey.id,
-      title: survey.title,
-      cardTitle: survey.cardTitle,
-      description: survey.description,
-      slug: survey.slug,
-      privateToken: survey.privateToken,
-      responseCount: responseCounts.get(survey.id)?.total ?? 0,
-      completedResponseCount: responseCounts.get(survey.id)?.completed ?? 0,
-      fieldworkCompletedCount: fieldworkCounts.get(survey.id) ?? 0,
-      createdAt: survey.createdAt,
-      updatedAt: survey.updatedAt,
-      endDate: survey.endDate,
-      isPublic: survey.isPublic,
-      // text 컬럼이라 어휘로 접는다 — 캐스트 대신 로더 정규화(JSONB 드리프트 관례와 동일 취지).
-      status: normalizeSurveyStatus(survey.status),
-      lifecycle: survey.lifecycle,
-      teamId: survey.teamId,
-      teamName: survey.teamName,
-      visibility: survey.visibility,
-      assignmentStatus: survey.assignmentStatus,
-      // 화면 편의(소유자 표기·소유자 필터·버튼 노출 근사)다 — 판정은 서버 capability 가 한다.
-      ownerUserId: survey.ownerUserId,
-      ownerName: survey.ownerName,
-      surveyGroupId: survey.surveyGroupId,
-      // 일반 목록의 행은 언제나 null 이다(조회 조건이 deleted_at IS NULL) — 화면은 이 값으로
-      // 「휴지통을 보고 있는가」를 판정한다.
-      deletedAt: survey.deletedAt,
-      isParticipant: survey.isParticipant,
-      isFullParticipant: survey.isFullParticipant,
-      isLedParticipant: survey.isLedParticipant,
-    })),
+    surveys: surveyList.map((survey) =>
+      toSurveyListItem(survey, responseCounts.get(survey.id), fieldworkCounts.get(survey.id)),
+    ),
+  };
+}
+
+/** 목록 행(범위 목록·휴지통·페이지 공통 투영) — `surveyListColumns` 가 고른 칸. */
+type SurveyListRow = Omit<
+  SurveyListItem,
+  'responseCount' | 'completedResponseCount' | 'fieldworkCompletedCount' | 'status'
+> & { status: string };
+
+/**
+ * 목록 행 + 응답 수 → 화면 한 행. 전체 목록(`getSurveyListWithCounts`)과 페이지 목록
+ * (`listSurveyPage`)이 같은 조립을 쓴다 — 갈리면 한쪽 카드만 칸이 빈다.
+ */
+function toSurveyListItem(
+  survey: SurveyListRow,
+  counts: { total: number; completed: number } | undefined,
+  fieldworkCompleted: number | undefined,
+): SurveyListItem {
+  return {
+    id: survey.id,
+    title: survey.title,
+    cardTitle: survey.cardTitle,
+    description: survey.description,
+    slug: survey.slug,
+    privateToken: survey.privateToken,
+    responseCount: counts?.total ?? 0,
+    completedResponseCount: counts?.completed ?? 0,
+    fieldworkCompletedCount: fieldworkCompleted ?? 0,
+    createdAt: survey.createdAt,
+    updatedAt: survey.updatedAt,
+    endDate: survey.endDate,
+    isPublic: survey.isPublic,
+    // text 컬럼이라 어휘로 접는다 — 캐스트 대신 로더 정규화(JSONB 드리프트 관례와 동일 취지).
+    status: normalizeSurveyStatus(survey.status),
+    lifecycle: survey.lifecycle,
+    teamId: survey.teamId,
+    teamName: survey.teamName,
+    visibility: survey.visibility,
+    assignmentStatus: survey.assignmentStatus,
+    // 화면 편의(소유자 표기·소유자 필터·버튼 노출 근사)다 — 판정은 서버 capability 가 한다.
+    ownerUserId: survey.ownerUserId,
+    ownerName: survey.ownerName,
+    surveyGroupId: survey.surveyGroupId,
+    // 일반 목록의 행은 언제나 null 이다(조회 조건이 deleted_at IS NULL) — 화면은 이 값으로
+    // 「휴지통을 보고 있는가」를 판정한다.
+    deletedAt: survey.deletedAt,
+    isParticipant: survey.isParticipant,
+    isFullParticipant: survey.isFullParticipant,
+    isLedParticipant: survey.isLedParticipant,
+  };
+}
+
+/**
+ * 설문 목록 한 페이지 — 서버 페이지네이션 (설문 즐겨찾기·태그 티켓 03).
+ *
+ * 범위 해석·휴지통 거부는 전체 목록(`getSurveyListWithCounts`)과 같은 판정을 그대로 지난다.
+ * **응답 수는 그 페이지의 설문만 센다** — 목록이 가벼워지는 핵심이다. 응답순 정렬·응답 수 범위가
+ * 범위 전체의 응답 수를 쓰는 것은 read model 의 정렬·조건 안쪽 일이고, 화면에 싣는 숫자는
+ * 여기서 페이지 id 로만 센다.
+ */
+export async function listSurveyPage(
+  user: SurveyAccessUser,
+  input: SurveyListPageInput,
+): Promise<SurveyListPageResult> {
+  const subject = await loadAccountAccessSubject(user);
+  const scope = resolveWorkScopeFor(subject, input.scope);
+  const filter = buildSurveyScopeFilter(subject, scope);
+
+  // 휴지통 규칙은 전체 목록과 같다 — 슈퍼어드민의 시스템 전체 보기 전용, 그 밖의 요청은 거부.
+  const canSeeDeleted = subject.isSuperadmin && scope.kind === 'system';
+  if (input.deleted && !canSeeDeleted) throw new SurveyAccessError('forbidden');
+
+  const [teams, deletedCount] = await Promise.all([
+    listSelectableTeams(subject),
+    canSeeDeleted ? countDeletedSurveys() : Promise.resolve(null),
+  ]);
+  const base = { scope, teams, canSeeSystemScope: subject.isSuperadmin, deletedCount };
+
+  // 아무것도 보지 않는 범위(팀 미배치)는 조회 없이 빈 페이지다.
+  if (!input.deleted && filter.kind === 'none') {
+    return {
+      ...base,
+      items: [],
+      total: 0,
+      page: 1,
+      totalPages: 1,
+      lifecycleCounts: { all: 0, draft: 0, running: 0, closed: 0 },
+      owners: [],
+      activeTeam: null,
+    };
+  }
+
+  const { scope: _requested, deleted, ...query } = input;
+  const result = await querySurveyListPage({
+    ...query,
+    source: deleted ? { kind: 'deleted' } : { kind: 'scoped', filter: filter as Exclude<typeof filter, { kind: 'none' }> },
+  });
+
+  const pageIds = result.rows.map((row) => row.id);
+  // 목록은 실데이터만 센다 — 응답 수(notTestResponse)와 같은 파티션.
+  const [responseCounts, fieldworkCounts] = await Promise.all([
+    getResponseCountsGroupedBySurvey(pageIds),
+    getFieldworkCompletedCounts(pageIds, false),
+  ]);
+
+  return {
+    ...base,
+    items: result.rows.map((row) =>
+      toSurveyListItem(row, responseCounts.get(row.id), fieldworkCounts.get(row.id)),
+    ),
+    total: result.total,
+    page: result.page,
+    totalPages: result.totalPages,
+    lifecycleCounts: result.lifecycleCounts,
+    owners: result.owners,
+    activeTeam: result.activeTeam,
   };
 }
 

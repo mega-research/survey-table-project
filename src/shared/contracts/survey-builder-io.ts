@@ -1,6 +1,8 @@
 // 설문 빌더·응답 경계 계약 — UI 와 서버가 주고받는 입출력 모양.
 // 같은 폴더의 survey.ts — DB 에 저장되는 JSONB 문서 어휘. 이 파일 — 서버와 UI 사이 경계를 건너는 모양.
 // client-safe — server-only·Node·DB 의존 없음. 질문 구조 타입은 @/types/survey 소관이라 빌려 쓴다.
+import * as z from 'zod';
+
 import type { Question, QuestionGroup, Survey, SurveySettings } from '@/types/survey';
 
 import type { SurveyEndRedirects } from './survey';
@@ -173,6 +175,132 @@ export type SurveySummaryItem = Pick<
   SurveyListItem,
   'id' | 'title' | 'cardTitle' | 'teamId' | 'teamName' | 'surveyGroupId'
 >;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 설문 목록 페이지 (surveyBuilder.read.listPage) — 서버 페이지네이션 (설문 즐겨찾기·태그 티켓 03)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 거르기·정렬·페이지 나누기·숫자 세기를 서버가 한다. 입력은 화면 주소의 쿼리와 1:1 이다 —
+// 변환은 화면 쪽 순수 함수(`survey-list-url`)가 하고, 이 스키마가 그 둘의 공통 어휘다.
+
+/** 한 페이지의 카드 수 — 고정. */
+export const SURVEY_LIST_PAGE_SIZE = 24;
+/** 검색어 상한(글자). 여러 단어 검색(티켓 04)의 단어 수 상한은 그쪽이 더한다. */
+export const SURVEY_LIST_SEARCH_MAX_LENGTH = 100;
+
+/** 세그먼트가 고르는 값 — 「전체」 + 목록 상태. */
+export const surveyListLifecycleFilterValues = ['all', ...surveyListLifecycleValues] as const;
+export type SurveyListLifecycleFilter = (typeof surveyListLifecycleFilterValues)[number];
+
+/** 정렬 — 방향은 값마다 고정(최신 수정·생성은 최신 먼저, 제목은 가나다, 응답은 많은 순). */
+export const surveyListSortValues = ['updatedAt', 'createdAt', 'title', 'responses'] as const;
+export type SurveyListSortBy = (typeof surveyListSortValues)[number];
+
+/** 상세 검색 「기간」의 기준 칸. */
+export const surveyListDateFieldValues = ['updatedAt', 'createdAt', 'endDate'] as const;
+export type SurveyListDateField = (typeof surveyListDateFieldValues)[number];
+
+export const surveyListVisibilityFilterValues = ['team', 'invite_only'] as const;
+export type SurveyListVisibilityFilter = (typeof surveyListVisibilityFilterValues)[number] | null;
+
+/** 느슨한 UUID 꼴(8-4-4-4-12) — 주소에서 온 id 를 DB 까지 보내기 전에 거른다(uuid 컬럼 22P02 방지). */
+export const LOOSE_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** 상세 검색 날짜 — YYYY-MM-DD, 한국 시간 하루로 읽는다. */
+export const SURVEY_LIST_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+const uuidLike = z.string().regex(LOOSE_UUID_PATTERN);
+const listDate = z.string().regex(SURVEY_LIST_DATE_PATTERN);
+const responseBound = z.number().int().min(0).max(1_000_000_000);
+
+export const SurveyListAdvancedFiltersSchema = z.object({
+  dateField: z.enum(surveyListDateFieldValues),
+  /** null 이면 미적용. */
+  dateFrom: listDate.nullable(),
+  /** 그날의 끝까지 포함한다. */
+  dateTo: listDate.nullable(),
+  ownerUserId: uuidLike.nullable(),
+  visibility: z.enum(surveyListVisibilityFilterValues).nullable(),
+  responsesMin: responseBound.nullable(),
+  responsesMax: responseBound.nullable(),
+});
+export type SurveyListAdvancedFilters = z.infer<typeof SurveyListAdvancedFiltersSchema>;
+
+export const INITIAL_ADVANCED_FILTERS: SurveyListAdvancedFilters = {
+  dateField: 'updatedAt',
+  dateFrom: null,
+  dateTo: null,
+  ownerUserId: null,
+  visibility: null,
+  responsesMin: null,
+  responsesMax: null,
+};
+
+/**
+ * 목록 페이지 조건 — 범위(scope)를 뺀 나머지. 화면 주소가 이것을 그대로 담는다.
+ *
+ * - `groupId` · `teamId` · `ungrouped` — 그룹 화면·실사팀 팀 좁힘(기존 주소 규칙 `?group=`·`?team=`·`&ungrouped=1`).
+ *   `ungrouped` 는 팀 좁힘이 걸렸을 때만 뜻이 있다.
+ * - `deleted` — 휴지통(슈퍼어드민 시스템 범위 전용, 아니면 거부).
+ */
+export const SurveyListPageQuerySchema = z.object({
+  groupId: uuidLike.nullable(),
+  teamId: uuidLike.nullable(),
+  ungrouped: z.boolean(),
+  q: z.string().max(SURVEY_LIST_SEARCH_MAX_LENGTH),
+  lifecycle: z.enum(surveyListLifecycleFilterValues),
+  advanced: SurveyListAdvancedFiltersSchema,
+  sort: z.enum(surveyListSortValues),
+  page: z.number().int().min(1).max(1_000_000),
+  deleted: z.boolean(),
+});
+export type SurveyListPageQuery = z.infer<typeof SurveyListPageQuerySchema>;
+
+export const INITIAL_SURVEY_LIST_PAGE_QUERY: SurveyListPageQuery = {
+  groupId: null,
+  teamId: null,
+  ungrouped: false,
+  q: '',
+  lifecycle: 'all',
+  advanced: INITIAL_ADVANCED_FILTERS,
+  sort: 'updatedAt',
+  page: 1,
+  deleted: false,
+};
+
+/** listPage RPC 입력 — 조건 + 화면이 기억하는 작업 범위(서버가 멤버십으로 다시 판정). */
+export const SurveyListPageInputSchema = SurveyListPageQuerySchema.extend({
+  scope: z.string().nullable(),
+}).strict();
+export type SurveyListPageInput = z.infer<typeof SurveyListPageInputSchema>;
+
+/** 범위 안 설문의 소유자 — 상세 검색 드롭다운(·자동완성 소유자 후보)의 재료. 이름순. */
+export interface SurveyListOwner {
+  id: string;
+  name: string;
+}
+
+/**
+ * 목록 페이지 응답.
+ *
+ * 숫자 기준이 둘이다 — `lifecycleCounts`·`owners` 는 범위·그룹·팀 좁힘까지만 적용해 센다(검색·
+ * 상세 검색·목록 상태 무관). `total` 은 모든 조건을 적용한 결과 수다.
+ */
+export interface SurveyListPageResult
+  extends Pick<SurveyListResult, 'scope' | 'teams' | 'canSeeSystemScope' | 'deletedCount'> {
+  items: SurveyListItem[];
+  total: number;
+  /** 요청한 page 가 범위를 넘으면 마지막 페이지로 접힌 값. */
+  page: number;
+  /** 결과가 0개여도 1. */
+  totalPages: number;
+  lifecycleCounts: Record<SurveyListLifecycleFilter, number>;
+  owners: SurveyListOwner[];
+  /**
+   * 실제로 걸린 팀 좁힘 — 화면 제목(「팀 이름 · 미분류」)용. 지목한 팀의 설문이 범위에 하나도
+   * 없으면 좁히지 않고 null 이다(참여가 끝난 팀 주소에 갇히지 않게).
+   */
+  activeTeam: { id: string; name: string | null } | null;
+}
 
 /**
  * Diff 기반 설문 저장(saveSurveyDiff) 페이로드.
