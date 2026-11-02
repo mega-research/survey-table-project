@@ -189,6 +189,8 @@ export const SURVEY_LIST_PAGE_SIZE = 24;
 export const SURVEY_LIST_SEARCH_MAX_LENGTH = 100;
 /** 검색어 단어 수 상한 — 단어마다 OR 묶음이 하나씩 붙으므로 SQL 크기를 묶어 둔다. */
 export const SURVEY_LIST_SEARCH_MAX_WORDS = 8;
+/** 한 번에 걸 수 있는 검색 칩(태그 조건) 수 — 서버 입력 스키마와 주소 변환이 같이 지킨다(티켓 09). */
+export const SURVEY_LIST_TAG_FILTER_MAX = 10;
 
 /** 검색어를 단어로 나눈다 — 공백(연속·앞뒤 포함)으로 자르고 빈 조각은 버린다. 서버 SQL 과 화면이 같이 쓴다. */
 export function splitSurveyListSearchWords(q: string): string[] {
@@ -256,6 +258,8 @@ export const INITIAL_ADVANCED_FILTERS: SurveyListAdvancedFilters = {
  * - `groupId` · `teamId` · `ungrouped` — 그룹 화면·실사팀 팀 좁힘(기존 주소 규칙 `?group=`·`?team=`·`&ungrouped=1`).
  *   `ungrouped` 는 팀 좁힘이 걸렸을 때만 뜻이 있다.
  * - `favorites` — 내가 별을 켠 설문만(티켓 06). 휴지통과 함께 오면 거부한다.
+ * - `tagIds` — 검색 칩(티켓 09). 모두 붙은 설문만(AND), 최대 10개, 중복 없음. 요청자 소유가 아닌 id 가
+ *   섞이면 서비스가 거부한다(조용히 빼면 결과가 넓어진다). 휴지통과 함께 오면 거부한다.
  * - `deleted` — 휴지통(슈퍼어드민 시스템 범위 전용, 아니면 거부).
  */
 export const SurveyListPageQuerySchema = z.object({
@@ -271,6 +275,10 @@ export const SurveyListPageQuerySchema = z.object({
   lifecycle: z.enum(surveyListLifecycleFilterValues),
   advanced: SurveyListAdvancedFiltersSchema,
   favorites: z.boolean(),
+  tagIds: z
+    .array(uuidLike)
+    .max(SURVEY_LIST_TAG_FILTER_MAX)
+    .refine((ids) => new Set(ids).size === ids.length, { message: '같은 태그가 두 번 걸렸습니다' }),
   sort: z.enum(surveyListSortValues),
   page: z.number().int().min(1).max(1_000_000),
   deleted: z.boolean(),
@@ -285,6 +293,7 @@ export const INITIAL_SURVEY_LIST_PAGE_QUERY: SurveyListPageQuery = {
   lifecycle: 'all',
   advanced: INITIAL_ADVANCED_FILTERS,
   favorites: false,
+  tagIds: [],
   sort: 'updatedAt',
   page: 1,
   deleted: false,

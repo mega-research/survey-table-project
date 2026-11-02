@@ -28,6 +28,7 @@ import {
   type SurveyListSource,
   querySurveyListPage,
   querySurveySuggestions,
+  selectOwnedTagIds,
   surveyListSearchSql,
 } from '@/server/read-models/survey-list-page';
 import { getSurveyOwnerEmail } from '@/server/read-models/survey-owner-email';
@@ -242,6 +243,14 @@ export async function listSurveyPage(
   // 휴지통에서는 즐겨찾기 조건을 받지 않는다(화면에도 단추가 없다) — 의미 없는 조합을 조용히
   // 0건으로 접지 않고 거부한다.
   if (input.deleted && input.favorites) throw new SurveyAccessError('forbidden');
+  // 태그 조건도 같다(티켓 09). 그리고 검색 칩은 요청자 소유 태그만 — 남의 것·없는 것(다른 탭에서
+  // 지운 태그)이 섞이면 조용히 빼지 않고 거부한다. 빼면 결과가 넓어져 「거른 결과」처럼 보인다.
+  // 남의 태그 id 는 없는 태그와 같은 not_found 다(남의 태그 존재를 떠볼 수 없게).
+  if (input.deleted && input.tagIds.length > 0) throw new SurveyAccessError('forbidden');
+  if (input.tagIds.length > 0) {
+    const owned = await selectOwnedTagIds(subject.userId, input.tagIds);
+    if (input.tagIds.some((id) => !owned.has(id))) throw new SurveyAccessError('not_found');
+  }
 
   const [teams, deletedCount] = await Promise.all([
     listSelectableTeams(subject),
@@ -327,7 +336,7 @@ export async function suggestSurveys(
   const subject = await loadAccountAccessSubject(user);
   const scope = resolveWorkScopeFor(subject, input.scope);
   const filter = buildSurveyScopeFilter(subject, scope);
-  const search = surveyListSearchSql(input.q);
+  const search = surveyListSearchSql(input.q, subject.userId);
   if (!search || filter.kind === 'none') return [];
   return querySurveySuggestions(filter, search);
 }

@@ -1,4 +1,16 @@
-import { type SQL, and, asc, count, desc, eq, gte, isNotNull, lte, sql } from 'drizzle-orm';
+import {
+  type SQL,
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  lte,
+  sql,
+} from 'drizzle-orm';
 import type { PgSelect } from 'drizzle-orm/pg-core';
 import 'server-only';
 
@@ -39,7 +51,7 @@ import {
 // 조건은 세 겹이다.
 //   ① 원천(source)   — 작업 범위(`scopedSurveyWhere`) 또는 휴지통(`deleted_at IS NOT NULL`)
 //   ② 좁힘(narrowing) — 그룹 화면·팀 좁힘·미분류. 여기까지가 세그먼트 숫자·소유자 목록의 기준
-//   ③ 거르기(filters) — 검색·목록 상태·상세 검색·즐겨찾기. `total` 과 페이지 항목은 셋 모두를 적용한다
+//   ③ 거르기(filters) — 검색·목록 상태·상세 검색·즐겨찾기·검색 칩(태그). `total` 과 페이지 항목은 셋 모두를 적용한다
 //
 // 즐겨찾기(티켓 06)·내 태그(티켓 07)는 요청자 본인의 행만 본다(`viewerId`) — 동료의 별·태그는
 // 조건에도 숫자에도 카드 표시에도 들어오지 않는다. 표는 workspace 도메인 소유지만 타 도메인 테이블
@@ -102,26 +114,29 @@ export function escapeLikePattern(text: string): string {
 }
 
 /**
- * 한 단어가 맞는가 — 카드 제목 · 설문지 제목 · 설명 · 소유자 이름 중 하나라도 부분일치(대소문자
- * 무시). 소유자 이름은 `users` 조인(`withListJoins`)이 걸린 문장에서만 쓸 수 있다.
+ * 한 단어가 맞는가 — 카드 제목 · 설문지 제목 · 설명 · 소유자 이름 · **요청자의** 태그 이름 중 하나라도
+ * 부분일치(대소문자 무시). 소유자 이름은 `users` 조인(`withListJoins`)이 걸린 문장에서만 쓸 수 있다.
  *
- * 내 태그 이름(티켓 09)은 여기에 요청자의 태그 EXISTS 를 OR 로 더한다.
+ * 태그 이름은 요청자 본인의 태그만 본다(티켓 09) — 동료가 붙인 태그 이름으로는 내 검색이 맞지 않는다.
+ * 설문별 연결(`personal_survey_tag_links_survey_idx`)에서 출발해 태그 PK 로 이름을 본다.
  */
-function surveyListWordMatchSql(word: string): SQL {
+function surveyListWordMatchSql(word: string, viewerId: string): SQL {
   const pattern = `%${escapeLikePattern(word)}%`;
-  return sql`(${surveys.cardTitle} ilike ${pattern} or ${surveys.title} ilike ${pattern} or ${surveys.description} ilike ${pattern} or ${users.name} ilike ${pattern})`;
+  const myTagName = sql`exists (select 1 from ${personalSurveyTagLinks} join ${personalSurveyTags} on ${personalSurveyTags.id} = ${personalSurveyTagLinks.tagId} where ${personalSurveyTagLinks.surveyId} = ${surveys.id} and ${personalSurveyTags.userId} = ${viewerId} and ${personalSurveyTags.name} ilike ${pattern})`;
+  return sql`(${surveys.cardTitle} ilike ${pattern} or ${surveys.title} ilike ${pattern} or ${surveys.description} ilike ${pattern} or ${users.name} ilike ${pattern} or ${myTagName})`;
 }
 
 /**
  * 검색 조각 — 검색어를 공백으로 나눈 단어마다 `surveyListWordMatchSql`, 단어끼리 AND. 빈 검색어면
- * 조건 없음. 목록 페이지와 자동완성(티켓 05)이 같은 조각을 쓰도록 여기 하나만 둔다.
+ * 조건 없음. 목록 페이지와 자동완성(티켓 05)이 같은 조각을 쓰도록 여기 하나만 둔다. `viewerId` 는
+ * 내 태그 이름을 볼 요청자다.
  *
  * 단어 수·글자 수 상한은 입력 스키마가 막는다(`SurveyListPageQuerySchema`) — 여기서는 받은 대로 쓴다.
  */
-export function surveyListSearchSql(q: string): SQL | undefined {
+export function surveyListSearchSql(q: string, viewerId: string): SQL | undefined {
   const words = splitSurveyListSearchWords(q);
   if (words.length === 0) return undefined;
-  return and(...words.map(surveyListWordMatchSql));
+  return and(...words.map((word) => surveyListWordMatchSql(word, viewerId)));
 }
 
 /** 요청자가 이 설문에 별을 켰는가 — PK(user_id, survey_id) 한 번 찾기. */
@@ -134,7 +149,33 @@ function isFavoriteSql(viewerId: string): SQL<boolean> {
  * 들어오지 않는다(태그의 user_id 로 건다). 카드가 이름·색을 내 태그 목록(`mine`)에서 찾아 그린다.
  */
 function myTagIdsSql(viewerId: string): SQL<string[]> {
-  return sql<string[]>`coalesce((select json_agg(${personalSurveyTagLinks.tagId} order by ${personalSurveyTagLinks.createdAt}, ${personalSurveyTagLinks.tagId}) from ${personalSurveyTagLinks} join ${personalSurveyTags} on ${personalSurveyTags.id} = ${personalSurveyTagLinks.tagId} where ${personalSurveyTagLinks.surveyId} = ${surveys.id} and ${personalSurveyTags.userId} = ${viewerId}), '[]'::json)`;
+  return sql<
+    string[]
+  >`coalesce((select json_agg(${personalSurveyTagLinks.tagId} order by ${personalSurveyTagLinks.createdAt}, ${personalSurveyTagLinks.tagId}) from ${personalSurveyTagLinks} join ${personalSurveyTags} on ${personalSurveyTags.id} = ${personalSurveyTagLinks.tagId} where ${personalSurveyTagLinks.surveyId} = ${surveys.id} and ${personalSurveyTags.userId} = ${viewerId}), '[]'::json)`;
+}
+
+/**
+ * 검색 칩(티켓 09) — 지정한 내 태그가 **모두** 붙은 설문. 연결 표 PK(tag_id, survey_id)로 고른 줄을
+ * 설문별로 세어 칩 수와 같은 것만 남긴다. 태그의 user_id 를 함께 걸어 남의 태그 연결은 세지 않는다
+ * (소유 확인은 서비스가 먼저 해서 거부하지만, 조건 자체도 요청자 것만 본다). id 는 중복 없이 온다(입력 스키마).
+ */
+function allTagsAttachedSql(viewerId: string, tagIds: readonly string[]): SQL {
+  return sql`${surveys.id} in (select ${personalSurveyTagLinks.surveyId} from ${personalSurveyTagLinks} join ${personalSurveyTags} on ${personalSurveyTags.id} = ${personalSurveyTagLinks.tagId} where ${personalSurveyTags.userId} = ${viewerId} and ${inArray(personalSurveyTagLinks.tagId, [...tagIds])} group by ${personalSurveyTagLinks.surveyId} having count(*) = ${tagIds.length})`;
+}
+
+/** 요청자 소유인 태그 id — 서비스가 검색 칩의 소유를 확인할 때 쓴다(남의 것·없는 것은 빠진다). */
+export async function selectOwnedTagIds(
+  viewerId: string,
+  tagIds: readonly string[],
+): Promise<Set<string>> {
+  if (tagIds.length === 0) return new Set();
+  const rows = await db
+    .select({ id: personalSurveyTags.id })
+    .from(personalSurveyTags)
+    .where(
+      and(eq(personalSurveyTags.userId, viewerId), inArray(personalSurveyTags.id, [...tagIds])),
+    );
+  return new Set(rows.map((r) => r.id));
 }
 
 const DATE_COLUMNS = {
@@ -304,13 +345,14 @@ export async function querySurveyListPage(
   const narrowed = narrowedWhere(params, activeTeam);
 
   const filters: SQL[] = [narrowed];
-  const search = surveyListSearchSql(params.q);
+  const search = surveyListSearchSql(params.q, params.viewerId);
   if (search) filters.push(search);
   if (params.lifecycle !== 'all') {
     filters.push(sql`${surveyListLifecycleSql()} = ${params.lifecycle}`);
   }
   filters.push(...advancedConditions(params.advanced));
   if (params.favorites) filters.push(isFavoriteSql(params.viewerId));
+  if (params.tagIds.length > 0) filters.push(allTagsAttachedSql(params.viewerId, params.tagIds));
   const where = and(...filters)!;
 
   const requestedPage = Math.max(1, params.page);
