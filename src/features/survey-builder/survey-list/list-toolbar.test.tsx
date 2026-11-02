@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -108,5 +108,53 @@ describe('ListToolbar — 둘째 줄 오른쪽', () => {
     renderToolbar();
     expect(screen.getByText('23개')).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: '정렬' })).toBeInTheDocument();
+  });
+});
+
+describe('ListToolbar — 검색창 상한', () => {
+  function renderSearch() {
+    const onSearch = vi.fn();
+    render(
+      <ListToolbar
+        counts={{ all: 0, draft: 0, running: 0, closed: 0 }}
+        lifecycle="all"
+        onLifecycleChange={vi.fn()}
+        resultCount={0}
+        searchQuery=""
+        onSearchQueryChange={onSearch}
+        sortBy="updatedAt"
+        onSortByChange={vi.fn()}
+        searchPlaceholder="설문 검색"
+        advancedOpen={false}
+        onToggleAdvanced={vi.fn()}
+        deletedCount={null}
+        showDeleted={false}
+        onToggleDeleted={vi.fn()}
+      />,
+    );
+    return { input: screen.getByRole('textbox', { name: '설문 검색' }), onSearch };
+  }
+
+  it('9번째 단어는 입력되지 않고 상한을 알린다 — 서버가 거부할 검색어를 보내지 않는다', async () => {
+    const user = userEvent.setup();
+    const { input, onSearch } = renderSearch();
+    await user.type(input, '가 나 다 라 마 바 사 아 자');
+    expect(input).toHaveValue('가 나 다 라 마 바 사 아 ');
+    expect(screen.getByRole('status')).toHaveTextContent('8단어');
+    await waitFor(() => expect(onSearch).toHaveBeenCalledWith('가 나 다 라 마 바 사 아 '));
+    expect(onSearch).toHaveBeenCalledTimes(1);
+
+    // 상한 안으로 돌아오면 알림이 걷힌다.
+    await user.type(input, '{Backspace}{Backspace}');
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('상한을 넘는 붙여넣기는 통째로 막는다', async () => {
+    const user = userEvent.setup();
+    const { input } = renderSearch();
+    await user.click(input);
+    await user.paste('1 2 3 4 5 6 7 8 9 10');
+    expect(input).toHaveValue('');
+    expect(screen.getByRole('status')).toBeInTheDocument();
   });
 });
