@@ -111,8 +111,8 @@ export function ListToolbar({
       <div className="flex flex-wrap items-center gap-2">
         <LifecycleSegment value={lifecycle} counts={counts} onChange={onLifecycleChange} />
 
-        {/* 휴지통은 세그먼트와 나란히 서지만 성격이 다르다 — 세그먼트는 받아온 목록을 접고
-            이쪽은 조회를 바꾼다(티켓 17). 구분선으로 그 경계를 보이게 둔다. */}
+        {/* 휴지통은 세그먼트와 나란히 서지만 성격이 다르다 — 세그먼트는 지금 목록 안의 거르기이고
+            이쪽은 목록의 원천을 삭제된 설문으로 바꾼다(티켓 17). 구분선으로 그 경계를 보이게 둔다. */}
         {deletedCount !== null && (
           <>
             <span className="h-4 w-px bg-[#E5E5EA]" aria-hidden />
