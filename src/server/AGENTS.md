@@ -259,6 +259,7 @@ src/
 - **`suggest`** — 자동완성 설문 후보 최대 5건(`id`·`displayTitle`·`ownerName`·`lifecycle`, 응답 수 없음), `querySurveySuggestions(filter, q)` 가 `listPage` 와 같은 검색 조각을 스스로 만든다. 내 태그·소유자 후보는 서버를 부르지 않고 브라우저가 `mine`·`owners` 에서 거른다. **서버 캐시(Redis)·잡은 두지 않는다** — 권한이 사람마다 달라 캐시가 사람별로 갈리고 무효화가 늘어나는데, 원본 조회가 이미 빠르다. 화면은 200ms 디바운스 + 앞 요청 취소 + TanStack Query 30초.
 - **`listSummaries`** — 실사팀 사이드바 참여 트리용. 응답 수 없이 id·제목·카드 제목·팀·그룹만 준다(`SurveySummaryItem`).
 - **trigram 인덱스는 일부러 없다.** 범위 안 설문 1만 개, 또는 목록·자동완성 p95 200ms 초과가 RPC 로그에 보이면 카드 제목·제목·설명에 붙인다.
+- **즐겨찾기 고정** — 범위 목록은 요청자의 별을 정렬 키 맨 앞에 둔다(`pinnedFavoritesOrder`): 별 켠 설문 먼저, 그 안은 고른 정렬과 무관하게 최신 수정순, 나머지는 고른 정렬. 휴지통과 「즐겨찾기만」에는 걸지 않는다. 별은 서버 정렬이라 페이지 경계를 넘어도 이어지고, 카드의 별을 켜면 정착 후 무효화로 다시 읽을 때 자리가 옮겨진다.
 - 제목순은 `collate "ko-x-icu"` 다 — 그 정렬이 없는 DB 에서는 깨지므로 승격 전에 프로덕션 `pg_collation` 을 확인한다.
 - **목록 상태**(CONTEXT.md)의 판정은 두 벌이다 — SQL `read-models/survey-list-lifecycle` 의 `surveyListLifecycleSql`, TS `shared/contracts/survey-builder-io` 의 `resolveSurveyListLifecycle`. 같은 표(`tests/fixtures/survey-list-lifecycle-cases.ts`)로 대조하니 판정을 바꾸면 표부터 고친다.
 - 쿼리 키는 셋 다(페이지·요약은 `shared/lib/survey-list-queries`, 자동완성은 `features/survey-builder/queries/use-survey-suggestions`) `surveyKeys.lists()` 아래라 설문 mutation 무효화를 그대로 받는다. 별·태그 낙관적 갱신의 `setQueriesData` 접두는 `surveyKeys.pages()` 다 — `lists()` 로 훑으면 모양이 다른 요약 캐시(배열)까지 잡힌다.

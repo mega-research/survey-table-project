@@ -1,4 +1,5 @@
 import {
+  type Column,
   type SQL,
   and,
   asc,
@@ -243,6 +244,26 @@ function orderBy(sort: SurveyListSortBy): SQL[] {
   }
 }
 
+/**
+ * 즐겨찾기 고정 — 요청자가 별을 켠 설문을 맨 위에 모으고, 그 안은 고른 정렬과 무관하게 늘
+ * 최신 수정순(같으면 생성 최신 → id)이다. 나머지는 고른 정렬 그대로다.
+ *
+ * 걸지 않는 곳이 둘이다 — 휴지통(별을 보이지 않는다)과 「즐겨찾기만」(전부 별이라 고정할 것이
+ * 없고, 그 화면에서는 고른 정렬이 즐겨찾기 사이의 순서를 정해야 한다). 별 판정은 PK 한 번
+ * 찾기라 정렬 키에 몇 번 들어가도 싸다.
+ */
+function pinnedFavoritesOrder(params: SurveyListPageParams): SQL[] {
+  if (params.source.kind === 'deleted' || params.favorites) return [];
+  const starred = isFavoriteSql(params.source.filter.viewerId);
+  const ifStarred = (column: Column) => sql`case when ${starred} then ${column} end`;
+  return [
+    sql`${starred} desc`,
+    sql`${ifStarred(surveys.updatedAt)} desc nulls last`,
+    sql`${ifStarred(surveys.createdAt)} desc nulls last`,
+    sql`${ifStarred(surveys.id)} asc nulls last`,
+  ];
+}
+
 /** 목록 행이 쓰는 조인 — 팀 이름·소유자 이름·그룹 접기. 숫자·소유자 조회도 같은 조인을 탄다. */
 function withListJoins<T extends PgSelect>(qb: T) {
   return qb
@@ -269,7 +290,7 @@ function selectPage(params: SurveyListPageParams, where: SQL, page: number) {
       .$dynamic(),
   )
     .where(where)
-    .orderBy(...orderBy(params.sort))
+    .orderBy(...pinnedFavoritesOrder(params), ...orderBy(params.sort))
     .limit(SURVEY_LIST_PAGE_SIZE)
     .offset((page - 1) * SURVEY_LIST_PAGE_SIZE);
 }

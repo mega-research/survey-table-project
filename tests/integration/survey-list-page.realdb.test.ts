@@ -312,8 +312,9 @@ describe.skipIf(!isLocalDb)('설문 목록 페이지 조회 (real local DB)', ()
       expect(first.items).toHaveLength(SURVEY_LIST_PAGE_SIZE);
       expect(second.page).toBe(2);
       expect(second.items).toHaveLength(6);
-      // 최신 수정순 — 29일째가 맨 앞, 0일째가 맨 끝.
-      expect(first.items[0]!.id).toBe(bulk[29]);
+      // 별을 켠 3일째가 맨 앞에 고정되고, 나머지는 최신 수정순 — 29일째가 그다음, 0일째가 맨 끝.
+      expect(first.items[0]!.id).toBe(bulk[3]);
+      expect(first.items[1]!.id).toBe(bulk[29]);
       expect(second.items.at(-1)!.id).toBe(bulk[0]);
       const ids = [...first.items, ...second.items].map((s) => s.id);
       expect(new Set(ids)).toEqual(new Set(bulk));
@@ -397,8 +398,9 @@ describe.skipIf(!isLocalDb)('설문 목록 페이지 조회 (real local DB)', ()
     it('응답순 정렬은 범위 전체 기준이다 — 오래전에 고친 응답 많은 설문이 맨 앞에 온다', async () => {
       const result = await listSurveyPage(viewer, query({ sort: 'responses' }));
 
-      expect(result.items[0]).toMatchObject({ id: S.popular, responseCount: 5 });
-      expect(result.items[1]).toMatchObject({ id: bulk[0], responseCount: 2 });
+      // 맨 앞 셋은 고정된 즐겨찾기 — 응답순은 그 뒤에서 시작한다.
+      expect(result.items[3]).toMatchObject({ id: S.popular, responseCount: 5 });
+      expect(result.items[4]).toMatchObject({ id: bulk[0], responseCount: 2 });
       // 화면에 싣는 숫자는 여전히 페이지 항목만 센다.
       expect(countedIds.calls[0]).toHaveLength(SURVEY_LIST_PAGE_SIZE);
     });
@@ -415,13 +417,15 @@ describe.skipIf(!isLocalDb)('설문 목록 페이지 조회 (real local DB)', ()
   describe('정렬', () => {
     it('생성일순은 최신 생성 먼저, 이름순은 카드에 보이는 이름의 가나다순', async () => {
       const created = await listSurveyPage(viewer, query({ q: '묶음', sort: 'createdAt' }));
-      expect(created.items[0]!.id).toBe(bulk[29]);
+      // 별을 켠 3일째는 고정이라 맨 앞, 정렬은 그 뒤에서 시작한다.
+      expect(created.items[1]!.id).toBe(bulk[29]);
 
       const titled = await listSurveyPage(viewer, query({ sort: 'title', q: RUN }));
-      const names = titled.items.map((s) => s.cardTitle ?? s.title);
+      const rest = titled.items.filter((s) => !s.isFavorite);
+      const names = rest.map((s) => s.cardTitle ?? s.title);
       expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b, 'ko')));
       // 숫자로 시작하는 「100%…」 → 카드 제목 「가가 카드」 → 설문지 제목 「묶음 …」 순(한국어 정렬).
-      expect(titled.items.slice(0, 3).map((s) => s.id)).toEqual([S.literal, S.carded, bulk[0]]);
+      expect(rest.slice(0, 3).map((s) => s.id)).toEqual([S.literal, S.carded, bulk[0]]);
     });
   });
 
@@ -465,8 +469,11 @@ describe.skipIf(!isLocalDb)('설문 목록 페이지 조회 (real local DB)', ()
 
     it('소유자 목록은 범위 안 소유자 전부다 — 지금 페이지에 없는 소유자도 고를 수 있다', async () => {
       const result = await listSurveyPage(viewer, query());
-      // 1페이지(최신 수정순)는 viewer 의 묶음뿐이지만 소유자 목록에는 동료·타 팀 소유자가 있다.
-      expect(result.items.every((s) => s.ownerUserId === VIEWER_ID)).toBe(true);
+      // 1페이지(최신 수정순)는 고정된 즐겨찾기 말고는 viewer 의 묶음뿐이지만, 소유자 목록에는
+      // 동료·타 팀 소유자가 있다.
+      expect(
+        result.items.filter((s) => !s.isFavorite).every((s) => s.ownerUserId === VIEWER_ID),
+      ).toBe(true);
       expect(result.owners.map((o) => o.id).sort()).toEqual(
         [VIEWER_ID, COLLEAGUE_ID, OUTSIDER_ID].sort(),
       );
@@ -564,6 +571,40 @@ describe.skipIf(!isLocalDb)('설문 목록 페이지 조회 (real local DB)', ()
         plainOrder.filter((id) => myVisibleFavorites.includes(id)),
       );
       expect(favorites.items.every((s) => s.isFavorite)).toBe(true);
+    });
+
+    it('즐겨찾기는 어느 정렬에서든 맨 위에 모이고, 그 안은 늘 최신 수정순이다', async () => {
+      // 3일째(가장 최근 수정) → 같은 날 고친 둘은 생성 최신(초대받은 설문)이 먼저.
+      const pinned = [bulk[3], S.invited, S.grouped];
+      for (const sort of ['updatedAt', 'createdAt', 'title', 'responses'] as const) {
+        const result = await listSurveyPage(viewer, query({ sort }));
+        expect(result.items.slice(0, 3).map((s) => s.id)).toEqual(pinned);
+        expect(result.items.slice(3).some((s) => s.isFavorite)).toBe(false);
+      }
+    });
+
+    it('고정은 걸러진 결과 안에서다 — 검색에 안 걸린 즐겨찾기는 끌어올리지 않는다', async () => {
+      const result = await listSurveyPage(viewer, query({ q: '묶음', sort: 'title' }));
+      expect(result.items[0]!.id).toBe(bulk[3]);
+      expect(result.items.map((s) => s.id)).not.toContain(S.invited);
+      expect(result.items.slice(1).map((s) => s.id)).toEqual(
+        bulk.filter((id) => id !== bulk[3]).slice(0, SURVEY_LIST_PAGE_SIZE - 1),
+      );
+    });
+
+    it('「즐겨찾기만」에서는 고른 정렬이 즐겨찾기 사이의 순서를 정한다', async () => {
+      const byCreated = await listSurveyPage(viewer, query({ favorites: true, sort: 'createdAt' }));
+      // 생성 최신순 — 초대받은 설문(지금 생성) → 3일째 → 오래전 생성한 그룹 설문.
+      expect(byCreated.items.map((s) => s.id)).toEqual([S.invited, bulk[3], S.grouped]);
+    });
+
+    it('동료에게는 동료의 별이 고정된다 — 내 별은 동료 목록을 움직이지 않는다', async () => {
+      const colleague = { id: COLLEAGUE_ID, isSuperadmin: false, userType: 'internal' as const };
+      const result = await listSurveyPage(colleague, query());
+      expect(new Set(result.items.slice(0, 2).map((s) => s.id))).toEqual(
+        new Set([bulk[5], S.closed]),
+      );
+      expect(result.items.slice(2).some((s) => s.isFavorite)).toBe(false);
     });
 
     it('항목마다 내 별 여부가 실린다 — 동료가 켠 별은 내 목록에서 꺼져 있다', async () => {
