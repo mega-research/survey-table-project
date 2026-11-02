@@ -119,11 +119,15 @@ export function escapeLikePattern(text: string): string {
  *
  * 태그 이름은 요청자 본인의 태그만 본다(티켓 09) — 동료가 붙인 태그 이름으로는 내 검색이 맞지 않는다.
  * 설문별 연결(`personal_survey_tag_links_survey_idx`)에서 출발해 태그 PK 로 이름을 본다.
+ * `tagViewerId` 가 null 이면(휴지통) 태그 이름 조각을 뺀다 — 휴지통 카드에는 태그가 없어서, 태그
+ * 이름으로 맞으면 왜 맞았는지 보이지 않는 결과가 된다.
  */
-function surveyListWordMatchSql(word: string, viewerId: string): SQL {
+function surveyListWordMatchSql(word: string, tagViewerId: string | null): SQL {
   const pattern = `%${escapeLikePattern(word)}%`;
-  const myTagName = sql`exists (select 1 from ${personalSurveyTagLinks} join ${personalSurveyTags} on ${personalSurveyTags.id} = ${personalSurveyTagLinks.tagId} where ${personalSurveyTagLinks.surveyId} = ${surveys.id} and ${personalSurveyTags.userId} = ${viewerId} and ${personalSurveyTags.name} ilike ${pattern})`;
-  return sql`(${surveys.cardTitle} ilike ${pattern} or ${surveys.title} ilike ${pattern} or ${surveys.description} ilike ${pattern} or ${users.name} ilike ${pattern} or ${myTagName})`;
+  const fields = sql`${surveys.cardTitle} ilike ${pattern} or ${surveys.title} ilike ${pattern} or ${surveys.description} ilike ${pattern} or ${users.name} ilike ${pattern}`;
+  if (tagViewerId === null) return sql`(${fields})`;
+  const myTagName = sql`exists (select 1 from ${personalSurveyTagLinks} join ${personalSurveyTags} on ${personalSurveyTags.id} = ${personalSurveyTagLinks.tagId} where ${personalSurveyTagLinks.surveyId} = ${surveys.id} and ${personalSurveyTags.userId} = ${tagViewerId} and ${personalSurveyTags.name} ilike ${pattern})`;
+  return sql`(${fields} or ${myTagName})`;
 }
 
 /**
@@ -133,10 +137,10 @@ function surveyListWordMatchSql(word: string, viewerId: string): SQL {
  *
  * 단어 수·글자 수 상한은 입력 스키마가 막는다(`SurveyListPageQuerySchema`) — 여기서는 받은 대로 쓴다.
  */
-export function surveyListSearchSql(q: string, viewerId: string): SQL | undefined {
+export function surveyListSearchSql(q: string, tagViewerId: string | null): SQL | undefined {
   const words = splitSurveyListSearchWords(q);
   if (words.length === 0) return undefined;
-  return and(...words.map((word) => surveyListWordMatchSql(word, viewerId)));
+  return and(...words.map((word) => surveyListWordMatchSql(word, tagViewerId)));
 }
 
 /** 요청자가 이 설문에 별을 켰는가 — PK(user_id, survey_id) 한 번 찾기. */
@@ -345,7 +349,10 @@ export async function querySurveyListPage(
   const narrowed = narrowedWhere(params, activeTeam);
 
   const filters: SQL[] = [narrowed];
-  const search = surveyListSearchSql(params.q, params.viewerId);
+  const search = surveyListSearchSql(
+    params.q,
+    params.source.kind === 'deleted' ? null : params.viewerId,
+  );
   if (search) filters.push(search);
   if (params.lifecycle !== 'all') {
     filters.push(sql`${surveyListLifecycleSql()} = ${params.lifecycle}`);

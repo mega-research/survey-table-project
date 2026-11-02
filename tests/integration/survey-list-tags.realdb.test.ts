@@ -49,6 +49,8 @@ const S = {
   onlyYear: crypto.randomUUID(),
   /** 내 태그 없음 — 동료가 동료 태그 「동료꼬리표」를 붙였다. */
   colleagueTagged: crypto.randomUUID(),
+  /** 휴지통 설문 — 슈퍼어드민이 지우기 전에 자기 태그 「휴지꼬리표」를 붙였다. */
+  trashed: crypto.randomUUID(),
 };
 const allSurveyIds = Object.values(S);
 
@@ -59,6 +61,8 @@ const TAG = {
   /** 아무 설문에도 안 붙은 내 태그. */
   unused: { id: crypto.randomUUID(), name: '빈꼬리표' },
   colleague: { id: crypto.randomUUID(), name: '동료꼬리표' },
+  /** 슈퍼어드민의 태그 — 휴지통 설문에만 붙었다. */
+  trash: { id: crypto.randomUUID(), name: '휴지꼬리표' },
 };
 
 function query(over: Partial<SurveyListPageInput> = {}): SurveyListPageInput {
@@ -116,12 +120,14 @@ describe.skipIf(!isLocalDb)('설문 목록 태그로 거르기 (real local DB)',
         row(S.onlyClient, '발주만 붙은 설문', running),
         row(S.onlyYear, '연도만 붙은 설문', running),
         row(S.colleagueTagged, '동료가 표시한 설문', running),
+        row(S.trashed, '지운 설문', { deletedAt: new Date() }),
       ]);
     await db.insert(personalSurveyTagsTable).values([
       { id: TAG.client.id, userId: VIEWER_ID, name: TAG.client.name, color: 'blue' },
       { id: TAG.year.id, userId: VIEWER_ID, name: TAG.year.name, color: 'gray' },
       { id: TAG.unused.id, userId: VIEWER_ID, name: TAG.unused.name, color: 'red' },
       { id: TAG.colleague.id, userId: COLLEAGUE_ID, name: TAG.colleague.name, color: 'green' },
+      { id: TAG.trash.id, userId: SUPERADMIN_ID, name: TAG.trash.name, color: 'amber' },
     ]);
     await db.insert(personalSurveyTagLinksTable).values([
       { tagId: TAG.client.id, surveyId: S.both },
@@ -131,6 +137,7 @@ describe.skipIf(!isLocalDb)('설문 목록 태그로 거르기 (real local DB)',
       { tagId: TAG.client.id, surveyId: S.onlyClient },
       { tagId: TAG.year.id, surveyId: S.onlyYear },
       { tagId: TAG.colleague.id, surveyId: S.colleagueTagged },
+      { tagId: TAG.trash.id, surveyId: S.trashed },
     ]);
     await db.insert(surveyFavoritesTable).values([
       { userId: VIEWER_ID, surveyId: S.both },
@@ -236,6 +243,14 @@ describe.skipIf(!isLocalDb)('설문 목록 태그로 거르기 (real local DB)',
       expect(await idsOf({ q: `${RUN} 동료꼬리표` }, colleague)).toEqual(
         new Set([S.colleagueTagged]),
       );
+    });
+
+    it('휴지통에서는 태그 이름으로 맞지 않는다 — 카드에 태그가 없으니 이유 없이 맞는 결과가 된다', async () => {
+      const trash = (q: string) =>
+        listSurveyPage(superadmin, query({ scope: 'system', deleted: true, q }));
+      expect((await trash(`${RUN} 휴지꼬리표`)).items).toEqual([]);
+      // 같은 설문이 제목으로는 맞는다 — 빠진 것이 태그 이름 조각 때문임을 대조로 본다.
+      expect((await trash(`${RUN} 지운`)).items.map((s) => s.id)).toEqual([S.trashed]);
     });
 
     it('자동완성 설문 후보도 같은 의미다 — 내 태그 이름으로 맞고 동료 태그 이름으로는 안 맞는다', async () => {
