@@ -28,24 +28,64 @@ export const PERSONAL_TAG_DOT_CLASS: Record<PersonalTagColor, string> = {
 };
 
 /**
- * 카드 태그 줄 — 붙인 순서대로 앞의 `CARD_TAG_LIMIT` 개를 보이고 나머지는 센다. 내 태그 목록에
- * 없는 id(다른 탭에서 지운 태그 등)는 건너뛴다.
+ * 카드 태그 줄 — 앞의 `CARD_TAG_LIMIT` 개를 보이고 나머지는 센다. 내 태그 목록에 없는 id(다른 탭에서
+ * 지운 태그 등)는 건너뛴다.
  *
- * 걸린 검색 칩과 같은 태그를 맨 앞에 세우는 규칙(티켓 09)은 이 함수에 더한다.
+ * 걸린 검색 칩(`activeTagIds`)과 같은 태그가 맨 앞에 선다(티켓 09) — 왜 이 카드가 보이는지 바로 보이게.
+ * 걸린 태그끼리, 나머지끼리는 붙인 순서 그대로다.
  */
 export function resolveCardTags(
   myTagIds: readonly string[],
   tags: readonly PersonalTagItem[],
+  activeTagIds: readonly string[] = [],
 ): { shown: PersonalTagItem[]; hiddenCount: number } {
   const byId = new Map(tags.map((t) => [t.id, t]));
+  const active = new Set(activeTagIds);
   const resolved = myTagIds.flatMap((id) => {
     const found = byId.get(id);
     return found ? [found] : [];
   });
+  const ordered = [
+    ...resolved.filter((t) => active.has(t.id)),
+    ...resolved.filter((t) => !active.has(t.id)),
+  ];
   return {
-    shown: resolved.slice(0, CARD_TAG_LIMIT),
-    hiddenCount: Math.max(0, resolved.length - CARD_TAG_LIMIT),
+    shown: ordered.slice(0, CARD_TAG_LIMIT),
+    hiddenCount: Math.max(0, ordered.length - CARD_TAG_LIMIT),
   };
+}
+
+/** 「# 태그」 목록 정렬 — 많이 쓴 순(기본)·가나다순. */
+export type TagFilterSort = 'usage' | 'name';
+
+/**
+ * 「# 태그」 목록(티켓 09, 시안 F8-d) — 이름에 찾는 글자가 든 내 태그(없으면 전부)를 고른 순서로.
+ * 붙은 설문이 0개인 태그도 나온다(지울 수 있게). 많이 쓴 순의 동점과 가나다순은 한국어 정렬이다.
+ */
+export function resolveTagFilterList(
+  tags: readonly PersonalTagItem[],
+  query: string,
+  sort: TagFilterSort,
+): PersonalTagItem[] {
+  const key = personalTagNameKey(query);
+  const matches =
+    key === '' ? [...tags] : tags.filter((t) => personalTagNameKey(t.name).includes(key));
+  const byName = (a: PersonalTagItem, b: PersonalTagItem) => a.name.localeCompare(b.name, 'ko');
+  return matches.sort(
+    sort === 'usage' ? (a, b) => b.linkCount - a.linkCount || byName(a, b) : byName,
+  );
+}
+
+/**
+ * 검색 칩 중 내 태그 목록에 있는 것만 — 다른 탭에서 지운 태그 칩을 풀 때 쓴다(서버는 없는 태그 id 를
+ * 거부한다). 순서는 그대로.
+ */
+export function keepKnownTagIds(
+  tagIds: readonly string[],
+  tags: readonly PersonalTagItem[],
+): string[] {
+  const known = new Set(tags.map((t) => t.id));
+  return tagIds.filter((id) => known.has(id));
 }
 
 export interface TagPickerView {
