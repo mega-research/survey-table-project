@@ -52,6 +52,7 @@ import {
   clearSearchBox,
   hasNarrowingFilters,
   parseSurveyListQuery,
+  pickTagSuggestion,
   removeTagFilter,
   serializeSurveyListQuery,
 } from './survey-list-url';
@@ -457,6 +458,11 @@ export function SurveyListView() {
               onRemove: (tagId) => navigateTo(removeTagFilter(urlQuery, tagId)),
               // 칩과 글자만 — 즐겨찾기·목록 상태·상세 검색은 각자 자리에서 푼다.
               onClearAll: () => navigateTo(clearSearchBox(urlQuery)),
+            }}
+            // 고르면 칩 + 남은 검색어를 한 번에 — 고르는 칸이라 push(뒤로 가기로 되돌린다).
+            tagSuggestions={{
+              tags: myTags,
+              onPick: (tagId, q) => navigateTo(pickTagSuggestion(urlQuery, tagId, q)),
             }}
             // 휴지통에는 태그 조건이 없다 — 단추 자체를 그리지 않는다(서버도 그 조합을 거부한다).
             tagFilter={

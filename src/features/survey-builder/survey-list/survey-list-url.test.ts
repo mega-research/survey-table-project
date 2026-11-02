@@ -13,6 +13,7 @@ import {
   clearSearchBox,
   hasNarrowingFilters,
   parseSurveyListQuery,
+  pickTagSuggestion,
   removeTagFilter,
   serializeSurveyListQuery,
 } from './survey-list-url';
@@ -232,5 +233,19 @@ describe('조건 풀기', () => {
       ungrouped: true,
       sort: 'responses',
     });
+  });
+});
+
+describe('pickTagSuggestion — 자동완성에서 태그를 고르면 칩과 남은 검색어가 함께 바뀐다', () => {
+  it('칩이 끝에 붙고 검색어는 남은 단어로, 1페이지로 — 주소에도 둘이 같이 실린다', () => {
+    const before = { ...INITIAL_SURVEY_LIST_PAGE_QUERY, q: 'a사 실', page: 3, tagIds: [TAG_A] };
+    const next = pickTagSuggestion(before, TAG_B, '실');
+    expect(next).toEqual({ ...before, q: '실', tagIds: [TAG_A, TAG_B], page: 1 });
+    expect(serializeSurveyListQuery(next)).toBe(`q=%EC%8B%A4&tag=${TAG_A}&tag=${TAG_B}`);
+  });
+
+  it('남은 단어가 없으면 검색어가 빈다', () => {
+    const next = pickTagSuggestion({ ...INITIAL_SURVEY_LIST_PAGE_QUERY, q: 'a사' }, TAG_A, '');
+    expect(next).toEqual({ ...INITIAL_SURVEY_LIST_PAGE_QUERY, tagIds: [TAG_A] });
   });
 });

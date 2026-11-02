@@ -19,7 +19,7 @@ import type {
 } from '@/shared/contracts/survey-builder-io';
 
 import { LifecycleSegment } from './lifecycle-segment';
-import { type SearchChips, SearchCombobox } from './search-combobox';
+import { type SearchChips, SearchCombobox, type TagSuggestions } from './search-combobox';
 import { TagFilterMenu } from './tag-filter-menu';
 
 // 문의 칩(.pen FLOW 6 「칩 문의」)은 Plan 3 게이트로 미노출 — 어휘 자체를 뺐다(티켓 08).
@@ -77,6 +77,8 @@ interface ListToolbarProps {
   favorites: { on: boolean; count: number; onToggle: (next: boolean) => void } | null;
   /** 검색창 안 칩(티켓 09) — 걸린 태그 필터 + 「모두 지우기」(칩·글자만). */
   searchChips: SearchChips;
+  /** 자동완성 「내 태그」 칸(티켓 10) — 내 태그 목록과 고르기(칩 + 남은 검색어). */
+  tagSuggestions: TagSuggestions;
   /**
    * 「# 태그 ▾」 목록(티켓 09) — 체크가 곧 검색창 칩. **null 이면 단추를 그리지 않는다** — 휴지통에는
    * 태그 조건이 없다.
@@ -112,6 +114,7 @@ export function ListToolbar({
   onToggleDeleted,
   favorites,
   searchChips,
+  tagSuggestions,
   tagFilter,
 }: ListToolbarProps) {
   return (
@@ -128,6 +131,7 @@ export function ListToolbar({
           onPickOwner={onPickOwner}
           onPickSurvey={onPickSurvey}
           chips={searchChips}
+          tagSuggestions={tagSuggestions}
         />
 
         {favorites && (

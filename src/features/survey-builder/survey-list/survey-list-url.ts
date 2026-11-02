@@ -189,6 +189,18 @@ export function addTagFilter(query: SurveyListPageQuery, tagId: string): SurveyL
   return changeSurveyListQuery(query, { tagIds: [...query.tagIds, tagId] });
 }
 
+/**
+ * 자동완성 「내 태그」 후보 고르기(티켓 10) — 칩을 더하고 검색어를 그 태그에 맞던 단어를 뺀 나머지로
+ * 바꾼다(남은 글자는 `dropWordsMatching` 이 정한다). 한 번의 이동이라 뒤로 가기 한 번에 둘 다 돌아간다.
+ */
+export function pickTagSuggestion(
+  query: SurveyListPageQuery,
+  tagId: string,
+  remainingQuery: string,
+): SurveyListPageQuery {
+  return changeSurveyListQuery(addTagFilter(query, tagId), { q: remainingQuery });
+}
+
 /** 검색 칩 빼기 — 칩의 × 와 「# 태그」 목록의 체크 풀기. 걸려 있지 않으면 그대로. */
 export function removeTagFilter(query: SurveyListPageQuery, tagId: string): SurveyListPageQuery {
   if (!query.tagIds.includes(tagId)) return query;

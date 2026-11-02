@@ -47,8 +47,7 @@ export function matchTagSuggestions(
   if (words.length === 0) return [];
   return tags
     .filter(
-      (tag) =>
-        !activeTagIds.includes(tag.id) && words.some((word) => containsWord(tag.name, word)),
+      (tag) => !activeTagIds.includes(tag.id) && words.some((word) => containsWord(tag.name, word)),
     )
     .slice(0, TAG_SUGGEST_LIMIT);
 }

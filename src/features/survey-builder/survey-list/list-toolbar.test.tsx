@@ -21,6 +21,7 @@ const SUGGEST_PROPS = {
 };
 
 const SEARCH_CHIPS = { tags: [], onRemove: vi.fn(), onClearAll: vi.fn() };
+const TAG_SUGGESTIONS = { tags: [], onPick: vi.fn() };
 
 const TAG_FILTER = {
   tags: [{ id: 't1', name: 'A사', color: 'blue' as const, linkCount: 6 }],
@@ -63,6 +64,7 @@ function Harness({
       onToggleDeleted={vi.fn()}
       favorites={favorites}
       searchChips={SEARCH_CHIPS}
+      tagSuggestions={TAG_SUGGESTIONS}
       tagFilter={tagFilter}
     />
   );
@@ -219,6 +221,7 @@ describe('ListToolbar — 검색창 상한', () => {
         onToggleDeleted={vi.fn()}
         favorites={null}
         searchChips={SEARCH_CHIPS}
+        tagSuggestions={TAG_SUGGESTIONS}
         tagFilter={null}
       />,
     );
