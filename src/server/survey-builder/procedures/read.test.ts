@@ -5,6 +5,7 @@ import type { ORPCContext } from '@/server/context';
 
 vi.mock('../services/survey-read', () => ({
   getSurveyListWithCounts: vi.fn(),
+  listSurveySummaries: vi.fn(),
   getSurveyById: vi.fn(),
   getSurveyWithDetails: vi.fn(),
   isSlugAvailable: vi.fn(),
@@ -75,6 +76,33 @@ describe('surveyBuilder.read procedures', () => {
     expect(surveySvc.getSurveyListWithCounts).toHaveBeenCalledWith(context.user, null, {
       deleted: false,
     });
+  });
+
+  it('listSummaries 는 세션 사용자와 요청 범위를 요약 조회에 넘긴다 — 응답 수 조회를 타지 않는다', async () => {
+    const rows = [
+      { id: SURVEY_ID, title: '설문', cardTitle: null, teamId: 't-1', teamName: '1팀', surveyGroupId: null },
+    ];
+    vi.mocked(surveySvc.listSurveySummaries).mockResolvedValue(rows as never);
+    const context = authedContext();
+    const client = createRouterClient({ read }, { context });
+    const res = await client.read.listSummaries({ scope: 'team-1' });
+    expect(surveySvc.listSurveySummaries).toHaveBeenCalledWith(context.user, 'team-1');
+    expect(surveySvc.getSurveyListWithCounts).not.toHaveBeenCalled();
+    expect(res).toEqual(rows);
+  });
+
+  it('listSummaries 는 범위 미지정을 null 로 넘긴다', async () => {
+    vi.mocked(surveySvc.listSurveySummaries).mockResolvedValue([] as never);
+    const context = authedContext();
+    const client = createRouterClient({ read }, { context });
+    await client.read.listSummaries({});
+    expect(surveySvc.listSurveySummaries).toHaveBeenCalledWith(context.user, null);
+  });
+
+  it('listSummaries 는 비로그인이면 UNAUTHORIZED', async () => {
+    const client = createRouterClient({ read }, { context: anonContext() });
+    await expect(client.read.listSummaries({})).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    expect(surveySvc.listSurveySummaries).not.toHaveBeenCalled();
   });
 
   it('byId는 surveyId를 풀어 getSurveyById에 위임한다', async () => {

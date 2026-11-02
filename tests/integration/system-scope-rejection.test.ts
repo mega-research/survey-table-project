@@ -118,6 +118,12 @@ describe('① 입력: 일반 사용자의 system 요청은 FORBIDDEN 이다', ()
     });
   });
 
+  it('사이드바 요약 목록', async () => {
+    await expect(member.read.listSummaries({ scope: SYSTEM_SCOPE })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+  });
+
   it('설문 생성', async () => {
     await expect(
       member.surveys.create({ ...NEW_SURVEY, scope: SYSTEM_SCOPE }),

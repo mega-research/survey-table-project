@@ -120,6 +120,18 @@ export interface SurveyListResult {
 }
 
 /**
+ * 사이드바 요약 한 행 (surveyBuilder.read.listSummaries) — 참여 트리가 팀·그룹 묶음을 세는 재료.
+ *
+ * 목록 화면의 `SurveyListItem` 과 범위 조건은 같고 **응답 수가 없다**. 목록이 페이지 단위로
+ * 바뀌어도(서버 페이지네이션) 사이드바는 범위 전체를 세야 하므로 조회를 따로 둔다. 제목은
+ * 카드 제목 표기 규칙(`surveyCardTitle`)을 그대로 쓰도록 두 칸을 함께 싣는다.
+ */
+export type SurveySummaryItem = Pick<
+  SurveyListItem,
+  'id' | 'title' | 'cardTitle' | 'teamId' | 'teamName' | 'surveyGroupId'
+>;
+
+/**
  * Diff 기반 설문 저장(saveSurveyDiff) 페이로드.
  *
  * groups/questionChanges.upserted 는 24+ 필드 다형 JSONB(tableColumns·displayCondition·

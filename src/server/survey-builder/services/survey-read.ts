@@ -29,6 +29,7 @@ import { countDeletedSurveys, getDeletedSurveys } from '@/server/read-models/sur
 import {
   getQuestionGroupsBySurvey,
   getQuestionsBySurvey,
+  getScopedSurveySummaries,
   getScopedSurveys,
   getSurveyById,
   getSurveyWithDetails,
@@ -59,6 +60,7 @@ import type {
   SurveyForResponseResult,
   SurveyIdRow,
   SurveyListResult,
+  SurveySummaryItem,
 } from '../domain/survey-read';
 
 // 이 service 는 actions/query-actions 의 requireAuth 를 제거한다.
@@ -182,6 +184,23 @@ export async function getSurveyListWithCounts(
       isLedParticipant: survey.isLedParticipant,
     })),
   };
+}
+
+/**
+ * 사이드바 참여 트리용 요약 — 목록과 같은 범위 판정, 응답 수 없음(설문 즐겨찾기·태그 티켓 02).
+ *
+ * 범위 해석은 목록(`getSurveyListWithCounts`)과 같은 코어 두 단계를 그대로 지난다 — 일반
+ * 사용자의 system 요청은 여기서도 `WorkScopeError` 로 거부되고, 내 팀이 아닌 teamId 는 접힌다.
+ * 응답 수·실사 완료 수는 세지 않는다. 사이드바는 묶음 개수만 쓰고, 목록이 페이지 단위로
+ * 바뀐 뒤에도 범위 전체를 세야 해서 목록 응답에 기댈 수 없다.
+ */
+export async function listSurveySummaries(
+  user: SurveyAccessUser,
+  requestedScope?: string | null,
+): Promise<SurveySummaryItem[]> {
+  const subject = await loadAccountAccessSubject(user);
+  const scope = resolveWorkScopeFor(subject, requestedScope ?? null);
+  return getScopedSurveySummaries(buildSurveyScopeFilter(subject, scope));
 }
 
 /** 스위처가 고를 수 있는 팀 — 내 활성 소속. 슈퍼어드민은 전 팀을 고를 수 있다. */

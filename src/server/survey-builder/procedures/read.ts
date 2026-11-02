@@ -16,6 +16,8 @@ import {
   SurveyResponseArrayOutput,
   SurveyResponseOutput,
   SurveyRowOutput,
+  SurveySummaryListInput,
+  SurveySummaryListOutput,
   SurveyVersionListOutput,
   SurveyWithDetailsOutput,
   VariableCatalogOutput,
@@ -45,6 +47,24 @@ const list = authed
       .getSurveyListWithCounts(context.user, input.scope ?? null, { deleted: input.deleted === true })
       // 일반 사용자의 system 요청은 코어가 거부한다 — 매핑이 없으면 그 거부가 500 이 된다.
       // 휴지통 요청(deleted)의 거부도 같은 자리에서 옮긴다(SurveyAccessError → FORBIDDEN).
+      .catch((error: unknown) => {
+        throw toRpcSurveyAccessError(toRpcWorkScopeError(error));
+      }),
+  );
+
+/**
+ * 사이드바 요약 — 목록과 같은 작업 범위 필터, 응답 수 없음(설문 즐겨찾기·태그 티켓 02).
+ *
+ * 실사팀 사이드바의 참여 트리가 팀 → 그룹 → 미분류 묶음을 센다. 목록이 페이지 단위로
+ * 바뀌어도 사이드바가 범위 전체를 세도록 목록 조회와 분리했다.
+ */
+const listSummaries = authed
+  .input(SurveySummaryListInput)
+  .output(SurveySummaryListOutput)
+  .handler(({ context, input }) =>
+    surveySvc
+      .listSurveySummaries(context.user, input.scope ?? null)
+      // 일반 사용자의 system 요청 거부(WorkScopeError)를 FORBIDDEN 으로 — 목록과 같은 매핑.
       .catch((error: unknown) => {
         throw toRpcSurveyAccessError(toRpcWorkScopeError(error));
       }),
@@ -170,6 +190,7 @@ const variableCatalog = authed
 
 export const read = {
   list,
+  listSummaries,
   byId,
   withDetails,
   slugAvailable,
