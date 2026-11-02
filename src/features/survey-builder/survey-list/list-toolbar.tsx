@@ -14,8 +14,10 @@ import {
 import { cn } from '@/lib/utils';
 import {
   SURVEY_LIST_SEARCH_MAX_LENGTH,
+  SURVEY_LIST_SEARCH_MAX_WORDS,
   type SurveyListLifecycleFilter,
   type SurveyListSortBy,
+  isSurveyListSearchWithinLimits,
 } from '@/shared/contracts/survey-builder-io';
 
 import { LifecycleSegment } from './lifecycle-segment';
@@ -195,6 +197,9 @@ const SEARCH_DEBOUNCE_MS = 250;
  *
  * 바깥 값(주소)이 바뀌면 따라간다 — 뒤로 가기·「조건 풀기」가 검색어를 바꾼 경우. 단 내가 방금
  * 올린 값이 돌아온 것이면 건드리지 않는다: 그 사이 더 친 글자를 덮어 지우게 된다.
+ *
+ * 상한(단어 8개·100자)을 넘기는 입력은 받지 않는다 — 서버 입력 스키마가 같은 기준으로 거부하므로
+ * 넘친 검색어를 보내면 목록이 오류로 바뀐다. 막힌 순간에는 아래에 상한을 알린다.
  */
 function SearchInput({
   value,
@@ -206,6 +211,7 @@ function SearchInput({
   placeholder: string;
 }) {
   const [draft, setDraft] = useState(value);
+  const [limitHit, setLimitHit] = useState(false);
   const [seen, setSeen] = useState(value);
   const [sent, setSent] = useState(value);
   if (value !== seen) {
@@ -232,12 +238,27 @@ function SearchInput({
       <input
         type="text"
         value={draft}
-        onChange={(e) => setDraft(e.target.value)}
+        onChange={(e) => {
+          const next = e.target.value;
+          const fits = isSurveyListSearchWithinLimits(next);
+          setLimitHit(!fits);
+          if (fits) setDraft(next);
+        }}
+        onBlur={() => setLimitHit(false)}
         placeholder={placeholder}
         aria-label="설문 검색"
         maxLength={SURVEY_LIST_SEARCH_MAX_LENGTH}
         className="h-10 w-full rounded-[10px] border border-[#E5E5EA] bg-white pr-3 pl-10 text-[13.5px] text-[#1C1C1E] placeholder:text-[#9CA3AF] focus:border-[#2E4FCE] focus:outline-none"
       />
+      {limitHit && (
+        <p
+          role="status"
+          className="absolute top-full left-0 z-10 mt-1 rounded-md border border-[#FECACA] bg-white px-2 py-1 text-[12px] text-[#B91C1C]"
+        >
+          검색어는 {SURVEY_LIST_SEARCH_MAX_WORDS}단어, {SURVEY_LIST_SEARCH_MAX_LENGTH}자까지 쓸 수
+          있습니다
+        </p>
+      )}
     </div>
   );
 }

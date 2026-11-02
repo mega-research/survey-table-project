@@ -98,6 +98,13 @@ describe('주소 ↔ 목록 조건', () => {
   it('검색어는 상한 글자 수에서 자른다', () => {
     expect(parse(`q=${'가'.repeat(150)}`).q).toHaveLength(100);
   });
+
+  it('검색어는 앞 8단어까지만 남긴다 — 서버가 거부할 주소로 조회하지 않게', () => {
+    const nine = encodeURIComponent('가 나 다 라 마 바 사 아 자');
+    expect(parse(`q=${nine}`).q).toBe('가 나 다 라 마 바 사 아');
+    // 8단어 이하면 사람이 친 그대로(공백 포함) 둔다 — 검색창이 같은 글자를 보여 준다.
+    expect(parse(`q=${encodeURIComponent(' 2026  실태 ')}`).q).toBe(' 2026  실태 ');
+  });
 });
 
 describe('조건 바꾸기', () => {

@@ -13,8 +13,10 @@ import {
   LOOSE_UUID_PATTERN,
   SURVEY_LIST_DATE_PATTERN,
   SURVEY_LIST_SEARCH_MAX_LENGTH,
+  SURVEY_LIST_SEARCH_MAX_WORDS,
   type SurveyListAdvancedFilters,
   type SurveyListPageQuery,
+  splitSurveyListSearchWords,
   surveyListDateFieldValues,
   surveyListLifecycleFilterValues,
   surveyListSortValues,
@@ -63,6 +65,18 @@ function nonNegativeIntOrNull(raw: string | null): number | null {
   return raw !== null && /^\d{1,9}$/.test(raw) ? Number(raw) : null;
 }
 
+/**
+ * 주소의 검색어를 상한 안으로 — 글자 수에서 자르고, 단어가 넘치면 앞 단어들만 한 칸씩 띄워 남긴다.
+ * 상한 안이면 친 그대로 둔다(검색창이 같은 글자를 보여 준다).
+ */
+function searchWithinLimits(raw: string | null): string {
+  const q = (raw ?? '').slice(0, SURVEY_LIST_SEARCH_MAX_LENGTH);
+  const words = splitSurveyListSearchWords(q);
+  return words.length > SURVEY_LIST_SEARCH_MAX_WORDS
+    ? words.slice(0, SURVEY_LIST_SEARCH_MAX_WORDS).join(' ')
+    : q;
+}
+
 /** 주소 → 조건. */
 export function parseSurveyListQuery(params: SearchParamsLike): SurveyListPageQuery {
   const teamId = uuidOrNull(params.get(P.teamId));
@@ -84,7 +98,7 @@ export function parseSurveyListQuery(params: SearchParamsLike): SurveyListPageQu
     teamId,
     // 미분류는 그 팀의 그룹 밖 설문이라 팀 좁힘과 함께일 때만 뜻이 있다.
     ungrouped: teamId !== null && params.get(P.ungrouped) === '1',
-    q: (params.get(P.q) ?? '').slice(0, SURVEY_LIST_SEARCH_MAX_LENGTH),
+    q: searchWithinLimits(params.get(P.q)),
     lifecycle:
       oneOf(surveyListLifecycleFilterValues, params.get(P.lifecycle)) ??
       INITIAL_SURVEY_LIST_PAGE_QUERY.lifecycle,

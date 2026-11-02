@@ -19,6 +19,7 @@ import {
   type SurveyListOwner,
   type SurveyListPageQuery,
   type SurveyListSortBy,
+  splitSurveyListSearchWords,
 } from '@/shared/contracts/survey-builder-io';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -74,10 +75,7 @@ function groupColumn(source: SurveyListSource): SQL<string | null> {
   return source.kind === 'deleted' ? sql<string | null>`null::uuid` : visibleGroupId();
 }
 
-/**
- * 카드에 보이는 이름 — `surveyCardTitle` 의 SQL 판(카드 제목이 없으면 설문지 제목). 검색과
- * 제목순 정렬이 이것을 본다.
- */
+/** 카드에 보이는 이름 — `surveyCardTitle` 의 SQL 판(카드 제목이 없으면 설문지 제목). 제목순 정렬이 본다. */
 const cardTitleSql = sql<string>`coalesce(${surveys.cardTitle}, ${surveys.title})`;
 
 /**
@@ -92,15 +90,26 @@ export function escapeLikePattern(text: string): string {
 }
 
 /**
- * 검색 조각 — 지금은 카드 제목 부분일치 하나(대소문자 무시). 빈 검색어면 조건 없음.
+ * 한 단어가 맞는가 — 카드 제목 · 설문지 제목 · 설명 · 소유자 이름 중 하나라도 부분일치(대소문자
+ * 무시). 소유자 이름은 `users` 조인(`withListJoins`)이 걸린 문장에서만 쓸 수 있다.
  *
- * 여러 단어 검색(티켓 04)이 이 함수를 단어별 OR 묶음의 AND 로 바꾼다. 목록 페이지와 자동완성이
- * 같은 조각을 쓰도록 여기 하나만 둔다.
+ * 내 태그 이름(티켓 09)은 여기에 요청자의 태그 EXISTS 를 OR 로 더한다.
+ */
+function surveyListWordMatchSql(word: string): SQL {
+  const pattern = `%${escapeLikePattern(word)}%`;
+  return sql`(${surveys.cardTitle} ilike ${pattern} or ${surveys.title} ilike ${pattern} or ${surveys.description} ilike ${pattern} or ${users.name} ilike ${pattern})`;
+}
+
+/**
+ * 검색 조각 — 검색어를 공백으로 나눈 단어마다 `surveyListWordMatchSql`, 단어끼리 AND. 빈 검색어면
+ * 조건 없음. 목록 페이지와 자동완성(티켓 05)이 같은 조각을 쓰도록 여기 하나만 둔다.
+ *
+ * 단어 수·글자 수 상한은 입력 스키마가 막는다(`SurveyListPageQuerySchema`) — 여기서는 받은 대로 쓴다.
  */
 export function surveyListSearchSql(q: string): SQL | undefined {
-  const term = q.trim();
-  if (term === '') return undefined;
-  return sql`${cardTitleSql} ilike ${`%${escapeLikePattern(term)}%`}`;
+  const words = splitSurveyListSearchWords(q);
+  if (words.length === 0) return undefined;
+  return and(...words.map(surveyListWordMatchSql));
 }
 
 /** 요청자가 이 설문에 별을 켰는가 — PK(user_id, survey_id) 한 번 찾기. */

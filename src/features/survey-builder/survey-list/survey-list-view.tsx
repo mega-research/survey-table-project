@@ -357,7 +357,9 @@ export function SurveyListView() {
             onSearchQueryChange={(q) => updateQuery({ q }, 'replace')}
             sortBy={query.sort}
             onSortByChange={(sort) => updateQuery({ sort })}
-            searchPlaceholder={activeGroup ? '그룹 내 설문 검색' : '설문 검색...'}
+            searchPlaceholder={
+              activeGroup ? `이 그룹 안에서 ${SEARCH_PLACEHOLDER}` : SEARCH_PLACEHOLDER
+            }
             advancedOpen={advancedOpen}
             onToggleAdvanced={() => setAdvancedOpen(!advancedOpen)}
             deletedCount={data?.deletedCount ?? null}
@@ -490,6 +492,9 @@ export function SurveyListView() {
     </div>
   );
 }
+
+/** 검색창 안내 — 단어마다 이 칸들 중 하나에 들면 맞는다(내 태그 이름 매칭은 티켓 09). */
+const SEARCH_PLACEHOLDER = '설문 이름, 설명, 소유자, 내 태그 — 여러 단어는 띄어서';
 
 const LIFECYCLE_LABELS = { draft: '작성중', running: '진행중', closed: '종료' } as const;
 

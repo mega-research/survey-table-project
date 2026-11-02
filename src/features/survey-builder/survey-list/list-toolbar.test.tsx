@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -121,9 +121,7 @@ describe('ListToolbar — 둘째 줄 오른쪽', () => {
 describe('ListToolbar — 즐겨찾기 단추', () => {
   it('내 별 개수와 함께 서고, 누르면 즐겨찾기만 보기를 켠다', async () => {
     const onToggle = vi.fn();
-    render(
-      <Harness onLifecycleChange={vi.fn()} favorites={{ on: false, count: 3, onToggle }} />,
-    );
+    render(<Harness onLifecycleChange={vi.fn()} favorites={{ on: false, count: 3, onToggle }} />);
 
     const button = screen.getByRole('button', { name: '즐겨찾기 3' });
     expect(button).toHaveAttribute('aria-pressed', 'false');
@@ -144,5 +142,54 @@ describe('ListToolbar — 즐겨찾기 단추', () => {
   it('null 이면 단추가 없다 — 휴지통', () => {
     render(<Harness onLifecycleChange={vi.fn()} favorites={null} />);
     expect(screen.queryByRole('button', { name: /즐겨찾기/ })).toBeNull();
+  });
+});
+
+describe('ListToolbar — 검색창 상한', () => {
+  function renderSearch() {
+    const onSearch = vi.fn();
+    render(
+      <ListToolbar
+        counts={{ all: 0, draft: 0, running: 0, closed: 0 }}
+        lifecycle="all"
+        onLifecycleChange={vi.fn()}
+        resultCount={0}
+        searchQuery=""
+        onSearchQueryChange={onSearch}
+        sortBy="updatedAt"
+        onSortByChange={vi.fn()}
+        searchPlaceholder="설문 검색"
+        advancedOpen={false}
+        onToggleAdvanced={vi.fn()}
+        deletedCount={null}
+        showDeleted={false}
+        onToggleDeleted={vi.fn()}
+        favorites={null}
+      />,
+    );
+    return { input: screen.getByRole('textbox', { name: '설문 검색' }), onSearch };
+  }
+
+  it('9번째 단어는 입력되지 않고 상한을 알린다 — 서버가 거부할 검색어를 보내지 않는다', async () => {
+    const user = userEvent.setup();
+    const { input, onSearch } = renderSearch();
+    await user.type(input, '가 나 다 라 마 바 사 아 자');
+    expect(input).toHaveValue('가 나 다 라 마 바 사 아 ');
+    expect(screen.getByRole('status')).toHaveTextContent('8단어');
+    await waitFor(() => expect(onSearch).toHaveBeenCalledWith('가 나 다 라 마 바 사 아 '));
+    expect(onSearch).toHaveBeenCalledTimes(1);
+
+    // 상한 안으로 돌아오면 알림이 걷힌다.
+    await user.type(input, '{Backspace}{Backspace}');
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('상한을 넘는 붙여넣기는 통째로 막는다', async () => {
+    const user = userEvent.setup();
+    const { input } = renderSearch();
+    await user.click(input);
+    await user.paste('1 2 3 4 5 6 7 8 9 10');
+    expect(input).toHaveValue('');
+    expect(screen.getByRole('status')).toBeInTheDocument();
   });
 });

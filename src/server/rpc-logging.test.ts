@@ -1,8 +1,16 @@
-import { createRouterClient, ORPCError } from '@orpc/server';
-import * as z from 'zod';
+import { ORPCError, createRouterClient } from '@orpc/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as z from 'zod';
+
+import { serializeError } from '@/lib/logger/err-serializer';
+import {
+  INITIAL_SURVEY_LIST_PAGE_QUERY,
+  SurveyListPageInputSchema,
+} from '@/shared/contracts/survey-builder-io';
 
 import type { ORPCContext } from './context';
+import { authed, base, pub } from './orpc';
+import { isSentryCaptured } from './rpc-error-policy';
 
 // pino 실인스턴스 대신 스파이 — 미들웨어가 넘기는 바인딩 객체만 검증한다.
 const logged = vi.hoisted(() => ({
@@ -39,9 +47,6 @@ vi.mock('@/lib/logger', () => ({
   createLogger: vi.fn(),
   REDACT_PATHS: [],
 }));
-
-import { authed, base, pub } from './orpc';
-import { isSentryCaptured } from './rpc-error-policy';
 
 beforeEach(() => {
   logged.info.mockReset();
@@ -89,6 +94,7 @@ const testRouter = {
     throw new Error('db down');
   }),
   adminOnly: authed.handler(() => 'ok'),
+  listPage: pub.input(SurveyListPageInputSchema).handler(() => []),
   boomWithDetail: pub.handler(() => {
     throw Object.assign(new Error('해당 설문에 존재하지 않는 질문입니다.'), {
       sentryContext: { versionId: 'v1', missingQuestionIds: ['q1'] },
@@ -211,7 +217,11 @@ describe('rpcLoggingMiddleware', () => {
     });
 
     expect(sentry.captureException).toHaveBeenCalledTimes(1);
-    expect(sentry.tags[0]).toMatchObject({ rpc: 'boom', code: 'INTERNAL_SERVER_ERROR', role: 'anonymous' });
+    expect(sentry.tags[0]).toMatchObject({
+      rpc: 'boom',
+      code: 'INTERNAL_SERVER_ERROR',
+      role: 'anonymous',
+    });
     expect(sentry.transactionNames[0]).toBe('rpc boom');
     expect(isSentryCaptured(thrown)).toBe(true);
   });
@@ -243,5 +253,24 @@ describe('rpcLoggingMiddleware', () => {
     expect(logged.info).toHaveBeenCalledTimes(1);
     const [fields] = logged.info.mock.calls[0] as [Record<string, unknown>];
     expect(fields).toMatchObject({ rpc: 'health' });
+  });
+
+  it('목록 검색어는 성공·입력 거부 어느 쪽에서도 로그에 실리지 않는다 (설문 목록 티켓 04)', async () => {
+    const client = createRouterClient(testRouter, { context: ctx('admin-1') });
+    const secret = '발주처비밀낱말';
+    await client.listPage({ ...INITIAL_SURVEY_LIST_PAGE_QUERY, scope: null, q: secret });
+    // 단어 9개 — 입력 스키마가 거부한다(BAD_REQUEST). 거부 사유에도 검색어가 남지 않아야 한다.
+    const tooMany = `${secret} 2 3 4 5 6 7 8 9`;
+    await expect(
+      client.listPage({ ...INITIAL_SURVEY_LIST_PAGE_QUERY, scope: null, q: tooMany }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+    // pino 가 실제로 쓰는 모양(err 는 err 직렬화기를 거친다)으로 펼쳐 찾는다.
+    const written = [...logged.info.mock.calls, ...logged.error.mock.calls].map(([fields]) => {
+      const { err, ...rest } = fields as Record<string, unknown>;
+      return JSON.stringify({ ...rest, err: err instanceof Error ? serializeError(err) : err });
+    });
+    expect(written).toHaveLength(2);
+    for (const line of written) expect(line).not.toContain(secret);
   });
 });

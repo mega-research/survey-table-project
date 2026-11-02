@@ -185,8 +185,23 @@ export type SurveySummaryItem = Pick<
 
 /** 한 페이지의 카드 수 — 고정. */
 export const SURVEY_LIST_PAGE_SIZE = 24;
-/** 검색어 상한(글자). 여러 단어 검색(티켓 04)의 단어 수 상한은 그쪽이 더한다. */
+/** 검색어 상한(글자, 공백 포함). */
 export const SURVEY_LIST_SEARCH_MAX_LENGTH = 100;
+/** 검색어 단어 수 상한 — 단어마다 OR 묶음이 하나씩 붙으므로 SQL 크기를 묶어 둔다. */
+export const SURVEY_LIST_SEARCH_MAX_WORDS = 8;
+
+/** 검색어를 단어로 나눈다 — 공백(연속·앞뒤 포함)으로 자르고 빈 조각은 버린다. 서버 SQL 과 화면이 같이 쓴다. */
+export function splitSurveyListSearchWords(q: string): string[] {
+  return q.split(/\s+/).filter((word) => word !== '');
+}
+
+/** 검색어가 상한(글자 수·단어 수) 안인가 — 입력 스키마가 거부하는 기준과 화면이 입력을 막는 기준이 같다. */
+export function isSurveyListSearchWithinLimits(q: string): boolean {
+  return (
+    q.length <= SURVEY_LIST_SEARCH_MAX_LENGTH &&
+    splitSurveyListSearchWords(q).length <= SURVEY_LIST_SEARCH_MAX_WORDS
+  );
+}
 
 /** 세그먼트가 고르는 값 — 「전체」 + 목록 상태. */
 export const surveyListLifecycleFilterValues = ['all', ...surveyListLifecycleValues] as const;
@@ -247,7 +262,12 @@ export const SurveyListPageQuerySchema = z.object({
   groupId: uuidLike.nullable(),
   teamId: uuidLike.nullable(),
   ungrouped: z.boolean(),
-  q: z.string().max(SURVEY_LIST_SEARCH_MAX_LENGTH),
+  q: z
+    .string()
+    .max(SURVEY_LIST_SEARCH_MAX_LENGTH)
+    .refine((q) => splitSurveyListSearchWords(q).length <= SURVEY_LIST_SEARCH_MAX_WORDS, {
+      message: `검색 단어는 ${SURVEY_LIST_SEARCH_MAX_WORDS}개까지입니다`,
+    }),
   lifecycle: z.enum(surveyListLifecycleFilterValues),
   advanced: SurveyListAdvancedFiltersSchema,
   favorites: z.boolean(),
