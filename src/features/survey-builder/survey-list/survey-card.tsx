@@ -46,6 +46,7 @@ import type { PersonalTagItem, SurveyGroupListItem } from '@/shared/contracts/wo
 import { ShareSettingsModal } from '../sharing/share-settings-modal';
 import { CardTitleDialog } from './card-title-dialog';
 import { GroupMoveSubmenu } from './groups/group-move-submenu';
+import { ACTIVE_TAG_LABEL_CLASS, PersonalTagLabel } from './personal-tag-label';
 import { resolveCardTags } from './personal-tags';
 import {
   type SurveyCardViewer,
@@ -54,7 +55,7 @@ import {
   canManageSurveyAccessCard,
   canManageSurveyGroupCard,
 } from './survey-list-capability';
-import { ACTIVE_TAG_LABEL_CLASS, PersonalTagLabel, TagPickerPanel } from './tag-picker';
+import { TagPickerPanel } from './tag-picker';
 
 /**
  * 카드의 내 태그 — 나에게만 보이는 개인 표시(티켓 07). 낙관적 갱신·연타 처리는 목록 화면의

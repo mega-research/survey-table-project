@@ -17,8 +17,8 @@ import {
 import type { PersonalTagItem } from '@/shared/contracts/workspace-io';
 
 import { useSurveySuggestions } from '../queries/use-survey-suggestions';
+import { ACTIVE_TAG_LABEL_CLASS, PersonalTagLabel } from './personal-tag-label';
 import { dropWordsMatching, matchOwnerSuggestions, matchTagSuggestions } from './search-suggest';
-import { ACTIVE_TAG_LABEL_CLASS, PersonalTagLabel } from './tag-picker';
 
 const LIFECYCLE_LABELS: Record<SurveyListLifecycle, string> = {
   draft: '작성중',
