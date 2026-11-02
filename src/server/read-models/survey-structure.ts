@@ -186,17 +186,11 @@ function surveyListColumns(viewerId: string | null, leaderTeamIds: readonly stri
 }
 
 /**
- * 작업 범위로 좁힌 설문 목록 (역할 모델 v2 티켓 07).
- *
- * 판정은 하지 않는다 — 무엇을 보게 되는지는 이미 buildSurveyScopeFilter 가 정했고 여기는
- * 그 조건을 SQL 로 옮길 뿐이다. 이 함수가 "팀장인가" 를 다시 물으면 매트릭스가 두 벌이 된다.
- *
- * 팀 범위에서 배치 대기 설문을 빼는 것은 조건이 아니라 정의다 — 배치 대기는 team_id 가
- * NULL 이라 어느 팀 범위에도 걸리지 않는다. 시스템 범위만 그것을 본다.
+ * 작업 범위가 보는 설문의 WHERE — 목록(`getScopedSurveys`)과 사이드바 요약
+ * (`getScopedSurveySummaries`)이 함께 쓴다. 아무것도 보지 않는 범위(`kind: 'none'`)는 호출 쪽이
+ * 조회 전에 빈 결과로 끝낸다.
  */
-export async function getScopedSurveys(filter: SurveyScopeFilter) {
-  if (filter.kind === 'none') return [];
-
+function scopedSurveyWhere(filter: Exclude<SurveyScopeFilter, { kind: 'none' }>): SQL {
   const conditions: SQL[] = [isNull(surveys.deletedAt)];
   if (filter.kind === 'team') {
     // 팀 범위가 보는 것 = 그 팀 설문 + **내가 초대받은 설문**(팀 무관, 티켓 18).
@@ -229,6 +223,22 @@ export async function getScopedSurveys(filter: SurveyScopeFilter) {
     conditions.push(visible);
   }
 
+  return and(...conditions)!;
+}
+
+/**
+ * 작업 범위로 좁힌 설문 목록 (역할 모델 v2 티켓 07).
+ *
+ * 판정은 하지 않는다 — 무엇을 보게 되는지는 이미 buildSurveyScopeFilter 가 정했고 여기는
+ * 그 조건을 SQL 로 옮길 뿐이다. 이 함수가 "팀장인가" 를 다시 물으면 매트릭스가 두 벌이 된다.
+ *
+ * 팀 범위에서 배치 대기 설문을 빼는 것은 조건이 아니라 정의다 — 배치 대기는 team_id 가
+ * NULL 이라 어느 팀 범위에도 걸리지 않는다. 시스템 범위만 그것을 본다.
+ */
+export async function getScopedSurveys(filter: SurveyScopeFilter) {
+  if (filter.kind === 'none') return [];
+  const where = scopedSurveyWhere(filter);
+
   return db
     .select({
       ...surveyListColumns(filter.viewerId, filter.kind === 'team' ? filter.leaderTeamIds : []),
@@ -241,7 +251,35 @@ export async function getScopedSurveys(filter: SurveyScopeFilter) {
     .leftJoin(teams, eq(teams.id, surveys.teamId))
     .leftJoin(users, eq(users.id, surveys.ownerUserId))
     .leftJoin(surveyGroups, eq(surveyGroups.id, surveys.surveyGroupId))
-    .where(and(...conditions))
+    .where(where)
+    .orderBy(desc(surveys.createdAt));
+}
+
+/**
+ * 사이드바 요약 (설문 즐겨찾기·태그 티켓 02) — `getScopedSurveys` 와 **같은 범위 조건**, 좁은 투영.
+ *
+ * 참여 트리는 팀 → 그룹 → 미분류 묶음만 센다. 목록 행의 참여 여부 서브쿼리·소유자 조인을 싣지
+ * 않고, 응답 수 집계는 호출 쪽도 하지 않는다. 범위 조건을 따로 적으면 사이드바 숫자와 본문
+ * 카드 수가 갈리므로 `scopedSurveyWhere` 하나를 공유하고, 그룹 열도 같은 접기(`visibleGroupId`)를
+ * 쓴다 — 목록이 미분류로 접는 설문을 사이드바가 폴더로 세면 누른 폴더에서 카드가 모자란다.
+ */
+export async function getScopedSurveySummaries(filter: SurveyScopeFilter) {
+  if (filter.kind === 'none') return [];
+  const where = scopedSurveyWhere(filter);
+
+  return db
+    .select({
+      id: surveys.id,
+      title: surveys.title,
+      cardTitle: surveys.cardTitle,
+      teamId: surveys.teamId,
+      teamName: teams.name,
+      surveyGroupId: visibleGroupId(),
+    })
+    .from(surveys)
+    .leftJoin(teams, eq(teams.id, surveys.teamId))
+    .leftJoin(surveyGroups, eq(surveyGroups.id, surveys.surveyGroupId))
+    .where(where)
     .orderBy(desc(surveys.createdAt));
 }
 

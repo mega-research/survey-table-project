@@ -2,7 +2,8 @@
  * 실사팀 사이드바 분기 (0139, .pen 사이드바_협업그룹_시안 「방식 A'」).
  *
  * 실사팀 범위에서만 「설문 목록」·그룹 트리 대신 「참여 중」 + 소유 팀 줄을 그린다. 일반 팀은
- * 종전 그대로다. 수치는 본문 목록과 같은 응답(read.list)에서 센다.
+ * 종전 그대로다. 수치는 응답 수 없는 요약 조회(read.listSummaries)에서 센다 — 서버가 목록과 같은
+ * 범위 조건을 쓰므로 본문 카드 수와 같다(설문 즐겨찾기·태그 티켓 02).
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
@@ -26,17 +27,23 @@ vi.mock('next/navigation', () => ({
 }));
 
 const listCall = vi.fn();
+const summariesCall = vi.fn();
 const groupsCall = vi.fn();
 vi.mock('@/shared/lib/rpc', () => ({
   client: {},
   orpc: {
-    surveyBuilder: { read: { list: { call: (...a: unknown[]) => listCall(...a) } } },
+    surveyBuilder: {
+      read: {
+        list: { call: (...a: unknown[]) => listCall(...a) },
+        listSummaries: { call: (...a: unknown[]) => summariesCall(...a) },
+      },
+    },
     workspace: { surveyGroups: { list: { call: (...a: unknown[]) => groupsCall(...a) } } },
   },
 }));
 
 function s(teamId: string, teamName: string, surveyGroupId: string | null) {
-  return { id: crypto.randomUUID(), teamId, teamName, surveyGroupId };
+  return { id: crypto.randomUUID(), title: '설문', cardTitle: null, teamId, teamName, surveyGroupId };
 }
 
 function renderSidebar(kind: TeamKind) {
@@ -67,18 +74,14 @@ function renderSidebar(kind: TeamKind) {
 
 beforeEach(() => {
   searchParams = new URLSearchParams();
-  listCall.mockResolvedValue({
-    scope: { kind: 'team', teamId: FIELDWORK_TEAM },
-    teams: [],
-    canSeeSystemScope: false,
-    deletedCount: null,
-    surveys: [
-      s(TEAM_5, '연구3본부 5팀', 'g-2026'),
-      s(TEAM_5, '연구3본부 5팀', 'g-2026'),
-      s(TEAM_5, '연구3본부 5팀', null),
-      s(TEAM_1, '연구1본부 1팀', null),
-    ],
-  });
+  listCall.mockReset();
+  summariesCall.mockReset();
+  summariesCall.mockResolvedValue([
+    s(TEAM_5, '연구3본부 5팀', 'g-2026'),
+    s(TEAM_5, '연구3본부 5팀', 'g-2026'),
+    s(TEAM_5, '연구3본부 5팀', null),
+    s(TEAM_1, '연구1본부 1팀', null),
+  ]);
   groupsCall.mockResolvedValue([
     { id: 'g-2026', name: '2026', order: 0, surveyCount: 2, foreignTeamName: '연구3본부 5팀' },
   ]);
@@ -100,6 +103,13 @@ describe('실사팀 사이드바', () => {
     expect(screen.getByRole('link', { name: /연구1본부 1팀/ })).toBeInTheDocument();
     // 참여 중 수 배지는 본문 목록과 같은 수다.
     expect(screen.getByRole('link', { name: /참여 중/ })).toHaveTextContent('4');
+  });
+
+  it('응답 수를 세는 목록 조회 대신 그 팀 범위의 요약 조회를 부른다', async () => {
+    renderSidebar('fieldwork');
+    await screen.findByRole('link', { name: /연구3본부 5팀/ });
+    expect(summariesCall).toHaveBeenCalledWith({ scope: FIELDWORK_TEAM });
+    expect(listCall).not.toHaveBeenCalled();
   });
 
   it('팀 줄의 화살표로 그 팀 폴더와 미분류를 펼친다', async () => {

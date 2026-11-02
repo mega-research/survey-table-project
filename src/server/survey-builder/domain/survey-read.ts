@@ -13,6 +13,7 @@ import type {
   SurveyControl,
   SurveyListItem,
   SurveyListResult,
+  SurveySummaryItem,
 } from '@/shared/contracts/survey-builder-io';
 import type { VariableDef } from '@/shared/contracts/template-variables';
 import type { Survey as SurveyType } from '@/types/survey';
@@ -60,6 +61,18 @@ export const SurveyListInput = z.object({
 export type SurveyListInput = z.infer<typeof SurveyListInput>;
 
 export const SurveyListOutput = z.custom<SurveyListResult>();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// listSummaries (listSurveySummaries) — 사이드바 참여 트리용, 응답 수 없음
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type { SurveySummaryItem };
+
+/** 요약 조회 입력 — 목록과 같은 작업 범위 값. 휴지통 모드는 없다(사이드바는 보이는 설문만 센다). */
+export const SurveySummaryListInput = z.object({ scope: z.string().nullish() });
+export type SurveySummaryListInput = z.infer<typeof SurveySummaryListInput>;
+
+export const SurveySummaryListOutput = z.custom<SurveySummaryItem[]>();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // byId (getSurveyById) — surveys.$inferSelect | undefined
