@@ -1,8 +1,9 @@
 // 실사팀 사이드바의 참여 트리 — 순수 계산 (0139, .pen 사이드바_협업그룹_시안 「방식 A'」).
 //
-// 본문 목록과 **같은 응답**(surveyBuilder.read.list)에서 센다 — 사이드바가 따로 세면 「5팀 3」
-// 인데 그 팀 화면에 카드가 2장인 어긋남이 생긴다. 폴더 이름만 그룹 목록에서 빌린다.
-import type { SurveyListItem } from '@/shared/contracts/survey-builder-io';
+// 요약 조회(surveyBuilder.read.listSummaries)에서 센다 — 서버가 본문 목록과 같은 범위 조건·같은
+// 그룹 접기를 쓰므로, 「5팀 3」인데 그 팀 화면에 카드가 2장인 어긋남이 생기지 않는다.
+// 폴더 이름만 그룹 목록에서 빌린다.
+import type { SurveySummaryItem } from '@/shared/contracts/survey-builder-io';
 import type { SurveyGroupListItem } from '@/shared/contracts/workspace-io';
 
 export interface ParticipationFolder {
@@ -28,7 +29,7 @@ export interface ParticipationTeam {
  * 없으므로 세지 않는다.
  */
 export function buildParticipationTree(
-  surveys: readonly Pick<SurveyListItem, 'teamId' | 'teamName' | 'surveyGroupId'>[],
+  surveys: readonly Pick<SurveySummaryItem, 'teamId' | 'teamName' | 'surveyGroupId'>[],
   groups: readonly SurveyGroupListItem[],
 ): ParticipationTeam[] {
   const groupOrder = new Map(groups.map((g, index) => [g.id, { name: g.name, index }]));

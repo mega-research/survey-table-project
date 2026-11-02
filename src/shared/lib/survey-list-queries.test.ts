@@ -1,8 +1,15 @@
+import { QueryClient } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
 
-import { surveyKeys, surveyListQueryOptions, surveyListScopeParam } from './survey-list-queries';
+import {
+  surveyKeys,
+  surveyListQueryOptions,
+  surveyListScopeParam,
+  surveySummaryListQueryOptions,
+} from './survey-list-queries';
 
 const listCall = vi.fn();
+const summariesCall = vi.fn();
 
 vi.mock('@/shared/lib/rpc', () => ({
   client: {},
@@ -11,6 +18,9 @@ vi.mock('@/shared/lib/rpc', () => ({
       read: {
         list: {
           call: (...args: unknown[]) => listCall(...args),
+        },
+        listSummaries: {
+          call: (...args: unknown[]) => summariesCall(...args),
         },
       },
     },
@@ -40,6 +50,39 @@ describe('surveyListQueryOptions', () => {
     surveyListQueryOptions().queryFn();
     // 휴지통 여부는 언제나 명시한다 — 서버 기본값에 기대면 두 모드의 계약이 갈린다(티켓 17).
     expect(listCall).toHaveBeenCalledWith({ scope: null, deleted: false });
+  });
+});
+
+describe('surveySummaryListQueryOptions', () => {
+  it('요약 조회를 부르고 범위 미지정은 null 로 보낸다', () => {
+    surveySummaryListQueryOptions('team-1').queryFn();
+    expect(summariesCall).toHaveBeenLastCalledWith({ scope: 'team-1' });
+    surveySummaryListQueryOptions(null).queryFn();
+    expect(summariesCall).toHaveBeenLastCalledWith({ scope: null });
+  });
+
+  it('설문 생성·이동·삭제가 접는 목록 키 무효화가 사이드바 요약도 접는다', async () => {
+    // mutation 들(use-surveys·use-survey-groups·use-survey-sync)은 `surveyKeys.lists()` 하나를 접는다.
+    const queryClient = new QueryClient();
+    const summaryKey = surveySummaryListQueryOptions('team-1').queryKey;
+    queryClient.setQueryData(summaryKey, []);
+    expect(queryClient.getQueryState(summaryKey)?.isInvalidated).toBe(false);
+
+    await queryClient.invalidateQueries({ queryKey: surveyKeys.lists() });
+
+    expect(queryClient.getQueryState(summaryKey)?.isInvalidated).toBe(true);
+  });
+
+  it('목록 키와 갈리고 범위마다 갈린다 — 같은 키면 모양이 다른 두 응답이 서로의 캐시를 덮는다', () => {
+    expect(surveySummaryListQueryOptions('team-1').queryKey).not.toEqual(
+      surveyListQueryOptions('team-1').queryKey,
+    );
+    expect(surveySummaryListQueryOptions(null).queryKey).not.toEqual(
+      surveyListQueryOptions(null).queryKey,
+    );
+    expect(surveySummaryListQueryOptions('team-1').queryKey).not.toEqual(
+      surveySummaryListQueryOptions('team-2').queryKey,
+    );
   });
 });
 

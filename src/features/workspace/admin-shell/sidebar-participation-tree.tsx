@@ -10,7 +10,7 @@ import { ChevronDown, ChevronRight, Folder, Inbox, Users } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { surveyGroupListQueryOptions } from '@/shared/lib/survey-group-queries';
-import { surveyListQueryOptions } from '@/shared/lib/survey-list-queries';
+import { surveySummaryListQueryOptions } from '@/shared/lib/survey-list-queries';
 
 import { buildParticipationTree } from './participation-tree';
 
@@ -33,8 +33,9 @@ function teamShortLabel(teamName: string): string {
  * 실사팀 범위의 사이드바 본체 (0139, .pen 사이드바_협업그룹_시안 「방식 A'」).
  *
  * 실사팀은 일감 대부분이 다른 팀 설문이라 「설문 목록」 + 협업 폴더 나열이 남의 폴더로만
- * 채워진다. 그래서 「참여 중」을 최상위로 두고 소유 팀 → 폴더로 접는다. 수치는 본문 목록과
- * **같은 응답**(read.list — 같은 쿼리 키라 왕복도 하나)에서 센다.
+ * 채워진다. 그래서 「참여 중」을 최상위로 두고 소유 팀 → 폴더로 접는다. 수치는 응답 수 없는
+ * 요약 조회(read.listSummaries)에서 센다 — 서버가 본문 목록과 **같은 범위 조건**을 쓰므로 카드
+ * 수와 갈리지 않고, 목록이 페이지 단위가 되어도 범위 전체를 센다(설문 즐겨찾기·태그 티켓 02).
  *
  * 펼침은 화면 상태다. 지금 보고 있는 팀(`?team=` 또는 열린 그룹의 소유 팀)은 펼친 채로 서고,
  * 사용자가 누른 화살표가 그 위를 덮는다.
@@ -42,11 +43,11 @@ function teamShortLabel(teamName: string): string {
 export function SidebarParticipationTree({ teamId }: { teamId: string }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { data: list } = useQuery(surveyListQueryOptions(teamId));
+  const { data: summaries } = useQuery(surveySummaryListQueryOptions(teamId));
   const { data: groups } = useQuery(surveyGroupListQueryOptions(teamId));
   const [toggled, setToggled] = useState<Record<string, boolean>>({});
 
-  const surveys = useMemo(() => list?.surveys ?? [], [list]);
+  const surveys = useMemo(() => summaries ?? [], [summaries]);
   const tree = useMemo(() => buildParticipationTree(surveys, groups ?? []), [surveys, groups]);
 
   const onListPage = pathname === '/surveys';
