@@ -9,6 +9,7 @@ import {
   DeleteContactAttemptInput,
   UpdateContactAttemptInput,
 } from '../domain/contact-attempt';
+import { contactEditorOf } from '../domain/contact-target-edit';
 import * as svc from '../services/contact-attempts';
 
 const add = scoped
@@ -16,8 +17,8 @@ const add = scoped
   .output(AttemptResultSchema)
   .handler(({ context, input }) => {
     assertSurveyWriteAccess(context.user.id, input.surveyId);
-    // 인증된 context 에서 1회 파생 — 서비스가 auth 를 재조회하지 않는다.
-    return svc.addAttempt(input, isGuestUser(context.user.id));
+    // 인증된 context 에서 1회 파생 — 서비스가 auth 를 재조회하지 않는다. 편집자는 회차 기록자다.
+    return svc.addAttempt(input, isGuestUser(context.user.id), contactEditorOf(context.user));
   });
 
 const update = scoped
@@ -25,7 +26,7 @@ const update = scoped
   .output(z.object({ ok: z.literal(true) }))
   .handler(async ({ context, input }) => {
     assertSurveyWriteAccess(context.user.id, input.surveyId);
-    await svc.updateAttempt(input, isGuestUser(context.user.id));
+    await svc.updateAttempt(input, isGuestUser(context.user.id), contactEditorOf(context.user));
     return { ok: true as const };
   });
 
@@ -34,7 +35,7 @@ const remove = scoped
   .output(z.object({ ok: z.literal(true) }))
   .handler(async ({ context, input }) => {
     assertSurveyWriteAccess(context.user.id, input.surveyId);
-    await svc.deleteAttempt(input, isGuestUser(context.user.id));
+    await svc.deleteAttempt(input, isGuestUser(context.user.id), contactEditorOf(context.user));
     return { ok: true as const };
   });
 

@@ -89,6 +89,13 @@ export function ContactAttemptHistoryCard({
                   </div>
                   {a.note && <div className="mt-1 text-xs text-slate-600">{a.note}</div>}
                 </div>
+                {/* 기록자 — 기록자 기능 전에 적힌 회차는 비어 있어 「-」. 긴 이메일은 줄이고 전체는 title 로. */}
+                <span
+                  className="w-44 shrink-0 truncate pt-0.5 text-xs text-slate-500"
+                  title={a.createdByEmail ?? undefined}
+                >
+                  {`기록자 ${a.createdByEmail ?? '-'}`}
+                </span>
                 <Button
                   size="sm"
                   variant="ghost"

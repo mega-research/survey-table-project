@@ -15,6 +15,7 @@ import {
 } from '@/server/read-models/contacts';
 import { getOperationsDataScope } from '@/server/data-scope';
 import { listAssignmentOptions } from '@/server/read-models/contact-assignment-options';
+import { getContactTargetEditLogs } from '@/server/read-models/contact-target-edit-logs';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
 import { isReeditableResponseStatus } from '@/shared/contracts/survey-response';
 
@@ -46,16 +47,25 @@ export default async function ContactDetailPage({ params }: PageProps) {
     : detail.contact.responseId != null;
 
   const isGuest = await isGuestViewer();
-  const [scheme, resultCodes, mailHistory, editLogs, mailTemplates, assignmentOptions] =
-    await Promise.all([
-      getContactColumnScheme(surveyId, scope),
-      getContactResultCodes(surveyId),
-      getMailRecipientsForTarget(detail.contact.id, scope),
-      getResponseEditLogs(editableResponseId, detail.contact.id),
-      getMailTemplatesBySurvey(surveyId),
-      // 컨택원은 내부 실사 운영 정보 — 게스트에게는 읽지도 내리지도 않는다.
-      isGuest ? Promise.resolve(null) : listAssignmentOptions(surveyId, scope),
-    ]);
+  const [
+    scheme,
+    resultCodes,
+    mailHistory,
+    editLogs,
+    targetEditLogs,
+    mailTemplates,
+    assignmentOptions,
+  ] = await Promise.all([
+    getContactColumnScheme(surveyId, scope),
+    getContactResultCodes(surveyId),
+    getMailRecipientsForTarget(detail.contact.id, scope),
+    getResponseEditLogs(editableResponseId, detail.contact.id),
+    // 게스트면 로더가 컨택원 변경을 빼고 싣는다 — 컨택원은 내부 실사 운영 정보.
+    getContactTargetEditLogs(detail.contact.id, scope, { isGuest }),
+    getMailTemplatesBySurvey(surveyId),
+    // 컨택원은 내부 실사 운영 정보 — 게스트에게는 읽지도 내리지도 않는다.
+    isGuest ? Promise.resolve(null) : listAssignmentOptions(surveyId, scope),
+  ]);
   if (!scheme) notFound();
 
   const groupLabel = detail.contact.groupValue ?? '미지정';
@@ -98,6 +108,7 @@ export default async function ContactDetailPage({ params }: PageProps) {
         systemFieldKeys={extractSystemFieldKeys(scheme)}
         mailHistory={mailHistory}
         editLogs={editLogs}
+        targetEditLogs={targetEditLogs}
         mailSend={{ templates: mailTemplateOptions, disabledReason: mailSendDisabledReason }}
         canReset={!isGuest}
         {...(assignmentOptions

@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@/lib/crypto/contact-pii-repo', () => ({
+vi.mock('@/lib/crypto/contact-pii-repo', async (importOriginal) => ({
+  // 저장할 평문 규칙(piiPlainToStore)은 실제 것을 쓴다.
+  ...(await importOriginal<typeof import('@/lib/crypto/contact-pii-repo')>()),
   upsertPiiValue: vi.fn(async () => undefined),
+  // 개인정보 열 변경 판정 재료 — 이 파일은 저장 페이로드만 본다(기록은 realdb 가 본다).
+  readStoredPiiPlain: vi.fn(async () => new Map()),
 }));
 
 // db.transaction(cb) 가 update().set().where() 체인의 set 페이로드를 캡처하도록 stub.
@@ -17,6 +21,8 @@ vi.mock('@/db', () => {
       };
       return chain;
     }),
+    // 「대상 정보 수정 현황」 기록 INSERT — 이 파일은 저장 페이로드만 본다.
+    insert: vi.fn(() => ({ values: vi.fn(async () => undefined) })),
     update: vi.fn(() => ({
       set: vi.fn((payload: Record<string, unknown>) => {
         capturedSets.push(payload);
@@ -39,11 +45,14 @@ vi.mock('@/db', () => {
 
 import { updateContactTarget } from './contact-targets';
 
+// 잠금 아래에서 읽는 대상 행 — 대상 정보의 지금 값(스키마상 attrs 는 늘 객체다).
+const lockedTarget = { id: 'ct-1', attrs: {}, memo: null, contactMethod: null };
+
 describe('updateContactTarget groupValue 보존', () => {
   beforeEach(() => {
     capturedSets.length = 0;
     selectResultQueue.length = 0;
-    selectResultQueue.push([{ enabled: false }], [{ id: 'ct-1' }]);
+    selectResultQueue.push([{ enabled: false }], [lockedTarget]);
     vi.clearAllMocks();
   });
 
@@ -56,6 +65,7 @@ describe('updateContactTarget groupValue 보존', () => {
         memo: '메모만 수정',
       },
       false,
+      { id: 'editor-1', email: 'editor@local' },
     );
 
     expect(capturedSets).toHaveLength(1);
@@ -74,6 +84,7 @@ describe('updateContactTarget groupValue 보존', () => {
         systemFieldKeys: { group: '전시회' },
       },
       false,
+      { id: 'editor-1', email: 'editor@local' },
     );
 
     expect(capturedSets).toHaveLength(1);
@@ -89,6 +100,7 @@ describe('updateContactTarget groupValue 보존', () => {
         systemFieldKeys: { group: '전시회' },
       },
       false,
+      { id: 'editor-1', email: 'editor@local' },
     );
 
     expect(capturedSets).toHaveLength(1);
@@ -104,6 +116,7 @@ describe('updateContactTarget groupValue 보존', () => {
         systemFieldKeys: { group: '전시회' },
       },
       false,
+      { id: 'editor-1', email: 'editor@local' },
     );
 
     expect(capturedSets).toHaveLength(1);
@@ -120,7 +133,7 @@ describe('updateContactTarget — 형식이 틀린 PII 는 거부한다', () => 
   beforeEach(() => {
     capturedSets.length = 0;
     selectResultQueue.length = 0;
-    selectResultQueue.push([{ enabled: false }], [{ id: 'ct-1' }]);
+    selectResultQueue.push([{ enabled: false }], [lockedTarget]);
     vi.clearAllMocks();
   });
 
@@ -136,6 +149,7 @@ describe('updateContactTarget — 형식이 틀린 PII 는 거부한다', () => 
           piiUpdates: [{ columnKey: '이메일1', fieldType: 'email', plain: 'dream-elec.co.kr' }],
         },
         false,
+        { id: 'editor-1', email: 'editor@local' },
       ),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST', message: expect.stringMatching(/「이메일1」.*메일 형식/) });
 
@@ -155,6 +169,7 @@ describe('updateContactTarget — 형식이 틀린 PII 는 거부한다', () => 
         piiUpdates: [{ columnKey: '이메일1', fieldType: 'email', plain: '' }],
       },
       false,
+      { id: 'editor-1', email: 'editor@local' },
     );
 
     expect(upsertPiiValue).toHaveBeenCalledWith(expect.anything(), 'ct-1', '이메일1', 'email', '');
@@ -171,6 +186,7 @@ describe('updateContactTarget — 형식이 틀린 PII 는 거부한다', () => 
         piiUpdates: [{ columnKey: '이메일1', fieldType: 'email', plain: 'info@dream-elec.co.kr' }],
       },
       false,
+      { id: 'editor-1', email: 'editor@local' },
     );
 
     expect(upsertPiiValue).toHaveBeenCalledTimes(1);

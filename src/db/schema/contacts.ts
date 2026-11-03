@@ -1,6 +1,7 @@
 import { relations, sql } from 'drizzle-orm';
 import {
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -13,6 +14,8 @@ import {
 
 import type {
   ContactAssignmentClause,
+  ContactTargetEditAction,
+  ContactTargetEditChange,
   ContactUploadMapping,
   ContactUploadMode,
 } from '@/shared/contracts/contacts';
@@ -159,7 +162,14 @@ export const contactAttempts = pgTable(
     attemptNo: integer('attempt_no').notNull(),
     resultCode: text('result_code').notNull(),
     note: text('note'),
+    /**
+     * 기록자 id — auth.users(id) FK, ON DELETE SET NULL(0014 가 만들고 0152 가 SET NULL 로 다시 건다).
+     * drizzle 스키마는 auth 스키마를 모르므로 FK 의 정본은 마이그레이션이다. 서비스는 uuid 이고
+     * auth.users 에 있는 id 일 때만 채우고 아니면 NULL 이다(contact-attempts 의 createdByOf).
+     */
     createdBy: uuid('created_by'),
+    /** 기록자 이메일 스냅샷 (0152) — created_by 와 함께 채운다. 그 전에 적힌 회차는 둘 다 NULL. */
+    createdByEmail: text('created_by_email'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => ({
@@ -168,6 +178,41 @@ export const contactAttempts = pgTable(
       table.attemptNo,
     ),
   }),
+);
+
+/**
+ * 대상 정보 수정 현황 (0152) — 조사 대상 한 명의 정보·회차·컨택원을 손으로 바꾼 기록.
+ * 바꾼 쓰기와 같은 트랜잭션에서 한 줄을 넣는다. 파티션 열은 없다 — 대상이 이미 실/테스트에 속하고
+ * 읽기는 대상 단위다. 대상·설문이 지워지면 함께 지워진다(cascade). pii 값은 담지 않는다.
+ */
+export const contactTargetEditLogs = pgTable(
+  'contact_target_edit_logs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    surveyId: uuid('survey_id')
+      .notNull()
+      .references(() => surveys.id, { onDelete: 'cascade' }),
+    contactTargetId: uuid('contact_target_id')
+      .notNull()
+      .references(() => contactTargets.id, { onDelete: 'cascade' }),
+    action: text('action').$type<ContactTargetEditAction>().notNull(),
+    changes: jsonb('changes').$type<ContactTargetEditChange[]>().notNull(),
+    // 바꾼 사람. authed/scoped 보장이나 응답 편집 이력과 같이 방어적으로 nullable.
+    editedBy: text('edited_by'),
+    // 스냅샷 — 계정이 지워져도 누구였는지 남는다.
+    editorEmail: text('editor_email'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('contact_target_edit_logs_target_created_idx').on(
+      table.contactTargetId,
+      table.createdAt.desc(),
+    ),
+    check(
+      'contact_target_edit_logs_action_check',
+      sql`${table.action} in ('info_edit', 'attempt_edit', 'attempt_delete', 'assignment_change')`,
+    ),
+  ],
 );
 
 /**
@@ -264,4 +309,5 @@ export type ContactPii = typeof contactPii.$inferSelect;
 export type NewContactPii = typeof contactPii.$inferInsert;
 export type ContactPriorAnswers = typeof contactPriorAnswers.$inferSelect;
 export type ContactAssignment = typeof contactAssignments.$inferSelect;
+export type ContactTargetEditLog = typeof contactTargetEditLogs.$inferSelect;
 export type NewContactPriorAnswers = typeof contactPriorAnswers.$inferInsert;

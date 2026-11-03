@@ -4,7 +4,11 @@
 import * as z from 'zod';
 
 import { PII_FIELD_TYPES, type PiiFieldType } from '@/lib/crypto/pii-fields';
-import type { ContactUploadMode } from '@/shared/contracts/contacts';
+import type {
+  ContactTargetEditAction,
+  ContactTargetEditChange,
+  ContactUploadMode,
+} from '@/shared/contracts/contacts';
 import type { MailCampaignKind, MailRecipientStatus } from '@/shared/contracts/mail';
 import type { ResponseEditChange } from '@/shared/contracts/survey-response';
 
@@ -193,6 +197,8 @@ export interface ContactAttemptRow {
   attemptNo: number;
   resultCode: string;
   note: string | null;
+  /** 기록자 이메일 스냅샷 — 기록자 기능(0152) 전에 적힌 회차는 null(화면은 「-」). */
+  createdByEmail: string | null;
   createdAt: Date;
 }
 
@@ -218,6 +224,18 @@ export interface ResponseEditLogRow {
   editorEmail: string | null;
   changedQuestions: ResponseEditChange[];
   changedCount: number;
+  createdAt: Date;
+}
+
+/**
+ * 「대상 정보 수정 현황」 한 줄 — 상세 화면이 RSC props 로 받는다.
+ * changes 는 이 화면이 볼 변경만 담긴다(게스트면 컨택원 변경이 빠져 있다).
+ */
+export interface ContactTargetEditLogRow {
+  id: string;
+  action: ContactTargetEditAction;
+  editorEmail: string | null;
+  changes: ContactTargetEditChange[];
   createdAt: Date;
 }
 

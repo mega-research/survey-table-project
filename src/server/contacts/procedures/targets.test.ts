@@ -39,7 +39,11 @@ describe('contacts.targets procedures', () => {
     const client = createRouterClient({ targets }, { context: authedContext() });
     const input = { id: 'ct-1', surveyId: 'sv-1', attrs: { name: '수정' } };
     const res = await client.targets.update(input);
-    expect(svc.updateContactTarget).toHaveBeenCalledWith(input, false);
+    // 편집자는 인증된 context 에서 넘긴다 — 「대상 정보 수정 현황」의 누가.
+    expect(svc.updateContactTarget).toHaveBeenCalledWith(input, false, {
+      id: 'admin-1',
+      email: 'a@b.com',
+    });
     expect(res).toEqual({ ok: true });
   });
 

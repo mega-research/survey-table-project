@@ -213,3 +213,85 @@ export interface PriorAnswerImportConfig {
    */
   valueAliases: Record<string, Record<string, string>>;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 대상 정보 수정 현황 (contact_target_edit_logs.changes, 0152)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 기록 한 줄이 어떤 쓰기에서 왔는가. 마이그레이션 0152 의 CHECK 와 같은 목록이다 —
+ * 늘리면 배열·스키마 check·마이그레이션 셋을 함께 고친다(AGENTS.md 주의사항 1).
+ */
+export const CONTACT_TARGET_EDIT_ACTIONS = [
+  'info_edit',
+  'attempt_edit',
+  'attempt_delete',
+  'assignment_change',
+] as const;
+export type ContactTargetEditAction = (typeof CONTACT_TARGET_EDIT_ACTIONS)[number];
+
+/** 기록에 남기는 값 하나의 최대 글자 수. 넘으면 자르고 `*Truncated` 표식을 단다. */
+export const CONTACT_TARGET_EDIT_VALUE_MAX = 1000;
+
+/** pii 열 변경 — 값은 남기지 않는다. set=없던 값 입력 · changed=다른 값으로 · cleared=삭제 */
+export type ContactTargetEditPiiOp = 'set' | 'changed' | 'cleared';
+
+/** 컨택원 스냅샷 — 이름은 그때 이름이다(나중에 바뀌거나 지워져도 기록은 읽힌다). */
+export interface ContactTargetEditAssignee {
+  id: string;
+  name: string;
+}
+
+/**
+ * 기록에 담는 바꾸기 전 회차 — 기록 시각은 ISO 문자열(JSONB). 비고는 1,000자에서 잘려 담길 수 있고
+ * 잘림 표식은 그 회차 변경(`attempt`)의 `beforeTruncated` 다.
+ */
+export interface ContactTargetEditAttemptSnapshot {
+  resultCode: string;
+  note: string | null;
+  createdByEmail: string | null;
+  createdAt: string;
+}
+
+/**
+ * 「대상 정보 수정 현황」 한 줄 안의 변경 하나.
+ *
+ * - 열 이름(`label`)·컨택원 이름은 저장 시점 스냅샷이다.
+ * - 값(`before`·`after`)은 null·빈 문자열을 모두 '' 로 접어 담는다(빈 값 → 빈 값은 변경이 아니다).
+ *   1,000자(CONTACT_TARGET_EDIT_VALUE_MAX)를 넘으면 잘라 담고 `beforeTruncated`·`afterTruncated` 를 단다.
+ * - `contactMethod` 의 값은 코드(`ContactMethod`)다 — 화면 글자는 format 이 붙인다.
+ * - `attempt.after === null` 은 회차 삭제다. 회차의 `beforeTruncated`·`afterTruncated` 는 그 쪽 비고가
+ *   1,000자에서 잘렸다는 뜻이다(결과코드는 자르지 않는다).
+ */
+export type ContactTargetEditChange =
+  | {
+      kind: 'attr';
+      key: string;
+      label: string;
+      before: string;
+      after: string;
+      beforeTruncated?: true;
+      afterTruncated?: true;
+    }
+  | { kind: 'pii'; key: string; label: string; op: ContactTargetEditPiiOp }
+  | {
+      kind: 'memo';
+      before: string;
+      after: string;
+      beforeTruncated?: true;
+      afterTruncated?: true;
+    }
+  | { kind: 'contactMethod'; before: string; after: string }
+  | {
+      kind: 'assignment';
+      before: ContactTargetEditAssignee | null;
+      after: ContactTargetEditAssignee | null;
+    }
+  | {
+      kind: 'attempt';
+      attemptNo: number;
+      before: ContactTargetEditAttemptSnapshot;
+      after: { resultCode: string; note: string | null } | null;
+      beforeTruncated?: true;
+      afterTruncated?: true;
+    };

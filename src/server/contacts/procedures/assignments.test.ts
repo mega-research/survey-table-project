@@ -2,6 +2,11 @@ import { createRouterClient } from '@orpc/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
+import { loadOperationsDataScope } from '@/server/data-scope';
+import { listAssignmentOptions } from '@/server/read-models/contact-assignment-options';
+
+import * as svc from '../services/contact-assignments';
+import { assignments } from './assignments';
 
 vi.mock('../services/contact-assignments', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../services/contact-assignments')>();
@@ -19,11 +24,6 @@ vi.mock('@/server/read-models/contact-assignment-options', () => ({
 vi.mock('@/server/data-scope', () => ({
   loadOperationsDataScope: vi.fn(),
 }));
-
-import { loadOperationsDataScope } from '@/server/data-scope';
-import { listAssignmentOptions } from '@/server/read-models/contact-assignment-options';
-import * as svc from '../services/contact-assignments';
-import { assignments } from './assignments';
 
 const SURVEY_ID = '00000000-0000-4000-8000-000000000001';
 const TARGET_ID = '00000000-0000-4000-8000-0000000000aa';
@@ -113,7 +113,7 @@ describe('contacts.assignments procedures', () => {
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
 
-  it('setTarget 은 배정 없음(null)도 그대로 넘긴다', async () => {
+  it('setTarget 은 배정 없음(null)도 그대로 넘기고, 기록할 편집자로 세션 사용자를 넘긴다', async () => {
     vi.mocked(svc.setTargetAssignment).mockResolvedValue();
     const client = createRouterClient({ assignments }, { context: ctx('admin-1') });
     await client.assignments.setTarget({
@@ -121,10 +121,9 @@ describe('contacts.assignments procedures', () => {
       contactTargetId: TARGET_ID,
       assignmentId: null,
     });
-    expect(svc.setTargetAssignment).toHaveBeenCalledWith({
-      surveyId: SURVEY_ID,
-      contactTargetId: TARGET_ID,
-      assignmentId: null,
-    });
+    expect(svc.setTargetAssignment).toHaveBeenCalledWith(
+      { surveyId: SURVEY_ID, contactTargetId: TARGET_ID, assignmentId: null },
+      { id: 'admin-1', email: 'a@b.com' },
+    );
   });
 });
