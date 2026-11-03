@@ -786,23 +786,51 @@ describe('결과코드 열', () => {
     ).toBe(13);
   });
 
-  it('상태 다음 칸에 숫자만 — 목록에 없는 옛 코드는 앞 번호, 회차가 없으면 빈칸', () => {
+  it('앞 번호가 겹치는 자유 코드는 뒤쪽이 가장 큰 번호 다음을 받는다 — 한 숫자가 두 코드를 가리키지 않는다', () => {
+    const numbers = buildResultCodeNumbers([
+      { code: '3.부재', label: '3.부재', order: 3 },
+      { code: '3-1.재통화', label: '3-1.재통화', order: 4 },
+      { code: '수신거부', label: '수신거부', order: 5 },
+    ]);
+    expect([...numbers]).toEqual([
+      ['3.부재', 3],
+      ['3-1.재통화', 4],
+      ['수신거부', 5],
+    ]);
+    // 목록에 없는 옛 코드의 앞 번호가 목록 번호와 겹치면 빈칸 — 남의 번호를 빌리지 않는다
+    const wb = generateRawDataWorkbook(
+      [radioQ],
+      [makeRow({ resultCode: '4.출장' }), makeRow({ id: 'r-2', resultCode: '7.결번' }), makeRow({ id: 'r-3', resultCode: '기타메모' })],
+      {
+        ...TEST_CTX,
+        resultCodes: [
+          { code: '3.부재', label: '3.부재', order: 3 },
+          { code: '3-1.재통화', label: '3-1.재통화', order: 4 },
+        ],
+      },
+    );
+    const ws = wb.getWorksheet('Raw Data')!;
+    expect([4, 5, 6].map((r) => ws.getRow(r).getCell(5).value)).toEqual(['', 7, '']);
+  });
+
+  it('상태 다음 칸에 숫자만 — 목록에 없는 옛 코드는 겹치지 않는 앞 번호만, 회차가 없으면 빈칸', () => {
     const wb = generateRawDataWorkbook(
       [radioQ],
       [
         makeRow({ resultCode: '13. 독려' }),
         makeRow({ id: 'r-2', resultCode: '수신거부' }),
-        makeRow({ id: 'r-3', resultCode: '9.전시회미참가' }),
-        makeRow({ id: 'r-4' }),
+        makeRow({ id: 'r-3', resultCode: '9.전시회미참가' }), // 9 는 목록의 9.휴/폐업 번호라 빌리지 않는다
+        makeRow({ id: 'r-4', resultCode: '5.출장' }),
+        makeRow({ id: 'r-5' }),
       ],
       ctx,
     );
     const ws = wb.getWorksheet('Raw Data')!;
     expect(ws.getRow(1).getCell(5).value).toBe('결과코드');
-    expect([4, 5, 6, 7].map((r) => ws.getRow(r).getCell(5).value)).toEqual([13, 14, 9, '']);
+    expect([4, 5, 6, 7, 8].map((r) => ws.getRow(r).getCell(5).value)).toEqual([13, 14, '', 5, '']);
     const ws1 = wb.getWorksheet('응답 내역')!;
     expect(ws1.getRow(1).getCell(5).value).toBe('결과코드');
-    expect([2, 3, 4, 5].map((r) => ws1.getRow(r).getCell(5).value)).toEqual([13, 14, 9, '']);
+    expect([2, 3, 4, 5, 6].map((r) => ws1.getRow(r).getCell(5).value)).toEqual([13, 14, '', 5, '']);
   });
 
   it('코딩북 끝에 상태와 결과코드 값 라벨이 붙는다 — 변수 행 번호는 그대로', () => {
@@ -814,7 +842,9 @@ describe('결과코드 열', () => {
     expect(tail[0]!.getCell(5).value).toBe(
       '완료, 완료(자격 미달), 쿼터마감, 불량, 진행중, 이탈, 미응답',
     );
-    expect(tail[1]!.getCell(5).value).toBe('빈값=회차 없음, 1=조사완료, 9=휴/폐업, 13=독려, 14=수신거부');
+    expect(tail[1]!.getCell(5).value).toBe(
+      '빈값=회차 없음 또는 목록에 없는 코드, 1=조사완료, 9=휴/폐업, 13=독려, 14=수신거부',
+    );
   });
 
   it('조사 대상이 없는 설문은 결과코드 열도 코딩북 행도 없다', () => {

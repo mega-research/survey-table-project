@@ -206,26 +206,29 @@ function leadingCodeNumber(code: string): number | null {
 }
 
 /**
- * 결과코드 → 숫자 맵. 앞 번호가 있는 코드는 그 번호, 없는 코드(수신거부)는 목록 순서대로 가장 큰
- * 번호 다음 번호를 받는다 — 번호가 겹치지 않는다. 코딩북 값 라벨과 결과코드 열이 같은 맵을 쓴다.
+ * 결과코드 → 숫자 맵. 앞 번호가 있는 코드는 그 번호, 없는 코드(수신거부)와 **앞 번호가 앞 코드와 겹치는
+ * 코드**(「3.부재」 뒤의 「3-1.재통화」 — 결과코드는 자유 글자다)는 목록 순서대로 가장 큰 번호 다음 번호를
+ * 받는다 — 한 숫자가 두 코드를 가리키지 않는다. 코딩북 값 라벨과 결과코드 열이 같은 맵을 쓴다.
  */
 export function buildResultCodeNumbers(codes: readonly ContactResultCode[]): Map<string, number> {
   const sorted = [...codes].sort((a, b) => a.order - b.order);
   const out = new Map<string, number>();
-  let max = 0;
+  const used = new Set<number>();
   for (const c of sorted) {
     const n = leadingCodeNumber(c.code);
-    if (n !== null) {
+    if (n !== null && !used.has(n) && !out.has(c.code)) {
       out.set(c.code, n);
-      max = Math.max(max, n);
+      used.add(n);
     }
   }
+  let max = Math.max(0, ...used);
   for (const c of sorted) if (!out.has(c.code)) out.set(c.code, ++max);
   return out;
 }
 
 /**
- * 행의 결과코드 숫자 — 목록에 있으면 맵의 번호, 목록에 없는 옛 코드는 앞 번호, 그것도 없으면 빈칸.
+ * 행의 결과코드 숫자 — 목록에 있으면 맵의 번호. 목록에 없는 옛 코드는 앞 번호가 목록의 어느 코드와도
+ * 겹치지 않을 때만 그 번호이고, 아니면 빈칸이다(남의 번호를 빌리지 않는다 — 코딩북 「빈값」 설명 참조).
  * 맵은 행마다 다시 만들지 않도록 호출부가 한 번 만들어 넘긴다.
  */
 function resultCodeCell(
@@ -234,7 +237,12 @@ function resultCodeCell(
 ): number | '' {
   const code = row.resultCode;
   if (!code) return '';
-  return numbers.get(code) ?? leadingCodeNumber(code) ?? '';
+  const known = numbers.get(code);
+  if (known !== undefined) return known;
+  const n = leadingCodeNumber(code);
+  if (n === null) return '';
+  for (const v of numbers.values()) if (v === n) return '';
+  return n;
 }
 
 const resultCodeNumbersCache = new WeakMap<RawExportContext, Map<string, number>>();
@@ -565,7 +573,7 @@ export function appendCodebookSheet(
         RESULT_CODE_HEADER,
         '조사 대상의 마지막 회차 결과코드',
         '',
-        ['빈값=회차 없음', ...(label ? [label] : [])].join(', '),
+        ['빈값=회차 없음 또는 목록에 없는 코드', ...(label ? [label] : [])].join(', '),
       ]);
     }
   }

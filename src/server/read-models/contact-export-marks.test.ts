@@ -42,6 +42,17 @@ describe('resolveEditedSources — 원본과 달라진 명단 열', () => {
     expect([...sources]).toEqual(['pii.대표번호']);
   });
 
+  it('기록 크기로 잘린 이전 값은 앞부분이 같고 지금 값이 더 길면 같다고 본다', () => {
+    const long = 'a'.repeat(1200);
+    const clipped = long.slice(0, 1000);
+    const back: ContactTargetEditChange[] = [
+      { kind: 'attr', key: '메모열', label: '메모열', before: clipped, after: 'x', beforeTruncated: true },
+      { kind: 'attr', key: '메모열', label: '메모열', before: 'x', after: clipped, afterTruncated: true },
+    ];
+    expect([...resolveEditedSources({ attrs: { 메모열: long }, changes: back })]).toEqual([]);
+    expect([...resolveEditedSources({ attrs: { 메모열: 'x' }, changes: back })]).toEqual(['attrs.메모열']);
+  });
+
   it('지금 attrs 에 없는 열은 빈 값으로 본다 — 지운 칸은 고친 칸, 비었다 다시 빈 칸은 아니다', () => {
     expect([...resolveEditedSources({ attrs: {}, changes: [attr('홈페이지', 'a.com', '')] })]).toEqual([
       'attrs.홈페이지',
