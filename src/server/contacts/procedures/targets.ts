@@ -28,7 +28,11 @@ const update = scoped
   .output(z.object({ ok: z.literal(true) }))
   .handler(async ({ context, input }) => {
     assertSurveyAccess(context.user.id, input.surveyId);
-    await svc.updateContactTarget(input, isGuestUser(context.user.id));
+    // 편집자도 인증된 context 에서 넘긴다 — 「대상 정보 수정 현황」의 누가(게스트도 자기 이메일로).
+    await svc.updateContactTarget(input, isGuestUser(context.user.id), {
+      id: context.user.id,
+      email: context.user.email ?? null,
+    });
     return { ok: true as const };
   });
 

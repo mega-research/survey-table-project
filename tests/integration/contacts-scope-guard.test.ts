@@ -95,6 +95,8 @@ vi.mock('@/db', () => {
 
   const tx = {
     select: vi.fn(() => makeSelectChain()),
+    // 「대상 정보 수정 현황」 기록 INSERT — 이 파일은 스코프 가드만 본다.
+    insert: vi.fn(() => ({ values: vi.fn(() => Promise.resolve(undefined)) })),
     update: vi.fn(() => makeUpdateChain()),
     delete: vi.fn(() => makeDeleteChain()),
   };
@@ -162,6 +164,7 @@ describe('updateContactTarget 설문 스코프', () => {
         },
       },
       false,
+      { id: 'editor-1', email: 'editor@local' },
     );
 
     expect(capturedSets[0]?.['attrs']).toEqual({
@@ -183,6 +186,7 @@ describe('updateContactTarget 설문 스코프', () => {
           attrs: { name: '홍길동' },
         },
         false,
+        { id: 'editor-1', email: 'editor@local' },
       ),
     ).rejects.toThrow('NOT_FOUND');
   });
@@ -199,6 +203,7 @@ describe('updateContactTarget 설문 스코프', () => {
           piiUpdates: [{ columnKey: 'phone', fieldType: 'phone', plain: '01000000000' }],
         },
         false,
+        { id: 'editor-1', email: 'editor@local' },
       ),
     ).rejects.toThrow('NOT_FOUND');
     // 소속 확정 전이므로 PII 재암호화는 호출되지 않아야 한다.
@@ -216,6 +221,7 @@ describe('updateContactTarget 설문 스코프', () => {
         piiUpdates: [{ columnKey: 'phone', fieldType: 'phone', plain: '01000000000' }],
       },
       false,
+      { id: 'editor-1', email: 'editor@local' },
     );
     expect(upsertPiiValueMock).toHaveBeenCalledTimes(1);
   });

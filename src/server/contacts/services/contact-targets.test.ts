@@ -17,6 +17,8 @@ vi.mock('@/db', () => {
       };
       return chain;
     }),
+    // 「대상 정보 수정 현황」 기록 INSERT — 이 파일은 저장 페이로드만 본다.
+    insert: vi.fn(() => ({ values: vi.fn(async () => undefined) })),
     update: vi.fn(() => ({
       set: vi.fn((payload: Record<string, unknown>) => {
         capturedSets.push(payload);
@@ -56,6 +58,7 @@ describe('updateContactTarget groupValue 보존', () => {
         memo: '메모만 수정',
       },
       false,
+      { id: 'editor-1', email: 'editor@local' },
     );
 
     expect(capturedSets).toHaveLength(1);
@@ -74,6 +77,7 @@ describe('updateContactTarget groupValue 보존', () => {
         systemFieldKeys: { group: '전시회' },
       },
       false,
+      { id: 'editor-1', email: 'editor@local' },
     );
 
     expect(capturedSets).toHaveLength(1);
@@ -89,6 +93,7 @@ describe('updateContactTarget groupValue 보존', () => {
         systemFieldKeys: { group: '전시회' },
       },
       false,
+      { id: 'editor-1', email: 'editor@local' },
     );
 
     expect(capturedSets).toHaveLength(1);
@@ -104,6 +109,7 @@ describe('updateContactTarget groupValue 보존', () => {
         systemFieldKeys: { group: '전시회' },
       },
       false,
+      { id: 'editor-1', email: 'editor@local' },
     );
 
     expect(capturedSets).toHaveLength(1);
@@ -136,6 +142,7 @@ describe('updateContactTarget — 형식이 틀린 PII 는 거부한다', () => 
           piiUpdates: [{ columnKey: '이메일1', fieldType: 'email', plain: 'dream-elec.co.kr' }],
         },
         false,
+        { id: 'editor-1', email: 'editor@local' },
       ),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST', message: expect.stringMatching(/「이메일1」.*메일 형식/) });
 
@@ -155,6 +162,7 @@ describe('updateContactTarget — 형식이 틀린 PII 는 거부한다', () => 
         piiUpdates: [{ columnKey: '이메일1', fieldType: 'email', plain: '' }],
       },
       false,
+      { id: 'editor-1', email: 'editor@local' },
     );
 
     expect(upsertPiiValue).toHaveBeenCalledWith(expect.anything(), 'ct-1', '이메일1', 'email', '');
@@ -171,6 +179,7 @@ describe('updateContactTarget — 형식이 틀린 PII 는 거부한다', () => 
         piiUpdates: [{ columnKey: '이메일1', fieldType: 'email', plain: 'info@dream-elec.co.kr' }],
       },
       false,
+      { id: 'editor-1', email: 'editor@local' },
     );
 
     expect(upsertPiiValue).toHaveBeenCalledTimes(1);

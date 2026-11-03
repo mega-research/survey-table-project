@@ -14,6 +14,11 @@ import {
 import { lockWriteScope } from '@/server/data-scope';
 import { generateInviteCode } from '@/lib/survey-url';
 
+import {
+  type ContactEditor,
+  type ContactTargetInfoValues,
+  diffContactTargetInfo,
+} from '../domain/contact-target-edit';
 import type {
   AddContactTargetInput,
   ContactTargetRow,
@@ -27,6 +32,7 @@ import {
 } from '@/lib/operations/contacts-format';
 
 import { allocateContactResid } from './contact-resid';
+import { recordContactTargetEdit } from './contact-target-edit-log';
 
 /**
  * 값이 있는데 형식이 틀린 PII(예: `@` 없는 메일)를 저장 전에 거부한다.
@@ -52,11 +58,21 @@ async function lockTargetInCurrentScope(
   tx: DbTransaction,
   input: { id: string; surveyId: string },
   isGuest: boolean,
-): Promise<{ isTest: boolean; scheme: NormalizedContactColumnScheme | null }> {
+): Promise<{
+  isTest: boolean;
+  scheme: NormalizedContactColumnScheme | null;
+  /** 잠금 아래에서 읽은 지금 값 — 「대상 정보 수정 현황」의 이전 값이다. */
+  current: ContactTargetInfoValues;
+}> {
   const scope = await lockCurrentSurveyScope(tx, input.surveyId, isGuest);
 
   const [target] = await tx
-    .select({ id: contactTargets.id })
+    .select({
+      id: contactTargets.id,
+      attrs: contactTargets.attrs,
+      memo: contactTargets.memo,
+      contactMethod: contactTargets.contactMethod,
+    })
     .from(contactTargets)
     .where(
       and(
@@ -68,7 +84,14 @@ async function lockTargetInCurrentScope(
     .for('update');
   if (!target) throw new Error('NOT_FOUND');
 
-  return scope;
+  return {
+    ...scope,
+    current: {
+      attrs: (target.attrs ?? {}) as Record<string, string>,
+      memo: target.memo ?? null,
+      contactMethod: target.contactMethod ?? null,
+    },
+  };
 }
 
 async function lockCurrentSurveyScope(
@@ -151,16 +174,26 @@ export async function addContactTarget(
 
 /**
  * 행 단위 갱신 — attrs/group/memo/contactMethod + PII 변경분 upsert.
+ *
+ * 바뀐 칸이 있으면 같은 트랜잭션에서 「대상 정보 수정 현황」 한 줄(`info_edit`)을 남긴다. 이전 값은
+ * 화면이 보낸 값이 아니라 대상 행 잠금 아래에서 읽은 지금 값이다 — 그 사이 다른 사람이 고친 칸을
+ * 이 저장이 옛 값으로 덮으면 그것도 변경으로 남는다. 기록 INSERT 가 실패하면 저장도 롤백된다.
+ * editor 는 procedure 가 인증된 context 에서 넘긴다.
  */
 export async function updateContactTarget(
   input: UpdateContactTargetInput,
   isGuest: boolean,
+  editor: ContactEditor,
 ): Promise<void> {
   const { id, surveyId, attrs: rawAttrs, piiUpdates, memo, contactMethod, systemFieldKeys } = input;
   assertStorablePiiUpdates(piiUpdates);
 
   await db.transaction(async (tx) => {
-    const { isTest, scheme } = await lockTargetInCurrentScope(tx, { id, surveyId }, isGuest);
+    const { isTest, scheme, current } = await lockTargetInCurrentScope(
+      tx,
+      { id, surveyId },
+      isGuest,
+    );
     // 모드·대상 소속과 같은 잠금 스냅샷에서 확정한 스킴으로 PII 평문을 제거한다.
     const attrs = sanitizeAttrsAgainstPiiScheme(rawAttrs, scheme);
 
@@ -198,6 +231,20 @@ export async function updateContactTarget(
         await upsertPiiValue(tx, id, p.columnKey, p.fieldType, p.plain);
       }
     }
+
+    // 비교 기준은 실제로 저장한 값(PII 정제 뒤 attrs)이다.
+    const changes = diffContactTargetInfo(
+      current,
+      { attrs, memo: memo ?? null, contactMethod: contactMethod ?? null },
+      scheme,
+    );
+    await recordContactTargetEdit(tx, {
+      surveyId,
+      contactTargetId: id,
+      action: 'info_edit',
+      changes,
+      editor,
+    });
   });
 }
 
