@@ -13,7 +13,6 @@ import {
   buildRawMetaHeaders,
   buildRawMetaValues,
   paintEditedMetaCells,
-  buildRawSeqMap,
   clampRawWidth,
   estimateTextWidth,
   styleHeaderRows,
@@ -39,8 +38,6 @@ export function buildSplitWorkbook(
   const plan = planSplit(sortedQuestions, basisQuestionId, {}, toSpssColumnOptions(exportCtx));
 
   const workbook = new ExcelJS.Workbook();
-  // 순번(접수 순번)은 응답 내역·공통·옵션 시트가 같은 맵을 쓴다
-  const seqMap = buildRawSeqMap(rows);
 
   // 변수 시트(공통/옵션) — bucketQuestions 결과로 헤더 3행 + 전체 응답자 데이터
   // 옵션 시트명 유일성은 assignSplitSheetNames(reserved 시드 포함)가 보장하므로 중복 방어 불필요.
@@ -56,7 +53,7 @@ export function buildSplitWorkbook(
     // 데이터는 전체 응답자 + 이 버킷 컬럼만 (열만 분할)
     rows.forEach((row) => {
       ws.addRow([
-        ...buildRawMetaValues(row, seqMap.get(row) ?? null, ctx),
+        ...buildRawMetaValues(row, ctx),
         ...buildDataRow(columns, questionMap, row as unknown as SurveySubmission),
       ]);
     });
@@ -82,7 +79,7 @@ export function buildSplitWorkbook(
   };
 
   // 시트 1: 응답 내역 (전체 응답자) — Raw 워크북과 공용 빌더, 조건부 열 규칙 동일
-  addResponseListSheet(workbook, rows, ctx, seqMap);
+  addResponseListSheet(workbook, rows, ctx);
 
   // 시트 2: 공통 — 고정 이름
   addVariableSheet('공통', bucketQuestions(sortedQuestions, basisQuestionId, 'common'));

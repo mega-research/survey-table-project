@@ -70,27 +70,6 @@ export function isNonRespondentRow(row: Pick<RawExportResponseRow, 'status'>): b
   return row.status === NOT_RESPONDED_STATUS;
 }
 
-/**
- * 순번 = 접수 순번. 모수 안의 응답 행을 시작일시 오름차순으로 1부터 매긴다 (같은 시각은 입력 순).
- * 파일의 행 정렬(조사 대상 기준 모수는 시스템ID 순)과 무관하고, 미응답 행은 순번이 없다.
- * 워크북의 모든 시트가 같은 맵을 써서 시트 간 순번이 정합하다. 키는 행 객체다(id 가 아니라) —
- * 시트마다 같은 rows 배열을 돌리므로 충분하고, 픽스처의 id 중복에 흔들리지 않는다.
- */
-export function buildRawSeqMap(
-  rows: readonly RawExportResponseRow[],
-): ReadonlyMap<RawExportResponseRow, number> {
-  const responded = rows
-    .map((row, index) => ({ row, index }))
-    .filter(({ row }) => !isNonRespondentRow(row));
-  responded.sort(
-    (a, b) =>
-      (a.row.startedAt?.getTime() ?? 0) - (b.row.startedAt?.getTime() ?? 0) || a.index - b.index,
-  );
-  const map = new Map<RawExportResponseRow, number>();
-  responded.forEach(({ row }, i) => map.set(row, i + 1));
-  return map;
-}
-
 export interface RawExportContext {
   /** NEXT_PUBLIC_APP_URL 정리값 (trailing slash 제거). 미설정 시 '' — 상대경로 /i/{code} 출력 */
   appUrl: string;
@@ -114,7 +93,7 @@ export interface RawExportContext {
    */
   changeConfirmQuestionIds?: ReadonlySet<string>;
   /**
-   * 조사 대상 명단 열 — 응답 내역 컬럼 설정에서 표시 중인 attrs·pii 열. 순번과 개별 URL 사이에
+   * 조사 대상 명단 열 — 응답 내역 컬럼 설정에서 표시 중인 attrs·pii 열. IP 해시와 개별 URL 사이에
    * 들어간다. 비어 있거나 없으면 명단 열이 없는 열 구성이다.
    */
   contactColumns?: readonly RawExportContactColumn[];
@@ -257,8 +236,7 @@ function resultCodeNumbersOf(ctx: RawExportContext): Map<string, number> {
 
 interface RawMetaColumn {
   header: string;
-  /** seq 는 접수 순번(buildRawSeqMap) — 미응답 행은 null 이라 빈칸이다 */
-  value: (row: RawExportResponseRow, seq: number | null, ctx: RawExportContext) => string | number;
+  value: (row: RawExportResponseRow, ctx: RawExportContext) => string | number;
   /** 열 생성 조건 — false 반환 시 헤더·값 모두 생략. 미지정은 항상 생성. */
   enabled?: (ctx: RawExportContext) => boolean;
   /** 이 행의 칸을 노랗게 칠할지 — 손으로 고친 명단 열. 미지정은 칠하지 않는다. */
@@ -284,29 +262,46 @@ type RawMetaLayoutItem =
 
 /**
  * Raw Data·분할 시트 왼쪽 메타 열 레이아웃 (헤더·값·생성 조건·명단 열 자리의 단일 출처).
- * 코딩북·.sav 미포함, 헤더 1~3행 세로 병합 대상. 결과코드는 설문 설정(컨택 존재)에 따라
- * 조건부 생성된다. 시스템ID 열은 내보내지 않는다(2026-11-03 — 행 정렬에만 쓴다). 조사 대상 그룹
+ * 코딩북·.sav 미포함, 헤더 1~3행 세로 병합 대상. 컨택결과코드·조사 현황은 설문 설정(컨택 존재)에
+ * 따라 조건부 생성된다. 시스템ID·순번 열은 내보내지 않는다(2026-11-03 — 시스템ID 는 행 정렬에만
+ * 쓴다). 조사 대상 그룹
  * 고정 열은 없다 — 그룹은 응답 내역 컬럼 설정의 attrs 열로 명단 열에 따라온다.
  */
-const RESULT_CODE_HEADER = '결과코드';
+const STATUS_HEADER = '온라인 응답 상태';
+const RESULT_CODE_HEADER = '컨택결과코드';
+const SURVEY_PROGRESS_HEADER = '조사 현황';
+const SURVEY_DONE_LABEL = '조사완료';
+
+/**
+ * 조사 현황 — 온라인 응답을 완료했거나 컨택결과코드가 1(조사완료)이면 「조사완료」, 아니면 빈칸.
+ * 실사원이 전화·대면으로 받아 1 로 처리한 대상도 조사완료로 센다(2026-11-03 피드백). 자격 미달은
+ * 온라인 완료가 아니다 — 코드가 1 일 때만 조사완료.
+ */
+function surveyProgressCell(row: RawExportResponseRow, numbers: ReadonlyMap<string, number>): string {
+  return row.status === 'completed' || resultCodeCell(row, numbers) === 1 ? SURVEY_DONE_LABEL : '';
+}
 
 const RAW_META_LAYOUT: readonly RawMetaLayoutItem[] = [
   // sha256 전체는 64자 — 동일값 식별 목적에는 앞 16자(64비트)로 충분하고 열 너비를 지킨다
   { header: 'IP 해시', value: (row) => (row.ipHash ? row.ipHash.slice(0, 16) : '') },
-  { header: '순번', value: (_row, seq) => seq ?? '' },
   CONTACT_COLUMNS_SLOT,
   ENTRY_PARAMS_SLOT,
   {
     header: '개별 URL',
-    value: (row, _seq, ctx) => (row.inviteCode ? buildInviteUrl(row.inviteCode, ctx.appUrl) : ''),
+    value: (row, ctx) => (row.inviteCode ? buildInviteUrl(row.inviteCode, ctx.appUrl) : ''),
   },
-  { header: '상태', value: (row) => formatExportStatusLabel(row.status) },
+  { header: STATUS_HEADER, value: (row) => formatExportStatusLabel(row.status) },
   {
     header: RESULT_CODE_HEADER,
     enabled: (ctx) => ctx.hasContacts,
-    value: (row, _seq, ctx) => resultCodeCell(row, resultCodeNumbersOf(ctx)),
+    value: (row, ctx) => resultCodeCell(row, resultCodeNumbersOf(ctx)),
   },
-  { header: '마지막 입력 문항', value: (row, _seq, ctx) => resolveLastEnteredLabel(row, ctx) },
+  {
+    header: SURVEY_PROGRESS_HEADER,
+    enabled: (ctx) => ctx.hasContacts,
+    value: (row, ctx) => surveyProgressCell(row, resultCodeNumbersOf(ctx)),
+  },
+  { header: '마지막 입력 문항', value: (row, ctx) => resolveLastEnteredLabel(row, ctx) },
   { header: '시작일시', value: (row) => formatExcelDateTime(row.startedAt) },
   { header: '종료일시', value: (row) => formatExcelDateTime(row.completedAt) },
   {
@@ -370,55 +365,52 @@ export function paintEditedMetaCells(
 
 export function buildRawMetaValues(
   row: RawExportResponseRow,
-  seq: number | null,
   ctx: RawExportContext,
 ): (string | number)[] {
-  return activeMetaColumns(ctx).map((c) => c.value(row, seq, ctx));
+  return activeMetaColumns(ctx).map((c) => c.value(row, ctx));
 }
 
 /**
  * '응답 내역' 시트 — 응답자 메타 요약 (Raw/분할 워크북 공용).
- * 결과코드 열은 메타 열과 동일한 조건부 생성 규칙을 따르고(상태 다음), 조사 대상 명단 열은 순번
- * 다음·접속 단말 앞에 같은 열이 붙는다. 손으로 고친 명단 칸은 노랗다. 순번은 seqMap(접수 순번)을
- * Raw Data 시트와 공유한다.
+ * 컨택결과코드·조사 현황 열은 메타 열과 동일한 조건부 생성 규칙을 따르고(온라인 응답 상태 다음),
+ * 조사 대상 명단 열은 맨 앞(접속 단말 앞)에 붙는다. 손으로 고친 명단 칸은 노랗다.
  */
 export function addResponseListSheet(
   workbook: ExcelJS.Workbook,
   rows: RawExportResponseRow[],
   ctx: RawExportContext,
-  seqMap: ReadonlyMap<RawExportResponseRow, number> = buildRawSeqMap(rows),
 ): void {
   const ws = workbook.addWorksheet('응답 내역');
   const contactColumns = ctx.contactColumns ?? [];
   const entryParamNames = ctx.entryParamNames ?? [];
   const headers = [
-    '순번',
     ...contactColumns.map((c) => c.label),
     ...entryParamNames,
     '접속 단말',
     '브라우저',
-    '상태',
-    ...(ctx.hasContacts ? [RESULT_CODE_HEADER] : []),
+    STATUS_HEADER,
+    ...(ctx.hasContacts ? [RESULT_CODE_HEADER, SURVEY_PROGRESS_HEADER] : []),
     '시작일시',
     '종료일시',
     '소요시간',
   ];
   ws.addRow(headers);
   const codeNumbers = resultCodeNumbersOf(ctx);
-  // 명단 열은 순번 다음 2열부터
-  const contactColumnStart = 2;
+  // 명단 열은 1열부터
+  const contactColumnStart = 1;
   rows.forEach((row) => {
     // 미응답 조사 대상 행은 응답 메타(단말·브라우저·소요시간)를 빈칸으로 둔다 —
     // RAW_META_LAYOUT 와 같은 분기. 응답 행의 출력은 바뀌지 않는다.
     const nonRespondent = isNonRespondentRow(row);
     const added = ws.addRow([
-      seqMap.get(row) ?? '',
       ...contactColumns.map((c) => row.contactValues?.[c.source] ?? ''),
       ...entryParamNames.map((name) => row.entryParams?.[name] ?? ''),
       nonRespondent ? '' : formatPlatformKo(row.platform as Platform | null),
       nonRespondent ? '' : (row.browser ?? 'Other'),
       formatExportStatusLabel(row.status),
-      ...(ctx.hasContacts ? [resultCodeCell(row, codeNumbers)] : []),
+      ...(ctx.hasContacts
+        ? [resultCodeCell(row, codeNumbers), surveyProgressCell(row, codeNumbers)]
+        : []),
       formatExcelDateTime(row.startedAt),
       formatExcelDateTime(row.completedAt),
       nonRespondent ? '' : formatTotalTime(row.totalSeconds, row.status),
@@ -454,10 +446,9 @@ export function generateRawDataWorkbook(
   const questionMap = new Map(sortedQuestions.map((q) => [q.id, q]));
 
   const workbook = new ExcelJS.Workbook();
-  const seqMap = buildRawSeqMap(rows);
 
   // 시트 1: 응답 내역
-  addResponseListSheet(workbook, rows, ctx, seqMap);
+  addResponseListSheet(workbook, rows, ctx);
 
   // 시트 2: Raw Data (헤더 3행 = 질문제목 / 셀라벨 / SPSS 변수명), 왼쪽 메타 열 + 변수 열
   const ws2 = workbook.addWorksheet('Raw Data');
@@ -469,7 +460,7 @@ export function generateRawDataWorkbook(
   ws2.addRow([...metaHeaders.map(() => ''), ...columns.map((c) => c.spssVarName)]);
   rows.forEach((row) => {
     ws2.addRow([
-      ...buildRawMetaValues(row, seqMap.get(row) ?? null, ctx),
+      ...buildRawMetaValues(row, ctx),
       ...buildDataRow(columns, questionMap, row as unknown as SurveySubmission),
     ]);
   });
@@ -561,7 +552,7 @@ export function appendCodebookSheet(
   // 메타 열의 값 라벨 — SPSS 변수가 아니라 번호·변수 유형 칸은 비운다. 변수 행 뒤에 붙여
   // 앞 행을 위치로 읽는 기존 작업을 깨지 않는다.
   if (ctx) {
-    ws.addRow(['', '상태', '응답 상태', '', EXPORT_STATUS_VALUE_LABEL]);
+    ws.addRow(['', STATUS_HEADER, '온라인 응답 상태', '', EXPORT_STATUS_VALUE_LABEL]);
     if (ctx.hasContacts) {
       const numbers = buildResultCodeNumbers(ctx.resultCodes ?? []);
       const label = [...numbers]
@@ -574,6 +565,13 @@ export function appendCodebookSheet(
         '조사 대상의 마지막 회차 결과코드',
         '',
         ['빈값=회차 없음 또는 목록에 없는 코드', ...(label ? [label] : [])].join(', '),
+      ]);
+      ws.addRow([
+        '',
+        SURVEY_PROGRESS_HEADER,
+        '온라인 응답 완료 또는 컨택결과코드 1',
+        '',
+        `${SURVEY_DONE_LABEL}=온라인 응답 완료 또는 컨택결과코드 1, 빈값=그 외`,
       ]);
     }
   }
