@@ -93,15 +93,3 @@ export function summarizeContactTargetEdit(changes: ContactTargetEditChange[]): 
   const head = format(first, SUMMARY_VALUE_MAX);
   return changes.length > 1 ? `${head} 외 ${changes.length - 1}개` : head;
 }
-
-/**
- * 이 화면이 받을 변경만 남긴다 — 게스트는 컨택원(내부 실사 운영 정보) 변경을 받지 않는다.
- * 읽기 로더가 RSC props 에 싣기 전에 부른다(화면이 숨기는 것이 아니다).
- */
-export function visibleContactTargetEditChanges(
-  changes: ContactTargetEditChange[],
-  viewer: { isGuest: boolean },
-): ContactTargetEditChange[] {
-  if (!viewer.isGuest) return changes;
-  return changes.filter((c) => c.kind !== 'assignment');
-}
