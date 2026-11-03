@@ -15,6 +15,7 @@ import {
 import { decryptQuestionResponses, isEncryptedAnswerValue } from '@/lib/crypto/response-pii';
 import { getSurveyContactStats } from '@/server/operations/services/contact-stats';
 import { getContactResultCodes } from '@/server/read-models/contacts';
+import { latestResultCodeExpr } from '@/lib/operations/contacts-filter-sql.server';
 import type { RawExportContactColumn } from '@/lib/operations/contacts-format';
 import { decryptPiiForExport } from '@/server/operations/services/contacts-export';
 import {
@@ -39,7 +40,11 @@ import {
   sortRowsForContactPopulation,
   stripHiddenFromExportRows,
 } from '@/lib/analytics/raw-export-rows';
-import type { RawExportContext, RawExportResponseRow } from '@/lib/analytics/raw-workbook';
+import {
+  type RawExportContext,
+  type RawExportResponseRow,
+  buildResultCodeNumbers,
+} from '@/lib/analytics/raw-workbook';
 import { readEntryParams } from '@/lib/survey/end-redirect';
 
 // ============================================================
@@ -74,6 +79,35 @@ export interface RawExportLoadOptions extends RawExportContextOptions {
    * 없으면 걷어내지 않는다 (omitDisabledPriorAnswersByContact).
    */
   questions?: readonly Question[];
+  /**
+   * 실사완료 코드 — 컨택결과코드가 1(조사완료)에 해당하는 결과코드 글자(`loadFieldCompletedCodes`).
+   * 「미응답자 포함」이 꺼져 있어도 마지막 회차가 이 코드인 미응답 조사 대상은 행으로 넣는다 — 조사
+   * 현황이 「조사완료」인 대상이 파일에서 빠지지 않게(2026-11-03 피드백). 비었거나 없으면 꺼짐과 같다.
+   */
+  fieldCompletedCodes?: readonly string[];
+}
+
+/**
+ * 결과코드 목록에서 컨택결과코드 1 에 해당하는 코드 — 결과코드 열의 번호 규칙(`buildResultCodeNumbers`)
+ * 그대로라 파일의 「1」과 같은 대상을 고른다. 기본값 폴백 포함.
+ */
+export async function loadFieldCompletedCodes(surveyId: string): Promise<string[]> {
+  const numbers = buildResultCodeNumbers(await getContactResultCodes(surveyId));
+  return [...numbers].filter(([, n]) => n === 1).map(([code]) => code);
+}
+
+/** 미응답 조사 대상을 얼마나 넣을지 — 전부 / 실사완료 코드인 대상만 / 넣지 않음 */
+type NonRespondentScope = 'all' | readonly string[] | null;
+
+function nonRespondentScopeOf(options: RawExportLoadOptions): NonRespondentScope {
+  if (options.includeNonRespondents) return 'all';
+  const codes = options.fieldCompletedCodes ?? [];
+  return codes.length > 0 ? codes : null;
+}
+
+/** 'all' 이면 코드 조건 없음 — nonRespondentWhere 의 onlyCodes 인자 */
+function onlyCodesOf(nonRespondentScope: Exclude<NonRespondentScope, null>): readonly string[] | null {
+  return nonRespondentScope === 'all' ? null : nonRespondentScope;
 }
 
 export interface RawExportPopulationCount {
@@ -108,8 +142,19 @@ export function rawResponseWhere(surveyId: string, scope: OperationsDataScope) {
  * 가짜로 두므로 중첩 db.select 는 mock 에서 깨진다. ${surveyResponses} 는 테이블명으로 렌더된다.
  * notExists 는 SQL 조각을 괄호 없이 붙이므로 괄호를 직접 쓴다.
  */
-function nonRespondentWhere(surveyId: string, scope: OperationsDataScope) {
+function nonRespondentWhere(
+  surveyId: string,
+  scope: OperationsDataScope,
+  onlyCodes: readonly string[] | null = null,
+) {
   return and(
+    // 실사완료 코드만 — 마지막 회차(콘솔 「컨택결과」 열과 같은 기준)가 그 코드인 대상
+    onlyCodes
+      ? sql`${latestResultCodeExpr} in (${sql.join(
+          onlyCodes.map((c) => sql`${c}`),
+          sql`, `,
+        )})`
+      : undefined,
     eq(contactTargets.surveyId, surveyId),
     targetScopeCondition(scope),
     notExists(
@@ -137,12 +182,13 @@ export async function countRawExportPopulation(
     .from(surveyResponses)
     .where(rawResponseWhere(surveyId, scope));
   const responseCount = responseRows[0]?.total ?? 0;
-  if (!options.includeNonRespondents) return { responseCount, nonRespondentCount: 0 };
+  const nonRespondentScope = nonRespondentScopeOf(options);
+  if (nonRespondentScope === null) return { responseCount, nonRespondentCount: 0 };
 
   const targetRows = await db
     .select({ total: count() })
     .from(contactTargets)
-    .where(nonRespondentWhere(surveyId, scope));
+    .where(nonRespondentWhere(surveyId, scope, onlyCodesOf(nonRespondentScope)));
   return { responseCount, nonRespondentCount: targetRows[0]?.total ?? 0 };
 }
 
@@ -410,8 +456,9 @@ export async function loadRawExportRows(
     for (const t of targets) contactMap.set(t.id, t);
   }
 
-  const nonRespondents = options.includeNonRespondents
-    ? await fetchContactRefs(nonRespondentWhere(surveyId, scope), {
+  const nonRespondentScope = nonRespondentScopeOf(options);
+  const nonRespondents = nonRespondentScope
+    ? await fetchContactRefs(nonRespondentWhere(surveyId, scope, onlyCodesOf(nonRespondentScope)), {
         withAttrs: withContactColumns,
         orderByResid: true,
       })
@@ -473,7 +520,8 @@ export async function loadRawExportRows(
       )
     : strippedRows;
 
-  if (!options.includeNonRespondents) return { kind: 'ok', rows: mergedRows, ...population };
+  // 미응답 행을 하나도 넣지 않는 경우만 응답 순서 그대로 — 넣으면(실사완료 코드 대상뿐이어도) 시스템ID 순
+  if (nonRespondentScope === null) return { kind: 'ok', rows: mergedRows, ...population };
 
   // 미응답 행은 이번 회차 답이 없으므로 이월값이 통째로 실린다.
   const nonRespondentRows = nonRespondents.map((t) => {

@@ -283,6 +283,60 @@ describe('loadRawExportRows — 토글 켜짐', () => {
     expect(render(targets.orderBy![0]).sql).toBe('"contact_targets"."resid" asc');
   });
 
+  it('꺼져 있어도 실사완료 코드가 오면 마지막 회차가 그 코드인 미응답 대상만 넣고 시스템ID 순으로 합친다', async () => {
+    useCounts({ responses: 4, nonRespondents: 2 });
+    responseFindManyMock.mockResolvedValue([
+      responseRow({ id: 'r1', contactTargetId: 'ct2', startedAt: new Date('2026-09-01T09:00:00Z') }),
+      responseRow({ id: 'r4', startedAt: new Date('2026-09-01T09:01:00Z') }),
+      responseRow({ id: 'r3', startedAt: new Date('2026-09-01T09:02:00Z') }),
+      responseRow({ id: 'r2', contactTargetId: 'ct4', startedAt: new Date('2026-09-01T09:05:00Z') }),
+    ]);
+
+    const result = await loadRawExportRows(surveyId, 'real', {
+      includeNonRespondents: false,
+      fieldCompletedCodes: ['1.조사완료'],
+    });
+
+    expect(kinds()).toEqual([
+      'responseCount',
+      'nonRespondentCount',
+      'contactsById',
+      'nonRespondentTargets',
+    ]);
+    for (const kind of ['nonRespondentCount', 'nonRespondentTargets'] as const) {
+      const { sql, params } = render(state.calls.find((c) => classify(c) === kind)!.where);
+      expect(sql).toContain('FROM contact_attempts');
+      expect(sql).toContain('ORDER BY attempt_no DESC LIMIT 1');
+      expect(params).toContain('1.조사완료');
+    }
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+    expect(result.nonRespondentCount).toBe(2);
+    expect(result.rows.map((r) => r.id)).toEqual(['t1', 'r1', 't3', 'r2', 'r4', 'r3']);
+  });
+
+  it('꺼져 있고 실사완료 코드가 없으면 미응답 대상을 조회하지 않는다', async () => {
+    useCounts({ responses: 1, nonRespondents: 5 });
+    responseFindManyMock.mockResolvedValue([responseRow({ id: 'r1' })]);
+    const result = await loadRawExportRows(surveyId, 'real', {
+      includeNonRespondents: false,
+      fieldCompletedCodes: [],
+    });
+    expect(kinds()).toEqual(['responseCount']);
+    expect(result.kind === 'ok' && result.nonRespondentCount).toBe(0);
+  });
+
+  it('켜져 있으면 실사완료 코드와 무관하게 미응답 대상 전부다 — 코드 조건이 붙지 않는다', async () => {
+    useCounts({ responses: 0, nonRespondents: 0 });
+    await loadRawExportRows(surveyId, 'real', {
+      includeNonRespondents: true,
+      fieldCompletedCodes: ['1.조사완료'],
+    });
+    const { sql } = render(state.calls.find((c) => classify(c) === 'nonRespondentCount')!.where);
+    expect(sql).not.toContain('contact_attempts');
+    expect(sql).not.toContain('result_code');
+  });
+
   it.each([
     ['real', false, true],
     ['test', true, false],
