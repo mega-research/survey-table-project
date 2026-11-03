@@ -4,17 +4,15 @@ import 'server-only';
 
 import { type DbTransaction, db } from '@/db';
 import { contactAssignments, contactTargets, surveys } from '@/db/schema';
-import { normalizeContactColumnScheme } from '@/lib/operations/contacts-format';
-import { matchedResponseSubquery } from '@/lib/operations/contacts-filter-sql.server';
 import { logger } from '@/lib/logger';
+import { matchedResponseSubquery } from '@/lib/operations/contacts-filter-sql.server';
+import { normalizeContactColumnScheme } from '@/lib/operations/contacts-format';
 import { isUniqueViolation, retryOnTxConflict } from '@/lib/pg-error';
-import {
-  lockWriteScope,
-  testFlagForScope,
-  type OperationsDataScope,
-} from '@/server/data-scope';
-
-import type { ContactAssignmentClause } from '@/shared/contracts/contacts';
+import { type OperationsDataScope, lockWriteScope, testFlagForScope } from '@/server/data-scope';
+import type {
+  ContactAssignmentClause,
+  ContactTargetEditAssignee,
+} from '@/shared/contracts/contacts';
 import type {
   ContactAssignmentListResult,
   ContactAssignmentStats,
@@ -28,6 +26,8 @@ import type {
   ReorderContactAssignmentsInput,
   SetTargetAssignmentInput,
 } from '../domain/contact-assignment';
+import type { ContactEditor } from '../domain/contact-target-edit';
+import { recordContactTargetEdit } from './contact-target-edit-log';
 import { ensureContactOwnerColumn } from './scheme-helpers';
 
 /**
@@ -140,15 +140,26 @@ async function ensureOwnerColumnInScheme(
  * 조사 대상 한 명의 컨택원 바꾸기 — 조사 대상 상세 드롭다운(고르면 바로 저장).
  * assignmentId=null 이면 배정을 푼다. 대상·컨택원 모두 이 세션의 파티션 안에 있어야 한다 —
  * 테스트 대상이 실 컨택원에, 실 대상이 테스트 컨택원에 붙는 길을 막는다.
+ *
+ * 바뀌면 「대상 정보 수정 현황」에 앞뒤 컨택원을 그때 이름으로 같은 트랜잭션에 남긴다. 같은
+ * 컨택원을 다시 고르면 아무것도 쓰지 않는다.
+ *
+ * 잠금 순서는 교체 적용·지우기와 같다 — 설문 스코프 → 컨택원 → 대상. 대상 행을 잡은 뒤에는
+ * 다른 행을 잠그지 않는다(앞 컨택원 이름은 잠그지 않고 읽는다). 대상 잠금을 쥔 채 컨택원
+ * 잠금을 기다리는 일이 없어, 컨택원을 잡고 대상을 기다리는 교체 적용·지우기와 고리가 생기지 않는다.
  */
-export async function setTargetAssignment(input: SetTargetAssignmentInput): Promise<void> {
+export async function setTargetAssignment(
+  input: SetTargetAssignmentInput,
+  editor: ContactEditor,
+): Promise<void> {
   await db.transaction(async (tx) => {
     const locked = await lockWriteScope(tx, input.surveyId, false, { lock: 'share' });
     if (!locked) throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
 
+    let after: ContactTargetEditAssignee | null = null;
     if (input.assignmentId !== null) {
       const [assignment] = await tx
-        .select({ id: contactAssignments.id })
+        .select({ id: contactAssignments.id, name: contactAssignments.name })
         .from(contactAssignments)
         .where(
           and(
@@ -161,11 +172,12 @@ export async function setTargetAssignment(input: SetTargetAssignmentInput): Prom
       if (!assignment) {
         throw new ORPCError('NOT_FOUND', { message: '컨택원을 찾을 수 없습니다.' });
       }
+      after = assignment;
     }
 
-    const updated = await tx
-      .update(contactTargets)
-      .set({ assignmentId: input.assignmentId, updatedAt: new Date() })
+    const [target] = await tx
+      .select({ assignmentId: contactTargets.assignmentId })
+      .from(contactTargets)
       .where(
         and(
           eq(contactTargets.id, input.contactTargetId),
@@ -173,10 +185,33 @@ export async function setTargetAssignment(input: SetTargetAssignmentInput): Prom
           eq(contactTargets.isTest, locked.isTest),
         ),
       )
-      .returning({ id: contactTargets.id });
-    if (updated.length === 0) {
+      .for('update');
+    if (!target) {
       throw new ORPCError('NOT_FOUND', { message: '조사 대상을 찾을 수 없습니다.' });
     }
+    if (target.assignmentId === input.assignmentId) return;
+
+    let before: ContactTargetEditAssignee | null = null;
+    if (target.assignmentId !== null) {
+      const [previous] = await tx
+        .select({ id: contactAssignments.id, name: contactAssignments.name })
+        .from(contactAssignments)
+        .where(eq(contactAssignments.id, target.assignmentId));
+      before = previous ?? null;
+    }
+
+    await tx
+      .update(contactTargets)
+      .set({ assignmentId: input.assignmentId, updatedAt: new Date() })
+      .where(eq(contactTargets.id, input.contactTargetId));
+
+    await recordContactTargetEdit(tx, {
+      surveyId: input.surveyId,
+      contactTargetId: input.contactTargetId,
+      action: 'assignment_change',
+      changes: [{ kind: 'assignment', before, after }],
+      editor,
+    });
   });
 }
 
@@ -349,7 +384,6 @@ async function removeAssignmentOnce(
     return { unassigned: Number(count?.n ?? 0) };
   });
 }
-
 
 /** 컨택원 수정 화면 — 이 세션 파티션의 컨택원 하나 (마지막 조건 포함). 없으면 null. */
 export async function getAssignmentForEdit(

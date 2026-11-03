@@ -3,7 +3,6 @@ import * as z from 'zod';
 import { loadOperationsDataScope } from '@/server/data-scope';
 import { assertSurveyAccess, authed } from '@/server/orpc';
 import { listAssignmentOptions } from '@/server/read-models/contact-assignment-options';
-
 import type { ContactAssignmentMatchesResult } from '@/shared/contracts/contacts-io';
 
 import {
@@ -14,8 +13,8 @@ import {
   AssignmentMatchesInput,
   ContactAssignmentOptionSchema,
   CreateContactAssignmentInput,
-  PreviewAssignmentInput,
   ListContactAssignmentsInput,
+  PreviewAssignmentInput,
   RemoveContactAssignmentInput,
   RenameContactAssignmentInput,
   ReorderContactAssignmentsInput,
@@ -23,8 +22,8 @@ import {
 } from '../domain/contact-assignment';
 import * as applySvc from '../services/contact-assignment-apply';
 import * as facetSvc from '../services/contact-assignment-facets';
-import { ForbiddenAttrColumnError } from '../services/contact-attr-values';
 import * as svc from '../services/contact-assignments';
+import { ForbiddenAttrColumnError } from '../services/contact-attr-values';
 
 /**
  * 컨택원 배정 — 내부 실사 운영 도구라 게스트(설문 위임 클라이언트)에게 열지 않는다.
@@ -62,13 +61,16 @@ const create = authed
     }
   });
 
-/** 조사 대상 한 명의 컨택원 바꾸기 (상세 드롭다운 — 고르면 바로 저장). */
+/** 조사 대상 한 명의 컨택원 바꾸기 (상세 드롭다운 — 고르면 바로 저장). 바뀌면 대상 정보 수정 현황에 남긴다. */
 const setTarget = authed
   .input(SetTargetAssignmentInput)
   .output(z.object({ ok: z.literal(true) }))
   .handler(async ({ context, input }) => {
     assertSurveyAccess(context.user.id, input.surveyId);
-    await svc.setTargetAssignment(input);
+    await svc.setTargetAssignment(input, {
+      id: context.user.id,
+      email: context.user.email ?? null,
+    });
     return { ok: true as const };
   });
 
