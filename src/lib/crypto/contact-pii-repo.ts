@@ -231,6 +231,48 @@ export async function decryptForTarget(targetId: string): Promise<Record<string,
 }
 
 /**
+ * upsertPiiValue 가 이 입력으로 실제로 저장할 평문 — `null` 이면 그 칸의 행을 지운다
+ * (빈 값 · 정규화 후 빈 값, 예: 숫자 없는 전화번호). 저장 규칙과 변경 판정이 같은 답을 보게 한 곳에 둔다.
+ */
+export function piiPlainToStore(fieldType: PiiFieldType, plain: string): string | null {
+  const trimmed = plain.trim();
+  if (!trimmed) return null;
+  if (!blindIndex(fieldType, trimmed)) return null;
+  return trimmed;
+}
+
+/**
+ * 한 대상의 지정 열 지금 저장값을 트랜잭션 안에서 복호화한다 — 저장 전 변경 판정용.
+ * 결과는 호출측 메모리에서만 쓰고 어디에도 쓰지 않는다. 행이 없는 열은 맵에 없고,
+ * 복호화에 실패한 열은 `{ failed: true }`.
+ */
+export async function readStoredPiiPlain(
+  tx: Tx,
+  contactTargetId: string,
+  columnKeys: readonly string[],
+): Promise<Map<string, { plain: string } | { failed: true }>> {
+  const result = new Map<string, { plain: string } | { failed: true }>();
+  if (columnKeys.length === 0) return result;
+  const rows = await tx
+    .select({ columnKey: contactPii.columnKey, cipher: contactPii.cipher })
+    .from(contactPii)
+    .where(
+      and(
+        eq(contactPii.contactTargetId, contactTargetId),
+        inArray(contactPii.columnKey, [...new Set(columnKeys)]),
+      ),
+    );
+  for (const r of rows) {
+    try {
+      result.set(r.columnKey, { plain: decryptPii(r.cipher) });
+    } catch {
+      result.set(r.columnKey, { failed: true });
+    }
+  }
+  return result;
+}
+
+/**
  * 단건 PII 값 UPSERT (트랜잭션 내).
  * - 빈 값/정규화 후 빈 값 → 기존 행 DELETE
  * - 값 있음 → INSERT or UPDATE (UNIQUE target_id, column_key)
@@ -243,8 +285,8 @@ export async function upsertPiiValue(
   fieldType: PiiFieldType,
   plain: string,
 ): Promise<void> {
-  const trimmed = plain.trim();
-  if (!trimmed) {
+  const trimmed = piiPlainToStore(fieldType, plain);
+  if (trimmed === null) {
     await tx
       .delete(contactPii)
       .where(
@@ -254,16 +296,6 @@ export async function upsertPiiValue(
   }
 
   const blind = blindIndex(fieldType, trimmed);
-  if (!blind) {
-    // 정규화 후 빈 값 (예: 전화번호에 숫자가 없음)
-    await tx
-      .delete(contactPii)
-      .where(
-        and(eq(contactPii.contactTargetId, contactTargetId), eq(contactPii.columnKey, columnKey)),
-      );
-    return;
-  }
-
   const cipher = encryptPii(trimmed);
   const hint = maskHint(fieldType, trimmed);
 

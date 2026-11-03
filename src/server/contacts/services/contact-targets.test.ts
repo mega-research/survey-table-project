@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/crypto/contact-pii-repo', () => ({
   upsertPiiValue: vi.fn(async () => undefined),
+  // 개인정보 열 변경 판정 재료 — 이 파일은 저장 페이로드만 본다(기록은 realdb 가 본다).
+  readStoredPiiPlain: vi.fn(async () => new Map()),
+  piiPlainToStore: vi.fn((_type: string, plain: string) => plain.trim() || null),
 }));
 
 // db.transaction(cb) 가 update().set().where() 체인의 set 페이로드를 캡처하도록 stub.
