@@ -12,7 +12,7 @@ import {
   teams,
 } from '@/db/schema';
 import { mailCampaigns } from '@/db/schema/mail';
-import type { CompleteQuestionWrite } from '@/db/schema/question-persisted-fields';
+import type { CompleteQuestionCopy } from '@/db/schema/question-persisted-fields';
 import { promoteSurveyResponseHeader } from '@/lib/survey/survey-image-promote';
 import { generateId } from '@/lib/utils';
 import { getSurveyById } from '@/server/read-models/survey-structure';
@@ -598,6 +598,8 @@ export async function duplicateSurvey(
         stagedRowsConfig: question.stagedRowsConfig as NewQuestion['stagedRowsConfig'],
         hideColumnLabels: question.hideColumnLabels,
         stickyColumnCount: question.stickyColumnCount ?? null,
+        fitTableToWidth: question.fitTableToWidth ?? false,
+        scaleMeanEnabled: question.scaleMeanEnabled ?? false,
         exportCellOrder: question.exportCellOrder ?? null,
         mobileOriginalTable: question.mobileOriginalTable,
         mobileTableDisplayMode: question.mobileTableDisplayMode,
@@ -613,7 +615,7 @@ export async function duplicateSurvey(
         answerQuoteEnabled: question.answerQuoteEnabled,
         answerQuoteName: question.answerQuoteName,
         answerQuoteText: question.answerQuoteText,
-      } satisfies CompleteQuestionWrite;
+      } satisfies CompleteQuestionCopy;
       return remapQuestionIdRefs(row, questionIdMap);
     });
 

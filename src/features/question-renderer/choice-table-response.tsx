@@ -1392,6 +1392,7 @@ function ChoiceTableResponseBody({
         {...(question.stickyColumnCount !== undefined
           ? { stickyColumnCount: question.stickyColumnCount }
           : {})}
+        fitTableToWidth={question.fitTableToWidth ?? false}
         applyCellBackground={!isMobile}
         renderCell={(cell) => renderCell(cell)}
       />

@@ -55,7 +55,7 @@ interface OperationsTabStripProps {
 /**
  * 현황 콘솔 상단 탭 스트립.
  *
- * - "실사 현황" trigger hover/click → `응답 현황` / `응답 내역` 드롭다운
+ * - "실사 현황" trigger hover/click → `응답 현황` / `응답 내역` / `척도 평균`(게스트 제외) 드롭다운
  * - "진척 보고" 는 단일 페이지 링크 (`/operations/report`)
  * - "조사 대상" trigger hover/click → `조사 대상 목록` / `조사 대상 업로드` / `컬럼 설정` / `결과코드 설정` / `컨택원 관리`(contacts.manage) 드롭다운
  * - "메일" trigger → `템플릿` / `단체 발송` / `비용 정산` 드롭다운 (수신거부자는 단체 발송 페이지 하단 세그먼트)
@@ -87,7 +87,9 @@ export function OperationsTabStrip({
   const profilesHref = paths.profiles;
   const isOverviewActive = pathname.startsWith(overviewHref);
   const isProfilesActive = pathname.startsWith(profilesHref);
-  const isFieldworkActive = isOverviewActive || isProfilesActive;
+  const scaleMeanHref = paths.scaleMean;
+  const isScaleMeanActive = pathname.startsWith(scaleMeanHref);
+  const isFieldworkActive = isOverviewActive || isProfilesActive || isScaleMeanActive;
 
   const contactsHref = paths.contacts;
   const contactsUploadHref = paths.contactsUpload;
@@ -157,6 +159,12 @@ export function OperationsTabStrip({
               {canProfiles && (
                 <SubLink href={profilesHref} active={isProfilesActive}>
                   응답 내역
+                </SubLink>
+              )}
+              {/* 척도 평균은 내부 담당자용 집계 — 내부 콘솔에만 있다(쿼터·문항 수요와 같은 축) */}
+              {internalShell && canOverview && (
+                <SubLink href={scaleMeanHref} active={isScaleMeanActive}>
+                  척도 평균
                 </SubLink>
               )}
             </NavigationMenuContent>

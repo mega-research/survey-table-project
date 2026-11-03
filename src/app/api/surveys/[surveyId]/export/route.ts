@@ -21,6 +21,7 @@ import { applyExportRowExclusions } from '@/lib/analytics/export-exclusions';
 import {
   MAX_EXPORT_RESPONSES,
   buildRawExportContext,
+  loadFieldCompletedCodes,
   loadLanguageSetLocales,
   loadRawExportRows,
   loadUsedRepeatCounts,
@@ -146,9 +147,13 @@ async function handleExport(
     // 패널 회원 ID 등 이어 넘길 값 열 — 현재 설정 기준(설정에서 지우면 열도 빠진다, 값은 DB 에 남는다).
     // 설정이 없는 설문은 키 자체를 싣지 않아 옵션 모양이 도입 전과 같다.
     const entryParamNames = normalizePassParamNames(surveyData.endRedirects?.passParams);
+    // 실사완료 코드 — 「미응답자 포함」을 꺼도 컨택결과코드 1 인 대상은 넣는다. 켜면 어차피 전부라 읽지 않는다.
+    const fieldCompletedCodes =
+      isRawExport && !includeNonRespondents ? await loadFieldCompletedCodes(surveyId) : [];
     const rawOptions: RawExportLoadOptions = {
       includeNonRespondents,
       includePriorAnswers,
+      ...(fieldCompletedCodes.length > 0 ? { fieldCompletedCodes } : {}),
       contactColumns,
       // 「이월값 불러오기」를 끈 문항 판정 — 현재 빌더 설정 기준
       questions: hydratedQuestions,

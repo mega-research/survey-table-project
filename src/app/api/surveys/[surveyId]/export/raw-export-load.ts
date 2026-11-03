@@ -5,6 +5,7 @@ import { and, asc, count, eq, inArray, notExists, sql, type SQL } from 'drizzle-
 import { db } from '@/db';
 import { contactTargets, surveyResponses, surveyVersions } from '@/db/schema';
 import { completedResponse, notDeletedResponse } from '@/server/response-filters';
+import { loadEditedSources, loadLatestResultCodes } from '@/server/read-models/contact-export-marks';
 import { loadRespondentContactAttrsMany } from '@/server/read-models/respondent-contact-attrs';
 import { getQuestionGroupsBySurvey, mapGroupRow } from '@/server/read-models/survey-structure';
 import {
@@ -13,6 +14,8 @@ import {
 } from '@/server/contacts/services/contact-prior-answers';
 import { decryptQuestionResponses, isEncryptedAnswerValue } from '@/lib/crypto/response-pii';
 import { getSurveyContactStats } from '@/server/operations/services/contact-stats';
+import { getContactResultCodes } from '@/server/read-models/contacts';
+import { latestResultCodeExpr } from '@/lib/operations/contacts-filter-sql.server';
 import type { RawExportContactColumn } from '@/lib/operations/contacts-format';
 import { decryptPiiForExport } from '@/server/operations/services/contacts-export';
 import {
@@ -37,7 +40,11 @@ import {
   sortRowsForContactPopulation,
   stripHiddenFromExportRows,
 } from '@/lib/analytics/raw-export-rows';
-import type { RawExportContext, RawExportResponseRow } from '@/lib/analytics/raw-workbook';
+import {
+  type RawExportContext,
+  type RawExportResponseRow,
+  buildResultCodeNumbers,
+} from '@/lib/analytics/raw-workbook';
 import { readEntryParams } from '@/lib/survey/end-redirect';
 
 // ============================================================
@@ -72,6 +79,35 @@ export interface RawExportLoadOptions extends RawExportContextOptions {
    * 없으면 걷어내지 않는다 (omitDisabledPriorAnswersByContact).
    */
   questions?: readonly Question[];
+  /**
+   * 실사완료 코드 — 컨택결과코드가 1(조사완료)에 해당하는 결과코드 글자(`loadFieldCompletedCodes`).
+   * 「미응답자 포함」이 꺼져 있어도 마지막 회차가 이 코드인 미응답 조사 대상은 행으로 넣는다 — 조사
+   * 현황이 「조사완료」인 대상이 파일에서 빠지지 않게(2026-11-03 피드백). 비었거나 없으면 꺼짐과 같다.
+   */
+  fieldCompletedCodes?: readonly string[];
+}
+
+/**
+ * 결과코드 목록에서 컨택결과코드 1 에 해당하는 코드 — 결과코드 열의 번호 규칙(`buildResultCodeNumbers`)
+ * 그대로라 파일의 「1」과 같은 대상을 고른다. 기본값 폴백 포함.
+ */
+export async function loadFieldCompletedCodes(surveyId: string): Promise<string[]> {
+  const numbers = buildResultCodeNumbers(await getContactResultCodes(surveyId));
+  return [...numbers].filter(([, n]) => n === 1).map(([code]) => code);
+}
+
+/** 미응답 조사 대상을 얼마나 넣을지 — 전부 / 실사완료 코드인 대상만 / 넣지 않음 */
+type NonRespondentScope = 'all' | readonly string[] | null;
+
+function nonRespondentScopeOf(options: RawExportLoadOptions): NonRespondentScope {
+  if (options.includeNonRespondents) return 'all';
+  const codes = options.fieldCompletedCodes ?? [];
+  return codes.length > 0 ? codes : null;
+}
+
+/** 'all' 이면 코드 조건 없음 — nonRespondentWhere 의 onlyCodes 인자 */
+function onlyCodesOf(nonRespondentScope: Exclude<NonRespondentScope, null>): readonly string[] | null {
+  return nonRespondentScope === 'all' ? null : nonRespondentScope;
 }
 
 export interface RawExportPopulationCount {
@@ -106,8 +142,19 @@ export function rawResponseWhere(surveyId: string, scope: OperationsDataScope) {
  * 가짜로 두므로 중첩 db.select 는 mock 에서 깨진다. ${surveyResponses} 는 테이블명으로 렌더된다.
  * notExists 는 SQL 조각을 괄호 없이 붙이므로 괄호를 직접 쓴다.
  */
-function nonRespondentWhere(surveyId: string, scope: OperationsDataScope) {
+function nonRespondentWhere(
+  surveyId: string,
+  scope: OperationsDataScope,
+  onlyCodes: readonly string[] | null = null,
+) {
   return and(
+    // 실사완료 코드만 — 마지막 회차(콘솔 「컨택결과」 열과 같은 기준)가 그 코드인 대상
+    onlyCodes
+      ? sql`${latestResultCodeExpr} in (${sql.join(
+          onlyCodes.map((c) => sql`${c}`),
+          sql`, `,
+        )})`
+      : undefined,
     eq(contactTargets.surveyId, surveyId),
     targetScopeCondition(scope),
     notExists(
@@ -135,12 +182,13 @@ export async function countRawExportPopulation(
     .from(surveyResponses)
     .where(rawResponseWhere(surveyId, scope));
   const responseCount = responseRows[0]?.total ?? 0;
-  if (!options.includeNonRespondents) return { responseCount, nonRespondentCount: 0 };
+  const nonRespondentScope = nonRespondentScopeOf(options);
+  if (nonRespondentScope === null) return { responseCount, nonRespondentCount: 0 };
 
   const targetRows = await db
     .select({ total: count() })
     .from(contactTargets)
-    .where(nonRespondentWhere(surveyId, scope));
+    .where(nonRespondentWhere(surveyId, scope, onlyCodesOf(nonRespondentScope)));
   return { responseCount, nonRespondentCount: targetRows[0]?.total ?? 0 };
 }
 
@@ -307,13 +355,48 @@ async function loadScopeMaterials(
   return out;
 }
 
-/** 조사 대상이 있는 행에만 contactValues 를 싣는다 — 익명 응답은 키 자체를 넣지 않는다. */
+/** 조사 대상 표식 — 마지막 회차 결과코드와 손으로 고친 명단 열. */
+interface ContactMarks {
+  resultCodes: ReadonlyMap<string, string>;
+  editedSources: ReadonlyMap<string, ReadonlySet<string>>;
+}
+
+/**
+ * 조사 대상이 있는 행에만 contactValues·결과코드·고친 열을 싣는다 — 익명 응답은 키 자체를 넣지
+ * 않는다. 값이 없는 표식도 키를 넣지 않아, 조사 대상이 없는 설문의 행 모양은 도입 전과 같다.
+ */
 function attachContactValues(
   row: RawExportResponseRow,
   values: Record<string, string> | undefined,
+  contactId?: string,
+  marks?: ContactMarks,
 ): RawExportResponseRow {
   if (values) row.contactValues = values;
+  if (contactId && marks) {
+    const code = marks.resultCodes.get(contactId);
+    if (code) row.resultCode = code;
+    const edited = marks.editedSources.get(contactId);
+    if (edited) row.editedSources = edited;
+  }
   return row;
+}
+
+/**
+ * 결과코드(조사 대상이 하나라도 있으면)와 고친 명단 열(명단 열이 켜졌을 때만 — attrs 가 있어야
+ * 되돌린 칸을 가린다)을 한 번씩 읽는다. 조사 대상이 없으면 쿼리하지 않는다.
+ */
+async function loadContactMarks(
+  contacts: readonly ContactRef[],
+  withContactColumns: boolean,
+): Promise<ContactMarks> {
+  if (contacts.length === 0) return { resultCodes: new Map(), editedSources: new Map() };
+  const [resultCodes, editedSources] = await Promise.all([
+    loadLatestResultCodes(contacts.map((c) => c.id)),
+    withContactColumns
+      ? loadEditedSources(contacts.map((c) => ({ id: c.id, attrs: c.attrs ?? {} })))
+      : Promise.resolve(new Map<string, Set<string>>()),
+  ]);
+  return { resultCodes, editedSources };
 }
 
 /**
@@ -373,8 +456,9 @@ export async function loadRawExportRows(
     for (const t of targets) contactMap.set(t.id, t);
   }
 
-  const nonRespondents = options.includeNonRespondents
-    ? await fetchContactRefs(nonRespondentWhere(surveyId, scope), {
+  const nonRespondentScope = nonRespondentScopeOf(options);
+  const nonRespondents = nonRespondentScope
+    ? await fetchContactRefs(nonRespondentWhere(surveyId, scope, onlyCodesOf(nonRespondentScope)), {
         withAttrs: withContactColumns,
         orderByResid: true,
       })
@@ -388,6 +472,7 @@ export async function loadRawExportRows(
     : null;
 
   const scopeMaterials = await loadScopeMaterials(candidates);
+  const marks = await loadContactMarks([...contactMap.values(), ...nonRespondents], withContactColumns);
 
   const responseRows: RawExportResponseRow[] = rawResponses.map((r) => {
     const c = r.contactTargetId ? contactMap.get(r.contactTargetId) : undefined;
@@ -407,7 +492,7 @@ export async function loadRawExportRows(
     };
     const entryParams = readEntryParams(r.metadata);
     if (entryParams) row.entryParams = entryParams;
-    return attachContactValues(row, c ? contactValues?.get(c.id) : undefined);
+    return attachContactValues(row, c ? contactValues?.get(c.id) : undefined, c?.id, marks);
   });
 
   // 숨은 문항 값은 내보내는 값에서만 뺀다 — DB 는 건드리지 않는다.
@@ -435,7 +520,8 @@ export async function loadRawExportRows(
       )
     : strippedRows;
 
-  if (!options.includeNonRespondents) return { kind: 'ok', rows: mergedRows, ...population };
+  // 미응답 행을 하나도 넣지 않는 경우만 응답 순서 그대로 — 넣으면(실사완료 코드 대상뿐이어도) 시스템ID 순
+  if (nonRespondentScope === null) return { kind: 'ok', rows: mergedRows, ...population };
 
   // 미응답 행은 이번 회차 답이 없으므로 이월값이 통째로 실린다.
   const nonRespondentRows = nonRespondents.map((t) => {
@@ -443,7 +529,7 @@ export async function loadRawExportRows(
     const withPrior = priorByContactId
       ? { ...base, questionResponses: mergePriorAnswersIntoResponses(base.questionResponses, priorByContactId.get(t.id)) }
       : base;
-    return attachContactValues(withPrior, contactValues?.get(t.id));
+    return attachContactValues(withPrior, contactValues?.get(t.id), t.id, marks);
   });
   const rows = sortRowsForContactPopulation([...mergedRows, ...nonRespondentRows]);
   return { kind: 'ok', rows, ...population };
@@ -469,8 +555,10 @@ export async function buildRawExportContext(
 ): Promise<RawExportContext> {
   const groups = await getQuestionGroupsBySurvey(surveyId);
   // 조건부 메타 열 판정 — 설문 설정 기준 (응답 매칭 여부 무관):
-  // 컨택 타겟이 없으면 시스템ID 열을 만들지 않는다. 컨택 통계도 같은 스코프 파티션으로 센다.
+  // 컨택 타겟이 없으면 결과코드 열을 만들지 않는다. 컨택 통계도 같은 스코프 파티션으로 센다.
   const { hasContacts } = await getSurveyContactStats(surveyId, scope);
+  // 결과코드 열의 숫자·코딩북 값 라벨 — 조사 대상이 있을 때만 읽는다(기본값 폴백 포함).
+  const resultCodes = hasContacts ? await getContactResultCodes(surveyId) : undefined;
   // 추적조사 — 이월 응답도 raw export 모수와 같은 스코프 파티션만 본다.
   const changeConfirmQuestionIds = await loadChangeConfirmQuestionIds(surveyId, {
     isTest: testFlagForScope(scope),
@@ -488,6 +576,7 @@ export async function buildRawExportContext(
     appUrl: (process.env['NEXT_PUBLIC_APP_URL'] ?? '').replace(/\/+$/, ''),
     stepLabels: buildStepLabelMap(stepQs, groups),
     hasContacts,
+    ...(resultCodes ? { resultCodes } : {}),
     questionMeta: buildQuestionMetaMap(questions),
     changeConfirmQuestionIds,
     ...(options.contactColumns ? { contactColumns: options.contactColumns } : {}),

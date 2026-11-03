@@ -20,6 +20,7 @@ import {
 } from '../domain/contact-target';
 import * as svc from '../services/contact-targets';
 import { generateTestContacts } from '../services/test-contacts';
+import { contactEditorOfContext } from './contact-editor';
 
 /**
  * 서비스의 0행 거부를 RPC 어휘로 옮긴다 (티켓 15).
@@ -50,7 +51,10 @@ const update = scoped
   .output(z.object({ ok: z.literal(true) }))
   .handler(async ({ context, input }) => {
     await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'contacts.manage');
-    await svc.updateContactTarget(input, isExternalActor(context.actor)).catch(rethrowContactNotFound);
+    // 편집자도 인증된 context 에서 넘긴다 — 「대상 정보 수정 현황」의 누가.
+    await svc
+      .updateContactTarget(input, isExternalActor(context.actor), contactEditorOfContext(context))
+      .catch(rethrowContactNotFound);
     return { ok: true as const };
   });
 
@@ -67,7 +71,7 @@ const setMemo = scoped
   .handler(async ({ context, input }) => {
     await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'contacts.writeAttempts');
     await svc
-      .setContactTargetMemo(input, isExternalActor(context.actor))
+      .setContactTargetMemo(input, isExternalActor(context.actor), contactEditorOfContext(context))
       .catch(rethrowContactNotFound);
     return { ok: true as const };
   });

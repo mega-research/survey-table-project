@@ -18,6 +18,8 @@ import {
   getResponseEditLogs,
 } from '@/server/read-models/contacts';
 import { listAssignmentOptions } from '@/server/read-models/contact-assignment-options';
+import { getContactTargetEditLogs } from '@/server/read-models/contact-target-edit-logs';
+import { LINK_CONTACT_EDITOR_LABEL } from '@/shared/contracts/contacts';
 import { isReeditableResponseStatus } from '@/shared/contracts/survey-response';
 import type { SurveyCapability } from '@/shared/contracts/workspace';
 
@@ -102,20 +104,39 @@ export async function ContactDetailScreen({
     : detail.contact.responseId != null;
 
   const showAssignment = includeContactOwner && permissions.manageContacts;
-  const [scheme, resultCodes, mailHistory, rawEditLogs, mailTemplates, assignmentOptions] =
-    await Promise.all([
-      getContactColumnScheme(surveyId, scope),
-      getContactResultCodes(surveyId),
-      permissions.viewMail ? getMailRecipientsForTarget(detail.contact.id, scope) : [],
-      permissions.editResponses ? getResponseEditLogs(editableResponseId, detail.contact.id) : [],
-      permissions.sendMail ? getMailTemplatesBySurvey(surveyId) : [],
-      showAssignment ? listAssignmentOptions(surveyId, scope) : null,
-    ]);
+  const [
+    scheme,
+    resultCodes,
+    mailHistory,
+    rawEditLogs,
+    rawTargetEditLogs,
+    mailTemplates,
+    assignmentOptions,
+  ] = await Promise.all([
+    getContactColumnScheme(surveyId, scope),
+    getContactResultCodes(surveyId),
+    permissions.viewMail ? getMailRecipientsForTarget(detail.contact.id, scope) : [],
+    permissions.editResponses ? getResponseEditLogs(editableResponseId, detail.contact.id) : [],
+    // 대상 정보 수정 현황 — 컨택원을 내리지 않는 화면(외주 링크)이면 로더가 컨택원 변경을 빼고 싣는다.
+    getContactTargetEditLogs(detail.contact.id, scope, { isGuest: !includeContactOwner }),
+    permissions.sendMail ? getMailTemplatesBySurvey(surveyId) : [],
+    showAssignment ? listAssignmentOptions(surveyId, scope) : null,
+  ]);
   if (!scheme) notFound();
   // 화면에서 감추지 않고 payload 에서 뺀다 — 감추기만 하면 이메일이 RSC payload 로 나간다.
   const editLogs = hideStaffEmails
     ? rawEditLogs.map((row) => ({ ...row, editorEmail: null }))
     : rawEditLogs;
+  // 대상 정보 수정 현황·회차 기록자도 같은 규칙이다 — 내부 담당자 이메일은 걷고, 외주 링크가 남긴
+  // 「외주」 글자(LINK_CONTACT_EDITOR_LABEL)는 남긴다(외주가 자기 기록을 알아보게).
+  const keepLinkLabel = (email: string | null) =>
+    email === LINK_CONTACT_EDITOR_LABEL ? email : null;
+  const targetEditLogs = hideStaffEmails
+    ? rawTargetEditLogs.map((row) => ({ ...row, editorEmail: keepLinkLabel(row.editorEmail) }))
+    : rawTargetEditLogs;
+  const attempts = hideStaffEmails
+    ? detail.attempts.map((a) => ({ ...a, createdByEmail: keepLinkLabel(a.createdByEmail) }))
+    : detail.attempts;
 
   const groupLabel = detail.contact.groupValue ?? '미지정';
   const companyKey = scheme.columns.find((c) => attrsKeyOf(c.source)?.includes('기업명'))?.source;
@@ -158,6 +179,7 @@ export async function ContactDetailScreen({
         systemFieldKeys={extractSystemFieldKeys(scheme)}
         mailHistory={mailHistory}
         editLogs={editLogs}
+        targetEditLogs={targetEditLogs}
         {...(permissions.sendMail
           ? {
               mailSend: {
@@ -189,7 +211,7 @@ export async function ContactDetailScreen({
           inviteCode: canProxyRespond ? detail.contact.inviteCode : null,
           responseId: editableResponseId,
           responseReeditable: editableResponseReeditable,
-          attempts: detail.attempts,
+          attempts,
         }}
       />
     </main>

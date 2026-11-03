@@ -22,6 +22,7 @@ import {
   ReorderContactAssignmentsInput,
   SetTargetAssignmentInput,
 } from '../domain/contact-assignment';
+import { contactEditorOf } from '../domain/contact-target-edit';
 import * as applySvc from '../services/contact-assignment-apply';
 import * as facetSvc from '../services/contact-assignment-facets';
 import { ForbiddenAttrColumnError } from '../services/contact-attr-values';
@@ -63,13 +64,13 @@ const create = authed
     }
   });
 
-/** 조사 대상 한 명의 컨택원 바꾸기 (상세 드롭다운 — 고르면 바로 저장). */
+/** 조사 대상 한 명의 컨택원 바꾸기 (상세 드롭다운 — 고르면 바로 저장). 바뀌면 대상 정보 수정 현황에 남긴다. */
 const setTarget = authed
   .input(SetTargetAssignmentInput)
   .output(z.object({ ok: z.literal(true) }))
   .handler(async ({ context, input }) => {
     await assertSurveyCapabilityRpc(context.user, input.surveyId, 'contacts.manage');
-    await svc.setTargetAssignment(input);
+    await svc.setTargetAssignment(input, contactEditorOf(context.user));
     return { ok: true as const };
   });
 

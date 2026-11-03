@@ -10,12 +10,15 @@ const {
   loadRawExportRowsMock,
   countRawExportPopulationMock,
   getContactColumnSchemeMock,
+  loadFieldCompletedCodesMock,
 } = vi.hoisted(() => ({
   authState: { user: { id: 'admin' } as null | { id: string } },
   surveyFindFirstMock: vi.fn(),
   loadRawExportRowsMock: vi.fn(),
   countRawExportPopulationMock: vi.fn(),
   getContactColumnSchemeMock: vi.fn(),
+  // 기본은 실사완료 코드 없음 — 옵션 모양이 도입 전과 같다. 실사완료 케이스만 값을 준다.
+  loadFieldCompletedCodesMock: vi.fn(async (): Promise<string[]> => []),
 }));
 
 vi.mock('@/lib/auth', () => ({
@@ -77,6 +80,7 @@ vi.mock('./raw-export-load', () => ({
   // 건드리는 순간 "mock 에 없는 export" 로 엉뚱하게 깨진다.
   loadUsedRepeatCounts: vi.fn(async () => new Map<string, number>()),
   loadLanguageSetLocales: vi.fn(async () => new Map()),
+  loadFieldCompletedCodes: loadFieldCompletedCodesMock,
   buildRawExportContext: vi.fn(async () => ({
     appUrl: '',
     stepLabels: new Map(),
@@ -227,6 +231,24 @@ describe('GET /export — includeNonRespondents 파라미터', () => {
       contactColumns: [],
       questions: expect.any(Array),
     });
+  });
+
+  it('미응답자 포함이 꺼져 있으면 실사완료 코드를 읽어 로더에 넘긴다 — 켜면 읽지 않는다', async () => {
+    loadFieldCompletedCodesMock.mockResolvedValueOnce(['1.조사완료']);
+    const off = await exportGet(exportRequest('type=raw'), params);
+    expect(off.status).toBe(200);
+    expect(loadFieldCompletedCodesMock).toHaveBeenCalledWith(surveyId);
+    expect(loadRawExportRowsMock).toHaveBeenLastCalledWith(
+      surveyId,
+      'real',
+      expect.objectContaining({ includeNonRespondents: false, fieldCompletedCodes: ['1.조사완료'] }),
+    );
+
+    loadFieldCompletedCodesMock.mockClear();
+    const on = await exportGet(exportRequest('type=raw&includeNonRespondents=1'), params);
+    expect(on.status).toBe(200);
+    expect(loadFieldCompletedCodesMock).not.toHaveBeenCalled();
+    expect(loadRawExportRowsMock.mock.lastCall?.[2]).not.toHaveProperty('fieldCompletedCodes');
   });
 
   it('raw-split 도 같은 파라미터를 로더에 넘긴다', async () => {

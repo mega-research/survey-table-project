@@ -1,7 +1,7 @@
 import { and, eq, isNull, isNotNull, or, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { surveyResponses } from '@/db/schema/surveys';
+import { surveyResponses, surveys } from '@/db/schema/surveys';
 import { notDeletedResponse, notTestResponse } from '@/server/response-filters';
 import { findContactByInviteToken } from '@/server/read-models/invite-lookup';
 import type { CheckResult, ServerSignals } from '@/lib/duplicate-detection/types';
@@ -27,6 +27,18 @@ export async function checkTrackA(
     contactTargetId: lookup.contactTargetId,
     ...(lookup.isTest ? { isTestTarget: true } : {}),
   };
+}
+
+/**
+ * 중복 응답 허용 설문인지 — 켜져 있으면 초대 토큰 없는 응답에 Track B 를 걸지 않는다.
+ * 지금 설문 행에서 읽는 라이브 값이다. 설문이 없으면 false(종전대로 검사).
+ */
+export async function allowsMultipleResponses(surveyId: string): Promise<boolean> {
+  const row = await db.query.surveys.findFirst({
+    where: and(eq(surveys.id, surveyId), isNull(surveys.deletedAt)),
+    columns: { allowMultipleResponses: true },
+  });
+  return row?.allowMultipleResponses === true;
 }
 
 export async function checkTrackB(params: {

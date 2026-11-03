@@ -22,6 +22,8 @@ function makeProps(overrides: Record<string, unknown> = {}) {
     onExclusiveChoiceChange: vi.fn(),
     exclusiveScope: 'group' as const,
     onExclusiveScopeChange: vi.fn(),
+    excludeFromMean: false,
+    onExcludeFromMeanChange: vi.fn(),
     parentQuestionType: undefined,
     branchRule: undefined,
     onBranchRuleChange: vi.fn(),
@@ -402,5 +404,35 @@ describe('ChoiceOptCellTab — 모바일 그룹 카드 보기 모양(세로 타�
   it('그룹이 없는 셀에서는 보이지 않는다', () => {
     render(<ChoiceOptCellTab {...makeProps({ choiceGroups: [rad1] })} />);
     expect(screen.queryByRole('button', { name: '척도 막대' })).not.toBeInTheDocument();
+  });
+});
+
+describe('ChoiceOptCellTab — 평균에서 제외', () => {
+  it('라디오 문항의 보기 칸에서 켜면 onExcludeFromMeanChange(true)', async () => {
+    const onExcludeFromMeanChange = vi.fn();
+    render(
+      <ChoiceOptCellTab {...makeProps({ parentQuestionType: 'radio', onExcludeFromMeanChange })} />,
+    );
+    await userEvent.click(screen.getByRole('switch', { name: '평균에서 제외' }));
+    expect(onExcludeFromMeanChange).toHaveBeenCalledWith(true);
+  });
+
+  it('체크박스 문항의 보기 칸에는 없다 — 척도 줄은 단일 선택 변수뿐이다', () => {
+    render(<ChoiceOptCellTab {...makeProps({ parentQuestionType: 'checkbox' })} />);
+    expect(screen.queryByRole('switch', { name: '평균에서 제외' })).toBeNull();
+  });
+
+  it('라디오 그룹에 속한 보기 칸에는 있다', () => {
+    render(
+      <ChoiceOptCellTab
+        {...makeProps({
+          parentQuestionType: 'table',
+          choiceGroups: [rad1],
+          choiceGroupId: 'g1',
+          groupMemberCounts: { g1: 7 },
+        })}
+      />,
+    );
+    expect(screen.getByRole('switch', { name: '평균에서 제외' })).toBeInTheDocument();
   });
 });

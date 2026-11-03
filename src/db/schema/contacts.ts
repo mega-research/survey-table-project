@@ -1,6 +1,7 @@
 import { relations, sql } from 'drizzle-orm';
 import {
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -13,6 +14,8 @@ import {
 
 import type {
   ContactAssignmentClause,
+  ContactTargetEditAction,
+  ContactTargetEditChange,
   ContactUploadMapping,
   ContactUploadMode,
 } from '@/shared/contracts/contacts';
@@ -159,12 +162,22 @@ export const contactAttempts = pgTable(
     attemptNo: integer('attempt_no').notNull(),
     resultCode: text('result_code').notNull(),
     note: text('note'),
+    /**
+     * 기록자 계정 id — public.users(id) FK, ON DELETE RESTRICT(0121 — 계정은 하드 삭제되지 않는다).
+     * 0152 가 운영(옛 auth.users)에서 SET NULL 로 다시 걸지만 재생 순서상 0121 이 뒤라 이쪽이 끝 상태다.
+     * FK 의 정본은 마이그레이션이다(순환 import 를 피한다).
+     */
     createdBy: uuid('created_by'),
     // 이 회차를 넣은 외주 실사 링크 — **계정 칸과 배타다** (0127, ADR-0026).
     // 외주에게는 계정이 없어 `created_by` 에 채울 값이 없다. 둘 다 채운 행을 막는 것은
     // 서비스가 아니라 CHECK 제약이고(한 행 안의 조건이라 DB 가 강제할 수 있다), FK 는
     // 마이그레이션이 만든다 — survey_access_links 와 순환 import 를 피한다.
     fieldworkLinkId: uuid('fieldwork_link_id'),
+    /**
+     * 기록자 이메일 스냅샷 (0152) — 계정이 쓴 회차는 created_by 와 함께 채운다. 외주 링크가 쓴 회차는
+     * 계정이 없어 NULL 이다(화면은 fieldwork_link_id 로 「외주」를 읽는다). 0152 전에 적힌 회차도 NULL.
+     */
+    createdByEmail: text('created_by_email'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => ({
@@ -173,6 +186,41 @@ export const contactAttempts = pgTable(
       table.attemptNo,
     ),
   }),
+);
+
+/**
+ * 대상 정보 수정 현황 (0152) — 조사 대상 한 명의 정보·회차·컨택원을 손으로 바꾼 기록.
+ * 바꾼 쓰기와 같은 트랜잭션에서 한 줄을 넣는다. 파티션 열은 없다 — 대상이 이미 실/테스트에 속하고
+ * 읽기는 대상 단위다. 대상·설문이 지워지면 함께 지워진다(cascade). pii 값은 담지 않는다.
+ */
+export const contactTargetEditLogs = pgTable(
+  'contact_target_edit_logs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    surveyId: uuid('survey_id')
+      .notNull()
+      .references(() => surveys.id, { onDelete: 'cascade' }),
+    contactTargetId: uuid('contact_target_id')
+      .notNull()
+      .references(() => contactTargets.id, { onDelete: 'cascade' }),
+    action: text('action').$type<ContactTargetEditAction>().notNull(),
+    changes: jsonb('changes').$type<ContactTargetEditChange[]>().notNull(),
+    // 바꾼 사람. authed/scoped 보장이나 응답 편집 이력과 같이 방어적으로 nullable.
+    editedBy: text('edited_by'),
+    // 스냅샷 — 계정이 지워져도 누구였는지 남는다.
+    editorEmail: text('editor_email'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('contact_target_edit_logs_target_created_idx').on(
+      table.contactTargetId,
+      table.createdAt.desc(),
+    ),
+    check(
+      'contact_target_edit_logs_action_check',
+      sql`${table.action} in ('info_edit', 'attempt_edit', 'attempt_delete', 'assignment_change')`,
+    ),
+  ],
 );
 
 /**
@@ -269,4 +317,5 @@ export type ContactPii = typeof contactPii.$inferSelect;
 export type NewContactPii = typeof contactPii.$inferInsert;
 export type ContactPriorAnswers = typeof contactPriorAnswers.$inferSelect;
 export type ContactAssignment = typeof contactAssignments.$inferSelect;
+export type ContactTargetEditLog = typeof contactTargetEditLogs.$inferSelect;
 export type NewContactPriorAnswers = typeof contactPriorAnswers.$inferInsert;

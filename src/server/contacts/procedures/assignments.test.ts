@@ -145,7 +145,7 @@ describe('contacts.assignments procedures', () => {
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
 
-  it('setTarget 은 배정 없음(null)도 그대로 넘긴다', async () => {
+  it('setTarget 은 배정 없음(null)도 그대로 넘기고, 기록할 편집자로 세션 사용자를 넘긴다', async () => {
     vi.mocked(svc.setTargetAssignment).mockResolvedValue();
     const client = createRouterClient({ assignments }, { context: ctx('admin-1') });
     await client.assignments.setTarget({
@@ -153,10 +153,9 @@ describe('contacts.assignments procedures', () => {
       contactTargetId: TARGET_ID,
       assignmentId: null,
     });
-    expect(svc.setTargetAssignment).toHaveBeenCalledWith({
-      surveyId: SURVEY_ID,
-      contactTargetId: TARGET_ID,
-      assignmentId: null,
-    });
+    expect(svc.setTargetAssignment).toHaveBeenCalledWith(
+      { surveyId: SURVEY_ID, contactTargetId: TARGET_ID, assignmentId: null },
+      { id: 'admin-1', email: 'a@b.com' },
+    );
   });
 });

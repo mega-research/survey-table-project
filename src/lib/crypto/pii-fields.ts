@@ -10,6 +10,12 @@ export const PII_FIELD_TYPES = [
 
 export type PiiFieldType = (typeof PII_FIELD_TYPES)[number];
 
+/**
+ * 개인정보 열 하나의 지금 저장값 — 서버가 잠금 아래에서 복호화해 메모리에서만 쓴다(변경 판정용).
+ * 복호화에 실패하면 `failed`.
+ */
+export type StoredPiiPlain = { plain: string } | { failed: true };
+
 export function isPiiFieldType(value: string): value is PiiFieldType {
   return (PII_FIELD_TYPES as readonly string[]).includes(value);
 }

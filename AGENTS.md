@@ -76,7 +76,7 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 | 언어           | TypeScript (strict)                          | 5.9.3           |
 
 > 참고: `xlsx`, `jszip` 의존성은 제거됨(2026-06-05). 엑셀 생성은 ExcelJS, SPSS는 sav-writer 사용.
-> `react-hook-form`, `@tanstack/react-virtual` 도 제거됨(2026-08-22) — 소스 참조가 처음부터 0이었다.
+> `react-hook-form`, `@tanstack/react-virtual` 도 제거됨(2026-08-22).
 > 폼은 제어 컴포넌트 + zod 로, 목록은 TanStack Table 로 직접 다룬다.
 > sharp 0.35는 Vercel libvips 이슈로 `next.config.ts`의 `outputFileTracingIncludes` 우회가 걸려 있다 (업스트림 수정 시 제거).
 > TipTap 36개 패키지는 `pnpm-workspace.yaml` overrides 로 한 버전에 묶는다 — `@tiptap/react` 가 `@tiptap/core`·`@tiptap/pm` 을 정확히 같은 버전으로 요구해 일부만 올리면 설치가 갈린다.
@@ -101,7 +101,7 @@ src/
 │   │                           # 인용값 계산이 양쪽에서 같은 입력을 봐야 해서 저장소를 하나로 둔 것 — 떼면 resetResponseState 의 원자적 리셋이 갈린다
 │   │                           # UI 가 서버에서 가져올 수 있는 건 없다 — @/server 전면 금지(타입 포함), 모양은 @/shared/contracts 로
 │   │                           # 루트 잔류 기준: ① 복수 하위 묶음이 소비하는 공용 조각 ② app 라우트가 직접 여는 진입점만 — 단일 묶음만 소비하면 그 묶음 안으로
-│   │                           # 루트 개수는 목표가 아니라 이 기준의 결과다(2026-08-25 전수 실측: 72파일 중 이동 1건). 새 묶음의 진입점은 폴더 안(table-editor 방식), 기존 group-manager·condition-card 는 유지
+│   │                           # 루트 개수는 목표가 아니라 이 기준의 결과다. 새 묶음의 진입점은 폴더 안(table-editor 방식), 기존 group-manager·condition-card 는 유지
 │                               # 상세 트리 → src/features/AGENTS.md
 ├── shared/                     # 서버·프론트 양쪽 공용 (feature 직접 import 금지의 탈출구)
 │   ├── contracts/              # 서버와 UI 가 합의한 모양 — UI 가 서버에서 가져오는 유일한 출처
@@ -207,7 +207,7 @@ POST   /api/upload/avatar                      # 아바타 업로드 (세 계정
 POST   /api/upload/mail-attachment             # 메일 첨부 업로드 (삭제는 media.* RPC)
 POST   /api/upload/notice-attachment           # 공지 첨부 업로드 (삭제는 media.* RPC)
 POST   /api/upload/survey-document             # 조사표 PDF 업로드 (tmp 로 받고 쪽 수 판독, promote 는 attach RPC)
-GET    /api/surveys/[surveyId]/export          # SPSS(.sav)/엑셀 export (인증 + export.download 관문, 파일 스트림). raw/raw-split 은 `includeNonRespondents=1` 로 미응답 조사 대상 행 포함 (sav/sps 는 무시). `includePriorAnswers=1` 은 이번 회차에 키가 없는 문항을 이월 응답으로 채운다 — 숨은 문항 strip 뒤에 병합하고 조건 판정은 하지 않되, 「이월값 불러오기」를 끈 문항(`priorAnswerDisabled`)은 현재 빌더 설정 기준으로 비워 둔다. 조사 대상 명단 열은 파라미터 없이 응답 내역 컬럼 설정(`profileColumns`)의 표시 attrs·pii 열을 항상 붙인다 (pii 열이 있으면 PII 평문 → no-store) — Raw 행 조립은 라우트 폴더 로컬 raw-export-load.ts (contacts·operations 를 함께 읽어 한 도메인에 못 둔다. 순수 조각은 lib/analytics/raw-export-rows.ts — 이름이 같아 헷갈리던 것을 로더 쪽 개명으로 갈랐다)
+GET    /api/surveys/[surveyId]/export          # SPSS(.sav)/엑셀 export (인증 + export.download 관문, 파일 스트림). raw/raw-split 은 `includeNonRespondents=1` 로 미응답 조사 대상 행 포함 (sav/sps 는 무시, 꺼도 컨택결과코드 1 은 포함). `includePriorAnswers=1` 은 이번 회차에 키가 없는 문항을 이월 응답으로 채운다 — 숨은 문항 strip 뒤에 병합하고 조건 판정은 하지 않되, 「이월값 불러오기」를 끈 문항(`priorAnswerDisabled`)은 현재 빌더 설정 기준으로 비워 둔다. 조사 대상 명단 열은 파라미터 없이 응답 내역 컬럼 설정(`profileColumns`)의 표시 attrs·pii 열을 항상 붙인다 (pii 열이 있으면 PII 평문 → no-store). — Raw 행 조립은 라우트 폴더 로컬 raw-export-load.ts (contacts·operations 를 함께 읽어 한 도메인에 못 둔다. 순수 조각은 lib/analytics/raw-export-rows.ts)
 GET    /api/surveys/[surveyId]/export/split-preview  # 분할 export 미리보기 (basis 없으면 `hasContacts` — 다이얼로그가 Raw Data 옵션 영역을 그릴지 판단. basis + `includeNonRespondents=1` 이면 `totalRows`·`nonRespondentRows` 를 더해 반환)
 GET    /api/surveys/[surveyId]/contacts/export # 조사 대상 목록 엑셀 다운로드
 GET    /api/surveys/[surveyId]/demand-summary  # 문항 수요 집계표 엑셀 (화면의 정렬·필터를 쿼리로 받음)
@@ -371,7 +371,7 @@ lib 은 도메인의 집이 아니라 **소유자를 특정할 수 없는 것들
   호출자가 옛 이름을 계속 거치면 새 경계가 가짜가 된다. 소비자를 새 집으로 재배선하고 통로를 지운다.
 
 판정은 소비자 실측으로 한다. **여러 줄 `import { ... } from` 블록은 한 줄 grep 으로 안 잡히니
-파일 단위로 세거나 tsc 에게 물을 것** — 2026-08-25 리뷰에서 이 착시로 살아 있는 재수출을 죽은 것으로 오판했다.
+파일 단위로 세거나 tsc 에게 물을 것** 
 
 ---
 
@@ -463,7 +463,7 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 
 2. **상태 관리**: 서버 상태는 TanStack Query, 클라이언트 상태는 Zustand(+Immer).
 
-3. **응답 페이지는 snapshot 기반**: 빌더 수정은 publish 전까지 실응답 페이지 미반영(테스트 링크·관리자 미리보기는 저장본 — `src/server/AGENTS.md` 「테스트 모드」). "테스트 링크 OK + 응답 페이지 NG" 패턴이면 publish 누락 먼저 의심. 단, `quotaConfig`·`isPaused`·`pausedMessage`·`endRedirects`는 스냅샷 밖 라이브 컬럼이라 즉시 반영된다.
+3. **응답 페이지는 snapshot 기반**: 빌더 수정은 publish 전까지 실응답 페이지 미반영(테스트 링크·관리자 미리보기는 저장본 — `src/server/AGENTS.md` 「테스트 모드」). "테스트 링크 OK + 응답 페이지 NG" 패턴이면 publish 누락 먼저 의심. 단, `quotaConfig`·`isPaused`·`pausedMessage`·`endRedirects`·`allowMultipleResponses`는 스냅샷 밖 라이브 컬럼이라 즉시 반영된다.
 
 4. **테이블 질문**: `tableColumns`, `tableRowsData`, `tableHeaderGrid`, `tableValidationRules`, `dynamicRowConfigs`, `rowRepeatConfig`, `sumConstraints` JSONB 사용. choice 응답값은 `cell.id`.
 
@@ -536,9 +536,9 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 - 새 마이그레이션은 **디스크에 없는 다음 번호**를 쓴다. 다른 브랜치가 이미 쓴 번호도 피한다
 - **나중에 병합하는 쪽은 `manual-migrations.json` 배열 끝에 append 한다.** 번호순으로 끼워 넣지 않는다 — 그 배열이 곧 빈 DB 재생 순서다
 - 그래서 번호와 배열 순서가 어긋나 보일 수 있다. 만지는 객체가 서로소면 정상이다
-- **배열 순서를 지켜야 하는 쌍**: 0128 과 0129 는 같은 CHECK(`mobile_table_display_mode`)를 차례로 갈아끼운다 — 0128 을 뒤에 재생하면 `item-cards` 가 빠진다
+- **배열 순서를 지켜야 하는 쌍**: 0128 과 0129 는 같은 CHECK(`mobile_table_display_mode`)를 차례로 갈아끼운다 — 0128 을 뒤에 재생하면 `item-cards` 가 빠진다. **0152 는 0121 앞**(운영 순서 — 0121 이 같은 FK 를 다시 건다)
 - **배포 전후가 갈리는 쌍**: 0142(이관 이력 표)는 앱 배포 **전**, 0143(`response_answers` 삭제 등)은 배포 **뒤** — 거꾸로 하면 구버전 앱의 완료 제출이 실패한다. 0145(언어별 설문 글자 `surveys.localized_messages`)도 배포 **전**이다(새 앱이 읽는다, nullable 이라 2단계 불필요)
-- **승격 때 프로덕션에 적용할 것**(staging 에만 있는 번호): 역할 모델 v2 는 **0112~0122·0151** 다(0111 은 선반영 재현용이라 적용 금지 — 파일 머리 참조). 팀 종류(실사팀 표시) **0139** 는 teams 를 만지므로 역할 v2 와 함께 간다. 외주·클라이언트 링크는 **0126·0127·0133·0134 를 함께** 적용하고, 0134 는 테이블 개명이라 옛 코드와 양립하지 않아 **앱 배포 직전에** 적용한다. 설문 즐겨찾기·내 태그 **0149·0150** 은 새 테이블만 만들어 앱 배포 **전**에 적용한다(목록 제목순이 쓰는 `ko-x-icu` 정렬이 프로덕션에 있는지도 함께 본다)
+- **승격 때 프로덕션에 적용할 것**(staging 에만 있는 번호 — 0146·0147·0152·0153 은 운영에 이미 있다): 역할 모델 v2 는 **0112~0122·0151** 다(0111 은 선반영 재현용이라 적용 금지 — 파일 머리 참조). 팀 종류(실사팀 표시) **0139** 는 teams 를 만지므로 역할 v2 와 함께 간다. 외주·클라이언트 링크는 **0126·0127·0133·0134 를 함께** 적용하고, 0134 는 테이블 개명이라 옛 코드와 양립하지 않아 **앱 배포 직전에** 적용한다. 설문 즐겨찾기·내 태그 **0149·0150** 은 새 테이블만 만들어 앱 배포 **전**에 적용한다(목록 제목순이 쓰는 `ko-x-icu` 정렬이 프로덕션에 있는지도 함께 본다)
 - 번호를 옮긴 이력은 문서에 두지 않는다 — 역할 v2 의 옛 번호 매핑(0101→0111 …)은 병합 커밋 `c7197701` 의 `AGENTS.md`, 외주 링크 0128→0133 은 0133 파일 머리에 있다. 이미 적용한 DB 는 번호와 무관하다(적용 이력 표가 없다)
 
 ---

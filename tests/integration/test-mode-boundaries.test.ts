@@ -27,9 +27,15 @@ vi.mock('@/server/data-scope', async (importOriginal) => {
 
 // 조사 대상 명단 열은 raw 경로가 항상 컬럼 스킴을 읽는다 — 이 파일은 응답 조건의 스코프가 관심사라
 // 스킴은 없는 것으로 둔다 (열 0개). 스코프 인자 자체는 route-params 테스트가 본다.
+// 결과코드도 없는 것으로 둔다 — 실사완료 코드가 없으면 미응답 대상을 조회하지 않아 이 파일이 보는
+// 응답 쿼리 모양이 그대로다(실사완료 대상 조회는 raw-export-load 테스트 몫).
 vi.mock('@/server/read-models/contacts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/server/read-models/contacts')>();
-  return { ...actual, getContactColumnScheme: vi.fn(async () => null) };
+  return {
+    ...actual,
+    getContactColumnScheme: vi.fn(async () => null),
+    getContactResultCodes: vi.fn(async () => []),
+  };
 });
 
 vi.mock('@/lib/auth', () => ({
@@ -74,7 +80,9 @@ vi.mock('@/db', () => ({
   },
 }));
 
-vi.mock('@/lib/analytics/raw-workbook', () => ({
+vi.mock('@/lib/analytics/raw-workbook', async (importOriginal) => ({
+  // 로더가 결과코드 번호 규칙(buildResultCodeNumbers)을 쓴다 — 워크북 생성만 가짜로 둔다
+  ...(await importOriginal<typeof import('@/lib/analytics/raw-workbook')>()),
   generateRawDataWorkbook: vi.fn(() => ({
     xlsx: { writeBuffer: vi.fn(async () => new ArrayBuffer(0)) },
   })),

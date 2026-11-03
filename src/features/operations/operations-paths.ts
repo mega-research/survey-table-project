@@ -29,6 +29,7 @@ export interface OperationsPaths {
   readonly mailCampaigns: string;
   readonly mailCampaignNew: string;
   readonly quota: string;
+  readonly scaleMean: string;
   readonly demand: string;
   contact(contactId: string): string;
   contactsAssignment(assignmentId: string): string;
@@ -66,6 +67,7 @@ export function operationsPaths(base: string): OperationsPaths {
     mailCampaigns: `${mail}/campaigns`,
     mailCampaignNew: `${mail}/campaigns/new`,
     quota: `${root}/quota`,
+    scaleMean: `${root}/scale-mean`,
     demand: `${root}/demand`,
     contact: (contactId) => `${contacts}/${contactId}`,
     contactsAssignment: (assignmentId) => `${contacts}/assignments/${assignmentId}`,

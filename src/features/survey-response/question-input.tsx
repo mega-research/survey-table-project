@@ -392,6 +392,7 @@ function QuestionInputControl({
           {...(question.stickyColumnCount !== undefined
             ? { stickyColumnCount: question.stickyColumnCount }
             : {})}
+          fitTableToWidth={question.fitTableToWidth ?? false}
           {...(question.mobileOriginalTable !== undefined
             ? { mobileOriginalTable: question.mobileOriginalTable }
             : {})}

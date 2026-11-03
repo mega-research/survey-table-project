@@ -282,6 +282,7 @@ export async function commitCellEdit({
               stagedRowsConfig: question.stagedRowsConfig,
               hideColumnLabels: question.hideColumnLabels,
               stickyColumnCount: question.stickyColumnCount,
+              fitTableToWidth: question.fitTableToWidth,
               mobileOriginalTable: question.mobileOriginalTable,
               mobileTableDisplayMode: question.mobileTableDisplayMode,
               mobileDrilldownOmitLeadingColumns: question.mobileDrilldownOmitLeadingColumns,

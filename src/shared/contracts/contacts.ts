@@ -167,14 +167,15 @@ export interface ContactResultCode {
 }
 
 /**
- * surveys.contact_result_codes 가 NULL 일 때 사용되는 디폴트 13개.
- * mockup §6 의 결과코드 라디오 그대로.
+ * surveys.contact_result_codes 가 NULL 일 때 사용되는 디폴트 14개.
+ * mockup §6 의 결과코드 라디오에서 9번을 휴/폐업으로 바꾸고 13.독려를 더했다(2026-11-03 —
+ * 0153 이 목록에서 사라진 옛 이름의 회차를 옮겼다 — 자기 목록에 9.전시회미참가 를 둔 설문은 그대로다).
  *
  * status 매핑:
  * - '1.조사완료' → 'positive' (응답 완료 인정)
  * - '수신거부' → 'neutral' (2026-08-27 결정 — 조사 거절 의사일 뿐 모집단 이탈이
  *   아니므로 분모 유지. 단체메일 배제는 status 무관한 수신거부 키워드 축이 담당)
- * - 나머지 11개 → 필드 생략 (= 'neutral')
+ * - 나머지 12개 → 필드 생략 (= 'neutral')
  */
 export const DEFAULT_RESULT_CODES: ContactResultCode[] = [
   { code: '1.조사완료', label: '1.조사완료', order: 1, tone: 'green', status: 'positive' },
@@ -185,11 +186,12 @@ export const DEFAULT_RESULT_CODES: ContactResultCode[] = [
   { code: '6.거절', label: '6.거절', order: 6, tone: 'rose' },
   { code: '7.결번·번호오류', label: '7.결번·번호오류', order: 7, tone: 'rose' },
   { code: '8.중복', label: '8.중복', order: 8, tone: 'slate' },
-  { code: '9.전시회미참가', label: '9.전시회미참가', order: 9, tone: 'slate' },
+  { code: '9.휴/폐업', label: '9.휴/폐업', order: 9, tone: 'slate' },
   { code: '10.메일발송', label: '10.메일발송', order: 10, tone: 'blue' },
   { code: '11.기타', label: '11.기타', order: 11, tone: 'amber' },
   { code: '12.담당자퇴사', label: '12.담당자퇴사', order: 12, tone: 'rose' },
-  { code: '수신거부', label: '수신거부', order: 13, tone: 'rose', status: 'neutral' },
+  { code: '13.독려', label: '13.독려', order: 13, tone: 'slate' },
+  { code: '수신거부', label: '수신거부', order: 14, tone: 'rose', status: 'neutral' },
 ];
 
 /**
@@ -213,3 +215,93 @@ export interface PriorAnswerImportConfig {
    */
   valueAliases: Record<string, Record<string, string>>;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 대상 정보 수정 현황 (contact_target_edit_logs.changes, 0152)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 기록 한 줄이 어떤 쓰기에서 왔는가. 마이그레이션 0152 의 CHECK 와 같은 목록이다 —
+ * 늘리면 배열·스키마 check·마이그레이션 셋을 함께 고친다(AGENTS.md 주의사항 1).
+ */
+export const CONTACT_TARGET_EDIT_ACTIONS = [
+  'info_edit',
+  'attempt_edit',
+  'attempt_delete',
+  'assignment_change',
+] as const;
+export type ContactTargetEditAction = (typeof CONTACT_TARGET_EDIT_ACTIONS)[number];
+
+/** 기록에 남기는 값 하나의 최대 글자 수. 넘으면 자르고 `*Truncated` 표식을 단다. */
+export const CONTACT_TARGET_EDIT_VALUE_MAX = 1000;
+
+/** pii 열 변경 — 값은 남기지 않는다. set=없던 값 입력 · changed=다른 값으로 · cleared=삭제 */
+/**
+ * 외주 실사 링크가 남긴 기록의 기록자 글자 — 링크에는 계정·이메일이 없다(ADR-0026).
+ * 「대상 정보 수정 현황」의 editor_email 과 회차의 created_by_email 에 이 글자가 들어간다.
+ * 편집 이력이 링크 행을 「외주」로 읽는 것과 같은 글자이고, 외주 화면은 내부 담당자 이메일을
+ * 걷되 이 글자는 남긴다(`app/_operations/contact-detail-screen`).
+ */
+export const LINK_CONTACT_EDITOR_LABEL = '외주';
+
+export type ContactTargetEditPiiOp = 'set' | 'changed' | 'cleared';
+
+/** 컨택원 스냅샷 — 이름은 그때 이름이다(나중에 바뀌거나 지워져도 기록은 읽힌다). */
+export interface ContactTargetEditAssignee {
+  id: string;
+  name: string;
+}
+
+/**
+ * 기록에 담는 바꾸기 전 회차 — 기록 시각은 ISO 문자열(JSONB). 비고는 1,000자에서 잘려 담길 수 있고
+ * 잘림 표식은 그 회차 변경(`attempt`)의 `beforeTruncated` 다.
+ */
+export interface ContactTargetEditAttemptSnapshot {
+  resultCode: string;
+  note: string | null;
+  createdByEmail: string | null;
+  createdAt: string;
+}
+
+/**
+ * 「대상 정보 수정 현황」 한 줄 안의 변경 하나.
+ *
+ * - 열 이름(`label`)·컨택원 이름은 저장 시점 스냅샷이다.
+ * - 값(`before`·`after`)은 null·빈 문자열을 모두 '' 로 접어 담는다(빈 값 → 빈 값은 변경이 아니다).
+ *   1,000자(CONTACT_TARGET_EDIT_VALUE_MAX)를 넘으면 잘라 담고 `beforeTruncated`·`afterTruncated` 를 단다.
+ * - `contactMethod` 의 값은 코드(`ContactMethod`)다 — 화면 글자는 format 이 붙인다.
+ * - `attempt.after === null` 은 회차 삭제다. 회차의 `beforeTruncated`·`afterTruncated` 는 그 쪽 비고가
+ *   1,000자에서 잘렸다는 뜻이다(결과코드는 자르지 않는다).
+ */
+export type ContactTargetEditChange =
+  | {
+      kind: 'attr';
+      key: string;
+      label: string;
+      before: string;
+      after: string;
+      beforeTruncated?: true;
+      afterTruncated?: true;
+    }
+  | { kind: 'pii'; key: string; label: string; op: ContactTargetEditPiiOp }
+  | {
+      kind: 'memo';
+      before: string;
+      after: string;
+      beforeTruncated?: true;
+      afterTruncated?: true;
+    }
+  | { kind: 'contactMethod'; before: string; after: string }
+  | {
+      kind: 'assignment';
+      before: ContactTargetEditAssignee | null;
+      after: ContactTargetEditAssignee | null;
+    }
+  | {
+      kind: 'attempt';
+      attemptNo: number;
+      before: ContactTargetEditAttemptSnapshot;
+      after: { resultCode: string; note: string | null } | null;
+      beforeTruncated?: true;
+      afterTruncated?: true;
+    };

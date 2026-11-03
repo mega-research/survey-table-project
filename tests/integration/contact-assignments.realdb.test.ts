@@ -60,9 +60,8 @@ import {
 import { listContactsForSurvey } from '@/server/read-models/contacts';
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 
-import { resolvedFilterForTest } from '../helpers/resolved-contact-filter';
-
 import { backendPid, waitForLockWaitersBehind } from '../helpers/lock-waiters';
+import { resolvedFilterForTest } from '../helpers/resolved-contact-filter';
 
 // 이 브라우저의 「테스트 데이터 보기」 쿠키 — 켜고 끄며 파티션을 오간다 (server/data-scope).
 const cookieState = vi.hoisted(() => ({ testView: false }));
@@ -90,6 +89,9 @@ const BASE_SCHEME: ContactColumnScheme = {
     { key: 'web', label: 'web', source: 'system.web', order: 3 },
   ],
 };
+
+/** 단건 변경이 대상 정보 수정 현황에 남기는 편집자. */
+const EDITOR = { id: 'editor-1', email: 'editor@local' };
 
 const createdSurveyIds: string[] = [];
 
@@ -169,7 +171,7 @@ run('컨택원 배정 (real local DB)', () => {
     const [t1, t2] = await seedTargets(surveyId, 2);
     const owner = await createAssignment({ surveyId, name: '외주 A팀' });
 
-    await setTargetAssignment({ surveyId, contactTargetId: t1!, assignmentId: owner.id });
+    await setTargetAssignment({ surveyId, contactTargetId: t1!, assignmentId: owner.id }, EDITOR);
     expect(await assignmentOf(t1!)).toBe(owner.id);
 
     const listed = await listContactsForSurvey({
@@ -196,7 +198,7 @@ run('컨택원 배정 (real local DB)', () => {
     });
     expect(guestListed.rows.every((r) => r.assignment === null)).toBe(true);
 
-    await setTargetAssignment({ surveyId, contactTargetId: t1!, assignmentId: null });
+    await setTargetAssignment({ surveyId, contactTargetId: t1!, assignmentId: null }, EDITOR);
     expect(await assignmentOf(t1!)).toBeNull();
     expect(await assignmentOf(t2!)).toBeNull();
   });
@@ -211,17 +213,26 @@ run('컨택원 배정 (real local DB)', () => {
 
     // 테스트 파티션 세션: 테스트 대상 + 실 컨택원 → 거부
     await expect(
-      setTargetAssignment({ surveyId, contactTargetId: testTarget!, assignmentId: realOwner.id }),
+      setTargetAssignment(
+        { surveyId, contactTargetId: testTarget!, assignmentId: realOwner.id },
+        EDITOR,
+      ),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     // 테스트 파티션 세션: 실 대상 → 거부
     await expect(
-      setTargetAssignment({ surveyId, contactTargetId: realTarget!, assignmentId: testOwner.id }),
+      setTargetAssignment(
+        { surveyId, contactTargetId: realTarget!, assignmentId: testOwner.id },
+        EDITOR,
+      ),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
 
     viewTest(false);
     // 실 파티션 세션: 실 대상 + 테스트 컨택원 → 거부
     await expect(
-      setTargetAssignment({ surveyId, contactTargetId: realTarget!, assignmentId: testOwner.id }),
+      setTargetAssignment(
+        { surveyId, contactTargetId: realTarget!, assignmentId: testOwner.id },
+        EDITOR,
+      ),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
 
     expect(await assignmentOf(realTarget!)).toBeNull();
@@ -249,7 +260,7 @@ run('컨택원 배정 (real local DB)', () => {
     const surveyId = await seedSurvey();
     const [t1] = await seedTargets(surveyId, 1);
     const owner = await createAssignment({ surveyId, name: '12차' });
-    await setTargetAssignment({ surveyId, contactTargetId: t1!, assignmentId: owner.id });
+    await setTargetAssignment({ surveyId, contactTargetId: t1!, assignmentId: owner.id }, EDITOR);
 
     await db.delete(contactAssignments).where(eq(contactAssignments.id, owner.id));
     expect(await assignmentOf(t1!)).toBeNull();
@@ -260,9 +271,15 @@ run('컨택원 배정 (real local DB)', () => {
     const [t1, t2, t3] = await seedTargets(surveyId, 4);
     const tenth = await createAssignment({ surveyId, name: '10차' });
     const eleventh = await createAssignment({ surveyId, name: '11차' });
-    await setTargetAssignment({ surveyId, contactTargetId: t1!, assignmentId: eleventh.id });
-    await setTargetAssignment({ surveyId, contactTargetId: t2!, assignmentId: tenth.id });
-    await setTargetAssignment({ surveyId, contactTargetId: t3!, assignmentId: eleventh.id });
+    await setTargetAssignment(
+      { surveyId, contactTargetId: t1!, assignmentId: eleventh.id },
+      EDITOR,
+    );
+    await setTargetAssignment({ surveyId, contactTargetId: t2!, assignmentId: tenth.id }, EDITOR);
+    await setTargetAssignment(
+      { surveyId, contactTargetId: t3!, assignmentId: eleventh.id },
+      EDITOR,
+    );
     // t4 는 배정 없음
 
     const filterCtx = await loadContactFilterContext(surveyId, 'real', {
@@ -323,7 +340,7 @@ run('컨택원 배정 (real local DB)', () => {
     const [t1, t2, t3, t4] = await seedTargets(surveyId, 5);
     const owner = await createAssignment({ surveyId, name: '10차' });
     for (const t of [t1, t2, t3]) {
-      await setTargetAssignment({ surveyId, contactTargetId: t!, assignmentId: owner.id });
+      await setTargetAssignment({ surveyId, contactTargetId: t!, assignmentId: owner.id }, EDITOR);
     }
     await db.insert(surveyResponses).values([
       {
@@ -384,8 +401,8 @@ run('컨택원 배정 (real local DB)', () => {
     const surveyId = await seedSurvey();
     const [t1, t2] = await seedTargets(surveyId, 2);
     const owner = await createAssignment({ surveyId, name: '삭제할 차수' });
-    await setTargetAssignment({ surveyId, contactTargetId: t1!, assignmentId: owner.id });
-    await setTargetAssignment({ surveyId, contactTargetId: t2!, assignmentId: owner.id });
+    await setTargetAssignment({ surveyId, contactTargetId: t1!, assignmentId: owner.id }, EDITOR);
+    await setTargetAssignment({ surveyId, contactTargetId: t2!, assignmentId: owner.id }, EDITOR);
 
     expect(await removeAssignment({ surveyId, id: owner.id })).toEqual({ unassigned: 2 });
     expect(await assignmentOf(t1!)).toBeNull();
@@ -428,9 +445,18 @@ run('컨택원 배정 (real local DB)', () => {
       const tenth = await createAssignment({ surveyId, name: '10차' });
       const eleventh = await createAssignment({ surveyId, name: '11차' });
       // 10차: 1, 9 / 11차: 2
-      await setTargetAssignment({ surveyId, contactTargetId: ids[0]!, assignmentId: tenth.id });
-      await setTargetAssignment({ surveyId, contactTargetId: ids[8]!, assignmentId: tenth.id });
-      await setTargetAssignment({ surveyId, contactTargetId: ids[1]!, assignmentId: eleventh.id });
+      await setTargetAssignment(
+        { surveyId, contactTargetId: ids[0]!, assignmentId: tenth.id },
+        EDITOR,
+      );
+      await setTargetAssignment(
+        { surveyId, contactTargetId: ids[8]!, assignmentId: tenth.id },
+        EDITOR,
+      );
+      await setTargetAssignment(
+        { surveyId, contactTargetId: ids[1]!, assignmentId: eleventh.id },
+        EDITOR,
+      );
 
       // 1-6 중 짝수 → 2, 4, 6
       const clauses = [
@@ -478,7 +504,10 @@ run('컨택원 배정 (real local DB)', () => {
       const surveyId = await seedSurvey();
       const ids = await seedTargets(surveyId, 3);
       const owner = await createAssignment({ surveyId, name: '10차' });
-      await setTargetAssignment({ surveyId, contactTargetId: ids[2]!, assignmentId: owner.id });
+      await setTargetAssignment(
+        { surveyId, contactTargetId: ids[2]!, assignmentId: owner.id },
+        EDITOR,
+      );
       const clauses = [{ source: 'attrs.기업명', value: '기업1', op: '' as const }];
 
       const preview = await previewAssignment(
@@ -543,7 +572,10 @@ run('컨택원 배정 (real local DB)', () => {
       const surveyId = await seedSurvey();
       const ids = await seedTargets(surveyId, 2);
       const owner = await createAssignment({ surveyId, name: '10차' });
-      await setTargetAssignment({ surveyId, contactTargetId: ids[0]!, assignmentId: owner.id });
+      await setTargetAssignment(
+        { surveyId, contactTargetId: ids[0]!, assignmentId: owner.id },
+        EDITOR,
+      );
 
       await expect(
         applyAssignment({
@@ -588,9 +620,9 @@ run('컨택원 배정 (real local DB)', () => {
       const a = await createAssignment({ surveyId, name: 'A' });
       const b = await createAssignment({ surveyId, name: 'B' });
       // 1 → B, 2 → B, 3 → A, 4 → 없음
-      await setTargetAssignment({ surveyId, contactTargetId: ids[0]!, assignmentId: b.id });
-      await setTargetAssignment({ surveyId, contactTargetId: ids[1]!, assignmentId: b.id });
-      await setTargetAssignment({ surveyId, contactTargetId: ids[2]!, assignmentId: a.id });
+      await setTargetAssignment({ surveyId, contactTargetId: ids[0]!, assignmentId: b.id }, EDITOR);
+      await setTargetAssignment({ surveyId, contactTargetId: ids[1]!, assignmentId: b.id }, EDITOR);
+      await setTargetAssignment({ surveyId, contactTargetId: ids[2]!, assignmentId: a.id }, EDITOR);
 
       // A 를 「지금 B 인 대상」으로 교체 → 1, 2 가 A, 3 은 빠짐
       const fromB = await applyAssignment({
@@ -777,9 +809,18 @@ run('컨택원 배정 (real local DB)', () => {
       const tenth = await createAssignment({ surveyId, name: '10차' });
       const eleventh = await createAssignment({ surveyId, name: '11차' });
       await reorderAssignments({ surveyId, ids: [eleventh.id, tenth.id] }); // 11차가 먼저
-      await setTargetAssignment({ surveyId, contactTargetId: ids[0]!, assignmentId: tenth.id });
-      await setTargetAssignment({ surveyId, contactTargetId: ids[1]!, assignmentId: tenth.id });
-      await setTargetAssignment({ surveyId, contactTargetId: ids[2]!, assignmentId: eleventh.id });
+      await setTargetAssignment(
+        { surveyId, contactTargetId: ids[0]!, assignmentId: tenth.id },
+        EDITOR,
+      );
+      await setTargetAssignment(
+        { surveyId, contactTargetId: ids[1]!, assignmentId: tenth.id },
+        EDITOR,
+      );
+      await setTargetAssignment(
+        { surveyId, contactTargetId: ids[2]!, assignmentId: eleventh.id },
+        EDITOR,
+      );
       // 4, 5 는 배정 없음. 대상 1 은 응답 완료.
       await db.insert(surveyResponses).values({
         surveyId,
@@ -872,7 +913,10 @@ run('컨택원 배정 (real local DB)', () => {
         .from(contactTargets)
         .where(eq(contactTargets.surveyId, surveyId));
       for (const t of targets) {
-        await setTargetAssignment({ surveyId, contactTargetId: t.id, assignmentId: owner.id });
+        await setTargetAssignment(
+          { surveyId, contactTargetId: t.id, assignmentId: owner.id },
+          EDITOR,
+        );
       }
       expect(await countAssignedTargets(surveyId, 'real')).toBe(2);
       return { surveyId, ownerId: owner.id };
@@ -937,8 +981,8 @@ run('컨택원 배정 (real local DB)', () => {
       const surveyId = await seedSurvey();
       const [t1, t2, t3] = await seedMailable(surveyId, 3);
       const owner = await createAssignment({ surveyId, name: '이메일 갱신' });
-      await setTargetAssignment({ surveyId, contactTargetId: t1!, assignmentId: owner.id });
-      await setTargetAssignment({ surveyId, contactTargetId: t3!, assignmentId: owner.id });
+      await setTargetAssignment({ surveyId, contactTargetId: t1!, assignmentId: owner.id }, EDITOR);
+      await setTargetAssignment({ surveyId, contactTargetId: t3!, assignmentId: owner.id }, EDITOR);
 
       const byOwner = await fetchCandidateIds(
         {
@@ -965,7 +1009,7 @@ run('컨택원 배정 (real local DB)', () => {
       const surveyId = await seedSurvey();
       const [t1, t2] = await seedMailable(surveyId, 2);
       const owner = await createAssignment({ surveyId, name: '이메일 갱신' });
-      await setTargetAssignment({ surveyId, contactTargetId: t1!, assignmentId: owner.id });
+      await setTargetAssignment({ surveyId, contactTargetId: t1!, assignmentId: owner.id }, EDITOR);
       await db
         .update(contactTargets)
         .set({ unsubscribedAt: new Date() })
@@ -980,7 +1024,7 @@ run('컨택원 배정 (real local DB)', () => {
       });
       expect(preview.rows.map((r) => [r.id, r.assignmentName])).toEqual([[t1, '이메일 갱신']]);
 
-      await setTargetAssignment({ surveyId, contactTargetId: t2!, assignmentId: owner.id });
+      await setTargetAssignment({ surveyId, contactTargetId: t2!, assignmentId: owner.id }, EDITOR);
       const unsub = await listUnsubscribedContacts({
         surveyId,
         scope: 'real',
@@ -1002,7 +1046,7 @@ run('컨택원 배정 (real local DB)', () => {
       const surveyId = await seedSurvey();
       const [t1] = await seedMailable(surveyId, 2);
       const owner = await createAssignment({ surveyId, name: '이메일 갱신' });
-      await setTargetAssignment({ surveyId, contactTargetId: t1!, assignmentId: owner.id });
+      await setTargetAssignment({ surveyId, contactTargetId: t1!, assignmentId: owner.id }, EDITOR);
       await removeAssignment({ surveyId, id: owner.id });
 
       await expect(
@@ -1043,7 +1087,7 @@ run('컨택원 배정 (real local DB)', () => {
       const surveyId = await seedSurvey();
       const [t1] = await seedMailable(surveyId, 2);
       const owner = await createAssignment({ surveyId, name: '이메일 갱신' });
-      await setTargetAssignment({ surveyId, contactTargetId: t1!, assignmentId: owner.id });
+      await setTargetAssignment({ surveyId, contactTargetId: t1!, assignmentId: owner.id }, EDITOR);
 
       await expect(
         fetchCandidateIds(

@@ -28,6 +28,9 @@ export type SurveyGateRow = {
   maxResponses: number | null;
   isPublic: boolean;
   requireInviteToken: boolean;
+  // 중복 응답 허용 — 켜면 초대 토큰 없는 응답의 기기 중복 검사(Track B)를 건너뛴다(조사원 대리 응답).
+  // 라이브 값이다: 발행 스냅샷이 아니라 지금 설문 행에서 읽어 저장 즉시 반영된다.
+  allowMultipleResponses: boolean;
   // #24 버전 무결성: 클라 제공 versionId 의 "현재 활성" 판정에 사용.
   currentVersionId: string | null;
   // 지금 테스트 버전(0141) — 테스트 응답의 고정 목적지. 없으면 테스트 응답도 배포본.
@@ -116,6 +119,7 @@ export async function loadSurveyGateRow(surveyId: string): Promise<SurveyGateRow
       maxResponses: true,
       isPublic: true,
       requireInviteToken: true,
+      allowMultipleResponses: true,
       currentVersionId: true,
       testVersionId: true,
       isPaused: true,

@@ -97,6 +97,7 @@
     "0118_survey_ownership_events",
     "0119_survey_participants",
     "0120_fieldwork_orgs",
+    "0152_contact_target_edit_logs",
     "0121_contact_actor_fk_to_app_users",
     "0122_response_fieldwork_attribution",
     "0123_survey_participant_access_level",
@@ -125,6 +126,9 @@
     "0148_client_response_columns",
     "0149_survey_favorites",
     "0150_personal_survey_tags",
-    "0151_accounts_issuer_relax"
+    "0151_accounts_issuer_relax",
+    "0146_fit_table_to_width",
+    "0147_scale_mean_enabled",
+    "0153_result_code_9_closed_business"
   ]
 }

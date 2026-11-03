@@ -92,6 +92,7 @@ function control(over: Partial<SurveyControl>): SurveyControl {
     priorWaveLabel: null,
     changeConfirmEnabled: false,
     endRedirects: null,
+    allowMultipleResponses: false,
     ...over,
   };
 }

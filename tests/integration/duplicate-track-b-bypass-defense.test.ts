@@ -159,6 +159,40 @@ describe('Track B bypass defense', () => {
   });
 });
 
+describe('중복 응답 허용 설문 — 첫 답 저장 재검증도 건너뛴다', () => {
+  it('매칭되는 완료 응답이 있어도 allowMultipleResponses 면 실응답으로 생성한다', async () => {
+    mockFindFirst.mockResolvedValue({ id: 'prev-response' });
+    mockSurveysFindFirst.mockResolvedValue({
+      status: 'published',
+      endDate: null,
+      maxResponses: null,
+      isPublic: true,
+      requireInviteToken: false,
+      allowMultipleResponses: true,
+      isPaused: false,
+      testModeEnabled: false,
+      testToken: null,
+    });
+    mockInsert.mockReturnValue(insertChain);
+
+    const { createResponseWithFirstAnswer } =
+      await import('@/server/survey-response/services/response-entry');
+    const result = await createResponseWithFirstAnswer({
+      surveyId: SURVEY_ID,
+      sessionId: 'proxy-interviewer-second',
+      versionId: null,
+      questionId: 'q1',
+      value: 'answer',
+      currentStepId: 'group:x',
+      clientSignals: SIGNALS,
+    });
+
+    expect(result.kind).toBe('created');
+    const valuesCalls = insertChain.values.mock.calls as unknown as Array<[{ isTest: boolean }]>;
+    expect(valuesCalls[0]![0].isTest).toBe(false);
+  });
+});
+
 describe('테스트 세션(isTest) — Track B skip', () => {
   it('유효한 testToken 이면 Track B 가 차단할 상황이어도 skip 하고 isTest=true 로 생성한다', async () => {
     // Track B 관점에서는 차단 대상(매칭되는 완료 응답 존재)이지만, 테스트 세션은

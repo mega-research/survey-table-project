@@ -6,15 +6,13 @@ import 'server-only';
 import { db } from '@/db';
 import { questions } from '@/db/schema';
 import { surveys } from '@/db/schema/surveys';
-import { generateSPSSColumns } from '@/lib/analytics/spss-excel-export';
-import { answerColumnKey } from '@/lib/operations/profile-columns-format';
+import type { AnswerChoiceMap } from '@/lib/operations/profile-answer-choices';
+import { buildProfileAnswerModel } from '@/lib/operations/profile-answer-sources';
 import { normalizeQuestions } from '@/lib/question';
 import { hydrateQuestionsForSpss } from '@/lib/spss/hydrate-questions';
 import { normalizePassParamNames } from '@/lib/survey/end-redirect';
-import { collectPiiCellIds } from '@/lib/survey/pii-cells';
 import type { ProfileColumnScheme } from '@/shared/contracts/operations';
 import type { ProfileAnswerSource } from '@/shared/contracts/operations-io';
-import { tableInputCellLabels } from '@/utils/table-input-cell-labels';
 
 /**
  * surveys.profile_columns 캐시 (RSC pass 내 dedupe).
@@ -45,52 +43,32 @@ export const getProfileEntryParamNames = cache(async (surveyId: string): Promise
 });
 
 /**
- * 응답 내역 응답값 열로 고를 수 있는 칸 — 지금 빌더 구조의 단답형·장문형 문항과 표 입력 칸.
- * 변수명은 Raw 내보내기와 같은 규칙(generateSPSSColumns)으로 만들어 목록에서 `Q1_r1_c2` 로
- * 찾을 수 있게 하고, 저장은 바뀌지 않는 문항·칸 id 로 한다(answerColumnKey).
+ * 응답 내역 응답값 열 모델 — 후보 목록과 보기 열의 보기 목록. 지금 빌더 구조에서 만든다
+ * (lib/operations/profile-answer-sources). 같은 요청 안에서 후보·보기 목록 두 조회가 한 번만 읽는다.
+ */
+const loadProfileAnswerModel = cache(async (surveyId: string) => {
+  // 내보내기와 같은 변수 순서가 되도록 문항 순서대로 읽는다.
+  const rows = await db
+    .select()
+    .from(questions)
+    .where(eq(questions.surveyId, surveyId))
+    .orderBy(asc(questions.order), asc(questions.id));
+  const prepared = hydrateQuestionsForSpss(normalizeQuestions(rows));
+  const encryptedQuestionIds = new Set(rows.filter((r) => r.piiEncrypted).map((r) => r.id));
+  return buildProfileAnswerModel(prepared, encryptedQuestionIds);
+});
+
+/**
+ * 응답 내역 응답값 열로 고를 수 있는 칸 — 단답형·장문형 문항, 표 입력 칸, 보기 문항, 표의 선택 칸.
+ * 변수명은 Raw 내보내기와 같은 규칙으로 만들어 목록에서 `Q1_r1_c2` 로 찾을 수 있게 하고,
+ * 저장은 바뀌지 않는 문항·칸 id 로 한다(answerColumnKey).
  */
 export const getProfileAnswerSources = cache(
-  async (surveyId: string): Promise<ProfileAnswerSource[]> => {
-    // 내보내기와 같은 변수 순서가 되도록 문항 순서대로 읽는다.
-    const rows = await db
-      .select()
-      .from(questions)
-      .where(eq(questions.surveyId, surveyId))
-      .orderBy(asc(questions.order), asc(questions.id));
-    const prepared = hydrateQuestionsForSpss(normalizeQuestions(rows));
-    // 표 칸 이름 — 양식형 표는 행 이름이 비어 있어 내보내기 라벨(「 - 년도1」)로는 칸을 알아볼 수
-    // 없다. 같은 행 앞 글자 칸(「(1) 기업명」)으로 부른다.
-    const cellLabels = new Map<string, string>();
-    // 개인정보 암호화 — 문항 단위(단답형·장문형)와 표 입력 칸 단위(응답 저장 경로와 같은 플래그).
-    const encryptedQuestionIds = new Set(rows.filter((r) => r.piiEncrypted).map((r) => r.id));
-    const encryptedCellIds = new Set<string>();
-    for (const q of prepared) {
-      if (q.type !== 'table') continue;
-      for (const [cellId, label] of tableInputCellLabels(q.tableRowsData ?? [])) {
-        cellLabels.set(cellId, label);
-      }
-      for (const cellId of collectPiiCellIds(q.tableRowsData)) encryptedCellIds.add(cellId);
-    }
-    const sources: ProfileAnswerSource[] = [];
-    for (const col of generateSPSSColumns(prepared)) {
-      if (col.type === 'text') {
-        sources.push({
-          key: answerColumnKey(col.questionId),
-          varName: col.spssVarName,
-          questionTitle: col.questionText,
-          cellLabel: null,
-          encrypted: encryptedQuestionIds.has(col.questionId),
-        });
-      } else if (col.type === 'table-cell' && col.tableCellType === 'input' && col.tableCellId) {
-        sources.push({
-          key: answerColumnKey(col.questionId, col.tableCellId),
-          varName: col.spssVarName,
-          questionTitle: col.questionText,
-          cellLabel: cellLabels.get(col.tableCellId) ?? (col.optionLabel || null),
-          encrypted: encryptedCellIds.has(col.tableCellId),
-        });
-      }
-    }
-    return sources;
-  },
+  async (surveyId: string): Promise<ProfileAnswerSource[]> =>
+    (await loadProfileAnswerModel(surveyId)).sources,
+);
+
+/** 보기 열(응답값 열 키) → 보기 목록 — 목록 칸 글자와 검색·깔때기가 같은 목록을 쓴다. */
+export const getProfileAnswerChoices = cache(
+  async (surveyId: string): Promise<AnswerChoiceMap> => (await loadProfileAnswerModel(surveyId)).choices,
 );

@@ -13,6 +13,7 @@ import {
   type HeaderFilterMode,
   escapeLikePattern,
 } from '@/lib/operations/filter-shared';
+import { type AnswerChoiceMap, matchChoiceValues } from '@/lib/operations/profile-answer-choices';
 import { answerKeyOf, entryKeyOf } from '@/lib/operations/profile-columns-format';
 import { STATUS_FILTERS } from '@/lib/operations/profiles-format';
 import { parseIdListInput } from '@/lib/operations/range-list';
@@ -191,7 +192,49 @@ function answerTextSql(answers: SQL, ref: { questionId: string; cellId: string |
     : sql`(${answers} -> ${ref.questionId} ->> ${ref.cellId})`;
 }
 
-function profilesExtraCondSql(cond: ClauseFilterCondition, cols: ProfilesClauseCols): SQL | null {
+/**
+ * 보기 열 값의 JSONB — 문항 전체면 `-> 문항`, 표 칸이면 `-> 문항 -> 칸`. 단일(문자열)·복수(배열)·
+ * 보기 그룹 맵(`{default: 칸 id}`) 어느 모양이든 안의 문자열 값을 `jsonb_path_query(…, 'lax $.**')` 로 편다
+ * (lib/operations/profile-answer-choices 의 collectAnswerStrings 와 같은 규칙).
+ */
+function answerJsonSql(answers: SQL, ref: { questionId: string; cellId: string | null }): SQL {
+  return ref.cellId === null
+    ? sql`(${answers} -> ${ref.questionId})`
+    : sql`(${answers} -> ${ref.questionId} -> ${ref.cellId})`;
+}
+
+/** 보기 열에 저장값이 하나라도 있는가 — `values` 를 주면 그중 하나인가 */
+function choiceValuesExistSql(json: SQL, values?: readonly string[]): SQL {
+  const match =
+    values === undefined
+      ? sql`btrim(v #>> '{}') <> ''`
+      : sql`(v #>> '{}') IN (${sql.join(values.map((v) => sql`${v}`), sql`, `)})`;
+  return sql`EXISTS (SELECT 1 FROM jsonb_path_query(${json}, 'lax $.**') AS t(v) WHERE jsonb_typeof(v) = 'string' AND ${match})`;
+}
+
+/**
+ * 보기 열 조건 — 부분일치는 보기 글자로 맞춘 보기들의 저장값과 비교하고(맞는 보기가 없으면 0건, 저장값
+ * 번호로는 걸리지 않는다), 값 없음/있음은 저장값이 하나라도 있는가로 본다.
+ */
+function choiceAnswerCondSql(
+  cond: ClauseFilterCondition,
+  json: SQL,
+  choices: Parameters<typeof matchChoiceValues>[0],
+): SQL {
+  if (cond.mode === 'text') {
+    const values = matchChoiceValues(choices, cond.value);
+    return values.length === 0 ? sql`FALSE` : choiceValuesExistSql(json, values);
+  }
+  if (cond.mode === 'in' && cond.includeNull) return sql`NOT ${choiceValuesExistSql(json)}`;
+  if (cond.mode === 'in' && cond.excludeNull) return choiceValuesExistSql(json);
+  return sql`FALSE`;
+}
+
+function profilesExtraCondSql(
+  cond: ClauseFilterCondition,
+  cols: ProfilesClauseCols,
+  answerChoices: AnswerChoiceMap,
+): SQL | null {
   if (cond.source === 'idx' && cond.mode === 'idlist') {
     if (!cond.ranges || cond.ranges.length === 0) return sql`FALSE`;
     const conds = cond.ranges.map((r) =>
@@ -212,6 +255,8 @@ function profilesExtraCondSql(cond: ClauseFilterCondition, cols: ProfilesClauseC
   }
   const answerRef = answerKeyOf(cond.source);
   if (answerRef !== null) {
+    const choices = answerChoices.get(cond.source);
+    if (choices) return choiceAnswerCondSql(cond, answerJsonSql(cols.answers, answerRef), choices);
     const text = answerTextSql(cols.answers, answerRef);
     if (cond.mode === 'text') {
       const escaped = escapeLikePattern(cond.value);
@@ -234,12 +279,17 @@ function profilesExtraCondSql(cond: ClauseFilterCondition, cols: ProfilesClauseC
 }
 
 /** 절 배열 → WHERE SQL. 빈 배열은 TRUE (공용 결합 규칙 그대로). */
-export function buildProfilesFilterSql(clauses: FilterClause[], cols: ProfilesClauseCols): SQL {
+export function buildProfilesFilterSql(
+  clauses: FilterClause[],
+  cols: ProfilesClauseCols,
+  /** 보기 열(응답값 열 키) → 보기 목록 — 그 열은 보기 글자로 거른다(read-models/profile-column-scheme) */
+  answerChoices: AnswerChoiceMap = new Map(),
+): SQL {
   const refs: ClauseColumnRefs = {
     resid: cols.contactResid,
     attrs: cols.contactAttrs,
     contactId: cols.contactTargetId,
-    extra: (cond) => profilesExtraCondSql(cond, cols),
+    extra: (cond) => profilesExtraCondSql(cond, cols, answerChoices),
   };
   return buildContactsFilterSql(clauses, refs);
 }

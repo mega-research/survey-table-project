@@ -37,6 +37,7 @@ import { media } from '@/server/media/procedures/media';
 import { control } from '@/server/operations/procedures/control';
 import { profileColumns } from '@/server/operations/procedures/profile-columns';
 import { progress } from '@/server/operations/procedures/progress';
+import { scaleMean } from '@/server/operations/procedures/scale-mean';
 import { quota } from '@/server/quota/procedures/quota';
 import { fieldwork } from '@/server/workspace/procedures/fieldwork';
 import { accessLinkSession } from '@/server/workspace/procedures/access-link-session';
@@ -122,6 +123,7 @@ export const router = {
     progress,
     profileColumns,
     control,
+    scaleMean,
   },
   quota,
   workspace: {

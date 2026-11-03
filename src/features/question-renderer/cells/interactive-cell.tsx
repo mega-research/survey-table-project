@@ -153,7 +153,7 @@ const CellRouter = React.memo(function CellRouter({
         />
       );
     case 'calc':
-      return <CalcCell cell={cell} questionId={questionId} />;
+      return <CalcCell cell={cell} questionId={questionId} ignoreInputWidth={ignoreInputWidth} />;
     case 'text':
     default:
       return (

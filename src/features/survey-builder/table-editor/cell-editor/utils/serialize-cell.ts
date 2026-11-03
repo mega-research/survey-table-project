@@ -93,6 +93,8 @@ export interface CellFormState {
   choiceExclusive: boolean;
   /** 단독 선택 범위 (TableCell.exclusiveScope). 'group' 이 기본이라 저장 시 키를 만들지 않는다 */
   choiceExclusiveScope: 'group' | 'table';
+  /** 평균에서 제외 (TableCell.excludeFromMean) — 보기 칸(choice_opt)·radio 칸 전용 */
+  excludeFromMean: boolean;
   /** 사이드카 텍스트 입력 모드 (TableCell.textInputType) */
   choiceTextInputType: InputType;
   choiceTextInputNumberFormat: NumberFormat | undefined;
@@ -299,6 +301,7 @@ export function cellToFormState(cell: TableCell): CellFormState {
     choiceAllowTextInput: cell.allowTextInput === true,
     choiceExclusive: cell.exclusiveChoice === true,
     choiceExclusiveScope: cell.exclusiveScope === 'table' ? 'table' : 'group',
+    excludeFromMean: cell.excludeFromMean === true,
     choiceTextInputType: cell.textInputType ?? 'text',
     choiceTextInputNumberFormat: cell.textInputNumberFormat,
     choiceBranchRule: cell.branchRule,
@@ -385,6 +388,10 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
       ? { radioOptions: form.radioOptions, radioGroupName: form.radioGroupName }
       : {}),
     ...(contentType === 'select' ? { selectOptions: form.selectOptions } : {}),
+    // 평균에서 제외 — 척도 줄이 되는 칸(보기 칸·radio 칸)만. 유형을 바꾸면 키가 떨어진다.
+    ...((contentType === 'choice_opt' || contentType === 'radio') && form.excludeFromMean
+      ? { excludeFromMean: true }
+      : {}),
     // 중복 불가 묶음 — 선택 칸 전용. 비우면 키를 두지 않는다(미지정).
     ...(contentType === 'select' && form.distinctGroup.trim()
       ? { distinctGroup: form.distinctGroup.trim() }
@@ -447,6 +454,10 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
       ? {
           ...(form.formula ? { formula: form.formula } : {}),
           ...(form.cellNumberFormat ? { numberFormat: form.cellNumberFormat } : {}),
+          // 값 너비 — input 셀의 입력칸 너비와 같은 필드·규칙(지정하면 단위 글자가 값 바로 뒤에 붙는다)
+          ...(typeof form.inputWidth === 'number' && form.inputWidth > 0
+            ? { inputWidth: form.inputWidth }
+            : {}),
           ...(form.calcValidationEnabled && form.calcValidationTarget
             ? {
                 calcValidation: {

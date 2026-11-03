@@ -62,6 +62,7 @@ const EMBEDDED_TABLE_KEYS = [
   'tableHeaderGrid',
   'hideColumnLabels',
   'stickyColumnCount',
+  'fitTableToWidth',
   'exportCellOrder',
 ];
 
@@ -121,6 +122,7 @@ describe('유형별 필드 매트릭스 (실측 박제)', () => {
         ...EMBEDDED_TABLE_KEYS,
         ...MOBILE_TABLE_DISPLAY_KEYS,
         'choiceGroups',
+        'scaleMeanEnabled',
       ]),
     );
   });
@@ -142,7 +144,7 @@ describe('유형별 필드 매트릭스 (실측 박제)', () => {
 
   it('select: options/allowOtherOption 만 — optionsColumns·테이블 capability 없음', () => {
     expect(shapeKeys(SelectQuestionSchema)).toEqual(
-      sorted([...BASE_KEYS, 'options', 'allowOtherOption']),
+      sorted([...BASE_KEYS, 'options', 'allowOtherOption', 'scaleMeanEnabled']),
     );
   });
 
@@ -173,6 +175,7 @@ describe('유형별 필드 매트릭스 (실측 박제)', () => {
         'dynamicRowConfigs',
         'rowRepeatConfig',
         'stagedRowsConfig',
+        'scaleMeanEnabled',
       ]),
     );
   });

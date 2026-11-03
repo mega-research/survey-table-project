@@ -493,6 +493,7 @@ export async function getContactDetailById(
         attemptNo: contactAttempts.attemptNo,
         resultCode: contactAttempts.resultCode,
         note: contactAttempts.note,
+        createdByEmail: contactAttempts.createdByEmail,
         createdAt: contactAttempts.createdAt,
       })
       .from(contactAttempts)

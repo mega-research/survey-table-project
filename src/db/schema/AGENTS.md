@@ -153,6 +153,7 @@ surveys                    # 설문 설정
 ├── id, title, description, slug, privateToken, previewToken
 ├── cardTitle                     # 카드 제목 (0140, nullable) — 목록 카드·운영 콘솔 머리의 관리용 이름. NULL 이면 title. 응답자는 안 본다
 ├── isPublic, allowMultipleResponses, showProgressBar, shuffleQuestions, requireLogin
+│                                 #   allowMultipleResponses = 「중복 응답 허용」(조사원 대리 응답, 2026-10-30) — 라이브 컬럼(control 로 흘린다). 켜면 초대 토큰 없는 응답의 기기 중복 검사(Track B)를 진입·첫 답 저장 둘 다 건너뛰고 완료 화면에 「새 응답 시작」. 초대 링크는 그대로 토큰당 하나
 ├── endDate, maxResponses, thankYouMessage, screenedOutMessage (자격미달 종료 문구, NULL=완료 문구 폴백, 0110), contactEmail, responseHeader (JSONB)
 ├── localizedMessages (JSONB)     # 언어별 설문 글자 { zh?, en? : { title, description, thankYou, screenedOut } } (0145, NULL=한국어만, 빈 칸은 한국어 폴백). 발행 스냅샷 settings 에 얼린다(라이브 아님). 계약 shared/contracts/survey 의 LocalizedSurveyTexts — src/features/AGENTS.md "다국어 설문"
 ├── piiRetentionUntil (개인정보 보관기한)
@@ -220,6 +221,8 @@ questions                  # 개별 질문
 ├── mobileItemCardBlockColumns (JSONB)  # 「항목 단위 카드」 블록 시작 열 번호 배열(1부터, 작성 열 순서, NULL=블록 없음, 0131). 경계는 저작자가 적는다(자동 추정 없음) — CONTEXT.md 「블록 단위로 세우기」
 ├── hideColumnLabels, pageBreakBefore
 ├── stickyColumnCount            # 좌측 고정 열 개수 (NULL=자동 판정, 0~3=명시 지정)
+├── fitTableToWidth              # 화면 폭에 맞춰 표 줄이기 (기본 false, 0146) — src/features/AGENTS.md "질문 유형"
+├── scaleMeanEnabled             # 평균 산출 = 운영 콘솔 「척도 평균」의 「문항 선택」 (기본 false, 0147) — radio·select·table 전용. 빌더는 쓰지 않는 콘솔 소유 컬럼(CONSOLE_OWNED_QUESTION_FIELDS)
 ├── priorAnswerCondition (JSONB), priorAnswerDisabled  # 추적조사 — 문항별 이월값 불러오기 조건(0102, 참→거짓으로 뒤집히면 프리필 회수)·끄기(0103, 켜면 이월값을 깔지 않고 Raw includePriorAnswers 도 비운다)
 ├── noticeContent, noticeBgColor, requiresAcknowledgment  # 공지 (배경색: NULL=기본 파랑, 'none'=무색, hex=커스텀)
 ├── imageUrl, videoUrl
@@ -348,7 +351,15 @@ contact_attempts           # 컨택 결과 회차
 ├── resultCode, note, createdBy   # createdBy FK → public.users (0121, 티켓 26 이 채우기 시작)
 ├── fieldworkLinkId               # 이 회차를 넣은 외주 실사 링크 (0127, FK restrict)
 │                                 #   **계정 칸과 배타** — contact_attempts_author_exclusive_check
+├── createdByEmail                # 기록자 글자 스냅샷 (0152) — 계정이면 이메일, 외주 링크면 「외주」. 회차 목록 「기록자」 열. 그 전 회차는 NULL
 └── createdAt  (UNIQUE contactTargetId+attemptNo)
+
+contact_target_edit_logs   # 대상 정보 수정 현황 (0152) — 조사 대상 상세에서 손으로 바꾼 기록, 바꾼 쓰기와 같은 트랜잭션
+├── id, surveyId (cascade), contactTargetId (cascade)   # 파티션 열 없음 — 대상이 이미 실/테스트에 속한다
+├── action                        # info_edit | attempt_edit | attempt_delete | assignment_change (CHECK)
+├── changes (JSONB)               # ContactTargetEditChange[] (shared/contracts/contacts) — 열·컨택원 이름은 그때 스냅샷, pii 는 값 없이 op 만, 값은 1,000자에서 자름
+├── editedBy (text), editorEmail  # 편집자 — 계정은 id·이메일, 외주 링크는 `link:<링크 id>`·「외주」
+└── createdAt                     # clock_timestamp() — 잠금 뒤 줄 선 저장끼리 최신순이 뒤집히지 않게. INDEX (contactTargetId, createdAt desc)
 
 contact_id_lists           # 필터 붙여넣기 ID 목록 저장 (0084) — 인라인 상한 2,000개 초과분
 ├── id, surveyId (cascade), ids (JSONB 정수 배열, 중복 제거·오름차순), idCount
@@ -453,6 +464,7 @@ surveys (1) ─┬─ (N) survey_documents ── (N) survey_document_anchors
 
 contact_targets ─┬─ (N) contact_pii (암호화 PII)
                  ├─ (N) contact_attempts (결과 회차)
+                 ├─ (N) contact_target_edit_logs (대상 정보 수정 현황)
                  ├─ (1) contact_prior_answers (이월 응답)
                  └─ (1) contact_assignments [optional — 지금 맡은 컨택원, 같은 isTest]
 

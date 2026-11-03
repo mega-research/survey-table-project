@@ -7,13 +7,20 @@ import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 // 시크릿 모드: deviceId 가 null (localStorage 차단).
 // fp+ip 매칭 row 가 DB 에 존재 -> 차단.
 
-const { mockFindFirst, mockHeaders } = vi.hoisted(() => ({
+const { mockFindFirst, mockSurveysFindFirst, mockHeaders } = vi.hoisted(() => ({
   mockFindFirst: vi.fn(),
+  // 막힐 때만 읽는 중복 응답 허용 설정 — 기본은 꺼짐(설정 행 그대로 차단).
+  mockSurveysFindFirst: vi.fn(async () => ({ allowMultipleResponses: false })),
   mockHeaders: vi.fn(),
 }));
 
 vi.mock('@/db', () => ({
-  db: { query: { surveyResponses: { findFirst: mockFindFirst } } },
+  db: {
+    query: {
+      surveyResponses: { findFirst: mockFindFirst },
+      surveys: { findFirst: mockSurveysFindFirst },
+    },
+  },
 }));
 
 vi.mock('next/headers', () => ({

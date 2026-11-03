@@ -398,6 +398,16 @@ export function QuestionBasicTab({
           variableCatalog={variableCatalog}
         />
 
+        {/* 평균 산출 (CONTEXT.md 「척도 평균」) — 켜고 끄는 곳은 현황 「척도 평균」의 「문항 선택」이다.
+            빌더는 보이기만 한다(옛 빌더 탭 저장이 콘솔 값을 되돌리지 않게 저장하지 않는다). */}
+        {formData.scaleMeanEnabled === true &&
+          (question.type === 'radio' || question.type === 'select' || question.type === 'table') && (
+            <p className="rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-700">
+              현황 「척도 평균」에 들어간 문항입니다. 「모름」 같은 보기는{' '}
+              {question.type === 'table' ? '칸 편집의' : '아래 보기의'} 「평균 제외」로 빼세요.
+            </p>
+          )}
+
         {/* 단답형·장문형 개인정보 암호화 토글 */}
         {(question.type === 'text' || question.type === 'textarea') && (
           <div className="flex items-start space-x-2">

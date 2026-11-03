@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { buildDataRows, generateSPSSColumns } from '@/lib/analytics/spss-excel-export';
 import { buildLabel } from '@/lib/spss/variable-meta';
-import { row2Label } from '@/lib/analytics/raw-workbook';
+import { columnCellLabel } from '@/lib/analytics/column-cell-label';
 import type { Question, SurveySubmission } from '@/types/survey';
 
 function makeSubmission(questionResponses: Record<string, unknown>): SurveySubmission {
@@ -131,12 +131,12 @@ describe('standalone ranking — buildDataRows 값 매핑', () => {
   });
 });
 
-describe('standalone ranking — row2Label / buildLabel', () => {
-  it('row2Label 은 optionLabel("1순위 상세 기재")을 반환한다', () => {
+describe('standalone ranking — columnCellLabel / buildLabel', () => {
+  it('columnCellLabel 은 optionLabel("1순위 상세 기재")을 반환한다', () => {
     const cols = generateSPSSColumns([standaloneQuestion]);
     const col1 = cols.find((c) => c.spssVarName === 'Q1_rk1_text');
     expect(col1).toBeDefined();
-    expect(row2Label(col1!)).toBe('1순위 상세 기재');
+    expect(columnCellLabel(col1!)).toBe('1순위 상세 기재');
   });
 
   it('buildLabel 은 "질문제목 - 1순위 상세 기재" 형식이다', () => {

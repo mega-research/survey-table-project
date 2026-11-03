@@ -529,6 +529,7 @@ function RankingQuestionBody({ question, value, onChange }: RankingQuestionProps
         {...(question.tableHeaderGrid ? { tableHeaderGrid: question.tableHeaderGrid } : {})}
         {...(question.hideColumnLabels !== undefined ? { hideColumnLabels: question.hideColumnLabels } : {})}
         {...(question.stickyColumnCount !== undefined ? { stickyColumnCount: question.stickyColumnCount } : {})}
+        fitTableToWidth={question.fitTableToWidth ?? false}
         renderCell={renderCell}
       />
       {detailRows}
@@ -612,6 +613,7 @@ function RankingDropdown({
         {...(question.tableHeaderGrid ? { tableHeaderGrid: question.tableHeaderGrid } : {})}
         {...(question.hideColumnLabels !== undefined ? { hideColumnLabels: question.hideColumnLabels } : {})}
         {...(question.stickyColumnCount !== undefined ? { stickyColumnCount: question.stickyColumnCount } : {})}
+        fitTableToWidth={question.fitTableToWidth ?? false}
       />
     )
   ) : null;

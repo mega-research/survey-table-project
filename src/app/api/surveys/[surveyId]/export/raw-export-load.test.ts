@@ -70,7 +70,14 @@ vi.mock('@/server/operations/services/contacts-export', async (importOriginal) =
   return { ...actual, decryptPiiForExport: vi.fn(async () => new Map()) };
 });
 
+// 결과코드·고친 열은 contact_attempts·edit_logs 를 직접 읽으므로 가짜 db 체인에 태우지 않는다.
+vi.mock('@/server/read-models/contact-export-marks', () => ({
+  loadLatestResultCodes: vi.fn(async () => new Map()),
+  loadEditedSources: vi.fn(async () => new Map()),
+}));
+
 import { sortRowsForContactPopulation } from '@/lib/analytics/raw-export-rows';
+import { loadEditedSources, loadLatestResultCodes } from '@/server/read-models/contact-export-marks';
 import {
   MAX_EXPORT_RESPONSES,
   countRawExportPopulation,
@@ -179,6 +186,8 @@ beforeEach(() => {
   vi.mocked(sortRowsForContactPopulation).mockClear();
   vi.mocked(decryptPiiForExport).mockReset();
   vi.mocked(decryptPiiForExport).mockResolvedValue(new Map());
+  vi.mocked(loadLatestResultCodes).mockClear();
+  vi.mocked(loadEditedSources).mockClear();
 });
 
 describe('loadRawExportRows — 토글 꺼짐', () => {
@@ -272,6 +281,60 @@ describe('loadRawExportRows — 토글 켜짐', () => {
 
     const targets = state.calls[3]!;
     expect(render(targets.orderBy![0]).sql).toBe('"contact_targets"."resid" asc');
+  });
+
+  it('꺼져 있어도 실사완료 코드가 오면 마지막 회차가 그 코드인 미응답 대상만 넣고 시스템ID 순으로 합친다', async () => {
+    useCounts({ responses: 4, nonRespondents: 2 });
+    responseFindManyMock.mockResolvedValue([
+      responseRow({ id: 'r1', contactTargetId: 'ct2', startedAt: new Date('2026-09-01T09:00:00Z') }),
+      responseRow({ id: 'r4', startedAt: new Date('2026-09-01T09:01:00Z') }),
+      responseRow({ id: 'r3', startedAt: new Date('2026-09-01T09:02:00Z') }),
+      responseRow({ id: 'r2', contactTargetId: 'ct4', startedAt: new Date('2026-09-01T09:05:00Z') }),
+    ]);
+
+    const result = await loadRawExportRows(surveyId, 'real', {
+      includeNonRespondents: false,
+      fieldCompletedCodes: ['1.조사완료'],
+    });
+
+    expect(kinds()).toEqual([
+      'responseCount',
+      'nonRespondentCount',
+      'contactsById',
+      'nonRespondentTargets',
+    ]);
+    for (const kind of ['nonRespondentCount', 'nonRespondentTargets'] as const) {
+      const { sql, params } = render(state.calls.find((c) => classify(c) === kind)!.where);
+      expect(sql).toContain('FROM contact_attempts');
+      expect(sql).toContain('ORDER BY attempt_no DESC LIMIT 1');
+      expect(params).toContain('1.조사완료');
+    }
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+    expect(result.nonRespondentCount).toBe(2);
+    expect(result.rows.map((r) => r.id)).toEqual(['t1', 'r1', 't3', 'r2', 'r4', 'r3']);
+  });
+
+  it('꺼져 있고 실사완료 코드가 없으면 미응답 대상을 조회하지 않는다', async () => {
+    useCounts({ responses: 1, nonRespondents: 5 });
+    responseFindManyMock.mockResolvedValue([responseRow({ id: 'r1' })]);
+    const result = await loadRawExportRows(surveyId, 'real', {
+      includeNonRespondents: false,
+      fieldCompletedCodes: [],
+    });
+    expect(kinds()).toEqual(['responseCount']);
+    expect(result.kind === 'ok' && result.nonRespondentCount).toBe(0);
+  });
+
+  it('켜져 있으면 실사완료 코드와 무관하게 미응답 대상 전부다 — 코드 조건이 붙지 않는다', async () => {
+    useCounts({ responses: 0, nonRespondents: 0 });
+    await loadRawExportRows(surveyId, 'real', {
+      includeNonRespondents: true,
+      fieldCompletedCodes: ['1.조사완료'],
+    });
+    const { sql } = render(state.calls.find((c) => classify(c) === 'nonRespondentCount')!.where);
+    expect(sql).not.toContain('contact_attempts');
+    expect(sql).not.toContain('result_code');
   });
 
   it.each([
@@ -411,6 +474,47 @@ describe('loadRawExportRows — 조사 대상 명단 열', () => {
     // 익명 응답은 키 자체가 없다
     expect(byId.get('r-anon')).toBeDefined();
     expect('contactValues' in byId.get('r-anon')!).toBe(false);
+  });
+
+  it('결과코드·고친 열은 조사 대상 전원을 한 번에 읽어 그 대상의 행에만 붙는다', async () => {
+    useRoster({ withAttrs: true });
+    responseFindManyMock.mockResolvedValue(threeResponses());
+    vi.mocked(loadLatestResultCodes).mockResolvedValueOnce(
+      new Map([
+        ['t1', '3.비수신'],
+        ['t3', '6.거절'],
+      ]),
+    );
+    vi.mocked(loadEditedSources).mockResolvedValueOnce(new Map([['t1', new Set(['attrs.기수'])]]));
+
+    const result = await loadRawExportRows(surveyId, 'real', {
+      includeNonRespondents: true,
+      contactColumns: rosterColumns,
+    });
+
+    expect(loadLatestResultCodes).toHaveBeenCalledTimes(1);
+    expect([...vi.mocked(loadLatestResultCodes).mock.calls[0]![0]].sort()).toEqual(['t1', 't2', 't3']);
+    expect(loadEditedSources).toHaveBeenCalledTimes(1);
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+    const byId = new Map(result.rows.map((r) => [r.id, r]));
+    expect(byId.get('r1')?.resultCode).toBe('3.비수신');
+    expect([...(byId.get('r1')?.editedSources ?? [])]).toEqual(['attrs.기수']);
+    expect(byId.get('t3')?.resultCode).toBe('6.거절');
+    // 회차·고친 열이 없는 대상과 익명 응답은 키가 없다
+    expect('resultCode' in byId.get('r2')!).toBe(false);
+    expect('editedSources' in byId.get('r2')!).toBe(false);
+    expect('resultCode' in byId.get('r-anon')!).toBe(false);
+  });
+
+  it('명단 열이 꺼져 있으면 고친 열은 읽지 않는다 — 결과코드만', async () => {
+    useRoster({ withAttrs: false });
+    responseFindManyMock.mockResolvedValue(threeResponses());
+
+    await loadRawExportRows(surveyId, 'real', { includeNonRespondents: false });
+
+    expect(loadLatestResultCodes).toHaveBeenCalledTimes(1);
+    expect(loadEditedSources).not.toHaveBeenCalled();
   });
 
   it('pii 열이 없으면 복호화를 부르지 않는다', async () => {

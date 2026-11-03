@@ -86,6 +86,7 @@ const noneControl: SurveyControl = {
   priorWaveLabel: null,
   changeConfirmEnabled: false,
   endRedirects: null,
+  allowMultipleResponses: false,
 };
 
 function responseResult(control: SurveyControl = noneControl): NonNullable<SurveyForResponseResult> {

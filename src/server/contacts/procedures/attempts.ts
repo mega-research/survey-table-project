@@ -13,6 +13,7 @@ import {
   UpdateContactAttemptInput,
 } from '../domain/contact-attempt';
 import * as svc from '../services/contact-attempts';
+import { contactEditorOfContext } from './contact-editor';
 
 /**
  * 서비스의 0행 거부를 RPC 어휘로 옮긴다 (티켓 15).
@@ -36,9 +37,14 @@ const add = scoped
     // 파티션 플래그는 **내부가 아닌 계정 전부**를 real 로 고정한다 — 게스트만 보면 테스트
     // 모드가 켜진 설문에서 실사원이 test 파티션에 결과코드를 쓴다(티켓 26).
     await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'contacts.writeAttempts');
-    // 인증된 context 에서 1회 파생 — 서비스가 auth 를 재조회하지 않는다.
+    // 인증된 context 에서 1회 파생 — 서비스가 auth 를 재조회하지 않는다. 편집자는 회차 기록자다.
     return svc
-      .addAttempt(input, isExternalActor(context.actor), attributionOf(context.actor))
+      .addAttempt(
+        input,
+        isExternalActor(context.actor),
+        attributionOf(context.actor),
+        contactEditorOfContext(context),
+      )
       .catch(rethrowAttemptNotFound);
   });
 
@@ -47,7 +53,9 @@ const update = scoped
   .output(z.object({ ok: z.literal(true) }))
   .handler(async ({ context, input }) => {
     await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'contacts.writeAttempts');
-    await svc.updateAttempt(input, isExternalActor(context.actor)).catch(rethrowAttemptNotFound);
+    await svc
+      .updateAttempt(input, isExternalActor(context.actor), contactEditorOfContext(context))
+      .catch(rethrowAttemptNotFound);
     return { ok: true as const };
   });
 
@@ -56,7 +64,9 @@ const remove = scoped
   .output(z.object({ ok: z.literal(true) }))
   .handler(async ({ context, input }) => {
     await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'contacts.writeAttempts');
-    await svc.deleteAttempt(input, isExternalActor(context.actor)).catch(rethrowAttemptNotFound);
+    await svc
+      .deleteAttempt(input, isExternalActor(context.actor), contactEditorOfContext(context))
+      .catch(rethrowAttemptNotFound);
     return { ok: true as const };
   });
 

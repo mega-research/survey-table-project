@@ -304,7 +304,8 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
                       조사 대상 중 미응답자 포함
                     </span>
                     <span className="block text-xs leading-relaxed text-slate-500">
-                      링크를 열지 않은 조사 대상도 행으로 넣고 상태를 미응답으로 표시합니다
+                      링크를 열지 않은 조사 대상도 행으로 넣고 온라인 응답 상태를 미응답으로
+                      표시합니다. 컨택결과코드가 1(조사완료)인 대상은 이 옵션과 관계없이 들어갑니다
                     </span>
                   </span>
                 </label>

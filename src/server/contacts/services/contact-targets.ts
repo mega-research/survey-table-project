@@ -5,7 +5,7 @@ import 'server-only';
 import { type DbTransaction, db } from '@/db';
 import { contactTargets, surveyResponses } from '@/db/schema';
 import { sanitizeAttrsAgainstPiiScheme } from './scheme-helpers';
-import { upsertPiiValue } from '@/lib/crypto/contact-pii-repo';
+import { piiPlainToStore, readStoredPiiPlain, upsertPiiValue } from '@/lib/crypto/contact-pii-repo';
 import { describePiiFormatProblems } from '@/lib/crypto/pii-fields';
 import {
   archiveTestMailForTargets,
@@ -14,6 +14,12 @@ import {
 import { lockWriteScope } from '@/server/data-scope';
 import { generateInviteCode } from '@/lib/survey-url';
 
+import {
+  type ContactEditor,
+  type ContactTargetInfoValues,
+  diffContactTargetInfo,
+  diffContactTargetPii,
+} from '../domain/contact-target-edit';
 import type {
   AddContactTargetInput,
   ContactTargetRow,
@@ -28,6 +34,7 @@ import {
 } from '@/lib/operations/contacts-format';
 
 import { allocateContactResid } from './contact-resid';
+import { recordContactTargetEdit } from './contact-target-edit-log';
 
 /**
  * 값이 있는데 형식이 틀린 PII(예: `@` 없는 메일)를 저장 전에 거부한다.
@@ -44,20 +51,30 @@ function assertStorablePiiUpdates(piiUpdates: UpdateContactTargetInput['piiUpdat
 }
 
 /**
- * 현재 DB 모드를 기준으로 대상자를 잠근다.
+ * 현재 DB 모드를 기준으로 대상자를 잠그고, 그 잠금 아래에서 대상 정보의 지금 값을 읽는다.
  *
  * 목록을 연 뒤 테스트 모드가 전환된 경우에도 이전 탭이 반대 스코프 행을 수정·삭제하지
  * 못하도록, 설문 행과 대상 행을 같은 트랜잭션에서 순서대로 잠근다.
  */
-async function lockTargetInCurrentScope(
+async function lockTargetAndReadCurrent(
   tx: DbTransaction,
   input: { id: string; surveyId: string },
   isExternal: boolean,
-): Promise<{ isTest: boolean; scheme: NormalizedContactColumnScheme | null }> {
+): Promise<{
+  isTest: boolean;
+  scheme: NormalizedContactColumnScheme | null;
+  /** 잠금 아래에서 읽은 지금 값 — 「대상 정보 수정 현황」의 이전 값이다. */
+  current: ContactTargetInfoValues;
+}> {
   const scope = await lockCurrentSurveyScope(tx, input.surveyId, isExternal);
 
   const [target] = await tx
-    .select({ id: contactTargets.id })
+    .select({
+      id: contactTargets.id,
+      attrs: contactTargets.attrs,
+      memo: contactTargets.memo,
+      contactMethod: contactTargets.contactMethod,
+    })
     .from(contactTargets)
     .where(
       and(
@@ -69,7 +86,10 @@ async function lockTargetInCurrentScope(
     .for('update');
   if (!target) throw new Error('NOT_FOUND');
 
-  return scope;
+  return {
+    ...scope,
+    current: { attrs: target.attrs, memo: target.memo, contactMethod: target.contactMethod },
+  };
 }
 
 async function lockCurrentSurveyScope(
@@ -157,16 +177,22 @@ export async function addContactTarget(
  * 실사에게 열리는 유일한 컨택 쓰기라(ADR-0019 「컨택 업로드/수정은 차단」) 명단에 닿는
  * 필드가 이 함수의 `set` 에 들어가서는 안 된다.
  *
- * 잠금은 같은 헬퍼를 쓴다 — 파티션 확정과 대상 소속 확인이 같은 스냅샷이어야 한다.
+ * 잠금은 같은 헬퍼를 쓴다 — 파티션 확정과 대상 소속 확인이 같은 스냅샷이어야 한다. 바뀐 메모·연락
+ * 방법은 같은 트랜잭션에서 「대상 정보 수정 현황」에 남긴다(바뀐 것이 없으면 기록하지 않는다).
  */
 export async function setContactTargetMemo(
   input: SetContactTargetMemoInput,
   isExternal: boolean,
+  editor: ContactEditor,
 ): Promise<void> {
   const { id, surveyId, memo, contactMethod } = input;
 
   await db.transaction(async (tx) => {
-    const { isTest } = await lockTargetInCurrentScope(tx, { id, surveyId }, isExternal);
+    const { isTest, scheme, current } = await lockTargetAndReadCurrent(
+      tx,
+      { id, surveyId },
+      isExternal,
+    );
 
     const updated = await tx
       .update(contactTargets)
@@ -180,21 +206,41 @@ export async function setContactTargetMemo(
       )
       .returning({ id: contactTargets.id });
     if (updated.length === 0) throw new Error('NOT_FOUND');
+
+    // 메모·연락 방법도 「대상 정보 수정 현황」에 남긴다 — attrs 는 이 표면이 건드리지 않아 그대로 비교한다.
+    await recordContactTargetEdit(tx, {
+      surveyId,
+      contactTargetId: id,
+      action: 'info_edit',
+      changes: diffContactTargetInfo(current, { attrs: current.attrs, memo, contactMethod }, scheme),
+      editor,
+    });
   });
 }
 
 /**
  * 행 단위 갱신 — attrs/group/memo/contactMethod + PII 변경분 upsert.
+ *
+ * 바뀐 칸이 있으면 같은 트랜잭션에서 「대상 정보 수정 현황」 한 줄(`info_edit`)을 남긴다. 개인정보 열은
+ * 값 없이 「입력 · 변경 · 삭제」만 남는다 — 지금 값은 잠금 아래에서 복호화해 비교에만 쓴다. 이전 값은
+ * 화면이 보낸 값이 아니라 대상 행 잠금 아래에서 읽은 지금 값이다 — 그 사이 다른 사람이 고친 칸을
+ * 이 저장이 옛 값으로 덮으면 그것도 변경으로 남는다. 기록 INSERT 가 실패하면 저장도 롤백된다.
+ * editor 는 procedure 가 인증된 context 에서 넘긴다.
  */
 export async function updateContactTarget(
   input: UpdateContactTargetInput,
   isExternal: boolean,
+  editor: ContactEditor,
 ): Promise<void> {
   const { id, surveyId, attrs: rawAttrs, piiUpdates, memo, contactMethod, systemFieldKeys } = input;
   assertStorablePiiUpdates(piiUpdates);
 
   await db.transaction(async (tx) => {
-    const { isTest, scheme } = await lockTargetInCurrentScope(tx, { id, surveyId }, isExternal);
+    const { isTest, scheme, current } = await lockTargetAndReadCurrent(
+      tx,
+      { id, surveyId },
+      isExternal,
+    );
     // 모드·대상 소속과 같은 잠금 스냅샷에서 확정한 스킴으로 PII 평문을 제거한다.
     const attrs = sanitizeAttrsAgainstPiiScheme(rawAttrs, scheme);
 
@@ -205,6 +251,17 @@ export async function updateContactTarget(
     const hasGroupKey = systemFieldKeys?.group != null;
     const rawGroup = hasGroupKey ? attrs[systemFieldKeys.group as string] : undefined;
     const groupValue = rawGroup != null && rawGroup !== '' ? rawGroup : null;
+
+    // 개인정보 열의 지금 값 — 같은 잠금 아래, 덮어쓰기 전에 읽어 메모리에서만 비교한다.
+    const piiWrites = (piiUpdates ?? []).map((p) => ({
+      columnKey: p.columnKey,
+      next: piiPlainToStore(p.fieldType, p.plain),
+    }));
+    const storedPii = await readStoredPiiPlain(
+      tx,
+      id,
+      piiWrites.map((w) => w.columnKey),
+    );
 
     // .returning() 길이로 영향 행 수를 판정한다. PII 재암호화(upsertPiiValue)는
     // 현재 모드의 행 소속이 확정된 뒤에만 일어나야 하므로 이 검증을 PII 부수효과보다 앞에 둔다.
@@ -232,6 +289,25 @@ export async function updateContactTarget(
         await upsertPiiValue(tx, id, p.columnKey, p.fieldType, p.plain);
       }
     }
+
+    // 비교 기준은 양쪽 다 PII 정제 뒤 attrs 다. 지금 값도 정제한다 — 그 열이 개인정보로 바뀌기 전에
+    // 올라온 옛 행은 attrs 에 평문이 남아 있어, 그대로 비교하면 그 평문이 기록의 이전 값이 된다.
+    // pii 변경은 값 없이 같은 줄에 붙인다.
+    const changes = [
+      ...diffContactTargetInfo(
+        { ...current, attrs: sanitizeAttrsAgainstPiiScheme(current.attrs, scheme) },
+        { attrs, memo: memo ?? null, contactMethod: contactMethod ?? null },
+        scheme,
+      ),
+      ...diffContactTargetPii(storedPii, piiWrites, scheme),
+    ];
+    await recordContactTargetEdit(tx, {
+      surveyId,
+      contactTargetId: id,
+      action: 'info_edit',
+      changes,
+      editor,
+    });
   });
 }
 

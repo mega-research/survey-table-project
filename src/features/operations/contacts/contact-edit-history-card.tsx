@@ -18,13 +18,16 @@ interface Props {
   hasResponse: boolean;
 }
 
-/** 응답 편집 audit 이력 — 기본 접힘 collapsible. 초기화 마커는 응답이 삭제된 뒤에도 남는다. */
+/**
+ * 「응답 수정 / 편집 현황」 — 응답 편집 audit 이력, 기본 접힘 collapsible. 초기화 마커는 응답이
+ * 삭제된 뒤에도 남는다. 대상 정보(명단 값·회차·컨택원) 변경은 「대상 정보 수정 현황」 카드가 보인다.
+ */
 export function ContactEditHistoryCard({ rows, hasResponse }: Props) {
   return (
     <details open={hasResponse || rows.length > 0} className="group rounded-lg border bg-white">
       <summary className="flex cursor-pointer items-center justify-between px-5 py-3 text-sm">
         <span className="flex items-center gap-1.5 font-medium text-slate-700">
-          수정 / 편집 현황 ({rows.length}건)
+          응답 수정 / 편집 현황 ({rows.length}건)
           <ChevronDown className="size-4 text-slate-400 transition-transform group-open:rotate-180" />
         </span>
       </summary>

@@ -36,6 +36,7 @@ import {
 } from '@/server/operations/services/profiles-filters';
 import { buildColumnCandidates, getContactColumnScheme } from '@/server/read-models/contacts';
 import {
+  getProfileAnswerChoices,
   getProfileAnswerSources,
   getProfileColumnScheme,
   getProfileEntryParamNames,
@@ -106,12 +107,14 @@ export async function ProfilesScreen({
     ...(sp.sort !== undefined ? { sort: sp.sort } : {}),
     ...(sp.dir !== undefined ? { dir: sp.dir } : {}),
   });
-  const [contactScheme, profileScheme, entryParamNames, answerSources] = await Promise.all([
-    getContactColumnScheme(surveyId, scope),
-    getProfileColumnScheme(surveyId),
-    getProfileEntryParamNames(surveyId),
-    getProfileAnswerSources(surveyId),
-  ]);
+  const [contactScheme, profileScheme, entryParamNames, answerSources, answerChoices] =
+    await Promise.all([
+      getContactColumnScheme(surveyId, scope),
+      getProfileColumnScheme(surveyId),
+      getProfileEntryParamNames(surveyId),
+      getProfileAnswerSources(surveyId),
+      getProfileAnswerChoices(surveyId),
+    ]);
   // 표시 컬럼 스킴 — NULL(미설정)이면 hydrate 가 기본 스킴(기존 9컬럼)을 만든다.
   const displayColumns = visibleProfileColumns(
     hydrateProfileColumns(
@@ -180,6 +183,7 @@ export async function ProfilesScreen({
       dir: args.dir,
       view: args.view,
       clauses,
+      answerChoices,
     }),
     db
       .select({
@@ -220,6 +224,7 @@ export async function ProfilesScreen({
       ? await loadProfileAnswerValues(
           rows.map((r) => r.id),
           answerColumnKeys,
+          answerChoices,
         )
       : {};
 

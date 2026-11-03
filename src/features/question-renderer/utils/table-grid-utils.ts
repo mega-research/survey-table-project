@@ -17,6 +17,55 @@ export function calcTotalWidth(columns: TableColumn[]): number {
   return columns.reduce((sum, col) => sum + (col.width || 150), 0);
 }
 
+// ── 표 grid 폭 (화면 폭에 맞춰 줄이기) ──
+
+/**
+ * 표 grid 컨테이너의 폭 스타일. 헤더·본문·가상화 본문이 같은 값을 써야 열이 어긋나지 않는다.
+ * - 끔(기본): 열 폭을 px 로 고정한다. 화면이 좁으면 표가 넘쳐 가로 스크롤이 된다.
+ * - 켬(문항 설정 fitTableToWidth, 모바일 모드가 아닐 때): 열 폭을 비율(fr)로 바꿔 화면에 맞춰 줄고,
+ *   넓은 화면에서는 지정한 총폭을 넘지 않는다. 표가 넘치지 않으므로 좌측 고정 열은 호출측이 끈다.
+ */
+export function resolveTableGridSizing(
+  columns: TableColumn[],
+  fitToWidth: boolean,
+): Pick<
+  CSSProperties,
+  | 'gridTemplateColumns'
+  | 'width'
+  | 'minWidth'
+  | 'maxWidth'
+  | 'borderRightWidth'
+  | 'overflow'
+> {
+  const totalWidth = calcTotalWidth(columns);
+  if (!totalWidth) return { gridTemplateColumns: '', width: '100%', minWidth: '100%' };
+  if (!fitToWidth) {
+    return { gridTemplateColumns: buildGridTemplateCols(columns), width: `${totalWidth}px`, minWidth: `${totalWidth}px` };
+  }
+  return {
+    gridTemplateColumns: columns.map((col) => `minmax(0, ${col.width || 150}fr)`).join(' '),
+    width: '100%',
+    minWidth: 0,
+    maxWidth: `${totalWidth}px`,
+    // 컨테이너(border-r)와 칸(border-r)이 둘 다 오른쪽 선을 그린다. px 열은 컨테이너 안쪽 폭보다
+    // 테두리만큼 넓어 마지막 칸이 컨테이너 선을 덮지만, 비율 열은 안쪽 폭에 딱 맞아 두 선이 나란히
+    // 보인다(이중선). 컨테이너 쪽을 빼 마지막 칸의 선을 오른쪽 끝선으로 쓴다.
+    // 둥근 모서리(rounded-*)는 그대로 두고 칸을 그 안으로 자른다 — 마지막 칸의 오른쪽 선이 모서리 곡선을
+    // 따라 잘려 왼쪽과 같은 둥근 모서리가 된다. clip 은 hidden 과 달리 스크롤 컨테이너를 만들지 않는다.
+    // 칸 밖으로 띄우는 목록·안내는 이미 body 포털이라 잘리지 않는다.
+    borderRightWidth: 0,
+    overflow: 'clip',
+  };
+}
+
+/**
+ * 화면 폭에 맞춰 줄인 표의 본문 표식. globals.css 가 이 표식 아래의 보기 N열 그리드를
+ * 「1/N 폭이 보기 글자보다 좁으면 보기째로 다음 줄」로 푼다 — 패드 폭에서 보기 글자가 칸 안에서 꺾였다.
+ */
+export function fitTableMarker(fitToWidth: boolean): { 'data-fit-table'?: '' } {
+  return fitToWidth ? { 'data-fit-table': '' } : {};
+}
+
 // ── 응답 페이지 컨테이너 폭 판정 ──
 
 /** 표 총폭이 이 값(px)을 넘으면 응답 페이지 컨테이너를 넓게(1280px) 편다. */

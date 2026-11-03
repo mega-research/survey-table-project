@@ -22,9 +22,10 @@ export function formatExcelDateTime(value: Date | null | undefined): string {
   return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
 }
 
+// .sav 값 라벨과 같은 변환(toSpssValueLabelPairs) — 보기 글자의 줄바꿈을 공백 한 칸으로 접는다
 function pairsFromOptions(options: QuestionOption[]): string {
-  return options
-    .map((o, i) => `${o.spssNumericCode ?? i + 1}=${o.label}`)
+  return toSpssValueLabelPairs(options)
+    .map(({ code, label }) => `${code}=${label}`)
     .join(', ');
 }
 

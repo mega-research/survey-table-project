@@ -57,11 +57,13 @@ describe('attempts procedures', () => {
       'contacts.writeAttempts',
     );
     // 작성자는 procedure 가 인증된 컨텍스트에서 넘긴다 — 서비스가 auth 를 다시 읽지 않는다.
-    // 계정 주체는 계정 칸만 채우고 링크 칸은 빈다(0127 의 배타 CHECK).
-    expect(svc.addAttempt).toHaveBeenCalledWith(input, false, {
-      accountUserId: 'admin-1',
-      fieldworkLinkId: null,
-    });
+    // 계정 주체는 계정 칸만 채우고 링크 칸은 빈다(0127 의 배타 CHECK). 기록자 글자는 계정 이메일이다.
+    expect(svc.addAttempt).toHaveBeenCalledWith(
+      input,
+      false,
+      { accountUserId: 'admin-1', fieldworkLinkId: null },
+      { id: 'admin-1', email: 'a@b.com' },
+    );
     expect(res).toEqual({ id: 'att-1', attemptNo: 1 });
   });
 
@@ -76,7 +78,10 @@ describe('attempts procedures', () => {
       's-1',
       'contacts.writeAttempts',
     );
-    expect(svc.updateAttempt).toHaveBeenCalledWith(input, false);
+    expect(svc.updateAttempt).toHaveBeenCalledWith(input, false, {
+      id: 'admin-1',
+      email: 'a@b.com',
+    });
     expect(res).toEqual({ ok: true });
   });
 
@@ -91,7 +96,10 @@ describe('attempts procedures', () => {
       's-1',
       'contacts.writeAttempts',
     );
-    expect(svc.deleteAttempt).toHaveBeenCalledWith(input, false);
+    expect(svc.deleteAttempt).toHaveBeenCalledWith(input, false, {
+      id: 'admin-1',
+      email: 'a@b.com',
+    });
     expect(res).toEqual({ ok: true });
   });
 
@@ -156,10 +164,12 @@ describe('attempts procedures', () => {
       resultCode: '1.조사완료',
     };
     const res = await client.contacts.attempts.add(input);
-    expect(svc.addAttempt).toHaveBeenCalledWith(input, true, {
-      accountUserId: 'external-1',
-      fieldworkLinkId: null,
-    });
+    expect(svc.addAttempt).toHaveBeenCalledWith(
+      input,
+      true,
+      { accountUserId: 'external-1', fieldworkLinkId: null },
+      { id: 'external-1', email: 'g@b.com' },
+    );
     expect(res).toEqual({ id: 'att-1', attemptNo: 1 });
   });
 
@@ -187,10 +197,12 @@ describe('attempts procedures', () => {
       resultCode: '1.조사완료',
     };
     await client.contacts.attempts.add(input);
-    // 링크는 언제나 실 파티션이다(스펙 §11-3) — 두 번째 인자 true.
-    expect(svc.addAttempt).toHaveBeenCalledWith(input, true, {
-      accountUserId: null,
-      fieldworkLinkId: LINK_ID,
-    });
+    // 링크는 언제나 실 파티션이다(스펙 §11-3) — 두 번째 인자 true. 기록자 글자는 「외주」다.
+    expect(svc.addAttempt).toHaveBeenCalledWith(
+      input,
+      true,
+      { accountUserId: null, fieldworkLinkId: LINK_ID },
+      { id: `link:${LINK_ID}`, email: '외주' },
+    );
   });
 });

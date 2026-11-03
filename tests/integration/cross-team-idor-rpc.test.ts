@@ -677,6 +677,11 @@ const SURFACES: Record<string, SurfaceSpec> = {
     capability: 'survey.edit',
     input: { surveyId: S, scheme: { columns: [] } },
   },
+  'operations.scaleMean.setQuestions': {
+    gate: 'rpc',
+    capability: 'survey.edit',
+    input: { surveyId: S, questionIds: [] },
+  },
   'operations.control.get': {
     gate: 'rpc',
     capability: 'operations.view',

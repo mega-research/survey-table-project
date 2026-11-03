@@ -84,6 +84,7 @@ export async function createQuestion(data: CreateQuestionInput): Promise<Questio
     stagedRowsConfig: data.stagedRowsConfig as NewQuestion['stagedRowsConfig'],
     hideColumnLabels: data.hideColumnLabels,
     stickyColumnCount: data.stickyColumnCount ?? null,
+    fitTableToWidth: data.fitTableToWidth ?? false,
     exportCellOrder: data.exportCellOrder ?? null,
     mobileOriginalTable: data.mobileOriginalTable,
     mobileTableDisplayMode: data.mobileTableDisplayMode,

@@ -65,6 +65,7 @@ export function resolveChoiceOptions(question: Question): QuestionOption[] {
     ...(cell.backgroundColor ? { backgroundColor: cell.backgroundColor } : {}),
     ...(cell.textColor ? { textColor: cell.textColor } : {}),
     ...(cell.answerQuoteText !== undefined ? { answerQuoteText: cell.answerQuoteText } : {}),
+    ...(cell.excludeFromMean ? { excludeFromMean: true } : {}),
   }));
 }
 
