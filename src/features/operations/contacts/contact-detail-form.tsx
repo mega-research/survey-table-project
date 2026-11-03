@@ -14,6 +14,7 @@ import { ContactAttemptHistoryCard } from '@/features/operations/contacts/contac
 import { ContactEditHistoryCard } from '@/features/operations/contacts/contact-edit-history-card';
 import { ContactInfoCard } from '@/features/operations/contacts/contact-info-card';
 import { ContactMailHistoryCard } from '@/features/operations/contacts/contact-mail-history-card';
+import { ContactTargetEditHistoryCard } from '@/features/operations/contacts/contact-target-edit-history-card';
 import {
   LIST_QUERY_PARAM,
   contactDetailHref,
@@ -35,6 +36,7 @@ import type {
 import type {
   ContactAssignmentOption,
   ContactAttemptRow,
+  ContactTargetEditLogRow,
   MailHistoryRow,
   PiiUpdate,
   ResponseEditLogRow,
@@ -67,6 +69,8 @@ interface ContactDetailFormProps {
   mailHistory?: MailHistoryRow[];
   /** 응답 편집 audit 이력 (편집 모드에서만 의미). */
   editLogs?: ResponseEditLogRow[];
+  /** 「대상 정보 수정 현황」 기록 (편집 모드에서만 의미). 게스트면 컨택원 변경이 빠져 있다. */
+  targetEditLogs?: ContactTargetEditLogRow[];
   /** 단건 메일 발송 다이얼로그용 (편집 모드에서만 의미). */
   mailSend?: { templates: MailTemplateOption[]; disabledReason: string | null };
   /** 응답 초기화 버튼 노출 — authed 전용 RPC 라 게스트는 false. */
@@ -85,6 +89,7 @@ export function ContactDetailForm({
   initial,
   mailHistory = [],
   editLogs = [],
+  targetEditLogs = [],
   mailSend,
   canReset = false,
   assignment,
@@ -388,6 +393,11 @@ export function ContactDetailForm({
               {isPending ? '저장 중…' : '저장'}
             </Button>
           </div>
+          {isEdit && (
+            <div className="mt-4">
+              <ContactTargetEditHistoryCard rows={targetEditLogs} />
+            </div>
+          )}
         </div>
 
         <div className="space-y-4">
