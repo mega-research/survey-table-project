@@ -4,7 +4,7 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-10-29. 날짜별 변경 이력은 `git log -- AGENTS.md CONTEXT.md` 로 본다 — 여기에 쌓지 않는다.
+> 최종 갱신: 2026-11-03. 날짜별 변경 이력은 `git log -- AGENTS.md CONTEXT.md` 로 본다 — 여기에 쌓지 않는다.
 
 ---
 
@@ -323,8 +323,17 @@ contact_prior_answers      # 이월 응답 — 지난 회차 응답 한 벌 (추
 
 contact_attempts           # 컨택 결과 회차
 ├── id, contactTargetId, attemptNo
-├── resultCode, note, createdBy
+├── resultCode, note
+├── createdBy                     # 기록자 id — auth.users FK ON DELETE SET NULL(0152). uuid 이고 auth.users 에 있을 때만 채운다
+├── createdByEmail                # 기록자 이메일 스냅샷 (0152, 늘 채운다 — 회차 목록 「기록자」 열). 그 전 회차는 둘 다 NULL
 └── createdAt  (UNIQUE contactTargetId+attemptNo)
+
+contact_target_edit_logs   # 대상 정보 수정 현황 (0152) — 조사 대상 상세에서 손으로 바꾼 기록, 바꾼 쓰기와 같은 트랜잭션
+├── id, surveyId (cascade), contactTargetId (cascade)   # 파티션 열 없음 — 대상이 이미 실/테스트에 속한다
+├── action                        # info_edit | attempt_edit | attempt_delete | assignment_change (CHECK)
+├── changes (JSONB)               # ContactTargetEditChange[] (shared/contracts/contacts) — 열·컨택원 이름은 그때 스냅샷, pii 는 값 없이 op 만, 값은 1,000자에서 자름
+├── editedBy (text), editorEmail  # 편집자 — 응답 편집 이력과 같은 스냅샷 관례
+└── createdAt                     # clock_timestamp() — 잠금 뒤 줄 선 저장끼리 최신순이 뒤집히지 않게. INDEX (contactTargetId, createdAt desc)
 
 contact_id_lists           # 필터 붙여넣기 ID 목록 저장 (0084) — 인라인 상한 2,000개 초과분
 ├── id, surveyId (cascade), ids (JSONB 정수 배열, 중복 제거·오름차순), idCount
@@ -408,6 +417,7 @@ surveys (1) ─┬─ (N) survey_documents ── (N) survey_document_anchors
 
 contact_targets ─┬─ (N) contact_pii (암호화 PII)
                  ├─ (N) contact_attempts (결과 회차)
+                 ├─ (N) contact_target_edit_logs (대상 정보 수정 현황)
                  ├─ (1) contact_prior_answers (이월 응답)
                  └─ (1) contact_assignments [optional — 지금 맡은 컨택원, 같은 isTest]
 
@@ -455,6 +465,8 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
 > **메일 발송 주소 · 대체 발송** (0135·0137): 이메일 열이 여럿일 때의 발송 주소 순서(`mailOrder`)와 반송·거부 시 다음 순위 주소로 한 통 더 보내는 대체 회차(`kind='fallback'`, cron `mailFallbackSweeper` — 새 Inngest 함수라 배포 뒤 수동 Resync)는 CONTEXT.md 「발송 주소」가 정본이다. 새로 "이 대상의 이메일"을 읽는 자리를 만들면 `field_type='email'` 을 직접 거르지 말고 `lib/mail/send-address`(규칙)·`server/read-models/send-address`(DB)를 쓸 것.
 >
 > **컨택원 배정** (0136): 조사 대상을 이름 붙은 배정 묶음(계정 아님)에 나눠 맡긴다. procedure 는 전부 `authed` 이고 게스트 화면은 컨택원 열·값·필터·칩을 전부 받지 않는다. 교체 적용은 들어옴·빠짐을 한 UPDATE 문장으로 하고 충돌이면 `retryAssignmentWrite` 로 다시 돈다. 상세는 CONTEXT.md 「컨택원」.
+>
+> **대상 정보 수정 현황** (0152): 조사 대상 상세에서 손으로 바꾼 명단 값·개인정보 열(값 없이 입력·변경·삭제)·메모·컨택 방법·컨택원·회차 수정/삭제를 `contact_target_edit_logs` 에 남긴다. 조사 대상을 한 명씩 바꾸는 쓰기 경로를 새로 만들면 대상 행 잠금 아래에서 지금 값을 읽고 같은 트랜잭션에서 `recordContactTargetEdit` 를 부를 것 — 일괄 쓰기(업로드·교체 적용·이월 임포트)는 남기지 않는 것이 정해진 범위다. 기존 「수정 / 편집 현황」 칸은 「응답 수정 / 편집 현황」으로 이름만 바뀌었다. 상세는 CONTEXT.md 「조사 대상 수정 기록」.
 >
 > **조사 대상 필터 해석 · 필터 확장**: 목록 주소·캠페인 스냅샷·조건 줄은 `server/read-models/contact-filter-resolution.ts` 한 곳으로 읽는다(하위 파서 `contacts-filter-parse` 직접 import 는 ESLint 가 막는다). 대상을 고르거나 쓰는 쪽은 `mode: 'write'` 로 해석해 해석 안 되는 조건을 거부한다 — 읽기 해석은 버려서 명단이 넓어진다. 「현재 컨택원」·`짝수`/`홀수`·조건 줄 여러 값 포함 상세는 CONTEXT.md 「조사 대상 필터 해석」. 테스트는 `tests/helpers/resolved-contact-filter.ts` 의 `resolvedFilterForTest`.
 >
@@ -1090,6 +1102,7 @@ export function QuestionEditor({ questionId, onSave }: Props) {
 - 새 마이그레이션은 **디스크에 없는 다음 번호**를 쓴다. 다른 브랜치가 이미 쓴 번호도 피한다
 - **나중에 병합하는 쪽은 `manual-migrations.json` 배열 끝에 append 한다.** 번호순으로 끼워 넣지 않는다 — 그 배열이 곧 빈 DB 재생 순서다
 - 그래서 번호와 배열 순서가 어긋나 보일 수 있다. 만지는 객체가 서로소면 정상이다
+- 대상 정보 수정 현황 `contact_target_edit_logs`·`contact_attempts.created_by_email`·회차 기록자 FK `ON DELETE SET NULL` 은 0152 다 (2026-11-03) — **앱 배포 전에** 적용한다(새 앱이 쓴다, 새 표·nullable 열이라 구버전 앱 무관 · 단일 단계). 0148~0151 은 staging 이 쓰고 있어 건너뛰었다 — staging 병합 시 배열 끝 append. FK 는 0014 가 이름 없이 만들어 `pg_constraint` 에서 찾아 다시 건다(이미 SET NULL 이면 그대로)
 - 평균 산출 `questions.scale_mean_enabled` 는 0147 이다 (2026-10-30) — **앱 배포 전에** 적용한다(새 앱이 읽고 쓴다 — 적용 전 새 코드는 문항 조회가 깨진다, NOT NULL DEFAULT false 라 구버전 앱 INSERT 무관 · 단일 단계)
 - 화면 폭에 맞춰 표 줄이기 `questions.fit_table_to_width` 는 0146 이다 (2026-10-29) — **앱 배포 전에** 적용한다(새 앱이 읽고 쓴다, NOT NULL DEFAULT false 라 구버전 앱 INSERT 무관 · 단일 단계)
 - 언어별 설문 글자 `surveys.localized_messages` 는 0145 다 (2026-10-27) — **앱 배포 전에** 적용한다(새 앱이 읽는다, nullable 이라 2단계 배포 불필요). 0144 는 staging(클라이언트 링크 탭 백필)이 쓰고 있어 건너뛰었다 — staging 병합 시 배열 끝 append
