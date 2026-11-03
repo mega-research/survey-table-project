@@ -43,6 +43,9 @@ vi.mock('@/server/contacts/services/scheme-helpers', async (importOriginal) => {
 
 vi.mock('@/lib/crypto/contact-pii-repo', () => ({
   upsertPiiValue: (...args: unknown[]) => upsertPiiValueMock(...(args as [])),
+  // 개인정보 열 변경 판정 재료 — 이 파일은 스코프 가드만 본다(기록은 realdb 가 본다).
+  readStoredPiiPlain: async () => new Map(),
+  piiPlainToStore: (_type: string, plain: string) => plain.trim() || null,
 }));
 
 vi.mock('@/db', () => {

@@ -5,7 +5,7 @@ import 'server-only';
 import { type DbTransaction, db } from '@/db';
 import { contactTargets, surveyResponses } from '@/db/schema';
 import { sanitizeAttrsAgainstPiiScheme } from './scheme-helpers';
-import { upsertPiiValue } from '@/lib/crypto/contact-pii-repo';
+import { piiPlainToStore, readStoredPiiPlain, upsertPiiValue } from '@/lib/crypto/contact-pii-repo';
 import { describePiiFormatProblems } from '@/lib/crypto/pii-fields';
 import {
   archiveTestMailForTargets,
@@ -18,6 +18,7 @@ import {
   type ContactEditor,
   type ContactTargetInfoValues,
   diffContactTargetInfo,
+  diffContactTargetPii,
 } from '../domain/contact-target-edit';
 import type {
   AddContactTargetInput,
@@ -175,7 +176,8 @@ export async function addContactTarget(
 /**
  * 행 단위 갱신 — attrs/group/memo/contactMethod + PII 변경분 upsert.
  *
- * 바뀐 칸이 있으면 같은 트랜잭션에서 「대상 정보 수정 현황」 한 줄(`info_edit`)을 남긴다. 이전 값은
+ * 바뀐 칸이 있으면 같은 트랜잭션에서 「대상 정보 수정 현황」 한 줄(`info_edit`)을 남긴다. 개인정보 열은
+ * 값 없이 「입력 · 변경 · 삭제」만 남는다 — 지금 값은 잠금 아래에서 복호화해 비교에만 쓴다. 이전 값은
  * 화면이 보낸 값이 아니라 대상 행 잠금 아래에서 읽은 지금 값이다 — 그 사이 다른 사람이 고친 칸을
  * 이 저장이 옛 값으로 덮으면 그것도 변경으로 남는다. 기록 INSERT 가 실패하면 저장도 롤백된다.
  * editor 는 procedure 가 인증된 context 에서 넘긴다.
@@ -205,6 +207,17 @@ export async function updateContactTarget(
     const rawGroup = hasGroupKey ? attrs[systemFieldKeys.group as string] : undefined;
     const groupValue = rawGroup != null && rawGroup !== '' ? rawGroup : null;
 
+    // 개인정보 열의 지금 값 — 같은 잠금 아래, 덮어쓰기 전에 읽어 메모리에서만 비교한다.
+    const piiWrites = (piiUpdates ?? []).map((p) => ({
+      columnKey: p.columnKey,
+      next: piiPlainToStore(p.fieldType, p.plain),
+    }));
+    const storedPii = await readStoredPiiPlain(
+      tx,
+      id,
+      piiWrites.map((w) => w.columnKey),
+    );
+
     // .returning() 길이로 영향 행 수를 판정한다. PII 재암호화(upsertPiiValue)는
     // 현재 모드의 행 소속이 확정된 뒤에만 일어나야 하므로 이 검증을 PII 부수효과보다 앞에 둔다.
     const updated = await tx
@@ -232,12 +245,15 @@ export async function updateContactTarget(
       }
     }
 
-    // 비교 기준은 실제로 저장한 값(PII 정제 뒤 attrs)이다.
-    const changes = diffContactTargetInfo(
-      current,
-      { attrs, memo: memo ?? null, contactMethod: contactMethod ?? null },
-      scheme,
-    );
+    // 비교 기준은 실제로 저장한 값(PII 정제 뒤 attrs)이다. pii 변경은 값 없이 같은 줄에 붙인다.
+    const changes = [
+      ...diffContactTargetInfo(
+        current,
+        { attrs, memo: memo ?? null, contactMethod: contactMethod ?? null },
+        scheme,
+      ),
+      ...diffContactTargetPii(storedPii, piiWrites, scheme),
+    ];
     await recordContactTargetEdit(tx, {
       surveyId,
       contactTargetId: id,
