@@ -20,6 +20,8 @@
     "db:studio": "drizzle-kit studio",
     "pdfjs:worker": "cp node_modules/pdfjs-dist/build/pdf.worker.min.mjs public/pdf.worker.min.mjs",
     "db:setup-test": "bash scripts/setup-test-db.sh",
+    "db:isolated": "bash scripts/test-db-isolated.sh",
+    "worktree:new": "bash scripts/worktree-bootstrap.sh",
     "db:drift": "node scripts/db-drift.mjs",
     "db:size": "node scripts/db-size-report.mjs",
     "survey:backup": "tsx scripts/private/backup-survey.ts",

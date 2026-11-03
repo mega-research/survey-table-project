@@ -778,8 +778,11 @@ pnpm test             # Vitest 단일 실행 (realdb 스위트는 제외 — 아
 pnpm test:watch       # Vitest watch
 pnpm test:coverage    # 커버리지 (spss 계열만 집계)
 pnpm test:e2e         # Playwright E2E
-pnpm test:integration # 실DB 왕복 (*.realdb.test.ts, 로컬 supabase 54322 필요)
-pnpm db:setup-test    # 테스트 DB 준비 (마이그레이션 전량 재생 = 재생 검증)
+pnpm test:integration # 실DB 왕복 (*.realdb.test.ts) — 워크트리 공유 DB(postgres)를 쓴다
+pnpm db:setup-test    # 공유 테스트 DB 를 통째로 다시 만든다 — 형제 워크트리의 realdb 가 깨진다
+pnpm db:isolated <이름> # 내 브랜치 전용 테스트 DB(같은 컨테이너, 마이그레이션 전량 재생 = 재생 검증). 실행은 출력된 URL 로
+                      #   RUN_REALDB=1 DATABASE_URL=<URL> pnpm exec vitest run <realdb 파일> · 지우기 `--drop`
+pnpm worktree:new <브랜치> [시작점] # .claude/worktrees 에 워크트리 생성 + env·공유 자료 링크 + 설치 (아래 Worktree bootstrap)
 pnpm db:drift         # 실 DB ↔ 레포 객체 대조 (아래 "DB 드리프트 점검")
 pnpm db:size          # 실 DB 테이블·인덱스 크기와 인덱스 사용 횟수 (읽기 전용 — 대량 작업 뒤·배포 전에 보고, 부풀었으면 손으로 REINDEX CONCURRENTLY)
 pnpm inngest          # Inngest 로컬 dev 서버
@@ -1049,7 +1052,7 @@ export function QuestionEditor({ questionId, onSave }: Props) {
 
 7. **마이그레이션 — 수동 SQL 관행**: drizzle `_journal.json`은 **0019에서 동결**됐고 0020 이후는 전부 손으로 쓴 `.sql`을 `supabase/migrations/`에 두고 Supabase MCP `apply_migration` 또는 직접 SQL로 적용한다. 새 파일을 추가하면 **반드시 `supabase/migrations/manual-migrations.json`의 `migrations`에 tag(확장자 제외 파일명)를 등재**해야 한다 — 미등재는 추적 불가 drift로 보고 CI(`.github/migration-journal-gate.ts`)가 차단한다. `pnpm db:generate`/`db:push`는 이 관행과 충돌하므로 쓰지 않는다. `TRUNCATE CASCADE` 금지 (ON DELETE SET NULL 무시).
 
-   **새 마이그레이션은 빈 DB에서 재생 가능해야 한다.** 2026-08-19부터 테스트 DB는 `drizzle-kit push`가 아니라 마이그레이션 전량 재생으로 만들어진다(`scripts/setup-test-db.sh`). 즉 `pnpm db:setup-test`가 곧 재생 검증이며, 기존 상태를 전제한 문장을 넣으면 거기서 깨진다. 실 DB에만 있고 레포에 없는 객체는 `pnpm db:drift`가 잡는다 — 자세한 내용은 아래 "DB 드리프트 점검" 참조.
+   **새 마이그레이션은 빈 DB에서 재생 가능해야 한다.** 2026-08-19부터 테스트 DB는 `drizzle-kit push`가 아니라 마이그레이션 전량 재생으로 만들어진다(`scripts/setup-test-db.sh`). 즉 `pnpm db:setup-test`(공유 DB)·`pnpm db:isolated <이름>`(전용 DB)이 곧 재생 검증이며, 기존 상태를 전제한 문장을 넣으면 거기서 깨진다. 실 DB에만 있고 레포에 없는 객체는 `pnpm db:drift`가 잡는다 — 자세한 내용은 아래 "DB 드리프트 점검" 참조.
 
 8. **앱 생성값 NOT NULL 컬럼은 2단계 배포**: nullable 추가 + 백필(배포 전) → 앱 배포 → `SET NOT NULL`(라이브 후). 한 번에 걸면 구버전 앱 INSERT가 깨진다.
 
@@ -1149,10 +1152,8 @@ export function QuestionEditor({ questionId, onSave }: Props) {
 
 ### Worktree bootstrap
 
-- `superpowers:using-git-worktrees`로 프로젝트 로컬 worktree를 만들 때는 메인 checkout의 런타임 환경을 우선 공유한다.
-- worktree 의 `node_modules` 는 **심볼릭 링크하지 않고 `pnpm install --frozen-lockfile` 로 실제 설치한다**(전역 store 하드링크라 십여 초). pnpm 11 의 `verify-deps-before-run` 이 링크된 `node_modules` 를 이물로 보고 자동 `pnpm install` 을 돌리는데, 모듈 퍼지 확인에서 멈춰 명령이 실행되지 않은 채 exit 0 으로 끝나고, 퍼지가 진행되면 링크 너머 메인 checkout 의 `node_modules` 가 지워진다 (2026-08-25 발견, 2026-10-06 재발).
-- 메인 checkout에 존재하는 ignored 환경 파일(`.env`, `.env.local`, `.env.development`, `.env.development.local`)은 내용을 읽거나 출력하지 않고 worktree에 심볼릭 링크한다.
-- worktree 준비 완료를 보고하기 전에 의존성 링크와 환경 파일 링크가 유효한지 확인한다.
+- 워크트리는 `pnpm worktree:new <브랜치> [시작점]` 으로 만든다(이미 있는 경로면 링크·설치만 다시). 링크할 것·하지 않을 것과 그 이유는 `scripts/worktree-bootstrap.sh` 머리 주석이 정본이다 — 요점은 env·`.scratch`·`pencil`·`docs` 미추적 하위는 링크, `node_modules` 는 실제 설치.
+- 그 워크트리의 realdb 테스트는 `pnpm db:isolated <이름>` 으로 만든 DB 에서 돌린다. 공유 DB 를 리셋하는 `db:setup-test` 는 형제 워크트리가 없을 때만.
 
 ### 문서 갱신
 
