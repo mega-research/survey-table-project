@@ -48,21 +48,29 @@ export interface EditedSourceInput {
  *
  * 일반 열은 **처음 고치기 전 값과 지금 값이 다를 때만** 고친 칸이다 — 고쳤다가 원래대로 돌려놓은
  * 칸은 원본과 같으므로 칠하지 않는다. 개인정보 열은 기록에 값이 없어(0152) 그렇게 가릴 수 없으니
- * 한 번이라도 입력·변경·삭제가 있으면 고친 칸이다.
+ * 한 번이라도 입력·변경·삭제가 있으면 고친 칸이다. 일괄 쓰기(명단 업로드·교체)는 기록되지 않으므로,
+ * 손으로 고친 뒤 업로드로 값이 바뀐 칸도 기록 기준으로 판정한다(알고 받아들인 한계).
  */
 export function resolveEditedSources(input: EditedSourceInput): Set<string> {
-  const firstBefore = new Map<string, string>();
+  const firstBefore = new Map<string, { text: string; truncated: boolean }>();
   const pii = new Set<string>();
   for (const change of input.changes) {
     if (change.kind === 'attr') {
-      if (!firstBefore.has(change.key)) firstBefore.set(change.key, change.before);
+      if (!firstBefore.has(change.key)) {
+        firstBefore.set(change.key, { text: change.before, truncated: change.beforeTruncated === true });
+      }
     } else if (change.kind === 'pii') {
       pii.add(change.key);
     }
   }
   const out = new Set<string>();
   for (const [key, before] of firstBefore) {
-    if ((input.attrs[key] ?? '') !== before) out.add(`attrs.${key}`);
+    const now = input.attrs[key] ?? '';
+    // 기록 크기로 잘린 이전 값은 앞부분만 남아 있다 — 지금 값이 그 앞부분으로 시작하고 더 길면 같다고 본다
+    const same = before.truncated
+      ? now.startsWith(before.text) && now.length > before.text.length
+      : now === before.text;
+    if (!same) out.add(`attrs.${key}`);
   }
   for (const key of pii) out.add(`pii.${key}`);
   return out;

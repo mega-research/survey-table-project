@@ -169,7 +169,7 @@ export interface ContactResultCode {
 /**
  * surveys.contact_result_codes 가 NULL 일 때 사용되는 디폴트 14개.
  * mockup §6 의 결과코드 라디오에서 9번을 휴/폐업으로 바꾸고 13.독려를 더했다(2026-11-03 —
- * 0153 이 저장된 9.전시회미참가 를 함께 옮겼다).
+ * 0153 이 목록에서 사라진 옛 이름의 회차를 옮겼다 — 자기 목록에 9.전시회미참가 를 둔 설문은 그대로다).
  *
  * status 매핑:
  * - '1.조사완료' → 'positive' (응답 완료 인정)

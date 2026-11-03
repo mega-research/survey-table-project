@@ -1,37 +1,29 @@
--- 0153: 결과코드 9번 「9.전시회미참가」 → 「9.휴/폐업」. (2026-11-03)
+-- 0153: 결과코드 9번 「9.전시회미참가」 → 「9.휴/폐업」 — 목록에서 이미 빠진 옛 이름만. (2026-11-03)
 --
--- 기본 결과코드(DEFAULT_RESULT_CODES)의 9번을 휴/폐업으로 바꾸면서, 이미 저장된 옛 이름도 함께 옮긴다.
--- 기본값을 쓰는 설문(contact_result_codes IS NULL)은 코드 쪽 기본값이 바뀌어 따라오고, 여기서는
--- 저장된 두 곳만 고친다.
+-- 기본 결과코드(DEFAULT_RESULT_CODES)의 9번을 휴/폐업으로 바꾸면서, 그 설문의 결과코드 목록에 더는 없는
+-- 옛 이름으로 남은 회차 기록을 새 이름으로 옮긴다. 옮기는 회차는 설문이
+--   · 기본값을 쓰거나(contact_result_codes IS NULL — 기본값이 바뀌어 옛 이름이 목록에서 사라졌다)
+--   · 자기 목록에 9.전시회미참가 가 없는(이미 9.휴/폐업 등으로 고친) 경우뿐이다.
+-- **자기 목록에 9.전시회미참가 를 두고 쓰는 설문은 손대지 않는다** — 전시회 설문(해외전시회 성과측정 등)
+-- 에서는 그 코드가 원래 뜻 그대로다. 설문 목록(surveys.contact_result_codes)은 고치지 않는다.
 --
---  ① surveys.contact_result_codes — 목록 안의 9.전시회미참가 항목을 9.휴/폐업으로 바꾼다(code·label).
---     이미 9.휴/폐업 이 있는 목록은 옛 항목을 빼기만 한다 — 같은 코드가 두 번 생기면 안 된다.
---  ② contact_attempts.result_code — 회차 기록의 옛 이름을 새 이름으로.
---
--- 대상 정보 수정 기록(contact_target_edit_logs, 0152)의 회차 스냅샷은 그때 값이라 고치지 않는다.
--- 다시 적용해도 결과가 같다(옛 이름이 남지 않으면 아무 행도 걸리지 않는다). 앱 배포 전후 무관 —
--- 옛 앱은 새 이름을 그냥 문자열 코드로 보여 준다.
+-- 대상 정보 수정 기록(contact_target_edit_logs)의 회차 스냅샷은 그때 값이라 고치지 않는다.
+-- 앱 배포 **뒤**에 적용한다 — 옛 앱은 기본값 설문에 옛 이름을 계속 기록하므로, 배포 전에 적용하면 그
+-- 사이 기록이 남는다. 다시 적용해도 결과가 같으니(옛 이름이 남지 않으면 아무 행도 걸리지 않는다)
+-- 의심되면 한 번 더 돌린다. 빈 DB 에서는 아무 행도 걸리지 않는다.
 
 BEGIN;
 
-UPDATE public.surveys s
-SET contact_result_codes = (
-  SELECT coalesce(jsonb_agg(
-    CASE WHEN e->>'code' = '9.전시회미참가'
-      THEN e || jsonb_build_object('code', '9.휴/폐업', 'label', '9.휴/폐업')
-      ELSE e END
-    ORDER BY ord), '[]'::jsonb)
-  FROM jsonb_array_elements(s.contact_result_codes) WITH ORDINALITY AS t(e, ord)
-  WHERE NOT (
-    e->>'code' = '9.전시회미참가'
-    AND s.contact_result_codes @> '[{"code": "9.휴/폐업"}]'::jsonb
-  )
-)
-WHERE jsonb_typeof(s.contact_result_codes) = 'array'
-  AND s.contact_result_codes @> '[{"code": "9.전시회미참가"}]'::jsonb;
-
-UPDATE public.contact_attempts
+UPDATE public.contact_attempts a
 SET result_code = '9.휴/폐업'
-WHERE result_code = '9.전시회미참가';
+FROM public.contact_targets t
+JOIN public.surveys s ON s.id = t.survey_id
+WHERE a.contact_target_id = t.id
+  AND a.result_code = '9.전시회미참가'
+  AND (
+    s.contact_result_codes IS NULL
+    OR jsonb_typeof(s.contact_result_codes) <> 'array'
+    OR NOT s.contact_result_codes @> '[{"code": "9.전시회미참가"}]'::jsonb
+  );
 
 COMMIT;
