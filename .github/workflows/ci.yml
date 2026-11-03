@@ -140,7 +140,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - uses: supabase/setup-cli@v3
         with:
-          version: latest
+          # latest 를 쓰지 않는다 — 2026-11-02 CLI v3.0.0 이 config.toml 의 [inbucket] 을 거부해
+          # supabase start 가 실패했다. 로컬과 같은 버전으로 고정하고, v3 이행(config 새 형식 ·
+          # setup-test-db.sh 제외 컨테이너 이름 · 로컬 CLI 상향)은 따로 한 번에 한다.
+          version: 2.109.1
       - run: pnpm db:setup-test
       - name: Export local Supabase test env
         shell: bash
