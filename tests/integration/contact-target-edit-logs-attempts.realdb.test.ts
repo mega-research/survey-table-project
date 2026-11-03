@@ -196,6 +196,49 @@ run('대상 정보 수정 현황 — 컨택 결과 회차 (real DB)', () => {
     });
   });
 
+  it('1,000자를 넘는 비고는 기록에 1,000자만 잘림 표식과 함께 남고 회차 행은 전부 남는다', async () => {
+    const { surveyId, targetId } = await seed();
+    const longBefore = '가'.repeat(1200);
+    const longAfter = '나'.repeat(1500);
+    const added = await addAttempt(
+      { contactTargetId: targetId, surveyId, resultCode: '13. 독려', note: longBefore },
+      false,
+      editor,
+    );
+
+    await updateAttempt(
+      {
+        id: added.id,
+        contactTargetId: targetId,
+        surveyId,
+        resultCode: '13. 독려',
+        note: longAfter,
+      },
+      false,
+      editor,
+    );
+    await deleteAttempt({ surveyId, contactTargetId: targetId, id: added.id }, false, editor);
+
+    const logs = await logsOf(targetId);
+    expect(logs.map((l) => l.changes)).toEqual([
+      [
+        expect.objectContaining({
+          before: expect.objectContaining({ note: '가'.repeat(1000) }),
+          after: { resultCode: '13. 독려', note: '나'.repeat(1000) },
+          beforeTruncated: true,
+          afterTruncated: true,
+        }),
+      ],
+      [
+        expect.objectContaining({
+          before: expect.objectContaining({ note: '나'.repeat(1000) }),
+          after: null,
+          beforeTruncated: true,
+        }),
+      ],
+    ]);
+  });
+
   it('결과코드·비고가 그대로인 수정은 기록을 남기지 않는다 — 비고 없음과 빈 비고는 같다', async () => {
     const { surveyId, targetId } = await seed();
     const added = await addAttempt(

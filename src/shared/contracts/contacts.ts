@@ -243,13 +243,25 @@ export interface ContactTargetEditAssignee {
 }
 
 /**
+ * 기록에 담는 바꾸기 전 회차 — 기록 시각은 ISO 문자열(JSONB). 비고는 1,000자에서 잘려 담길 수 있고
+ * 잘림 표식은 그 회차 변경(`attempt`)의 `beforeTruncated` 다.
+ */
+export interface ContactTargetEditAttemptSnapshot {
+  resultCode: string;
+  note: string | null;
+  createdByEmail: string | null;
+  createdAt: string;
+}
+
+/**
  * 「대상 정보 수정 현황」 한 줄 안의 변경 하나.
  *
  * - 열 이름(`label`)·컨택원 이름은 저장 시점 스냅샷이다.
  * - 값(`before`·`after`)은 null·빈 문자열을 모두 '' 로 접어 담는다(빈 값 → 빈 값은 변경이 아니다).
  *   1,000자(CONTACT_TARGET_EDIT_VALUE_MAX)를 넘으면 잘라 담고 `beforeTruncated`·`afterTruncated` 를 단다.
  * - `contactMethod` 의 값은 코드(`ContactMethod`)다 — 화면 글자는 format 이 붙인다.
- * - `attempt.after === null` 은 회차 삭제다.
+ * - `attempt.after === null` 은 회차 삭제다. 회차의 `beforeTruncated`·`afterTruncated` 는 그 쪽 비고가
+ *   1,000자에서 잘렸다는 뜻이다(결과코드는 자르지 않는다).
  */
 export type ContactTargetEditChange =
   | {
@@ -278,11 +290,8 @@ export type ContactTargetEditChange =
   | {
       kind: 'attempt';
       attemptNo: number;
-      before: {
-        resultCode: string;
-        note: string | null;
-        createdByEmail: string | null;
-        createdAt: string;
-      };
+      before: ContactTargetEditAttemptSnapshot;
       after: { resultCode: string; note: string | null } | null;
+      beforeTruncated?: true;
+      afterTruncated?: true;
     };

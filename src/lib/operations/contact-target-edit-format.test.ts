@@ -108,6 +108,53 @@ describe('describeContactTargetEditChange — 펼친 줄 문구', () => {
       }),
     ).toBe('메모 가나다…(이하 생략) → (빈 값)');
   });
+
+  it('회차 비고가 기록할 때 잘렸으면 잘렸다고 적는다', () => {
+    const before = {
+      resultCode: '13. 독려',
+      note: '가나다',
+      createdByEmail: null,
+      createdAt: '2026-10-27T00:35:53.000Z',
+    };
+    expect(
+      describeContactTargetEditChange({
+        kind: 'attempt',
+        attemptNo: 2,
+        before,
+        after: { resultCode: '13. 독려', note: '라마' },
+        beforeTruncated: true,
+        afterTruncated: true,
+      }),
+    ).toBe('2회차 비고 가나다…(이하 생략) → 라마…(이하 생략)');
+    expect(
+      describeContactTargetEditChange({
+        kind: 'attempt',
+        attemptNo: 2,
+        before,
+        after: null,
+        beforeTruncated: true,
+      }),
+    ).toBe('2회차 삭제 (13. 독려 · 가나다…(이하 생략))');
+  });
+
+  it('잘린 앞부분이 같아도 결과가 그대로면 바뀐 것은 비고다', () => {
+    const before = {
+      resultCode: '13. 독려',
+      note: '가나다',
+      createdByEmail: null,
+      createdAt: '2026-10-27T00:35:53.000Z',
+    };
+    expect(
+      describeContactTargetEditChange({
+        kind: 'attempt',
+        attemptNo: 2,
+        before,
+        after: { resultCode: '13. 독려', note: '가나다' },
+        beforeTruncated: true,
+        afterTruncated: true,
+      }),
+    ).toBe('2회차 비고 가나다…(이하 생략) → 가나다…(이하 생략)');
+  });
 });
 
 describe('summarizeContactTargetEdit — 한 줄 요약', () => {

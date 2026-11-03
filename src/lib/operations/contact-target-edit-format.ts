@@ -54,22 +54,23 @@ function format(change: ContactTargetEditChange, maxChars?: number): string {
     case 'assignment':
       return `컨택원 ${assigneeLabel(change.before)} → ${assigneeLabel(change.after)}`;
     case 'attempt': {
-      const { attemptNo, before, after } = change;
+      const { attemptNo, before, after, beforeTruncated, afterTruncated } = change;
       if (after === null) {
         const note = before.note ?? '';
         const detail =
           note === ''
             ? before.resultCode
-            : `${before.resultCode} · ${shown(note, false, maxChars)}`;
+            : `${before.resultCode} · ${shown(note, beforeTruncated, maxChars)}`;
         return `${attemptNo}회차 삭제 (${detail})`;
       }
       const parts: string[] = [];
       if (before.resultCode !== after.resultCode) {
         parts.push(`결과 ${before.resultCode} → ${after.resultCode}`);
       }
-      if ((before.note ?? '') !== (after.note ?? '')) {
+      // 결과가 그대로인데 기록이 있으면 바뀐 것은 비고다 — 1,000자에서 잘린 앞부분이 같아 보여도.
+      if ((before.note ?? '') !== (after.note ?? '') || parts.length === 0) {
         parts.push(
-          `비고 ${shown(before.note, false, maxChars)} → ${shown(after.note, false, maxChars)}`,
+          `비고 ${shown(before.note, beforeTruncated, maxChars)} → ${shown(after.note, afterTruncated, maxChars)}`,
         );
       }
       return `${attemptNo}회차 ${parts.join(', ')}`;

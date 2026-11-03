@@ -5,6 +5,7 @@ import { attrsKeyOf, piiKeyOf } from '@/lib/operations/contacts-format';
 import {
   CONTACT_TARGET_EDIT_VALUE_MAX,
   type ContactColumnScheme,
+  type ContactTargetEditAttemptSnapshot,
   type ContactTargetEditChange,
   type ContactTargetEditPiiOp,
 } from '@/shared/contracts/contacts';
@@ -102,6 +103,34 @@ export function diffContactTargetInfo(
   }
 
   return changes;
+}
+
+/** 비고 하나를 기록 크기로 — 비고 없음(null)은 그대로 둔다. */
+function clipNote(note: string | null): { note: string | null; truncated: boolean } {
+  if (note === null) return { note: null, truncated: false };
+  const c = clip(note);
+  return { note: c.text, truncated: c.truncated };
+}
+
+/**
+ * 회차 수정·삭제 한 번의 변경 — `after === null` 은 삭제다. 비고는 다른 값과 같이 1,000자에서 자르고
+ * 잘린 쪽에 `beforeTruncated`·`afterTruncated` 를 단다. 바뀌었는지는 서비스가 자르기 전 값으로 정한다.
+ */
+export function attemptEditChange(
+  attemptNo: number,
+  before: ContactTargetEditAttemptSnapshot,
+  after: { resultCode: string; note: string | null } | null,
+): ContactTargetEditChange {
+  const b = clipNote(before.note);
+  const a = after ? clipNote(after.note) : null;
+  return {
+    kind: 'attempt',
+    attemptNo,
+    before: { ...before, note: b.note },
+    after: after && a ? { resultCode: after.resultCode, note: a.note } : null,
+    ...(b.truncated ? { beforeTruncated: true as const } : {}),
+    ...(a?.truncated ? { afterTruncated: true as const } : {}),
+  };
 }
 
 /**

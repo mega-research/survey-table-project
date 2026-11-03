@@ -7,6 +7,7 @@ import { logger } from '@/lib/logger';
 import { isUniqueViolation } from '@/lib/pg-error';
 import { isUUID } from '@/lib/survey-url';
 import { lockWriteScope } from '@/server/data-scope';
+import type { ContactTargetEditAttemptSnapshot } from '@/shared/contracts/contacts';
 
 import type {
   AddContactAttemptInput,
@@ -14,7 +15,7 @@ import type {
   DeleteContactAttemptInput,
   UpdateContactAttemptInput,
 } from '../domain/contact-attempt';
-import type { ContactEditor } from '../domain/contact-target-edit';
+import { type ContactEditor, attemptEditChange } from '../domain/contact-target-edit';
 import { recordContactTargetEdit } from './contact-target-edit-log';
 
 /**
@@ -157,14 +158,7 @@ export async function updateAttempt(
       surveyId,
       contactTargetId,
       action: 'attempt_edit',
-      changes: [
-        {
-          kind: 'attempt',
-          attemptNo: before.attemptNo,
-          before: attemptSnapshot(before),
-          after: { resultCode, note },
-        },
-      ],
+      changes: [attemptEditChange(before.attemptNo, attemptSnapshot(before), { resultCode, note })],
       editor,
     });
   });
@@ -196,26 +190,14 @@ export async function deleteAttempt(
       surveyId,
       contactTargetId,
       action: 'attempt_delete',
-      changes: [
-        {
-          kind: 'attempt',
-          attemptNo: deleted.attemptNo,
-          before: attemptSnapshot(deleted),
-          after: null,
-        },
-      ],
+      changes: [attemptEditChange(deleted.attemptNo, attemptSnapshot(deleted), null)],
       editor,
     });
   });
 }
 
 /** 기록에 담는 바꾸기 전 회차 — 기록 시각은 ISO 문자열(JSONB). */
-function attemptSnapshot(row: ContactAttempt): {
-  resultCode: string;
-  note: string | null;
-  createdByEmail: string | null;
-  createdAt: string;
-} {
+function attemptSnapshot(row: ContactAttempt): ContactTargetEditAttemptSnapshot {
   return {
     resultCode: row.resultCode,
     note: row.note,
