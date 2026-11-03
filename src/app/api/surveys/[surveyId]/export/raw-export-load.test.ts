@@ -70,7 +70,14 @@ vi.mock('@/server/operations/services/contacts-export', async (importOriginal) =
   return { ...actual, decryptPiiForExport: vi.fn(async () => new Map()) };
 });
 
+// 결과코드·고친 열은 contact_attempts·edit_logs 를 직접 읽으므로 가짜 db 체인에 태우지 않는다.
+vi.mock('@/server/read-models/contact-export-marks', () => ({
+  loadLatestResultCodes: vi.fn(async () => new Map()),
+  loadEditedSources: vi.fn(async () => new Map()),
+}));
+
 import { sortRowsForContactPopulation } from '@/lib/analytics/raw-export-rows';
+import { loadEditedSources, loadLatestResultCodes } from '@/server/read-models/contact-export-marks';
 import {
   MAX_EXPORT_RESPONSES,
   countRawExportPopulation,
@@ -179,6 +186,8 @@ beforeEach(() => {
   vi.mocked(sortRowsForContactPopulation).mockClear();
   vi.mocked(decryptPiiForExport).mockReset();
   vi.mocked(decryptPiiForExport).mockResolvedValue(new Map());
+  vi.mocked(loadLatestResultCodes).mockClear();
+  vi.mocked(loadEditedSources).mockClear();
 });
 
 describe('loadRawExportRows — 토글 꺼짐', () => {
@@ -411,6 +420,47 @@ describe('loadRawExportRows — 조사 대상 명단 열', () => {
     // 익명 응답은 키 자체가 없다
     expect(byId.get('r-anon')).toBeDefined();
     expect('contactValues' in byId.get('r-anon')!).toBe(false);
+  });
+
+  it('결과코드·고친 열은 조사 대상 전원을 한 번에 읽어 그 대상의 행에만 붙는다', async () => {
+    useRoster({ withAttrs: true });
+    responseFindManyMock.mockResolvedValue(threeResponses());
+    vi.mocked(loadLatestResultCodes).mockResolvedValueOnce(
+      new Map([
+        ['t1', '3.비수신'],
+        ['t3', '6.거절'],
+      ]),
+    );
+    vi.mocked(loadEditedSources).mockResolvedValueOnce(new Map([['t1', new Set(['attrs.기수'])]]));
+
+    const result = await loadRawExportRows(surveyId, 'real', {
+      includeNonRespondents: true,
+      contactColumns: rosterColumns,
+    });
+
+    expect(loadLatestResultCodes).toHaveBeenCalledTimes(1);
+    expect([...vi.mocked(loadLatestResultCodes).mock.calls[0]![0]].sort()).toEqual(['t1', 't2', 't3']);
+    expect(loadEditedSources).toHaveBeenCalledTimes(1);
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+    const byId = new Map(result.rows.map((r) => [r.id, r]));
+    expect(byId.get('r1')?.resultCode).toBe('3.비수신');
+    expect([...(byId.get('r1')?.editedSources ?? [])]).toEqual(['attrs.기수']);
+    expect(byId.get('t3')?.resultCode).toBe('6.거절');
+    // 회차·고친 열이 없는 대상과 익명 응답은 키가 없다
+    expect('resultCode' in byId.get('r2')!).toBe(false);
+    expect('editedSources' in byId.get('r2')!).toBe(false);
+    expect('resultCode' in byId.get('r-anon')!).toBe(false);
+  });
+
+  it('명단 열이 꺼져 있으면 고친 열은 읽지 않는다 — 결과코드만', async () => {
+    useRoster({ withAttrs: false });
+    responseFindManyMock.mockResolvedValue(threeResponses());
+
+    await loadRawExportRows(surveyId, 'real', { includeNonRespondents: false });
+
+    expect(loadLatestResultCodes).toHaveBeenCalledTimes(1);
+    expect(loadEditedSources).not.toHaveBeenCalled();
   });
 
   it('pii 열이 없으면 복호화를 부르지 않는다', async () => {

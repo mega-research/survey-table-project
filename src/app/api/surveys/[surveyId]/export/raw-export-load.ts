@@ -5,6 +5,7 @@ import { and, asc, count, eq, inArray, notExists, sql, type SQL } from 'drizzle-
 import { db } from '@/db';
 import { contactTargets, surveyResponses, surveyVersions } from '@/db/schema';
 import { completedResponse, notDeletedResponse } from '@/server/response-filters';
+import { loadEditedSources, loadLatestResultCodes } from '@/server/read-models/contact-export-marks';
 import { loadRespondentContactAttrsMany } from '@/server/read-models/respondent-contact-attrs';
 import { getQuestionGroupsBySurvey, mapGroupRow } from '@/server/read-models/survey-structure';
 import {
@@ -13,6 +14,7 @@ import {
 } from '@/server/contacts/services/contact-prior-answers';
 import { decryptQuestionResponses, isEncryptedAnswerValue } from '@/lib/crypto/response-pii';
 import { getSurveyContactStats } from '@/server/operations/services/contact-stats';
+import { getContactResultCodes } from '@/server/read-models/contacts';
 import type { RawExportContactColumn } from '@/lib/operations/contacts-format';
 import { decryptPiiForExport } from '@/server/operations/services/contacts-export';
 import {
@@ -307,13 +309,48 @@ async function loadScopeMaterials(
   return out;
 }
 
-/** 조사 대상이 있는 행에만 contactValues 를 싣는다 — 익명 응답은 키 자체를 넣지 않는다. */
+/** 조사 대상 표식 — 마지막 회차 결과코드와 손으로 고친 명단 열. */
+interface ContactMarks {
+  resultCodes: ReadonlyMap<string, string>;
+  editedSources: ReadonlyMap<string, ReadonlySet<string>>;
+}
+
+/**
+ * 조사 대상이 있는 행에만 contactValues·결과코드·고친 열을 싣는다 — 익명 응답은 키 자체를 넣지
+ * 않는다. 값이 없는 표식도 키를 넣지 않아, 조사 대상이 없는 설문의 행 모양은 도입 전과 같다.
+ */
 function attachContactValues(
   row: RawExportResponseRow,
   values: Record<string, string> | undefined,
+  contactId?: string,
+  marks?: ContactMarks,
 ): RawExportResponseRow {
   if (values) row.contactValues = values;
+  if (contactId && marks) {
+    const code = marks.resultCodes.get(contactId);
+    if (code) row.resultCode = code;
+    const edited = marks.editedSources.get(contactId);
+    if (edited) row.editedSources = edited;
+  }
   return row;
+}
+
+/**
+ * 결과코드(조사 대상이 하나라도 있으면)와 고친 명단 열(명단 열이 켜졌을 때만 — attrs 가 있어야
+ * 되돌린 칸을 가린다)을 한 번씩 읽는다. 조사 대상이 없으면 쿼리하지 않는다.
+ */
+async function loadContactMarks(
+  contacts: readonly ContactRef[],
+  withContactColumns: boolean,
+): Promise<ContactMarks> {
+  if (contacts.length === 0) return { resultCodes: new Map(), editedSources: new Map() };
+  const [resultCodes, editedSources] = await Promise.all([
+    loadLatestResultCodes(contacts.map((c) => c.id)),
+    withContactColumns
+      ? loadEditedSources(contacts.map((c) => ({ id: c.id, attrs: c.attrs ?? {} })))
+      : Promise.resolve(new Map<string, Set<string>>()),
+  ]);
+  return { resultCodes, editedSources };
 }
 
 /**
@@ -388,6 +425,7 @@ export async function loadRawExportRows(
     : null;
 
   const scopeMaterials = await loadScopeMaterials(candidates);
+  const marks = await loadContactMarks([...contactMap.values(), ...nonRespondents], withContactColumns);
 
   const responseRows: RawExportResponseRow[] = rawResponses.map((r) => {
     const c = r.contactTargetId ? contactMap.get(r.contactTargetId) : undefined;
@@ -407,7 +445,7 @@ export async function loadRawExportRows(
     };
     const entryParams = readEntryParams(r.metadata);
     if (entryParams) row.entryParams = entryParams;
-    return attachContactValues(row, c ? contactValues?.get(c.id) : undefined);
+    return attachContactValues(row, c ? contactValues?.get(c.id) : undefined, c?.id, marks);
   });
 
   // 숨은 문항 값은 내보내는 값에서만 뺀다 — DB 는 건드리지 않는다.
@@ -443,7 +481,7 @@ export async function loadRawExportRows(
     const withPrior = priorByContactId
       ? { ...base, questionResponses: mergePriorAnswersIntoResponses(base.questionResponses, priorByContactId.get(t.id)) }
       : base;
-    return attachContactValues(withPrior, contactValues?.get(t.id));
+    return attachContactValues(withPrior, contactValues?.get(t.id), t.id, marks);
   });
   const rows = sortRowsForContactPopulation([...mergedRows, ...nonRespondentRows]);
   return { kind: 'ok', rows, ...population };
@@ -469,8 +507,10 @@ export async function buildRawExportContext(
 ): Promise<RawExportContext> {
   const groups = await getQuestionGroupsBySurvey(surveyId);
   // 조건부 메타 열 판정 — 설문 설정 기준 (응답 매칭 여부 무관):
-  // 컨택 타겟이 없으면 시스템ID 열을 만들지 않는다. 컨택 통계도 같은 스코프 파티션으로 센다.
+  // 컨택 타겟이 없으면 결과코드 열을 만들지 않는다. 컨택 통계도 같은 스코프 파티션으로 센다.
   const { hasContacts } = await getSurveyContactStats(surveyId, scope);
+  // 결과코드 열의 숫자·코딩북 값 라벨 — 조사 대상이 있을 때만 읽는다(기본값 폴백 포함).
+  const resultCodes = hasContacts ? await getContactResultCodes(surveyId) : undefined;
   // 추적조사 — 이월 응답도 raw export 모수와 같은 스코프 파티션만 본다.
   const changeConfirmQuestionIds = await loadChangeConfirmQuestionIds(surveyId, {
     isTest: testFlagForScope(scope),
@@ -488,6 +528,7 @@ export async function buildRawExportContext(
     appUrl: (process.env['NEXT_PUBLIC_APP_URL'] ?? '').replace(/\/+$/, ''),
     stepLabels: buildStepLabelMap(stepQs, groups),
     hasContacts,
+    ...(resultCodes ? { resultCodes } : {}),
     questionMeta: buildQuestionMetaMap(questions),
     changeConfirmQuestionIds,
     ...(options.contactColumns ? { contactColumns: options.contactColumns } : {}),

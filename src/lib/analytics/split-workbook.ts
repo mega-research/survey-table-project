@@ -12,6 +12,7 @@ import {
   autoFitRawColumnRange,
   buildRawMetaHeaders,
   buildRawMetaValues,
+  paintEditedMetaCells,
   buildRawSeqMap,
   clampRawWidth,
   estimateTextWidth,
@@ -59,6 +60,7 @@ export function buildSplitWorkbook(
         ...buildDataRow(columns, questionMap, row as unknown as SurveySubmission),
       ]);
     });
+    paintEditedMetaCells(ws, rows, ctx, 4);
 
     styleHeaderRows(ws, [1, 2, 3], colCount);
     for (let c = 1; c <= metaCount; c++) ws.mergeCells(1, c, 3, c);
@@ -95,6 +97,7 @@ export function buildSplitWorkbook(
     workbook,
     generateSPSSColumns(sortedQuestions, toSpssColumnOptions(exportCtx)),
     sortedQuestions,
+    ctx,
   );
 
   return workbook;
