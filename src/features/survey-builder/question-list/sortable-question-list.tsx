@@ -56,7 +56,7 @@ import {
 import { SurveyLocaleProvider } from '@/features/question-renderer/survey-locale-context';
 import { FormulaEvalProvider } from '@/features/question-renderer/formula-context';
 import { resolveEffectiveOptionTextsByQuestion } from '@/features/question-renderer/utils/effective-option-texts';
-import { substituteTokens } from '@/lib/survey/substitute-tokens';
+import { substituteTokens, substituteTokensInHtml } from '@/lib/survey/substitute-tokens';
 import { resolveCurrentLocale } from '@/utils/survey-language';
 import { generateId, isEmptyHtml } from '@/lib/utils';
 import { client } from '@/shared/lib/rpc';
@@ -303,7 +303,7 @@ const SortableQuestion = React.memo(function SortableQuestion({
               }}
               dangerouslySetInnerHTML={{
                 __html: sanitizeRichHtml(
-                  substituteTokens(question.description ?? '', attrs, quotes),
+                  substituteTokensInHtml(question.description ?? '', attrs, quotes),
                 ),
               }}
             />

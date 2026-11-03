@@ -1,5 +1,5 @@
 import { sanitizeCellHtml } from '@/lib/sanitize';
-import { substituteTokens } from '@/lib/survey/substitute-tokens';
+import { substituteTokensInHtml } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { TableCell } from '@/types/survey';
 
@@ -58,5 +58,5 @@ export function resolveCellTextHtml(
   attrs: Record<string, string>,
   quotes: Record<string, string>,
 ): string | undefined {
-  return cell.contentHtml ? substituteTokens(cell.contentHtml, attrs, quotes) : undefined;
+  return cell.contentHtml ? substituteTokensInHtml(cell.contentHtml, attrs, quotes) : undefined;
 }

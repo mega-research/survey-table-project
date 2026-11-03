@@ -30,7 +30,7 @@ import {
 import { usePriorAnswers } from '@/features/question-renderer/prior-answers-context';
 import { RootGroupNameBadge } from '@/features/question-renderer/root-group-name-badge';
 import { resolveQuestionTitleHtml } from '@/lib/survey/question-title-html';
-import { substituteTokens } from '@/lib/survey/substitute-tokens';
+import { substituteTokens, substituteTokensInHtml } from '@/lib/survey/substitute-tokens';
 import { isEmptyHtml } from '@/lib/utils';
 import type { GroupNameDesign, Question } from '@/types/survey';
 import type { BranchEvalCtx } from '@/utils/branch-eval';
@@ -139,7 +139,7 @@ export function GroupStepItem({
     return resolved !== undefined ? sanitizeTitleHtml(resolved) : null;
   }, [q, attrs, quotes]);
   const descriptionHtml = useMemo(
-    () => sanitizeRichHtml(substituteTokens(q.description ?? '', attrs, quotes)),
+    () => sanitizeRichHtml(substituteTokensInHtml(q.description ?? '', attrs, quotes)),
     [q.description, attrs, quotes],
   );
   const subgroupNameText = useMemo(

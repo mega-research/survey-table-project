@@ -63,7 +63,7 @@ import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
 import { useMobileView } from '@/hooks/use-media-query';
 import { isChoiceGroupTableQuestion } from '@/lib/survey/choice-selection';
 import { type PriorAnswers, hasPriorAnswer, priorAnswerText } from '@/lib/survey/prior-answers';
-import { substituteTokens } from '@/lib/survey/substitute-tokens';
+import { substituteTokens, substituteTokensInHtml } from '@/lib/survey/substitute-tokens';
 import { type InputFormat, isInputFormat } from '@/types/input-type';
 import { Question, QuestionOption } from '@/types/survey';
 import type { SurveyLocale } from '@/types/survey-locale';
@@ -293,7 +293,7 @@ function QuestionInputControl({
           : { agreed: typeof value === 'boolean' ? value : false };
       return (
         <NoticeRenderer
-          content={substituteTokens(question.noticeContent || '', attrs, quotes)}
+          content={substituteTokensInHtml(question.noticeContent || '', attrs, quotes)}
           bgColor={question.noticeBgColor}
           {...(question.requiresAcknowledgment !== undefined
             ? { requiresAcknowledgment: question.requiresAcknowledgment }
