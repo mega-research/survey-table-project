@@ -10,7 +10,7 @@
 | ------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | `text`        | 단답형 텍스트      | placeholder, defaultValueTemplate, inputType(숫자·형식 5종), emptyDefault, numberFormat, textValidation, inputRows, inputAutoGrow        |
 | `textarea`    | 장문형 텍스트      | textValidation(최소 글자 수·의미 없는 입력 거부), inputRows(기본 4줄), inputAutoGrow                                                     |
-| `radio`       | 단일 선택          | options, choiceGroups, allowOtherOption, optionsAlign                                                                                    |
+| `radio`       | 단일 선택          | options, choiceGroups, allowOtherOption, optionsAlign, defaultValueTemplate(명단 값과 맞는 보기를 골라 잠금 — `utils/choice-prefill`)      |
 | `checkbox`    | 복수 선택          | options, choiceGroups, allowOtherOption, minSelections, maxSelections                                                                    |
 | `select`      | 드롭다운 단일 선택 | options, allowOtherOption                                                                                                                |
 | `multiselect` | 드롭다운 복수 선택 | selectLevels (다단계 — 옵션 리스트는 selectLevels 내부 소유)                                                                             |

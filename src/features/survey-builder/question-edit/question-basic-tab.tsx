@@ -396,6 +396,7 @@ export function QuestionBasicTab({
           defaultTemplateRef={defaultTemplateRef}
           hasTokenPrefill={hasTokenPrefill}
           variableCatalog={variableCatalog}
+          showChoicePrefill={needsOptions}
         />
 
         {/* 평균 산출 (CONTEXT.md 「척도 평균」) — 켜고 끄는 곳은 현황 「척도 평균」의 「문항 선택」이다.

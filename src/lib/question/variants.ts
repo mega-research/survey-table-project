@@ -103,7 +103,8 @@ export interface RadioQuestion
     EmbeddedTableFields,
     MobileTableDisplayFields,
     ChoiceGroupFields,
-    ScaleMeanFields {
+    ScaleMeanFields,
+    Pick<Question, 'defaultValueTemplate'> {
   type: 'radio';
 }
 

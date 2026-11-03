@@ -111,7 +111,11 @@ export const RadioQuestionSchema = base
   .extend(mobileTableDisplay.shape)
   .extend(choiceGroups.shape)
   .extend(scaleMean.shape)
-  .extend({ type: z.literal('radio') });
+  .extend({
+    type: z.literal('radio'),
+    // 명단 값으로 보기를 미리 골라 잠근다(utils/choice-prefill) — 단답형과 같은 컬럼
+    defaultValueTemplate: z.string().nullable().optional(),
+  });
 
 export const CheckboxQuestionSchema = base
   .extend(optionList.shape)

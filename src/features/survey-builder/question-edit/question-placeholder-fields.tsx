@@ -2,20 +2,20 @@
 
 import type { RefObject } from 'react';
 
-import type { VariableDef } from '@/components/ui/rich-text-editor/types';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import type { VariableDef } from '@/components/ui/rich-text-editor/types';
+import { isPlainTextInput } from '@/features/question-renderer/utils/text-quality';
 import { InputFormatSelect } from '@/features/survey-builder/input-format-select';
 import { NumberFormatFields } from '@/features/survey-builder/number-format-fields';
 import { PlaceholderField } from '@/features/survey-builder/placeholder-field';
-import { TextValidationFields } from '@/features/survey-builder/text-validation-fields';
 import { QuestionInputHeightFields } from '@/features/survey-builder/question-edit/question-input-height-fields';
-import { VariableButton } from '@/features/survey-builder/variable-button';
+import { TextValidationFields } from '@/features/survey-builder/text-validation-fields';
 import { applyInputTypeChange } from '@/features/survey-builder/utils/input-mode';
+import { VariableButton } from '@/features/survey-builder/variable-button';
 import { isInputFormat } from '@/types/input-type';
-import { isPartialNumericInput, parseNumericInput } from '@/utils/numeric-input';
-import { isPlainTextInput } from '@/features/question-renderer/utils/text-quality';
 import type { Question } from '@/types/survey';
+import { isPartialNumericInput, parseNumericInput } from '@/utils/numeric-input';
 
 interface QuestionPlaceholderFieldsProps {
   question: Question;
@@ -26,6 +26,8 @@ interface QuestionPlaceholderFieldsProps {
   /** 템플릿에 토큰이 있으면 응답자에게 readonly 로 보인다는 안내를 띄운다. */
   hasTokenPrefill: boolean;
   variableCatalog: VariableDef[];
+  /** 단일선택의 명단 값 프리필 칸을 보일지 — 보기를 표로 그리는 문항(choice_opt 셀)은 대상이 아니다. */
+  showChoicePrefill?: boolean;
 }
 
 /** 질문 편집의 '안내 문구·응답 품질 검사·prefill·입력 형식' 구획. 상태는 부모가 그대로 들고 있다. */
@@ -36,6 +38,7 @@ export function QuestionPlaceholderFields({
   defaultTemplateRef,
   hasTokenPrefill,
   variableCatalog,
+  showChoicePrefill = false,
 }: QuestionPlaceholderFieldsProps) {
   // 응답 화면과 같은 판정(question-input) — 장문형은 언제나, 단답형은 평문 모드에서 줄 수 2 이상이거나
   // 높이 늘리기를 켰을 때 여러 줄 입력칸이다. 여러 줄 칸만 안내 문구의 줄바꿈을 그린다.
@@ -46,174 +49,211 @@ export function QuestionPlaceholderFields({
 
   return (
     <>
-  {/* 안내 문구는 단답형·장문형 공용 — 둘 다 자유 기입 칸이라 같은 설정이 필요하다.
+      {/* 안내 문구는 단답형·장문형 공용 — 둘 다 자유 기입 칸이라 같은 설정이 필요하다.
       아래 prefill·입력 형식은 단답형 전용이라 분리한다(장문형에는 형식이 없다). */}
-  {(question.type === 'text' || question.type === 'textarea') && (
-    <div>
-      <Label htmlFor="placeholder">안내 문구 (Placeholder)</Label>
-      <PlaceholderField
-        id="placeholder"
-        value={formData.placeholder || ''}
-        onChange={(next) => setFormData((prev) => ({ ...prev, placeholder: next }))}
-        multiline={answersInMultilineField}
-        className="mt-2"
-      />
-    </div>
-  )}
-
-  {/* 입력칸 높이 — 줄 수 · 입력한 만큼 높이 늘리기 (단답형·장문형 공용, 표 input 셀과 같은 규칙) */}
-  {(question.type === 'text' || question.type === 'textarea') && (
-    <QuestionInputHeightFields
-      questionType={question.type}
-      formData={formData}
-      setFormData={setFormData}
-    />
-  )}
-
-  {/* 단답형·장문형 응답 품질 검사 — 최소·최대 글자 수·의미 없는 입력 거부.
-      숫자 모드·입력 형식 칸은 자기 검사가 있어 잠근다(배타). 셀 모달과 같은 묶음. */}
-  {(question.type === 'text' || question.type === 'textarea') && (
-    <TextValidationFields
-      idPrefix="question"
-      value={formData.textValidation}
-      locked={!isPlainTextInput({ type: question.type, inputType: formData.inputType })}
-      onChange={(next) => setFormData((prev) => ({ ...prev, textValidation: next }))}
-    />
-  )}
-
-  {/* 단답형 전용 — 응답값 prefill · 입력 형식 */}
-  {question.type === 'text' && (
-    <>
-      <div className="space-y-2">
-        <Label htmlFor="defaultValueTemplate">
-          응답값 prefill
-          <span className="ml-1 text-xs font-normal text-gray-500">(선택)</span>
-        </Label>
-        <div className="flex items-center gap-2">
-          <Input
-            id="defaultValueTemplate"
-            ref={defaultTemplateRef}
-            value={formData.defaultValueTemplate ?? ''}
-            onChange={(e) =>
-              setFormData((prev) => ({
-                ...prev,
-                defaultValueTemplate: e.target.value || null,
-              }))
-            }
-            placeholder="예: {{전시회명}}"
-            className="flex-1"
+      {(question.type === 'text' || question.type === 'textarea') && (
+        <div>
+          <Label htmlFor="placeholder">안내 문구 (Placeholder)</Label>
+          <PlaceholderField
+            id="placeholder"
+            value={formData.placeholder || ''}
+            onChange={(next) => setFormData((prev) => ({ ...prev, placeholder: next }))}
+            multiline={answersInMultilineField}
+            className="mt-2"
           />
-          {variableCatalog.length > 0 && (
-            <VariableButton
-              catalog={variableCatalog}
-              inputRef={defaultTemplateRef}
-              onChange={(v) =>
-                setFormData((prev) => ({
-                  ...prev,
-                  defaultValueTemplate: v || null,
-                }))
-              }
-            />
-          )}
         </div>
-        <p className="text-xs text-gray-500">
-          명단에 값이 있으면 응답자가 고칠 수 없는 값으로 보이고, 값이 없으면 응답자가 직접
-          입력합니다
-        </p>
-      </div>
-      <div className="space-y-2">
-        <div className="flex flex-col gap-3 rounded-md border border-gray-200 bg-gray-50 p-3">
-          <InputFormatSelect
-            id="text-input-format"
-            value={formData.inputType}
-            onChange={(next) => setFormData((prev) => applyInputTypeChange(prev, next))}
-          />
-          <div className="flex items-start gap-3">
-            <input
-              type="checkbox"
-              id="text-input-type-number"
-              disabled={isInputFormat(formData.inputType)}
-              checked={formData.inputType === 'number'}
-              onChange={(e) => {
-                const checked = e.target.checked;
-                setFormData((prev) => applyInputTypeChange(prev, checked ? 'number' : 'text'));
-              }}
-              className="mt-0.5 h-4 w-4"
-            />
-            <label htmlFor="text-input-type-number" className="flex-1 cursor-pointer text-sm">
-              <span className="font-medium">숫자만 입력</span>
-              <p className="mt-0.5 text-xs text-gray-500">
-                체크 시 응답자는 숫자만 입력할 수 있고, 분기 조건(expression)에서 비교 연산자
-                (=, ≠, ≥, ≤, &gt;, &lt;) 를 사용할 수 있습니다.
-                {isInputFormat(formData.inputType) && ' 입력 형식을 지정한 칸에는 쓸 수 없습니다.'}
-              </p>
-            </label>
-          </div>
+      )}
 
-          {formData.inputType === 'number' && (
-            <>
-              <div className="ml-7 flex items-center gap-2 text-sm">
+      {/* 입력칸 높이 — 줄 수 · 입력한 만큼 높이 늘리기 (단답형·장문형 공용, 표 input 셀과 같은 규칙) */}
+      {(question.type === 'text' || question.type === 'textarea') && (
+        <QuestionInputHeightFields
+          questionType={question.type}
+          formData={formData}
+          setFormData={setFormData}
+        />
+      )}
+
+      {/* 단답형·장문형 응답 품질 검사 — 최소·최대 글자 수·의미 없는 입력 거부.
+      숫자 모드·입력 형식 칸은 자기 검사가 있어 잠근다(배타). 셀 모달과 같은 묶음. */}
+      {(question.type === 'text' || question.type === 'textarea') && (
+        <TextValidationFields
+          idPrefix="question"
+          value={formData.textValidation}
+          locked={!isPlainTextInput({ type: question.type, inputType: formData.inputType })}
+          onChange={(next) => setFormData((prev) => ({ ...prev, textValidation: next }))}
+        />
+      )}
+
+      {/* 단일선택 — 명단 값과 맞는 보기를 미리 골라 잠근다(utils/choice-prefill 의 판정과 같은 안내) */}
+      {question.type === 'radio' && showChoicePrefill && (
+        <PrefillTemplateField
+          formData={formData}
+          setFormData={setFormData}
+          defaultTemplateRef={defaultTemplateRef}
+          variableCatalog={variableCatalog}
+          placeholder="예: {{지원사업}}"
+          hint="명단 값과 보기 값·코드·문구가 같거나, 문구에 그 값이 들어 있는 보기가 하나뿐이면 그 보기를 미리 골라 응답자가 바꿀 수 없게 합니다. 맞는 보기가 없거나 명단 값이 비면 응답자가 직접 고릅니다"
+        />
+      )}
+
+      {/* 단답형 전용 — 응답값 prefill · 입력 형식 */}
+      {question.type === 'text' && (
+        <>
+          <PrefillTemplateField
+            formData={formData}
+            setFormData={setFormData}
+            defaultTemplateRef={defaultTemplateRef}
+            variableCatalog={variableCatalog}
+            hint="명단에 값이 있으면 응답자가 고칠 수 없는 값으로 보이고, 값이 없으면 응답자가 직접 입력합니다"
+          />
+          <div className="space-y-2">
+            <div className="flex flex-col gap-3 rounded-md border border-gray-200 bg-gray-50 p-3">
+              <InputFormatSelect
+                id="text-input-format"
+                value={formData.inputType}
+                onChange={(next) => setFormData((prev) => applyInputTypeChange(prev, next))}
+              />
+              <div className="flex items-start gap-3">
                 <input
                   type="checkbox"
-                  id="text-empty-default-enabled"
-                  checked={formData.emptyDefault !== undefined}
-                  disabled={hasTokenPrefill}
+                  id="text-input-type-number"
+                  disabled={isInputFormat(formData.inputType)}
+                  checked={formData.inputType === 'number'}
                   onChange={(e) => {
                     const checked = e.target.checked;
-                    setFormData((prev) => {
-                      const next: Partial<Question> = { ...prev };
-                      if (checked) {
-                        next.emptyDefault = prev.emptyDefault ?? 0;
-                      } else {
-                        delete next.emptyDefault;
-                      }
-                      return next;
-                    });
+                    setFormData((prev) => applyInputTypeChange(prev, checked ? 'number' : 'text'));
                   }}
-                  className="h-4 w-4"
+                  className="mt-0.5 h-4 w-4"
                 />
-                <label htmlFor="text-empty-default-enabled" className="cursor-pointer">
-                  응답자 입력란 초기값
+                <label htmlFor="text-input-type-number" className="flex-1 cursor-pointer text-sm">
+                  <span className="font-medium">숫자만 입력</span>
+                  <p className="mt-0.5 text-xs text-gray-500">
+                    체크 시 응답자는 숫자만 입력할 수 있고, 분기 조건(expression)에서 비교 연산자
+                    (=, ≠, ≥, ≤, &gt;, &lt;) 를 사용할 수 있습니다.
+                    {isInputFormat(formData.inputType) &&
+                      ' 입력 형식을 지정한 칸에는 쓸 수 없습니다.'}
+                  </p>
                 </label>
-                <Input
-                  type="text"
-                  inputMode="decimal"
-                  value={
-                    formData.emptyDefault !== undefined ? String(formData.emptyDefault) : ''
-                  }
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    if (isPartialNumericInput(v)) {
-                      setFormData((prev) => ({
-                        ...prev,
-                        emptyDefault:
-                          v === '' ? 0 : (parseNumericInput(v) ?? prev.emptyDefault ?? 0),
-                      }));
-                    }
-                  }}
-                  disabled={formData.emptyDefault === undefined || hasTokenPrefill}
-                  className="h-8 w-24"
-                  aria-label="초기값"
-                />
-                {hasTokenPrefill && (
-                  <span className="text-xs text-gray-400">토큰 prefill 사용 중 (우선)</span>
-                )}
               </div>
-              <div className="ml-7">
-                <NumberFormatFields
-                  idPrefix="text-nf"
-                  value={formData.numberFormat ?? undefined}
-                  onChange={(nf) =>
-                    setFormData((prev) => ({ ...prev, numberFormat: nf ?? null }))
-                  }
-                />
-              </div>
-            </>
-          )}
-        </div>
+
+              {formData.inputType === 'number' && (
+                <>
+                  <div className="ml-7 flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      id="text-empty-default-enabled"
+                      checked={formData.emptyDefault !== undefined}
+                      disabled={hasTokenPrefill}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setFormData((prev) => {
+                          const next: Partial<Question> = { ...prev };
+                          if (checked) {
+                            next.emptyDefault = prev.emptyDefault ?? 0;
+                          } else {
+                            delete next.emptyDefault;
+                          }
+                          return next;
+                        });
+                      }}
+                      className="h-4 w-4"
+                    />
+                    <label htmlFor="text-empty-default-enabled" className="cursor-pointer">
+                      응답자 입력란 초기값
+                    </label>
+                    <Input
+                      type="text"
+                      inputMode="decimal"
+                      value={
+                        formData.emptyDefault !== undefined ? String(formData.emptyDefault) : ''
+                      }
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (isPartialNumericInput(v)) {
+                          setFormData((prev) => ({
+                            ...prev,
+                            emptyDefault:
+                              v === '' ? 0 : (parseNumericInput(v) ?? prev.emptyDefault ?? 0),
+                          }));
+                        }
+                      }}
+                      disabled={formData.emptyDefault === undefined || hasTokenPrefill}
+                      className="h-8 w-24"
+                      aria-label="초기값"
+                    />
+                    {hasTokenPrefill && (
+                      <span className="text-xs text-gray-400">토큰 prefill 사용 중 (우선)</span>
+                    )}
+                  </div>
+                  <div className="ml-7">
+                    <NumberFormatFields
+                      idPrefix="text-nf"
+                      value={formData.numberFormat ?? undefined}
+                      onChange={(nf) =>
+                        setFormData((prev) => ({ ...prev, numberFormat: nf ?? null }))
+                      }
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+/** 「응답값 prefill」 입력칸 — 단답형·단일선택 공용. 변수 버튼이 커서 위치에 토큰을 꽂는다. */
+function PrefillTemplateField({
+  formData,
+  setFormData,
+  defaultTemplateRef,
+  variableCatalog,
+  placeholder = '예: {{전시회명}}',
+  hint,
+}: {
+  formData: Partial<Question>;
+  setFormData: React.Dispatch<React.SetStateAction<Partial<Question>>>;
+  defaultTemplateRef: RefObject<HTMLInputElement | null>;
+  variableCatalog: VariableDef[];
+  placeholder?: string;
+  hint: string;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label htmlFor="defaultValueTemplate">
+        응답값 prefill
+        <span className="ml-1 text-xs font-normal text-gray-500">(선택)</span>
+      </Label>
+      <div className="flex items-center gap-2">
+        <Input
+          id="defaultValueTemplate"
+          ref={defaultTemplateRef}
+          value={formData.defaultValueTemplate ?? ''}
+          onChange={(e) =>
+            setFormData((prev) => ({
+              ...prev,
+              defaultValueTemplate: e.target.value || null,
+            }))
+          }
+          placeholder={placeholder}
+          className="flex-1"
+        />
+        {variableCatalog.length > 0 && (
+          <VariableButton
+            catalog={variableCatalog}
+            inputRef={defaultTemplateRef}
+            onChange={(v) =>
+              setFormData((prev) => ({
+                ...prev,
+                defaultValueTemplate: v || null,
+              }))
+            }
+          />
+        )}
       </div>
-    </>
-  )}
-    </>
+      <p className="text-xs text-gray-500">{hint}</p>
+    </div>
   );
 }

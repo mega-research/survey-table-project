@@ -5,16 +5,17 @@ import { db } from '@/db';
 import { questions, surveyVersions } from '@/db/schema';
 import type { PiiTargets } from '@/lib/crypto/response-pii';
 import { logger } from '@/lib/logger';
-import { loadRespondentContactAttrs } from '@/server/read-models/respondent-contact-attrs';
+import type { NormalizedQuotaConfig } from '@/lib/quota/normalize';
+import { collectPiiCellIds } from '@/lib/survey/pii-cells';
+import { isPersistedRootSidecarKey, sanitizeRootSidecar } from '@/lib/survey/response-sidecars';
+import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import {
   countQuotaCellCompleted,
   loadQuotaPlan,
   resolveQuotaTargetCell,
 } from '@/server/read-models/quota-cell';
-import type { NormalizedQuotaConfig } from '@/lib/quota/normalize';
-import { collectPiiCellIds } from '@/lib/survey/pii-cells';
-import { isPersistedRootSidecarKey, sanitizeRootSidecar } from '@/lib/survey/response-sidecars';
-import { substituteTokens } from '@/lib/survey/substitute-tokens';
+import { loadRespondentContactAttrs } from '@/server/read-models/respondent-contact-attrs';
+import { resolveChoicePrefill } from '@/utils/choice-prefill';
 
 import { SurveyNotAcceptingResponsesError } from './response-gate';
 import { TestResponseVersionPrunedError } from './response-version-snapshot';
@@ -360,7 +361,13 @@ export async function restorePrefillAnswers(
     const attrs = await loadRespondentContactAttrs(contactTargetId);
 
     const prefillQuestions = await db
-      .select({ id: questions.id, template: questions.defaultValueTemplate })
+      .select({
+        id: questions.id,
+        type: questions.type,
+        options: questions.options,
+        tableRowsData: questions.tableRowsData,
+        template: questions.defaultValueTemplate,
+      })
       .from(questions)
       .where(
         and(eq(questions.surveyId, gateRow.surveyId), isNotNull(questions.defaultValueTemplate)),
@@ -370,6 +377,22 @@ export async function restorePrefillAnswers(
     // (필터 결과를 다시 원본 questionResponses 로 덮어쓰면 오염 가드가 무력화되므로 금지.)
     for (const q of prefillQuestions) {
       if (!q.template?.trim()) continue;
+      // 단일선택 — 명단 값에 맞춘 보기 하나가 잠긴 답이다(응답 화면과 같은 판정). 맞는 보기를
+      // 정하지 못하면 잠기지 않은 문항이라 응답자가 고른 값을 그대로 둔다.
+      if (q.type === 'radio') {
+        const expectedChoice = resolveChoicePrefill(
+          {
+            type: 'radio',
+            options: q.options ?? [],
+            tableRowsData: q.tableRowsData ?? [],
+            defaultValueTemplate: q.template,
+          },
+          attrs,
+        );
+        if (expectedChoice === null || !(q.id in validated)) continue;
+        if (validated[q.id] !== expectedChoice) validated[q.id] = expectedChoice;
+        continue;
+      }
       const expected = substituteTokens(q.template, attrs);
       // 명단 값이 비면 잠긴 문항이 아니다 — 응답자가 직접 적은 값이므로 그대로 둔다
       // (화면의 잠금 판정 `resolveTokenPrefill` 과 같은 식).
@@ -395,7 +418,9 @@ export async function restorePrefillAnswers(
  * 평문 키는 이미 같은 임계로 걸렀으므로 다시 재도 결과가 같다 — 크기가 변할 수 있는 것은
  * 암호화된 키뿐이다.
  */
-export function dropOversizedStoredValues(stored: Record<string, unknown>): Record<string, unknown> {
+export function dropOversizedStoredValues(
+  stored: Record<string, unknown>,
+): Record<string, unknown> {
   let out: Record<string, unknown> | null = null;
   for (const [qid, value] of Object.entries(stored)) {
     if (Buffer.byteLength(JSON.stringify(value ?? null), 'utf8') > MAX_ANSWER_VALUE_BYTES) {
