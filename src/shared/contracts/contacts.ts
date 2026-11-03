@@ -167,14 +167,15 @@ export interface ContactResultCode {
 }
 
 /**
- * surveys.contact_result_codes 가 NULL 일 때 사용되는 디폴트 13개.
- * mockup §6 의 결과코드 라디오 그대로.
+ * surveys.contact_result_codes 가 NULL 일 때 사용되는 디폴트 14개.
+ * mockup §6 의 결과코드 라디오에서 9번을 휴/폐업으로 바꾸고 13.독려를 더했다(2026-11-03 —
+ * 0153 이 저장된 9.전시회미참가 를 함께 옮겼다).
  *
  * status 매핑:
  * - '1.조사완료' → 'positive' (응답 완료 인정)
  * - '수신거부' → 'neutral' (2026-08-27 결정 — 조사 거절 의사일 뿐 모집단 이탈이
  *   아니므로 분모 유지. 단체메일 배제는 status 무관한 수신거부 키워드 축이 담당)
- * - 나머지 11개 → 필드 생략 (= 'neutral')
+ * - 나머지 12개 → 필드 생략 (= 'neutral')
  */
 export const DEFAULT_RESULT_CODES: ContactResultCode[] = [
   { code: '1.조사완료', label: '1.조사완료', order: 1, tone: 'green', status: 'positive' },
@@ -185,11 +186,12 @@ export const DEFAULT_RESULT_CODES: ContactResultCode[] = [
   { code: '6.거절', label: '6.거절', order: 6, tone: 'rose' },
   { code: '7.결번·번호오류', label: '7.결번·번호오류', order: 7, tone: 'rose' },
   { code: '8.중복', label: '8.중복', order: 8, tone: 'slate' },
-  { code: '9.전시회미참가', label: '9.전시회미참가', order: 9, tone: 'slate' },
+  { code: '9.휴/폐업', label: '9.휴/폐업', order: 9, tone: 'slate' },
   { code: '10.메일발송', label: '10.메일발송', order: 10, tone: 'blue' },
   { code: '11.기타', label: '11.기타', order: 11, tone: 'amber' },
   { code: '12.담당자퇴사', label: '12.담당자퇴사', order: 12, tone: 'rose' },
-  { code: '수신거부', label: '수신거부', order: 13, tone: 'rose', status: 'neutral' },
+  { code: '13.독려', label: '13.독려', order: 13, tone: 'slate' },
+  { code: '수신거부', label: '수신거부', order: 14, tone: 'rose', status: 'neutral' },
 ];
 
 /**

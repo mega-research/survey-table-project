@@ -55,18 +55,26 @@ describe('분할 워크북 메타 컬럼', () => {
     for (const ws of wb.worksheets) {
       if (ws.name === '응답 내역' || ws.name === '코딩북') continue;
       expect(ws.getRow(1).getCell(1).value).toBe('IP 해시');
-      expect(ws.getRow(1).getCell(2).value).toBe('시스템ID');
+      expect(ws.getRow(1).getCell(2).value).toBe('순번'); // 시스템ID 열은 없다
+      expect(ws.getRow(1).getCell(5).value).toBe('결과코드');
       expect(ws.getRow(1).getCell(10).value).toBe('접속 단말');
-      expect(ws.getRow(4).getCell(2).value).toBe(3); // 번호=resid
-      expect(ws.getRow(4).getCell(3).value).toBe(1); // 순번
+      expect(ws.getRow(4).getCell(2).value).toBe(1); // 순번
     }
   });
 
-  it('응답 내역 시트는 번호+순번 9열 구조다', () => {
+  it('응답 내역 시트는 순번으로 시작하고 상태 다음에 결과코드가 붙는다', () => {
     const wb = buildSplitWorkbook([basisQ, textQ], [row], 'qb', CTX);
     const ws1 = wb.getWorksheet('응답 내역')!;
-    expect(ws1.getRow(1).getCell(1).value).toBe('시스템ID');
-    expect(ws1.getRow(1).getCell(2).value).toBe('순번');
+    expect(ws1.getRow(1).getCell(1).value).toBe('순번');
+    expect(ws1.getRow(1).getCell(4).value).toBe('상태');
+    expect(ws1.getRow(1).getCell(5).value).toBe('결과코드');
+  });
+
+  it('코딩북 끝에 상태·결과코드 값 라벨이 붙는다', () => {
+    const wb = buildSplitWorkbook([basisQ, textQ], [row], 'qb', CTX);
+    const names = wb.getWorksheet('코딩북')!.getColumn(2).values;
+    expect(names).toContain('상태');
+    expect(names).toContain('결과코드');
   });
 
   it('코딩북도 일반 Raw Data와 같은 9개 SPSS 감사 열을 제공한다', () => {
@@ -114,9 +122,8 @@ describe('분할 워크북 메타 컬럼', () => {
       if (ws.name === '응답 내역' || ws.name === '코딩북') continue;
       expect(ws.rowCount).toBe(5); // 헤더 3행 + 데이터 2행
       const dr = ws.getRow(5);
-      expect(dr.getCell(2).value).toBe(5); // 시스템ID
-      expect(dr.getCell(3).value).toBe(''); // 순번 — 미응답 행은 접수 순번이 없다
-      expect(dr.getCell(5).value).toBe('미응답');
+      expect(dr.getCell(2).value).toBe(''); // 순번 — 미응답 행은 접수 순번이 없다
+      expect(dr.getCell(4).value).toBe('미응답');
       expect([9, 10].map((c) => dr.getCell(c).value)).toEqual(['', '']); // 소요시간·접속 단말
       expect(dr.getCell(11).value).toBeNull(); // 변수 열
     }
@@ -160,28 +167,28 @@ describe('분할 워크북 조사 대상 명단 열', () => {
     expect(variableSheets.map((ws) => ws.name)).toContain('공통');
     expect(variableSheets.length).toBeGreaterThanOrEqual(2);
     for (const ws of variableSheets) {
-      expect(ws.getRow(1).getCell(3).value).toBe('순번');
-      expect(ws.getRow(1).getCell(4).value).toBe('기수');
-      expect(ws.getRow(1).getCell(5).value).toBe('성명');
-      expect(ws.getRow(1).getCell(6).value).toBe('개별 URL');
+      expect(ws.getRow(1).getCell(2).value).toBe('순번');
+      expect(ws.getRow(1).getCell(3).value).toBe('기수');
+      expect(ws.getRow(1).getCell(4).value).toBe('성명');
+      expect(ws.getRow(1).getCell(5).value).toBe('개별 URL');
       expect(ws.getRow(1).getCell(12).value).toBe('접속 단말');
-      expect(ws.getRow(4).getCell(4).value).toBe('15기');
-      expect(ws.getRow(4).getCell(5).value).toBe('홍길동');
+      expect(ws.getRow(4).getCell(3).value).toBe('15기');
+      expect(ws.getRow(4).getCell(4).value).toBe('홍길동');
       const merges = ws.model.merges as string[];
+      expect(merges).toContain('C1:C3');
       expect(merges).toContain('D1:D3');
-      expect(merges).toContain('E1:E3');
     }
     const names = wb.getWorksheet('코딩북')!.getColumn(2).values;
     expect(names).not.toContain('기수');
     expect(names).not.toContain('성명');
     // 응답 내역 시트에도 순번 다음에 같은 명단 열이 붙는다
     const ws1 = wb.getWorksheet('응답 내역')!;
-    expect([2, 3, 4, 5].map((c) => ws1.getRow(1).getCell(c).value)).toEqual([
+    expect([1, 2, 3, 4].map((c) => ws1.getRow(1).getCell(c).value)).toEqual([
       '순번',
       '기수',
       '성명',
       '접속 단말',
     ]);
-    expect([3, 4].map((c) => ws1.getRow(2).getCell(c).value)).toEqual(['15기', '홍길동']);
+    expect([2, 3].map((c) => ws1.getRow(2).getCell(c).value)).toEqual(['15기', '홍길동']);
   });
 });

@@ -10,7 +10,7 @@ import {
   generateSPSSColumns,
 } from '@/lib/analytics/spss-excel-export';
 import { collectUsedRepeatCounts } from '@/lib/analytics/row-repeat-usage';
-import { RESID_DEFAULT_LABEL, type RawExportContactColumn } from '@/lib/operations/contacts-format';
+import type { RawExportContactColumn } from '@/lib/operations/contacts-format';
 import { type Platform, formatPlatformKo } from '@/lib/operations/parse-ua';
 import {
   NOT_RESPONDED_STATUS,
@@ -21,6 +21,7 @@ import { buildCodebookVariableMetadata } from '@/lib/spss/export-metadata';
 import { buildMrsetNameMap } from '@/lib/spss/mrsets-syntax';
 import { buildLabel } from '@/lib/spss/variable-meta';
 import { buildInviteUrl } from '@/lib/survey-url';
+import type { ContactResultCode } from '@/shared/contracts/contacts';
 import { Question, SurveySubmission } from '@/types/survey';
 import type { SurveyLocale } from '@/types/survey-locale';
 
@@ -45,6 +46,13 @@ export interface RawExportResponseRow {
   startedAt: Date | null;
   completedAt: Date | null;
   totalSeconds: number | null;
+  /** 조사 대상의 마지막 회차 결과코드(코드 글자 그대로). 조사 대상이 없거나 회차가 없으면 null·없음 */
+  resultCode?: string | null;
+  /**
+   * 손으로 고친 명단 열 — source('attrs.기업명' / 'pii.대표번호'). 대상 정보 수정 현황 기록에서
+   * 온다. 이 열의 칸은 노랗게 칠한다. 고친 열이 없으면 키가 없다.
+   */
+  editedSources?: ReadonlySet<string>;
   /**
    * 조사 대상 명단 열 값 — source → 값 (RawExportContext.contactColumns 의 source 와 같은 키).
    * 조사 대상이 없는 익명 응답은 키 자체가 없고, 컨택은 있으나 값이 없는 키는 ''.
@@ -88,8 +96,13 @@ export interface RawExportContext {
   appUrl: string;
   /** currentStepId → 표시 라벨 (buildStepLabelMap 결과) */
   stepLabels: ReadonlyMap<string, string>;
-  /** 설문에 컨택 타겟이 존재하는지 — false 면 시스템ID 열을 만들지 않는다 (응답 매칭 여부 무관, 설문 설정 기준) */
+  /** 설문에 컨택 타겟이 존재하는지 — false 면 결과코드 열을 만들지 않는다 (응답 매칭 여부 무관, 설문 설정 기준) */
   hasContacts: boolean;
+  /**
+   * 설문의 결과코드 목록(기본값 폴백 포함) — 결과코드 열의 숫자와 코딩북 값 라벨을 만든다.
+   * 없으면 코드 글자의 앞 번호만 읽는다.
+   */
+  resultCodes?: readonly ContactResultCode[];
   /**
    * 질문 id → { order, 표시 라벨 } (buildQuestionMetaMap 결과).
    * currentStepId 미저장 구응답의 "마지막 입력 문항" 폴백 — 응답값이 존재하는 질문 중 최후순의 라벨.
@@ -179,12 +192,69 @@ export function resolveLastEnteredLabel(row: RawExportResponseRow, ctx: RawExpor
   return row.currentStepId ? (ctx.stepLabels.get(row.currentStepId) ?? '') : '';
 }
 
+/** 손으로 고친 명단 칸의 배경 — 원본 명단과 달라진 칸 표시. */
+export const EDITED_CELL_FILL: ExcelJS.FillPattern = {
+  type: 'pattern',
+  pattern: 'solid',
+  fgColor: { argb: 'FFFFFF00' },
+};
+
+/** 결과코드 글자의 앞 번호 — '13. 독려' → 13. 번호가 없으면 null. */
+function leadingCodeNumber(code: string): number | null {
+  const m = /^\s*(\d+)/.exec(code);
+  return m ? Number(m[1]) : null;
+}
+
+/**
+ * 결과코드 → 숫자 맵. 앞 번호가 있는 코드는 그 번호, 없는 코드(수신거부)는 목록 순서대로 가장 큰
+ * 번호 다음 번호를 받는다 — 번호가 겹치지 않는다. 코딩북 값 라벨과 결과코드 열이 같은 맵을 쓴다.
+ */
+export function buildResultCodeNumbers(codes: readonly ContactResultCode[]): Map<string, number> {
+  const sorted = [...codes].sort((a, b) => a.order - b.order);
+  const out = new Map<string, number>();
+  let max = 0;
+  for (const c of sorted) {
+    const n = leadingCodeNumber(c.code);
+    if (n !== null) {
+      out.set(c.code, n);
+      max = Math.max(max, n);
+    }
+  }
+  for (const c of sorted) if (!out.has(c.code)) out.set(c.code, ++max);
+  return out;
+}
+
+/**
+ * 행의 결과코드 숫자 — 목록에 있으면 맵의 번호, 목록에 없는 옛 코드는 앞 번호, 그것도 없으면 빈칸.
+ * 맵은 행마다 다시 만들지 않도록 호출부가 한 번 만들어 넘긴다.
+ */
+function resultCodeCell(
+  row: RawExportResponseRow,
+  numbers: ReadonlyMap<string, number>,
+): number | '' {
+  const code = row.resultCode;
+  if (!code) return '';
+  return numbers.get(code) ?? leadingCodeNumber(code) ?? '';
+}
+
+const resultCodeNumbersCache = new WeakMap<RawExportContext, Map<string, number>>();
+function resultCodeNumbersOf(ctx: RawExportContext): Map<string, number> {
+  let m = resultCodeNumbersCache.get(ctx);
+  if (!m) {
+    m = buildResultCodeNumbers(ctx.resultCodes ?? []);
+    resultCodeNumbersCache.set(ctx, m);
+  }
+  return m;
+}
+
 interface RawMetaColumn {
   header: string;
   /** seq 는 접수 순번(buildRawSeqMap) — 미응답 행은 null 이라 빈칸이다 */
   value: (row: RawExportResponseRow, seq: number | null, ctx: RawExportContext) => string | number;
   /** 열 생성 조건 — false 반환 시 헤더·값 모두 생략. 미지정은 항상 생성. */
   enabled?: (ctx: RawExportContext) => boolean;
+  /** 이 행의 칸을 노랗게 칠할지 — 손으로 고친 명단 열. 미지정은 칠하지 않는다. */
+  edited?: (row: RawExportResponseRow) => boolean;
 }
 
 /**
@@ -206,18 +276,15 @@ type RawMetaLayoutItem =
 
 /**
  * Raw Data·분할 시트 왼쪽 메타 열 레이아웃 (헤더·값·생성 조건·명단 열 자리의 단일 출처).
- * 코딩북·.sav 미포함, 헤더 1~3행 세로 병합 대상. 시스템ID는 설문 설정(컨택 존재)에 따라
- * 조건부 생성된다. 조사 대상 그룹 고정 열은 없다 — 그룹은 응답 내역 컬럼 설정의 attrs 열로
- * 명단 열에 따라온다.
+ * 코딩북·.sav 미포함, 헤더 1~3행 세로 병합 대상. 결과코드는 설문 설정(컨택 존재)에 따라
+ * 조건부 생성된다. 시스템ID 열은 내보내지 않는다(2026-11-03 — 행 정렬에만 쓴다). 조사 대상 그룹
+ * 고정 열은 없다 — 그룹은 응답 내역 컬럼 설정의 attrs 열로 명단 열에 따라온다.
  */
+const RESULT_CODE_HEADER = '결과코드';
+
 const RAW_META_LAYOUT: readonly RawMetaLayoutItem[] = [
   // sha256 전체는 64자 — 동일값 식별 목적에는 앞 16자(64비트)로 충분하고 열 너비를 지킨다
   { header: 'IP 해시', value: (row) => (row.ipHash ? row.ipHash.slice(0, 16) : '') },
-  {
-    header: RESID_DEFAULT_LABEL,
-    enabled: (ctx) => ctx.hasContacts,
-    value: (row) => row.resid ?? '',
-  },
   { header: '순번', value: (_row, seq) => seq ?? '' },
   CONTACT_COLUMNS_SLOT,
   ENTRY_PARAMS_SLOT,
@@ -226,6 +293,11 @@ const RAW_META_LAYOUT: readonly RawMetaLayoutItem[] = [
     value: (row, _seq, ctx) => (row.inviteCode ? buildInviteUrl(row.inviteCode, ctx.appUrl) : ''),
   },
   { header: '상태', value: (row) => formatExportStatusLabel(row.status) },
+  {
+    header: RESULT_CODE_HEADER,
+    enabled: (ctx) => ctx.hasContacts,
+    value: (row, _seq, ctx) => resultCodeCell(row, resultCodeNumbersOf(ctx)),
+  },
   { header: '마지막 입력 문항', value: (row, _seq, ctx) => resolveLastEnteredLabel(row, ctx) },
   { header: '시작일시', value: (row) => formatExcelDateTime(row.startedAt) },
   { header: '종료일시', value: (row) => formatExcelDateTime(row.completedAt) },
@@ -252,6 +324,7 @@ function activeMetaColumns(ctx: RawExportContext): RawMetaColumn[] {
       return (ctx.contactColumns ?? []).map<RawMetaColumn>((col) => ({
         header: col.label,
         value: (row) => row.contactValues?.[col.source] ?? '',
+        edited: (row) => row.editedSources?.has(col.source) ?? false,
       }));
     }
     if (item === ENTRY_PARAMS_SLOT) {
@@ -268,6 +341,25 @@ export function buildRawMetaHeaders(ctx: RawExportContext): string[] {
   return activeMetaColumns(ctx).map((c) => c.header);
 }
 
+/**
+ * 메타 열 중 손으로 고친 명단 칸을 노랗게 칠한다 — Raw Data·분할 변수 시트 공용.
+ * firstDataRow 는 첫 데이터 행 번호(헤더 3행이면 4). 행 순서는 rows 와 같다.
+ */
+export function paintEditedMetaCells(
+  ws: ExcelJS.Worksheet,
+  rows: readonly RawExportResponseRow[],
+  ctx: RawExportContext,
+  firstDataRow: number,
+): void {
+  const cols = activeMetaColumns(ctx);
+  rows.forEach((row, i) => {
+    if (!row.editedSources?.size) return;
+    cols.forEach((col, c) => {
+      if (col.edited?.(row)) ws.getRow(firstDataRow + i).getCell(c + 1).fill = EDITED_CELL_FILL;
+    });
+  });
+}
+
 export function buildRawMetaValues(
   row: RawExportResponseRow,
   seq: number | null,
@@ -278,8 +370,9 @@ export function buildRawMetaValues(
 
 /**
  * '응답 내역' 시트 — 응답자 메타 요약 (Raw/분할 워크북 공용).
- * 시스템ID 열은 메타 열과 동일한 조건부 생성 규칙을 따르고, 조사 대상 명단 열은 순번 다음·접속 단말
- * 앞에 같은 열이 붙는다. 순번은 seqMap(접수 순번)을 Raw Data 시트와 공유한다.
+ * 결과코드 열은 메타 열과 동일한 조건부 생성 규칙을 따르고(상태 다음), 조사 대상 명단 열은 순번
+ * 다음·접속 단말 앞에 같은 열이 붙는다. 손으로 고친 명단 칸은 노랗다. 순번은 seqMap(접수 순번)을
+ * Raw Data 시트와 공유한다.
  */
 export function addResponseListSheet(
   workbook: ExcelJS.Workbook,
@@ -291,34 +384,44 @@ export function addResponseListSheet(
   const contactColumns = ctx.contactColumns ?? [];
   const entryParamNames = ctx.entryParamNames ?? [];
   const headers = [
-    ...(ctx.hasContacts ? [RESID_DEFAULT_LABEL] : []),
     '순번',
     ...contactColumns.map((c) => c.label),
     ...entryParamNames,
     '접속 단말',
     '브라우저',
     '상태',
+    ...(ctx.hasContacts ? [RESULT_CODE_HEADER] : []),
     '시작일시',
     '종료일시',
     '소요시간',
   ];
   ws.addRow(headers);
+  const codeNumbers = resultCodeNumbersOf(ctx);
+  // 명단 열은 순번 다음 2열부터
+  const contactColumnStart = 2;
   rows.forEach((row) => {
     // 미응답 조사 대상 행은 응답 메타(단말·브라우저·소요시간)를 빈칸으로 둔다 —
     // RAW_META_LAYOUT 와 같은 분기. 응답 행의 출력은 바뀌지 않는다.
     const nonRespondent = isNonRespondentRow(row);
-    ws.addRow([
-      ...(ctx.hasContacts ? [row.resid ?? ''] : []),
+    const added = ws.addRow([
       seqMap.get(row) ?? '',
       ...contactColumns.map((c) => row.contactValues?.[c.source] ?? ''),
       ...entryParamNames.map((name) => row.entryParams?.[name] ?? ''),
       nonRespondent ? '' : formatPlatformKo(row.platform as Platform | null),
       nonRespondent ? '' : (row.browser ?? 'Other'),
       formatExportStatusLabel(row.status),
+      ...(ctx.hasContacts ? [resultCodeCell(row, codeNumbers)] : []),
       formatExcelDateTime(row.startedAt),
       formatExcelDateTime(row.completedAt),
       nonRespondent ? '' : formatTotalTime(row.totalSeconds, row.status),
     ]);
+    if (row.editedSources?.size) {
+      contactColumns.forEach((c, i) => {
+        if (row.editedSources?.has(c.source)) {
+          added.getCell(contactColumnStart + i).fill = EDITED_CELL_FILL;
+        }
+      });
+    }
   });
   styleHeaderRows(ws, [1], headers.length);
   autoFitRawColumns(ws, headers.length);
@@ -362,6 +465,7 @@ export function generateRawDataWorkbook(
       ...buildDataRow(columns, questionMap, row as unknown as SurveySubmission),
     ]);
   });
+  paintEditedMetaCells(ws2, rows, ctx, 4);
 
   // 1~3행 헤더 스타일
   styleHeaderRows(ws2, [1, 2, 3], colCount);
@@ -387,16 +491,30 @@ export function generateRawDataWorkbook(
   });
 
   // 시트 3: 코딩북
-  appendCodebookSheet(workbook, columns, sortedQuestions);
+  appendCodebookSheet(workbook, columns, sortedQuestions, ctx);
 
   return workbook;
 }
+
+/** 상태 열에 나오는 글자 — formatExportStatusLabel 의 어휘 그대로. */
+const EXPORT_STATUS_VALUE_LABEL = [
+  'completed',
+  'screened_out',
+  'quotaful_out',
+  'bad',
+  'in_progress',
+  'drop',
+  NOT_RESPONDED_STATUS,
+]
+  .map((status) => formatExportStatusLabel(status))
+  .join(', ');
 
 /** 코딩북 시트를 워크북에 추가한다 — Raw/Split 워크북 공용. */
 export function appendCodebookSheet(
   workbook: ExcelJS.Workbook,
   columns: SPSSExportColumn[],
   questions: Question[],
+  ctx?: Pick<RawExportContext, 'hasContacts' | 'resultCodes'>,
 ): void {
   const questionMap = new Map(questions.map((q) => [q.id, q]));
   const mrsetNames = buildMrsetNameMap(columns, questions);
@@ -432,6 +550,25 @@ export function appendCodebookSheet(
       buildLabel(c, question?.questionCode),
     ]);
   });
+  // 메타 열의 값 라벨 — SPSS 변수가 아니라 번호·변수 유형 칸은 비운다. 변수 행 뒤에 붙여
+  // 앞 행을 위치로 읽는 기존 작업을 깨지 않는다.
+  if (ctx) {
+    ws.addRow(['', '상태', '응답 상태', '', EXPORT_STATUS_VALUE_LABEL]);
+    if (ctx.hasContacts) {
+      const numbers = buildResultCodeNumbers(ctx.resultCodes ?? []);
+      const label = [...numbers]
+        .sort((a, b) => a[1] - b[1])
+        .map(([code, n]) => `${n}=${code.replace(/^\s*\d+\s*\.\s*/, '')}`)
+        .join(', ');
+      ws.addRow([
+        '',
+        RESULT_CODE_HEADER,
+        '조사 대상의 마지막 회차 결과코드',
+        '',
+        ['빈값=회차 없음', ...(label ? [label] : [])].join(', '),
+      ]);
+    }
+  }
   styleHeaderRows(ws, [1], 10);
   autoFitRawColumns(ws, 10);
 }

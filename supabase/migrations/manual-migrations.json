@@ -104,6 +104,7 @@
     "0145_survey_localized_messages",
     "0146_fit_table_to_width",
     "0147_scale_mean_enabled",
-    "0152_contact_target_edit_logs"
+    "0152_contact_target_edit_logs",
+    "0153_result_code_9_closed_business"
   ]
 }
