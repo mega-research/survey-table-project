@@ -4,11 +4,16 @@ import 'server-only';
 
 import { type DbTransaction, db } from '@/db';
 import { contactAssignments, contactTargets, surveys } from '@/db/schema';
-import { logger } from '@/lib/logger';
-import { matchedResponseSubquery } from '@/lib/operations/contacts-filter-sql.server';
 import { normalizeContactColumnScheme } from '@/lib/operations/contacts-format';
+import { matchedResponseSubquery } from '@/lib/operations/contacts-filter-sql.server';
+import { logger } from '@/lib/logger';
 import { isUniqueViolation, retryOnTxConflict } from '@/lib/pg-error';
-import { type OperationsDataScope, lockWriteScope, testFlagForScope } from '@/server/data-scope';
+import {
+  lockWriteScope,
+  testFlagForScope,
+  type OperationsDataScope,
+} from '@/server/data-scope';
+
 import type {
   ContactAssignmentClause,
   ContactTargetEditAssignee,

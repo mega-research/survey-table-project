@@ -2,13 +2,9 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
 import { ContactDetailForm } from '@/features/operations/contacts/contact-detail-form';
-import { isGuestViewer } from '@/lib/auth/guest-viewer';
+import { getMailTemplatesBySurvey } from '@/server/mail/services/templates';
 import { attrsKeyOf } from '@/lib/operations/contacts-format';
 import { extractSystemFieldKeys } from '@/lib/operations/contacts-shared';
-import { getOperationsDataScope } from '@/server/data-scope';
-import { getMailTemplatesBySurvey } from '@/server/mail/services/templates';
-import { listAssignmentOptions } from '@/server/read-models/contact-assignment-options';
-import { getContactTargetEditLogs } from '@/server/read-models/contact-target-edit-logs';
 import {
   getContactColumnScheme,
   getContactDetailById,
@@ -17,6 +13,10 @@ import {
   getMailRecipientsForTarget,
   getResponseEditLogs,
 } from '@/server/read-models/contacts';
+import { getOperationsDataScope } from '@/server/data-scope';
+import { listAssignmentOptions } from '@/server/read-models/contact-assignment-options';
+import { getContactTargetEditLogs } from '@/server/read-models/contact-target-edit-logs';
+import { isGuestViewer } from '@/lib/auth/guest-viewer';
 import { isReeditableResponseStatus } from '@/shared/contracts/survey-response';
 
 export const metadata: Metadata = {
