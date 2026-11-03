@@ -245,10 +245,12 @@ export async function updateContactTarget(
       }
     }
 
-    // 비교 기준은 실제로 저장한 값(PII 정제 뒤 attrs)이다. pii 변경은 값 없이 같은 줄에 붙인다.
+    // 비교 기준은 양쪽 다 PII 정제 뒤 attrs 다. 지금 값도 정제한다 — 그 열이 개인정보로 바뀌기 전에
+    // 올라온 옛 행은 attrs 에 평문이 남아 있어, 그대로 비교하면 그 평문이 기록의 이전 값이 된다.
+    // pii 변경은 값 없이 같은 줄에 붙인다.
     const changes = [
       ...diffContactTargetInfo(
-        current,
+        { ...current, attrs: sanitizeAttrsAgainstPiiScheme(current.attrs, scheme) },
         { attrs, memo: memo ?? null, contactMethod: contactMethod ?? null },
         scheme,
       ),

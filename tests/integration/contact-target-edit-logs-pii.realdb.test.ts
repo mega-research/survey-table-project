@@ -210,6 +210,26 @@ run('대상 정보 수정 현황 — 개인정보 열 (real DB)', () => {
     ]);
   });
 
+  it('옛 행 attrs 에 남은, 지금은 개인정보 열인 키의 평문은 기록에 들어가지 않는다', async () => {
+    // 그 열이 개인정보로 바뀌기 전에 올라온 행 — attrs 에 평문이 그대로 남아 있다.
+    const { surveyId, targetId } = await seed({ 지역: '서울', 대표자휴대폰: '010-9999-0000' });
+
+    await updateContactTarget(
+      { id: targetId, surveyId, attrs: { 지역: '부산' } },
+      false,
+      editor,
+    );
+
+    const logs = await logsOf(targetId);
+    expect(logs).toHaveLength(1);
+    expect(logs[0]!.changes).toEqual([
+      { kind: 'attr', key: '지역', label: '지역', before: '서울', after: '부산' },
+    ]);
+    const serialized = JSON.stringify(logs[0]);
+    expect(serialized).not.toContain('010-9999-0000');
+    expect(serialized).not.toContain('01099990000');
+  });
+
   it('열 이름은 저장 시점 스킴의 이름이고, 스킴에 없는 열은 키를 이름으로 쓴다', async () => {
     const { surveyId, targetId } = await seed({ 지역: '서울' });
 
