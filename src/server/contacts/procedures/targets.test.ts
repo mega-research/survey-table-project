@@ -43,6 +43,21 @@ describe('contacts.targets procedures', () => {
     expect(res).toEqual({ ok: true });
   });
 
+  it('보기만 하는 게스트는 자기 grant 설문이어도 update 가 FORBIDDEN — 대상 정보를 고치지 않는다', async () => {
+    const guest9 = 'c79af8a1-186a-4157-be4c-2bebfbde4a8d';
+    const viewOnlySurvey = '253534a5-913a-4891-a019-f9643ccea0a7';
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `${guest9}:${viewOnlySurvey}`);
+    const client = createRouterClient(
+      { targets },
+      { context: { db: {} as never, supabase: {} as never, user: { id: guest9, email: 'g9@b.com' } } },
+    );
+    await expect(
+      client.targets.update({ id: 'ct-1', surveyId: viewOnlySurvey, attrs: { name: '수정' } }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(svc.updateContactTarget).not.toHaveBeenCalled();
+  });
+
   it('remove는 surveyId/id 입력을 service.deleteContactTarget에 위임하고 {ok:true}를 반환한다', async () => {
     vi.mocked(svc.deleteContactTarget).mockResolvedValue(undefined as never);
     const client = createRouterClient({ targets }, { context: authedContext() });

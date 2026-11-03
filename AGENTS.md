@@ -592,7 +592,7 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
 - procedure 베이스 3종 (`server/orpc.ts`):
   - **`pub`** — 인증 불필요 (응답자 표면: 응답 mutation·공개 설문 조회·컨택 attrs·수신거부 lookup). 남용 방지가 필요한 표면은 `.use(withRateLimit(group))` 부착.
   - **`authed`** — 세션 + `ADMIN_USER_IDS` allowlist. grant-first: 게스트 유저는 allowlist fail-open 여부와 무관하게 FORBIDDEN.
-  - **`scoped`** — 세션 + (admin allowlist ∨ 게스트 grant). **이 베이스를 쓰는 procedure는 핸들러 첫 줄에서 `assertSurveyAccess(context.user.id, input.surveyId)` 호출 필수** (유일한 예외: surveyId가 없는 `media.deleteMailAttachmentTmp`).
+  - **`scoped`** — 세션 + (admin allowlist ∨ 게스트 grant). **이 베이스를 쓰는 procedure는 핸들러 첫 줄에서 `assertSurveyAccess(context.user.id, input.surveyId)` 호출 필수** (유일한 예외: surveyId가 없는 `media.deleteMailAttachmentTmp`). **쓰기 procedure 는 `assertSurveyAccess` 대신 `assertSurveyWriteAccess`** 를 부른다 — 보기만 하는 게스트(`VIEW_ONLY_GUEST_GRANTS`)를 거부한다. 그 게스트의 화면 차단(미들웨어)은 `/api/rpc` 에 걸리지 않아 직접 요청을 막지 못한다(2026-11-03 발견). 새 scoped procedure 는 `orpc-scoped-write-guard.test.ts` 가 소스로 읽어 읽기면 목록 등재를, 쓰기면 이 확인을 요구한다.
 - 게스트 계정: `GUEST_SURVEY_GRANTS="<userId>:<surveyId>[,...]"` env로 설문 단위 위임 (한 유저가 복수 설문 grant 가능). 무권한 설문 콘솔 진입 시 강제 로그아웃 → 로그인 후 원래 목적지 복귀 (`lib/auth/guest-grants.ts`).
 - allowlist 미설정이면 fail-open(인증된 모든 유저 통과) + 최초 1회 경고. 게스트 콘솔은 전역 테스트 모드와 무관하게 항상 실데이터를 본다.
 

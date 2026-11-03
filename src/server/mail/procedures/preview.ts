@@ -1,4 +1,4 @@
-import { assertSurveyAccess, scoped } from '@/server/orpc';
+import { assertSurveyAccess, assertSurveyWriteAccess, scoped } from '@/server/orpc';
 
 import {
   GetMailPreviewSampleInput,
@@ -26,7 +26,7 @@ const testSend = scoped
   .input(SendTestTemplateMailInput)
   .output(SendTestTemplateMailOutput)
   .handler(({ context, input }) => {
-    assertSurveyAccess(context.user.id, input.surveyId);
+    assertSurveyWriteAccess(context.user.id, input.surveyId);
     return svc.sendTestTemplateMail(input);
   });
 

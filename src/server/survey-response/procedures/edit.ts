@@ -1,7 +1,7 @@
 import { ORPCError } from '@orpc/server';
 
-import { isGuestUser, isViewOnlyGuest } from '@/lib/auth/guest-grants';
-import { assertSurveyAccess, scoped } from '@/server/orpc';
+import { isGuestUser } from '@/lib/auth/guest-grants';
+import { assertSurveyWriteAccess, scoped } from '@/server/orpc';
 
 import { SaveAdminEditInput, SaveAdminEditOutput } from '../domain/response-edit';
 import * as svc from '../services/response-edit';
@@ -51,11 +51,8 @@ const saveAdminEdit = scoped
   .input(SaveAdminEditInput)
   .output(SaveAdminEditOutput)
   .handler(async ({ input, context }) => {
-    assertSurveyAccess(context.user.id, input.surveyId);
-    // 보기만 하는 게스트 — 응답 내역 수정 메뉴·화면이 없지만 저장 자체도 막는다.
-    if (isViewOnlyGuest(context.user.id, input.surveyId)) {
-      throw new ORPCError('FORBIDDEN', { message: '응답을 수정할 권한이 없습니다.' });
-    }
+    // 보기만 하는 게스트는 응답 내역 수정 메뉴·화면이 없고 저장 자체도 여기서 막힌다.
+    assertSurveyWriteAccess(context.user.id, input.surveyId);
     try {
       return await svc.saveAdminEdit(
         input,

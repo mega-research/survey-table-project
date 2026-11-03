@@ -5,6 +5,7 @@ import {
   canAccessSurvey,
   isAdminOrGuestGrantHolder,
   isGuestUser,
+  isViewOnlyGuest,
 } from '@/lib/auth/guest-grants';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
 import { isRateLimitedTwoTier, type RateLimitGroup } from '@/lib/rate-limit/rate-limiter';
@@ -105,7 +106,7 @@ export const authed = base.use(({ context, next }) => {
  *
  * 게스트에게 열어줄 procedure 전용. 이 베이스를 쓰는 procedure 는 반드시
  * handler 첫 줄에서 assertSurveyAccess(context.user.id, input.surveyId) 를
- * 호출해 설문 일치를 강제해야 한다 (유일한 예외: 입력에 surveyId 가 없는
+ * 호출해 설문 일치를 강제해야 한다 — 쓰기 procedure 는 assertSurveyWriteAccess 를 부른다 (유일한 예외: 입력에 surveyId 가 없는
  * media.deleteMailAttachmentTmp — tmp 네임스페이스 검증에 의존).
  * 나머지 전 표면은 authed(admin 전용) 유지 — 게스트는 기본 거부.
  *
@@ -127,5 +128,20 @@ export const scoped = base.use(({ context, next }) => {
 export function assertSurveyAccess(userId: string, surveyId: string): void {
   if (!canAccessSurvey(userId, surveyId)) {
     throw new ORPCError('FORBIDDEN', { message: '해당 설문에 대한 권한이 없습니다.' });
+  }
+}
+
+/**
+ * 설문 쓰기 강제 — 설문 접근(assertSurveyAccess)에 더해 보기만 하는 게스트를 거부한다.
+ *
+ * scoped 베이스의 **쓰기** procedure 는 handler 첫 줄에서 assertSurveyAccess 대신 이것을 부른다.
+ * 보기만 하는 게스트(guest-grants 의 VIEW_ONLY_GUEST_GRANTS)의 화면 메뉴·경로 차단은
+ * 미들웨어가 /admin 경로에만 걸어 /api/rpc 직접 요청을 막지 못한다 — 쓰기는 여기서 막는다.
+ * 빠뜨림은 orpc-scoped-write-guard.test.ts 가 소스로 잡는다.
+ */
+export function assertSurveyWriteAccess(userId: string, surveyId: string): void {
+  assertSurveyAccess(userId, surveyId);
+  if (isViewOnlyGuest(userId, surveyId)) {
+    throw new ORPCError('FORBIDDEN', { message: '이 설문을 바꿀 권한이 없습니다.' });
   }
 }

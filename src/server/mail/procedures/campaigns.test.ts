@@ -104,6 +104,25 @@ describe('mail.campaigns procedures', () => {
     });
   });
 
+  it('보기만 하는 게스트는 자기 grant 설문이어도 sendSingle 이 FORBIDDEN — 메일이 나가지 않는다', async () => {
+    const guest9 = 'c79af8a1-186a-4157-be4c-2bebfbde4a8d';
+    const viewOnlySurvey = '253534a5-913a-4891-a019-f9643ccea0a7';
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `${guest9}:${viewOnlySurvey}`);
+    const client = createRouterClient(
+      { campaigns },
+      { context: { db: {} as never, supabase: {} as never, user: { id: guest9, email: 'g9@b.com' } } },
+    );
+    await expect(
+      client.campaigns.sendSingle({
+        surveyId: viewOnlySurvey,
+        contactTargetId: CONTACT_ID,
+        mailTemplateId: TEMPLATE_ID,
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(singleSvc.sendSingleCampaign).not.toHaveBeenCalled();
+  });
+
   it('sendSingle은 input과 context.user.id를 sendSingleCampaign에 위임하고 결과를 반환한다', async () => {
     vi.mocked(singleSvc.sendSingleCampaign).mockResolvedValue({
       campaignId: CAMPAIGN_ID,

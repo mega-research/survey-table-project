@@ -1,6 +1,6 @@
 import * as z from 'zod';
 
-import { assertSurveyAccess, scoped } from '@/server/orpc';
+import { assertSurveyAccess, assertSurveyWriteAccess, scoped } from '@/server/orpc';
 
 import {
   AttachSurveyDocumentInput,
@@ -26,7 +26,7 @@ const attach = scoped
   .input(AttachSurveyDocumentInput)
   .output(SurveyDocumentSchema)
   .handler(({ input, context }) => {
-    assertSurveyAccess(context.user.id, input.surveyId);
+    assertSurveyWriteAccess(context.user.id, input.surveyId);
     return svc.attachSurveyDocument(input);
   });
 
@@ -34,7 +34,7 @@ const remove = scoped
   .input(RemoveSurveyDocumentInput)
   .output(z.object({ ok: z.literal(true) }))
   .handler(async ({ input, context }) => {
-    assertSurveyAccess(context.user.id, input.surveyId);
+    assertSurveyWriteAccess(context.user.id, input.surveyId);
     await svc.removeSurveyDocument(input);
     return { ok: true as const };
   });

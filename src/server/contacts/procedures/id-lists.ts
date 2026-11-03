@@ -1,4 +1,4 @@
-import { assertSurveyAccess, scoped } from '@/server/orpc';
+import { assertSurveyWriteAccess, scoped } from '@/server/orpc';
 
 import { CreateContactIdListInput, CreateContactIdListOutput } from '../domain/contact-id-list';
 import * as svc from '../services/contact-id-lists';
@@ -12,7 +12,7 @@ const create = scoped
   .input(CreateContactIdListInput)
   .output(CreateContactIdListOutput)
   .handler(async ({ input, context }) => {
-    assertSurveyAccess(context.user.id, input.surveyId);
+    assertSurveyWriteAccess(context.user.id, input.surveyId);
     return svc.createContactIdList({ ...input, createdBy: context.user.id });
   });
 
