@@ -162,6 +162,11 @@ export const contactAttempts = pgTable(
     attemptNo: integer('attempt_no').notNull(),
     resultCode: text('result_code').notNull(),
     note: text('note'),
+    /**
+     * 기록자 id — auth.users(id) FK, ON DELETE SET NULL(0014 가 만들고 0152 가 SET NULL 로 다시 건다).
+     * drizzle 스키마는 auth 스키마를 모르므로 FK 의 정본은 마이그레이션이다. 서비스는 uuid 이고
+     * auth.users 에 있는 id 일 때만 채우고 아니면 NULL 이다(contact-attempts 의 createdByOf).
+     */
     createdBy: uuid('created_by'),
     /** 기록자 이메일 스냅샷 (0152) — created_by 와 함께 채운다. 그 전에 적힌 회차는 둘 다 NULL. */
     createdByEmail: text('created_by_email'),

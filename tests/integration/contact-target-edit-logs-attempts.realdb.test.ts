@@ -114,6 +114,23 @@ run('대상 정보 수정 현황 — 컨택 결과 회차 (real DB)', () => {
     ]);
   });
 
+  it('회차를 남긴 계정을 지울 수 있고, 그 회차는 기록자 id 만 비고 이메일은 남는다', async () => {
+    const { surveyId, targetId } = await seed();
+    const goneId = randomUUID();
+    await db.execute(sql`INSERT INTO auth.users (id) VALUES (${goneId})`);
+    await addAttempt({ contactTargetId: targetId, surveyId, resultCode: '13. 독려' }, false, {
+      id: goneId,
+      email: 'gone@local',
+    });
+
+    await db.execute(sql`DELETE FROM auth.users WHERE id = ${goneId}`);
+
+    const rows = await attemptsOf(targetId);
+    expect(rows.map((r) => [r.attemptNo, r.createdBy, r.createdByEmail])).toEqual([
+      [1, null, 'gone@local'],
+    ]);
+  });
+
   it('회차를 지우면 지운 회차의 결과코드·비고·기록자·기록 시각이 이전 값으로 남는다', async () => {
     const { surveyId, targetId } = await seed();
     const added = await addAttempt(
