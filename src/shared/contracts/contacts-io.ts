@@ -197,6 +197,8 @@ export interface ContactAttemptRow {
   attemptNo: number;
   resultCode: string;
   note: string | null;
+  /** 기록자 이메일 스냅샷 — 기록자 기능(0152) 전에 적힌 회차는 null(화면은 「-」). */
+  createdByEmail: string | null;
   createdAt: Date;
 }
 

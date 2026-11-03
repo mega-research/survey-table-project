@@ -17,6 +17,7 @@ import {
   deleteAttempt,
   updateAttempt,
 } from '@/server/contacts/services/contact-attempts';
+import { getContactDetailById } from '@/server/read-models/contacts';
 
 // 요청 밖이라 쿠키가 없다 — 콘솔은 실데이터 파티션을 본다(server/data-scope).
 vi.mock('next/headers', () => ({
@@ -240,5 +241,26 @@ run('대상 정보 수정 현황 — 컨택 결과 회차 (real DB)', () => {
     }
 
     expect(await attemptsOf(targetId)).toHaveLength(1);
+  });
+
+  it('상세 화면이 읽는 회차 목록에 기록자 이메일이 실리고, 기록자 기능 전 회차는 비어 있다', async () => {
+    const { surveyId, targetId } = await seed();
+    // 기록자 기능 전에 적힌 회차 — 기록자 칸이 둘 다 NULL 이다.
+    await db.insert(contactAttempts).values({
+      contactTargetId: targetId,
+      attemptNo: 1,
+      resultCode: '13. 독려',
+    });
+    await addAttempt(
+      { contactTargetId: targetId, surveyId, resultCode: '3.비수신' },
+      false,
+      editor,
+    );
+
+    const detail = await getContactDetailById(targetId, 'real');
+    expect(detail?.attempts.map((a) => [a.attemptNo, a.createdByEmail])).toEqual([
+      [2, 'caller@local'],
+      [1, null],
+    ]);
   });
 });
