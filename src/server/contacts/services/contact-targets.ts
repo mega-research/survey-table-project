@@ -50,12 +50,12 @@ function assertStorablePiiUpdates(piiUpdates: UpdateContactTargetInput['piiUpdat
 }
 
 /**
- * 현재 DB 모드를 기준으로 대상자를 잠근다.
+ * 현재 DB 모드를 기준으로 대상자를 잠그고, 그 잠금 아래에서 대상 정보의 지금 값을 읽는다.
  *
  * 목록을 연 뒤 테스트 모드가 전환된 경우에도 이전 탭이 반대 스코프 행을 수정·삭제하지
  * 못하도록, 설문 행과 대상 행을 같은 트랜잭션에서 순서대로 잠근다.
  */
-async function lockTargetInCurrentScope(
+async function lockTargetAndReadCurrent(
   tx: DbTransaction,
   input: { id: string; surveyId: string },
   isGuest: boolean,
@@ -87,11 +87,7 @@ async function lockTargetInCurrentScope(
 
   return {
     ...scope,
-    current: {
-      attrs: (target.attrs ?? {}) as Record<string, string>,
-      memo: target.memo ?? null,
-      contactMethod: target.contactMethod ?? null,
-    },
+    current: { attrs: target.attrs, memo: target.memo, contactMethod: target.contactMethod },
   };
 }
 
@@ -191,7 +187,7 @@ export async function updateContactTarget(
   assertStorablePiiUpdates(piiUpdates);
 
   await db.transaction(async (tx) => {
-    const { isTest, scheme, current } = await lockTargetInCurrentScope(
+    const { isTest, scheme, current } = await lockTargetAndReadCurrent(
       tx,
       { id, surveyId },
       isGuest,

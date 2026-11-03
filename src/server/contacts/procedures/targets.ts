@@ -11,6 +11,7 @@ import {
   GenerateTestContactsResult,
   UpdateContactTargetInput,
 } from '../domain/contact-target';
+import { contactEditorOf } from '../domain/contact-target-edit';
 import * as svc from '../services/contact-targets';
 import { generateTestContacts } from '../services/test-contacts';
 
@@ -29,10 +30,11 @@ const update = scoped
   .handler(async ({ context, input }) => {
     assertSurveyAccess(context.user.id, input.surveyId);
     // 편집자도 인증된 context 에서 넘긴다 — 「대상 정보 수정 현황」의 누가(게스트도 자기 이메일로).
-    await svc.updateContactTarget(input, isGuestUser(context.user.id), {
-      id: context.user.id,
-      email: context.user.email ?? null,
-    });
+    await svc.updateContactTarget(
+      input,
+      isGuestUser(context.user.id),
+      contactEditorOf(context.user),
+    );
     return { ok: true as const };
   });
 

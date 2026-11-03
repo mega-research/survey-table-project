@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
+import type { StoredPiiPlain } from '@/lib/crypto/pii-fields';
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 
-import { type StoredPiiPlain, diffContactTargetPii } from './contact-target-edit';
+import { diffContactTargetPii } from './contact-target-edit';
 
 const scheme: ContactColumnScheme = {
   version: 1,

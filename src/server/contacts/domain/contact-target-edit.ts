@@ -1,6 +1,7 @@
 // 대상 정보 수정 현황 — 저장 한 번이 무엇을 바꿨는가를 정하는 순수 규칙 (client-safe).
 // 서비스가 대상 행 잠금 아래에서 읽은 지금 값과 실제로 저장할 값을 넘긴다 — 클라이언트가
 // 화면을 연 시점 값은 믿지 않는다. 정본 설계는 .scratch/contact-edit-history/PRD.md.
+import type { StoredPiiPlain } from '@/lib/crypto/pii-fields';
 import { attrsKeyOf, piiKeyOf } from '@/lib/operations/contacts-format';
 import {
   CONTACT_TARGET_EDIT_VALUE_MAX,
@@ -14,6 +15,11 @@ import {
 export interface ContactEditor {
   id: string | null;
   email: string | null;
+}
+
+/** 인증된 context 의 사용자 → 편집자. 이메일이 없으면 null(화면은 「관리자」로 보인다). */
+export function contactEditorOf(user: { id: string; email?: string | null }): ContactEditor {
+  return { id: user.id, email: user.email ?? null };
 }
 
 /** 대상 정보 저장이 비교하는 값 묶음. attrs 는 PII 정제 뒤의 값이어야 한다. */
@@ -50,11 +56,14 @@ function norm(value: string | null | undefined): string {
   return value ?? '';
 }
 
-/** attrs 키 → 저장 시점 열 이름. 스킴에 없으면 키 그대로. */
-function attrLabelMap(scheme: ContactColumnScheme | null): Map<string, string> {
+/** 열 키 → 저장 시점 열 이름. keyOf 가 그 종류(attrs·pii)의 키를 고른다. 스킴에 없으면 키 그대로. */
+function labelMap(
+  scheme: ContactColumnScheme | null,
+  keyOf: (source: string) => string | null,
+): Map<string, string> {
   const map = new Map<string, string>();
   for (const col of scheme?.columns ?? []) {
-    const key = attrsKeyOf(col.source);
+    const key = keyOf(col.source);
     if (key != null && !map.has(key)) map.set(key, col.label || key);
   }
   return map;
@@ -74,7 +83,7 @@ export function diffContactTargetInfo(
   after: ContactTargetInfoValues,
   scheme: ContactColumnScheme | null,
 ): ContactTargetEditChange[] {
-  const labels = attrLabelMap(scheme);
+  const labels = labelMap(scheme, attrsKeyOf);
   const keys = new Set<string>();
   for (const key of labels.keys()) {
     if (key in before.attrs || key in after.attrs) keys.add(key);
@@ -133,26 +142,10 @@ export function attemptEditChange(
   };
 }
 
-/**
- * 개인정보 열 하나의 지금 저장값 — 서비스가 잠금 아래에서 복호화해 메모리에서만 넘긴다.
- * 행이 없는 열은 맵에 없다. 복호화에 실패하면 `failed`.
- */
-export type StoredPiiPlain = { plain: string } | { failed: true };
-
 /** 저장 한 번이 개인정보 열 하나에 남기는 값 — `null` 은 그 열의 행을 지운다는 뜻이다. */
 export interface PiiWrite {
   columnKey: string;
   next: string | null;
-}
-
-/** pii 열 키 → 저장 시점 열 이름. 스킴에 없으면 키 그대로. */
-function piiLabelMap(scheme: ContactColumnScheme | null): Map<string, string> {
-  const map = new Map<string, string>();
-  for (const col of scheme?.columns ?? []) {
-    const key = piiKeyOf(col.source);
-    if (key != null && !map.has(key)) map.set(key, col.label || key);
-  }
-  return map;
 }
 
 /**
@@ -171,7 +164,7 @@ export function diffContactTargetPii(
   const finalNext = new Map<string, string | null>();
   for (const w of writes) finalNext.set(w.columnKey, w.next);
 
-  const labels = piiLabelMap(scheme);
+  const labels = labelMap(scheme, piiKeyOf);
   const changes: ContactTargetEditChange[] = [];
   for (const [key, next] of finalNext) {
     const current = stored.get(key);

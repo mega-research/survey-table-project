@@ -3,6 +3,7 @@ import * as z from 'zod';
 import { loadOperationsDataScope } from '@/server/data-scope';
 import { assertSurveyAccess, authed } from '@/server/orpc';
 import { listAssignmentOptions } from '@/server/read-models/contact-assignment-options';
+
 import type { ContactAssignmentMatchesResult } from '@/shared/contracts/contacts-io';
 
 import {
@@ -13,17 +14,18 @@ import {
   AssignmentMatchesInput,
   ContactAssignmentOptionSchema,
   CreateContactAssignmentInput,
-  ListContactAssignmentsInput,
   PreviewAssignmentInput,
+  ListContactAssignmentsInput,
   RemoveContactAssignmentInput,
   RenameContactAssignmentInput,
   ReorderContactAssignmentsInput,
   SetTargetAssignmentInput,
 } from '../domain/contact-assignment';
+import { contactEditorOf } from '../domain/contact-target-edit';
 import * as applySvc from '../services/contact-assignment-apply';
 import * as facetSvc from '../services/contact-assignment-facets';
-import * as svc from '../services/contact-assignments';
 import { ForbiddenAttrColumnError } from '../services/contact-attr-values';
+import * as svc from '../services/contact-assignments';
 
 /**
  * 컨택원 배정 — 내부 실사 운영 도구라 게스트(설문 위임 클라이언트)에게 열지 않는다.
@@ -67,10 +69,7 @@ const setTarget = authed
   .output(z.object({ ok: z.literal(true) }))
   .handler(async ({ context, input }) => {
     assertSurveyAccess(context.user.id, input.surveyId);
-    await svc.setTargetAssignment(input, {
-      id: context.user.id,
-      email: context.user.email ?? null,
-    });
+    await svc.setTargetAssignment(input, contactEditorOf(context.user));
     return { ok: true as const };
   });
 

@@ -6,7 +6,7 @@ import { type NewContactPii, contactPii } from '@/db/schema';
 import { decryptPii, encryptPii } from './aes';
 import { blindIndex } from './blind';
 import { maskHint } from './mask-hint';
-import { type PiiFieldType } from './pii-fields';
+import { type PiiFieldType, type StoredPiiPlain } from './pii-fields';
 
 export interface PiiInput {
   columnKey: string;
@@ -235,10 +235,19 @@ export async function decryptForTarget(targetId: string): Promise<Record<string,
  * (빈 값 · 정규화 후 빈 값, 예: 숫자 없는 전화번호). 저장 규칙과 변경 판정이 같은 답을 보게 한 곳에 둔다.
  */
 export function piiPlainToStore(fieldType: PiiFieldType, plain: string): string | null {
+  return prepareStoredPii(fieldType, plain)?.plain ?? null;
+}
+
+/** 저장할 평문과 그 blind index — 둘 중 하나라도 비면 `null`(그 칸의 행을 지운다). */
+function prepareStoredPii(
+  fieldType: PiiFieldType,
+  plain: string,
+): { plain: string; blind: string } | null {
   const trimmed = plain.trim();
   if (!trimmed) return null;
-  if (!blindIndex(fieldType, trimmed)) return null;
-  return trimmed;
+  const blind = blindIndex(fieldType, trimmed);
+  if (!blind) return null;
+  return { plain: trimmed, blind };
 }
 
 /**
@@ -250,8 +259,8 @@ export async function readStoredPiiPlain(
   tx: Tx,
   contactTargetId: string,
   columnKeys: readonly string[],
-): Promise<Map<string, { plain: string } | { failed: true }>> {
-  const result = new Map<string, { plain: string } | { failed: true }>();
+): Promise<Map<string, StoredPiiPlain>> {
+  const result = new Map<string, StoredPiiPlain>();
   if (columnKeys.length === 0) return result;
   const rows = await tx
     .select({ columnKey: contactPii.columnKey, cipher: contactPii.cipher })
@@ -285,8 +294,8 @@ export async function upsertPiiValue(
   fieldType: PiiFieldType,
   plain: string,
 ): Promise<void> {
-  const trimmed = piiPlainToStore(fieldType, plain);
-  if (trimmed === null) {
+  const stored = prepareStoredPii(fieldType, plain);
+  if (stored === null) {
     await tx
       .delete(contactPii)
       .where(
@@ -295,9 +304,9 @@ export async function upsertPiiValue(
     return;
   }
 
-  const blind = blindIndex(fieldType, trimmed);
-  const cipher = encryptPii(trimmed);
-  const hint = maskHint(fieldType, trimmed);
+  const { plain: storedPlain, blind } = stored;
+  const cipher = encryptPii(storedPlain);
+  const hint = maskHint(fieldType, storedPlain);
 
   await tx
     .insert(contactPii)

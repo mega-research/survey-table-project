@@ -41,11 +41,12 @@ vi.mock('@/server/contacts/services/scheme-helpers', async (importOriginal) => {
   };
 });
 
-vi.mock('@/lib/crypto/contact-pii-repo', () => ({
+vi.mock('@/lib/crypto/contact-pii-repo', async (importOriginal) => ({
+  // 저장할 평문 규칙(piiPlainToStore)은 실제 것을 쓴다.
+  ...(await importOriginal<typeof import('@/lib/crypto/contact-pii-repo')>()),
   upsertPiiValue: (...args: unknown[]) => upsertPiiValueMock(...(args as [])),
   // 개인정보 열 변경 판정 재료 — 이 파일은 스코프 가드만 본다(기록은 realdb 가 본다).
   readStoredPiiPlain: async () => new Map(),
-  piiPlainToStore: (_type: string, plain: string) => plain.trim() || null,
 }));
 
 vi.mock('@/db', () => {
@@ -134,6 +135,9 @@ beforeEach(() => {
   upsertPiiValueMock.mockClear();
 });
 
+// 잠금 아래에서 읽는 대상 행 — 대상 정보의 지금 값(스키마상 attrs 는 늘 객체다).
+const lockedTarget = { id: 'ct-1', attrs: {}, memo: null, contactMethod: null };
+
 describe('updateContactTarget 설문 스코프', () => {
   it('테스트 스코프 PII 컬럼을 attrs 평문에서 제거한다', async () => {
     selectResultQueue.push(
@@ -152,7 +156,7 @@ describe('updateContactTarget 설문 스코프', () => {
           },
         },
       ],
-      [{ id: 'ct-1' }],
+      [lockedTarget],
     );
     updateReturningQueue.push([{ id: 'ct-1' }]);
 
@@ -195,7 +199,7 @@ describe('updateContactTarget 설문 스코프', () => {
   });
 
   it('다른 설문 소속이면(영향 0행) NOT_FOUND throw 하고 PII upsert 도 일어나지 않는다', async () => {
-    selectResultQueue.push([{ enabled: false }], [{ id: 'ct-1' }]);
+    selectResultQueue.push([{ enabled: false }], [lockedTarget]);
     updateReturningQueue.push([]); // 0행 영향
     await expect(
       updateContactTarget(
@@ -214,7 +218,7 @@ describe('updateContactTarget 설문 스코프', () => {
   });
 
   it('정상 설문이면(1행 영향) 성공하고 PII upsert 가 소속 확정 후 호출된다', async () => {
-    selectResultQueue.push([{ enabled: false }], [{ id: 'ct-1' }]);
+    selectResultQueue.push([{ enabled: false }], [lockedTarget]);
     updateReturningQueue.push([{ id: 'ct-1' }]); // 1행 영향
     await updateContactTarget(
       {
