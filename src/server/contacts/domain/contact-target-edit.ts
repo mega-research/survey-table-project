@@ -1,7 +1,6 @@
 // 대상 정보 수정 현황 — 저장 한 번이 무엇을 바꿨는가를 정하는 순수 규칙 (client-safe).
 // 서비스가 대상 행 잠금 아래에서 읽은 지금 값과 실제로 저장할 값을 넘긴다 — 클라이언트가
 // 화면을 연 시점 값은 믿지 않는다. 정본 설계는 .scratch/contact-edit-history/PRD.md.
-
 import { attrsKeyOf } from '@/lib/operations/contacts-format';
 import {
   CONTACT_TARGET_EDIT_VALUE_MAX,

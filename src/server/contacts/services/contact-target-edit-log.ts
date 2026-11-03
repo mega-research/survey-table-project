@@ -3,10 +3,7 @@ import 'server-only';
 
 import type { DbTransaction } from '@/db';
 import { contactTargetEditLogs } from '@/db/schema';
-import type {
-  ContactTargetEditAction,
-  ContactTargetEditChange,
-} from '@/shared/contracts/contacts';
+import type { ContactTargetEditAction, ContactTargetEditChange } from '@/shared/contracts/contacts';
 
 import type { ContactEditor } from '../domain/contact-target-edit';
 

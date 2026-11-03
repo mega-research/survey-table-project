@@ -8,7 +8,12 @@ const scheme: ContactColumnScheme = {
   version: 1,
   headerRow: 1,
   columns: [
-    { key: '사업자등록증기업명', label: '사업자등록증기업명', source: 'attrs.사업자등록증기업명', order: 1 },
+    {
+      key: '사업자등록증기업명',
+      label: '사업자등록증기업명',
+      source: 'attrs.사업자등록증기업명',
+      order: 1,
+    },
     { key: '명단기업명', label: '명단 기업명', source: 'attrs.명단기업명', order: 2, hidden: true },
     { key: '대표자', label: '대표자 휴대폰', source: 'pii.대표자', order: 3, piiType: 'mobile' },
   ],
@@ -20,11 +25,20 @@ describe('diffContactTargetInfo — 대상 정보 저장의 변경 목록', () =
   it('바뀐 attrs 칸마다 저장 시점 열 이름으로 이전 값 → 새 값을 낸다(숨김 열 포함)', () => {
     const changes = diffContactTargetInfo(
       { ...base, attrs: { 사업자등록증기업명: '-', 명단기업명: '-', 지역: '서울' } },
-      { ...base, attrs: { 사업자등록증기업명: '아리오나트', 명단기업명: '아리오나트', 지역: '서울' } },
+      {
+        ...base,
+        attrs: { 사업자등록증기업명: '아리오나트', 명단기업명: '아리오나트', 지역: '서울' },
+      },
       scheme,
     );
     expect(changes).toEqual([
-      { kind: 'attr', key: '사업자등록증기업명', label: '사업자등록증기업명', before: '-', after: '아리오나트' },
+      {
+        kind: 'attr',
+        key: '사업자등록증기업명',
+        label: '사업자등록증기업명',
+        before: '-',
+        after: '아리오나트',
+      },
       { kind: 'attr', key: '명단기업명', label: '명단 기업명', before: '-', after: '아리오나트' },
     ]);
   });
@@ -35,7 +49,9 @@ describe('diffContactTargetInfo — 대상 정보 저장의 변경 목록', () =
       { ...base, attrs: { 비고열: 'b' } },
       null,
     );
-    expect(changes).toEqual([{ kind: 'attr', key: '비고열', label: '비고열', before: 'a', after: 'b' }]);
+    expect(changes).toEqual([
+      { kind: 'attr', key: '비고열', label: '비고열', before: 'a', after: 'b' },
+    ]);
   });
 
   it('키가 새로 생기거나 없어진 것도 변경이다', () => {
@@ -85,7 +101,14 @@ describe('diffContactTargetInfo — 대상 정보 저장의 변경 목록', () =
       null,
     );
     expect(changes).toEqual([
-      { kind: 'attr', key: '긴열', label: '긴열', before: exact, after: '가'.repeat(1000), afterTruncated: true },
+      {
+        kind: 'attr',
+        key: '긴열',
+        label: '긴열',
+        before: exact,
+        after: '가'.repeat(1000),
+        afterTruncated: true,
+      },
       { kind: 'memo', before: '가'.repeat(1000), after: 'x', beforeTruncated: true },
     ]);
   });

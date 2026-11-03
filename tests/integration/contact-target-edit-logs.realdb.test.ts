@@ -13,6 +13,7 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 import { db } from '@/db';
 import { contactTargetEditLogs, contactTargets, surveys } from '@/db/schema';
 import { updateContactTarget } from '@/server/contacts/services/contact-targets';
+import { getContactTargetEditLogs } from '@/server/read-models/contact-target-edit-logs';
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 
 import { backendPid, waitForLockWaitersBehind } from '../helpers/lock-waiters';
@@ -28,7 +29,12 @@ const scheme: ContactColumnScheme = {
   version: 1,
   headerRow: 1,
   columns: [
-    { key: '사업자등록증기업명', label: '사업자등록증기업명', source: 'attrs.사업자등록증기업명', order: 1 },
+    {
+      key: '사업자등록증기업명',
+      label: '사업자등록증기업명',
+      source: 'attrs.사업자등록증기업명',
+      order: 1,
+    },
     { key: '명단기업명', label: '명단기업명', source: 'attrs.명단기업명', order: 2, hidden: true },
     { key: '지역', label: '지역', source: 'attrs.지역', order: 3 },
   ],
@@ -73,7 +79,11 @@ run('대상 정보 수정 현황 (real DB)', () => {
   }
 
   it('attrs 두 칸을 바꾸면 한 줄에 변경 둘이 이전·새 값과 함께 남는다', async () => {
-    const { surveyId, targetId } = await seed({ 사업자등록증기업명: '-', 명단기업명: '-', 지역: '서울' });
+    const { surveyId, targetId } = await seed({
+      사업자등록증기업명: '-',
+      명단기업명: '-',
+      지역: '서울',
+    });
 
     await updateContactTarget(
       {
@@ -93,7 +103,13 @@ run('대상 정보 수정 현황 (real DB)', () => {
       editedBy: 'editor-1',
       editorEmail: 'editor@local',
       changes: [
-        { kind: 'attr', key: '사업자등록증기업명', label: '사업자등록증기업명', before: '-', after: '아리오나트' },
+        {
+          kind: 'attr',
+          key: '사업자등록증기업명',
+          label: '사업자등록증기업명',
+          before: '-',
+          after: '아리오나트',
+        },
         { kind: 'attr', key: '명단기업명', label: '명단기업명', before: '-', after: '아리오나트' },
       ],
     });
@@ -195,5 +211,92 @@ run('대상 정보 수정 현황 (real DB)', () => {
       .where(eq(contactTargets.id, targetId));
     expect(row).toEqual({ attrs: { 지역: '서울' }, memo: null });
     expect(await logsOf(targetId)).toEqual([]);
+  });
+  describe('읽기 로더', () => {
+    async function insertLog(
+      surveyId: string,
+      targetId: string,
+      action: 'info_edit' | 'assignment_change',
+      changes: (typeof contactTargetEditLogs.$inferInsert)['changes'],
+      at: string,
+    ) {
+      await db.insert(contactTargetEditLogs).values({
+        surveyId,
+        contactTargetId: targetId,
+        action,
+        changes,
+        editorEmail: 'editor@local',
+        createdAt: new Date(at),
+      });
+    }
+
+    it('최신순으로 내고, 테스트 파티션 대상의 기록은 실데이터 스코프에 나오지 않는다', async () => {
+      const real = await seed({ 지역: '서울' });
+      await insertLog(
+        real.surveyId,
+        real.targetId,
+        'info_edit',
+        [{ kind: 'memo', before: '', after: '처음' }],
+        '2026-11-01T00:00:00Z',
+      );
+      await insertLog(
+        real.surveyId,
+        real.targetId,
+        'info_edit',
+        [{ kind: 'memo', before: '처음', after: '나중' }],
+        '2026-11-02T00:00:00Z',
+      );
+
+      const rows = await getContactTargetEditLogs(real.targetId, 'real', { isGuest: false });
+      expect(rows.map((r) => r.changes[0])).toEqual([
+        { kind: 'memo', before: '처음', after: '나중' },
+        { kind: 'memo', before: '', after: '처음' },
+      ]);
+      expect(rows[0]).toMatchObject({ action: 'info_edit', editorEmail: 'editor@local' });
+
+      const testTarget = await seed({ 지역: '서울' }, { isTest: true });
+      await insertLog(
+        testTarget.surveyId,
+        testTarget.targetId,
+        'info_edit',
+        [{ kind: 'memo', before: '', after: '테스트' }],
+        '2026-11-01T00:00:00Z',
+      );
+      expect(
+        await getContactTargetEditLogs(testTarget.targetId, 'real', { isGuest: false }),
+      ).toEqual([]);
+      expect(
+        await getContactTargetEditLogs(testTarget.targetId, 'test', { isGuest: false }),
+      ).toHaveLength(1);
+    });
+
+    it('게스트에게는 컨택원 변경을 빼고, 그것만 담긴 줄은 줄째 뺀다', async () => {
+      const { surveyId, targetId } = await seed({});
+      const assignment = {
+        kind: 'assignment' as const,
+        before: null,
+        after: { id: 'a', name: '10차' },
+      };
+      await insertLog(
+        surveyId,
+        targetId,
+        'assignment_change',
+        [assignment],
+        '2026-11-01T00:00:00Z',
+      );
+      await insertLog(
+        surveyId,
+        targetId,
+        'info_edit',
+        [{ kind: 'memo', before: '', after: 'x' }, assignment],
+        '2026-11-02T00:00:00Z',
+      );
+
+      const guest = await getContactTargetEditLogs(targetId, 'real', { isGuest: true });
+      expect(guest.map((r) => r.changes)).toEqual([[{ kind: 'memo', before: '', after: 'x' }]]);
+
+      const admin = await getContactTargetEditLogs(targetId, 'real', { isGuest: false });
+      expect(admin).toHaveLength(2);
+    });
   });
 });
