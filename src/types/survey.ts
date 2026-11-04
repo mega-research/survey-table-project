@@ -861,6 +861,13 @@ export interface TableColumn {
   colspan?: number; // 헤더 가로 병합
   isHeaderHidden?: boolean; // 다른 컬럼의 colspan에 의해 숨겨진 헤더
   displayCondition?: QuestionConditionGroup; // 열 표시 조건
+  /**
+   * 안 쓰면 내보내기에서 뺀다 — 응답 전체에서 이 열의 칸에 값이 하나도 없으면 엑셀·SPSS 에
+   * 이 열의 변수를 내지 않는다(CONTEXT.md 「안 쓴 열 빼기」). 「기타 원료 1~3」처럼 넉넉히
+   * 만들어 둔 열용이다. 판정은 설문 전체 기준이고(분할 파일 간 열 구성이 같도록) 응답 화면·
+   * 저장·변수명은 무변경이다. 판정 `lib/analytics/unused-column-usage`.
+   */
+  exportOmitIfUnused?: boolean;
 }
 
 // 다단계 헤더 셀 (headerGrid용)

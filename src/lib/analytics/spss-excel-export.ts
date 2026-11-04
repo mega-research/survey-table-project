@@ -168,6 +168,12 @@ export interface SpssColumnOptions {
    */
   usedRepeatCounts?: ReadonlyMap<string, number>;
   /**
+   * 안 쓴 열 빼기 — 질문 id → 아무도 채우지 않은 「안 쓰면 뺀다」 열 id (`unused-column-usage`).
+   * 그 열의 칸 변수를 내지 않는다. 미전달이면 전 열을 낸다(발행 시점 변수명 게이트는 최악의 집합).
+   * **설문 전체 기준**으로 계산해야 분할 내보내기의 파일 간 열 구성이 갈리지 않는다.
+   */
+  unusedColumnIds?: ReadonlyMap<string, ReadonlySet<string>>;
+  /**
    * 문항 id → 그 문항이 속한 언어 묶음의 언어 (`resolveLanguageSetLocales`). 주어지면 서로 다른
    * 언어 묶음의 같은 변수명 열을 한 열로 합친다. 미전달·빈 맵이면 다국어 기능 도입 전과 같은 열이다.
    */
@@ -557,9 +563,13 @@ export function generateSPSSColumns(
             cellCoords.push({ tRow, colIdx });
         }
       }
+      const unusedColumns = options?.unusedColumnIds?.get(q.id);
       for (const { tRow, colIdx } of cellCoords) {
         const cell = tRow.cells[colIdx];
         if (!cell) continue;
+        // 안 쓴 열 빼기 — 보기 그룹 칸은 그룹 열로 따로 나가므로 그대로 둔다
+        const columnId = q.tableColumns[colIdx]?.id;
+        if (unusedColumns && columnId && unusedColumns.has(columnId) && !choiceGroupOfCell.has(cell.id)) continue;
         const choiceGroup = choiceGroupOfCell.get(cell.id);
         if (choiceGroup && !emittedChoiceGroups.has(choiceGroup)) {
           emittedChoiceGroups.add(choiceGroup);

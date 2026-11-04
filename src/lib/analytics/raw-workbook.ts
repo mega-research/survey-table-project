@@ -10,6 +10,7 @@ import {
   generateSPSSColumns,
 } from '@/lib/analytics/spss-excel-export';
 import { collectUsedRepeatCounts } from '@/lib/analytics/row-repeat-usage';
+import { collectUnusedColumnIds } from '@/lib/analytics/unused-column-usage';
 import type { RawExportContactColumn } from '@/lib/operations/contacts-format';
 import { type Platform, formatPlatformKo } from '@/lib/operations/parse-ua';
 import {
@@ -104,10 +105,12 @@ export interface RawExportContext {
   entryParamNames?: readonly string[];
   /**
    * 반복 블록별 "실제로 쓰인 최대 벌" — 뒤쪽 미사용 벌의 열을 빼는 판정.
-   * 워크북 빌더가 진입부에서 모수 전체를 1회 스캔해 채운다(withUsedRepeatCounts).
+   * 워크북 빌더가 진입부에서 모수 전체를 1회 스캔해 채운다(withExportColumnUsage).
    * 모든 시트가 같은 맵을 공유해야 파일 안에서 열 구성이 갈리지 않는다.
    */
   usedRepeatCounts?: ReadonlyMap<string, number>;
+  /** 안 쓴 열 빼기 — 아무도 채우지 않은 「안 쓰면 뺀다」 열(질문 id → 열 id). 채우는 자리는 위와 같다. */
+  unusedColumnIds?: ReadonlyMap<string, ReadonlySet<string>>;
   /**
    * 문항 id → 언어 묶음의 언어 (`resolveLanguageSetLocales`). 공유 변수명을 한 열로 합친다
    * (CONTEXT.md 「공유 변수명」). 다국어 설문이 아니면 비어 있거나 없고, 열 구성은 그대로다.
@@ -125,21 +128,28 @@ export function toSpssColumnOptions(ctx: RawExportContext): SpssColumnOptions {
       ? { changeConfirmQuestionIds: ctx.changeConfirmQuestionIds }
       : {}),
     ...(ctx.usedRepeatCounts ? { usedRepeatCounts: ctx.usedRepeatCounts } : {}),
+    ...(ctx.unusedColumnIds ? { unusedColumnIds: ctx.unusedColumnIds } : {}),
     ...(ctx.languageSetLocales ? { languageSetLocales: ctx.languageSetLocales } : {}),
   };
 }
 
 /**
- * 반복 블록 사용 벌 스캔을 컨텍스트에 얹는다 — 워크북 빌더 진입부에서 한 번만 부른다.
- * 파일별이 아니라 **모수 전체**를 세야 분할 내보내기의 파일 간 열 구성이 같다.
+ * 내보낼 열을 줄이는 두 스캔(행 반복 사용 벌 · 안 쓴 열)을 컨텍스트에 얹는다 — 워크북 빌더
+ * 진입부에서 한 번만 부른다. 파일별이 아니라 **모수 전체**를 세야 분할 내보내기의 파일 간
+ * 열 구성이 같다.
  */
-export function withUsedRepeatCounts(
+export function withExportColumnUsage(
   ctx: RawExportContext,
   questions: Question[],
   rows: readonly RawExportResponseRow[],
 ): RawExportContext {
   const usedRepeatCounts = collectUsedRepeatCounts(questions, rows);
-  return usedRepeatCounts.size > 0 ? { ...ctx, usedRepeatCounts } : ctx;
+  const unusedColumnIds = collectUnusedColumnIds(questions, rows);
+  return {
+    ...ctx,
+    ...(usedRepeatCounts.size > 0 ? { usedRepeatCounts } : {}),
+    ...(unusedColumnIds.size > 0 ? { unusedColumnIds } : {}),
+  };
 }
 
 /** 응답값이 실제 입력으로 간주되는지 — 빈 문자열/빈 배열/빈 객체는 미입력. */
@@ -441,7 +451,7 @@ export function generateRawDataWorkbook(
 ): ExcelJS.Workbook {
   // 질문은 order 순으로 정렬해 컬럼/코딩북 순서를 설문 표시 순서와 일치시킨다.
   const sortedQuestions = [...questions].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  const exportCtx = withUsedRepeatCounts(ctx, sortedQuestions, rows);
+  const exportCtx = withExportColumnUsage(ctx, sortedQuestions, rows);
   const columns = generateSPSSColumns(sortedQuestions, toSpssColumnOptions(exportCtx));
   const questionMap = new Map(sortedQuestions.map((q) => [q.id, q]));
 

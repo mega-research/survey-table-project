@@ -82,6 +82,7 @@ import {
   MAX_EXPORT_RESPONSES,
   countRawExportPopulation,
   loadRawExportRows,
+  loadUnusedColumnIds,
   loadUsedRepeatCounts,
 } from './raw-export-load';
 import type { RawExportContactColumn } from '@/lib/operations/contacts-format';
@@ -836,4 +837,48 @@ describe('loadUsedRepeatCounts', () => {
       expect(render(sliceCall!.where).params).toEqual(params);
     },
   );
+});
+
+describe('loadUnusedColumnIds', () => {
+  const OMIT_QUESTION = {
+    id: 'q-omit',
+    type: 'table',
+    title: '원료 표',
+    required: false,
+    order: 0,
+    tableColumns: [
+      { id: 'col-milk', label: '원유' },
+      { id: 'col-etc1', label: '기타1', exportOmitIfUnused: true },
+      { id: 'col-etc2', label: '기타2', exportOmitIfUnused: true },
+    ],
+    tableRowsData: [
+      {
+        id: 'omit-row',
+        label: '국내산',
+        cells: ['milk', 'etc1', 'etc2'].map((k) => ({ id: `omit-${k}`, type: 'input', content: '' })),
+      },
+    ],
+  } as unknown as Question;
+
+  it('「안 쓰면 뺀다」 열이 없는 설문은 질의를 하지 않는다', async () => {
+    const result = await loadUnusedColumnIds(surveyId, 'real', [PLAIN_QUESTION, REPEAT_QUESTION]);
+    expect(result.size).toBe(0);
+    expect(state.calls).toHaveLength(0);
+  });
+
+  it('완료 응답 조각을 읽어 아무도 안 쓴 표시 열만 돌려준다', async () => {
+    useScan({ total: 1, rows: [{ questionResponses: { 'q-omit': { 'omit-etc1': '연유' } } }] });
+    const result = await loadUnusedColumnIds(surveyId, 'real', [OMIT_QUESTION, PLAIN_QUESTION]);
+    expect(kinds()).toEqual(['repeatScanCount', 'repeatScanRows']);
+    expect([...result]).toEqual([['q-omit', new Set(['col-etc2'])]]);
+    const { params } = render(selectFields('repeatScanRows')?.['questionResponses']);
+    expect(params).toEqual(['q-omit', 'q-omit']);
+  });
+
+  it('상한을 넘으면 빈 맵 — 호출측이 전 열을 낸다', async () => {
+    useScan({ total: MAX_EXPORT_RESPONSES + 1 });
+    const result = await loadUnusedColumnIds(surveyId, 'real', [OMIT_QUESTION]);
+    expect(kinds()).toEqual(['repeatScanCount']);
+    expect(result.size).toBe(0);
+  });
 });

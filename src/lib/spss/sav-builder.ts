@@ -5,6 +5,7 @@ import { join } from 'path';
 import { SavVariable, VariableAlignment, VariableType, saveToFile } from 'sav-writer';
 
 import { collectUsedRepeatCounts } from '@/lib/analytics/row-repeat-usage';
+import { collectUnusedColumnIds } from '@/lib/analytics/unused-column-usage';
 import {
   SPSSExportColumn,
   SpssColumnOptions,
@@ -278,9 +279,12 @@ export async function generateSavBuffer(
   // 반복 블록의 뒤쪽 미사용 벌은 빈 열이다 — 모수 전체를 1회 스캔해 잘라낸다.
   // 호출부가 이미 판정을 넘겼으면 그것을 존중한다(설문 전체 기준 판정 보존).
   const usedRepeatCounts = options?.usedRepeatCounts ?? collectUsedRepeatCounts(questions, submissions);
+  // 안 쓴 열 빼기도 같은 규칙 — 모수 전체 스캔, 호출부 판정 우선
+  const unusedColumnIds = options?.unusedColumnIds ?? collectUnusedColumnIds(questions, submissions);
   const columns = generateSPSSColumns(questions, {
     ...options,
     ...(usedRepeatCounts.size > 0 ? { usedRepeatCounts } : {}),
+    ...(unusedColumnIds.size > 0 ? { unusedColumnIds } : {}),
   });
   // 변수명 가드: invalid/중복이면 명시적 에러 (silent 치환 금지 — C1 차단)
   assertValidSpssVarNames(columns);

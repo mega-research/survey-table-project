@@ -17,7 +17,7 @@ import {
   estimateTextWidth,
   styleHeaderRows,
   toSpssColumnOptions,
-  withUsedRepeatCounts,
+  withExportColumnUsage,
 } from './raw-workbook';
 import { columnCellLabel } from './column-cell-label';
 
@@ -31,7 +31,7 @@ export function buildSplitWorkbook(
   const sortedQuestions = [...questions].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const questionMap = new Map(sortedQuestions.map((q) => [q.id, q]));
   // 반복 블록 사용 벌은 파일 전체가 같은 판정을 쓴다 — 시트마다 열 구성이 갈리면 안 된다.
-  const exportCtx = withUsedRepeatCounts(ctx, sortedQuestions, rows);
+  const exportCtx = withExportColumnUsage(ctx, sortedQuestions, rows);
 
   // planSplit이 assignSplitSheetNames 적용 후 최종 시트명을 s.name에 보관한다.
   // buildSplitWorkbook은 plan.sheets를 그대로 따라 옵션 시트를 생성해 이름 일관성을 보장한다.

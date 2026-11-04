@@ -642,6 +642,29 @@ export function useTableEditor({
     [commitColumns, notifyChange],
   );
 
+  // 안 쓴 열 빼기 — 체크박스라 스타일과 같이 즉시 커밋한다
+  const updateColumnExportOmit = useCallback(
+    (columnIndex: number, omit: boolean) => {
+      if (pendingChangeRef.current) {
+        clearTimeout(pendingChangeRef.current);
+        pendingChangeRef.current = null;
+      }
+      if (pendingRowsSyncRef.current) {
+        pendingRowsSyncRef.current = false;
+        setCurrentRows(currentRowsRef.current);
+      }
+      const updatedColumns = currentColumnsRef.current.map((col, index) => {
+        if (index !== columnIndex) return col;
+        if (omit) return { ...col, exportOmitIfUnused: true };
+        const { exportOmitIfUnused: _omit, ...rest } = col;
+        return rest;
+      });
+      commitColumns(updatedColumns);
+      notifyChange(currentTitleRef.current, updatedColumns, currentRowsRef.current);
+    },
+    [commitColumns, notifyChange],
+  );
+
   // ── 행 CRUD ──
 
   const addRow = useCallback(() => {
@@ -1506,6 +1529,7 @@ export function useTableEditor({
       moveRow,
       updateColumnLabel,
       updateColumnStyle,
+      updateColumnExportOmit,
       updateColumnCode,
       handleColumnWidthChange,
       setEditingColumnWidth,

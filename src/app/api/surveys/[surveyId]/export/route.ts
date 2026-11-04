@@ -24,6 +24,7 @@ import {
   loadFieldCompletedCodes,
   loadLanguageSetLocales,
   loadRawExportRows,
+  loadUnusedColumnIds,
   loadUsedRepeatCounts,
   type RawExportLoadOptions,
   type RawExportLoadResult,
@@ -221,11 +222,14 @@ async function handleExport(
       // 행 반복의 뒤쪽 미사용 벌은 .sav 에서 열이 없다 — 여기서도 같은 판정을 써야
       // FORMATS 가 존재하지 않는 변수를 가리키지 않는다. 빈 맵이면 전 벌을 낸다.
       const usedRepeatCounts = await loadUsedRepeatCounts(surveyId, scope, hydratedQuestions);
+      // 안 쓴 열 빼기도 .sav 와 같은 판정이어야 FORMATS 가 없는 변수를 가리키지 않는다
+      const unusedColumnIds = await loadUnusedColumnIds(surveyId, scope, hydratedQuestions);
       const syntax = generateMrsetsSyntax(
         generateSPSSColumns(hydratedQuestions, {
           changeConfirmQuestionIds,
           languageSetLocales,
           ...(usedRepeatCounts.size > 0 ? { usedRepeatCounts } : {}),
+          ...(unusedColumnIds.size > 0 ? { unusedColumnIds } : {}),
         }),
         hydratedQuestions,
       );
