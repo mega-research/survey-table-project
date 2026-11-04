@@ -151,10 +151,37 @@ function baseRowCodeOf(row: TableRow, fallback: string): string {
   return raw;
 }
 
+/**
+ * 복제 벌의 선택 칸 보기 id — 템플릿 보기 id 에 벌 번호를 붙여 정한다.
+ *
+ * 상세 기재는 `__optTexts__[문항][보기 id]` 에 산다(OptionTextInput). 보기 id 를 그대로 복사하면
+ * 모든 벌이 같은 칸을 써서 한 벌의 「기타」 입력이 다른 벌의 입력을 덮는다. 발번하지 않고 파생하는
+ * 이유는 멱등성이다 — 다시 펼쳐도 같은 id 가 나오고, 템플릿에 보기를 끼우거나 순서를 바꿔도 기존
+ * 보기의 id 가 따라가 이미 저장된 상세 기재가 고아가 되지 않는다.
+ *
+ * 값이 없는 보기는 템플릿 보기 id 를 값으로 둔다. 선택 칸은 `value ?? id` 를 저장하고 중복 불가
+ * 묶음도 그 키로 비교하므로, 그래야 벌끼리 같은 보기가 같은 저장값으로 남는다(빌더는 늘 값을 준다).
+ */
+export function bundleOptionId(templateOptionId: string, bundle: number): string {
+  return `${templateOptionId}-r${bundle}`;
+}
+
+function cloneSelectOptionsForBundle(
+  options: NonNullable<TableCell['selectOptions']>,
+  bundle: number,
+): NonNullable<TableCell['selectOptions']> {
+  return options.map((option) => ({
+    ...option,
+    id: bundleOptionId(option.id, bundle),
+    value: option.value ?? option.id,
+  }));
+}
+
 function cloneCellForBundle(
   template: TableCell,
   newId: string,
   idMap: ReadonlyMap<string, string>,
+  bundle: number,
 ): TableCell {
   const rest: Omit<TableCell, ClonedAwayCellField> & Partial<Pick<TableCell, ClonedAwayCellField>> =
     { ...template };
@@ -163,7 +190,11 @@ function cloneCellForBundle(
   delete rest.exportLabel;
   delete rest.isCustomExportLabel;
   delete rest.rankVarNames;
-  return remapCellRefs({ ...(rest as TableCell), id: newId }, idMap);
+  const cloned: TableCell = { ...(rest as TableCell), id: newId };
+  if (template.selectOptions) {
+    cloned.selectOptions = cloneSelectOptionsForBundle(template.selectOptions, bundle);
+  }
+  return remapCellRefs(cloned, idMap);
 }
 
 /**
@@ -262,7 +293,7 @@ export function expandRepeatRows(
             repeatIndex: bundle,
             repeatSourceRowId: template.id,
             cells: template.cells.map((cell) =>
-              cloneCellForBundle(cell, cellIds.get(cell.id)!, cellIds),
+              cloneCellForBundle(cell, cellIds.get(cell.id)!, cellIds, bundle),
             ),
           });
         }
@@ -356,8 +387,8 @@ export interface RowRepeatViolation {
  * 반복 블록 안에 놓아도 되는 셀 종류 — 입력 셀 · 선택(드롭다운) 셀 · 라벨용 표시 셀.
  *
  * 선택 칸은 값이 입력 칸과 같은 모양(셀 id 아래 문자열 하나)이라 열린 벌 파생·접을 때 비우기·
- * 사용 벌 pruning 이 그대로 맞는다. 상세 기재(`__optTexts__[문항][셀]`)도 셀 id 로 갈려 벌끼리
- * 섞이지 않는다 — 행 차례로 열기에서 이미 쓰는 조합이다(2026-11-04, 유가공업 실태조사 문1).
+ * 사용 벌 pruning 이 그대로 맞는다. 상세 기재는 `__optTexts__[문항][보기 id]` 라 셀 id 로 갈리지
+ * 않는다 — 복제 벌의 보기 id 를 벌마다 따로 정해 섞이지 않게 한다(`bundleOptionId`, 2026-11-04 유가공업 실태조사 문1).
  * 라디오·체크박스는 보기 목록을 셀마다 따로 들고 값 모양이 달라, 계산·랭킹·보기 소스 셀은
  * 표 전체 규칙에 엮여 벌마다 의미가 갈려 여전히 뺀다.
  */

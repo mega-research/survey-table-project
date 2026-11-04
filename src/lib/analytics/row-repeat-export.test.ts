@@ -6,7 +6,7 @@ import type { Question, RowRepeatConfig, SurveySubmission, TableRow } from '@/ty
 import { assertValidSpssVarNames } from '@/lib/spss/variable-name-guard';
 
 import { collectUsedRepeatCounts, repeatQuestionIds } from './row-repeat-usage';
-import { generateSPSSColumns } from './spss-excel-export';
+import { buildDataRows, generateSPSSColumns } from './spss-excel-export';
 
 /**
  * 뒤쪽 미사용 벌 pruning — 구조에는 20벌이 박혀 있어도 아무도 채우지 않은 벌의 열은
@@ -199,5 +199,30 @@ describe('선택 칸(드롭다운)이 든 반복 블록', () => {
     expect(names.some((v) => v.startsWith('QS_r01_02_c01'))).toBe(true);
     expect(names.some((v) => v.startsWith('QS_r01_03'))).toBe(false);
     expect(names.filter((v) => v.endsWith('_text'))).toHaveLength(2);
+  });
+
+  it('벌마다 「기타」 상세 기재가 따로 저장되고 따로 내보내진다', () => {
+    // 상세 기재는 __optTexts__[문항][보기 id] 에 산다 — 벌끼리 보기 id 가 같으면 나중 입력이 앞 벌을 덮는다.
+    const otherIdOf = (bundle: number) =>
+      q.tableRowsData!.find((r) => r.repeatIndex === bundle)!.cells[0]!.selectOptions!.find(
+        (o) => o.value === '99',
+      )!.id;
+    expect(new Set([1, 2, 3].map(otherIdOf)).size).toBe(3);
+
+    const sub = {
+      id: 's',
+      questionResponses: {
+        q3: { [selectIdOf(1)]: '99', [selectIdOf(2)]: '99' },
+        __optTexts__: { q3: { [otherIdOf(1)]: '치즈', [otherIdOf(2)]: '버터' } },
+      },
+    } as unknown as SurveySubmission;
+    const used = collectUsedRepeatCounts([q], [sub]);
+    const columns = generateSPSSColumns([q], { usedRepeatCounts: used });
+    const row = buildDataRows(columns, [q], [sub])[0]!;
+    const textValues = columns
+      .map((c, i) => [c.spssVarName, row[i]] as const)
+      .filter(([name]) => name.endsWith('_text'))
+      .map(([, v]) => v);
+    expect(textValues).toEqual(['치즈', '버터']);
   });
 });

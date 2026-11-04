@@ -220,3 +220,73 @@ describe('collapseRepeatRows', () => {
     expect(collapseRepeatRows(out).map((r) => r.id)).toEqual(['head', 'tpl', 'tail']);
   });
 });
+
+describe('expandRepeatRows — 선택 칸 보기 id', () => {
+  // 상세 기재는 __optTexts__[문항][보기 id] 에 산다. 벌끼리 보기 id 가 같으면 한 벌의 「기타」 입력이
+  // 다른 벌의 입력을 덮는다 — 벌마다 보기 id 가 갈려야 한다.
+  function selectRows(options = [
+    { id: 'o1', label: '우유', value: '01' },
+    { id: 'o99', label: '기타', value: '99', allowTextInput: true },
+  ]): TableRow[] {
+    return [row('tpl', '품목', [{ id: 'sel', content: '', type: 'select', selectOptions: options }])];
+  }
+  const optionIds = (rows: TableRow[]) =>
+    rows.map((r) => r.cells[0]!.selectOptions!.map((o) => o.id));
+
+  it('1벌은 템플릿 보기 id 그대로, 2벌부터는 벌마다 다른 보기 id', () => {
+    const out = expandRepeatRows(selectRows(), config(), makeIdFactory('n'));
+    const ids = optionIds(out);
+    expect(ids[0]).toEqual(['o1', 'o99']);
+    expect(new Set(ids.flat()).size).toBe(6);
+  });
+
+  it('보기 값·라벨·상세 기재 설정은 그대로 복제한다', () => {
+    const out = expandRepeatRows(selectRows(), config(), makeIdFactory('n'));
+    for (const r of out) {
+      expect(r.cells[0]!.selectOptions!.map((o) => [o.label, o.value, o.allowTextInput])).toEqual([
+        ['우유', '01', undefined],
+        ['기타', '99', true],
+      ]);
+    }
+  });
+
+  it('다시 펼쳐도 기존 벌의 보기 id 가 그대로다 — 이미 저장된 상세 기재가 고아가 되지 않는다', () => {
+    const once = expandRepeatRows(selectRows(), config(), makeIdFactory('n'));
+    const twice = expandRepeatRows(once, config(), makeIdFactory('m'));
+    expect(optionIds(twice)).toEqual(optionIds(once));
+  });
+
+  it('템플릿에 보기를 끼워 넣어도 기존 보기의 벌별 id 는 따라간다', () => {
+    const once = expandRepeatRows(selectRows(), config(), makeIdFactory('n'));
+    const edited = once.map((r) =>
+      r.repeatIndex === 1
+        ? {
+            ...r,
+            cells: [
+              {
+                ...r.cells[0]!,
+                selectOptions: [{ id: 'o0', label: '발효유', value: '00' }, ...r.cells[0]!.selectOptions!],
+              },
+            ],
+          }
+        : r,
+    );
+    const twice = expandRepeatRows(edited, config(), makeIdFactory('m'));
+    const bundle2 = (rows: TableRow[]) => rows.find((r) => r.repeatIndex === 2)!.cells[0]!.selectOptions!;
+    const otherBefore = bundle2(once).find((o) => o.value === '99')!.id;
+    expect(bundle2(twice).find((o) => o.value === '99')!.id).toBe(otherBefore);
+  });
+
+  it('값이 없는 보기는 템플릿 보기 id 를 값으로 삼아 벌끼리 저장값이 같다', () => {
+    const out = expandRepeatRows(
+      selectRows([{ id: 'o1', label: '우유' } as never]),
+      config(),
+      makeIdFactory('n'),
+    );
+    expect(out.map((r) => r.cells[0]!.selectOptions![0]!.value ?? r.cells[0]!.selectOptions![0]!.id)).toEqual([
+      'o1',
+      'o1',
+      'o1',
+    ]);
+  });
+});
