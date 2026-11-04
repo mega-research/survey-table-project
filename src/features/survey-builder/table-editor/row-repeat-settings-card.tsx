@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   DEFAULT_ROW_REPEAT_ADD_LABEL,
+  canUseFlatRowCodes,
   DEFAULT_ROW_REPEAT_MAX,
   ROW_REPEAT_MAX,
   clampMaxRepeats,
@@ -105,9 +106,12 @@ export function RowRepeatSettingsCard({
       templateRowIds: selectedRowIds,
       maxRepeats,
       ...(config?.addLabel !== undefined ? { addLabel: config.addLabel } : {}),
+      ...(config?.flatRowCodes ? { flatRowCodes: true } : {}),
       ...patch,
     });
   };
+  // 줄 번호 변수명 — 틀이 1줄이고 표의 다른 행 코드와 겹치지 않을 때만(펼치기도 그 밖에서는 무시한다)
+  const flatRowCodesAvailable = canUseFlatRowCodes(rows, selectedRowIds, maxRepeats);
 
   const rowLabel = (row: TableRow, index: number) =>
     `${index + 1}행${row.label?.trim() ? ` · ${row.label.trim()}` : ''}`;
@@ -222,6 +226,22 @@ export function RowRepeatSettingsCard({
               }}
               disabled={!enabled}
             />
+          </label>
+          <label
+            className="flex items-center gap-1.5 self-end pb-1.5 text-xs text-gray-600"
+            title="틀이 1줄일 때만 — 변수명이 r01_01·r01_02 대신 r01·r02 …가 된다"
+          >
+            <input
+              type="checkbox"
+              checked={config?.flatRowCodes === true}
+              disabled={!enabled || !flatRowCodesAvailable}
+              onChange={(e) => {
+                if (!enabled) return;
+                const { flatRowCodes: _flat, ...rest } = config!;
+                onChange?.(e.target.checked ? { ...rest, flatRowCodes: true } : rest);
+              }}
+            />
+            변수명을 줄 번호로 (r01·r02 …)
           </label>
           {!enabled && (
             <Button size="sm" className="h-8 text-xs" disabled={!canApply} onClick={() => apply({})}>

@@ -792,6 +792,11 @@ export interface RowRepeatConfig {
   maxRepeats: number;
   /** 추가 버튼 문구 (기본 '행 추가') */
   addLabel?: string;
+  /**
+   * 줄 번호 변수명 — 틀이 1줄이면 벌마다 rowCode 를 `r01`·`r02` …로 짓는다(기본은 `r01_01`·`r01_02` …).
+   * 틀이 2줄 이상이거나 표의 다른 행 코드와 겹치면 무시한다(`lib/question/row-repeat`).
+   */
+  flatRowCodes?: boolean;
 }
 
 /**

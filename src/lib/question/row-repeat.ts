@@ -175,6 +175,59 @@ export function bundleRadioGroupName(templateGroupName: string, bundle: number):
   return `${templateGroupName}-r${bundle}`;
 }
 
+/**
+ * 줄 번호 변수명(`RowRepeatConfig.flatRowCodes`) — 틀이 1줄이면 벌마다 `r01`·`r02` …로 짓는다.
+ * 밑동의 끝 숫자를 벌 번호로 바꾼다(최소 두 자리). 끝 숫자가 없으면 밑동 뒤에 붙인다.
+ */
+function flatBundleCode(base: string, bundle: number): string {
+  const match = /^(.*?)(\d+)$/.exec(base);
+  const prefix = match ? match[1]! : base;
+  const width = Math.max(2, match ? match[2]!.length : 0);
+  return `${prefix}${String(bundle).padStart(width, '0')}`;
+}
+
+/**
+ * 줄 번호 변수명을 쓸 수 있으면 벌별 rowCode 목록, 아니면 null(종전 `<밑동>_NN` 으로 짓는다).
+ * 틀이 2줄 이상이면 줄 번호만으로는 어느 틀 줄인지 가를 수 없고, 표의 다른 행 코드와 겹치면 변수명이
+ * 겹친다 — 둘 다 조용히 깨지는 대신 종전 이름으로 둔다(빌더는 `canUseFlatRowCodes` 로 미리 막는다).
+ */
+function resolveFlatCodes(
+  collapsed: readonly TableRow[],
+  templateIdSet: ReadonlySet<string>,
+  baseCodes: ReadonlyMap<string, string>,
+  maxRepeats: number,
+): string[] | null {
+  const templates = collapsed.filter((row) => templateIdSet.has(row.id));
+  if (templates.length !== 1) return null;
+  const base = baseCodes.get(templates[0]!.id)!;
+  const codes = Array.from({ length: maxRepeats }, (_, i) => flatBundleCode(base, i + 1));
+  const others = new Set(
+    collapsed.filter((row) => !templateIdSet.has(row.id)).map((row) => baseCodes.get(row.id)!),
+  );
+  return codes.some((code) => others.has(code)) ? null : codes;
+}
+
+function computeBaseCodes(collapsed: readonly TableRow[]): Map<string, string> {
+  // rowCode 밑동 — 펼치기 이전 행 수 기준 패딩 (buildTableCellVarName 과 같은 규칙)
+  const pad = collapsed.length >= 100 ? 3 : collapsed.length >= 10 ? 2 : 1;
+  const baseCodes = new Map<string, string>();
+  collapsed.forEach((row, index) => {
+    baseCodes.set(row.id, baseRowCodeOf(row, `r${String(index + 1).padStart(pad, '0')}`));
+  });
+  return baseCodes;
+}
+
+/** 빌더 — 이 템플릿·벌 수로 줄 번호 변수명을 쓸 수 있는가(틀 1줄 · 다른 행 코드와 안 겹침) */
+export function canUseFlatRowCodes(
+  rows: TableRow[],
+  templateRowIds: readonly string[],
+  maxRepeats: number,
+): boolean {
+  const collapsed = collapseRepeatRows(rows);
+  const templateIdSet = new Set(templateRowIds);
+  return resolveFlatCodes(collapsed, templateIdSet, computeBaseCodes(collapsed), clampMaxRepeats(maxRepeats)) !== null;
+}
+
 function cloneOptionsForBundle<O extends { id: string; value?: string }>(
   options: readonly O[],
   bundle: number,
@@ -270,12 +323,12 @@ export function expandRepeatRows(
     }
   }
 
-  // rowCode 밑동 — 펼치기 이전 행 수 기준 패딩 (buildTableCellVarName 과 같은 규칙)
-  const pad = collapsed.length >= 100 ? 3 : collapsed.length >= 10 ? 2 : 1;
-  const baseCodes = new Map<string, string>();
-  collapsed.forEach((row, index) => {
-    baseCodes.set(row.id, baseRowCodeOf(row, `r${String(index + 1).padStart(pad, '0')}`));
-  });
+  const baseCodes = computeBaseCodes(collapsed);
+  const flatCodes = config!.flatRowCodes
+    ? resolveFlatCodes(collapsed, templateIdSet, baseCodes, maxRepeats)
+    : null;
+  const bundleCode = (templateId: string, bundle: number) =>
+    flatCodes ? flatCodes[bundle - 1]! : `${baseCodes.get(templateId)!}_${String(bundle).padStart(2, '0')}`;
 
   const firstTemplateId = templates[0]!.id;
   const out: TableRow[] = [];
@@ -290,7 +343,7 @@ export function expandRepeatRows(
           for (const template of templates) {
             out.push({
               ...template,
-              rowCode: `${baseCodes.get(template.id)!}_01`,
+              rowCode: bundleCode(template.id, 1),
               repeatIndex: 1,
               repeatSourceRowId: template.id,
             });
@@ -302,7 +355,7 @@ export function expandRepeatRows(
           out.push({
             ...template,
             id: rowIds.get(template.id)!,
-            rowCode: `${baseCodes.get(template.id)!}_${String(bundle).padStart(2, '0')}`,
+            rowCode: bundleCode(template.id, bundle),
             label: bundleLabel(template.label, bundle),
             repeatIndex: bundle,
             repeatSourceRowId: template.id,

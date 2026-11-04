@@ -171,4 +171,27 @@ describe('행 반복 설정 카드', () => {
     );
     expect(screen.getByLabelText('끝 행')).toHaveValue('b');
   });
+  it('틀이 1줄이면 「변수명을 줄 번호로」를 켤 수 있고 켜면 설정에 싣는다', () => {
+    const onChange = vi.fn();
+    const config = { enabled: true, templateRowIds: ['a'], maxRepeats: 5 };
+    render(<RowRepeatSettingsCard rows={rows} config={config} onChange={onChange} />);
+    const box = screen.getByRole('checkbox', { name: /변수명을 줄 번호로/ });
+    expect(box).toBeEnabled();
+    fireEvent.click(box);
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ templateRowIds: ['a'], flatRowCodes: true }));
+  });
+
+  it('틀이 2줄이면 「변수명을 줄 번호로」를 켤 수 없다', () => {
+    const config = { enabled: true, templateRowIds: ['a', 'b'], maxRepeats: 5 };
+    render(<RowRepeatSettingsCard rows={rows} config={config} onChange={vi.fn()} />);
+    expect(screen.getByRole('checkbox', { name: /변수명을 줄 번호로/ })).toBeDisabled();
+  });
+
+  it('다른 칸을 고쳐도 켜 둔 「변수명을 줄 번호로」가 남는다', () => {
+    const onChange = vi.fn();
+    const config = { enabled: true, templateRowIds: ['a'], maxRepeats: 5, flatRowCodes: true };
+    render(<RowRepeatSettingsCard rows={rows} config={config} onChange={onChange} />);
+    fireEvent.change(screen.getByPlaceholderText('행 추가'), { target: { value: '원료 추가' } });
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ addLabel: '원료 추가', flatRowCodes: true }));
+  });
 });

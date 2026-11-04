@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { Question, RowRepeatConfig, TableCell, TableRow } from '@/types/survey';
 import { buildTableCellVarName } from '@/utils/table-cell-code-generator';
 
-import { ROW_REPEAT_MAX, collapseRepeatRows, expandRepeatRows } from './row-repeat';
+import { ROW_REPEAT_MAX, canUseFlatRowCodes, collapseRepeatRows, expandRepeatRows } from './row-repeat';
 
 // 결정론적 id 발번 — 멱등성 단언이 "무엇이 새로 생겼는지"를 눈으로 볼 수 있게 한다.
 function makeIdFactory(prefix: string) {
@@ -344,5 +344,50 @@ describe('expandRepeatRows — 라디오·체크박스 칸', () => {
     expect(twice.map((r) => r.cells.map((c) => [c.radioGroupName, (c.radioOptions ?? c.checkboxOptions)!.map((o) => o.id)]))).toEqual(
       once.map((r) => r.cells.map((c) => [c.radioGroupName, (c.radioOptions ?? c.checkboxOptions)!.map((o) => o.id)])),
     );
+  });
+});
+
+describe('expandRepeatRows — 줄 번호 변수명(flatRowCodes)', () => {
+  // 틀이 1줄인 반복은 `r01_01`·`r01_02` 의 앞 r01 이 늘 같아 읽기만 어렵다. 켜면 벌마다 r01·r02 …로 짓는다 —
+  // 미리 만든 행을 쓰던 표(행 차례로 열기)에서 바꿔도 변수명이 그대로다. 기본은 꺼짐(기존 설문 변수명 보존).
+  const single = (): TableRow[] => [row('tpl', '원료', [inputCell('c1'), inputCell('c2')], { rowCode: 'r01' })];
+  const q = (rows: TableRow[]) =>
+    ({ id: 'q', type: 'table', questionCode: 'Q2', tableColumns: [{ id: 'a', label: 'a' }, { id: 'b', label: 'b' }], tableRowsData: rows }) as unknown as Question;
+
+  it('켜면 틀 1줄의 벌이 r01·r02·r03 이 된다', () => {
+    const out = expandRepeatRows(single(), config({ flatRowCodes: true }), makeIdFactory('n'));
+    expect(out.map((r) => r.rowCode)).toEqual(['r01', 'r02', 'r03']);
+    const cols = q(out).tableColumns!;
+    expect(buildTableCellVarName(q(out), out[1]!, 1, cols, out)).toBe('Q2_r02_c2');
+  });
+
+  it('끄면(기본) 종전대로 r01_01 …', () => {
+    expect(expandRepeatRows(single(), config(), makeIdFactory('n')).map((r) => r.rowCode)).toEqual(['r01_01', 'r01_02', 'r01_03']);
+  });
+
+  it('켰다 껐다 해도 밑동이 누적되지 않는다', () => {
+    const flat = expandRepeatRows(single(), config({ flatRowCodes: true }), makeIdFactory('n'));
+    const off = expandRepeatRows(flat, config(), makeIdFactory('m'));
+    expect(off.map((r) => r.rowCode)).toEqual(['r01_01', 'r01_02', 'r01_03']);
+    const again = expandRepeatRows(off, config({ flatRowCodes: true }), makeIdFactory('k'));
+    expect(again.map((r) => r.rowCode)).toEqual(['r01', 'r02', 'r03']);
+    expect(again.map((r) => r.id)).toEqual(flat.map((r) => r.id));
+  });
+
+  it('틀이 2줄 이상이면 무시한다 — 줄 번호만으로는 어느 틀 줄인지 가를 수 없다', () => {
+    const rows = [
+      row('a', '국내산', [inputCell('a1')], { rowCode: 'r01' }),
+      row('b', '수입산', [inputCell('b1')], { rowCode: 'r02' }),
+    ];
+    const out = expandRepeatRows(rows, config({ templateRowIds: ['a', 'b'], maxRepeats: 2, flatRowCodes: true }), makeIdFactory('n'));
+    expect(out.map((r) => r.rowCode)).toEqual(['r01_01', 'r02_01', 'r01_02', 'r02_02']);
+  });
+
+  it('표의 다른 행 코드와 겹치면 무시한다 — 변수명이 겹치면 안 된다', () => {
+    const rows = [...single(), row('tail', '합계', [inputCell('t1'), inputCell('t2')], { rowCode: 'r02' })];
+    const out = expandRepeatRows(rows, config({ flatRowCodes: true }), makeIdFactory('n'));
+    expect(out.map((r) => r.rowCode)).toEqual(['r01_01', 'r01_02', 'r01_03', 'r02']);
+    expect(canUseFlatRowCodes(rows, ['tpl'], 3)).toBe(false);
+    expect(canUseFlatRowCodes(single(), ['tpl'], 3)).toBe(true);
   });
 });
