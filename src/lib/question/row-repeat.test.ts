@@ -106,9 +106,13 @@ describe('expandRepeatRows — 펼치기', () => {
     );
   });
 
-  it('maxRepeats 는 1~20 으로 죈다', () => {
+  it('maxRepeats 는 1~30 으로 죈다', () => {
+    expect(ROW_REPEAT_MAX).toBe(30);
     const over = expandRepeatRows(baseRows(), config({ maxRepeats: 99 }), makeIdFactory('n'));
     expect(over.filter((r) => r.repeatIndex).length).toBe(ROW_REPEAT_MAX);
+
+    const thirty = expandRepeatRows(baseRows(), config({ maxRepeats: 30 }), makeIdFactory('n'));
+    expect(thirty.filter((r) => r.repeatIndex).length).toBe(30);
 
     const under = expandRepeatRows(baseRows(), config({ maxRepeats: 0 }), makeIdFactory('n'));
     expect(under.filter((r) => r.repeatIndex).length).toBe(1);

@@ -19,8 +19,12 @@ import { generateId } from '@/lib/utils';
 import { remapCellRefs } from '@/utils/table-cell-refs';
 import { isCellValuePresent } from '@/utils/table-cell-semantics';
 
-/** 최대 반복 벌 수 상한. 구조에 실제로 펼쳐지는 행이라 무한대는 없다. */
-export const ROW_REPEAT_MAX = 20;
+/**
+ * 최대 반복 벌 수 상한. 구조에 실제로 펼쳐지는 행이라 무한대는 없다.
+ * 30 — 제품 품목 15종 × 2개년처럼 「품목 × 연도」 한 벌짜리 표가 다 들어가야 해서 20 에서 올렸다
+ * (2026-11-04, 유가공업 실태조사 문1). 벌 번호 접미 `_NN` 두 자리 안이다. 기본값은 20 그대로.
+ */
+export const ROW_REPEAT_MAX = 30;
 /** 기본 최대 벌 수 */
 export const DEFAULT_ROW_REPEAT_MAX = 20;
 /** 추가 버튼 기본 문구 */
