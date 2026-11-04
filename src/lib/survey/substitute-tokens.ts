@@ -3,6 +3,7 @@
  *
  * - `{{{인용이름}}}` → quotes[인용이름]  (응답 인용 — 앞 질문의 응답에서 계산된 파생값)
  * - `{{키}}`         → attrs[키]        (컨택 attrs — 운영자가 업로드한 명단 값)
+ * - `{{키1 || 키2}}`  → 왼쪽부터 처음으로 값이 있는 열 하나 (대체 문법 — 명단 채널만, 인용 채널은 아님)
  *
  * 메일 시스템의 {{var}} 치환과 이중괄호 syntax 가 같고, 응답 페이지 본문(notice/description/
  * table cell)과 단답형 prefill 평가에 공통 사용된다.
@@ -20,6 +21,42 @@
  */
 const TOKEN_PATTERN = /\{\{\{([^{}]+)\}\}\}|\{\{([^{}]+)\}\}/g;
 
+/** 명단 토큰 대체 문법의 구분자 — `{{업체명 || DQ2}}`. 단일 `|` 는 열 이름의 일부다. */
+const FALLBACK_SEPARATOR = '||';
+
+/**
+ * 명단 토큰 안쪽 글자(`업체명 || DQ2`)를 읽을 열 이름 목록으로 나눈다 — 조각마다 앞뒤 공백을
+ * 걷고 빈 조각은 버린다. `||` 가 없으면 공백만 걷은 키 하나다.
+ *
+ * 토큰을 읽는 자리(응답 화면 치환 · 응답자 브라우저로 보낼 개인정보 열 · 빌더 경고 · 메일)가
+ * 모두 이 함수로 나눠야 한다. 특히 보낼 열을 고르는 쪽이 식 전체를 키 하나로 보면 뒤 조각의
+ * 개인정보 열이 브라우저에 가지 않아 오류 없이 빈칸이 된다(`collectReferencedContactKeys`).
+ */
+export function splitContactTokenKeys(inner: string): string[] {
+  if (!inner.includes(FALLBACK_SEPARATOR)) {
+    const key = inner.trim();
+    return key ? [key] : [];
+  }
+  return inner
+    .split(FALLBACK_SEPARATOR)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+}
+
+/**
+ * 명단 토큰 하나의 값. `||` 가 없으면 종전 그대로 `attrs[키] ?? ''`(공백만 있는 값도 그대로)이고,
+ * 있으면 **왼쪽부터 처음으로 값이 있는 열 하나**다 — 앞뒤 공백을 걷고 한 글자 이상이면 값이
+ * 있는 것으로 보고, 고른 값은 원래 글자 그대로 쓴다. 모두 비면 빈 글자.
+ */
+function resolveContactToken(inner: string, attrs: Record<string, string>): string {
+  if (!inner.includes(FALLBACK_SEPARATOR)) return attrs[inner.trim()] ?? '';
+  for (const key of splitContactTokenKeys(inner)) {
+    const value = attrs[key];
+    if (typeof value === 'string' && value.trim().length > 0) return value;
+  }
+  return '';
+}
+
 export function substituteTokens(
   template: string,
   attrs: Record<string, string>,
@@ -28,7 +65,7 @@ export function substituteTokens(
   if (!template) return '';
   return template.replace(TOKEN_PATTERN, (_match, quoteKey?: string, attrsKey?: string) => {
     if (quoteKey !== undefined) return quotes[quoteKey.trim()] ?? '';
-    return attrs[(attrsKey ?? '').trim()] ?? '';
+    return resolveContactToken(attrsKey ?? '', attrs);
   });
 }
 
@@ -74,7 +111,8 @@ export function substituteTokensInHtml(
       .replace(TAG_PATTERN, '')
       .replace(/&(?:amp|lt|gt|quot|#39|nbsp);/g, (m) => HTML_ENTITY_DECODE[m] ?? m)
       .trim();
-    const value = quoteInner !== undefined ? (quotes[key] ?? '') : (attrs[key] ?? '');
+    const value =
+      quoteInner !== undefined ? (quotes[key] ?? '') : resolveContactToken(key, attrs);
     const tags = inner.match(TAG_PATTERN) ?? [];
     // 첫 글자(태그가 아닌 문자) 앞에 연속으로 붙은 태그만 값 앞에 둔다.
     const leading: string[] = [];

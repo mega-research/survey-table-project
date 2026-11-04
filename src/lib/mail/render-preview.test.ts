@@ -199,3 +199,44 @@ describe('renderMailPreview - 이미지 정렬 부산물 제거', () => {
     expect(out.bodyHtml).toBe(body);
   });
 });
+
+describe('renderMailPreview - 대체 식 {{a || b}}', () => {
+  const s: PreviewSample = {
+    attrs: { 업체명: '', DQ2: '동남종합상사', 빈값: '' },
+    email: null,
+    inviteUrl: 'https://example.com/survey/abc?invite=tok-1',
+  };
+
+  it('send 모드: 처음으로 값이 있는 조각을 쓴다 (제목·본문·속성)', () => {
+    const out = renderMailPreview({
+      subject: '[{{업체명 || DQ2}}] 안내',
+      bodyHtml: '<p>{{업체명 || DQ2}}</p><a href="https://x.com/?c={{업체명 || DQ2}}">l</a>',
+      fromName: '{{없는열 || DQ2}}',
+      sample: s,
+      mode: 'send',
+    });
+    expect(out.subject).toBe('[동남종합상사] 안내');
+    expect(out.bodyHtml).toContain('<p>동남종합상사</p>');
+    expect(out.bodyHtml).toContain('href="https://x.com/?c=동남종합상사"');
+    expect(out.fromName).toBe('동남종합상사');
+  });
+
+  it('send 모드: 모두 비면 빈 글자', () => {
+    const out = renderMailPreview({ subject: 'A{{빈값 || 없는열}}B', bodyHtml: '', fromName: '', sample: s, mode: 'send' });
+    expect(out.subject).toBe('AB');
+  });
+
+  it('preview 모드: 열은 있는데 값이 없으면 빈 값 표시, 열이 하나도 없으면 없음 표시 — 라벨은 식 전체', () => {
+    const empty = renderMailPreview({ subject: '', bodyHtml: '<p>{{빈값 || 업체명}}</p>', fromName: '', sample: s });
+    expect(empty.bodyHtml).toContain('mail-preview-empty');
+    expect(empty.bodyHtml).toContain('빈값 || 업체명');
+    const missing = renderMailPreview({ subject: '', bodyHtml: '<p>{{없는열 || 또없는열}}</p>', fromName: '', sample: s });
+    expect(missing.bodyHtml).toContain('mail-preview-missing');
+    expect(missing.bodyHtml).toContain('{{없는열 || 또없는열}}');
+  });
+
+  it('이긴 조각이 invite_link 면 본문에서 자동 링크가 된다', () => {
+    const out = renderMailPreview({ subject: '', bodyHtml: '<p>{{개별링크 || invite_link}}</p>', fromName: '', sample: s, mode: 'send' });
+    expect(out.bodyHtml).toContain('<a href="https://example.com/survey/abc?invite=tok-1"');
+  });
+});

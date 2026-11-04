@@ -9,6 +9,7 @@
  */
 
 import { IMG_TAG_RE, expandImageLinkAreas } from './image-link-area';
+import { splitContactTokenKeys } from '@/lib/survey/substitute-tokens';
 
 export interface PreviewSample {
   attrs: Record<string, string>;
@@ -38,20 +39,38 @@ const TOKEN_RE = /(?<!\{)\{\{([^{}]+)\}\}(?!\})/g;
 const TAG_RE = /<[^>]+>/g;
 
 type Resolved =
-  | { kind: 'value'; text: string }
+  | { kind: 'value'; text: string; key: string }
   | { kind: 'missing'; key: string }
   | { kind: 'empty'; key: string };
 
 function resolveKey(key: string, sample: PreviewSample | null): Resolved {
   if (key === 'invite_link') {
-    if (sample?.inviteUrl) return { kind: 'value', text: sample.inviteUrl };
+    if (sample?.inviteUrl) return { kind: 'value', text: sample.inviteUrl, key };
     return { kind: 'missing', key };
   }
   if (!sample) return { kind: 'missing', key };
   if (!(key in sample.attrs)) return { kind: 'missing', key };
   const val = sample.attrs[key];
   if (typeof val !== 'string' || val.trim() === '') return { kind: 'empty', key };
-  return { kind: 'value', text: val };
+  return { kind: 'value', text: val, key };
+}
+
+/**
+ * 토큰 안쪽 글자 하나의 판정 — 응답 화면과 같은 대체 문법(`{{업체명 || DQ2}}`, 조각 나누기는
+ * `splitContactTokenKeys`)을 따른다. 처음으로 값이 있는 조각이 이기고(`key` = 이긴 조각 —
+ * `invite_link` 자동 링크 판정용), 없으면 열이 하나라도 있으면 empty, 아니면 missing 이다.
+ * 표시 라벨은 호출측이 식 전체로 단다. `||` 가 없으면 `resolveKey` 그대로다.
+ */
+function resolveExpr(expr: string, sample: PreviewSample | null): Resolved {
+  const parts = splitContactTokenKeys(expr);
+  if (parts.length <= 1) return resolveKey(parts[0] ?? expr, sample);
+  let sawEmpty = false;
+  for (const part of parts) {
+    const r = resolveKey(part, sample);
+    if (r.kind === 'value') return r;
+    if (r.kind === 'empty') sawEmpty = true;
+  }
+  return { kind: sawEmpty ? 'empty' : 'missing', key: expr };
 }
 
 function escapeHtml(s: string): string {
@@ -83,7 +102,7 @@ function renderInlineText(s: string, sample: PreviewSample | null, mode: RenderM
   if (mode === 'send') {
     return s.replace(TOKEN_RE, (_, rawKey: string) => {
       const key = rawKey.trim();
-      const r = resolveKey(key, sample);
+      const r = resolveExpr(key, sample);
       if (r.kind === 'value') return r.text;
       return '';
     });
@@ -91,7 +110,7 @@ function renderInlineText(s: string, sample: PreviewSample | null, mode: RenderM
   const escaped = escapeHtml(s);
   return escaped.replace(TOKEN_RE, (_, rawKey: string) => {
     const key = rawKey.trim();
-    const r = resolveKey(key, sample);
+    const r = resolveExpr(key, sample);
     if (r.kind === 'missing') return missingSpan(key);
     if (r.kind === 'empty') return emptySpan(key);
     return escapeHtml(r.text);
@@ -164,14 +183,14 @@ function renderTextSegment(
   // 단, preview 모드에서만 missing/empty span 으로 inline 강조 처리.
   return text.replace(TOKEN_RE, (_, rawKey: string) => {
     const key = rawKey.trim();
-    const r = resolveKey(key, sample);
+    const r = resolveExpr(key, sample);
     if (r.kind === 'missing') return mode === 'send' ? '' : missingSpan(key);
     if (r.kind === 'empty') return mode === 'send' ? '' : emptySpan(key);
     // invite_link 가 plain text 로 본문에 들어왔을 때 — 사용자가 변수 메뉴를 거치지 않고
     // 직접 타이핑·붙여넣기 한 경우 — 메일 클라이언트가 클릭 가능한 링크로 인식하도록
     // 자동으로 a 태그로 감싼다. 이미 사용자가 a 태그로 감쌌으면 (변수 메뉴 케이스 등)
     // nested anchor 가 되지 않도록 insideAnchor 일 때는 plain text 치환.
-    if (key === 'invite_link' && !insideAnchor) {
+    if (r.key === 'invite_link' && !insideAnchor) {
       return `<a href="${escapeAttr(r.text)}" ${AUTO_LINK_ATTRS}>${escapeHtml(r.text)}</a>`;
     }
     return escapeHtml(r.text);
@@ -181,7 +200,7 @@ function renderTextSegment(
 function renderTagSegment(tag: string, sample: PreviewSample | null, mode: RenderMode): string {
   return tag.replace(TOKEN_RE, (_, rawKey: string) => {
     const key = rawKey.trim();
-    const r = resolveKey(key, sample);
+    const r = resolveExpr(key, sample);
     if (r.kind === 'value') return escapeAttr(r.text);
     if (r.kind === 'empty') return '';
     // missing: send 모드도 attribute 안의 의미 없는 {{key}} 는 제거 (URL 깨짐 방지)

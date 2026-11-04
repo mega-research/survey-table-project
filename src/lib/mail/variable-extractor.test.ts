@@ -24,6 +24,14 @@ describe('extractVariableKeys', () => {
     ]);
   });
 
+  it('대체 식 {{a || b}} 는 조각마다 키로 낸다 — 빌더 경고가 없는 조각만 지목한다', () => {
+    expect(extractVariableKeys(['{{업체명 || DQ2}} {{ DQ2 || 새열 }}'])).toEqual([
+      '업체명',
+      'DQ2',
+      '새열',
+    ]);
+  });
+
   it('설문 전체 규모(20만 소스)에서도 스택과 무관하게 동작한다 — 회귀 핀', () => {
     const sources = new Array(200_000).fill('셀 내용 {{k}}');
     expect(extractVariableKeys(sources)).toEqual(['k']);
