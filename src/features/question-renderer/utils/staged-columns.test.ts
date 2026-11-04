@@ -4,6 +4,7 @@ import type { TableColumn, TableRow } from '@/types/survey';
 
 import {
   cellIdsOfColumnStepsBeyond,
+  columnIdsOfStep,
   deriveOpenColumnStep,
   hiddenStagedColumnIds,
   isColumnStageable,
@@ -11,6 +12,7 @@ import {
   stagedColumnAddLabel,
   stagedColumnOptionalCellIds,
   stageableColumns,
+  stagedColumnRevealScrollLeft,
 } from './staged-columns';
 
 /**
@@ -139,5 +141,46 @@ describe('열린 단계 파생은 응답 칸 값만 센다', () => {
       },
     ] as TableRow[];
     expect(deriveOpenColumnStep(columns, calcRows, { k: '0' })).toBe(1);
+  });
+});
+
+describe('stagedColumnRevealScrollLeft — + 로 연 열까지 가로 스크롤', () => {
+  // 열 폭 100 씩 6열: [0,100,200,300,400,500,600]. 새로 연 열 = 3·4번(300~500).
+  const stops = [0, 100, 200, 300, 400, 500, 600];
+  const visible = ['a', 'b', 'c', 'n1', 'n2', 'tail'].map((id) => ({ id, label: id }));
+  const target = new Set(['n1', 'n2']);
+
+  it('새 열의 오른쪽 끝이 보이도록 오른쪽으로 민다', () => {
+    expect(
+      stagedColumnRevealScrollLeft({ visibleColumns: visible, columnStops: stops, targetColumnIds: target, viewportWidth: 300, currentScrollLeft: 0, stickyWidth: 0 }),
+    ).toBe(200);
+  });
+
+  it('새 열이 뷰보다 넓으면 왼쪽 끝을 고정 열 바로 옆에 맞춘다', () => {
+    expect(
+      stagedColumnRevealScrollLeft({ visibleColumns: visible, columnStops: stops, targetColumnIds: target, viewportWidth: 150, currentScrollLeft: 0, stickyWidth: 100 }),
+    ).toBe(200);
+  });
+
+  it('이미 다 보이면 움직이지 않는다(null) — 왼쪽으로는 되돌리지 않는다', () => {
+    expect(
+      stagedColumnRevealScrollLeft({ visibleColumns: visible, columnStops: stops, targetColumnIds: target, viewportWidth: 600, currentScrollLeft: 0, stickyWidth: 0 }),
+    ).toBeNull();
+    expect(
+      stagedColumnRevealScrollLeft({ visibleColumns: visible, columnStops: stops, targetColumnIds: target, viewportWidth: 300, currentScrollLeft: 250, stickyWidth: 0 }),
+    ).toBeNull();
+  });
+
+  it('보이는 열에 대상이 없으면 null', () => {
+    expect(
+      stagedColumnRevealScrollLeft({ visibleColumns: visible, columnStops: stops, targetColumnIds: new Set(['zz']), viewportWidth: 300, currentScrollLeft: 0, stickyWidth: 0 }),
+    ).toBeNull();
+  });
+});
+
+describe('columnIdsOfStep', () => {
+  it('그 단계의 열 id — 단계를 뗀 열(보기 옵션 칸 열)은 들지 않는다', () => {
+    expect([...columnIdsOfStep(columns, 2)]).toEqual(['n2', 'q2']);
+    expect(columnIdsOfStep(columns, 1).size).toBe(0);
   });
 });

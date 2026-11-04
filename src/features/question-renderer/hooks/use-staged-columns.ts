@@ -16,6 +16,7 @@ import {
 import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
 import {
   cellIdsOfColumnStepsBeyond,
+  columnIdsOfStep,
   deriveOpenColumnStep,
   hiddenStagedColumnIds,
   maxColumnStep,
@@ -43,6 +44,8 @@ export interface UseStagedColumnsReturn {
   maxStep: number;
   /** 지금 가려 렌더에서 뺄 열 id */
   hiddenColumnIds: Set<string>;
+  /** 지금 열린 마지막 단계의 열 id — `+` 뒤 그 열까지 가로 스크롤하는 데 쓴다(1단계면 빈 집합) */
+  openStepColumnIds: Set<string>;
   canAdd: boolean;
   canRemove: boolean;
   addLabel: string;
@@ -91,6 +94,11 @@ export function useStagedColumns({
     [isActive, columns, openStep],
   );
 
+  const openStepColumnIds = useMemo(
+    () => (isActive ? columnIdsOfStep(columns, openStep) : NO_HIDDEN),
+    [isActive, columns, openStep],
+  );
+
   const addStep = useCallback(() => {
     setSessionOpenStep((prev) => Math.min(maxStep, Math.max(prev, openStep) + 1));
   }, [maxStep, openStep]);
@@ -109,6 +117,7 @@ export function useStagedColumns({
     openStep,
     maxStep,
     hiddenColumnIds,
+    openStepColumnIds,
     canAdd: isActive && openStep < maxStep,
     canRemove: isActive && openStep > 1,
     addLabel: stagedColumnAddLabel(columns) ?? defaultAddLabel,

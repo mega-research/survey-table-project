@@ -136,3 +136,38 @@ export function stagedColumnAddLabel(columns: readonly TableColumn[]): string | 
   }
   return null;
 }
+
+/** 그 단계의 열 id — 단계 2 이상만(1단계는 처음부터 보인다). `+` 로 막 연 열을 찾는 데 쓴다 */
+export function columnIdsOfStep(columns: readonly TableColumn[], step: number): Set<string> {
+  if (step < 2) return new Set();
+  return new Set(columns.filter((column) => stepOf(column) === step).map((column) => column.id));
+}
+
+/**
+ * `+` 로 연 열이 화면 오른쪽 밖에 생기면 「눌렀는데 아무 일도 없다」가 된다 — 그 열이 보이도록 민
+ * 가로 스크롤 위치. 새 열의 오른쪽 끝이 보이게 밀되, 새 열이 뷰보다 넓으면 왼쪽 끝을 좌측 고정 열
+ * 바로 옆에 맞춘다. 이미 보이면(또는 더 오른쪽에 있으면) 움직이지 않는다(null) — 왼쪽으로 되돌리지 않는다.
+ * `columnStops` 는 보이는 열의 왼쪽 경계 누적 px(0 시작, 마지막 = 전체 폭).
+ */
+export function stagedColumnRevealScrollLeft(input: {
+  visibleColumns: readonly TableColumn[];
+  columnStops: readonly number[];
+  targetColumnIds: ReadonlySet<string>;
+  viewportWidth: number;
+  currentScrollLeft: number;
+  stickyWidth: number;
+}): number | null {
+  const { visibleColumns, columnStops, targetColumnIds, viewportWidth, currentScrollLeft, stickyWidth } = input;
+  let first = -1;
+  let last = -1;
+  visibleColumns.forEach((column, index) => {
+    if (!targetColumnIds.has(column.id)) return;
+    if (first < 0) first = index;
+    last = index;
+  });
+  if (first < 0) return null;
+  const start = columnStops[first] ?? 0;
+  const end = columnStops[last + 1] ?? start;
+  const left = Math.max(0, Math.min(end - viewportWidth, start - stickyWidth));
+  return left > currentScrollLeft ? left : null;
+}

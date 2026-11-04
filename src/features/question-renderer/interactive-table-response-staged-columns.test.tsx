@@ -2,7 +2,7 @@ import { useState } from 'react';
 
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { HeaderCell, TableColumn, TableRow } from '@/types/survey';
 
@@ -13,6 +13,8 @@ import { InteractiveTableResponse } from './interactive-table-response';
  * 열린 단계는 값에서 파생하고, `−` 는 마지막 단계의 값을 비우고 닫는다.
  */
 beforeAll(() => {
+  // jsdom 은 요소 scrollTo 가 없다 — `+` 가 새 열까지 가로로 밀 때 부른다
+  if (!HTMLElement.prototype.scrollTo) HTMLElement.prototype.scrollTo = () => {};
   if (!window.matchMedia) {
     window.matchMedia = ((query: string) => ({
       matches: false,
@@ -105,5 +107,32 @@ describe('열 차례로 열기 — 응답 화면', () => {
     const value = JSON.parse(screen.getByTestId('value').textContent ?? '{}');
     expect(value['r1-n2']).toBe('');
     expect(value['r1-n1']).toBe('연유');
+  });
+});
+
+describe('열 차례로 열기 — 버튼 자리와 스크롤', () => {
+  it('열 추가 버튼은 표 위에 선다 — 표 아래의 행 추가 버튼과 갈린다', () => {
+    render(<Harness />);
+    const button = screen.getByRole('button', { name: '기타 원료 추가' });
+    const grid = screen.getByRole('grid');
+    expect(button.compareDocumentPosition(grid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('+ 를 누르면 막 연 열이 보이도록 표를 가로로 민다', async () => {
+    const scrollTo = vi.fn();
+    const original = HTMLElement.prototype.scrollTo;
+    HTMLElement.prototype.scrollTo = scrollTo as unknown as typeof HTMLElement.prototype.scrollTo;
+    const width = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(300);
+    try {
+      const user = userEvent.setup();
+      render(<Harness />);
+      scrollTo.mockClear();
+      await user.click(screen.getByRole('button', { name: '기타 원료 추가' }));
+      // 원유·기타1(0~300) 뒤 기타2 = 300~500 → 오른쪽 끝 500 이 보이게 200
+      expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ left: 200 }));
+    } finally {
+      HTMLElement.prototype.scrollTo = original;
+      width.mockRestore();
+    }
   });
 });

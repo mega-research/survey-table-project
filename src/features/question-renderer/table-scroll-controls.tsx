@@ -84,7 +84,7 @@ export function computeColumnPageTarget(
 const SCROLL_STEP_BUTTON_CLASS =
   'flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-gray-300 bg-white text-gray-600 shadow-sm transition-all hover:border-gray-400 hover:bg-gray-50 hover:text-gray-900 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-gray-300 disabled:hover:bg-white';
 
-function getScrollBehavior(): ScrollBehavior {
+export function getScrollBehavior(): ScrollBehavior {
   return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
 }
 

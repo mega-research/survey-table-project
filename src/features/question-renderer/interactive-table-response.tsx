@@ -9,6 +9,7 @@ import { useBranchEvalCtx } from '@/features/question-renderer/contact-attrs-con
 import { useDynamicRows } from '@/features/question-renderer/hooks/use-dynamic-rows';
 import { useElementWidth } from '@/features/question-renderer/hooks/use-element-width';
 import { useStagedColumns } from '@/features/question-renderer/hooks/use-staged-columns';
+import { stagedColumnRevealScrollLeft } from '@/features/question-renderer/utils/staged-columns';
 import { useHorizontalScrollIndicators } from '@/features/question-renderer/hooks/use-horizontal-scroll-indicators';
 import { usePageStickyThreshold } from '@/features/question-renderer/hooks/use-page-sticky-threshold';
 import { useScrollLeftSync } from '@/features/question-renderer/hooks/use-scroll-left-sync';
@@ -103,7 +104,7 @@ import { MobileTableDrilldown } from './mobile-table-drilldown';
 import { MobileColumnAxisCards } from './mobile-column-axis-cards';
 import { MobileItemCards } from './mobile-item-cards';
 import { MobileTableStepper } from './mobile-table-stepper';
-import { HEADER_SCROLL_CLASS, TableScrollControls } from './table-scroll-controls';
+import { HEADER_SCROLL_CLASS, TableScrollControls, getScrollBehavior } from './table-scroll-controls';
 import { OptionTextBelowTable } from './option-text-below-table';
 import { StagedRowsButtons } from './staged-rows-buttons';
 import { VirtualizedTableGrid } from './virtualized-table-grid';
@@ -975,6 +976,30 @@ function InteractiveTableResponseBody({
     stickyColumnCount,
   ]);
 
+  // 열 차례로 열기 — `+` 로 연 열이 화면 오른쪽 밖에 생기면 그 열까지 가로로 민다. 값에서 파생해
+  // 열린 경우(재진입)는 밀지 않는다 — 누른 직후 한 번만. 카드 화면·폭 맞춤 표는 가로 스크롤이 없다.
+  const pendingColumnRevealScrollRef = useRef(false);
+  const { addStep: addColumnStep, openStep: openColumnStep, openStepColumnIds } = stagedColumns;
+  const handleAddColumnStep = useCallback(() => {
+    pendingColumnRevealScrollRef.current = true;
+    addColumnStep();
+  }, [addColumnStep]);
+  useEffect(() => {
+    if (!pendingColumnRevealScrollRef.current) return;
+    pendingColumnRevealScrollRef.current = false;
+    const container = tableContainerRef.current;
+    if (!container || mobileUsesCards || fitToWidth) return;
+    const left = stagedColumnRevealScrollLeft({
+      visibleColumns,
+      columnStops,
+      targetColumnIds: openStepColumnIds,
+      viewportWidth: container.clientWidth,
+      currentScrollLeft: container.scrollLeft,
+      stickyWidth: stickyInfo ? (columnStops[stickyInfo.stickyColCount] ?? 0) : 0,
+    });
+    if (left !== null) container.scrollTo({ left, behavior: getScrollBehavior() });
+  }, [openColumnStep, openStepColumnIds, visibleColumns, columnStops, stickyInfo, mobileUsesCards, fitToWidth]);
+
   // ── 가상화 여부 (hooks-rules: 빈 테이블 early return 이전에 계산) ──
   const shouldVirtualize = displayRows.length >= VIRTUALIZATION_THRESHOLD;
 
@@ -1471,6 +1496,22 @@ function InteractiveTableResponseBody({
                 : 'p-0 sm:px-6',
             )}
           >
+            {/* 열 차례로 열기 — 열은 머리 쪽에서 오른쪽으로 늘어나므로 버튼을 표 위 오른쪽에 둔다.
+                표 아래의 행 추가(행 반복·행 차례로 열기)와 자리·아이콘으로 갈린다. */}
+            {stagedColumns.isActive && (
+              <StagedRowsButtons
+                addLabel={stagedColumns.addLabel}
+                canAdd={stagedColumns.canAdd}
+                canRemove={stagedColumns.canRemove}
+                openCount={stagedColumns.openStep}
+                maxCount={stagedColumns.maxStep}
+                onAdd={handleAddColumnStep}
+                onRemove={stagedColumns.removeStep}
+                removeLabel={systemText('table.removeLastColumn', locale)}
+                addIcon="arrow-right"
+                className="mb-2 justify-end"
+              />
+            )}
             <div className="w-full">
               {/* 모바일 원본 표 옵션이 켜진 질문은 카드/스테퍼 전환 없이 원본 표(가로 스크롤) 유지 */}
               {usesRowWiseSheet ? (
@@ -1620,20 +1661,6 @@ function InteractiveTableResponseBody({
                 </OptionTextBelowTableHost>
               )}
             </div>
-
-            {stagedColumns.isActive && (
-              <StagedRowsButtons
-                addLabel={stagedColumns.addLabel}
-                canAdd={stagedColumns.canAdd}
-                canRemove={stagedColumns.canRemove}
-                openCount={stagedColumns.openStep}
-                maxCount={stagedColumns.maxStep}
-                onAdd={stagedColumns.addStep}
-                onRemove={stagedColumns.removeStep}
-                removeLabel={systemText('table.removeLastColumn', locale)}
-                className="mt-3"
-              />
-            )}
 
             {rowRepeat.isActive && (
               <RowRepeatControls
