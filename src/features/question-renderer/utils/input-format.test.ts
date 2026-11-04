@@ -54,6 +54,15 @@ const PASS: Array<[InputFormat, string, string]> = [
   ['email', 'a@b.co.kr', 'a@b.co.kr'],
   ['email', ' Hong.Gil-Dong@Example.CO.KR ', 'hong.gil-dong@example.co.kr'],
   ['email', 'user+tag@sub.example.com', 'user+tag@sub.example.com'],
+  // 날짜 — 구분 문자(. - / 공백)가 무엇이든, 한 자리 월·일이든 YYYY.MM.DD 로 수렴한다
+  ['date', '2025.01.31', '2025.01.31'],
+  ['date', '20250131', '2025.01.31'],
+  ['date', '2025-01-31', '2025.01.31'],
+  ['date', '2025/1/31', '2025.01.31'],
+  ['date', '2025. 3. 1.', '2025.03.01'],
+  ['date', ' 2025.3.1 ', '2025.03.01'],
+  ['date', '2024.02.29', '2024.02.29'],
+  ['date', '2000.02.29', '2000.02.29'],
 ];
 
 /** 실패 케이스 — 넣은 값과 나와야 할 사유. */
@@ -93,6 +102,23 @@ const FAIL: Array<[InputFormat, string, string]> = [
   ['email', 'user@exam ple.com', 'malformed'],
   ['email', 'user@.example.com', 'malformed'],
   ['email', 'user@example..com', 'malformed'],
+  // 날짜
+  ['date', '2025.1월.31', 'not_a_number'],
+  ['date', '2025년1월31일', 'not_a_number'],
+  ['date', '202501311', 'wrong_length'],
+  ['date', '2025013', 'wrong_length'],
+  ['date', '25.01.31', 'malformed'],
+  ['date', '2025.01', 'malformed'],
+  ['date', '2025.001.31', 'malformed'],
+  ['date', '2025.01.31.01', 'malformed'],
+  ['date', '2025.13.01', 'invalid_date'],
+  ['date', '2025.00.10', 'invalid_date'],
+  ['date', '2025.02.29', 'invalid_date'],
+  ['date', '1900.02.29', 'invalid_date'],
+  ['date', '2025.04.31', 'invalid_date'],
+  ['date', '2025.01.00', 'invalid_date'],
+  ['date', '1899.12.31', 'invalid_date'],
+  ['date', '2101.01.01', 'invalid_date'],
 ];
 
 describe('parseInputFormat', () => {
@@ -148,6 +174,12 @@ describe('formatFailureMessage', () => {
     expect(formatFailureMessage('mobile', 'unknown_prefix')).toBe('휴대전화 번호가 아닙니다');
     expect(formatFailureMessage('email', 'malformed')).toBe('이메일 형식이 아닙니다');
     expect(formatFailureMessage('email', 'non_ascii')).toBe('이메일은 영문·숫자로만 입력해 주세요');
+    expect(formatFailureMessage('date', 'invalid_date')).toBe('없는 날짜입니다. 다시 확인해 주세요');
+    expect(formatFailureMessage('date', 'wrong_length')).toBe(
+      '날짜는 2025.01.31 처럼 연(4자리)·월·일로 입력해 주세요',
+    );
+    expect(formatFailureMessage('date', 'malformed')).toBe(formatFailureMessage('date', 'wrong_length'));
+    expect(formatFailureMessage('date', 'not_a_number')).toBe('날짜는 숫자로 입력해 주세요');
   });
 
   it('같은 사유라도 형식이 다르면 문구가 다르다', () => {
@@ -166,6 +198,7 @@ describe('formatFailureMessage', () => {
       'unknown_prefix',
       'checksum_mismatch',
       'malformed',
+      'invalid_date',
     ] as const;
     for (const format of INPUT_FORMATS) {
       for (const reason of reasons) {
@@ -191,6 +224,12 @@ describe('filterFormatTyping — 형식 칸 타이핑 필터', () => {
     expect(filterFormatTyping('biz_number', '(123)45-67890')).toBe('12345-67890');
     expect(filterFormatTyping('corp_number', '110111-1234567')).toBe('110111-1234567');
     expect(filterFormatTyping('phone', '')).toBe('');
+  });
+
+  it('날짜는 숫자와 구분 문자(. - /)만 남긴다', () => {
+    expect(filterFormatTyping('date', '2025년 1월 31일')).toBe('2025131');
+    expect(filterFormatTyping('date', '2025.01.31')).toBe('2025.01.31');
+    expect(filterFormatTyping('date', '2025-01/31')).toBe('2025-01/31');
   });
 
   it('이메일 형식은 손대지 않는다', () => {

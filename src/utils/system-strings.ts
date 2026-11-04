@@ -275,11 +275,13 @@ const KO = {
   'format.label.biz_number': '사업자번호',
   'format.label.corp_number': '법인번호',
   'format.label.email': '이메일',
+  'format.label.date': '날짜(YYYY.MM.DD)',
   'format.notANumber.mobile': '휴대전화는 숫자로 입력해 주세요',
   'format.notANumber.phone': '전화번호는 숫자로 입력해 주세요',
   'format.notANumber.biz_number': '사업자번호는 숫자로 입력해 주세요',
   'format.notANumber.corp_number': '법인번호는 숫자로 입력해 주세요',
   'format.notANumber.email': '이메일은 숫자로 입력해 주세요',
+  'format.notANumber.date': '날짜는 숫자로 입력해 주세요',
   'format.wrongLengthFixed.biz_number': '사업자번호는 {length}자리입니다',
   'format.wrongLengthFixed.corp_number': '법인번호는 {length}자리입니다',
   'format.wrongLength': '{label} 자릿수가 맞지 않습니다',
@@ -288,6 +290,8 @@ const KO = {
   'format.checksum': '{label} 확인번호가 맞지 않습니다. 다시 확인해 주세요',
   'format.malformed': '{label} 형식이 아닙니다',
   'format.nonAscii': '이메일은 영문·숫자로만 입력해 주세요',
+  'format.dateShape': '날짜는 2025.01.31 처럼 연(4자리)·월·일로 입력해 주세요',
+  'format.invalidDate': '없는 날짜입니다. 다시 확인해 주세요',
 
   // 저작자가 비웠을 때의 기본 문구 — 라이브 설정이라 저작 문구는 한국어 한 벌이다
   'default.paused': '설문이 일시 중단되었습니다. 잠시 후 다시 시도해 주세요.',
@@ -538,11 +542,13 @@ const ZH: Dictionary = {
   'format.label.biz_number': '营业执照号码',
   'format.label.corp_number': '法人登记号码',
   'format.label.email': '电子邮箱',
+  'format.label.date': '日期(YYYY.MM.DD)',
   'format.notANumber.mobile': '手机号码请输入数字',
   'format.notANumber.phone': '电话号码请输入数字',
   'format.notANumber.biz_number': '营业执照号码请输入数字',
   'format.notANumber.corp_number': '法人登记号码请输入数字',
   'format.notANumber.email': '电子邮箱请输入数字',
+  'format.notANumber.date': '日期请输入数字',
   'format.wrongLengthFixed.biz_number': '营业执照号码应为{length}位',
   'format.wrongLengthFixed.corp_number': '法人登记号码应为{length}位',
   'format.wrongLength': '{label}位数不正确',
@@ -551,6 +557,8 @@ const ZH: Dictionary = {
   'format.checksum': '{label}校验码不正确，请再次确认',
   'format.malformed': '{label}格式不正确',
   'format.nonAscii': '电子邮箱只能输入英文字母和数字',
+  'format.dateShape': '日期请按 2025.01.31 的格式输入年(4位)·月·日',
+  'format.invalidDate': '该日期不存在，请再次确认',
 
   'default.paused': '问卷已暂停。请稍后再试。',
   'default.quotaClosed': '该条件的名额已满，无法继续参与。感谢您的参与。',
@@ -817,6 +825,7 @@ const EN: Dictionary = {
   'format.label.biz_number': 'business registration number',
   'format.label.corp_number': 'corporate registration number',
   'format.label.email': 'email address',
+  'format.label.date': 'date (YYYY.MM.DD)',
   'format.notANumber.mobile': 'Please enter the mobile number using numbers only',
   'format.notANumber.phone': 'Please enter the phone number using numbers only',
   'format.notANumber.biz_number':
@@ -824,6 +833,7 @@ const EN: Dictionary = {
   'format.notANumber.corp_number':
     'Please enter the corporate registration number using numbers only',
   'format.notANumber.email': 'Please enter the email address using numbers only',
+  'format.notANumber.date': 'Please enter the date using numbers only',
   'format.wrongLengthFixed.biz_number': 'The business registration number must be {length} digits',
   'format.wrongLengthFixed.corp_number':
     'The corporate registration number must be {length} digits',
@@ -833,6 +843,8 @@ const EN: Dictionary = {
   'format.checksum': 'The {label} check digit is incorrect. Please check it again',
   'format.malformed': 'This is not a valid {label}',
   'format.nonAscii': 'Please use only English letters and numbers in the email address',
+  'format.dateShape': 'Please enter the date as year (4 digits), month and day, e.g. 2025.01.31',
+  'format.invalidDate': 'This date does not exist. Please check it again',
 
   'default.paused': 'The survey has been paused. Please try again later.',
   'default.quotaClosed':

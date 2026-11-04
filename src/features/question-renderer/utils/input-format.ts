@@ -1,5 +1,5 @@
 /**
- * 입력 형식 파서 — 휴대전화 · 전화 · 사업자번호 · 법인번호 · 이메일.
+ * 입력 형식 파서 — 휴대전화 · 전화 · 사업자번호 · 법인번호 · 이메일 · 날짜.
  *
  * 검증 · 체크섬 · 하이픈 정규화 · 실패 사유가 **한 함수에서** 나온다. 따로 두면
  * "통과했는데 정규형이 없다" 처럼 서로 어긋난다.
@@ -23,7 +23,8 @@ export type FormatFailure =
   | 'unknown_prefix' // 휴대전화 식별번호·지역번호가 아님
   | 'checksum_mismatch'
   | 'malformed' // 이메일 구조 불량
-  | 'non_ascii'; // 이메일에 한글·전각 등 ASCII 밖 글자
+  | 'non_ascii' // 이메일에 한글·전각 등 ASCII 밖 글자
+  | 'invalid_date'; // 날짜 모양은 맞는데 달력에 없는 날(13월·2월 30일) 또는 범위 밖 연도
 
 export type ParseResult = { ok: true; normalized: string } | { ok: false; reason: FormatFailure };
 
@@ -179,6 +180,43 @@ function parseEmail(raw: string): ParseResult {
   return { ok: true, normalized: value };
 }
 
+/** 받는 연도 범위 — 오타(0025·9999)를 거르는 선. 조사 대상 날짜(설립·인증·출생일)는 이 안에 있다. */
+const DATE_YEAR_MIN = 1900;
+const DATE_YEAR_MAX = 2100;
+const DATE_SEPARATOR_SPLIT = /[\s.\-/]+/;
+
+/**
+ * 날짜 — `YYYY.MM.DD` 로 정돈한다.
+ *
+ * 구분 문자(점·하이픈·슬래시·공백)가 있으면 연·월·일 세 조각으로 읽어 한 자리 월·일(`2025.3.1`)도
+ * 받는다. 구분 문자가 없으면 8자리(`20250131`)만 받는다 — `202531` 은 3월 1일인지 31일인지 모른다.
+ * 끝의 점(`2025. 3. 1.` — 한국식 표기)은 빈 조각이라 버린다.
+ */
+function parseDate(raw: string): ParseResult {
+  const value = raw.trim();
+  if (/[^0-9\s.\-/]/.test(value)) return { ok: false, reason: 'not_a_number' };
+  let parts: string[];
+  if (/[\s.\-/]/.test(value)) {
+    parts = value.split(DATE_SEPARATOR_SPLIT).filter((p) => p !== '');
+    if (parts.length !== 3) return { ok: false, reason: 'malformed' };
+    const [y, m, d] = parts as [string, string, string];
+    if (y.length !== 4 || m.length > 2 || d.length > 2) return { ok: false, reason: 'malformed' };
+  } else {
+    if (value.length !== 8) return { ok: false, reason: 'wrong_length' };
+    parts = [value.slice(0, 4), value.slice(4, 6), value.slice(6)];
+  }
+  const [year, month, day] = parts.map(Number) as [number, number, number];
+  // 윤년은 Date 로 판정한다 — UTC 로 만들어 시간대가 날짜를 밀지 않게 한다
+  const daysInMonth = month >= 1 && month <= 12 ? new Date(Date.UTC(year, month, 0)).getUTCDate() : 0;
+  if (year < DATE_YEAR_MIN || year > DATE_YEAR_MAX || day < 1 || day > daysInMonth) {
+    return { ok: false, reason: 'invalid_date' };
+  }
+  return {
+    ok: true,
+    normalized: `${year}.${String(month).padStart(2, '0')}.${String(day).padStart(2, '0')}`,
+  };
+}
+
 /**
  * 값 하나를 형식에 비추어 본다.
  *
@@ -188,6 +226,7 @@ function parseEmail(raw: string): ParseResult {
 export function parseInputFormat(format: InputFormat, raw: string): ParseResult {
   if (raw.trim() === '') return { ok: true, normalized: '' };
   if (format === 'email') return parseEmail(raw);
+  if (format === 'date') return parseDate(raw);
 
   const digits = digitsOf(raw.trim());
   if (digits === null) return { ok: false, reason: 'not_a_number' };
@@ -211,6 +250,7 @@ const FORMAT_LABEL_KEY: Record<InputFormat, SystemStringKey> = {
   biz_number: 'format.label.biz_number',
   corp_number: 'format.label.corp_number',
   email: 'format.label.email',
+  date: 'format.label.date',
 };
 
 /** 「숫자로 입력해 주세요」 — 한국어 조사(은/는)가 형식 이름마다 달라 형식마다 문장을 둔다. */
@@ -220,6 +260,7 @@ const NOT_A_NUMBER_KEY: Record<InputFormat, SystemStringKey> = {
   biz_number: 'format.notANumber.biz_number',
   corp_number: 'format.notANumber.corp_number',
   email: 'format.notANumber.email',
+  date: 'format.notANumber.date',
 };
 
 /** 자릿수가 정해진 형식 — 「N자리입니다」(조사 때문에 형식마다 문장). */
@@ -235,6 +276,7 @@ export const INPUT_FORMAT_LABEL: Record<InputFormat, string> = {
   biz_number: systemText(FORMAT_LABEL_KEY.biz_number),
   corp_number: systemText(FORMAT_LABEL_KEY.corp_number),
   email: systemText(FORMAT_LABEL_KEY.email),
+  date: systemText(FORMAT_LABEL_KEY.date),
 };
 
 /**
@@ -248,6 +290,7 @@ const INPUT_FORMAT_SAMPLE: Record<InputFormat, string> = {
   biz_number: '123-45-67891',
   corp_number: '110111-1234569',
   email: 'name@example.com',
+  date: '2025.01.31',
 };
 
 export function formatSampleValue(format: InputFormat): string {
@@ -273,6 +316,10 @@ export function formatFailureMessage(
   locale: SurveyLocale = DEFAULT_SURVEY_LOCALE,
 ): string {
   const values = { label: systemText(FORMAT_LABEL_KEY[format], locale) };
+  // 날짜는 자릿수·구조 실패를 한 문장(예시 값 포함)으로 안내한다 — 응답자에게는 같은 고칠 방향이다
+  if (format === 'date' && (reason === 'wrong_length' || reason === 'malformed')) {
+    return systemText('format.dateShape', locale);
+  }
   switch (reason) {
     case 'not_a_number':
       return systemText(NOT_A_NUMBER_KEY[format], locale);
@@ -293,11 +340,15 @@ export function formatFailureMessage(
     case 'non_ascii':
       // 이메일만 나는 사유다(`parseEmail`)
       return systemText('format.nonAscii', locale);
+    case 'invalid_date':
+      // 날짜만 나는 사유다(`parseDate`)
+      return systemText('format.invalidDate', locale);
   }
 }
 
 /**
  * 형식 칸 타이핑 필터 — 번호 형식은 숫자와 하이픈만 통과시킨다(글자·공백·괄호·점은 떨어뜨린다).
+ * 날짜는 숫자와 구분 문자(점·하이픈·슬래시)를 남긴다 — 정돈(`YYYY.MM.DD`)은 blur 때 한 번이다.
  * 검사(`parseInputFormat`)는 공백·괄호·점도 구분 문자로 받아 주지만, 타이핑 단계에서는
  * "숫자만 받는 칸"으로 보이는 것이 목적이라 하이픈 하나만 남긴다. 붙여넣기도 같은 필터를
  * 타므로 `(02) 123-4567` 을 붙이면 `02123-4567` 이 되고 blur 정돈이 `02-123-4567` 로 맞춘다.
@@ -305,5 +356,6 @@ export function formatFailureMessage(
  */
 export function filterFormatTyping(format: InputFormat, raw: string): string {
   if (format === 'email') return raw;
+  if (format === 'date') return raw.replace(/[^0-9.\-/]/g, '');
   return raw.replace(/[^0-9-]/g, '');
 }

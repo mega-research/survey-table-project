@@ -18,8 +18,11 @@
  * 정규화 규칙은 다르다 — PII 는 숫자만 남기고 이쪽은 하이픈을 넣는다. 나중에 응답값과
  * 명단을 대조할 일이 생기면 비교 시점에 양쪽을 `normalizePii` 로 태워 숫자만 남긴다.
  * `corp_number`(법인번호)만 PII 목록에 없는 신규 어휘다.
+ *
+ * `date`(날짜)는 번호가 아니라 달력 값이다 — 하이픈이 아니라 `YYYY.MM.DD` 글자로 저장한다
+ * (내보내기도 String). 없는 날짜(2월 30일 등)는 막는다.
  */
-export const INPUT_FORMATS = ['mobile', 'phone', 'biz_number', 'corp_number', 'email'] as const;
+export const INPUT_FORMATS = ['mobile', 'phone', 'biz_number', 'corp_number', 'email', 'date'] as const;
 
 export type InputFormat = (typeof INPUT_FORMATS)[number];
 
