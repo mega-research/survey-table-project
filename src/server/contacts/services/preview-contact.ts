@@ -6,7 +6,7 @@ import { contactTargets } from '@/db/schema/contacts';
 import { collectReferencedContactKeys } from '@/lib/contacts/respondent-pii';
 import { appendContactPii } from '@/server/read-models/respondent-contact-attrs';
 
-import { lookupPriorAnswersByContactTarget } from './contact-prior-answers';
+import { lookupPriorAnswersByContactTarget } from '@/server/read-models/contact-prior-answers';
 
 /** 관리자 「설문 보기」가 싣는 조사 대상 한 명의 명단 값·이월 응답 */
 export interface PreviewContactSeed {

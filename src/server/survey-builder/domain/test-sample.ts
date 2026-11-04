@@ -6,6 +6,8 @@ import * as z from 'zod';
 export const SurveyTestSampleSchema = z.object({
   attrs: z.record(z.string(), z.string()),
   resid: z.number(),
+  /** 그 대상의 이월 응답({문항 id: 값}) — 없으면 null */
+  priorAnswers: z.record(z.string(), z.unknown()).nullable(),
 });
 export type SurveyTestSample = z.infer<typeof SurveyTestSampleSchema>;
 

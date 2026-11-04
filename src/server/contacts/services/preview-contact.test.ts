@@ -24,7 +24,7 @@ vi.mock('@/server/read-models/respondent-contact-attrs', () => ({
   appendContactPii: (...args: unknown[]) => appendContactPii(...args),
 }));
 const lookupPriorAnswersByContactTarget = vi.fn();
-vi.mock('./contact-prior-answers', () => ({
+vi.mock('@/server/read-models/contact-prior-answers', () => ({
   lookupPriorAnswersByContactTarget: (...args: unknown[]) => lookupPriorAnswersByContactTarget(...args),
 }));
 

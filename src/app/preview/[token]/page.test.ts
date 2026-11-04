@@ -10,7 +10,11 @@ const {
   getSurveyByIdMock,
   getSurveyForResponseMock,
   isRscRateLimitedMock,
+  loadPreviewContactSeedMock,
+  loadOperationsDataScopeMock,
 } = vi.hoisted(() => ({
+  loadPreviewContactSeedMock: vi.fn(),
+  loadOperationsDataScopeMock: vi.fn(),
   notFoundMock: vi.fn(() => {
     throw new Error('NEXT_NOT_FOUND');
   }),
@@ -32,6 +36,13 @@ vi.mock('@/server/survey-builder/services/survey-read', () => ({
   getSurveyByPreviewToken: (...a: unknown[]) => getSurveyByPreviewTokenMock(...a),
   getSurveyById: (...a: unknown[]) => getSurveyByIdMock(...a),
   getSurveyForResponse: (...a: unknown[]) => getSurveyForResponseMock(...a),
+}));
+
+vi.mock('@/server/contacts/services/preview-contact', () => ({
+  loadPreviewContactSeed: (...a: unknown[]) => loadPreviewContactSeedMock(...a),
+}));
+vi.mock('@/server/data-scope', () => ({
+  loadOperationsDataScope: (...a: unknown[]) => loadOperationsDataScopeMock(...a),
 }));
 
 function SurveyResponseFlowStub(): null {
@@ -94,6 +105,8 @@ describe('PublicSurveyPreviewPage (/preview/[token])', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     isRscRateLimitedMock.mockResolvedValue(false);
+    loadPreviewContactSeedMock.mockResolvedValue(null);
+    loadOperationsDataScopeMock.mockResolvedValue('real');
   });
 
   it('유효한 previewToken은 해당 설문을 resolve해 SurveyResponseFlow를 preview 모드로 렌더한다', async () => {
@@ -212,4 +225,43 @@ describe('PublicSurveyPreviewPage (/preview/[token])', () => {
     expect(notFoundMock).not.toHaveBeenCalled();
   });
 
+  it('첫 번째 조사 대상의 명단 값·이월 응답으로 연다 — 배포본 구조가 읽는 열만, 띠에 기준 대상을 적는다', async () => {
+    getSurveyByPreviewTokenMock.mockResolvedValue({ id: SURVEY_ID });
+    getSurveyByIdMock.mockResolvedValue(SURVEY_ROW);
+    const previewSurvey = { id: SURVEY_ID, title: '테스트 설문' };
+    getSurveyForResponseMock.mockResolvedValue({ survey: previewSurvey, versionId: 'v1' });
+    loadPreviewContactSeedMock.mockResolvedValue({
+      resid: 1,
+      isTest: false,
+      contactAttrs: { 기업명: '메가' },
+      priorAnswers: { q1: '작년 값' },
+    });
+
+    const result = await PublicSurveyPreviewPage({ params: Promise.resolve({ token: PREVIEW_TOKEN }) });
+
+    expect(loadPreviewContactSeedMock).toHaveBeenCalledWith({
+      surveyId: SURVEY_ID,
+      isTest: false,
+      structure: previewSurvey,
+    });
+    const flow = findElementByType(result, SurveyResponseFlowStub);
+    expect(flow?.props?.['previewContext']).toEqual({
+      survey: previewSurvey,
+      versionId: 'v1',
+      contactAttrs: { 기업명: '메가' },
+      priorAnswers: { q1: '작년 값' },
+    });
+    expect(flattenText(result).join('')).toContain('조사 대상 #1 기준');
+  });
+
+  it('테스트 파티션이면 테스트 대상으로 연다', async () => {
+    getSurveyByPreviewTokenMock.mockResolvedValue({ id: SURVEY_ID });
+    getSurveyByIdMock.mockResolvedValue(SURVEY_ROW);
+    getSurveyForResponseMock.mockResolvedValue({ survey: { id: SURVEY_ID }, versionId: 'v1' });
+    loadOperationsDataScopeMock.mockResolvedValue('test');
+
+    await PublicSurveyPreviewPage({ params: Promise.resolve({ token: PREVIEW_TOKEN }) });
+
+    expect(loadPreviewContactSeedMock).toHaveBeenCalledWith(expect.objectContaining({ isTest: true }));
+  });
 });

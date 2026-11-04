@@ -19,15 +19,16 @@ function authedContext(): ORPCContext {
 describe('surveyBuilder testSample procedures', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('get은 샘플이 있으면 { attrs, resid }를 직접 반환한다', async () => {
+  it('get은 샘플이 있으면 { attrs, resid, priorAnswers }를 직접 반환한다', async () => {
     vi.mocked(svc.getSurveyTestSample).mockResolvedValue({
       attrs: { 이름: '홍길동' },
       resid: 1,
+      priorAnswers: null,
     } as never);
     const client = createRouterClient({ testSample }, { context: authedContext() });
     const res = await client.testSample.get({ surveyId: SURVEY_ID });
     expect(svc.getSurveyTestSample).toHaveBeenCalledWith(SURVEY_ID);
-    expect(res).toEqual({ attrs: { 이름: '홍길동' }, resid: 1 });
+    expect(res).toEqual({ attrs: { 이름: '홍길동' }, resid: 1, priorAnswers: null });
   });
 
   it('get은 샘플이 없으면 null을 반환한다', async () => {

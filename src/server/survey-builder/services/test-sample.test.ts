@@ -27,10 +27,14 @@ vi.mock('@/server/read-models/contact-sample', () => ({
 vi.mock('@/server/read-models/respondent-contact-attrs', () => ({
   loadRespondentContactAttrs: vi.fn(),
 }));
+vi.mock('@/server/read-models/contact-prior-answers', () => ({
+  lookupPriorAnswersByContactTarget: vi.fn().mockResolvedValue(null),
+}));
 
 import { getFirstContactSample } from '@/server/read-models/contact-sample';
 import { loadOperationsDataScope } from '@/server/data-scope';
 import { loadRespondentContactAttrs } from '@/server/read-models/respondent-contact-attrs';
+import { lookupPriorAnswersByContactTarget } from '@/server/read-models/contact-prior-answers';
 
 import { getSurveyTestSample } from './test-sample';
 
@@ -62,6 +66,7 @@ describe('getSurveyTestSample', () => {
     await expect(getSurveyTestSample('s1')).resolves.toEqual({
       attrs: { 이름: '홍길동', 사업자등록번호: '123-45-67890' },
       resid: 1,
+      priorAnswers: null,
     });
     expect(loadRespondentContactAttrs).toHaveBeenCalledWith('ct-1');
   });
@@ -71,5 +76,14 @@ describe('getSurveyTestSample', () => {
     vi.mocked(loadOperationsDataScope).mockResolvedValue('real' as never);
     vi.mocked(getFirstContactSample).mockResolvedValue(null as never);
     await expect(getSurveyTestSample('s1')).resolves.toBeNull();
+  });
+  it('그 대상의 이월 응답도 싣는다 — 빌더 미리보기가 응답 화면처럼 지난 회차 값을 깐다', async () => {
+    limitMock.mockResolvedValue([{ id: 's1' }]);
+    vi.mocked(loadOperationsDataScope).mockResolvedValue('test' as never);
+    vi.mocked(getFirstContactSample).mockResolvedValue({ id: 'ct-9', attrs: {}, resid: 2 } as never);
+    vi.mocked(loadRespondentContactAttrs).mockResolvedValue({});
+    vi.mocked(lookupPriorAnswersByContactTarget).mockResolvedValue({ q1: '작년 값' } as never);
+    await expect(getSurveyTestSample('s1')).resolves.toEqual({ attrs: {}, resid: 2, priorAnswers: { q1: '작년 값' } });
+    expect(lookupPriorAnswersByContactTarget).toHaveBeenCalledWith({ surveyId: 's1', contactTargetId: 'ct-9', isTest: true });
   });
 });

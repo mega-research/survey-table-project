@@ -46,7 +46,7 @@ vi.mock('@/db', () => ({
 }));
 // 이월 표시(빨강)용 조회 — 이 파일이 지키는 것은 스코프이지 이월 값이 아니므로 서비스는
 // 대역으로 두고, 호출 인자만 본다(같은 종류의 누출이 이 경로로도 날 수 있다).
-vi.mock('@/server/contacts/services/contact-prior-answers', () => ({
+vi.mock('@/server/read-models/contact-prior-answers', () => ({
   lookupPriorAnswersByContactTarget: vi.fn(async () => null),
 }));
 vi.mock(
@@ -56,7 +56,7 @@ vi.mock(
   }),
 );
 
-import { lookupPriorAnswersByContactTarget } from '@/server/contacts/services/contact-prior-answers';
+import { lookupPriorAnswersByContactTarget } from '@/server/read-models/contact-prior-answers';
 
 import AdminResponseEditPage from '@/app/admin/surveys/[id]/operations/profiles/[responseId]/edit/page';
 
