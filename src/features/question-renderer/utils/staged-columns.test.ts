@@ -6,9 +6,11 @@ import {
   cellIdsOfColumnStepsBeyond,
   deriveOpenColumnStep,
   hiddenStagedColumnIds,
+  isColumnStageable,
   maxColumnStep,
   stagedColumnAddLabel,
   stagedColumnOptionalCellIds,
+  stageableColumns,
 } from './staged-columns';
 
 /**
@@ -84,5 +86,58 @@ describe('stagedColumnAddLabel', () => {
   it('단계 열 중 처음 적힌 문구, 없으면 null', () => {
     expect(stagedColumnAddLabel(columns)).toBe('기타 원료 추가');
     expect(stagedColumnAddLabel([{ id: 'a', label: 'a', revealStep: 2 }])).toBeNull();
+  });
+});
+
+describe('보기·순위 옵션 칸이 든 열은 단계로 열지 않는다', () => {
+  // 보기 옵션 칸의 선택은 칸 값이 아니라 표 응답 안 보기 그룹 맵(__choiceGroups)에 산다.
+  // 열린 단계 파생·닫을 때 비우기가 칸 값만 보므로, 단계를 걸면 선택이 있어도 접히고 닫아도 선택이 남는다.
+  // 행 차례로 열기의 묶음 제외 규칙(NON_STAGEABLE_CELL_TYPES)과 같다.
+  const choiceColumns: TableColumn[] = [
+    { id: 'a', label: '가' },
+    { id: 'b', label: '나', revealStep: 2 },
+  ];
+  const choiceRows: TableRow[] = [
+    {
+      id: 'r1',
+      label: '행',
+      cells: [
+        { id: 'ca', type: 'choice_opt', content: '' },
+        { id: 'cb', type: 'choice_opt', content: '' },
+      ],
+    },
+  ] as TableRow[];
+
+  it('그런 열의 단계는 무시해 늘 보인다', () => {
+    const effective = stageableColumns(choiceColumns, choiceRows);
+    expect(maxColumnStep(effective)).toBe(1);
+    expect(hiddenStagedColumnIds(effective, 1).size).toBe(0);
+    expect(stagedColumnOptionalCellIds(choiceColumns, choiceRows, {}).size).toBe(0);
+  });
+
+  it('응답 칸만 든 열의 단계는 그대로 둔다', () => {
+    expect(stageableColumns(columns, rows)).toBe(columns);
+  });
+
+  it('빌더 판정 — 그 열에 보기·순위 옵션 칸이 있는가', () => {
+    expect(isColumnStageable(choiceRows, 1)).toBe(false);
+    expect(isColumnStageable(rows, 3)).toBe(true);
+  });
+});
+
+describe('열린 단계 파생은 응답 칸 값만 센다', () => {
+  it('계산 칸 값(저장 경계가 넣는다)으로는 단계가 열리지 않는다', () => {
+    const calcRows: TableRow[] = [
+      {
+        id: 'r1',
+        label: '행',
+        cells: columns.map((c) =>
+          c.id === 'q2'
+            ? { id: 'k', type: 'calc' as const, content: '' }
+            : { id: `x-${c.id}`, type: 'input' as const, content: '' },
+        ),
+      },
+    ] as TableRow[];
+    expect(deriveOpenColumnStep(columns, calcRows, { k: '0' })).toBe(1);
   });
 });

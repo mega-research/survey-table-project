@@ -55,7 +55,7 @@ function clampInitialVisibleCount(value: number, stagedLength: number): number {
  * - 게이팅으로 닫힌 칸의 잔존값은 없는 것으로 본다. 보기 선택으로 열리는 칸은 표 응답 안 예약 키의
  *   선택 집합이 있어야 판정된다 — 넘기지 않으면 열린 칸이 늘 닫힌 것으로 읽혀 값이 있는 행이 닫힌다.
  */
-function hasLiveValue(
+export function hasLiveValue(
   cell: TableCell,
   cellValues: Record<string, unknown>,
   tableCells: readonly TableCell[],
@@ -145,7 +145,10 @@ export type StagedRowsViolationKind =
  * 열린 수 파생·닫을 때 값 비우기·필수 범위가 전부 칸 값을 보므로, 이런 행을 묶으면 닫아도
  * 선택이 남아 제출되고 안 열린 행의 필수 보기 그룹이 「다음」을 막는다.
  */
-const NON_STAGEABLE_CELL_TYPES = new Set<TableCell['type']>(['choice_opt', 'ranking_opt']);
+export const NON_STAGEABLE_CELL_TYPES: ReadonlySet<TableCell['type']> = new Set<TableCell['type']>([
+  'choice_opt',
+  'ranking_opt',
+]);
 
 export interface StagedRowsViolation {
   kind: StagedRowsViolationKind;

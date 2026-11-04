@@ -222,9 +222,12 @@ export function collectVisibleTableCells(
     rows.some((row) => row.cells.some((cell) => (cell.rowspan ?? 1) > 1))
       ? recalculateRowspansForVisibleRows(rows, new Set(visibleRows.map((row) => row.id)))
       : visibleRows;
+  // 열 차례로 열기 — 아직 열지 않은 단계의 열 칸은 화면에 없다. 필수뿐 아니라 계산 칸 비교·범위·
+  // 합계 등 모든 차단 검증에서 빼야 보이지 않는 칸의 오류가 「다음」을 막지 않는다.
+  const stagedColumnHidden = stagedColumnOptionalCellIds(question.tableColumns, rows, cellValues);
   return projectedRows
     .flatMap((row) => row.cells.filter((_, idx) => !hiddenColIndices.has(idx)))
-    .filter((c) => !c.isHidden);
+    .filter((c) => !c.isHidden && !stagedColumnHidden.has(c.id));
 }
 
 /**
@@ -1034,20 +1037,13 @@ export function collectNumericIssues(
       question.stagedRowsConfig,
       cellValues,
     );
-    // 열 차례로 열기: 아직 열리지 않은 단계(값이 있는 마지막 단계 뒤)의 열 칸은 필수에서 뺀다 —
-    // 화면에 없는 칸이 「다음」을 막으면 따를 길이 없다.
-    const stagedColumnOptional = stagedColumnOptionalCellIds(
-      question.tableColumns,
-      question.tableRowsData,
-      cellValues,
-    );
+    // 열 차례로 열기의 닫힌 열 칸은 collectVisibleTableCells 가 이미 뺐다(모든 차단 검증 공통).
     const ordinaryMissingCells = enabled.filter(
       (c) =>
         REQUIRED_CELL_TYPES.has(c.type) &&
         isRequiredCell(c) &&
         !repeatOptionalCellIds.has(c.id) &&
         !stagedOptional.has(c.id) &&
-        !stagedColumnOptional.has(c.id) &&
         !isCellValuePresent(cellValues[c.id]),
     );
     // 셀별 지정 문구(requiredMessage)가 있으면 문구 단위로 별도 이슈를 만든다 —

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { produce } from 'immer';
 import { toast } from 'sonner';
 
+import { isColumnStageable } from '@/features/question-renderer/utils/staged-columns';
 import { useSyncLatestRef } from '@/hooks/use-latest-ref';
 import { collectTableCells } from '@/lib/survey/cell-gating';
 import { generateId } from '@/lib/utils';
@@ -668,6 +669,12 @@ export function useTableEditor({
   // 열 차례로 열기 — 단계·버튼 문구를 통째로 바꾼다(빈 값은 키를 지운다)
   const updateColumnReveal = useCallback(
     (columnIndex: number, reveal: { revealStep?: number; revealAddLabel?: string }) => {
+      // 보기·순위 옵션 칸이 든 열은 단계를 걸지 못한다 — 선택이 칸 값이 아닌 곳에 살아 열린 단계
+      // 파생·닫을 때 비우기가 보지 못한다(응답 화면도 이런 열의 단계는 무시한다).
+      if ((reveal.revealStep ?? 1) >= 2 && !isColumnStageable(currentRowsRef.current, columnIndex)) {
+        toast.error('보기·순위 옵션 칸이 있는 열은 차례로 열 수 없습니다.');
+        return;
+      }
       if (pendingChangeRef.current) {
         clearTimeout(pendingChangeRef.current);
         pendingChangeRef.current = null;

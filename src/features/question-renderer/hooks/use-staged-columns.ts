@@ -19,6 +19,7 @@ import {
   deriveOpenColumnStep,
   hiddenStagedColumnIds,
   maxColumnStep,
+  stageableColumns,
   stagedColumnAddLabel,
 } from '@/features/question-renderer/utils/staged-columns';
 import type { TableColumn, TableRow } from '@/types/survey';
@@ -54,11 +55,13 @@ const NO_HIDDEN: Set<string> = new Set();
 
 export function useStagedColumns({
   questionId,
-  columns,
+  columns: authoredColumns,
   rows,
   value,
   onChange,
 }: UseStagedColumnsParams): UseStagedColumnsReturn {
+  // 보기·순위 옵션 칸이 든 열의 단계는 무시한다(빌더가 막지만 옛 구조·스크립트 설정 방어)
+  const columns = useMemo(() => stageableColumns(authoredColumns, rows), [authoredColumns, rows]);
   const { questionResponses: source } = useResponseSources();
   const sourceQuestionResponse = useQuestionResponseSelector(source, questionId, selectQuestionResponse);
   const [sessionOpenStep, setSessionOpenStep] = useState(0);

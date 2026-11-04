@@ -41,3 +41,52 @@ describe('열 차례로 열기 — 필수 범위', () => {
     expect(issues.map((i) => i.kind)).toContain('required-cells');
   });
 });
+
+describe('열 차례로 열기 — 닫힌 열은 모든 차단 검증에서 빠진다', () => {
+  // 1단계 입력 a, 2단계 계산 칸 k = a, 검증 k == 100. 2단계가 닫혀 있으면 k 는 화면에 없다 —
+  // 보이지 않는 칸의 오류가 「다음」을 막으면 응답자는 풀 길이 없다.
+  const calcQ = {
+    ...q,
+    tableColumns: [
+      { id: 'c1', label: '원유' },
+      { id: 'c2', label: '기타2 계산', revealStep: 2 },
+      { id: 'c3', label: '기타2 원료명', revealStep: 2 },
+    ],
+    tableRowsData: [
+      {
+        id: 'r1',
+        label: '국내산',
+        cells: [
+          { id: 'a', type: 'input', content: '', inputType: 'number' },
+          {
+            id: 'k',
+            type: 'calc',
+            content: '',
+            formula: { kind: 'cell', cellId: 'a' },
+            calcValidation: { operator: 'eq', target: { kind: 'literal', value: 100 } },
+          },
+          { id: 'n', type: 'input', content: '' },
+        ],
+      },
+    ],
+  } as unknown as Question;
+  // 계산 칸 검증은 ctx 가 있어야 돈다(없으면 fail-safe 통과)
+  const run = (values: Record<string, unknown>) =>
+    collectNumericIssues(calcQ, values, {
+      allResponses: { q1: values },
+      allQuestions: [calcQ],
+      contactAttrs: {},
+    });
+
+  it('닫힌 단계의 계산 칸 검증은 막지 않는다', () => {
+    expect(run({ a: '1' })).toEqual([]);
+  });
+
+  it('저장 경계가 넣은 계산 칸 값으로 단계가 열리지 않는다', () => {
+    expect(run({ a: '1', k: '1' })).toEqual([]);
+  });
+
+  it('응답 칸에 값이 들어와 열린 단계의 계산 칸은 검사한다', () => {
+    expect(run({ a: '1', n: '연유' }).map((i) => i.kind)).toContain('formula');
+  });
+});

@@ -7,9 +7,16 @@
  * 저장하지 않고 **값에서 파생**한다(값이 있는 마지막 단계). `−` 는 마지막 단계의 값을 비우고
  * 닫는다. 필수 판정은 열리지 않은 단계의 칸을 뺀다 — 화면에 없는 칸이 「다음」을 막으면 안 된다.
  * 내보내기는 이 기능을 모른다(넉넉히 만든 열을 줄이려면 「안 쓰면 내보내기에서 빼기」를 함께 켠다).
+ *
+ * 값의 판정은 행 차례로 열기와 같다 — 응답 칸만 세고(계산 칸은 저장 경계가 값을 넣는다) 게이팅으로
+ * 닫힌 칸의 잔존값은 없는 것으로 본다(`hasLiveValue`). 보기·순위 옵션 칸이 든 열은 단계를 무시한다
+ * (`stageableColumns`) — 선택이 칸 값이 아닌 곳에 살아 열린 단계 파생·닫을 때 비우기가 보지 못한다.
  */
+import { collectTableCells } from '@/lib/survey/cell-gating';
+import { collectTableChoiceSelection } from '@/lib/survey/choice-selection';
 import type { TableColumn, TableRow } from '@/types/survey';
-import { isCellValuePresent } from '@/utils/table-cell-semantics';
+
+import { NON_STAGEABLE_CELL_TYPES, hasLiveValue } from './staged-rows';
 
 const stepOf = (column: TableColumn): number =>
   typeof column.revealStep === 'number' && column.revealStep >= 1 ? Math.floor(column.revealStep) : 1;
@@ -22,6 +29,37 @@ export function maxColumnStep(columns: readonly TableColumn[]): number {
 /** 단계가 2 이상인 열이 있는가 */
 export function isStagedColumnsActive(columns: readonly TableColumn[] | null | undefined): boolean {
   return maxColumnStep(columns ?? []) >= 2;
+}
+
+/**
+ * 이 열에 단계를 걸 수 있는가 — 보기·순위 옵션 칸이 하나라도 있으면 아니다(빌더 차단·런타임 무시 공용).
+ * 그 칸의 선택은 표 응답 안 보기 그룹 맵이나 문항 응답에 살아, 칸 값만 보는 열린 단계 파생이 선택을
+ * 못 보고(재진입 때 접힘) 닫을 때 비우기도 선택을 지우지 못한다(화면에서 사라진 선택이 제출된다).
+ */
+export function isColumnStageable(rows: readonly TableRow[], colIdx: number): boolean {
+  return !rows.some((row) => {
+    const cell = row.cells[colIdx];
+    return cell !== undefined && NON_STAGEABLE_CELL_TYPES.has(cell.type);
+  });
+}
+
+/**
+ * 단계를 걸 수 없는 열의 단계를 뗀 열 목록 — 바꿀 것이 없으면 원본 참조 그대로.
+ * 빌더가 막지만 스크립트·옛 구조로 들어온 설정이 응답 화면에서 같은 사고를 내지 않게 런타임에서도 무시한다.
+ */
+export function stageableColumns(
+  columns: readonly TableColumn[],
+  rows: readonly TableRow[],
+): readonly TableColumn[] {
+  if (!isStagedColumnsActive(columns)) return columns;
+  let changed = false;
+  const out = columns.map((column, colIdx) => {
+    if (stepOf(column) < 2 || isColumnStageable(rows, colIdx)) return column;
+    changed = true;
+    const { revealStep: _step, ...rest } = column;
+    return rest;
+  });
+  return changed ? out : columns;
 }
 
 /** 열 index 별 단계 — 행의 칸은 열 index 로 맞춘다 */
@@ -47,9 +85,17 @@ export function deriveOpenColumnStep(
   values: Record<string, unknown> | undefined,
 ): number {
   const cellValues = values ?? {};
+  const tableCells = collectTableCells(rows);
+  const cellById = new Map(tableCells.map((cell) => [cell.id, cell]));
+  const choiceSelection = collectTableChoiceSelection(cellValues);
   let open = 1;
   for (const [step, ids] of cellIdsByStep(columns, rows)) {
-    if (step > open && ids.some((id) => isCellValuePresent(cellValues[id]))) open = step;
+    if (step <= open) continue;
+    const live = ids.some((id) => {
+      const cell = cellById.get(id);
+      return cell !== undefined && hasLiveValue(cell, cellValues, tableCells, choiceSelection);
+    });
+    if (live) open = step;
   }
   return open;
 }
@@ -70,14 +116,14 @@ export function cellIdsOfColumnStepsBeyond(
   return out;
 }
 
-/** 필수에서 뺄 칸 — 값에서 파생한 열린 단계보다 뒤 열의 칸 */
+/** 화면에 없는 칸 — 값에서 파생한 열린 단계보다 뒤 열의 칸. 모든 차단 검증이 이 칸을 뺀다 */
 export function stagedColumnOptionalCellIds(
   columns: readonly TableColumn[] | null | undefined,
   rows: readonly TableRow[] | null | undefined,
   values: Record<string, unknown> | undefined,
 ): Set<string> {
-  const cols = columns ?? [];
   const tableRows = rows ?? [];
+  const cols = stageableColumns(columns ?? [], tableRows);
   if (!isStagedColumnsActive(cols)) return new Set();
   return new Set(cellIdsOfColumnStepsBeyond(cols, tableRows, deriveOpenColumnStep(cols, tableRows, values)));
 }
