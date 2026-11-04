@@ -152,24 +152,33 @@ function baseRowCodeOf(row: TableRow, fallback: string): string {
 }
 
 /**
- * 복제 벌의 선택 칸 보기 id — 템플릿 보기 id 에 벌 번호를 붙여 정한다.
+ * 복제 벌의 보기 id — 템플릿 보기 id 에 벌 번호를 붙여 정한다(선택·라디오·체크박스 칸 공용).
  *
  * 상세 기재는 `__optTexts__[문항][보기 id]` 에 산다(OptionTextInput). 보기 id 를 그대로 복사하면
  * 모든 벌이 같은 칸을 써서 한 벌의 「기타」 입력이 다른 벌의 입력을 덮는다. 발번하지 않고 파생하는
  * 이유는 멱등성이다 — 다시 펼쳐도 같은 id 가 나오고, 템플릿에 보기를 끼우거나 순서를 바꿔도 기존
  * 보기의 id 가 따라가 이미 저장된 상세 기재가 고아가 되지 않는다.
  *
- * 값이 없는 보기는 템플릿 보기 id 를 값으로 둔다. 선택 칸은 `value ?? id` 를 저장하고 중복 불가
- * 묶음도 그 키로 비교하므로, 그래야 벌끼리 같은 보기가 같은 저장값으로 남는다(빌더는 늘 값을 준다).
+ * 값이 없는 보기는 템플릿 보기 id 를 값으로 둔다. 칸은 `value ?? id` 를 저장하고 중복 불가 묶음·게이팅도
+ * 그 키로 비교하므로, 그래야 벌끼리 같은 보기가 같은 저장값으로 남는다(빌더는 늘 값을 준다).
  */
 export function bundleOptionId(templateOptionId: string, bundle: number): string {
   return `${templateOptionId}-r${bundle}`;
 }
 
-function cloneSelectOptionsForBundle(
-  options: NonNullable<TableCell['selectOptions']>,
+/**
+ * 복제 벌의 라디오 묶음 이름 — 내보내기가 표 전체에서 같은 `radioGroupName` 의 칸을 변수 하나로 합치므로
+ * (`collectRadioGroupColumns`) 그대로 복사하면 모든 벌이 한 변수로 뭉친다. 응답 화면의 묶음은 행 안에서만
+ * 짓기 때문에 같은 행의 칸이 같은 이름을 받으면 그대로 맞는다. 보기 id 와 같은 이유로 파생한다.
+ */
+export function bundleRadioGroupName(templateGroupName: string, bundle: number): string {
+  return `${templateGroupName}-r${bundle}`;
+}
+
+function cloneOptionsForBundle<O extends { id: string; value?: string }>(
+  options: readonly O[],
   bundle: number,
-): NonNullable<TableCell['selectOptions']> {
+): O[] {
   return options.map((option) => ({
     ...option,
     id: bundleOptionId(option.id, bundle),
@@ -191,8 +200,13 @@ function cloneCellForBundle(
   delete rest.isCustomExportLabel;
   delete rest.rankVarNames;
   const cloned: TableCell = { ...(rest as TableCell), id: newId };
-  if (template.selectOptions) {
-    cloned.selectOptions = cloneSelectOptionsForBundle(template.selectOptions, bundle);
+  if (template.selectOptions) cloned.selectOptions = cloneOptionsForBundle(template.selectOptions, bundle);
+  if (template.radioOptions) cloned.radioOptions = cloneOptionsForBundle(template.radioOptions, bundle);
+  if (template.checkboxOptions) {
+    cloned.checkboxOptions = cloneOptionsForBundle(template.checkboxOptions, bundle);
+  }
+  if (template.radioGroupName) {
+    cloned.radioGroupName = bundleRadioGroupName(template.radioGroupName, bundle);
   }
   return remapCellRefs(cloned, idMap);
 }
@@ -384,21 +398,21 @@ export interface RowRepeatViolation {
 }
 
 /**
- * 반복 블록 안에 놓아도 되는 셀 종류 — 입력 셀 · 선택(드롭다운) 셀 · 라벨용 표시 셀.
+ * 반복 블록 안에 놓아도 되는 셀 종류 — 입력 · 선택(드롭다운) · 라디오 · 체크박스 · 라벨용 표시 셀.
  *
- * 선택 칸은 값이 입력 칸과 같은 모양(셀 id 아래 문자열 하나)이라 열린 벌 파생·접을 때 비우기·
- * 사용 벌 pruning 이 그대로 맞는다. 상세 기재는 `__optTexts__[문항][보기 id]` 라 셀 id 로 갈리지
- * 않는다 — 복제 벌의 보기 id 를 벌마다 따로 정해 섞이지 않게 한다(`bundleOptionId`, 2026-11-04 유가공업 실태조사 문1).
- * 라디오·체크박스는 보기 목록을 셀마다 따로 들고 값 모양이 달라, 계산·랭킹·보기 소스 셀은
- * 표 전체 규칙에 엮여 벌마다 의미가 갈려 여전히 뺀다.
+ * 응답 칸은 모두 값이 셀 id 아래에 있어(선택·라디오는 문자열, 체크박스는 배열) 열린 벌 파생·접을 때 비우기·
+ * 사용 벌 pruning 이 그대로 맞는다(행 차례로 열기도 같은 칸을 같은 방식으로 다룬다). 상세 기재는
+ * `__optTexts__[문항][보기 id]` 라 셀 id 로 갈리지 않는다 — 복제 벌의 보기 id 를 벌마다 따로 정하고
+ * (`bundleOptionId`, 2026-11-04 유가공업 실태조사 문1), 라디오 묶음 이름도 벌마다 가른다(`bundleRadioGroupName`).
+ * 계산·랭킹·보기 소스 셀은 표 전체 규칙에 엮여 벌마다 의미가 갈려 여전히 뺀다.
  */
-const REPEATABLE_CELL_TYPES = new Set<TableCell['type']>(['input', 'select', 'text']);
+const REPEATABLE_CELL_TYPES = new Set<TableCell['type']>(['input', 'select', 'radio', 'checkbox', 'text']);
 
 /**
  * 반복 블록으로 지정해도 되는 묶음인지 검사한다. 빌더가 지정을 막는 데 쓰고,
  * 펼치기 함수는 이 판정을 신뢰한다(검증 실패 상태를 조용히 뭉개지 않는다).
  *
- * 라디오·체크박스·계산·랭킹 셀, 합계 제약·분기 규칙·행 표시 조건이 참조하는 행, 동적 행 그룹 소속
+ * 계산·랭킹·보기 소스 셀, 합계 제약·분기 규칙·행 표시 조건이 참조하는 행, 동적 행 그룹 소속
  * 행은 벌마다 의미가 갈려 규칙이 얽히므로 지정 대상에서 뺀다 (스펙 제외 목록).
  */
 export function validateRowRepeatTemplate(
@@ -443,7 +457,7 @@ export function validateRowRepeatTemplate(
   if (badCellRows.length > 0) {
     violations.push({
       kind: 'cell-type',
-      message: '반복 블록에는 입력·선택(드롭다운) 셀과 표시용 텍스트 셀만 넣을 수 있습니다.',
+      message: '반복 블록에는 입력·선택(드롭다운)·라디오·체크박스 셀과 표시용 텍스트 셀만 넣을 수 있습니다.',
       rowIds: badCellRows.map((row) => row.id),
     });
   }

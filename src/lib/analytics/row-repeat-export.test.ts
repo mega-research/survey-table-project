@@ -226,3 +226,111 @@ describe('선택 칸(드롭다운)이 든 반복 블록', () => {
     expect(textValues).toEqual(['치즈', '버터']);
   });
 });
+
+describe('라디오·체크박스 칸이 든 반복 블록', () => {
+  const cfg: RowRepeatConfig = { enabled: true, templateRowIds: ['tpl'], maxRepeats: 3 };
+  let n = 0;
+  const seed: TableRow[] = [
+    {
+      id: 'tpl',
+      label: '품목',
+      rowCode: 'r01',
+      cells: [
+        {
+          id: 'rad',
+          type: 'radio',
+          content: '',
+          radioOptions: [
+            { id: 'r1', label: '있음', value: '1', spssNumericCode: 1 },
+            { id: 'r9', label: '기타', value: '9', spssNumericCode: 9, allowTextInput: true },
+          ],
+        },
+        {
+          id: 'chk',
+          type: 'checkbox',
+          content: '',
+          checkboxOptions: [
+            { id: 'k1', label: '가', value: '1', spssNumericCode: 1 },
+            { id: 'k9', label: '기타', value: '9', spssNumericCode: 9, allowTextInput: true },
+          ],
+        },
+      ],
+    },
+  ] as TableRow[];
+  const q = {
+    id: 'q4',
+    type: 'table',
+    title: '의향 표',
+    required: false,
+    order: 0,
+    questionCode: 'QR',
+    tableColumns: [
+      { id: 'c1', label: '의향', columnCode: 'c01' },
+      { id: 'c2', label: '항목', columnCode: 'c02' },
+    ],
+    tableRowsData: expandRepeatRows(seed, cfg, () => `x${++n}`),
+    rowRepeatConfig: cfg,
+  } as Question;
+  const cellOf = (bundle: number, i: number) => q.tableRowsData!.find((r) => r.repeatIndex === bundle)!.cells[i]!;
+  const otherOf = (bundle: number, i: number) =>
+    (cellOf(bundle, i).radioOptions ?? cellOf(bundle, i).checkboxOptions)!.find((o) => o.value === '9')!.id;
+
+  it('벌마다 라디오 값·체크박스 값·「기타」 상세 기재가 따로 내보내진다', () => {
+    const sub = {
+      id: 's',
+      questionResponses: {
+        q4: {
+          [cellOf(1, 0).id]: '9',
+          [cellOf(2, 0).id]: '1',
+          [cellOf(1, 1).id]: ['9'],
+          [cellOf(2, 1).id]: ['1', '9'],
+        },
+        __optTexts__: {
+          q4: { [otherOf(1, 0)]: '라디오기타1', [otherOf(1, 1)]: '체크기타1', [otherOf(2, 1)]: '체크기타2' },
+        },
+      },
+    } as unknown as SurveySubmission;
+    const used = collectUsedRepeatCounts([q], [sub]);
+    expect(used.get('q4')).toBe(2);
+    const columns = generateSPSSColumns([q], { usedRepeatCounts: used });
+    assertValidSpssVarNames(columns);
+    const row = buildDataRows(columns, [q], [sub])[0]!;
+    const byName = Object.fromEntries(columns.map((c, i) => [c.spssVarName, row[i]]));
+    const texts = columns.filter((c) => c.spssVarName.endsWith('_text')).map((c) => byName[c.spssVarName]);
+    expect(texts).toEqual(['라디오기타1', '체크기타1', null, '체크기타2']);
+    expect(Object.keys(byName).filter((k) => k.startsWith('QR_r01_01'))).not.toEqual([]);
+    expect(Object.keys(byName).filter((k) => k.startsWith('QR_r01_02'))).not.toEqual([]);
+  });
+
+  it('라디오 묶음 이름이 같은 칸도 벌마다 다른 변수가 된다', () => {
+    const grouped = expandRepeatRows(
+      [
+        {
+          id: 'tpl',
+          label: '척도',
+          rowCode: 'r01',
+          cells: [1, 2].map((k) => ({
+            id: `g${k}`,
+            type: 'radio' as const,
+            content: '',
+            radioGroupName: 'scale',
+            radioOptions: [{ id: `o${k}`, label: String(k), value: String(k), spssNumericCode: k }],
+          })),
+        },
+      ] as TableRow[],
+      cfg,
+      () => `y${++n}`,
+    );
+    const gq = { ...q, id: 'q5', questionCode: 'QG', tableRowsData: grouped } as Question;
+    const sub = {
+      id: 's',
+      questionResponses: { q5: { [grouped[0]!.cells[0]!.id]: '1', [grouped[1]!.cells[1]!.id]: '2' } },
+    } as unknown as SurveySubmission;
+    const used = collectUsedRepeatCounts([gq], [sub]);
+    const columns = generateSPSSColumns([gq], { usedRepeatCounts: used });
+    const row = buildDataRows(columns, [gq], [sub])[0]!;
+    const values = columns.map((c, i) => [c.spssVarName, row[i]] as const);
+    // 벌 두 개 = 라디오 묶음 변수 두 개, 각자 제 값
+    expect(values.map(([, v]) => v)).toEqual([1, 2]);
+  });
+});

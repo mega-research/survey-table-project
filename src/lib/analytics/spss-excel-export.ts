@@ -783,9 +783,23 @@ export function generateSPSSColumns(
       }
       const unreached = pendingChoiceGroups.filter((g) => !emittedChoiceGroups.has(g));
       if (unreached.length > 0) emitChoiceGroupColumns(q, q.questionCode, columns, unreached);
-      // 순회가 닿지 않은 묶음(멤버 행이 반복 pruning 으로 빠진 경우)은 표 끝에 — 열이 사라지지 않게
-      for (const column of new Set(radioGroupColumnOfCell.values())) {
-        if (!emittedRadioGroups.has(column)) columns.push(column);
+      // 순회가 닿지 않은 묶음은 표 끝에 — 열이 사라지지 않게. 단 멤버가 전부 아무도 안 쓴 뒤쪽 반복 벌에
+      // 있는 묶음은 뺀다 — 벌마다 묶음 이름이 갈리므로(`bundleRadioGroupName`) 그 벌의 다른 칸과 같이 빠져야
+      // 「안 쓴 벌의 열은 내지 않는다」가 라디오 묶음에도 성립한다.
+      const exportRowIds = new Set(exportRows.map((row) => row.id));
+      const prunedCellIds = new Set(
+        (q.tableRowsData ?? [])
+          .filter((row) => row.repeatIndex !== undefined && !exportRowIds.has(row.id))
+          .flatMap((row) => row.cells.map((cell) => cell.id)),
+      );
+      const membersOfGroup = new Map<SPSSExportColumn, string[]>();
+      for (const [cellId, column] of radioGroupColumnOfCell) {
+        membersOfGroup.set(column, [...(membersOfGroup.get(column) ?? []), cellId]);
+      }
+      for (const [column, members] of membersOfGroup) {
+        if (emittedRadioGroups.has(column)) continue;
+        if (members.every((id) => prunedCellIds.has(id))) continue;
+        columns.push(column);
       }
     } else {
       columns.push({

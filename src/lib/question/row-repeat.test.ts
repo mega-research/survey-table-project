@@ -290,3 +290,59 @@ describe('expandRepeatRows — 선택 칸 보기 id', () => {
     ]);
   });
 });
+
+describe('expandRepeatRows — 라디오·체크박스 칸', () => {
+  // 라디오·체크박스의 「기타」 상세 기재도 __optTexts__[문항][보기 id] 에 산다 — 보기 id 를 벌마다 가른다.
+  // 라디오 묶음 이름(radioGroupName)은 내보내기가 표 전체에서 같은 이름을 변수 하나로 합치므로 벌마다 가른다.
+  function choiceRows(): TableRow[] {
+    return [
+      row('tpl', '품목', [
+        {
+          id: 'rad',
+          content: '',
+          type: 'radio',
+          radioGroupName: 'will',
+          radioOptions: [
+            { id: 'r1', label: '있음', value: '1' },
+            { id: 'r9', label: '기타', value: '9', allowTextInput: true },
+          ],
+        },
+        {
+          id: 'chk',
+          content: '',
+          type: 'checkbox',
+          checkboxOptions: [
+            { id: 'k1', label: '가', value: '1' },
+            { id: 'k9', label: '기타', value: '9', allowTextInput: true },
+          ],
+        },
+      ] as TableCell[]),
+    ];
+  }
+
+  it('2벌부터 라디오·체크박스 보기 id 가 벌마다 다르고 값은 같다', () => {
+    const out = expandRepeatRows(choiceRows(), config(), makeIdFactory('n'));
+    const radioIds = out.map((r) => r.cells[0]!.radioOptions!.map((o) => o.id));
+    const checkIds = out.map((r) => r.cells[1]!.checkboxOptions!.map((o) => o.id));
+    expect(radioIds[0]).toEqual(['r1', 'r9']);
+    expect(new Set(radioIds.flat()).size).toBe(6);
+    expect(new Set(checkIds.flat()).size).toBe(6);
+    for (const r of out) {
+      expect(r.cells[0]!.radioOptions!.map((o) => o.value)).toEqual(['1', '9']);
+      expect(r.cells[1]!.checkboxOptions!.map((o) => o.value)).toEqual(['1', '9']);
+    }
+  });
+
+  it('라디오 묶음 이름은 1벌 그대로, 2벌부터 벌마다 다르다', () => {
+    const out = expandRepeatRows(choiceRows(), config(), makeIdFactory('n'));
+    expect(out.map((r) => r.cells[0]!.radioGroupName)).toEqual(['will', 'will-r2', 'will-r3']);
+  });
+
+  it('다시 펼쳐도 보기 id·묶음 이름이 그대로다', () => {
+    const once = expandRepeatRows(choiceRows(), config(), makeIdFactory('n'));
+    const twice = expandRepeatRows(once, config(), makeIdFactory('m'));
+    expect(twice.map((r) => r.cells.map((c) => [c.radioGroupName, (c.radioOptions ?? c.checkboxOptions)!.map((o) => o.id)]))).toEqual(
+      once.map((r) => r.cells.map((c) => [c.radioGroupName, (c.radioOptions ?? c.checkboxOptions)!.map((o) => o.id)])),
+    );
+  });
+});

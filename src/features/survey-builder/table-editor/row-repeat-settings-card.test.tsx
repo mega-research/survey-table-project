@@ -35,19 +35,19 @@ describe('행 반복 설정 카드', () => {
     );
   });
 
-  it('선택 셀이 든 행을 고르면 위반을 알리고 켜지 못하게 한다', async () => {
+  it('계산 셀이 든 행을 고르면 위반을 알리고 켜지 못하게 한다', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    const withRadio: TableRow[] = [
+    const withCalc: TableRow[] = [
       rows[0]!,
-      { id: 'a', label: '성과명', cells: [cell('a1', 'radio')] },
+      { id: 'a', label: '성과명', cells: [cell('a1', 'calc')] },
       rows[2]!,
     ];
-    render(<RowRepeatSettingsCard rows={withRadio} onChange={onChange} />);
+    render(<RowRepeatSettingsCard rows={withCalc} onChange={onChange} />);
 
     await pickRange(user, 'a', 'a');
 
-    expect(screen.getByText(/입력·선택\(드롭다운\) 셀과 표시용 텍스트 셀만/)).toBeInTheDocument();
+    expect(screen.getByText(/입력·선택\(드롭다운\)·라디오·체크박스 셀과 표시용 텍스트 셀만/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '반복 켜기' })).toBeDisabled();
   });
 
