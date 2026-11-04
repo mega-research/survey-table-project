@@ -180,6 +180,11 @@ export interface SumConstraint {
   targetExpr?: CalcExpr; // 있으면 우변 = 이 수식 (셀/질문응답/attrs/LUT/복합)
   tolerance?: number; // eq/ne 전용 절대 오차. 기본 0 — 부등호 연산자는 무시
   errorMessage?: string; // 미지정 시 자동 생성 메시지 사용
+  /**
+   * 행 반복 벌마다 — 1벌(틀) 칸으로 만든 제약을 1벌과 적기 시작한 벌마다 복제해 검사한다
+   * (`resolveBundleSumConstraints`). 블록 안 칸만 가리키고 수식(leftExpr·targetExpr)이 없을 때만 쓴다.
+   */
+  perRepeatBundle?: boolean;
 }
 
 // 질문 표시 조건 논리 타입
@@ -797,6 +802,11 @@ export interface RowRepeatConfig {
    * 틀이 2줄 이상이거나 표의 다른 행 코드와 겹치면 무시한다(`lib/question/row-repeat`).
    */
   flatRowCodes?: boolean;
+  /**
+   * 적기 시작한 벌도 1벌처럼 필수 — 응답 칸에 값이 하나라도 든 2벌 이후의 필수 칸을 검사한다.
+   * 기본(꺼짐)은 1벌만 필수. 빈 채로 열어 둔 벌은 어느 쪽이든 막지 않는다.
+   */
+  requireStartedBundles?: boolean;
 }
 
 /**

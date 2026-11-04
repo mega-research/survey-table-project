@@ -10,6 +10,7 @@ import { findDistinctViolations } from '@/features/question-renderer/utils/disti
 import { optionTextTargetId } from '@/features/question-renderer/utils/option-text-target';
 import { stagedColumnOptionalCellIds } from '@/features/question-renderer/utils/staged-columns';
 import { stagedOptionalCellIds } from '@/features/question-renderer/utils/staged-rows';
+import { resolveBundleSumConstraints, startedRepeatBundles } from '@/lib/question/row-repeat';
 import {
   areAllFormulaRefsEmpty,
   evaluateCellFormula,
@@ -267,12 +268,19 @@ export function resolveChoiceTableVisibleCellIds(
 
 /**
  * 필수 판정에서 빼는 셀 — 반복 2벌 이후의 셀.
- * 1벌은 평범한 필수 셀이고, 그 뒤 벌은 "더 적을 것이 있으면 적는" 자리다.
+ * 1벌은 평범한 필수 셀이고, 그 뒤 벌은 "더 적을 것이 있으면 적는" 자리다. 「적기 시작한 벌도 1벌처럼
+ * 필수」(`rowRepeatConfig.requireStartedBundles`)를 켜면 값이 하나라도 든 벌은 빼지 않는다 — 빈 채로
+ * 열어 둔 벌은 그래도 뺀다.
  */
-function collectRepeatOptionalCellIds(question: Question): Set<string> {
+function collectRepeatOptionalCellIds(question: Question, cellValues: Record<string, unknown>): Set<string> {
+  const rows = question.tableRowsData ?? [];
+  const started = question.rowRepeatConfig?.requireStartedBundles
+    ? startedRepeatBundles(rows, cellValues)
+    : new Set<number>();
   const ids = new Set<string>();
-  for (const row of question.tableRowsData ?? []) {
-    if ((row.repeatIndex ?? 1) < 2) continue;
+  for (const row of rows) {
+    const idx = row.repeatIndex ?? 1;
+    if (idx < 2 || started.has(idx)) continue;
     for (const cell of row.cells) ids.add(cell.id);
   }
   return ids;
@@ -929,7 +937,7 @@ export function collectNumericIssues(
   // 0) 입력된 칸 수 제약 — 미접촉 표에서도 평가한다. "이 칸들 중 N칸은 적어야 한다" 는 표를
   //    건드리지 않은 응답자에게도 걸려야 하므로 아래 미접촉 스킵 밖에 둔다. 모자라면 빈 칸을,
   //    넘치면 채운 칸을 짚는다.
-  for (const constraint of question.sumConstraints ?? []) {
+  for (const constraint of resolveBundleSumConstraints(question, cellValues)) {
     if (!isFilledCountConstraint(constraint)) continue;
     const result = evaluateFilledCountConstraint(constraint, cellValues, existingIds);
     if (result.skipped || result.ok) continue;
@@ -1002,7 +1010,7 @@ export function collectNumericIssues(
 
     // 2) 합계 제약 — 합산 대상은 "보이고 활성인 셀"로 한정 (미선택 동적 행 잔존 값·isHidden 셀·
     //    숨은 열/행·비활성 게이팅 셀 제외)
-    for (const constraint of question.sumConstraints ?? []) {
+    for (const constraint of resolveBundleSumConstraints(question, cellValues)) {
       if (isFilledCountConstraint(constraint)) continue; // 위 0) 에서 평가했다
       const result = evaluateSumConstraint(
         constraint,
@@ -1031,7 +1039,7 @@ export function collectNumericIssues(
     // 행 반복: 필수는 1벌만 본다. 2벌부터는 열어도 비워 둘 수 있어야 한다 —
     // 실수로 `+` 를 누른 응답자가 제출하지 못하는 상황을 막는다. 범위·합계 검증은
     // 값이 있을 때만 위반이 나므로 벌 수와 무관하게 그대로 둔다.
-    const repeatOptionalCellIds = collectRepeatOptionalCellIds(question);
+    const repeatOptionalCellIds = collectRepeatOptionalCellIds(question, cellValues);
     // 행·열 차례로 열기의 닫힌 칸은 collectVisibleTableCells 가 이미 뺐다(모든 차단 검증 공통) —
     // 「처음 보이는 행」과 「값이 있는 마지막 행」까지는 평범한 행으로 검사한다.
     const ordinaryMissingCells = enabled.filter(

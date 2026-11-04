@@ -107,6 +107,7 @@ export function RowRepeatSettingsCard({
       maxRepeats,
       ...(config?.addLabel !== undefined ? { addLabel: config.addLabel } : {}),
       ...(config?.flatRowCodes ? { flatRowCodes: true } : {}),
+      ...(config?.requireStartedBundles ? { requireStartedBundles: true } : {}),
       ...patch,
     });
   };
@@ -242,6 +243,22 @@ export function RowRepeatSettingsCard({
               }}
             />
             변수명을 줄 번호로 (r01·r02 …)
+          </label>
+          <label
+            className="flex items-center gap-1.5 self-end pb-1.5 text-xs text-gray-600"
+            title="값을 하나라도 적은 2벌 이후도 1벌의 필수 칸을 채워야 넘어간다. 빈 채로 열어 둔 벌은 막지 않는다"
+          >
+            <input
+              type="checkbox"
+              checked={config?.requireStartedBundles === true}
+              disabled={!enabled}
+              onChange={(e) => {
+                if (!enabled) return;
+                const { requireStartedBundles: _req, ...rest } = config!;
+                onChange?.(e.target.checked ? { ...rest, requireStartedBundles: true } : rest);
+              }}
+            />
+            적기 시작한 벌도 필수
           </label>
           {!enabled && (
             <Button size="sm" className="h-8 text-xs" disabled={!canApply} onClick={() => apply({})}>

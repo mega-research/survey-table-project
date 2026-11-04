@@ -194,4 +194,14 @@ describe('행 반복 설정 카드', () => {
     fireEvent.change(screen.getByPlaceholderText('행 추가'), { target: { value: '원료 추가' } });
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ addLabel: '원료 추가', flatRowCodes: true }));
   });
+  it('「적기 시작한 벌도 필수」를 켜고 끌 수 있고 다른 칸을 고쳐도 남는다', () => {
+    const onChange = vi.fn();
+    const config = { enabled: true, templateRowIds: ['a'], maxRepeats: 5 };
+    const { rerender } = render(<RowRepeatSettingsCard rows={rows} config={config} onChange={onChange} />);
+    fireEvent.click(screen.getByRole('checkbox', { name: /적기 시작한 벌도 필수/ }));
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ requireStartedBundles: true }));
+    rerender(<RowRepeatSettingsCard rows={rows} config={{ ...config, requireStartedBundles: true }} onChange={onChange} />);
+    fireEvent.change(screen.getByPlaceholderText('행 추가'), { target: { value: '원료 추가' } });
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ addLabel: '원료 추가', requireStartedBundles: true }));
+  });
 });

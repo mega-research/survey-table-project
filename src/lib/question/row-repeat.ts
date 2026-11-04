@@ -14,7 +14,7 @@
  * 비반복 행 변수명이 r1 에서 r01 로 통째 바뀐다. 펼치기 이전 행 수로 계산한 코드를
  * 행에 박아 그 길이 의존을 끊는다 (설계 결정 3).
  */
-import type { Question, RowRepeatConfig, TableCell, TableRow } from '@/types/survey';
+import type { Question, RowRepeatConfig, SumConstraint, TableCell, TableRow } from '@/types/survey';
 import { generateId } from '@/lib/utils';
 import { remapCellRefs } from '@/utils/table-cell-refs';
 import { isCellValuePresent } from '@/utils/table-cell-semantics';
@@ -522,8 +522,17 @@ export function validateRowRepeatTemplate(
     });
   }
 
-  const sumRefs = (question.sumConstraints ?? []).filter((constraint) =>
-    constraint.cellIds.some((id) => blockCellIds.has(id)),
+  // 벌마다 제약(perRepeatBundle)은 블록 안 칸만 가리키면 벌마다 복제해 검사하므로 막지 않는다
+  // (`resolveBundleSumConstraints`). 블록 밖 칸과 섞이면 어느 벌의 제약인지 정할 수 없어 막는다.
+  const sumRefs = (question.sumConstraints ?? []).filter(
+    (constraint) =>
+      constraint.cellIds.some((id) => blockCellIds.has(id)) &&
+      !(
+        constraint.perRepeatBundle === true &&
+        !constraint.leftExpr &&
+        !constraint.targetExpr &&
+        constraint.cellIds.every((id) => blockCellIds.has(id))
+      ),
   );
   if (sumRefs.length > 0) {
     violations.push({
@@ -586,4 +595,67 @@ function badRowIdsOf(
   return blockRows
     .filter((row) => row.cells.some((cell) => hit.has(cell.id)))
     .map((row) => row.id);
+}
+
+// ── 적기 시작한 벌 · 벌마다 제약 (검증) ─────────────────────────────
+
+/** 응답 칸 — 글자·이미지·계산 칸은 값이 응답이 아니다(계산 칸은 저장 경계가 값을 넣는다) */
+const RESPONDENT_CELL_TYPES = new Set<TableCell['type']>(['input', 'select', 'radio', 'checkbox', 'ranking']);
+
+/**
+ * 적기 시작한 2벌 이후의 벌 번호 — 응답 칸에 값이 하나라도 든 벌. 빈 채로 열어 둔 벌은 안 쓴 것이다
+ * (열린 벌 수는 저장하지 않는다 — 검증은 값만 본다, 2026-11-04 사용자 결정).
+ */
+export function startedRepeatBundles(
+  rows: readonly TableRow[],
+  values: Record<string, unknown> | undefined,
+): Set<number> {
+  const cellValues = values ?? {};
+  const started = new Set<number>();
+  for (const row of rows) {
+    const idx = repeatIndexOf(row);
+    if (idx === undefined || idx < 2 || started.has(idx)) continue;
+    if (row.cells.some((cell) => RESPONDENT_CELL_TYPES.has(cell.type) && isCellValuePresent(cellValues[cell.id]))) {
+      started.add(idx);
+    }
+  }
+  return started;
+}
+
+/**
+ * 검사할 합계·칸 수 제약 — 벌마다 제약(`perRepeatBundle`)을 1벌과 적기 시작한 벌마다 복제한다.
+ * 1벌 칸 id 를 (틀 행, 칸 자리)로 풀어 그 벌의 같은 자리 칸 id 로 옮긴다. 옮길 수 없는 칸(구조가 깨짐)은 뺀다.
+ * 표식 없는 제약과 반복이 꺼진 표는 그대로 돌려준다.
+ */
+export function resolveBundleSumConstraints(
+  question: Pick<Question, 'tableRowsData' | 'rowRepeatConfig' | 'sumConstraints'>,
+  values: Record<string, unknown> | undefined,
+): SumConstraint[] {
+  const constraints = question.sumConstraints ?? [];
+  if (!constraints.some((c) => c.perRepeatBundle) || !isRowRepeatActive(question.rowRepeatConfig)) return constraints;
+  const rows = question.tableRowsData ?? [];
+  const position = new Map<string, { sourceRowId: string; index: number }>();
+  const bundleRows = new Map<string, TableRow>();
+  for (const row of rows) {
+    const idx = repeatIndexOf(row);
+    if (idx === undefined || !row.repeatSourceRowId) continue;
+    bundleRows.set(`${row.repeatSourceRowId}#${idx}`, row);
+    if (idx === 1) row.cells.forEach((cell, index) => position.set(cell.id, { sourceRowId: row.repeatSourceRowId!, index }));
+  }
+  const bundles = [...startedRepeatBundles(rows, values)].sort((a, b) => a - b);
+  const out: SumConstraint[] = [];
+  for (const constraint of constraints) {
+    out.push(constraint);
+    if (!constraint.perRepeatBundle) continue;
+    for (const bundle of bundles) {
+      const cellIds = constraint.cellIds
+        .map((id) => {
+          const at = position.get(id);
+          return at ? bundleRows.get(`${at.sourceRowId}#${bundle}`)?.cells[at.index]?.id : undefined;
+        })
+        .filter((id): id is string => id !== undefined);
+      out.push({ ...constraint, id: `${constraint.id}#${bundle}`, cellIds });
+    }
+  }
+  return out;
 }
