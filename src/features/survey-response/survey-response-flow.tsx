@@ -818,7 +818,16 @@ function SurveyResponseFlowActive({
     // 같은 참조가 돌아와 set 을 부르지 않으므로 렌더 루프가 생기지 않는다.
     // (react-hooks/set-state-in-effect 는 이 조건부 set 을 보고하지 않는다 — 보고되지도
     //  않는 규칙에 disable 을 달면 "쓰이지 않은 disable" 경고가 새로 뜬다.)
-    if (next !== responses) setResponses(next as ResponsesMap);
+    // 갱신 함수로 넣는다 — 같은 커밋에 자식 칸이 넣은 쓰기(미리 채운 명단 값 등)가 아직 이 렌더의
+    // responses 에 없을 수 있다. 계산한 결과를 그대로 넣으면 그 쓰기를 덮어 지운다. 그사이 바뀌었으면
+    // 최신 값에서 다시 지운다.
+    if (next !== responses) {
+      setResponses((prev) =>
+        (prev === responses
+          ? next
+          : stripHiddenQuestionValues(questions, prev, groups, evalCtx)) as ResponsesMap,
+      );
+    }
   }, [questions, responses, groups, evalCtx, setResponses, skipHiddenStrip]);
 
   // ── 분할 레이아웃 파생 ──

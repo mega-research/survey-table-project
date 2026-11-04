@@ -56,6 +56,9 @@ import type { InteractiveCellProps } from './types';
  * 「응답자가 고칠 수 있게」 칸이 고칠 때마다 명단 값으로 되돌아갔다(2026-10-27 발견). 유일한
  * 부모 `CellRouter` 가 memo 라 여기서 다시 감쌀 이득도 없다.
  */
+
+/** 「고칠 수 있게」 명단 값 쓰기를 마운트당 몇 번까지 다시 시도하는가 — 첫 쓰기 + 빠졌을 때 두 번 */
+const MAX_SEED_ATTEMPTS = 3;
 export function InputCell({
   cell,
   cellResponse,
@@ -191,15 +194,22 @@ export function InputCell({
 
   // 고칠 수 있는 prefill — 응답값이 아예 없을 때(undefined)만 명단 값을 깐다. 응답자가 지워
   // 빈 문자열이 되면 다시 깔지 않는다(emptyDefault 와 같은 규칙 — 지운 뜻을 지킨다).
+  //
+  // 쓰기가 응답에 반영되지 못하고 빠지면(같은 순간 다른 갱신이 응답 묶음을 통째로 덮는 등) 칸 값이
+  // undefined 그대로라 값 기준 effect 는 다시 돌지 않는다 — 화면엔 안 보이는 칸이 「필수 응답이
+  // 비어있습니다」로 막혔다(2026-11-04 유가공업 테스트 대상자). 그래서 렌더마다 확인해 다시 깔되,
+  // 쓰기를 계속 삼키는 호스트에서 무한히 쓰지 않도록 마운트당 횟수를 제한한다.
+  const seedAttemptsRef = useRef(0);
   const applySeed = useEffectEvent(() => {
-    if (seedValue !== null && cellResponse === undefined) {
-      markSeedWrite?.(questionId);
-      onUpdateValue(seedValue);
-    }
+    if (seedValue === null || cellResponse !== undefined) return;
+    if (seedAttemptsRef.current >= MAX_SEED_ATTEMPTS) return;
+    seedAttemptsRef.current += 1;
+    markSeedWrite?.(questionId);
+    onUpdateValue(seedValue);
   });
   useEffect(() => {
     applySeed();
-  }, [cellResponse, seedValue]);
+  });
 
   // 숫자 모드 + emptyDefault 정의 + 응답값 아예 미존재(undefined) → 첫 진입 시 초기값 자동 채움.
   // 고칠 수 있는 prefill 값이 있으면 그쪽이 이긴다(명단 값이 일반 기본치보다 구체적이다).

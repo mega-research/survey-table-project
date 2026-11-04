@@ -102,6 +102,31 @@ describe('InputCell prefill·emptyDefault 쓰기 횟수', () => {
     expect(edited).not.toHaveBeenCalled();
   });
 
+  it('「고칠 수 있게」 칸의 명단 값이 응답에 반영되지 못하고 빠지면 다음 렌더에서 다시 깐다 — 횟수는 제한', () => {
+    // 2026-11-04 유가공업 테스트 대상자: 화면엔 업체명이 보였는데 응답에는 빠져 「필수 응답이 비어있습니다」.
+    // 같은 순간 다른 갱신이 응답 묶음을 덮으면 칸 값이 undefined 그대로라 effect 가 다시 돌지 않았다.
+    const cell = {
+      id: 'c-prefill-heal',
+      type: 'input',
+      content: '',
+      defaultValueTemplate: '{{회사}}',
+      prefillEditable: true,
+    } as unknown as TableCell;
+    const first = vi.fn();
+    const { rerender } = render(renderCell(cell, undefined, first));
+    expect(first).toHaveBeenCalledTimes(1);
+
+    // 부모가 쓰기를 잃어 여전히 undefined 로 다시 그린다 → 다시 깐다
+    const healed = vi.fn();
+    rerender(renderCell(cell, undefined, healed));
+    expect(healed).toHaveBeenCalledWith('메가리서치');
+
+    // 계속 잃는 호스트에서 무한히 쓰지 않는다
+    const more = vi.fn();
+    for (let i = 0; i < 5; i++) rerender(renderCell(cell, undefined, more));
+    expect(more.mock.calls.length).toBeLessThanOrEqual(2);
+  });
+
   it('고칠 수 있는 prefill 칸도 명단 값이 없으면 아무것도 깔지 않는다', () => {
     const cell = {
       id: 'c-prefill-editable-empty',
