@@ -222,12 +222,14 @@ export function collectVisibleTableCells(
     rows.some((row) => row.cells.some((cell) => (cell.rowspan ?? 1) > 1))
       ? recalculateRowspansForVisibleRows(rows, new Set(visibleRows.map((row) => row.id)))
       : visibleRows;
-  // 열 차례로 열기 — 아직 열지 않은 단계의 열 칸은 화면에 없다. 필수뿐 아니라 계산 칸 비교·범위·
-  // 합계 등 모든 차단 검증에서 빼야 보이지 않는 칸의 오류가 「다음」을 막지 않는다.
+  // 행·열 차례로 열기 — 아직 열지 않은 행·단계의 칸은 화면에 없다. 필수뿐 아니라 계산 칸 비교·범위·
+  // 합계 등 모든 차단 검증에서 빼야 보이지 않는 칸의 오류가 「다음」을 막지 않는다. 열린 범위는 값에서
+  // 파생한다(세션에서 `+` 로 연 빈 행·단계는 검증이 알 수 없고, 비어 있어 빼도 잃는 판정이 없다).
+  const stagedHidden = stagedOptionalCellIds(rows, question.stagedRowsConfig, cellValues);
   const stagedColumnHidden = stagedColumnOptionalCellIds(question.tableColumns, rows, cellValues);
   return projectedRows
     .flatMap((row) => row.cells.filter((_, idx) => !hiddenColIndices.has(idx)))
-    .filter((c) => !c.isHidden && !stagedColumnHidden.has(c.id));
+    .filter((c) => !c.isHidden && !stagedHidden.has(c.id) && !stagedColumnHidden.has(c.id));
 }
 
 /**
@@ -1030,20 +1032,13 @@ export function collectNumericIssues(
     // 실수로 `+` 를 누른 응답자가 제출하지 못하는 상황을 막는다. 범위·합계 검증은
     // 값이 있을 때만 위반이 나므로 벌 수와 무관하게 그대로 둔다.
     const repeatOptionalCellIds = collectRepeatOptionalCellIds(question);
-    // 행 차례로 열기: 「처음 보이는 행」과 「값이 있는 마지막 행」 뒤의 묶음 행은 필수에서 뺀다.
-    // 행 반복과 달리 범위가 값에서 나온다 — 적기 시작한 행까지는 평범한 행으로 검사한다.
-    const stagedOptional = stagedOptionalCellIds(
-      question.tableRowsData,
-      question.stagedRowsConfig,
-      cellValues,
-    );
-    // 열 차례로 열기의 닫힌 열 칸은 collectVisibleTableCells 가 이미 뺐다(모든 차단 검증 공통).
+    // 행·열 차례로 열기의 닫힌 칸은 collectVisibleTableCells 가 이미 뺐다(모든 차단 검증 공통) —
+    // 「처음 보이는 행」과 「값이 있는 마지막 행」까지는 평범한 행으로 검사한다.
     const ordinaryMissingCells = enabled.filter(
       (c) =>
         REQUIRED_CELL_TYPES.has(c.type) &&
         isRequiredCell(c) &&
         !repeatOptionalCellIds.has(c.id) &&
-        !stagedOptional.has(c.id) &&
         !isCellValuePresent(cellValues[c.id]),
     );
     // 셀별 지정 문구(requiredMessage)가 있으면 문구 단위로 별도 이슈를 만든다 —
