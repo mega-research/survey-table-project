@@ -190,6 +190,7 @@ function flatBundleCode(base: string, bundle: number): string {
  * 줄 번호 변수명을 쓸 수 있으면 벌별 rowCode 목록, 아니면 null(종전 `<밑동>_NN` 으로 짓는다).
  * 틀이 2줄 이상이면 줄 번호만으로는 어느 틀 줄인지 가를 수 없고, 표의 다른 행 코드와 겹치면 변수명이
  * 겹친다 — 둘 다 조용히 깨지는 대신 종전 이름으로 둔다(빌더는 `canUseFlatRowCodes` 로 미리 막는다).
+ * 밑동이 `_두 자리`로 끝나는 행(r_01)도 줄 번호 코드가 벌 접미와 구별되지 않아 쓰지 않는다.
  */
 function resolveFlatCodes(
   collapsed: readonly TableRow[],
@@ -201,6 +202,8 @@ function resolveFlatCodes(
   if (templates.length !== 1) return null;
   const base = baseCodes.get(templates[0]!.id)!;
   const codes = Array.from({ length: maxRepeats }, (_, i) => flatBundleCode(base, i + 1));
+  // 줄 번호 코드가 벌 접미 `_NN` 처럼 보이면(밑동이 r_01) 다시 펼칠 때 밑동이 잘려 변수명이 바뀐다
+  if (codes.some((code) => BUNDLE_CODE_SUFFIX.test(code))) return null;
   const others = new Set(
     collapsed.filter((row) => !templateIdSet.has(row.id)).map((row) => baseCodes.get(row.id)!),
   );
@@ -448,7 +451,8 @@ export type RowRepeatViolationKind =
   | 'validation-rule'
   | 'display-condition'
   | 'dynamic-row'
-  | 'already-expanded';
+  | 'already-expanded'
+  | 'radio-group';
 
 export interface RowRepeatViolation {
   kind: RowRepeatViolationKind;
@@ -519,6 +523,29 @@ export function validateRowRepeatTemplate(
       kind: 'cell-type',
       message: '반복 블록에는 입력·선택(드롭다운)·라디오·체크박스 셀과 표시용 텍스트 셀만 넣을 수 있습니다.',
       rowIds: badCellRows.map((row) => row.id),
+    });
+  }
+
+  // 라디오 묶음은 한 행 안(가로)일 때만 — 여러 행에 걸친 세로 묶음은 내보내기 변수명이 `문항_열코드` 라
+  // 벌마다 묶음 이름을 갈라도 변수명이 겹치고(배포의 변수명 검사가 막는다), 블록 밖 행과 걸친 묶음은
+  // 복제 벌만 이름이 갈려 묶음이 쪼개진다.
+  const groupRows = new Map<string, Set<string>>();
+  for (const row of rows) {
+    for (const cell of row.cells) {
+      if (cell.type !== 'radio' || !cell.radioGroupName) continue;
+      const set = groupRows.get(cell.radioGroupName) ?? new Set<string>();
+      set.add(row.id);
+      groupRows.set(cell.radioGroupName, set);
+    }
+  }
+  const badGroupRowIds = [...groupRows.values()]
+    .filter((ids) => [...ids].some((id) => blockRowIds.has(id)) && ids.size > 1)
+    .flatMap((ids) => [...ids].filter((id) => blockRowIds.has(id)));
+  if (badGroupRowIds.length > 0) {
+    violations.push({
+      kind: 'radio-group',
+      message: '여러 행에 걸친 라디오 묶음은 반복 블록에 넣을 수 없습니다. 한 행 안의 묶음만 반복할 수 있습니다.',
+      rowIds: [...new Set(badGroupRowIds)],
     });
   }
 

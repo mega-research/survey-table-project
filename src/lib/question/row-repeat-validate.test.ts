@@ -132,3 +132,29 @@ describe('validateRowRepeatTemplate', () => {
     expect(violations[0]!.message.length).toBeGreaterThan(0);
   });
 });
+
+describe('validateRowRepeatTemplate — 라디오 묶음', () => {
+  const radio = (id: string, group: string) =>
+    ({ id, type: 'radio', content: '', radioGroupName: group, radioOptions: [{ id: `${id}o`, label: 'a', value: '1' }] }) as TableCell;
+
+  it('여러 행에 걸친(세로) 라디오 묶음은 막는다 — 변수명이 열 코드라 벌마다 겹친다', () => {
+    const rows = [
+      { id: 'a', label: 'a', cells: [radio('a1', 'v')] },
+      { id: 'b', label: 'b', cells: [radio('b1', 'v')] },
+    ] as TableRow[];
+    expect(validateRowRepeatTemplate(tableQuestion(rows), ['a', 'b']).map((v) => v.kind)).toContain('radio-group');
+  });
+
+  it('블록 안팎에 걸친 라디오 묶음은 막는다', () => {
+    const rows = [
+      { id: 'a', label: 'a', cells: [radio('a1', 'v')] },
+      { id: 'b', label: 'b', cells: [radio('b1', 'v')] },
+    ] as TableRow[];
+    expect(validateRowRepeatTemplate(tableQuestion(rows), ['a']).map((v) => v.kind)).toContain('radio-group');
+  });
+
+  it('한 행 안의(가로) 라디오 묶음은 반복할 수 있다', () => {
+    const rows = [{ id: 'a', label: 'a', cells: [radio('a1', 'h'), radio('a2', 'h')] }] as TableRow[];
+    expect(validateRowRepeatTemplate(tableQuestion(rows), ['a'])).toEqual([]);
+  });
+});

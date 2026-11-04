@@ -408,3 +408,20 @@ describe('expandRepeatRows — 줄 번호 변수명(flatRowCodes)', () => {
     expect(canUseFlatRowCodes(single(), ['tpl'], 3)).toBe(true);
   });
 });
+
+describe('expandRepeatRows — 줄 번호 변수명과 _NN 으로 끝나는 행 코드', () => {
+  // 행 코드가 r_01 처럼 _두 자리로 끝나면 줄 번호 코드(r_01·r_02)가 벌 접미 `_NN` 과 구별되지 않아
+  // 다시 펼칠 때 밑동이 r 로 잘린다 — 그런 행에는 줄 번호를 쓰지 않고 종전 이름으로 둔다.
+  const rows = (): TableRow[] => [row('tpl', '원료', [inputCell('c1')], { rowCode: 'r_01' })];
+
+  it('줄 번호를 쓰지 않고, 다시 펼쳐도 변수명이 그대로다', () => {
+    const once = expandRepeatRows(rows(), config({ flatRowCodes: true }), makeIdFactory('n'));
+    const twice = expandRepeatRows(once, config({ flatRowCodes: true }), makeIdFactory('m'));
+    expect(twice.map((r) => r.rowCode)).toEqual(once.map((r) => r.rowCode));
+    expect(once.map((r) => r.rowCode)).toEqual(['r_01_01', 'r_01_02', 'r_01_03']);
+  });
+
+  it('빌더도 켜지 못하게 한다', () => {
+    expect(canUseFlatRowCodes(rows(), ['tpl'], 3)).toBe(false);
+  });
+});
