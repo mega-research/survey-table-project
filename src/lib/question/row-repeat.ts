@@ -253,6 +253,13 @@ function cloneCellForBundle(
   delete rest.isCustomExportLabel;
   delete rest.rankVarNames;
   const cloned: TableCell = { ...(rest as TableCell), id: newId };
+  // 직접 지정한 엑셀 라벨은 버리지 않고 벌 번호를 붙여 잇는다(「연도」→「연도 ②」) — 버리면 1벌만 지정 라벨이고
+  // 나머지는 자동 라벨(「Q1_연도_국내산 ②」)이라 한 표의 라벨 모양이 갈린다. 자동 라벨은 그대로 비워 자동으로 짓게 둔다.
+  const customLabel = template.isCustomExportLabel === true ? template.exportLabel?.trim() : undefined;
+  if (customLabel) {
+    cloned.exportLabel = bundleLabel(customLabel, bundle);
+    cloned.isCustomExportLabel = true;
+  }
   if (template.selectOptions) cloned.selectOptions = cloneOptionsForBundle(template.selectOptions, bundle);
   if (template.radioOptions) cloned.radioOptions = cloneOptionsForBundle(template.radioOptions, bundle);
   if (template.checkboxOptions) {

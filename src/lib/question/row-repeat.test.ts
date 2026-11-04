@@ -54,7 +54,7 @@ describe('expandRepeatRows — 펼치기', () => {
     ]);
   });
 
-  it('2벌 이후 셀에 새 id 를 발번하고 커스텀 코드 플래그는 떨군다', () => {
+  it('2벌 이후 셀에 새 id 를 발번하고 커스텀 코드 플래그는 떨군다 — 직접 지정한 라벨은 벌 번호를 붙여 잇는다', () => {
     const rows = baseRows();
     rows[1]!.cells[0] = inputCell('tpl_c1', {
       cellCode: 'Q1_MY_CODE',
@@ -69,9 +69,26 @@ describe('expandRepeatRows — 펼치기', () => {
     expect(second.cells.map((c) => c.id)).toEqual(['n2', 'n3']);
     expect(second.cells[0]!.cellCode).toBeUndefined();
     expect(second.cells[0]!.isCustomCellCode).toBeUndefined();
-    expect(second.cells[0]!.exportLabel).toBeUndefined();
+    // 직접 지정한 엑셀 라벨은 버리지 않고 벌 번호를 붙여 잇는다 — 1벌과 같은 모양의 라벨
+    expect(second.cells[0]!.exportLabel).toBe('내 라벨 ②');
+    expect(second.cells[0]!.isCustomExportLabel).toBe(true);
     // 1벌(템플릿)의 커스텀 코드는 손대지 않는다
     expect(out.find((r) => r.repeatIndex === 1)!.cells[0]!.cellCode).toBe('Q1_MY_CODE');
+  });
+
+  it('자동 라벨(직접 지정 아님)인 칸은 복제 벌에서도 라벨을 비워 자동으로 짓게 둔다', () => {
+    const rows = baseRows();
+    rows[1]!.cells[0] = inputCell('tpl_c1', { exportLabel: '자동으로 채운 라벨' });
+    const second = expandRepeatRows(rows, config({ maxRepeats: 2 }), makeIdFactory('n')).find((r) => r.repeatIndex === 2)!;
+    expect(second.cells[0]!.exportLabel).toBeUndefined();
+  });
+
+  it('다시 펼쳐도 라벨 번호가 겹쳐 붙지 않는다', () => {
+    const rows = baseRows();
+    rows[1]!.cells[0] = inputCell('tpl_c1', { exportLabel: '연도', isCustomExportLabel: true });
+    const once = expandRepeatRows(rows, config({ maxRepeats: 3 }), makeIdFactory('n'));
+    const twice = expandRepeatRows(once, config({ maxRepeats: 3 }), makeIdFactory('m'));
+    expect(twice.filter((r) => r.repeatSourceRowId === 'tpl').map((r) => r.cells[0]!.exportLabel)).toEqual(['연도', '연도 ②', '연도 ③']);
   });
 
   it('멱등하다 — 같은 설정으로 다시 펼쳐도 모든 행·셀 id 가 그대로다', () => {
