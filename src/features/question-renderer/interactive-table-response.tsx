@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useBranchEvalCtx } from '@/features/question-renderer/contact-attrs-context';
 import { useDynamicRows } from '@/features/question-renderer/hooks/use-dynamic-rows';
 import { useElementWidth } from '@/features/question-renderer/hooks/use-element-width';
+import { useStagedColumns } from '@/features/question-renderer/hooks/use-staged-columns';
 import { useHorizontalScrollIndicators } from '@/features/question-renderer/hooks/use-horizontal-scroll-indicators';
 import { usePageStickyThreshold } from '@/features/question-renderer/hooks/use-page-sticky-threshold';
 import { useScrollLeftSync } from '@/features/question-renderer/hooks/use-scroll-left-sync';
@@ -712,17 +713,21 @@ function InteractiveTableResponseBody({
   // 빠뜨리면 attr 이 undefined 가 되어 `!=` 비교가 항상 참이 된다.
   const branchEvalCtx = useBranchEvalCtx(allResponses);
 
+  // 열 차례로 열기 — 아직 열지 않은 단계의 열은 표시 조건과 같은 자리에서 뺀다
+  const stagedColumns = useStagedColumns({
+    questionId,
+    columns,
+    rows,
+    value,
+    onChange: mergedOnChange,
+  });
+  const stagedHiddenColumnIds = stagedColumns.hiddenColumnIds;
+
   // displayCondition 기반 가시 열 필터링 + colspan 재계산
   const { visibleColumns, columnFilteredRows, visibleHeaderGrid } = useMemo(() => {
-    if (ignoreDisplayConditions || !allResponses || !allQuestions || columns.length === 0) {
-      return {
-        visibleColumns: columns,
-        columnFilteredRows: rows,
-        visibleHeaderGrid: tableHeaderGrid,
-      };
-    }
-    const hasColumnConditions = columns.some((col) => col.displayCondition);
-    if (!hasColumnConditions) {
+    const evaluateConditions =
+      !ignoreDisplayConditions && !!allResponses && !!allQuestions && columns.some((col) => col.displayCondition);
+    if (columns.length === 0 || (!evaluateConditions && stagedHiddenColumnIds.size === 0)) {
       return {
         visibleColumns: columns,
         columnFilteredRows: rows,
@@ -731,7 +736,11 @@ function InteractiveTableResponseBody({
     }
     const visibleColumnIds = new Set<string>();
     for (const col of columns) {
-      if (shouldDisplayColumn(col, allResponses, allQuestions, branchEvalCtx)) {
+      if (stagedHiddenColumnIds.has(col.id)) continue;
+      if (
+        !evaluateConditions ||
+        shouldDisplayColumn(col, allResponses!, allQuestions!, branchEvalCtx)
+      ) {
         visibleColumnIds.add(col.id);
       }
     }
@@ -754,6 +763,7 @@ function InteractiveTableResponseBody({
     allQuestions,
     ignoreDisplayConditions,
     branchEvalCtx,
+    stagedHiddenColumnIds,
   ]);
 
   // 행 displayCondition 평가 결과 — null 이면 조건 필터 없음.
@@ -1610,6 +1620,20 @@ function InteractiveTableResponseBody({
                 </OptionTextBelowTableHost>
               )}
             </div>
+
+            {stagedColumns.isActive && (
+              <StagedRowsButtons
+                addLabel={stagedColumns.addLabel}
+                canAdd={stagedColumns.canAdd}
+                canRemove={stagedColumns.canRemove}
+                openCount={stagedColumns.openStep}
+                maxCount={stagedColumns.maxStep}
+                onAdd={stagedColumns.addStep}
+                onRemove={stagedColumns.removeStep}
+                removeLabel={systemText('table.removeLastColumn', locale)}
+                className="mt-3"
+              />
+            )}
 
             {rowRepeat.isActive && (
               <RowRepeatControls

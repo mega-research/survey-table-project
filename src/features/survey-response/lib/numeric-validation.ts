@@ -8,6 +8,7 @@
  */
 import { findDistinctViolations } from '@/features/question-renderer/utils/distinct-select-group';
 import { optionTextTargetId } from '@/features/question-renderer/utils/option-text-target';
+import { stagedColumnOptionalCellIds } from '@/features/question-renderer/utils/staged-columns';
 import { stagedOptionalCellIds } from '@/features/question-renderer/utils/staged-rows';
 import {
   areAllFormulaRefsEmpty,
@@ -1033,12 +1034,20 @@ export function collectNumericIssues(
       question.stagedRowsConfig,
       cellValues,
     );
+    // 열 차례로 열기: 아직 열리지 않은 단계(값이 있는 마지막 단계 뒤)의 열 칸은 필수에서 뺀다 —
+    // 화면에 없는 칸이 「다음」을 막으면 따를 길이 없다.
+    const stagedColumnOptional = stagedColumnOptionalCellIds(
+      question.tableColumns,
+      question.tableRowsData,
+      cellValues,
+    );
     const ordinaryMissingCells = enabled.filter(
       (c) =>
         REQUIRED_CELL_TYPES.has(c.type) &&
         isRequiredCell(c) &&
         !repeatOptionalCellIds.has(c.id) &&
         !stagedOptional.has(c.id) &&
+        !stagedColumnOptional.has(c.id) &&
         !isCellValuePresent(cellValues[c.id]),
     );
     // 셀별 지정 문구(requiredMessage)가 있으면 문구 단위로 별도 이슈를 만든다 —

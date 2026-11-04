@@ -250,6 +250,8 @@ const KO = {
 
   'table.addRow': '행 추가',
   'table.removeLastRow': '마지막 줄 삭제',
+  'table.addColumn': '열 추가',
+  'table.removeLastColumn': '마지막 열 삭제',
   'table.maxRowsReached': '최대 {max}개까지 추가할 수 있습니다.',
   'table.rowControls': '행 추가·삭제',
   'table.collapse': '접기',
@@ -518,6 +520,8 @@ const ZH: Dictionary = {
 
   'table.addRow': '添加行',
   'table.removeLastRow': '删除最后一行',
+  'table.addColumn': '添加列',
+  'table.removeLastColumn': '删除最后一列',
   'table.maxRowsReached': '最多可添加{max}个。',
   'table.rowControls': '添加或删除行',
   'table.collapse': '收起',
@@ -801,6 +805,8 @@ const EN: Dictionary = {
 
   'table.addRow': 'Add row',
   'table.removeLastRow': 'Remove last row',
+  'table.addColumn': 'Add column',
+  'table.removeLastColumn': 'Remove last column',
   'table.maxRowsReached': 'You can add up to {max}.',
   'table.rowControls': 'Add or remove rows',
   'table.collapse': 'Collapse',

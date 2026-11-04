@@ -191,6 +191,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
     updateColumnLabel,
     updateColumnStyle,
     updateColumnExportOmit,
+    updateColumnReveal,
     updateColumnCode,
     handleColumnWidthChange,
     setEditingColumnWidth,
@@ -767,6 +768,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
                 onUpdateColumnLabel={updateColumnLabel}
                 onUpdateColumnStyle={updateColumnStyle}
                 onUpdateColumnExportOmit={updateColumnExportOmit}
+                onUpdateColumnReveal={updateColumnReveal}
                 onUpdateColumnCode={updateColumnCode}
                 onMoveColumn={moveColumn}
                 onDeleteColumn={deleteColumn}

@@ -665,6 +665,32 @@ export function useTableEditor({
     [commitColumns, notifyChange],
   );
 
+  // 열 차례로 열기 — 단계·버튼 문구를 통째로 바꾼다(빈 값은 키를 지운다)
+  const updateColumnReveal = useCallback(
+    (columnIndex: number, reveal: { revealStep?: number; revealAddLabel?: string }) => {
+      if (pendingChangeRef.current) {
+        clearTimeout(pendingChangeRef.current);
+        pendingChangeRef.current = null;
+      }
+      if (pendingRowsSyncRef.current) {
+        pendingRowsSyncRef.current = false;
+        setCurrentRows(currentRowsRef.current);
+      }
+      const updatedColumns = currentColumnsRef.current.map((col, index) => {
+        if (index !== columnIndex) return col;
+        const { revealStep: _step, revealAddLabel: _label, ...rest } = col;
+        return {
+          ...rest,
+          ...(reveal.revealStep && reveal.revealStep >= 1 ? { revealStep: reveal.revealStep } : {}),
+          ...(reveal.revealAddLabel ? { revealAddLabel: reveal.revealAddLabel } : {}),
+        };
+      });
+      commitColumns(updatedColumns);
+      notifyChange(currentTitleRef.current, updatedColumns, currentRowsRef.current);
+    },
+    [commitColumns, notifyChange],
+  );
+
   // ── 행 CRUD ──
 
   const addRow = useCallback(() => {
@@ -1530,6 +1556,7 @@ export function useTableEditor({
       updateColumnLabel,
       updateColumnStyle,
       updateColumnExportOmit,
+      updateColumnReveal,
       updateColumnCode,
       handleColumnWidthChange,
       setEditingColumnWidth,

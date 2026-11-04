@@ -18,6 +18,8 @@ export interface StagedRowsButtonsProps {
   maxCount: number;
   onAdd: () => void;
   onRemove: () => void;
+  /** `−` 버튼 문구 — 미지정이면 「마지막 줄 삭제」(열 차례로 열기는 「마지막 열 삭제」) */
+  removeLabel?: string | undefined;
   className?: string | undefined;
 }
 
@@ -34,6 +36,7 @@ export const StagedRowsButtons = React.memo(function StagedRowsButtons({
   maxCount,
   onAdd,
   onRemove,
+  removeLabel,
   className,
 }: StagedRowsButtonsProps) {
   const locale = useInlineSurveyLocale();
@@ -55,7 +58,7 @@ export const StagedRowsButtons = React.memo(function StagedRowsButtons({
           className="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
         >
           <Minus className="h-4 w-4" />
-          {systemText('table.removeLastRow', locale)}
+          {removeLabel ?? systemText('table.removeLastRow', locale)}
         </button>
       )}
       <span className="text-xs text-gray-500 tabular-nums">

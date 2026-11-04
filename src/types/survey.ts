@@ -868,6 +868,15 @@ export interface TableColumn {
    * 저장·변수명은 무변경이다. 판정 `lib/analytics/unused-column-usage`.
    */
   exportOmitIfUnused?: boolean;
+  /**
+   * 열 차례로 열기 단계 (CONTEXT.md 「열 차례로 열기」) — 2 이상이면 처음에는 가려 두고 응답자가
+   * 표 아래 `+` 를 누를 때마다 다음 단계의 열이 함께 열린다(「기타1」 원료명·투입량 두 열이
+   * 한 단계). 미지정·1 은 항상 보인다. 열린 단계는 저장하지 않고 값에서 파생한다
+   * (`features/question-renderer/utils/staged-columns`). 테이블 유형 문항 전용.
+   */
+  revealStep?: number;
+  /** 열 차례로 열기 버튼 문구 — 단계 열 중 처음 적힌 것을 쓴다(기본 「열 추가」). */
+  revealAddLabel?: string;
 }
 
 // 다단계 헤더 셀 (headerGrid용)
