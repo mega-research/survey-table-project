@@ -210,6 +210,10 @@ export interface SurveyResponseFlowProps {
     survey: Survey;
     versionId: string | null;
     documentView?: SurveyDocumentView | null;
+    /** 관리자 「설문 보기」가 싣는 첫 번째 조사 대상의 명단 값(응답자 경로와 같은 규칙). 없으면 빈 명단 값. */
+    contactAttrs?: Record<string, string>;
+    /** 같은 대상의 이월 응답 원본 — 로더가 공개 경로와 같은 적재(정규화·끈 문항 제외·상세 기재 시드)를 거친다. */
+    priorAnswers?: unknown;
   };
 }
 

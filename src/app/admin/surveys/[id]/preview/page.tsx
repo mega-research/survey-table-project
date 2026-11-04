@@ -10,6 +10,8 @@ import {
   getSurveyForResponse,
 } from '@/server/survey-builder/services/survey-read';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
+import { loadPreviewContactSeed } from '@/server/contacts/services/preview-contact';
+import { loadOperationsDataScope } from '@/server/data-scope';
 
 import { CopyPreviewLinkButton } from './copy-preview-link-button';
 
@@ -76,6 +78,14 @@ export default async function SurveyPreviewPage({ params }: PageProps) {
     );
   }
 
+  // 첫 번째 조사 대상(resid 최소)의 명단 값·이월 응답으로 연다 — 파티션은 콘솔과 같은 기준(테스트 모드 ∧
+  // 이 브라우저의 「테스트 데이터 보기」 ∧ 비게스트일 때 테스트). 개인정보 열은 이 설문이 읽는 열만 싣는다.
+  const seed = await loadPreviewContactSeed({
+    surveyId,
+    isTest: (await loadOperationsDataScope(surveyId)) === 'test',
+    structure: preview.survey,
+  });
+
   return (
     <>
       <div className="border-b border-blue-200 bg-blue-50 px-6 py-3">
@@ -84,6 +94,9 @@ export default async function SurveyPreviewPage({ params }: PageProps) {
             <Eye className="h-4 w-4 shrink-0" />
             <span className="truncate">
               설문 보기 모드 — 저장한 내용 기준 응답 화면이며 입력 내용은 저장되지 않습니다.
+              {seed
+                ? ` 명단 값·이월 값은 ${seed.isTest ? '테스트 ' : ''}조사 대상 #${seed.resid} 기준입니다.`
+                : ''}
             </span>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -113,6 +126,7 @@ export default async function SurveyPreviewPage({ params }: PageProps) {
           versionId: preview.versionId,
           // 이 화면은 테스트 버전(저장본) 스냅샷을, 공개 미리보기는 발행 스냅샷을 읽는다 — 앵커도 각자의 시점 좌표다
           documentView: preview.documentView,
+          ...(seed ? { contactAttrs: seed.contactAttrs, priorAnswers: seed.priorAnswers } : {}),
         }}
       />
     </>
