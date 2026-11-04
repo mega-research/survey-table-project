@@ -144,3 +144,60 @@ describe('generateSPSSColumns — 뒤쪽 미사용 벌 제외', () => {
     expect(varNames(new Map([['q1', 1]]))[0]).toBe(varNames()[0]);
   });
 });
+
+describe('선택 칸(드롭다운)이 든 반복 블록', () => {
+  const selectConfig: RowRepeatConfig = { enabled: true, templateRowIds: ['tpl'], maxRepeats: 3 };
+  let n = 0;
+  const seed: TableRow[] = [
+    {
+      id: 'tpl',
+      label: '품목',
+      rowCode: 'r01',
+      cells: [
+        {
+          id: 'sel',
+          type: 'select',
+          content: '',
+          selectOptions: [
+            { id: 'o1', label: '우유', value: '01', spssNumericCode: 1 },
+            { id: 'o2', label: '가공유', value: '02', spssNumericCode: 2 },
+            { id: 'o99', label: '기타', value: '99', spssNumericCode: 99, allowTextInput: true },
+          ],
+        },
+      ],
+    },
+  ] as TableRow[];
+  const q = {
+    id: 'q3',
+    type: 'table',
+    title: '품목 표',
+    required: false,
+    order: 0,
+    questionCode: 'QS',
+    tableColumns: [{ id: 'c1', label: '품목', columnCode: 'c01' }],
+    tableRowsData: expandRepeatRows(seed, selectConfig, () => `s${++n}`),
+    rowRepeatConfig: selectConfig,
+  } as Question;
+  const selectIdOf = (bundle: number) =>
+    q.tableRowsData!.find((r) => r.repeatIndex === bundle)!.cells[0]!.id;
+
+  it('벌마다 제 선택 칸이 생기고 보기는 템플릿과 같다', () => {
+    const cells = q.tableRowsData!.map((r) => r.cells[0]!);
+    expect(new Set(cells.map((c) => c.id)).size).toBe(3);
+    for (const c of cells) {
+      expect(c.type).toBe('select');
+      expect(c.selectOptions!.map((o) => o.value)).toEqual(['01', '02', '99']);
+    }
+  });
+
+  it('고른 벌까지만 열을 내고, 상세 기재 열도 그 벌과 함께 빠진다', () => {
+    const subs = [{ id: 's', questionResponses: { q3: { [selectIdOf(2)]: '02' } } }] as unknown as SurveySubmission[];
+    const used = collectUsedRepeatCounts([q], subs);
+    expect(used.get('q3')).toBe(2);
+    const names = generateSPSSColumns([q], { usedRepeatCounts: used }).map((c) => c.spssVarName);
+    assertValidSpssVarNames(generateSPSSColumns([q], { usedRepeatCounts: used }));
+    expect(names.some((v) => v.startsWith('QS_r01_02_c01'))).toBe(true);
+    expect(names.some((v) => v.startsWith('QS_r01_03'))).toBe(false);
+    expect(names.filter((v) => v.endsWith('_text'))).toHaveLength(2);
+  });
+});

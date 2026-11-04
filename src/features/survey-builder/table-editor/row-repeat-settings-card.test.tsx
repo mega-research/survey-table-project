@@ -47,7 +47,7 @@ describe('행 반복 설정 카드', () => {
 
     await pickRange(user, 'a', 'a');
 
-    expect(screen.getByText(/입력 셀과 표시용 텍스트 셀만/)).toBeInTheDocument();
+    expect(screen.getByText(/입력·선택\(드롭다운\) 셀과 표시용 텍스트 셀만/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '반복 켜기' })).toBeDisabled();
   });
 

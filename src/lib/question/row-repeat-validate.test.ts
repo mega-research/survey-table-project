@@ -56,8 +56,14 @@ describe('validateRowRepeatTemplate', () => {
     ).toEqual(['not-contiguous']);
   });
 
-  it('선택·계산·랭킹·보기소스 셀이 들어 있으면 위반이다', () => {
-    for (const type of ['radio', 'checkbox', 'select', 'calc', 'ranking', 'ranking_opt', 'choice_opt'] as const) {
+  it('선택 칸(드롭다운)은 반복할 수 있다 — 값이 입력 칸처럼 셀 id 아래 문자열 하나다', () => {
+    const rows = plainRows();
+    rows[1]!.cells = [cell('b1', 'select')];
+    expect(validateRowRepeatTemplate(tableQuestion(rows), ['a', 'b'])).toEqual([]);
+  });
+
+  it('라디오·체크박스·계산·랭킹·보기소스 셀이 들어 있으면 위반이다', () => {
+    for (const type of ['radio', 'checkbox', 'calc', 'ranking', 'ranking_opt', 'choice_opt'] as const) {
       const rows = plainRows();
       rows[1]!.cells = [cell('b1', type)];
       const kinds = validateRowRepeatTemplate(tableQuestion(rows), ['a', 'b']).map((v) => v.kind);

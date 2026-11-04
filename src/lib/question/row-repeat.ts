@@ -348,14 +348,22 @@ export interface RowRepeatViolation {
   rowIds?: string[];
 }
 
-/** 반복 블록 안에 놓아도 되는 셀 종류 — 입력 셀과 라벨용 표시 셀뿐이다. */
-const REPEATABLE_CELL_TYPES = new Set<TableCell['type']>(['input', 'text']);
+/**
+ * 반복 블록 안에 놓아도 되는 셀 종류 — 입력 셀 · 선택(드롭다운) 셀 · 라벨용 표시 셀.
+ *
+ * 선택 칸은 값이 입력 칸과 같은 모양(셀 id 아래 문자열 하나)이라 열린 벌 파생·접을 때 비우기·
+ * 사용 벌 pruning 이 그대로 맞는다. 상세 기재(`__optTexts__[문항][셀]`)도 셀 id 로 갈려 벌끼리
+ * 섞이지 않는다 — 행 차례로 열기에서 이미 쓰는 조합이다(2026-11-04, 유가공업 실태조사 문1).
+ * 라디오·체크박스는 보기 목록을 셀마다 따로 들고 값 모양이 달라, 계산·랭킹·보기 소스 셀은
+ * 표 전체 규칙에 엮여 벌마다 의미가 갈려 여전히 뺀다.
+ */
+const REPEATABLE_CELL_TYPES = new Set<TableCell['type']>(['input', 'select', 'text']);
 
 /**
  * 반복 블록으로 지정해도 되는 묶음인지 검사한다. 빌더가 지정을 막는 데 쓰고,
  * 펼치기 함수는 이 판정을 신뢰한다(검증 실패 상태를 조용히 뭉개지 않는다).
  *
- * 선택·계산·랭킹 셀, 합계 제약·분기 규칙·행 표시 조건이 참조하는 행, 동적 행 그룹 소속
+ * 라디오·체크박스·계산·랭킹 셀, 합계 제약·분기 규칙·행 표시 조건이 참조하는 행, 동적 행 그룹 소속
  * 행은 벌마다 의미가 갈려 규칙이 얽히므로 지정 대상에서 뺀다 (스펙 제외 목록).
  */
 export function validateRowRepeatTemplate(
@@ -400,7 +408,7 @@ export function validateRowRepeatTemplate(
   if (badCellRows.length > 0) {
     violations.push({
       kind: 'cell-type',
-      message: '반복 블록에는 입력 셀과 표시용 텍스트 셀만 넣을 수 있습니다.',
+      message: '반복 블록에는 입력·선택(드롭다운) 셀과 표시용 텍스트 셀만 넣을 수 있습니다.',
       rowIds: badCellRows.map((row) => row.id),
     });
   }
