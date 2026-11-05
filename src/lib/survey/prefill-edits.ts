@@ -22,10 +22,12 @@ function comparable(value: string, inputType: TableCell['inputType']): string {
   const text = value.trim();
   if (inputType && DIGIT_FORMATS.has(inputType)) {
     const digits = text.replace(/\D/g, '');
-    // +82 는 정돈이 국내 번호(010…)로 바꾼다 — 국가번호를 걷고 0 을 붙여 같은 모양으로(대표번호 15xx·16xx·18xx 는 0 없이)
+    // +82 는 정돈이 국내 번호(010…)로 바꾼다 — 국가번호를 걷고 0 을 붙여 같은 모양으로. 대표번호(15·16·18 로
+    // 시작하는 8자리)만 0 없이 — 자릿수를 안 보면 +82 16… (016 휴대 번호)이 대표번호로 읽힌다
     if (!text.startsWith('+82')) return digits;
     const national = digits.slice(2);
-    return national.startsWith('0') || /^1[568]/.test(national) ? national : `0${national}`;
+    const representative = national.length === 8 && /^1[568]/.test(national);
+    return national.startsWith('0') || representative ? national : `0${national}`;
   }
   if (inputType === 'date') {
     const parts = text.split(/\D+/).filter(Boolean);

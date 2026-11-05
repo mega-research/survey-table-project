@@ -128,7 +128,8 @@ const KOREA_COUNTRY_CODE = '82';
  * 해외 번호 — 전화·휴대전화 칸에서 값이 `+` 로 시작할 때만 탄다(국내 번호는 `+` 로 시작하지 않아
  * 국내 응답에는 영향이 없다 — 2026-11-05 다국어 설문의 중·영판 자국 번호를 열려고 더했다).
  * - `+82` 는 국내 번호로 바꿔 국내 규칙(`domestic`)으로 검사·정돈한다. 국가번호 뒤에 0 을 붙여 쓴
- *   `+82 010…` 도 받는다. 대표번호(`+82 1588-1234`)는 앞에 0 을 붙이지 않는다.
+ *   `+82 010…` 도 받는다. 대표번호(`+82 1588-1234` — 15·16·18 로 시작하는 **8자리**)는 앞에 0 을 붙이지
+ *   않는다. 자릿수까지 봐야 한다 — `+82 16 123 4567` 은 016 휴대 번호다(2026-11-05 리뷰).
  * - 그 밖은 나라별 규칙 없이 숫자 8~15자리면 통과하고 `+` 와 숫자만으로 정돈한다. 국가번호는 0 으로
  *   시작하지 않는다.
  * 휴대전화 칸도 해외 번호는 휴대전화인지 가릴 수 없어 길이만 본다.
@@ -139,7 +140,7 @@ function parseInternational(raw: string, domestic: (digits: string) => ParseResu
   if (digits.startsWith(KOREA_COUNTRY_CODE)) {
     const national = digits.slice(KOREA_COUNTRY_CODE.length);
     const asDomestic =
-      national.startsWith('0') || REPRESENTATIVE_PREFIXES.some((p) => national.startsWith(p))
+      national.startsWith('0') || (national.length === 8 && isRepresentative(national))
         ? national
         : `0${national}`;
     return domestic(asDomestic);
