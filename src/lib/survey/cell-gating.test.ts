@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isCellEnabled, stripDisabledCellValues } from '@/lib/survey/cell-gating';
+import { isCellEnabled, isGateConditionMet, stripDisabledCellValues } from '@/lib/survey/cell-gating';
 import type { Question, TableCell } from '@/types/survey';
 
 const inputCell = (id: string, over: Partial<TableCell> = {}): TableCell =>
@@ -646,6 +646,29 @@ describe('비활성 컨트롤러의 값은 없는 것으로 본다 — NOT 과 �
         __optTexts__: { q: { x: '', a: '옛값', b: '옛값', c: '지켜야 할 답' } },
       });
       expect(out['__optTexts__']).toEqual({ q: { x: '', c: '지켜야 할 답' } });
+    }
+  });
+});
+
+describe('isGateConditionMet — 칸 없이 조건만', () => {
+  const ctrl: TableCell = {
+    id: 'prod',
+    type: 'select',
+    content: '',
+    selectOptions: [
+      { id: 'o1', label: '우유', value: '01' },
+      { id: 'o12', label: '분유', value: '12' },
+    ],
+  };
+  const cond = { kind: 'option' as const, controllerCellId: 'prod', values: ['01'] };
+
+  it('게이팅과 같은 결과 — 고른 보기가 값 목록에 있으면 충족', () => {
+    expect(isGateConditionMet(cond, { prod: '01' }, [ctrl])).toBe(true);
+    expect(isGateConditionMet(cond, { prod: '12' }, [ctrl])).toBe(false);
+    expect(isGateConditionMet(cond, {}, [ctrl])).toBe(false);
+    const gated: TableCell = { id: 'x', type: 'input', content: '', enabledWhen: cond };
+    for (const v of [{ prod: '01' }, { prod: '12' }, {}]) {
+      expect(isGateConditionMet(cond, v, [ctrl])).toBe(isCellEnabled(gated, v, [ctrl]));
     }
   });
 });

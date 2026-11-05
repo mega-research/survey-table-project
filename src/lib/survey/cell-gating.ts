@@ -215,6 +215,18 @@ export function isCellEnabled(
 }
 
 /**
+ * 셀 없이 조건만 판정한다 — 표 제약의 적용 조건(`SumConstraint.when`)처럼 칸이 아닌 것에 건 조건.
+ * 컨트롤러 해석·비활성 컨트롤러 무시는 `isCellEnabled` 와 같다.
+ */
+export function isGateConditionMet(
+  condition: CellEnableCondition,
+  cellValues: Record<string, unknown>,
+  tableCells?: readonly TableCell[],
+): boolean {
+  return evaluate(condition, { cellValues, tableCells, choiceSelection: undefined, visiting: new Set() });
+}
+
+/**
  * 보기 소스 표의 게이팅 셀 사이드카 정리 — 미충족 셀의 `__optTexts__[q.id][cell.id]` 를 뺀다.
  * 지울 것이 없으면 null. 보기 선택 자체는 건드리지 않는다(보기는 게이팅 대상이 아니다).
  */

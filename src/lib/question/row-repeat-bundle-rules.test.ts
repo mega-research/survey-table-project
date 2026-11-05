@@ -69,3 +69,60 @@ describe('validateRowRepeatTemplate — 벌마다 제약', () => {
     expect(validateRowRepeatTemplate(q, ['dom', 'imp']).map((v) => v.kind)).toContain('sum-constraint');
   });
 });
+
+describe('묶음마다 수식·적용 조건 (경고 제약)', () => {
+  // 출고(milk) ≤ 생산(year 자리 칸) × 2, 조건: year 칸이 채워졌을 때
+  const exprConstraint: SumConstraint = {
+    id: 'warn',
+    cellIds: [],
+    leftExpr: { kind: 'cell', cellId: 'milk' },
+    targetExpr: { kind: 'group', op: '*', terms: [{ kind: 'cell', cellId: 'year' }, { kind: 'literal', value: 2 }] },
+    operator: 'lte',
+    target: 0,
+    perRepeatBundle: true,
+    severity: 'warn',
+    when: { kind: 'filled', controllerCellId: 'milk2' },
+  };
+
+  it('수식 셀 참조와 조건 컨트롤러가 그 벌의 칸으로 옮겨간다', () => {
+    const out = resolveBundleSumConstraints(question([exprConstraint]), { [cellOf(3, 0, 0)]: '10' });
+    const b3 = out.find((c) => c.id === 'warn#3')!;
+    expect(b3.leftExpr).toEqual({ kind: 'cell', cellId: cellOf(3, 0, 2) });
+    expect(b3.targetExpr).toEqual({
+      kind: 'group',
+      op: '*',
+      terms: [{ kind: 'cell', cellId: cellOf(3, 0, 0) }, { kind: 'literal', value: 2 }],
+    });
+    expect(b3.when).toEqual({ kind: 'filled', controllerCellId: cellOf(3, 1, 2) });
+    expect(b3.severity).toBe('warn');
+    // 1벌은 원본 그대로
+    expect(out.find((c) => c.id === 'warn')).toBe(exprConstraint);
+  });
+
+  it('다른 질문을 가리키는 수식 항과 블록 밖 칸은 그대로 둔다', () => {
+    const c: SumConstraint = {
+      ...exprConstraint,
+      targetExpr: { kind: 'cell', questionId: 'other', cellId: 'year' },
+      when: { kind: 'filled', controllerCellId: 'outside' },
+    };
+    const b2 = resolveBundleSumConstraints(question([c]), { [cellOf(2, 0, 0)]: '1' }).find((x) => x.id === 'warn#2')!;
+    expect(b2.targetExpr).toEqual({ kind: 'cell', questionId: 'other', cellId: 'year' });
+    expect(b2.when).toEqual({ kind: 'filled', controllerCellId: 'outside' });
+  });
+
+  it('블록 안 칸만 가리키는 벌마다 수식 제약은 막지 않고, 블록 밖 조건이 섞이면 막는다', () => {
+    const ok = { tableRowsData: seed, sumConstraints: [exprConstraint] } as unknown as Question;
+    expect(validateRowRepeatTemplate(ok, ['dom', 'imp'])).toEqual([]);
+    const mixed = {
+      tableRowsData: [...seed, { id: 'out', label: '밖', cells: [input('outside'), label('l3'), input('o3')] }],
+      sumConstraints: [{ ...exprConstraint, when: { kind: 'filled', controllerCellId: 'outside' } }],
+    } as unknown as Question;
+    expect(validateRowRepeatTemplate(mixed, ['dom', 'imp']).map((v) => v.kind)).toContain('sum-constraint');
+  });
+
+  it('벌마다가 아닌데 수식이 블록 칸을 가리키면 막는다 — 1벌만 검사되는 것을 막는다', () => {
+    const { perRepeatBundle: _p, ...plain } = exprConstraint;
+    const q = { tableRowsData: seed, sumConstraints: [plain] } as unknown as Question;
+    expect(validateRowRepeatTemplate(q, ['dom', 'imp']).map((v) => v.kind)).toContain('sum-constraint');
+  });
+});

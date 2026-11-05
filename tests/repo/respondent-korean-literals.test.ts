@@ -66,7 +66,7 @@ const MARKERS: Record<string, readonly string[]> = {
   // 저작자 라벨의 「… 단위」 짝 판정
   'question-renderer/utils/mobile-card-options.ts': ['단위'],
   // 저작자 검증 문구의 자리표시자 이름(저작자가 한국어로 적는다)
-  'survey-response/lib/numeric-validation.ts': ['{현재값}', '{기준값}'],
+  'survey-response/lib/numeric-validation.ts': ['{현재값}', '{기준값}', '{묶음}'],
   // 서버 오류 문장과의 비교
   'survey-response/hooks/use-duplicate-guard.ts': ['테스트 링크가 더 이상 유효하지 않습니다'],
   // 언어 바꾸기 버튼 — 이미 세 언어다

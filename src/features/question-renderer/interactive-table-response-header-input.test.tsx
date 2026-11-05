@@ -156,3 +156,33 @@ describe('머리글 입력칸 — 데스크톱 표', () => {
     expect(screen.getByRole('button', { name: '기타 원료 추가' })).toBeInTheDocument();
   });
 });
+
+describe('경고만 하는 제약의 안내', () => {
+  it('경고 문구가 있으면 표 아래 노란 안내(status)로 서고, 없으면 그리지 않는다', () => {
+    const { rerender } = render(
+      <InteractiveTableResponse
+        questionId="q1"
+        columns={headerInputColumns}
+        rows={headerInputRows}
+        value={{}}
+        onChange={() => {}}
+        enableSticky={false}
+        softWarnings={['1번째 제품: 출고량이 생산량의 2배를 넘게 입력됐어요.']}
+      />,
+    );
+    expect(screen.getByRole('status')).toHaveTextContent('1번째 제품: 출고량이 생산량의 2배를 넘게 입력됐어요.');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    rerender(
+      <InteractiveTableResponse
+        questionId="q1"
+        columns={headerInputColumns}
+        rows={headerInputRows}
+        value={{}}
+        onChange={() => {}}
+        enableSticky={false}
+        softWarnings={[]}
+      />,
+    );
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+});

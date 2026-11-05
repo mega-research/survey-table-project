@@ -51,7 +51,10 @@ import {
   buildRadioGroupBuckets,
   resolveRadioGroupProps,
 } from '@/features/question-renderer/utils/table-radio-groups';
-import { ValidationIssueBanner } from '@/features/question-renderer/validation-issue-banner';
+import {
+  SoftWarningNotice,
+  ValidationIssueBanner,
+} from '@/features/question-renderer/validation-issue-banner';
 import { useMobileView } from '@/hooks/use-media-query';
 import { collectTableCells } from '@/lib/survey/cell-gating';
 import { cn } from '@/lib/utils';
@@ -612,6 +615,8 @@ interface InteractiveTableResponseProps {
         detailTargetIds?: string[] | undefined;
       }[]
     | undefined;
+  /** 경고만 하는 표 제약의 안내 문구 — 막지 않는다(survey-response `collectTableSoftWarnings`) */
+  softWarnings?: readonly string[] | undefined;
 }
 
 /**
@@ -707,6 +712,7 @@ function InteractiveTableResponseBody({
   choiceGroups,
   errorCellIds,
   errorItems,
+  softWarnings,
 }: InteractiveTableResponseProps) {
   const mergedOnChange = useMergedResponseChange(value, onChange);
 
@@ -1799,6 +1805,7 @@ function InteractiveTableResponseBody({
               />
             )}
 
+            <SoftWarningNotice messages={softWarnings} />
             <ValidationIssueBanner
               items={errorItems}
               questionId={questionId}

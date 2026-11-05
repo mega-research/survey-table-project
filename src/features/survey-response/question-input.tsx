@@ -56,7 +56,10 @@ import {
 } from '@/features/question-renderer/validation-issue-banner';
 import { collectUnfilledChoiceGroupCellIds } from '@/features/survey-response/lib/answer-validation';
 import type { NumericIssue } from '@/features/survey-response/lib/numeric-validation';
-import { resolveTextQualityViolation } from '@/features/survey-response/lib/numeric-validation';
+import {
+  collectTableSoftWarnings,
+  resolveTextQualityViolation,
+} from '@/features/survey-response/lib/numeric-validation';
 import { liveResponseSources } from '@/features/survey-response/stores/live-response-sources';
 import { useAutoGrowTextarea } from '@/hooks/use-auto-grow-textarea';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
@@ -252,6 +255,7 @@ function QuestionInputControl({
   const quotes = useAnswerQuotes();
   const priorHighlight = usePriorHighlight();
   const { answers: priorAnswersForQuality } = usePriorAnswers();
+  const inlineLocale = useInlineSurveyLocale();
   // 최대 선택 개수가 다른 문항 응답을 따라가는 문항은 여기서 상한을 갈아 끼운다 — 아래 렌더러들은
   // 고정 숫자만 읽는다. 출처가 없는 문항은 같은 참조가 그대로 돌아온다.
   const question = withResolvedMaxSelections(questionProp, allResponses);
@@ -434,6 +438,13 @@ function QuestionInputControl({
             requiredVisibleCellIds,
           )}
           errorItems={buildTableValidationBannerItems(question, numericIssues)}
+          // 경고만 하는 제약 — 「다음」을 막지 않고 값을 고칠 때까지 표 아래 노란 안내로만 보인다
+          softWarnings={collectTableSoftWarnings(
+            question,
+            value,
+            allResponses && allQuestions ? { allResponses, allQuestions } : undefined,
+            inlineLocale,
+          ).map((warning) => warning.message)}
         />
       ) : (
         <div className="py-4 text-center text-gray-500">테이블이 구성되지 않았습니다.</div>

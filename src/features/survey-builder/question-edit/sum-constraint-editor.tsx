@@ -171,6 +171,18 @@ export function SumConstraintEditor({
     emit(constraints.map((c, i) => (i === index ? rest : c)));
   };
 
+  // 경고만 — 끄면 키를 지워 종전 차단 제약과 같은 모양으로 돌아간다
+  const setWarnOnly = (index: number, warn: boolean) => {
+    const current = constraints[index];
+    if (!current) return;
+    if (warn) {
+      updateAt(index, { severity: 'warn' });
+      return;
+    }
+    const { severity: _drop, ...rest } = current;
+    emit(constraints.map((c, i) => (i === index ? rest : c)));
+  };
+
   // 모드는 leftExpr/targetExpr 존재 여부에서 파생한다 — 로컬 state 이중화 금지.
   // 주의: 셀 선택 합계 모드는 대상 셀이 전부 빈 값이면 검증 자체를 건너뛰지만(evaluateSumConstraint
   // skipped), 수식 모드는 빈 셀을 0으로 계산해 비교를 그대로 실행한다 — 토글이 완전 등가 변환은
@@ -437,10 +449,27 @@ export function SumConstraintEditor({
                   </div>
                 )}
 
+                <label className="flex items-center gap-2 text-xs text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={constraint.severity === 'warn'}
+                    onChange={(e) => setWarnOnly(index, e.target.checked)}
+                  />
+                  경고만 (막지 않고 표 아래 노란 안내만 띄움)
+                </label>
+                {constraint.when && (
+                  <p className="text-xs text-gray-500">
+                    적용 조건이 있습니다 — 조건을 충족할 때만 검사합니다(스크립트로 설정, 편집해도 유지).
+                  </p>
+                )}
                 <Input
                   value={constraint.errorMessage ?? ''}
                   onChange={(e) => setErrorMessage(index, e.target.value)}
-                  placeholder="에러 메시지 (비우면 자동 생성) — {현재값}·{기준값} 을 쓰면 숫자로 바뀜"
+                  placeholder={
+                    constraint.severity === 'warn'
+                      ? '경고 문구 (비우면 기본 문구) — {현재값}·{기준값}·{묶음}(행 반복 줄 번호)'
+                      : '에러 메시지 (비우면 자동 생성) — {현재값}·{기준값} 을 쓰면 숫자로 바뀜'
+                  }
                   className="h-8 text-sm"
                 />
               </>

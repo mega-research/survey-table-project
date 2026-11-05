@@ -16,7 +16,13 @@
  */
 import type { Question, RowRepeatConfig, SumConstraint, TableCell, TableRow } from '@/types/survey';
 import { generateId } from '@/lib/utils';
-import { remapCellRefs } from '@/utils/table-cell-refs';
+import {
+  collectCalcExprCellIds,
+  remapCalcExprCellIds,
+  remapCellRefs,
+  remapGateConditionCellIds,
+} from '@/utils/table-cell-refs';
+import { collectGateControllerIds } from '@/utils/cell-gate-tree';
 import { isCellValuePresent } from '@/utils/table-cell-semantics';
 
 /**
@@ -549,23 +555,21 @@ export function validateRowRepeatTemplate(
     });
   }
 
-  // 벌마다 제약(perRepeatBundle)은 블록 안 칸만 가리키면 벌마다 복제해 검사하므로 막지 않는다
-  // (`resolveBundleSumConstraints`). 블록 밖 칸과 섞이면 어느 벌의 제약인지 정할 수 없어 막는다.
-  const sumRefs = (question.sumConstraints ?? []).filter(
-    (constraint) =>
-      constraint.cellIds.some((id) => blockCellIds.has(id)) &&
-      !(
-        constraint.perRepeatBundle === true &&
-        !constraint.leftExpr &&
-        !constraint.targetExpr &&
-        constraint.cellIds.every((id) => blockCellIds.has(id))
-      ),
-  );
+  // 벌마다 제약(perRepeatBundle)은 참조하는 칸(cellIds·수식 셀 참조·적용 조건 컨트롤러)이 전부 블록 안이면
+  // 벌마다 그 벌의 칸으로 옮겨 검사하므로 막지 않는다(`resolveBundleSumConstraints`). 블록 밖 칸과 섞이거나
+  // 벌마다가 아닌데 블록 칸을 가리키면 1벌만 검사되거나 어느 벌의 제약인지 정할 수 없어 막는다.
+  const sumRefs = (question.sumConstraints ?? [])
+    .map((constraint) => ({ constraint, refs: sumConstraintCellRefs(constraint) }))
+    .filter(
+      ({ constraint, refs }) =>
+        refs.some((id) => blockCellIds.has(id)) &&
+        !(constraint.perRepeatBundle === true && refs.every((id) => blockCellIds.has(id))),
+    );
   if (sumRefs.length > 0) {
     violations.push({
       kind: 'sum-constraint',
       message: '합계 제약이 참조하는 행은 반복 블록으로 지정할 수 없습니다.',
-      rowIds: badRowIdsOf(blockRows, blockCellIds, sumRefs.flatMap((c) => c.cellIds)),
+      rowIds: badRowIdsOf(blockRows, blockCellIds, sumRefs.flatMap((c) => c.refs)),
     });
   }
 
@@ -654,6 +658,16 @@ export function startedRepeatBundles(
  * 1벌 칸 id 를 (틀 행, 칸 자리)로 풀어 그 벌의 같은 자리 칸 id 로 옮긴다. 옮길 수 없는 칸(구조가 깨짐)은 뺀다.
  * 표식 없는 제약과 반복이 꺼진 표는 그대로 돌려준다.
  */
+/** 제약이 가리키는 표 칸 — cellIds · 좌변·우변 수식의 같은 질문 셀 참조 · 적용 조건 컨트롤러 */
+export function sumConstraintCellRefs(constraint: SumConstraint): string[] {
+  return [
+    ...constraint.cellIds,
+    ...collectCalcExprCellIds(constraint.leftExpr),
+    ...collectCalcExprCellIds(constraint.targetExpr),
+    ...collectGateControllerIds(constraint.when),
+  ];
+}
+
 export function resolveBundleSumConstraints(
   question: Pick<Question, 'tableRowsData' | 'rowRepeatConfig' | 'sumConstraints'>,
   values: Record<string, unknown> | undefined,
@@ -675,13 +689,20 @@ export function resolveBundleSumConstraints(
     out.push(constraint);
     if (!constraint.perRepeatBundle) continue;
     for (const bundle of bundles) {
+      // 1벌 칸 id → 이 벌의 같은 자리 칸 id. 블록 밖 칸은 대응표에 없어 그대로 남는다.
+      const idMap = new Map<string, string>();
+      for (const [templateId, at] of position) {
+        const id = bundleRows.get(`${at.sourceRowId}#${bundle}`)?.cells[at.index]?.id;
+        if (id) idMap.set(templateId, id);
+      }
       const cellIds = constraint.cellIds
-        .map((id) => {
-          const at = position.get(id);
-          return at ? bundleRows.get(`${at.sourceRowId}#${bundle}`)?.cells[at.index]?.id : undefined;
-        })
+        .map((id) => idMap.get(id))
         .filter((id): id is string => id !== undefined);
-      out.push({ ...constraint, id: `${constraint.id}#${bundle}`, cellIds });
+      const next: SumConstraint = { ...constraint, id: `${constraint.id}#${bundle}`, cellIds };
+      if (constraint.leftExpr) next.leftExpr = remapCalcExprCellIds(constraint.leftExpr, idMap);
+      if (constraint.targetExpr) next.targetExpr = remapCalcExprCellIds(constraint.targetExpr, idMap);
+      if (constraint.when) next.when = remapGateConditionCellIds(constraint.when, idMap);
+      out.push(next);
     }
   }
   return out;

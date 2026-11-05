@@ -114,6 +114,8 @@ const KO = {
   'validation.sum.gte': '{subject}가 {target} 이상이어야 합니다 (현재 {current})',
   'validation.sum.lt': '{subject}가 {target} 미만이어야 합니다 (현재 {current})',
   'validation.sum.gt': '{subject}가 {target} 초과여야 합니다 (현재 {current})',
+  'validation.softWarning': '입력한 값을 다시 확인해 주세요. 맞다면 그대로 넘어가셔도 됩니다.',
+  'validation.softWarningMore': '외 {count}건',
   // 입력된 칸 수
   'validation.filledCount.eq': '선택된 칸 중 정확히 {target}칸을 입력해야 합니다 (현재 {count}칸)',
   'validation.filledCount.ne':
@@ -392,6 +394,8 @@ const ZH: Dictionary = {
   'validation.sum.gte': '{subject}应大于或等于{target}（当前 {current}）',
   'validation.sum.lt': '{subject}应小于{target}（当前 {current}）',
   'validation.sum.gt': '{subject}应大于{target}（当前 {current}）',
+  'validation.softWarning': '请再次确认输入的数值。如无误，可直接继续。',
+  'validation.softWarningMore': '另有 {count} 项',
   'validation.filledCount.eq': '所选单元格中须正好填写{target}格（当前 {count}格）',
   'validation.filledCount.ne': '所选单元格中填写的格数不能为{target}格（当前 {count}格）',
   'validation.filledCount.gte': '所选单元格中须至少填写{target}格（当前 {count}格）',
@@ -667,6 +671,8 @@ const EN: Dictionary = {
   'validation.sum.gte': '{subject} must be at least {target} (current: {current})',
   'validation.sum.lt': '{subject} must be less than {target} (current: {current})',
   'validation.sum.gt': '{subject} must be greater than {target} (current: {current})',
+  'validation.softWarning': 'Please double-check the values you entered. If they are correct, you can continue.',
+  'validation.softWarningMore': '+{count} more',
   'validation.filledCount.eq':
     'Of the selected fields, exactly {target} must be filled in (currently {count})',
   'validation.filledCount.ne':

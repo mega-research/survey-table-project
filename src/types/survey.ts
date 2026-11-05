@@ -182,9 +182,17 @@ export interface SumConstraint {
   errorMessage?: string; // 미지정 시 자동 생성 메시지 사용
   /**
    * 행 반복 벌마다 — 1벌(틀) 칸으로 만든 제약을 1벌과 적기 시작한 벌마다 복제해 검사한다
-   * (`resolveBundleSumConstraints`). 블록 안 칸만 가리키고 수식(leftExpr·targetExpr)이 없을 때만 쓴다.
+   * (`resolveBundleSumConstraints`). 참조하는 칸(cellIds·수식의 같은 질문 셀 참조·적용 조건 컨트롤러)이
+   * 전부 블록 안일 때만 쓴다 — 묶음마다 그 묶음의 칸으로 옮긴다.
    */
   perRepeatBundle?: boolean;
+  /**
+   * 경고만 — 걸려도 「다음」을 막지 않고 표 아래 노란 안내만 띄운다(「단위를 확인해 주세요」).
+   * 판정은 차단과 같은 평가기, 목록은 `collectTableSoftWarnings`(numeric-validation). 없으면 차단.
+   */
+  severity?: 'warn';
+  /** 적용 조건 — 같은 표 칸 조건(게이팅과 같은 모양). 충족할 때만 이 제약을 검사한다(경고·차단 공용). */
+  when?: CellEnableCondition;
 }
 
 // 질문 표시 조건 논리 타입
