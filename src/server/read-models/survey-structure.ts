@@ -188,6 +188,8 @@ export function mapQuestionRow(q: QuestionRow): QuestionType {
     ...(q.inputRows != null ? { inputRows: q.inputRows } : {}),
     ...(q.inputAutoGrow != null ? { inputAutoGrow: q.inputAutoGrow } : {}),
     ...(q.titleHtml != null ? { titleHtml: q.titleHtml } : {}),
+    // 꺼진 값(NULL)은 싣지 않는다 — 기존 문항의 스냅샷·빌더 모양이 그대로다
+    ...(q.collapseButtonLabel != null ? { collapseButtonLabel: q.collapseButtonLabel } : {}),
     ...(q.sumConstraints != null
       ? { sumConstraints: q.sumConstraints as NonNullable<QuestionType['sumConstraints']> }
       : {}),

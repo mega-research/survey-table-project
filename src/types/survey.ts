@@ -1025,6 +1025,12 @@ export interface Question {
   // 문항 제목 서식본 (0125) — 굵게·밑줄·글자색·글자 크기. 정본은 평문 title 이고 응답 화면 표시만
   // 이것을 우선한다(표 셀 contentHtml 과 같은 규칙). 서식이 없으면 두지 않는다.
   titleHtml?: string | null;
+  /**
+   * 문항 접어 두기 버튼 글자 (모든 유형, 2026-11-05). 비었거나 공백뿐이면 꺼짐 = 기존 화면. 글자가 있으면 응답 화면에서
+   * 문항 자리에 이 글자의 버튼만 보이고, 누르면 문항 전체가 펼쳐지며 다시 누르면 접힌다. 펼침은 저장하지 않고,
+   * 검증 문제가 있는 문항은 접힌 채로 두지 않는다(GroupStepItem `resolveCollapsedQuestionOpen`).
+   */
+  collapseButtonLabel?: string | null;
   // 단답형·장문형 입력칸 줄 수 (0124). 미지정 = 유형 기본(단답형 한 줄, 장문형 4줄).
   // 단답형에서 2 이상이면 여러 줄 칸. 숫자 모드·입력 형식은 한 줄 고정(표 input 셀 inputRows 와 같은 규칙).
   inputRows?: number | null;

@@ -42,6 +42,7 @@ const BASE_KEYS = [
   'id',
   'title',
   'titleHtml',
+  'collapseButtonLabel',
   'description',
   'required',
   'groupId',

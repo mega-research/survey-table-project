@@ -114,6 +114,7 @@ interface SnapshotQuestion {
   inputRows?: Question['inputRows'] | undefined;
   inputAutoGrow?: Question['inputAutoGrow'] | undefined;
   titleHtml?: Question['titleHtml'] | undefined;
+  collapseButtonLabel?: Question['collapseButtonLabel'] | undefined;
   sumConstraints?: Question['sumConstraints'] | undefined;
   answerQuoteEnabled?: boolean | undefined;
   answerQuoteName?: string | undefined;
@@ -212,6 +213,7 @@ export function buildSurveySnapshot(
       inputRows: q.inputRows,
       inputAutoGrow: q.inputAutoGrow,
       titleHtml: q.titleHtml,
+      collapseButtonLabel: q.collapseButtonLabel,
       sumConstraints: q.sumConstraints,
       answerQuoteEnabled: q.answerQuoteEnabled,
       answerQuoteName: q.answerQuoteName,

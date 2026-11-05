@@ -25,6 +25,7 @@ type QuestionBase = Pick<
   | 'id'
   | 'title'
   | 'titleHtml'
+  | 'collapseButtonLabel'
   | 'description'
   | 'required'
   | 'groupId'

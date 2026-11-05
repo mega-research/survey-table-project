@@ -281,6 +281,24 @@ export function QuestionBasicTab({
           />
         </div>
 
+        {/* 문항 접어 두기 — 글자가 있으면 응답 화면에서 이 버튼을 눌러야 문항이 펼쳐진다 */}
+        <div className="rounded-lg border border-gray-200 px-3 py-2.5">
+          <Label htmlFor="collapse-button-label">접어 두기 버튼 글자 (선택사항)</Label>
+          <p className="mt-0.5 mb-2 text-xs text-gray-500">
+            적으면 응답 페이지에서 이 질문 자리에 그 글자의 버튼만 보이고, 누르면 질문이 펼쳐집니다(다시 누르면 접힘).
+            비우면 그대로 보입니다. 코드표·참고 표처럼 필요할 때만 볼 내용에 씁니다.
+          </p>
+          <Input
+            id="collapse-button-label"
+            value={formData.collapseButtonLabel ?? ''}
+            maxLength={200}
+            placeholder="예: 제품 품목 코드표"
+            onChange={(e) =>
+              setFormData((prev) => ({ ...prev, collapseButtonLabel: e.target.value || null }))
+            }
+          />
+        </div>
+
         {/* SPSS 변수명 및 엑셀 라벨 */}
         <QuestionSpssFields
           question={question}

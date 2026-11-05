@@ -52,6 +52,7 @@ questions                  # 개별 질문
 ├── id, surveyId, groupId
 ├── type                   # text|textarea|radio|checkbox|select|multiselect|ranking|table|notice
 ├── title, description, required, requiredMessage, order, hideTitle
+├── collapseButtonLabel           # 문항 접어 두기 버튼 글자(0154, NULL·공백=꺼짐) — 응답 화면에서 그 버튼을 눌러야 문항이 펼쳐진다(CONTEXT.md 「문항 접어 두기」)
 ├── titleHtml                     # 제목 서식본(굵게·밑줄·글자색·글자 크기, 0125). 정본은 평문 title — 응답 화면 제목 표시만 우선하고, 글자가 평문과 어긋나면 버린다(lib/survey/question-title-html)
 ├── options, selectLevels, choiceGroups (JSONB)
 ├── tableTitle, tableColumns, tableRowsData, tableHeaderGrid (JSONB)  # 테이블
