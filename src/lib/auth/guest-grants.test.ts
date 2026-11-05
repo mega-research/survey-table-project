@@ -172,6 +172,13 @@ describe('보기만 하는 게스트 grant', () => {
     expect(getViewOnlySurveyIds(GUEST9)).toEqual([]);
   });
 
+  it('client1 은 유가공업 실태조사를 보기만 한다(2026-11-05 고객 계정)', () => {
+    const CLIENT1 = '75060289-51b4-44e7-8fd1-dabf73a0bfaf';
+    const DAIRY_2026 = '24b15972-36fe-400a-adfe-7d4c80438204';
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `${CLIENT1}:${DAIRY_2026}`);
+    expect(isViewOnlyGuest(CLIENT1, DAIRY_2026)).toBe(true);
+  });
+
   it('응답 현황·응답 내역 목록 밖의 콘솔 화면과 설문 보기는 응답 현황으로 돌려보낸다', () => {
     const grants = [AI_2026_PUBLIC, 'survey-b'];
     const only = [AI_2026_PUBLIC];

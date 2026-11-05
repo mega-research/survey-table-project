@@ -74,6 +74,11 @@ const VIEW_ONLY_GUEST_GRANTS: ReadonlyArray<{ userId: string; surveyId: string }
     userId: 'c79af8a1-186a-4157-be4c-2bebfbde4a8d',
     surveyId: '253534a5-913a-4891-a019-f9643ccea0a7',
   },
+  // client1 — 2026 유가공업 실태조사 고객(클라이언트) 계정, 2026-11-05 요청
+  {
+    userId: '75060289-51b4-44e7-8fd1-dabf73a0bfaf',
+    surveyId: '24b15972-36fe-400a-adfe-7d4c80438204',
+  },
 ];
 
 /** 이 계정이 보기만 하는 grant 설문 목록 — grant 가 없는 설문은 빼고 돌려준다. */
