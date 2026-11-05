@@ -741,7 +741,8 @@ function HeaderCellLinkFields({ cell, candidates, linked, columnRevealAvailable,
                 : '연결이 서지 않습니다 — 같은 줄의 다른 입력칸도 모두 머리글에 넣어야 하고, 그 줄에는 글자 칸만 남아야 합니다.'}
         </p>
       </div>
-      {columnRevealAvailable && (
+      {/* 입력칸을 넣은 칸에는 버튼을 둘 자리가 없다 — 응답 화면은 표 위 버튼으로 돌아간다 */}
+      {columnRevealAvailable && !cell.inputCellId && (
         <label className="flex items-center gap-2 text-xs text-gray-700">
           <input
             type="checkbox"

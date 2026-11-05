@@ -142,6 +142,25 @@ describe('머리글 입력칸 — 데스크톱 표', () => {
     expect(within(header).getByPlaceholderText('원료명(직접작성)')).toBeInTheDocument();
   });
 
+  it('입력칸이 서는 머리글에 열 추가 버튼도 지정하면 버튼은 표 위로 돌아간다 — 버튼이 사라지면 안 된다', () => {
+    const grid = headerInputGrid(false);
+    grid[1]![1] = { ...grid[1]![1]!, inputCellId: 'name1', hostsColumnReveal: true };
+    grid[1]![2] = { ...grid[1]![2]!, inputCellId: 'name2' };
+    render(
+      <InteractiveTableResponse
+        questionId="q1"
+        columns={headerInputColumns}
+        rows={headerInputRows}
+        tableHeaderGrid={grid}
+        value={{}}
+        onChange={() => {}}
+        enableSticky={false}
+      />,
+    );
+    expect(screen.getAllByRole('button', { name: '기타 원료 추가' })).toHaveLength(1);
+    expect(document.querySelector('[role="columnheader"][data-cell-id="name1"] input')).not.toBeNull();
+  });
+
   it('필수 미응답이면 머리글 칸에 오류 링이 선다', () => {
     render(<Harness errorCellIds={new Set(['name1'])} />);
     const header = document.querySelector('[role="columnheader"][data-cell-id="name1"]')!;

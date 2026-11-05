@@ -7,6 +7,7 @@ import { ChoiceTableResponse } from '@/features/question-renderer/choice-table-r
 import {
   useAnswerQuotes,
   useContactAttrs,
+  useSurveyLookups,
 } from '@/features/question-renderer/contact-attrs-context';
 import { useClearDeselectedOptionTexts } from '@/features/question-renderer/hooks/use-clear-deselected-option-texts';
 import { useFieldFocus } from '@/features/question-renderer/hooks/use-field-focus';
@@ -256,6 +257,7 @@ function QuestionInputControl({
   const priorHighlight = usePriorHighlight();
   const { answers: priorAnswersForQuality } = usePriorAnswers();
   const inlineLocale = useInlineSurveyLocale();
+  const lookups = useSurveyLookups();
   // 최대 선택 개수가 다른 문항 응답을 따라가는 문항은 여기서 상한을 갈아 끼운다 — 아래 렌더러들은
   // 고정 숫자만 읽는다. 출처가 없는 문항은 같은 참조가 그대로 돌아온다.
   const question = withResolvedMaxSelections(questionProp, allResponses);
@@ -442,7 +444,13 @@ function QuestionInputControl({
           softWarnings={collectTableSoftWarnings(
             question,
             value,
-            allResponses && allQuestions ? { allResponses, allQuestions } : undefined,
+            // 차단 검증과 같은 평가 재료 — 명단 값·참조표를 빠뜨리면 attr·lookup 수식 경고가 조용히 건너뛴다
+            {
+              allResponses: allResponses ?? { [question.id]: value },
+              allQuestions: allQuestions ?? [question],
+              contactAttrs: attrs,
+              lookups,
+            },
             inlineLocale,
           ).map((warning) => warning.message)}
         />

@@ -869,9 +869,12 @@ function InteractiveTableResponseBody({
   const columnRevealHostId = useMemo(() => {
     if (!rendersHeaderGrid) return null;
     const id = findColumnRevealHostId(tableHeaderGrid);
+    if (!id) return null;
+    // 그 머리글 칸에 입력칸이 서면 버튼을 둘 자리가 없다 — 표 위 버튼으로 돌아간다(둘 다 숨으면 열을 못 연다)
+    if (headerInputs.cellByHeaderId.has(id)) return null;
     // 열 단계·표시 조건으로 그 머리글 칸이 빠졌으면 표 위 버튼으로 돌아간다
-    return id && visibleHeaderGrid?.some((line) => line.some((cell) => cell.id === id)) ? id : null;
-  }, [rendersHeaderGrid, tableHeaderGrid, visibleHeaderGrid]);
+    return visibleHeaderGrid?.some((line) => line.some((cell) => cell.id === id)) ? id : null;
+  }, [rendersHeaderGrid, tableHeaderGrid, visibleHeaderGrid, headerInputs]);
 
   // Grid 관련 계산
   // 화면 폭에 맞춰 줄이기는 모바일 모드가 아닐 때만 — 휴대폰 원본 표까지 줄이면 칸이 찌그러진다
