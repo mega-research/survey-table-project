@@ -18,7 +18,10 @@ vi.mock('@/utils/branch-logic', async (importOriginal) => ({
 }));
 vi.mock('@/hooks/use-media-query', () => ({ useMobileView: () => false, useMediaQuery: () => false }));
 
-function renderItem(partial: Partial<Question>, opts: { showRequiredMessage?: boolean; issues?: NumericIssue[] } = {}) {
+function renderItem(
+  partial: Partial<Question>,
+  opts: { showRequiredMessage?: boolean; issues?: NumericIssue[]; onResponse?: (id: string, v: unknown) => void } = {},
+) {
   const question = { id: 'q1', type: 'text', title: '[붙임] 코드표', required: false, order: 1, ...partial } as Question;
   const item: StepItem = { question, rootGroupId: null, rootGroupName: null, subgroupName: null };
   return render(
@@ -27,7 +30,7 @@ function renderItem(partial: Partial<Question>, opts: { showRequiredMessage?: bo
       showSubgroupHeading={false}
       responses={{}}
       questions={[question]}
-      onResponse={vi.fn()}
+      onResponse={opts.onResponse ?? vi.fn()}
       isHighlighted={false}
       showRequiredMessage={opts.showRequiredMessage ?? false}
       showChangeConfirmMessage={false}
@@ -53,23 +56,33 @@ describe('문항 접어 두기', () => {
     renderItem({ collapseButtonLabel: '제품 품목 코드표' });
     const button = screen.getByRole('button', { name: '제품 품목 코드표' });
     expect(button.getAttribute('aria-expanded')).toBe('false');
-    expect(screen.queryByText('[붙임] 코드표')).toBeNull();
+    expect(screen.getByText('[붙임] 코드표')).not.toBeVisible();
 
     fireEvent.click(button);
     expect(button.getAttribute('aria-expanded')).toBe('true');
-    expect(screen.getByText('[붙임] 코드표')).toBeTruthy();
+    expect(screen.getByText('[붙임] 코드표')).toBeVisible();
     const controls = button.getAttribute('aria-controls');
     expect(controls && document.getElementById(controls)).toBeTruthy();
 
     fireEvent.click(button);
     expect(button.getAttribute('aria-expanded')).toBe('false');
-    expect(screen.queryByText('[붙임] 코드표')).toBeNull();
+    expect(screen.getByText('[붙임] 코드표')).not.toBeVisible();
+  });
+
+  it('접혀 있어도 입력은 그려 둔다 — 빈값 기본치·명단 값 자동 채움이 펼친 경우와 같게 돈다(2026-11-05 리뷰)', () => {
+    const onResponse = vi.fn();
+    renderItem(
+      { collapseButtonLabel: '보기', inputType: 'number', emptyDefault: 1 } as Partial<Question>,
+      { onResponse },
+    );
+    expect(screen.getByRole('button', { name: '보기' }).getAttribute('aria-expanded')).toBe('false');
+    expect(onResponse).toHaveBeenCalledWith('q1', '1');
   });
 
   it('필수 강조가 뜨면 누르지 않아도 펼쳐져 있다', () => {
     renderItem({ collapseButtonLabel: '코드표 보기', required: true }, { showRequiredMessage: true });
     expect(screen.getByRole('button', { name: '코드표 보기' }).getAttribute('aria-expanded')).toBe('true');
-    expect(screen.getByText('[붙임] 코드표')).toBeTruthy();
+    expect(screen.getByText('[붙임] 코드표')).toBeVisible();
   });
 });
 

@@ -255,103 +255,107 @@ export function GroupStepItem({
             />
           </button>
         )}
-        {isOpen && (
-          <div id={collapseLabel !== '' ? collapsePanelId : undefined} className="space-y-2">
-            {!q.hideTitle && (
-              <div className="flex items-start">
-                <div
-                  id={`q-label-${q.id}`}
-                  className="px-1 text-lg leading-snug font-semibold break-keep text-gray-900"
-                >
-                  {titleHtml ? (
-                    // 제목은 한 줄 편집기라 문단 하나 — 필수 표시(*)가 같은 줄에 붙게 문단을 인라인으로 편다.
-                    <span
-                      className="[&_p]:m-0 [&_p]:inline"
-                      data-testid="question-title-rich"
-                      dangerouslySetInnerHTML={{ __html: titleHtml }}
-                    />
-                  ) : (
-                    titleText
-                  )}
-                  {q.required && (
-                    <span
-                      className="ml-1 text-red-500"
-                      aria-label={systemText('a11y.requiredQuestion', locale)}
-                    >
-                      *
-                    </span>
-                  )}
-                </div>
+        {/* 접힌 동안에도 그려 두고 숨기기만 한다 — 입력이 마운트돼야 명단 값·빈값 기본치 자동 채움이 펼친 경우와
+            같게 돈다(접는 것은 보이기만 바꾼다, 2026-11-05 리뷰). hidden 이라 탭 순서·스크린리더에서도 빠진다. */}
+        <div
+          id={collapseLabel !== '' ? collapsePanelId : undefined}
+          hidden={!isOpen}
+          className="space-y-2"
+        >
+          {!q.hideTitle && (
+            <div className="flex items-start">
+              <div
+                id={`q-label-${q.id}`}
+                className="px-1 text-lg leading-snug font-semibold break-keep text-gray-900"
+              >
+                {titleHtml ? (
+                  // 제목은 한 줄 편집기라 문단 하나 — 필수 표시(*)가 같은 줄에 붙게 문단을 인라인으로 편다.
+                  <span
+                    className="[&_p]:m-0 [&_p]:inline"
+                    data-testid="question-title-rich"
+                    dangerouslySetInnerHTML={{ __html: titleHtml }}
+                  />
+                ) : (
+                  titleText
+                )}
+                {q.required && (
+                  <span
+                    className="ml-1 text-red-500"
+                    aria-label={systemText('a11y.requiredQuestion', locale)}
+                  >
+                    *
+                  </span>
+                )}
               </div>
-            )}
-            {!isEmptyHtml(q.description) && (
-              <RichDescription
-                html={descriptionHtml}
-                size="sm"
-                className="px-2 pb-2 text-sm text-gray-500 md:overflow-x-auto md:text-xs [&_p]:min-h-[1.3em] [&_table]:my-1.5 [&_table_td]:px-2.5 [&_table_td]:py-1 [&_table_th]:px-2.5 [&_table_th]:py-1"
-              />
-            )}
-            {hasPrior && (
-              <ChangeConfirmControl
-                questionId={q.id}
-                waveLabel={waveLabel}
-                value={changeConfirmation}
-                onSelect={onChangeConfirm}
-                showRequiredMessage={showChangeConfirmMessage}
-              />
-            )}
-            {/* fieldset[disabled] 은 안쪽 폼 컨트롤 전체를 브라우저가 직접 비활성화한다 —
+            </div>
+          )}
+          {!isEmptyHtml(q.description) && (
+            <RichDescription
+              html={descriptionHtml}
+              size="sm"
+              className="px-2 pb-2 text-sm text-gray-500 md:overflow-x-auto md:text-xs [&_p]:min-h-[1.3em] [&_table]:my-1.5 [&_table_td]:px-2.5 [&_table_td]:py-1 [&_table_th]:px-2.5 [&_table_th]:py-1"
+            />
+          )}
+          {hasPrior && (
+            <ChangeConfirmControl
+              questionId={q.id}
+              waveLabel={waveLabel}
+              value={changeConfirmation}
+              onSelect={onChangeConfirm}
+              showRequiredMessage={showChangeConfirmMessage}
+            />
+          )}
+          {/* fieldset[disabled] 은 안쪽 폼 컨트롤 전체를 브라우저가 직접 비활성화한다 —
             타입별 disabled prop 을 9종 + 표 셀까지 흘리지 않고도 잠금이 성립하고,
             값은 그대로 읽히며(스크린리더 포함) 탭 순서에서만 빠진다. */}
-            {/* pointer-events-none 은 쓰지 않는다 — 넓은 표의 가로 스크롤까지 죽어
+          {/* pointer-events-none 은 쓰지 않는다 — 넓은 표의 가로 스크롤까지 죽어
             응답자가 이월 값을 끝까지 볼 수 없게 된다. 그 대가로 폼 컨트롤이 아닌
             div onClick(모바일 옵션 카드 토글)은 잠기지 않는데, 새어 나간 편집은
             "같음"이 이월 값을 다시 복사하므로 값이 어긋난 채 제출되지는 않는다. */}
-            <fieldset
-              disabled={isLocked}
-              className={`m-0 min-w-0 border-0 p-0 ${isLocked ? 'opacity-70' : ''}`}
+          <fieldset
+            disabled={isLocked}
+            className={`m-0 min-w-0 border-0 p-0 ${isLocked ? 'opacity-70' : ''}`}
+          >
+            <div
+              role="group"
+              aria-labelledby={`q-label-${q.id}`}
+              // 표 형태(테이블 질문·설명 테이블 소스)만 모바일에서 좌우/하단 margin 을 빼고
+              // 제목과의 간격 8px(mt-2)만 남긴다 — 입력 카드가 화면 폭을 그대로 쓰게.
+              // 그 외 질문(일반 라디오·체크박스·단답 등)은 좌우 margin 을 빼면 선택지가
+              // 제목(px-1)보다 왼쪽으로 삐져나가므로 모든 화면에서 m-2 유지.
+              // 데스크탑(md 이상) 표 형태는 설명이 없으면 제목과 표가 8px 로 붙어 보여
+              // 24px(mt-6)로 벌린다. 제목 숨김(hideTitle) 질문은 벌릴 기준(제목)이 없으므로
+              // 제외 — 그룹 헤더와 표 사이가 불필요하게 벌어지는 회귀 방지.
+              className={
+                q.type === 'table' ||
+                ((q.type === 'radio' || q.type === 'checkbox') && isChoiceTableSource(q))
+                  ? `mt-2 md:m-2 ${!q.hideTitle && isEmptyHtml(q.description) ? 'md:mt-6' : ''}`
+                  : 'm-2'
+              }
             >
-              <div
-                role="group"
-                aria-labelledby={`q-label-${q.id}`}
-                // 표 형태(테이블 질문·설명 테이블 소스)만 모바일에서 좌우/하단 margin 을 빼고
-                // 제목과의 간격 8px(mt-2)만 남긴다 — 입력 카드가 화면 폭을 그대로 쓰게.
-                // 그 외 질문(일반 라디오·체크박스·단답 등)은 좌우 margin 을 빼면 선택지가
-                // 제목(px-1)보다 왼쪽으로 삐져나가므로 모든 화면에서 m-2 유지.
-                // 데스크탑(md 이상) 표 형태는 설명이 없으면 제목과 표가 8px 로 붙어 보여
-                // 24px(mt-6)로 벌린다. 제목 숨김(hideTitle) 질문은 벌릴 기준(제목)이 없으므로
-                // 제외 — 그룹 헤더와 표 사이가 불필요하게 벌어지는 회귀 방지.
-                className={
-                  q.type === 'table' ||
-                  ((q.type === 'radio' || q.type === 'checkbox') && isChoiceTableSource(q))
-                    ? `mt-2 md:m-2 ${!q.hideTitle && isEmptyHtml(q.description) ? 'md:mt-6' : ''}`
-                    : 'm-2'
-                }
-              >
-                <QuestionInput
-                  question={q}
-                  value={inputValue}
-                  onChange={onChange}
-                  allResponses={responses as Record<string, unknown>}
-                  allQuestions={questions}
-                  numericIssues={visibleIssues}
-                  selectedDynamicRowIds={selectedDynamicRowIds}
-                  onDynamicRowSelectionChange={onDynamicRowSelectionChange}
-                  showRequiredHighlight={showRequiredMessage}
-                  requiredVisibleCellIds={choiceGroupVisibility.visibleCellIds}
-                />
-              </div>
-            </fieldset>
-            {showRequiredMessage && !requiredMessageInBanner && (
-              <p
-                {...{ [VALIDATION_NOTICE_ATTRIBUTE]: q.id }}
-                className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
-              >
-                {resolveGroupedRequiredMessage(q, responses[q.id], choiceGroupVisibility, locale)}
-              </p>
-            )}
-          </div>
-        )}
+              <QuestionInput
+                question={q}
+                value={inputValue}
+                onChange={onChange}
+                allResponses={responses as Record<string, unknown>}
+                allQuestions={questions}
+                numericIssues={visibleIssues}
+                selectedDynamicRowIds={selectedDynamicRowIds}
+                onDynamicRowSelectionChange={onDynamicRowSelectionChange}
+                showRequiredHighlight={showRequiredMessage}
+                requiredVisibleCellIds={choiceGroupVisibility.visibleCellIds}
+              />
+            </div>
+          </fieldset>
+          {showRequiredMessage && !requiredMessageInBanner && (
+            <p
+              {...{ [VALIDATION_NOTICE_ATTRIBUTE]: q.id }}
+              className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+            >
+              {resolveGroupedRequiredMessage(q, responses[q.id], choiceGroupVisibility, locale)}
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );
