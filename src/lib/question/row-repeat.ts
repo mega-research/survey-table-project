@@ -558,12 +558,21 @@ export function validateRowRepeatTemplate(
   // 벌마다 제약(perRepeatBundle)은 참조하는 칸(cellIds·수식 셀 참조·적용 조건 컨트롤러)이 전부 블록 안이면
   // 벌마다 그 벌의 칸으로 옮겨 검사하므로 막지 않는다(`resolveBundleSumConstraints`). 블록 밖 칸과 섞이거나
   // 벌마다가 아닌데 블록 칸을 가리키면 1벌만 검사되거나 어느 벌의 제약인지 정할 수 없어 막는다.
+  // 묶음 가로지르기(acrossRepeatBundles)는 칸 목록만 넓히므로 수식·칸 조건과 같이 쓸 수 없다.
+  const isAcrossOk = (constraint: SumConstraint, refs: string[]) =>
+    constraint.acrossRepeatBundles === true &&
+    constraint.perRepeatBundle !== true &&
+    !constraint.leftExpr &&
+    !constraint.targetExpr &&
+    !constraint.when &&
+    refs.every((id) => blockCellIds.has(id));
   const sumRefs = (question.sumConstraints ?? [])
     .map((constraint) => ({ constraint, refs: sumConstraintCellRefs(constraint) }))
     .filter(
       ({ constraint, refs }) =>
         refs.some((id) => blockCellIds.has(id)) &&
-        !(constraint.perRepeatBundle === true && refs.every((id) => blockCellIds.has(id))),
+        !(constraint.perRepeatBundle === true && refs.every((id) => blockCellIds.has(id))) &&
+        !isAcrossOk(constraint, refs),
     );
   if (sumRefs.length > 0) {
     violations.push({
@@ -673,7 +682,12 @@ export function resolveBundleSumConstraints(
   values: Record<string, unknown> | undefined,
 ): SumConstraint[] {
   const constraints = question.sumConstraints ?? [];
-  if (!constraints.some((c) => c.perRepeatBundle) || !isRowRepeatActive(question.rowRepeatConfig)) return constraints;
+  if (
+    !constraints.some((c) => c.perRepeatBundle || c.acrossRepeatBundles) ||
+    !isRowRepeatActive(question.rowRepeatConfig)
+  ) {
+    return constraints;
+  }
   const rows = question.tableRowsData ?? [];
   const position = new Map<string, { sourceRowId: string; index: number }>();
   const bundleRows = new Map<string, TableRow>();
@@ -686,6 +700,19 @@ export function resolveBundleSumConstraints(
   const bundles = [...startedRepeatBundles(rows, values)].sort((a, b) => a - b);
   const out: SumConstraint[] = [];
   for (const constraint of constraints) {
+    if (constraint.acrossRepeatBundles && !constraint.perRepeatBundle) {
+      // 묶음 가로지르기 — 1벌 칸 + 적기 시작한 벌의 같은 자리 칸을 한 제약에 모은다
+      const cellIds = [...constraint.cellIds];
+      for (const bundle of bundles) {
+        for (const id of constraint.cellIds) {
+          const at = position.get(id);
+          const mapped = at ? bundleRows.get(`${at.sourceRowId}#${bundle}`)?.cells[at.index]?.id : undefined;
+          if (mapped) cellIds.push(mapped);
+        }
+      }
+      out.push({ ...constraint, cellIds });
+      continue;
+    }
     out.push(constraint);
     if (!constraint.perRepeatBundle) continue;
     for (const bundle of bundles) {

@@ -47,6 +47,7 @@ import type { Question, SumConstraint, SurveyLookup, TableCell } from '@/types/s
 import { DEFAULT_SURVEY_LOCALE, type SurveyLocale } from '@/types/survey-locale';
 import { type BranchEvalCtx, responsesToLookupShape } from '@/utils/branch-eval';
 import {
+  evaluateQuestionConditionGroup,
   shouldDisplayColumn,
   shouldDisplayDynamicGroup,
   shouldDisplayRow,
@@ -60,7 +61,7 @@ import { parseNumericInput } from '@/utils/numeric-input';
 import { collectSelectedOptionIds } from '@/utils/option-text-migration';
 import { requiredCellMessage } from '@/utils/required-message';
 import { type SystemStringKey, systemText } from '@/utils/system-strings';
-import { REQUIRED_CELL_TYPES, isCellValuePresent } from '@/utils/table-cell-semantics';
+import { REQUIRED_CELL_TYPES, isCellValuePresent, resolveSelectedValues } from '@/utils/table-cell-semantics';
 import { recalculateRowspansForVisibleRows } from '@/utils/table-merge-helpers';
 import {
   type TextQualityViolation,
@@ -448,12 +449,25 @@ export function evaluateFilledCountConstraint(
   constraint: SumConstraint,
   cellValues: Record<string, unknown>,
   existingCellIds: Set<string>,
+  /** `countValues` 판정용 칸 정의 — 값 세기는 칸 종류별 선택값 해석기가 필요하다 */
+  tableCells?: readonly TableCell[],
 ): { skipped: boolean; ok: boolean; count: number; filledIds: string[]; emptyIds: string[] } {
   const targetIds = constraint.cellIds.filter((id) => existingCellIds.has(id));
   if (targetIds.length === 0) {
     return { skipped: true, ok: true, count: 0, filledIds: [], emptyIds: [] };
   }
-  const filledIds = targetIds.filter((id) => isCellValuePresent(cellValues[id]));
+  // 값 세기(countValues) — 채운 칸 대신 그 값을 고른 칸만 센다. 입력칸은 글자 그대로 비교한다.
+  const wanted = constraint.countValues && constraint.countValues.length > 0 ? new Set(constraint.countValues) : null;
+  const cellById = wanted ? new Map((tableCells ?? []).map((c) => [c.id, c])) : null;
+  const counts = (id: string): boolean => {
+    const value = cellValues[id];
+    if (!wanted) return isCellValuePresent(value);
+    const cell = cellById!.get(id);
+    if (!cell) return false;
+    if (cell.type === 'input') return typeof value === 'string' && wanted.has(value.trim());
+    return resolveSelectedValues(cell, value).some((v) => wanted.has(v));
+  };
+  const filledIds = targetIds.filter(counts);
   const emptyIds = targetIds.filter((id) => !filledIds.includes(id));
   const ok = compareValues(filledIds.length, constraint.target, constraint.operator, 0);
   return { skipped: false, ok, count: filledIds.length, filledIds, emptyIds };
@@ -579,13 +593,22 @@ function sumConstraintMessage(
   return comparisonMessage(constraint.operator, { subject, target, current: sum }, locale);
 }
 
-/** 적용 조건(`SumConstraint.when`)이 없거나 충족하면 검사 대상 — 게이팅과 같은 평가기 */
+/**
+ * 적용 조건이 없거나 충족하면 검사 대상 — 칸 조건(`when`)은 게이팅과 같은 평가기, 다른 문항 조건(`whenQuestion`)은
+ * 문항 표시 조건과 같은 평가기·재료. 다른 문항 조건은 응답 전체(ctx)가 없으면 판정할 수 없어 검사하지 않는다.
+ */
 function isConstraintApplicable(
   constraint: SumConstraint,
   cellValues: Record<string, unknown>,
   tableCells: readonly TableCell[],
+  ctx: NumericValidationCtx | undefined,
 ): boolean {
-  return !constraint.when || isGateConditionMet(constraint.when, cellValues, tableCells);
+  if (constraint.when && !isGateConditionMet(constraint.when, cellValues, tableCells)) return false;
+  if (constraint.whenQuestion) {
+    if (!ctx) return false;
+    return evaluateQuestionConditionGroup(constraint.whenQuestion, ctx.allResponses, ctx.allQuestions, toBranchEvalCtx(ctx));
+  }
+  return true;
 }
 
 /** 묶음마다 복제된 제약의 벌 번호 — 복제본 id 는 `<원본>#<벌>`, 원본(1벌)은 1 */
@@ -630,11 +653,11 @@ export function collectTableSoftWarnings(
   };
   const out: SoftWarning[] = [];
   for (const constraint of resolveBundleSumConstraints(question, cellValues)) {
-    if (constraint.severity !== 'warn' || !isConstraintApplicable(constraint, cellValues, tableCells)) continue;
+    if (constraint.severity !== 'warn' || !isConstraintApplicable(constraint, cellValues, tableCells, ctx)) continue;
     let message: string;
     let cellIds: string[];
     if (isFilledCountConstraint(constraint)) {
-      const result = evaluateFilledCountConstraint(constraint, cellValues, existingIds);
+      const result = evaluateFilledCountConstraint(constraint, cellValues, existingIds, tableCells);
       if (result.skipped || result.ok) continue;
       message = filledCountMessage(constraint, result.count, locale);
       cellIds = filledCountHighlightIds(constraint, result);
@@ -1020,8 +1043,8 @@ export function collectNumericIssues(
   for (const constraint of resolveBundleSumConstraints(question, cellValues)) {
     if (!isFilledCountConstraint(constraint)) continue;
     // 경고만 하는 제약은 막지 않는다(collectTableSoftWarnings 소관). 적용 조건 미충족이면 검사하지 않는다.
-    if (constraint.severity === 'warn' || !isConstraintApplicable(constraint, cellValues, tableCells)) continue;
-    const result = evaluateFilledCountConstraint(constraint, cellValues, existingIds);
+    if (constraint.severity === 'warn' || !isConstraintApplicable(constraint, cellValues, tableCells, ctx)) continue;
+    const result = evaluateFilledCountConstraint(constraint, cellValues, existingIds, tableCells);
     if (result.skipped || result.ok) continue;
     const highlightIds = filledCountHighlightIds(constraint, result);
     issues.push({
@@ -1094,7 +1117,7 @@ export function collectNumericIssues(
     //    숨은 열/행·비활성 게이팅 셀 제외)
     for (const constraint of resolveBundleSumConstraints(question, cellValues)) {
       if (isFilledCountConstraint(constraint)) continue; // 위 0) 에서 평가했다
-      if (constraint.severity === 'warn' || !isConstraintApplicable(constraint, cellValues, tableCells)) continue;
+      if (constraint.severity === 'warn' || !isConstraintApplicable(constraint, cellValues, tableCells, ctx)) continue;
       const result = evaluateSumConstraint(
         constraint,
         cellValues,

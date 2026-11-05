@@ -193,6 +193,18 @@ export interface SumConstraint {
   severity?: 'warn';
   /** 적용 조건 — 같은 표 칸 조건(게이팅과 같은 모양). 충족할 때만 이 제약을 검사한다(경고·차단 공용). */
   when?: CellEnableCondition;
+  /**
+   * 다른 문항 적용 조건 — 문항 표시 조건과 같은 모양·같은 평가기. 충족할 때만 검사한다(경고·차단 공용).
+   * 평가 재료(응답 전체)가 없으면 검사하지 않는다(막지 않는 쪽).
+   */
+  whenQuestion?: QuestionConditionGroup;
+  /** 칸 수 모드(`aggregate: 'count'`)에서 채운 칸 대신 이 값을 고른 칸만 센다(선택값 정본 해석기). */
+  countValues?: string[];
+  /**
+   * 행 반복 묶음 가로지르기 — 1벌 칸을 1벌 + 적기 시작한 벌의 같은 자리 칸으로 넓혀 **한 제약**으로 검사한다
+   * (「2025를 고른 줄 수 = 0」). `perRepeatBundle` 과 배타, 수식·`when` 과 같이 쓰지 않는다.
+   */
+  acrossRepeatBundles?: boolean;
 }
 
 // 질문 표시 조건 논리 타입

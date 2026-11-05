@@ -457,9 +457,16 @@ export function SumConstraintEditor({
                   />
                   경고만 (막지 않고 표 아래 노란 안내만 띄움)
                 </label>
-                {constraint.when && (
+                {(constraint.when || constraint.whenQuestion || constraint.countValues || constraint.acrossRepeatBundles) && (
                   <p className="text-xs text-gray-500">
-                    적용 조건이 있습니다 — 조건을 충족할 때만 검사합니다(스크립트로 설정, 편집해도 유지).
+                    {[
+                      constraint.when || constraint.whenQuestion ? '적용 조건이 있습니다 — 조건을 충족할 때만 검사합니다' : null,
+                      constraint.countValues ? `값 「${constraint.countValues.join('·')}」을 고른 칸만 셉니다` : null,
+                      constraint.acrossRepeatBundles ? '반복 줄 전체를 한 번에 셉니다' : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                    (스크립트로 설정, 편집해도 유지)
                   </p>
                 )}
                 <Input
