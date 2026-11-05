@@ -7,7 +7,11 @@ import { Combine, Minus, Palette, Plus, Unlink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn, generateId } from '@/lib/utils';
-import { HeaderCell } from '@/types/survey';
+import {
+  listHeaderInputCandidates,
+  resolveHeaderInputCells,
+} from '@/features/question-renderer/utils/header-input-cells';
+import type { HeaderCell, StagedRowsConfig, TableRow } from '@/types/survey';
 import {
   getCellBackgroundStyle,
   getCellTextClassName,
@@ -22,6 +26,16 @@ interface HeaderGridEditorProps {
   headerGrid: HeaderCell[][];
   columnCount: number; // tableColumns.length
   onChange: (grid: HeaderCell[][]) => void;
+  /** 머리글 입력칸 후보·유효성 판정용 본문 행 — 없으면 「입력칸 넣기」를 그리지 않는다 */
+  rows?: TableRow[] | undefined;
+  stagedRowsConfig?: StagedRowsConfig | null | undefined;
+  /** 열 차례로 열기 열이 있는가 — 있을 때만 「열 추가 버튼 두기」 */
+  columnRevealAvailable?: boolean | undefined;
+}
+
+interface HeaderCellLinkPatch {
+  inputCellId?: string | null;
+  hostsColumnReveal?: boolean;
 }
 
 /**
@@ -87,7 +101,14 @@ function getCellGridCol(
   return 0;
 }
 
-export function HeaderGridEditor({ headerGrid, columnCount, onChange }: HeaderGridEditorProps) {
+export function HeaderGridEditor({
+  headerGrid,
+  columnCount,
+  onChange,
+  rows,
+  stagedRowsConfig,
+  columnRevealAvailable = false,
+}: HeaderGridEditorProps) {
   const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState<{ row: number; col: number } | null>(null);
@@ -420,6 +441,34 @@ export function HeaderGridEditor({ headerGrid, columnCount, onChange }: HeaderGr
     [headerGrid, onChange],
   );
 
+  // 머리글 입력칸 — 응답 화면과 같은 판정으로 연결이 실제로 서는지 본다
+  const headerInputs = useMemo(
+    () => resolveHeaderInputCells(headerGrid, rows ?? [], stagedRowsConfig),
+    [headerGrid, rows, stagedRowsConfig],
+  );
+  const updateCellLink = useCallback(
+    (rowIdx: number, cellIdx: number, patch: HeaderCellLinkPatch) => {
+      const newGrid = headerGrid.map((row, r) =>
+        row.map((cell, c) => {
+          const next: HeaderCell = { ...cell };
+          const isTarget = r === rowIdx && c === cellIdx;
+          if (isTarget && 'inputCellId' in patch) {
+            if (patch.inputCellId) next.inputCellId = patch.inputCellId;
+            else delete next.inputCellId;
+          }
+          if ('hostsColumnReveal' in patch) {
+            // 버튼 자리는 표에 하나 — 새로 지정하면 다른 칸의 지정을 푼다
+            if (isTarget && patch.hostsColumnReveal) next.hostsColumnReveal = true;
+            else if (isTarget || patch.hostsColumnReveal) delete next.hostsColumnReveal;
+          }
+          return next;
+        }),
+      );
+      onChange(newGrid);
+    },
+    [headerGrid, onChange],
+  );
+
   // 그리드 셀 위치 계산 (렌더링용)
   const cellPositions = useMemo(() => {
     const positions: {
@@ -580,6 +629,19 @@ export function HeaderGridEditor({ headerGrid, columnCount, onChange }: HeaderGr
                     {cell.label || '(빈 셀)'}
                   </span>
                 )}
+                {cell.inputCellId && (
+                  <span
+                    className={cn(
+                      'mt-0.5 block text-[11px]',
+                      headerInputs.cellByHeaderId.has(cell.id) ? 'text-blue-600' : 'text-red-600',
+                    )}
+                  >
+                    {headerInputs.cellByHeaderId.has(cell.id) ? '입력칸 연결' : '입력칸 연결 끊김'}
+                  </span>
+                )}
+                {cell.hostsColumnReveal && columnRevealAvailable && (
+                  <span className="mt-0.5 block text-[11px] text-blue-600">열 추가 버튼</span>
+                )}
 
                 <Popover>
                   <PopoverTrigger asChild>
@@ -607,6 +669,15 @@ export function HeaderGridEditor({ headerGrid, columnCount, onChange }: HeaderGr
                         updateCellStyle(rowIdx, cellIdx, style)
                       ))}
                     />
+                    {rows && (
+                      <HeaderCellLinkFields
+                        cell={cell}
+                        candidates={cell.colspan === 1 ? listHeaderInputCandidates(rows, gridCol, stagedRowsConfig) : []}
+                        linked={headerInputs.cellByHeaderId.has(cell.id)}
+                        columnRevealAvailable={columnRevealAvailable}
+                        onChange={(patch) => updateCellLink(rowIdx, cellIdx, patch)}
+                      />
+                    )}
                   </PopoverContent>
                 </Popover>
               </div>
@@ -619,6 +690,67 @@ export function HeaderGridEditor({ headerGrid, columnCount, onChange }: HeaderGr
         셀을 드래그하여 선택 후 &quot;병합&quot; 버튼을 클릭하세요. 더블클릭으로 라벨을, 셀 우측 상단
         팔레트 버튼으로 색상을 편집할 수 있습니다.
       </p>
+    </div>
+  );
+}
+
+interface HeaderCellLinkFieldsProps {
+  cell: HeaderCell;
+  candidates: ReturnType<typeof listHeaderInputCandidates>;
+  linked: boolean;
+  columnRevealAvailable: boolean;
+  onChange: (patch: HeaderCellLinkPatch) => void;
+}
+
+/**
+ * 머리글 입력칸 · 열 추가 버튼 자리 — 응답 화면 데스크톱 표에서 이 머리글 칸 자리에 본문 입력칸을 그리고
+ * 그 칸만 있던 행을 본문에서 뺀다(모바일 카드 화면은 행 그대로). 판정은 응답 화면과 같은 함수.
+ */
+function HeaderCellLinkFields({ cell, candidates, linked, columnRevealAvailable, onChange }: HeaderCellLinkFieldsProps) {
+  const selectId = `header-input-${cell.id}`;
+  const current = cell.inputCellId ?? '';
+  const missing = current !== '' && !candidates.some((c) => c.cellId === current);
+  return (
+    <div className="mt-3 space-y-2 border-t border-gray-100 pt-3">
+      <div className="space-y-1">
+        <label htmlFor={selectId} className="text-xs font-medium text-gray-700">
+          입력칸 넣기
+        </label>
+        <select
+          id={selectId}
+          value={current}
+          disabled={candidates.length === 0 && current === ''}
+          onChange={(e) => onChange({ inputCellId: e.target.value || null })}
+          className="h-8 w-full rounded-md border border-gray-200 bg-white px-2 text-sm"
+        >
+          <option value="">없음 (글자만)</option>
+          {missing && <option value={current}>연결 끊긴 칸</option>}
+          {candidates.map((c) => (
+            <option key={c.cellId} value={c.cellId}>
+              {c.label}
+            </option>
+          ))}
+        </select>
+        <p className="text-[11px] leading-snug text-gray-500">
+          {candidates.length === 0 && current === ''
+            ? '이 열에 넣을 수 있는 입력칸이 없습니다. 반복·동적·조건 행이 아닌 줄의 입력칸만 넣을 수 있습니다.'
+            : current === ''
+              ? '고른 칸을 응답 화면(PC) 머리글 자리에 그립니다. 휴대폰 카드 화면은 그 줄을 그대로 보여 줍니다.'
+              : linked
+                ? '응답 화면(PC)에서 이 머리글 자리에 입력칸이 서고, 그 줄은 본문에서 빠집니다.'
+                : '연결이 서지 않습니다 — 같은 줄의 다른 입력칸도 모두 머리글에 넣어야 하고, 그 줄에는 글자 칸만 남아야 합니다.'}
+        </p>
+      </div>
+      {columnRevealAvailable && (
+        <label className="flex items-center gap-2 text-xs text-gray-700">
+          <input
+            type="checkbox"
+            checked={cell.hostsColumnReveal === true}
+            onChange={(e) => onChange({ hostsColumnReveal: e.target.checked })}
+          />
+          열 추가 버튼을 이 칸 안에 두기
+        </label>
+      )}
     </div>
   );
 }

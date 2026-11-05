@@ -903,6 +903,14 @@ export interface HeaderCell {
   textColor?: string;
   colspan: number; // 가로 병합 (기본 1)
   rowspan: number; // 세로 병합 (기본 1)
+  /**
+   * 머리글 입력칸 — 같은 표 본문의 입력칸 하나를 이 머리글 자리에 그린다(「기타(원료명 직접 작성)」).
+   * 값은 그 본문 칸 키에 그대로 산다(저장·검증·내보내기 무변경). 판정·올린 행은
+   * `features/question-renderer/utils/header-input-cells` 하나. 무효 연결은 무시하고 글자로 그린다.
+   */
+  inputCellId?: string;
+  /** 열 차례로 열기 버튼(추가·빼기)을 이 머리글 칸 안에 둔다 — 데스크톱 표·모바일 원본만. */
+  hostsColumnReveal?: boolean;
 }
 
 export interface SelectLevel {

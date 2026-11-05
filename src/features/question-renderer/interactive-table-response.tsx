@@ -23,6 +23,10 @@ import {
 } from '@/features/question-renderer/utils/classify-table';
 import { distinctGroupOf } from '@/features/question-renderer/utils/distinct-select-group';
 import { expandHeaderGrid } from '@/features/question-renderer/utils/expand-header-grid';
+import {
+  findColumnRevealHostId,
+  resolveHeaderInputCells,
+} from '@/features/question-renderer/utils/header-input-cells';
 import { buildItemCards } from '@/features/question-renderer/utils/item-cards';
 import {
   useAnswerQuotes,
@@ -328,6 +332,13 @@ interface HeaderCellsProps {
   hideColumnLabels: boolean;
   /** sticky 비활성화 시 undefined (헬퍼도 전원 OFF) */
   stickyInfo?: StickyLeftInfo | undefined;
+  /** 머리글 입력칸 — 머리글 칸 id → 그 자리에 그릴 본문 칸 (`header-input-cells`) */
+  headerInputCells?: ReadonlyMap<string, TableCell> | undefined;
+  renderHeaderInput?: ((cell: TableCell) => React.ReactNode) | undefined;
+  errorCellIds?: Set<string> | undefined;
+  /** 열 차례로 열기 버튼을 둘 머리글 칸 id 와 그 버튼 */
+  columnRevealHostId?: string | null | undefined;
+  columnRevealControls?: React.ReactNode;
 }
 
 function HeaderCells({
@@ -335,6 +346,11 @@ function HeaderCells({
   visibleColumns,
   hideColumnLabels,
   stickyInfo,
+  headerInputCells,
+  renderHeaderInput,
+  errorCellIds,
+  columnRevealHostId,
+  columnRevealControls,
 }: HeaderCellsProps): React.ReactNode {
   if (hideColumnLabels) return null;
 
@@ -352,6 +368,40 @@ function HeaderCells({
           ...getCellBackgroundStyle(cell),
           ...getCellTextStyle(cell),
         };
+
+        // 머리글 입력칸 — 본문 칸을 이 자리에 그린다. data-cell-id 로 오류 「위치로 이동」·링이 본문 칸과 같다.
+        const inputCell = headerInputCells?.get(cell.id);
+        if (inputCell && renderHeaderInput) {
+          return (
+            <div
+              key={cell.id}
+              className={cn(
+                HEADER_CELL_BASE_CLASS,
+                'px-2',
+                errorCellIds?.has(inputCell.id) && 'ring-2 ring-red-300 ring-inset',
+              )}
+              style={style}
+              data-cell-id={inputCell.id}
+              {...getGridCellAria('columnheader', colSpan, rowSpan)}
+            >
+              <div className="w-full text-left text-sm font-normal">{renderHeaderInput(inputCell)}</div>
+            </div>
+          );
+        }
+
+        if (columnRevealControls && cell.id === columnRevealHostId) {
+          return (
+            <div
+              key={cell.id}
+              className={cn(HEADER_CELL_BASE_CLASS, getCellTextClassName(cell), 'gap-2')}
+              style={style}
+              {...getGridCellAria('columnheader', colSpan, rowSpan)}
+            >
+              <span className="min-w-0 flex-1">{cell.label}</span>
+              <div className="shrink-0 text-sm font-normal">{columnRevealControls}</div>
+            </div>
+          );
+        }
 
         return (
           <div
@@ -783,6 +833,40 @@ function InteractiveTableResponseBody({
     return ids;
   }, [columnFilteredRows, allResponses, allQuestions, ignoreDisplayConditions, branchEvalCtx]);
 
+  // 머리글 입력칸 — 머리글을 그리는 화면(데스크톱 표·모바일 원본)에서만 본문 칸을 머리글로 올리고 그 행을 뺀다.
+  // 카드 화면은 머리글이 없어 그 행을 그대로 그린다. 판정은 구조 전체로 한다 — 열 단계로 칸이 잠시 숨어도
+  // 행이 본문에 글자만 남은 채 나타나지 않게.
+  const rendersHeaderGrid = !mobileUsesCards && !hideColumnLabels;
+  const headerInputs = useMemo(
+    () => resolveHeaderInputCells(tableHeaderGrid, rows, stagedRowsConfig),
+    [tableHeaderGrid, rows, stagedRowsConfig],
+  );
+  const hoistedRowIds = rendersHeaderGrid ? headerInputs.hoistedRowIds : null;
+  const bodyVisibleRowIds = useMemo(() => {
+    if (!hoistedRowIds || hoistedRowIds.size === 0) return conditionVisibleRowIds;
+    const ids = new Set<string>();
+    for (const row of columnFilteredRows) {
+      if (hoistedRowIds.has(row.id)) continue;
+      if (conditionVisibleRowIds === null || conditionVisibleRowIds.has(row.id)) ids.add(row.id);
+    }
+    return ids;
+  }, [hoistedRowIds, conditionVisibleRowIds, columnFilteredRows]);
+  const hoistedRowCellsByCellId = useMemo(() => {
+    const map = new Map<string, TableCell[]>();
+    if (!hoistedRowIds) return map;
+    for (const row of rows) {
+      if (!hoistedRowIds.has(row.id)) continue;
+      for (const cell of row.cells) map.set(cell.id, row.cells);
+    }
+    return map;
+  }, [hoistedRowIds, rows]);
+  const columnRevealHostId = useMemo(() => {
+    if (!rendersHeaderGrid) return null;
+    const id = findColumnRevealHostId(tableHeaderGrid);
+    // 열 단계·표시 조건으로 그 머리글 칸이 빠졌으면 표 위 버튼으로 돌아간다
+    return id && visibleHeaderGrid?.some((line) => line.some((cell) => cell.id === id)) ? id : null;
+  }, [rendersHeaderGrid, tableHeaderGrid, visibleHeaderGrid]);
+
   // Grid 관련 계산
   // 화면 폭에 맞춰 줄이기는 모바일 모드가 아닐 때만 — 휴대폰 원본 표까지 줄이면 칸이 찌그러진다
   const fitToWidth = fitTableToWidth && !isMobileView;
@@ -854,7 +938,7 @@ function InteractiveTableResponseBody({
     questionId,
     rows,
     columnFilteredRows,
-    conditionVisibleRowIds,
+    conditionVisibleRowIds: bodyVisibleRowIds,
     hiddenGroupIds,
     dynamicRowConfigs,
     rowRepeatConfig,
@@ -1047,16 +1131,44 @@ function InteractiveTableResponseBody({
   );
 
   // 헤더 셀 렌더링 (다단계/단일 폴백 공용 — 파일 상단 HeaderCells 참고)
-  const renderHeaderCells = useCallback(
-    () => (
-      <HeaderCells
-        visibleHeaderGrid={visibleHeaderGrid}
-        visibleColumns={visibleColumns}
-        hideColumnLabels={hideColumnLabels}
-        stickyInfo={stickyInfo}
+  const renderHeaderInput = useCallback(
+    (cell: TableCell) => (
+      <InteractiveCell
+        cell={cell}
+        questionId={questionId}
+        value={value}
+        onChange={mergedOnChange}
+        rowCells={hoistedRowCellsByCellId.get(cell.id) ?? [cell]}
       />
     ),
-    [visibleHeaderGrid, visibleColumns, hideColumnLabels, stickyInfo],
+    [questionId, value, mergedOnChange, hoistedRowCellsByCellId],
+  );
+  const columnRevealControls = columnRevealHostId ? (
+    <StagedRowsButtons
+      addLabel={stagedColumns.addLabel}
+      canAdd={stagedColumns.canAdd}
+      canRemove={stagedColumns.canRemove}
+      openCount={stagedColumns.openStep}
+      maxCount={stagedColumns.maxStep}
+      onAdd={handleAddColumnStep}
+      onRemove={stagedColumns.removeStep}
+      removeLabel={systemText('table.removeLastColumn', locale)}
+      addIcon="plus"
+      className="justify-end"
+    />
+  ) : null;
+  const renderHeaderCells = () => (
+    <HeaderCells
+      visibleHeaderGrid={visibleHeaderGrid}
+      visibleColumns={visibleColumns}
+      hideColumnLabels={hideColumnLabels}
+      stickyInfo={stickyInfo}
+      headerInputCells={hoistedRowIds ? headerInputs.cellByHeaderId : undefined}
+      renderHeaderInput={renderHeaderInput}
+      errorCellIds={errorCellIds}
+      columnRevealHostId={stagedColumns.isActive ? columnRevealHostId : null}
+      columnRevealControls={columnRevealControls}
+    />
   );
 
   // 4) 셀렉터 행 + 펼친 그룹 행 렌더링 (가상화/비가상화 공용)
@@ -1498,7 +1610,7 @@ function InteractiveTableResponseBody({
           >
             {/* 열 차례로 열기 — 열은 머리 쪽에서 오른쪽으로 늘어나므로 버튼을 표 위 오른쪽에 둔다.
                 표 아래의 행 추가(행 반복·행 차례로 열기)와 자리·아이콘으로 갈린다. */}
-            {stagedColumns.isActive && (
+            {stagedColumns.isActive && !columnRevealHostId && (
               <StagedRowsButtons
                 addLabel={stagedColumns.addLabel}
                 canAdd={stagedColumns.canAdd}

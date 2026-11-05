@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { cn, generateId } from '@/lib/utils';
 import { headerPath } from '@/features/question-renderer/utils/column-axis-cards';
 import { resolveUngroupedSelectionType } from '@/features/question-renderer/utils/row-scale-bars';
+import { isStagedColumnsActive } from '@/features/question-renderer/utils/staged-columns';
 import { diagnoseRowScaleBars } from '@/features/survey-builder/lib/scale-bar-diagnostics';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
@@ -509,6 +510,9 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
             headerGrid={currentHeaderGrid}
             columnCount={currentColumns.length}
             onChange={updateHeaderGrid}
+            rows={currentRows}
+            stagedRowsConfig={props.stagedRowsConfig}
+            columnRevealAvailable={isStagedColumnsActive(currentColumns)}
           />
         )}
       </div>

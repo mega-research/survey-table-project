@@ -161,6 +161,27 @@ describe('duplicateQuestionTable', () => {
     expect('stagedRowsConfig' in duplicateQuestionTable(tableQuestion())).toBe(false);
   });
 
+  it('머리글 입력칸은 복제본의 칸을 가리킨다', () => {
+    const q = tableQuestion({
+      tableHeaderGrid: [
+        [
+          { id: 'h1', label: '컨트롤러', colspan: 1, rowspan: 1 },
+          { id: 'h2', label: '기타', colspan: 1, rowspan: 1, inputCellId: 'c-gated', hostsColumnReveal: true },
+        ],
+      ],
+    });
+    const out = duplicateQuestionTable(q);
+    const copied = out.tableRowsData![0]!.cells[1]!.id;
+    expect(copied).not.toBe('c-gated');
+    expect(out.tableHeaderGrid![0]![1]).toMatchObject({ inputCellId: copied, hostsColumnReveal: true });
+    expect(out.tableHeaderGrid![0]![0]).toEqual(q.tableHeaderGrid![0]![0]);
+  });
+
+  it('머리글 입력칸이 없는 표의 복제본에는 머리글 키가 없다 — 종전 복제 그대로', () => {
+    const q = tableQuestion({ tableHeaderGrid: [[{ id: 'h1', label: 'a', colspan: 2, rowspan: 1 }]] });
+    expect('tableHeaderGrid' in duplicateQuestionTable(q)).toBe(false);
+  });
+
   it('행 반복 설정과 벌 표식도 새 행 id 를 가리킨다', () => {
     let n = 0;
     const config: RowRepeatConfig = { enabled: true, templateRowIds: ['row1'], maxRepeats: 2 };
