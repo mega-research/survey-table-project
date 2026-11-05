@@ -61,7 +61,7 @@ describe('앞 문항 설명 밑에 붙이기', () => {
     // 페이지 줄은 하나 — 붙인 문항은 제자리에 따로 서지 않는다
     expect(container.querySelectorAll('.divide-y > div')).toHaveLength(1);
     const host = container.querySelector('[data-question-id="q1"]') as HTMLElement;
-    const button = within(host).getByRole('button', { name: '[붙임] 제품 품목 코드표' });
+    const button = within(host).getByRole('button', { name: /^\[붙임\] 제품 품목 코드표/ });
     const description = within(host).getByText('제품 품목을 선택하고');
     const input = within(host).getByRole('group', { name: '문1. 생산 현황' });
     // 문서 순서: 설명 → 붙임 버튼 → 문1 입력

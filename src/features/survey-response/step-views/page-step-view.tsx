@@ -97,7 +97,8 @@ export function PageStepView({
                 {renderItem(
                   item,
                   attached ? (
-                    <div className="space-y-2 px-1">
+                    // 설명과 같은 들여쓰기(px-2) — 붙임 줄과 펼친 내용이 설명의 연장으로 읽힌다
+                    <div className="space-y-2 px-2 pb-2">
                       {attached.map((a) => (
                         <div key={a.question.id}>{renderItem(a)}</div>
                       ))}

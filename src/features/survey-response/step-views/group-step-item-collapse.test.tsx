@@ -1,8 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { GroupStepItem } from '@/features/survey-response/step-views/group-step-item';
 import type { NumericIssue } from '@/features/survey-response/lib/numeric-validation';
+import { GroupStepItem } from '@/features/survey-response/step-views/group-step-item';
 import type { Question } from '@/types/survey';
 import type { StepItem } from '@/utils/group-ordering';
 
@@ -16,13 +16,27 @@ vi.mock('@/utils/branch-logic', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/utils/branch-logic')>()),
   shouldDisplayQuestion: () => true,
 }));
-vi.mock('@/hooks/use-media-query', () => ({ useMobileView: () => false, useMediaQuery: () => false }));
+vi.mock('@/hooks/use-media-query', () => ({
+  useMobileView: () => false,
+  useMediaQuery: () => false,
+}));
 
 function renderItem(
   partial: Partial<Question>,
-  opts: { showRequiredMessage?: boolean; issues?: NumericIssue[]; onResponse?: (id: string, v: unknown) => void } = {},
+  opts: {
+    showRequiredMessage?: boolean;
+    issues?: NumericIssue[];
+    onResponse?: (id: string, v: unknown) => void;
+  } = {},
 ) {
-  const question = { id: 'q1', type: 'text', title: '[붙임] 코드표', required: false, order: 1, ...partial } as Question;
+  const question = {
+    id: 'q1',
+    type: 'text',
+    title: '[붙임] 코드표',
+    required: false,
+    order: 1,
+    ...partial,
+  } as Question;
   const item: StepItem = { question, rootGroupId: null, rootGroupName: null, subgroupName: null };
   return render(
     <GroupStepItem
@@ -54,12 +68,15 @@ describe('문항 접어 두기', () => {
 
   it('글자가 있으면 버튼만 보이고, 누르면 펼치고 다시 누르면 접는다', () => {
     renderItem({ collapseButtonLabel: '제품 품목 코드표' });
-    const button = screen.getByRole('button', { name: '제품 품목 코드표' });
+    const button = screen.getByRole('button', { name: /^제품 품목 코드표/ });
     expect(button.getAttribute('aria-expanded')).toBe('false');
     expect(screen.getByText('[붙임] 코드표')).not.toBeVisible();
 
+    expect(button.textContent).toContain('펼쳐 보기');
+
     fireEvent.click(button);
     expect(button.getAttribute('aria-expanded')).toBe('true');
+    expect(button.textContent).toContain('접기');
     expect(screen.getByText('[붙임] 코드표')).toBeVisible();
     const controls = button.getAttribute('aria-controls');
     expect(controls && document.getElementById(controls)).toBeTruthy();
@@ -75,24 +92,39 @@ describe('문항 접어 두기', () => {
       { collapseButtonLabel: '보기', inputType: 'number', emptyDefault: 1 } as Partial<Question>,
       { onResponse },
     );
-    expect(screen.getByRole('button', { name: '보기' }).getAttribute('aria-expanded')).toBe('false');
+    expect(screen.getByRole('button', { name: /^보기/ }).getAttribute('aria-expanded')).toBe(
+      'false',
+    );
     expect(onResponse).toHaveBeenCalledWith('q1', '1');
   });
 
   it('필수 강조가 뜨면 누르지 않아도 펼쳐져 있다', () => {
-    renderItem({ collapseButtonLabel: '코드표 보기', required: true }, { showRequiredMessage: true });
-    expect(screen.getByRole('button', { name: '코드표 보기' }).getAttribute('aria-expanded')).toBe('true');
+    renderItem(
+      { collapseButtonLabel: '코드표 보기', required: true },
+      { showRequiredMessage: true },
+    );
+    expect(screen.getByRole('button', { name: /^코드표 보기/ }).getAttribute('aria-expanded')).toBe(
+      'true',
+    );
     expect(screen.getByText('[붙임] 코드표')).toBeVisible();
   });
 });
 
 describe('resolveCollapsedQuestionOpen', () => {
   it('접기를 안 켰으면 늘 펼침', () => {
-    expect(resolveCollapsedQuestionOpen({ label: '', userOpen: false, hasProblem: false })).toBe(true);
+    expect(resolveCollapsedQuestionOpen({ label: '', userOpen: false, hasProblem: false })).toBe(
+      true,
+    );
   });
   it('켰으면 응답자가 연 상태 또는 검증 문제가 있을 때 펼침', () => {
-    expect(resolveCollapsedQuestionOpen({ label: '보기', userOpen: false, hasProblem: false })).toBe(false);
-    expect(resolveCollapsedQuestionOpen({ label: '보기', userOpen: true, hasProblem: false })).toBe(true);
-    expect(resolveCollapsedQuestionOpen({ label: '보기', userOpen: false, hasProblem: true })).toBe(true);
+    expect(
+      resolveCollapsedQuestionOpen({ label: '보기', userOpen: false, hasProblem: false }),
+    ).toBe(false);
+    expect(resolveCollapsedQuestionOpen({ label: '보기', userOpen: true, hasProblem: false })).toBe(
+      true,
+    );
+    expect(resolveCollapsedQuestionOpen({ label: '보기', userOpen: false, hasProblem: true })).toBe(
+      true,
+    );
   });
 });

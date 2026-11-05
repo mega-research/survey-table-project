@@ -2,7 +2,7 @@
 
 import { type ReactNode, useCallback, useId, useMemo, useState } from 'react';
 
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Paperclip } from 'lucide-react';
 
 import {
   useAnswerQuotes,
@@ -249,18 +249,22 @@ export function GroupStepItem({
             aria-expanded={isOpen}
             aria-controls={collapsePanelId}
             onClick={() => setUserOpen(!isOpen)}
-            className={
-              q.collapseAttachToPrevious
-                ? // 앞 문항 설명 밑에 붙인 문항 — 설명 글줄에 어울리게 글자 버튼으로
-                  'inline-flex max-w-full items-center gap-1 rounded text-left text-sm font-semibold break-keep text-blue-600 underline-offset-2 hover:text-blue-700 hover:underline focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:outline-none md:text-xs'
-                : 'inline-flex max-w-full items-center gap-2 rounded-lg bg-blue-500 px-4 py-2.5 text-left text-base font-semibold break-keep text-white transition-colors hover:bg-blue-600 focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:outline-none'
-            }
+            // 붙임 파일 모양 — 이름(저작자 글자)과 동작 글자(펼쳐 보기·접기)를 한 줄에. 주 행동 파랑 버튼은 문항 흐름을
+            // 끊고(2026-11-05 「따로 논다」), 맨 글자 링크는 누를 것인지 안 보여서 둘 다 쓰지 않는다.
+            // 앞 문항 설명 밑에 붙이면 설명의 「*」 줄과 같은 들여쓰기에서 시작한다(PageStepView 가 px-2 로 감싼다).
+            className="group/attach inline-flex max-w-full items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 py-2 pr-3 pl-2.5 text-left text-sm break-keep text-gray-800 transition-colors hover:border-gray-300 hover:bg-gray-100 focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:outline-none"
           >
-            <span>{collapseLabel}</span>
-            <ChevronDown
-              aria-hidden="true"
-              className={`h-4 w-4 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-            />
+            {q.collapseAttachToPrevious && (
+              <Paperclip aria-hidden="true" className="h-4 w-4 shrink-0 text-gray-500" />
+            )}
+            <span className="font-medium">{collapseLabel}</span>
+            <span className="inline-flex shrink-0 items-center gap-0.5 text-[13px] font-medium text-blue-600 group-hover/attach:text-blue-700">
+              {systemText(isOpen ? 'collapse.collapse' : 'collapse.expand', locale)}
+              <ChevronDown
+                aria-hidden="true"
+                className={`h-3.5 w-3.5 transition-transform duration-200 ease-out ${isOpen ? 'rotate-180' : ''}`}
+              />
+            </span>
           </button>
         )}
         {/* 접힌 동안에도 그려 두고 숨기기만 한다 — 입력이 마운트돼야 명단 값·빈값 기본치 자동 채움이 펼친 경우와

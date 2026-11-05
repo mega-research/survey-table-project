@@ -297,6 +297,10 @@ const KO = {
   'format.dateShape': '날짜는 2025.01.31 처럼 연(4자리)·월·일로 입력해 주세요',
   'format.invalidDate': '없는 날짜입니다. 다시 확인해 주세요',
 
+  // 문항 접어 두기 — 붙임 줄의 동작 글자(버튼 글자는 저작자 문구라 번역하지 않는다)
+  'collapse.expand': '펼쳐 보기',
+  'collapse.collapse': '접기',
+
   // 저작자가 비웠을 때의 기본 문구 — 라이브 설정이라 저작 문구는 한국어 한 벌이다
   'default.paused': '설문이 일시 중단되었습니다. 잠시 후 다시 시도해 주세요.',
   'default.quotaClosed':
@@ -567,6 +571,9 @@ const ZH: Dictionary = {
   'format.nonAscii': '电子邮箱只能输入英文字母和数字',
   'format.dateShape': '日期请按 2025.01.31 的格式输入年(4位)·月·日',
   'format.invalidDate': '该日期不存在，请再次确认',
+
+  'collapse.expand': '展开查看',
+  'collapse.collapse': '收起',
 
   'default.paused': '问卷已暂停。请稍后再试。',
   'default.quotaClosed': '该条件的名额已满，无法继续参与。感谢您的参与。',
@@ -857,6 +864,9 @@ const EN: Dictionary = {
   'format.nonAscii': 'Please use only English letters and numbers in the email address',
   'format.dateShape': 'Please enter the date as year (4 digits), month and day, e.g. 2025.01.31',
   'format.invalidDate': 'This date does not exist. Please check it again',
+
+  'collapse.expand': 'Show',
+  'collapse.collapse': 'Hide',
 
   'default.paused': 'The survey has been paused. Please try again later.',
   'default.quotaClosed':
