@@ -57,6 +57,7 @@ import {
   resolveRankingOptionsFromCells,
 } from '@/utils/ranking-source';
 import { buildCheckboxItemVarName, buildOptionTextVarName } from '@/utils/spss-var-name';
+import { isPrefillEdited } from '@/utils/prefill-edits-sidecar';
 import {
   buildTableCellVarName,
   flattenLabelLineBreaks,
@@ -92,7 +93,9 @@ export interface SPSSExportColumn {
     | 'choice-group'
     | 'choice-group-item'
     // 추적조사 변동 확인 — 문항 변수 옆에 붙는 파생 변수 (질문 값이 아니라 응답자의 진술)
-    | 'change-confirm';
+    | 'change-confirm'
+    // 고친 프리필 — 응답자가 명단 값과 다르게 낸 경우에만 칸 값을 싣는 파생 변수(<변수>_upd)
+    | 'prefill-edit';
   optionIndex?: number;
   optionValue?: string;
   tableCellId?: string;
@@ -314,6 +317,9 @@ function emitChoiceGroupColumns(
     }
   }
 }
+
+/** 고친 프리필 파생 변수의 꼬리 — `SQ1_r05_c02_upd` */
+export const PREFILL_EDIT_VAR_SUFFIX = '_upd';
 
 export function generateSPSSColumns(
   questions: QuestionVariant[],
@@ -740,6 +746,21 @@ export function generateSPSSColumns(
             // RadioOption은 QuestionOption과 구조적으로 호환되어 그대로 widening.
             ...(opts ? { cellOptions: opts } : {}),
           });
+
+          // 고친 경우만 따로 내보내기 — 원 변수 바로 옆에 <변수>_upd (String). 값은 응답 확정이 단 표식이 있을 때만.
+          if (cell.type === 'input' && cell.exportPrefillEdit && cell.prefillEditable && cell.defaultValueTemplate?.trim()) {
+            columns.push({
+              spssVarName: `${varName}${PREFILL_EDIT_VAR_SUFFIX}`,
+              questionText: q.title,
+              optionLabel: `${optionLabel || `${tRow.label} - ${q.tableColumns[colIdx]?.label ?? ''}`} (수정값)`,
+              questionId: q.id,
+              type: 'prefill-edit',
+              tableCellId: cell.id,
+              tableCellType: 'input',
+              cellSpssVarType: 'String',
+              ...(autoExportLabel !== undefined ? { cellExportLabel: `${autoExportLabel} (수정값)` } : {}),
+            });
+          }
 
           // radio/select 셀의 allowTextInput 옵션마다 STRING 사이드카 텍스트 변수 생성
           if (cell.type === 'radio' && cell.radioOptions) {
@@ -1397,6 +1418,14 @@ function buildColumnValue(
         return otherItem?.otherValue || null;
       }
       return null;
+    }
+
+    case 'prefill-edit': {
+      // 응답 확정이 「명단 값과 다르게 냈다」 표식을 단 칸만 그 값을 싣는다
+      if (!col.tableCellId || !isPrefillEdited(sub.questionResponses, col.questionId, col.tableCellId)) return null;
+      if (!rawValue || typeof rawValue !== 'object') return null;
+      const edited = (rawValue as Record<string, unknown>)[col.tableCellId];
+      return typeof edited === 'string' && edited.trim() !== '' ? edited : null;
     }
 
     case 'table-cell': {

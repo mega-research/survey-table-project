@@ -9,7 +9,9 @@ import {
   scopeMaterialFromSnapshot,
 } from '@/lib/survey/answerable-scope';
 import { withCalcValues } from '@/lib/survey/cell-formula';
+import { computePrefillEdits } from '@/lib/survey/prefill-edits';
 import { sanitizeRootSidecar, splitRootSidecars } from '@/lib/survey/response-sidecars';
+import { PREFILL_EDITS_KEY } from '@/utils/prefill-edits-sidecar';
 import { loadRespondentContactAttrs } from '@/server/read-models/respondent-contact-attrs';
 import { loadVersionSnapshot } from '@/server/read-models/version-snapshot';
 import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
@@ -127,6 +129,7 @@ export function finalizeAnswers(
     );
   }
   current = keepRegisteredSidecars(current, material);
+  current = withPrefillEdits(current, material);
 
   const screenedOut =
     scope && scope.questions.length > 0
@@ -144,6 +147,28 @@ export function finalizeAnswers(
     changed: current !== plain,
     screenedOut,
   };
+}
+
+/**
+ * 고친 프리필 표식(`__prefillEdits__`)을 서버가 계산해 덮어쓴다 — 응답자가 보낸 값은 믿지 않는다. 명단 값은
+ * 응답 화면과 같은 명단 값(개인정보 열 포함, `scope.contactAttrs`)이다. 범위 재료(스냅샷)가 없으면 판정할 수
+ * 없어 표식을 지운다. 바뀐 것이 없으면 받은 객체를 그대로 돌려준다(`changed` 가 참조 비교).
+ */
+function withPrefillEdits(
+  responses: Record<string, unknown>,
+  material: FinalizationMaterial,
+): Record<string, unknown> {
+  const edits = material.scope
+    ? computePrefillEdits(material.scope.questions, responses, material.scope.contactAttrs)
+    : {};
+  const has = Object.keys(edits).length > 0;
+  const prev = responses[PREFILL_EDITS_KEY];
+  if (!has && prev === undefined) return responses;
+  if (has && JSON.stringify(prev) === JSON.stringify(edits)) return responses;
+  const out = { ...responses };
+  if (has) out[PREFILL_EDITS_KEY] = edits;
+  else delete out[PREFILL_EDITS_KEY];
+  return out;
 }
 
 /**

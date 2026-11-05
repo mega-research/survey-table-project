@@ -249,6 +249,53 @@ describe('finalizeAnswers — 사이드카', () => {
   });
 });
 
+describe('finalizeAnswers — 고친 프리필 표식', () => {
+  const PHONE = {
+    id: 'q-sq1',
+    type: 'table',
+    title: '일반현황',
+    order: 0,
+    tableRowsData: [
+      {
+        id: 'r1',
+        label: '전화',
+        cells: [
+          { id: 'phone', content: '', type: 'input', defaultValueTemplate: '{{전화번호}}', prefillEditable: true, exportPrefillEdit: true },
+          { id: 'name', content: '', type: 'input', defaultValueTemplate: '{{업소명}}', prefillEditable: true },
+        ],
+      },
+    ],
+  } as unknown as Question;
+  const withRoster = (attrs: Record<string, string>) =>
+    material([PHONE], { scope: { questions: [PHONE], groups: [], lookups: [], settings: null, contactAttrs: attrs } });
+
+  it('명단 값과 다르게 낸 칸만 표식을 단다 — 옵션을 켠 칸만', () => {
+    const { plain } = finalizeAnswers(withRoster({ 전화번호: '02-111-1111', 업소명: '메가' }), {
+      'q-sq1': { phone: '02-222-2222', name: '다른이름' },
+    });
+    expect(plain['__prefillEdits__']).toEqual({ 'q-sq1': ['phone'] });
+  });
+
+  it('명단 값 그대로면(앞뒤 공백 무시) 표식이 없고, 응답자가 보낸 표식은 믿지 않고 지운다', () => {
+    const input = { 'q-sq1': { phone: ' 02-111-1111 ' }, __prefillEdits__: { 'q-sq1': ['phone'] } };
+    const { plain } = finalizeAnswers(withRoster({ 전화번호: '02-111-1111' }), input);
+    expect(plain).not.toHaveProperty('__prefillEdits__');
+  });
+
+  it('명단 값이 없던 칸에 적으면 고친 것으로 본다 — 비우면 표식 없음', () => {
+    expect(finalizeAnswers(withRoster({}), { 'q-sq1': { phone: '010-1234-5678' } }).plain['__prefillEdits__']).toEqual({ 'q-sq1': ['phone'] });
+    expect(finalizeAnswers(withRoster({ 전화번호: '02-1' }), { 'q-sq1': { phone: '' } }).plain).not.toHaveProperty('__prefillEdits__');
+  });
+
+  it('범위 재료가 없으면 표식을 지운다 — 판정할 수 없다', () => {
+    const { plain } = finalizeAnswers(material([PHONE], { scope: null, snapshot: null }), {
+      'q-sq1': { phone: 'x' },
+      __prefillEdits__: { 'q-sq1': ['phone'] },
+    });
+    expect(plain).not.toHaveProperty('__prefillEdits__');
+  });
+});
+
 describe('finalizeAnswers — 자격미달 판정과 암호화', () => {
   it('확정 평문으로 판정한다', () => {
     expect(finalizeAnswers(material([SCREEN_CTRL]), { 'q-ctrl': 'no' }).screenedOut).toBe(true);

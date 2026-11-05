@@ -55,6 +55,8 @@ export interface CellFormState {
   inputDefaultValueTemplate: string;
   /** prefill 값을 응답자가 고칠 수 있게 (TableCell.prefillEditable) — 템플릿이 있을 때만 저장한다 */
   inputPrefillEditable: boolean;
+  /** 고친 경우만 따로 내보내기 (TableCell.exportPrefillEdit) — 고칠 수 있는 프리필일 때만 저장한다 */
+  inputExportPrefillEdit: boolean;
   /** 목록에서 찾기 (TableCell.lookupSearch) — 평문 모드에서만 저장한다. null 이면 끔 */
   inputLookupSearch: CellLookupSearch | null;
   inputType: InputType;
@@ -271,6 +273,7 @@ export function cellToFormState(cell: TableCell): CellFormState {
     inputWidth: cell.inputWidth || '',
     inputDefaultValueTemplate: cell.defaultValueTemplate ?? '',
     inputPrefillEditable: cell.prefillEditable === true,
+    inputExportPrefillEdit: cell.exportPrefillEdit === true,
     inputLookupSearch: cell.lookupSearch ?? null,
     inputType: cell.inputType ?? 'text',
     inputPiiEncrypted: cell.piiEncrypted === true,
@@ -429,6 +432,11 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
             : {}),
           ...(form.inputPrefillEditable && form.inputDefaultValueTemplate.trim().length > 0
             ? { prefillEditable: true }
+            : {}),
+          ...(form.inputExportPrefillEdit &&
+          form.inputPrefillEditable &&
+          form.inputDefaultValueTemplate.trim().length > 0
+            ? { exportPrefillEdit: true }
             : {}),
           inputType: form.inputType,
           ...(form.inputPiiEncrypted ? { piiEncrypted: true } : {}),

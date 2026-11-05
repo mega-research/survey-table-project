@@ -589,6 +589,12 @@ export interface TableCell {
    * 미지정이면 종전대로 명단 값으로 잠근다. 표 input 셀 전용(단답형 문항에는 없다).
    */
   prefillEditable?: boolean;
+  /**
+   * 고친 경우만 따로 내보내기 — 고칠 수 있는 프리필 칸에서 응답자가 명단 값과 다르게 낸 경우에만 채워지는
+   * `<변수>_upd` 열을 내보내기에 더한다(웹 버전의 「수정 전화번호」). 판정은 응답 확정 때 사이드카
+   * `__prefillEdits__`(`utils/prefill-edits-sidecar`)에 적는다. `prefillEditable` 과 템플릿이 있을 때만 의미가 있다.
+   */
+  exportPrefillEdit?: boolean;
   // input 셀 입력 모드 — 'number' 면 응답자가 숫자만 입력 가능. 미지정/'text' 면 기존 자유 입력.
   inputType?: InputType;
   // input 셀 개인정보 암호화 — 이 셀의 응답값을 encryptPii 암호문으로 저장 (질문 단위
