@@ -1,16 +1,20 @@
 'use client';
 
-import { useMemo } from 'react';
+import { type ReactNode, useMemo } from 'react';
 
-import { GroupStepItem } from '@/features/survey-response/step-views/group-step-item';
-import { RootGroupNameBadge } from '@/features/question-renderer/root-group-name-badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { RenderStep, StepItem } from '@/utils/group-ordering';
-import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
+import {
+  useAnswerQuotes,
+  useContactAttrs,
+} from '@/features/question-renderer/contact-attrs-context';
+import { RootGroupNameBadge } from '@/features/question-renderer/root-group-name-badge';
+import { groupAttachedItems } from '@/features/survey-response/lib/attached-questions';
 import type { NumericIssue } from '@/features/survey-response/lib/numeric-validation';
+import { GroupStepItem } from '@/features/survey-response/step-views/group-step-item';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { Question, QuestionGroup } from '@/types/survey';
-import { shouldDisplayQuestion, type BranchEvalCtx } from '@/utils/branch-logic';
+import { type BranchEvalCtx, shouldDisplayQuestion } from '@/utils/branch-logic';
+import { RenderStep, StepItem } from '@/utils/group-ordering';
 
 type ResponsesMap = Record<string, unknown>;
 
@@ -49,14 +53,34 @@ export function PageStepView({
     [step.items, responses, questions, groups, evalCtx],
   );
 
+  // 앞 문항 설명 밑에 붙이는 문항(접어 두기 + collapseAttachToPrevious)은 제자리에서 빼고 앞 문항 안에 그린다
+  const { rendered, attachments } = useMemo(() => groupAttachedItems(visibleItems), [visibleItems]);
+
   if (visibleItems.length === 0) return null;
+
+  const renderItem = (item: StepItem, attachedSlot?: ReactNode) => (
+    <GroupStepItem
+      item={item}
+      showSubgroupHeading={!!item.subgroupName && item.subgroupName !== item.rootGroupName}
+      responses={responses}
+      questions={questions}
+      onResponse={onResponse}
+      isHighlighted={highlightQuestionIds.has(item.question.id)}
+      showRequiredMessage={requiredMessageQuestionIds.has(item.question.id)}
+      showChangeConfirmMessage={changeConfirmMessageQuestionIds.has(item.question.id)}
+      issues={numericIssues.get(item.question.id)}
+      evalCtx={evalCtx}
+      {...(attachedSlot !== undefined ? { attachedSlot } : {})}
+    />
+  );
 
   return (
     <Card className="animate-in fade-in duration-200">
       <CardContent className="p-4 pt-6 md:p-6 md:px-8 md:pt-6">
         <div className="divide-y divide-gray-100">
-          {visibleItems.map((item, idx) => {
-            const prev = visibleItems[idx - 1];
+          {rendered.map((item, idx) => {
+            const prev = rendered[idx - 1];
+            const attached = attachments.get(item.question.id);
             // root 그룹이 바뀌는 지점(또는 페이지 첫 항목)에 그룹 헤더를 표시한다.
             const showRootBadge =
               !!item.rootGroupName && (idx === 0 || prev?.rootGroupId !== item.rootGroupId);
@@ -70,22 +94,16 @@ export function PageStepView({
                     />
                   </div>
                 )}
-                <GroupStepItem
-                  item={item}
-                  showSubgroupHeading={
-                    !!item.subgroupName && item.subgroupName !== item.rootGroupName
-                  }
-                  responses={responses}
-                  questions={questions}
-                  onResponse={onResponse}
-                  isHighlighted={highlightQuestionIds.has(item.question.id)}
-                  showRequiredMessage={requiredMessageQuestionIds.has(item.question.id)}
-                  showChangeConfirmMessage={changeConfirmMessageQuestionIds.has(
-                    item.question.id,
-                  )}
-                  issues={numericIssues.get(item.question.id)}
-                  evalCtx={evalCtx}
-                />
+                {renderItem(
+                  item,
+                  attached ? (
+                    <div className="space-y-2 px-1">
+                      {attached.map((a) => (
+                        <div key={a.question.id}>{renderItem(a)}</div>
+                      ))}
+                    </div>
+                  ) : undefined,
+                )}
               </div>
             );
           })}
@@ -94,5 +112,3 @@ export function PageStepView({
     </Card>
   );
 }
-
-

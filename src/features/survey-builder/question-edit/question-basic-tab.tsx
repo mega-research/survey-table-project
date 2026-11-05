@@ -297,6 +297,23 @@ export function QuestionBasicTab({
               setFormData((prev) => ({ ...prev, collapseButtonLabel: e.target.value || null }))
             }
           />
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <div>
+              <Label htmlFor="collapse-attach-previous">바로 앞 질문 설명 밑에 붙이기</Label>
+              <p className="mt-0.5 text-xs text-gray-500">
+                켜면 이 버튼이 제자리가 아니라 같은 페이지 바로 앞 질문의 설명과 입력 사이에 글자 버튼으로 들어갑니다
+                (예: 문1 설명 밑 「[붙임] 제품 품목 코드표」). 앞 질문이 없으면 제자리에 보입니다.
+              </p>
+            </div>
+            <Switch
+              id="collapse-attach-previous"
+              checked={formData.collapseAttachToPrevious === true}
+              disabled={!(formData.collapseButtonLabel ?? '').trim()}
+              onCheckedChange={(checked) =>
+                setFormData((prev) => ({ ...prev, collapseAttachToPrevious: checked }))
+              }
+            />
+          </div>
         </div>
 
         {/* SPSS 변수명 및 엑셀 라벨 */}

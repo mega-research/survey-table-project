@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useId, useMemo, useState } from 'react';
+import { type ReactNode, useCallback, useId, useMemo, useState } from 'react';
 
 import { ChevronDown } from 'lucide-react';
 
@@ -80,6 +80,7 @@ export function GroupStepItem({
   showChangeConfirmMessage,
   issues,
   evalCtx,
+  attachedSlot,
 }: {
   item: StepItem;
   showSubgroupHeading: boolean;
@@ -94,6 +95,8 @@ export function GroupStepItem({
   issues?: NumericIssue[] | undefined;
   /** 표 행·열 표시조건 평가용 — 숨은 보기 그룹을 필수 안내에서 빼는 데 쓴다. */
   evalCtx?: BranchEvalCtx | undefined;
+  /** 설명 밑·입력 위에 들어갈 붙인 문항(앞 문항 설명 밑에 붙이기 — PageStepView 가 만든다) */
+  attachedSlot?: ReactNode;
 }) {
   const q = item.question;
   // 보기를 표로 그리는 문항에서 화면에 보이는 셀 — 필수 게이트(survey-response-flow)와 같은 판정이라야
@@ -246,7 +249,12 @@ export function GroupStepItem({
             aria-expanded={isOpen}
             aria-controls={collapsePanelId}
             onClick={() => setUserOpen(!isOpen)}
-            className="inline-flex max-w-full items-center gap-2 rounded-lg bg-blue-500 px-4 py-2.5 text-left text-base font-semibold break-keep text-white transition-colors hover:bg-blue-600 focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:outline-none"
+            className={
+              q.collapseAttachToPrevious
+                ? // 앞 문항 설명 밑에 붙인 문항 — 설명 글줄에 어울리게 글자 버튼으로
+                  'inline-flex max-w-full items-center gap-1 rounded text-left text-sm font-semibold break-keep text-blue-600 underline-offset-2 hover:text-blue-700 hover:underline focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:outline-none md:text-xs'
+                : 'inline-flex max-w-full items-center gap-2 rounded-lg bg-blue-500 px-4 py-2.5 text-left text-base font-semibold break-keep text-white transition-colors hover:bg-blue-600 focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:outline-none'
+            }
           >
             <span>{collapseLabel}</span>
             <ChevronDown
@@ -296,6 +304,8 @@ export function GroupStepItem({
               className="px-2 pb-2 text-sm text-gray-500 md:overflow-x-auto md:text-xs [&_p]:min-h-[1.3em] [&_table]:my-1.5 [&_table_td]:px-2.5 [&_table_td]:py-1 [&_table_th]:px-2.5 [&_table_th]:py-1"
             />
           )}
+          {/* 앞 문항 설명 밑에 붙인 문항(PageStepView) — 설명과 입력 사이 */}
+          {attachedSlot}
           {hasPrior && (
             <ChangeConfirmControl
               questionId={q.id}

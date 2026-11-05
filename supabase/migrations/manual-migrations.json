@@ -106,6 +106,7 @@
     "0147_scale_mean_enabled",
     "0152_contact_target_edit_logs",
     "0153_result_code_9_closed_business",
-    "0154_question_collapse_button_label"
+    "0154_question_collapse_button_label",
+    "0155_question_collapse_attach_previous"
   ]
 }

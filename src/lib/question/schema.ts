@@ -37,6 +37,7 @@ const base = z.object({
   // 제목 서식본 — 정본은 평문 title (0125)
   titleHtml: z.string().nullable().optional(),
   collapseButtonLabel: z.string().nullable().optional(),
+  collapseAttachToPrevious: z.boolean().optional(),
   description: z.string().optional(),
   required: z.boolean(),
   groupId: z.string().optional(),

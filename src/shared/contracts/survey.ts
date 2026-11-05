@@ -318,5 +318,6 @@ export interface QuestionData {
   inputAutoGrow?: boolean | null;
   titleHtml?: string | null;
   collapseButtonLabel?: string | null;
+  collapseAttachToPrevious?: boolean;
   sumConstraints?: SumConstraint[] | null;
 }

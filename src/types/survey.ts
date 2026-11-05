@@ -1031,6 +1031,12 @@ export interface Question {
    * 검증 문제가 있는 문항은 접힌 채로 두지 않는다(GroupStepItem `resolveCollapsedQuestionOpen`).
    */
   collapseButtonLabel?: string | null;
+  /**
+   * 접어 둔 문항을 페이지에서 바로 앞에 보이는 문항의 설명 밑에 붙인다(`collapseButtonLabel` 이 있을 때만, 2026-11-05).
+   * 문항 id 로 잇지 않고 「바로 앞」으로 정해 복제·보관함에서 연결이 깨지지 않는다. 앞에 보이는 문항이 없으면(페이지 첫 문항)
+   * 제자리에 그린다(survey-response `groupAttachedItems`).
+   */
+  collapseAttachToPrevious?: boolean;
   // 단답형·장문형 입력칸 줄 수 (0124). 미지정 = 유형 기본(단답형 한 줄, 장문형 4줄).
   // 단답형에서 2 이상이면 여러 줄 칸. 숫자 모드·입력 형식은 한 줄 고정(표 input 셀 inputRows 와 같은 규칙).
   inputRows?: number | null;

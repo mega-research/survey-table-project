@@ -18,7 +18,7 @@
 | `table`       | 매트릭스/그리드    | tableColumns, tableRowsData, tableHeaderGrid, tableValidationRules, dynamicRowConfigs, rowRepeatConfig, stagedRowsConfig, sumConstraints |
 | `notice`      | 안내문             | noticeContent, noticeBgColor, requiresAcknowledgment                                                                                     |
 
-공통: `titleHtml`(제목 서식본 — 아래 "셀 본문 부분 강조"와 같은 규칙), `requiredMessage`(필수 미응답 문구), `hideTitle`, `collapseButtonLabel`(문항 접어 두기 — 글자가 있으면 그 버튼을 눌러야 문항이 펼쳐진다, 검증 문제가 있으면 펼침, 0154 · CONTEXT.md 「문항 접어 두기」), `pageBreakBefore`(수동 페이지 나눔), `answerQuote*`(이전 응답 인용), `displayCondition`.
+공통: `titleHtml`(제목 서식본 — 아래 "셀 본문 부분 강조"와 같은 규칙), `requiredMessage`(필수 미응답 문구), `hideTitle`, `collapseButtonLabel`(문항 접어 두기 — 글자가 있으면 그 버튼을 눌러야 문항이 펼쳐진다, 검증 문제가 있으면 펼침, 0154) · `collapseAttachToPrevious`(그 버튼을 바로 앞 문항 설명 밑에 붙이기, 0155 · 둘 다 CONTEXT.md 「문항 접어 두기」), `pageBreakBefore`(수동 페이지 나눔), `answerQuote*`(이전 응답 인용), `displayCondition`.
 
 - **언어 문항**: `QuestionOption.locale`(`'ko' | 'zh' | 'en'`, 어휘 `@/types/survey-locale`) — 보기 하나 이상에 언어가 붙은 radio 문항이 그 설문의 언어 문항이다. `options` JSONB 안이라 마이그레이션 없음, 발행 스냅샷에 그대로 실린다. 빌더는 질문 편집 모달의 보기마다 「언어」를 고르고 둘 이상·첫 페이지가 아님을 경고만 한다(`survey-builder/lib/language-question-diagnostics`, 배포는 막지 않음). 동작은 아래 "다국어 설문".
 - **그룹별 필수**: `ChoiceGroup.required`/`requiredMessage` (JSONB) — 미설정이면 질문 레벨 `required` 상속. 질문 필수여도 특정 그룹만 해제하거나 그 반대가 가능하며, 문구는 그룹 → 질문 → 기본 순 폴백.

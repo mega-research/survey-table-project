@@ -344,6 +344,7 @@ export async function duplicateSurvey(
         inputAutoGrow: question.inputAutoGrow ?? null,
         titleHtml: question.titleHtml ?? null,
         collapseButtonLabel: question.collapseButtonLabel ?? null,
+        collapseAttachToPrevious: question.collapseAttachToPrevious ?? false,
         sumConstraints: question.sumConstraints as NewQuestion['sumConstraints'],
         dynamicRowConfigs: question.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
         rowRepeatConfig: question.rowRepeatConfig as NewQuestion['rowRepeatConfig'],
