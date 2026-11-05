@@ -183,7 +183,7 @@ describe('collectNumericIssues — 보기-소스 표 안의 input 셀 형식', (
   });
 
   it('형식이 어긋나면 그 칸을 짚어 막는다', () => {
-    const issues = collectNumericIssues(question, 'src', ctxWith({ tel: '1544-1234' }));
+    const issues = collectNumericIssues(question, 'src', ctxWith({ tel: '009-123-4567' }));
     expect(issues).toHaveLength(1);
     expect(issues[0]?.kind).toBe('format');
     expect(issues[0]?.detailTargetIds).toEqual(['qs:option:tel']);
@@ -197,7 +197,7 @@ describe('collectNumericIssues — 보기-소스 표 안의 input 셀 형식', (
 describe('collectNumericIssues — 이월 프리필 면제', () => {
   const prior = {
     q1: '02-1234-5678',
-    qt: { c1: '1544-1234' },
+    qt: { c1: '009-123-4567' },
     __optTexts__: { qc: { o1: 'nobody@nowhere' } },
   };
 
@@ -227,7 +227,7 @@ describe('collectNumericIssues — 이월 프리필 면제', () => {
     expect(
       collectNumericIssues(
         q,
-        { c1: '1544-1234' },
+        { c1: '009-123-4567' },
         {
           allResponses: {},
           allQuestions: [q],
@@ -415,7 +415,7 @@ describe('collectNumericIssues — 리뷰 지적 회귀', () => {
       collectNumericIssues(q, 'src', {
         allResponses: { gate: 'yes' },
         allQuestions: [q, gate],
-        optionTexts: { tel: '1544-1234' },
+        optionTexts: { tel: '009-123-4567' },
       })[0]?.kind,
     ).toBe('format');
 
@@ -424,7 +424,7 @@ describe('collectNumericIssues — 리뷰 지적 회귀', () => {
       collectNumericIssues(q, 'src', {
         allResponses: { gate: 'no' },
         allQuestions: [q, gate],
-        optionTexts: { tel: '1544-1234' },
+        optionTexts: { tel: '009-123-4567' },
       }),
     ).toEqual([]);
   });
@@ -449,7 +449,7 @@ describe('collectNumericIssues — 리뷰 지적 회귀', () => {
     const issues = collectNumericIssues(q, 'src', {
       allResponses: {},
       allQuestions: [q],
-      optionTexts: { tel: '1544-1234' },
+      optionTexts: { tel: '009-123-4567' },
     });
     expect(issues[0]?.kind).toBe('format');
   });

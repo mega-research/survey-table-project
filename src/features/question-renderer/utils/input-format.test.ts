@@ -34,6 +34,16 @@ const PASS: Array<[InputFormat, string, string]> = [
   ['phone', '07012345678', '070-1234-5678'],
   ['phone', '01012345678', '010-1234-5678'],
   ['phone', '010 1234 5678', '010-1234-5678'],
+  // 전국 대표번호 15xx·16xx·18xx — 늘 4자리-4자리
+  ['phone', '15881234', '1588-1234'],
+  ['phone', '1544-1234', '1544-1234'],
+  ['phone', '1600 1234', '1600-1234'],
+  ['phone', '1899-1234', '1899-1234'],
+  ['phone', '1577-1234', '1577-1234'],
+  ['phone', '1566-1234', '1566-1234'],
+  ['phone', '1644-1234', '1644-1234'],
+  ['phone', '1688-1234', '1688-1234'],
+  ['phone', '1599-1234', '1599-1234'],
   // 사업자번호 — 자릿수만 맞으면 통과한다(ENFORCE_CHECKSUM=false, 2026-09-09)
   ['biz_number', '1248100998', '124-81-00998'],
   ['biz_number', '124-81-00998', '124-81-00998'],
@@ -76,7 +86,10 @@ const FAIL: Array<[InputFormat, string, string]> = [
   ['mobile', '010-1234-567a', 'not_a_number'],
   ['mobile', '010일이삼사', 'not_a_number'],
   // 전화 — 지역번호·식별번호 어디에도 없음
-  ['phone', '1544-1234', 'unknown_prefix'],
+  ['phone', '1700-1234', 'unknown_prefix'],
+  ['phone', '0801234567', 'unknown_prefix'],
+  ['phone', '1588-123', 'wrong_length'],
+  ['phone', '1588-12345', 'wrong_length'],
   ['phone', '0091234567', 'unknown_prefix'],
   ['phone', '021234', 'wrong_length'],
   ['phone', '02123456789', 'wrong_length'],

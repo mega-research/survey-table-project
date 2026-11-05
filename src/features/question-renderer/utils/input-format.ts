@@ -36,8 +36,9 @@ const MOBILE_PREFIXES = ['010', '011', '016', '017', '018', '019'] as const;
 
 /**
  * 유선 지역번호 3자리 + 인터넷전화(070). 서울(02)은 2자리라 따로 본다.
- * 대표번호(15xx·16xx·18xx)와 안심번호(050x)는 **일부러 뺐다** — 자릿수·형태가 제각각이라
- * 정규형을 정할 수 없다. 담당자가 정당한 예외로 넣어야 할 값은 관리자 편집에서 경고로 통과한다.
+ * 안심번호(050x)는 **일부러 뺐다** — 자릿수·형태가 제각각이라 정규형을 정할 수 없다. 수신자 부담(080)은
+ * 사업체 전화로 받지 않기로 했다(2026-11-05). 담당자가 정당한 예외로 넣어야 할 값은 관리자 편집에서 경고로
+ * 통과한다. 대표번호는 아래 따로 본다.
  */
 const LANDLINE_AREA_CODES = [
   '031',
@@ -58,6 +59,13 @@ const LANDLINE_AREA_CODES = [
   '064', // 전남·광주·전북·제주
   '070', // 인터넷전화
 ] as const;
+
+/**
+ * 전국 대표번호(1588·1544·1600·1899 …) — 지역번호 없이 앞 4자리 + 뒤 4자리, 늘 8자리다.
+ * 첫 두 자리 15·16·18 만 받는다(대표번호 대역). 사업체 전화로 대표번호만 가진 곳이 실제로 있어
+ * 막으면 응답자가 넘어갈 수 없었다(2026-11-05, 유가공업 실태조사).
+ */
+const REPRESENTATIVE_PREFIXES = ['15', '16', '18'] as const;
 
 /** 표기용 구분 문자 — 공백·하이픈류·괄호·점. 이것만 걷어내고 남은 것이 숫자가 아니면 실패다. */
 const SEPARATOR_PATTERN = /[\s\-–—().]/g;
@@ -89,6 +97,10 @@ function parseMobile(digits: string): ParseResult {
 
 function parsePhone(digits: string): ParseResult {
   if (MOBILE_PREFIXES.some((p) => digits.startsWith(p))) return parseMobile(digits);
+  if (REPRESENTATIVE_PREFIXES.some((p) => digits.startsWith(p))) {
+    if (digits.length !== 8) return { ok: false, reason: 'wrong_length' };
+    return { ok: true, normalized: `${digits.slice(0, 4)}-${digits.slice(4)}` };
+  }
   const area = digits.startsWith('02')
     ? '02'
     : LANDLINE_AREA_CODES.find((c) => digits.startsWith(c));
