@@ -53,6 +53,16 @@ const PASS: Array<[InputFormat, string, string]> = [
   ['phone', '080-1544-1234', '080-1544-1234'],
   ['phone', '0215881234', '02-1588-1234'],
   ['phone', '0505-1588-1234', '0505-1588-1234'],
+  // 해외 번호 — + 로 시작할 때만. +82 는 국내 규칙으로 정돈, 그 밖은 + 와 숫자(8~15자리)로
+  ['phone', '+82 2-123-4567', '02-123-4567'],
+  ['phone', '+82-10-1234-5678', '010-1234-5678'],
+  ['phone', '+82 010 1234 5678', '010-1234-5678'],
+  ['phone', '+86 138 0013 8000', '+8613800138000'],
+  ['phone', '+1 (212) 555-0100', '+12125550100'],
+  ['phone', '+8613800138000', '+8613800138000'],
+  ['phone', '+82 1588-1234', '1588-1234'],
+  ['mobile', '+82 10 1234 5678', '010-1234-5678'],
+  ['mobile', '+86-138-0013-8000', '+8613800138000'],
   // 사업자번호 — 자릿수만 맞으면 통과한다(ENFORCE_CHECKSUM=false, 2026-09-09)
   ['biz_number', '1248100998', '124-81-00998'],
   ['biz_number', '124-81-00998', '124-81-00998'],
@@ -97,6 +107,16 @@ const FAIL: Array<[InputFormat, string, string]> = [
   // 전화 — 지역번호·식별번호 어디에도 없음
   ['phone', '1700-1234', 'unknown_prefix'],
   ['phone', '0501-123-4567', 'unknown_prefix'],
+  // 해외 번호 실패
+  ['phone', '+1234567', 'wrong_length'],
+  ['phone', '+1234567890123456', 'wrong_length'],
+  ['phone', '+0212345678', 'unknown_prefix'],
+  ['phone', '+82 1588', 'wrong_length'],
+  ['phone', '+82 99-123-4567', 'unknown_prefix'],
+  ['phone', '+', 'not_a_number'],
+  ['phone', '++8613800138000', 'not_a_number'],
+  ['mobile', '+82 2-123-4567', 'unknown_prefix'],
+  ['biz_number', '+1248100998', 'not_a_number'],
   ['phone', '0505-12-3456', 'wrong_length'],
   ['phone', '1588-123', 'wrong_length'],
   ['phone', '1588-12345', 'wrong_length'],
@@ -247,6 +267,15 @@ describe('filterFormatTyping — 형식 칸 타이핑 필터', () => {
     expect(filterFormatTyping('biz_number', '(123)45-67890')).toBe('12345-67890');
     expect(filterFormatTyping('corp_number', '110111-1234567')).toBe('110111-1234567');
     expect(filterFormatTyping('phone', '')).toBe('');
+  });
+
+  it('전화·휴대전화는 맨 앞 + 하나를 남긴다 — 해외 번호', () => {
+    expect(filterFormatTyping('phone', '+86 138-0013')).toBe('+86138-0013');
+    expect(filterFormatTyping('mobile', '+82 10 1234')).toBe('+82101234');
+    expect(filterFormatTyping('phone', '02+123')).toBe('02123');
+    expect(filterFormatTyping('phone', '++82')).toBe('+82');
+    expect(filterFormatTyping('phone', ' +82')).toBe('+82');
+    expect(filterFormatTyping('biz_number', '+123')).toBe('123');
   });
 
   it('날짜는 숫자와 구분 문자(. - /)만 남긴다', () => {

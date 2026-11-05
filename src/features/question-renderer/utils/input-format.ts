@@ -12,6 +12,7 @@
  *    응답자에게 전혀 다른 안내다.
  *
  * 국제번호 라이브러리(libphonenumber 류)는 쓰지 않는다 — 국내 조사에는 과하고 번들만 무겁다.
+ * 해외 번호는 `+` 로 시작할 때만 받고 나라별 규칙 없이 길이만 본다(`parseInternational`).
  */
 import type { InputFormat } from '@/types/input-type';
 import { DEFAULT_SURVEY_LOCALE, type SurveyLocale } from '@/types/survey-locale';
@@ -116,6 +117,38 @@ function parsePhone(digits: string): ParseResult {
   const rest = digits.slice(area.length);
   if (rest.length !== 7 && rest.length !== 8) return { ok: false, reason: 'wrong_length' };
   return { ok: true, normalized: `${area}-${splitSubscriber(rest)}` };
+}
+
+/** 국제 표준(E.164) 번호 길이 — 국가번호 포함 숫자만 */
+const INTERNATIONAL_MIN_DIGITS = 8;
+const INTERNATIONAL_MAX_DIGITS = 15;
+const KOREA_COUNTRY_CODE = '82';
+
+/**
+ * 해외 번호 — 전화·휴대전화 칸에서 값이 `+` 로 시작할 때만 탄다(국내 번호는 `+` 로 시작하지 않아
+ * 국내 응답에는 영향이 없다 — 2026-11-05 다국어 설문의 중·영판 자국 번호를 열려고 더했다).
+ * - `+82` 는 국내 번호로 바꿔 국내 규칙(`domestic`)으로 검사·정돈한다. 국가번호 뒤에 0 을 붙여 쓴
+ *   `+82 010…` 도 받는다. 대표번호(`+82 1588-1234`)는 앞에 0 을 붙이지 않는다.
+ * - 그 밖은 나라별 규칙 없이 숫자 8~15자리면 통과하고 `+` 와 숫자만으로 정돈한다. 국가번호는 0 으로
+ *   시작하지 않는다.
+ * 휴대전화 칸도 해외 번호는 휴대전화인지 가릴 수 없어 길이만 본다.
+ */
+function parseInternational(raw: string, domestic: (digits: string) => ParseResult): ParseResult {
+  const digits = digitsOf(raw.slice(1));
+  if (digits === null) return { ok: false, reason: 'not_a_number' };
+  if (digits.startsWith(KOREA_COUNTRY_CODE)) {
+    const national = digits.slice(KOREA_COUNTRY_CODE.length);
+    const asDomestic =
+      national.startsWith('0') || REPRESENTATIVE_PREFIXES.some((p) => national.startsWith(p))
+        ? national
+        : `0${national}`;
+    return domestic(asDomestic);
+  }
+  if (digits.startsWith('0')) return { ok: false, reason: 'unknown_prefix' };
+  if (digits.length < INTERNATIONAL_MIN_DIGITS || digits.length > INTERNATIONAL_MAX_DIGITS) {
+    return { ok: false, reason: 'wrong_length' };
+  }
+  return { ok: true, normalized: `+${digits}` };
 }
 
 /**
@@ -247,8 +280,13 @@ export function parseInputFormat(format: InputFormat, raw: string): ParseResult 
   if (raw.trim() === '') return { ok: true, normalized: '' };
   if (format === 'email') return parseEmail(raw);
   if (format === 'date') return parseDate(raw);
+  const trimmed = raw.trim();
+  if (trimmed.startsWith('+')) {
+    if (format === 'phone') return parseInternational(trimmed, parsePhone);
+    if (format === 'mobile') return parseInternational(trimmed, parseMobile);
+  }
 
-  const digits = digitsOf(raw.trim());
+  const digits = digitsOf(trimmed);
   if (digits === null) return { ok: false, reason: 'not_a_number' };
 
   switch (format) {
@@ -372,10 +410,15 @@ export function formatFailureMessage(
  * 검사(`parseInputFormat`)는 공백·괄호·점도 구분 문자로 받아 주지만, 타이핑 단계에서는
  * "숫자만 받는 칸"으로 보이는 것이 목적이라 하이픈 하나만 남긴다. 붙여넣기도 같은 필터를
  * 타므로 `(02) 123-4567` 을 붙이면 `02123-4567` 이 되고 blur 정돈이 `02-123-4567` 로 맞춘다.
+ * 전화·휴대전화는 맨 앞의 `+` 하나도 남긴다 — 해외 번호(`parseInternational`). 중간의 `+` 는 떨어뜨린다.
  * 이메일은 글자가 본문이라 손대지 않는다.
  */
 export function filterFormatTyping(format: InputFormat, raw: string): string {
   if (format === 'email') return raw;
   if (format === 'date') return raw.replace(/[^0-9.\-/]/g, '');
+  if (format === 'phone' || format === 'mobile') {
+    const kept = raw.replace(/[^0-9+-]/g, '');
+    return (kept.startsWith('+') ? '+' : '') + kept.replace(/\+/g, '');
+  }
   return raw.replace(/[^0-9-]/g, '');
 }

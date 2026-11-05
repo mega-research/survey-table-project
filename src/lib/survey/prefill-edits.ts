@@ -7,7 +7,7 @@
  *
  * **비교는 칸 형식의 같은 값 기준이다** — 응답 화면은 제출 직전 형식 칸을 정돈해 보낸다(`normalizeFormatValues`,
  * `0212345678` → `02-1234-5678`). 정돈 함수는 응답 화면 묶음 소유라 서버가 부를 수 없으므로, 정돈이 바꾸지
- * 않는 성분으로 견준다: 번호 형식은 숫자만, 날짜는 연·월·일 숫자, 숫자 칸은 쉼표를 뺀 수, 그 밖은 앞뒤 공백을 걷은
+ * 않는 성분으로 견준다: 번호 형식은 숫자만(`+82` 는 국내 번호로), 날짜는 연·월·일 숫자, 숫자 칸은 쉼표를 뺀 수, 그 밖은 앞뒤 공백을 걷은
  * 글자. 글자 그대로 견주면 손대지 않은 번호까지 「고쳤다」가 된다(2026-11-05 리뷰).
  */
 import type { Question, TableCell } from '@/types/survey';
@@ -20,7 +20,13 @@ const DIGIT_FORMATS = new Set(['mobile', 'phone', 'biz_number', 'corp_number']);
 /** 정돈이 바꾸지 않는 성분 — 같은 값이면 같은 글자가 된다 */
 function comparable(value: string, inputType: TableCell['inputType']): string {
   const text = value.trim();
-  if (inputType && DIGIT_FORMATS.has(inputType)) return text.replace(/\D/g, '');
+  if (inputType && DIGIT_FORMATS.has(inputType)) {
+    const digits = text.replace(/\D/g, '');
+    // +82 는 정돈이 국내 번호(010…)로 바꾼다 — 국가번호를 걷고 0 을 붙여 같은 모양으로(대표번호 15xx·16xx·18xx 는 0 없이)
+    if (!text.startsWith('+82')) return digits;
+    const national = digits.slice(2);
+    return national.startsWith('0') || /^1[568]/.test(national) ? national : `0${national}`;
+  }
   if (inputType === 'date') {
     const parts = text.split(/\D+/).filter(Boolean);
     if (parts.length === 3) return parts.map((p) => String(Number(p))).join('.');

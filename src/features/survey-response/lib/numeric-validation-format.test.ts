@@ -318,19 +318,19 @@ describe('collectNumericIssues — 리뷰 지적 회귀', () => {
     // 응답자가 고칠 수 없는 칸(disabled)이라 막으면 따를 수 있는 길이 없다.
     const q = textQuestion({ inputType: 'mobile', defaultValueTemplate: '{{휴대전화}}' });
     expect(
-      collectNumericIssues(q, '+81 90 1234 5678', withAttrs({ 휴대전화: '+81 90 1234 5678' })),
+      collectNumericIssues(q, '090-1234-5678', withAttrs({ 휴대전화: '090-1234-5678' })),
     ).toEqual([]);
   });
 
   it('명단 값이 비어 잠기지 않은 프리필 단답형은 응답자가 적은 값이므로 검사한다', () => {
     const q = textQuestion({ inputType: 'mobile', defaultValueTemplate: '{{휴대전화}}' });
-    expect(collectNumericIssues(q, '+81 90 1234 5678', withAttrs({}))[0]?.kind).toBe('format');
-    expect(collectNumericIssues(q, '+81 90 1234 5678')[0]?.kind).toBe('format');
+    expect(collectNumericIssues(q, '090-1234-5678', withAttrs({}))[0]?.kind).toBe('format');
+    expect(collectNumericIssues(q, '090-1234-5678')[0]?.kind).toBe('format');
   });
 
   it('토큰 프리필이 아닌 단답형은 종전대로 검사한다', () => {
     const q = textQuestion({ inputType: 'mobile', defaultValueTemplate: '   ' });
-    expect(collectNumericIssues(q, '+81 90 1234 5678')[0]?.kind).toBe('format');
+    expect(collectNumericIssues(q, '090-1234-5678')[0]?.kind).toBe('format');
   });
 
   it('토큰 프리필로 잠긴 표 셀도 형식 검사 대상이 아니다', () => {
@@ -338,10 +338,10 @@ describe('collectNumericIssues — 리뷰 지적 회귀', () => {
       { id: 'c1', inputType: 'mobile', defaultValueTemplate: '{{휴대전화}}' },
       { id: 'c2', inputType: 'mobile' },
     ]);
-    const locked = withAttrs({ 휴대전화: '+81 90 1234 5678' });
-    expect(collectNumericIssues(q, { c1: '+81 90 1234 5678' }, locked)).toEqual([]);
+    const locked = withAttrs({ 휴대전화: '090-1234-5678' });
+    expect(collectNumericIssues(q, { c1: '090-1234-5678' }, locked)).toEqual([]);
     expect(
-      collectNumericIssues(q, { c1: '+81 90 1234 5678', c2: '02-1234-5678' }, locked)[0]?.cellIds,
+      collectNumericIssues(q, { c1: '090-1234-5678', c2: '02-1234-5678' }, locked)[0]?.cellIds,
     ).toEqual(['c2']);
   });
 
@@ -352,8 +352,8 @@ describe('collectNumericIssues — 리뷰 지적 회귀', () => {
     expect(
       collectNumericIssues(
         q,
-        { c1: '+81 90 1234 5678' },
-        withAttrs({ 휴대전화: '+81 90 1234 5678' }),
+        { c1: '090-1234-5678' },
+        withAttrs({ 휴대전화: '090-1234-5678' }),
       )[0]?.cellIds,
     ).toEqual(['c1']);
   });
@@ -362,7 +362,7 @@ describe('collectNumericIssues — 리뷰 지적 회귀', () => {
     const q = tableQuestion([
       { id: 'c1', inputType: 'mobile', defaultValueTemplate: '{{휴대전화}}' },
     ]);
-    expect(collectNumericIssues(q, { c1: '+81 90 1234 5678' }, withAttrs({}))[0]?.cellIds).toEqual([
+    expect(collectNumericIssues(q, { c1: '090-1234-5678' }, withAttrs({}))[0]?.cellIds).toEqual([
       'c1',
     ]);
   });
