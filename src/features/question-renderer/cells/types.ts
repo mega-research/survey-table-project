@@ -4,6 +4,12 @@ import type { TableCell } from '@/types/survey';
 export interface InteractiveCellProps {
   cell: TableCell;
   cellResponse: unknown;
+  /**
+   * 응답에 실제로 저장된 이 칸의 값 — `cellResponse` 는 쓰는 즉시 바뀌는 로컬 사본이라 부모가 쓰기를 잃으면
+   * 둘이 갈린다(화면엔 값, 응답엔 없음). 「응답에 없으면 다시 쓴다」 판정은 이 값으로 한다. 미지정이면
+   * `cellResponse` 와 같다고 본다.
+   */
+  storedCellResponse?: unknown;
   onUpdateValue: (value: string | string[] | object) => void;
   /**
    * 같은 표의 여러 칸을 한 번에 쓴다(칸 id → 값). input 셀의 목록에서 찾기가 고른 행을 이 칸과

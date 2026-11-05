@@ -48,6 +48,7 @@ import { VideoCell } from './video-cell';
 const CellRouter = React.memo(function CellRouter({
   cell,
   cellResponse,
+  storedCellResponse,
   onUpdateValue,
   onPatchValues,
   questionId,
@@ -103,6 +104,7 @@ const CellRouter = React.memo(function CellRouter({
         <InputCell
           cell={cell}
           cellResponse={cellResponse}
+          storedCellResponse={storedCellResponse}
           onUpdateValue={onUpdateValue}
           onPatchValues={onPatchValues}
           questionId={questionId}
@@ -218,7 +220,7 @@ export const InteractiveCell = React.memo(function InteractiveCell({
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
   const { questionResponses: source } = useResponseSources();
-  const { cellResponse, updateValue, clearValue, patchValues } = useCellResponse(
+  const { cellResponse, storedResponse, updateValue, clearValue, patchValues } = useCellResponse(
     questionId,
     cell.id,
     value,
@@ -350,6 +352,7 @@ export const InteractiveCell = React.memo(function InteractiveCell({
     <CellRouter
       cell={cell}
       cellResponse={cellResponse}
+      storedCellResponse={storedResponse}
       onUpdateValue={updateValue}
       onPatchValues={patchValues}
       questionId={questionId}

@@ -59,18 +59,22 @@ import type { InteractiveCellProps } from './types';
 
 /** 「고칠 수 있게」 명단 값 쓰기를 마운트당 몇 번까지 다시 시도하는가 — 첫 쓰기 + 빠졌을 때 두 번 */
 const MAX_SEED_ATTEMPTS = 3;
-export function InputCell({
-  cell,
-  cellResponse,
-  onUpdateValue,
-  onPatchValues,
-  questionId,
-  inputIdScope,
-  ariaInvalid,
-  ariaDescribedBy,
-  hintInFlow,
-  ignoreInputWidth,
-}: InteractiveCellProps) {
+export function InputCell(props: InteractiveCellProps) {
+  const {
+    cell,
+    cellResponse,
+    storedCellResponse,
+    onUpdateValue,
+    onPatchValues,
+    questionId,
+    inputIdScope,
+    ariaInvalid,
+    ariaDescribedBy,
+    hintInFlow,
+    ignoreInputWidth,
+  } = props;
+  // 셀 컨테이너는 저장된 값을 늘 넘긴다(비어 있으면 undefined 그대로) — 키가 없을 때만 화면 값으로 갈음한다
+  const hasStoredValue = 'storedCellResponse' in props;
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
   // prefill·빈값 기본치는 응답자의 입력이 아니다 — 쓰기 직전에 호스트에게 알린다.
@@ -199,9 +203,13 @@ export function InputCell({
   // undefined 그대로라 값 기준 effect 는 다시 돌지 않는다 — 화면엔 안 보이는 칸이 「필수 응답이
   // 비어있습니다」로 막혔다(2026-11-04 유가공업 테스트 대상자). 그래서 렌더마다 확인해 다시 깔되,
   // 쓰기를 계속 삼키는 호스트에서 무한히 쓰지 않도록 마운트당 횟수를 제한한다.
+  //
+  // 판정은 **저장된 값**으로 한다 — `cellResponse` 는 셀 컨테이너가 쓰는 즉시 바꾸는 로컬 사본이라, 쓰기를
+  // 잃어도 값이 들어 있어 다시 깔지 않았다(화면엔 업체명, 응답엔 없음 — 2026-11-05 유가공업 SQ1).
   const seedAttemptsRef = useRef(0);
+  const storedValue = hasStoredValue ? storedCellResponse : cellResponse;
   const applySeed = useEffectEvent(() => {
-    if (seedValue === null || cellResponse !== undefined) return;
+    if (seedValue === null || storedValue !== undefined) return;
     if (seedAttemptsRef.current >= MAX_SEED_ATTEMPTS) return;
     seedAttemptsRef.current += 1;
     markSeedWrite?.(questionId);
