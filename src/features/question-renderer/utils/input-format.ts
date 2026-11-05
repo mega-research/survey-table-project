@@ -24,8 +24,7 @@ export type FormatFailure =
   | 'checksum_mismatch'
   | 'malformed' // 이메일 구조 불량
   | 'non_ascii' // 이메일에 한글·전각 등 ASCII 밖 글자
-  | 'invalid_date' // 날짜 모양은 맞는데 달력에 없는 날(13월·2월 30일) 또는 범위 밖 연도
-  | 'representative_with_prefix'; // 대표번호(15xx·16xx·18xx) 앞에 지역번호·080 등을 붙임
+  | 'invalid_date'; // 날짜 모양은 맞는데 달력에 없는 날(13월·2월 30일) 또는 범위 밖 연도
 
 export type ParseResult = { ok: true; normalized: string } | { ok: false; reason: FormatFailure };
 
@@ -115,10 +114,6 @@ function parsePhone(digits: string): ParseResult {
       : LANDLINE_AREA_CODES.find((c) => digits.startsWith(c));
   if (!area) return { ok: false, reason: 'unknown_prefix' };
   const rest = digits.slice(area.length);
-  // 080-1544-1234 처럼 대표번호 앞에 번호를 붙인 값 — 국번은 1 로 시작하지 않으니 정당한 번호가 아니다
-  if (rest.length === 8 && isRepresentative(rest)) {
-    return { ok: false, reason: 'representative_with_prefix' };
-  }
   if (rest.length !== 7 && rest.length !== 8) return { ok: false, reason: 'wrong_length' };
   return { ok: true, normalized: `${area}-${splitSubscriber(rest)}` };
 }
@@ -368,9 +363,6 @@ export function formatFailureMessage(
     case 'invalid_date':
       // 날짜만 나는 사유다(`parseDate`)
       return systemText('format.invalidDate', locale);
-    case 'representative_with_prefix':
-      // 전화만 나는 사유다(`parsePhone`)
-      return systemText('format.representativeWithPrefix', locale);
   }
 }
 
