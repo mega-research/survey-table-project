@@ -67,8 +67,15 @@ export function canAccessSurvey(userId: string, surveyId: string): boolean {
  * 응답 현황 안에서는 KPI·쿼터·일자별 추이 차트만 남기고(operations/overview 페이지),
  * 응답 내역에서는 수정·삭제·초기화 메뉴가 없으며 수정 화면 경로와 수정 저장(saveAdminEdit)도
  * 막는다. 같은 계정의 다른 grant 설문에는 걸리지 않는다.
+ *
+ * `allowPreview` 를 켠 grant 는 설문 보기(preview)도 연다 — 설문 내용을 보여 줘도 되는 고객용이다.
+ * 끈 grant(guest9)는 협업 업체와 함께 하는 조사라 설문 보기를 막아 둔다.
  */
-const VIEW_ONLY_GUEST_GRANTS: ReadonlyArray<{ userId: string; surveyId: string }> = [
+const VIEW_ONLY_GUEST_GRANTS: ReadonlyArray<{
+  userId: string;
+  surveyId: string;
+  allowPreview?: true;
+}> = [
   // guest9 — 2026년 인공지능산업 실태조사 공개본(리멤버 패널용), 2026-10-22 요청
   {
     userId: 'c79af8a1-186a-4157-be4c-2bebfbde4a8d',
@@ -78,6 +85,8 @@ const VIEW_ONLY_GUEST_GRANTS: ReadonlyArray<{ userId: string; surveyId: string }
   {
     userId: '75060289-51b4-44e7-8fd1-dabf73a0bfaf',
     surveyId: '24b15972-36fe-400a-adfe-7d4c80438204',
+    // 설문을 보여 줘도 되는 고객이라 설문 보기를 연다(2026-11-05 요청)
+    allowPreview: true,
   },
 ];
 
@@ -92,6 +101,19 @@ export function getViewOnlySurveyIds(userId: string): string[] {
 /** 이 계정이 이 설문에서 보기만 하는가. */
 export function isViewOnlyGuest(userId: string, surveyId: string): boolean {
   return getViewOnlySurveyIds(userId).includes(surveyId);
+}
+
+/** 이 계정이 보기만 하면서도 설문 보기는 여는 grant 설문 목록 — `allowPreview` 를 켠 보기 전용 grant. */
+export function getViewOnlyPreviewSurveyIds(userId: string): string[] {
+  const viewOnly = getViewOnlySurveyIds(userId);
+  return VIEW_ONLY_GUEST_GRANTS.filter(
+    (g) => g.userId === userId && g.allowPreview === true && viewOnly.includes(g.surveyId),
+  ).map((g) => g.surveyId);
+}
+
+/** 보기 전용 게스트가 이 설문의 설문 보기를 열 수 있는가. */
+export function canViewOnlyGuestPreview(userId: string, surveyId: string): boolean {
+  return getViewOnlyPreviewSurveyIds(userId).includes(surveyId);
 }
 
 /** 게스트가 무권한 설문 URL 을 눌렀을 때 보내는 강제 로그아웃 라우트. */
@@ -138,6 +160,7 @@ export function guestPathRedirect(
   pathname: string,
   grantedSurveyIds: readonly string[],
   viewOnlySurveyIds: readonly string[] = [],
+  viewOnlyPreviewSurveyIds: readonly string[] = [],
 ): string | null {
   if (pathname === '/admin/login') return null;
   // 강제 로그아웃 라우트 자신은 통과 — 리다이렉트 루프 방지.
@@ -148,10 +171,13 @@ export function guestPathRedirect(
     const allowedPrefix = `/admin/surveys/${grantedSurveyId}/operations`;
     const overviewPath = `${allowedPrefix}/overview`;
     // 보기만 하는 grant — 응답 현황과 응답 내역 목록만 열고, 그 밖의 콘솔 화면(응답 수정
-    // 화면·컬럼 설정 포함)과 설문 보기는 응답 현황으로 돌려보낸다.
+    // 화면·컬럼 설정 포함)과 설문 보기는 응답 현황으로 돌려보낸다. 설문 보기를 허용한 grant 는 설문 보기만 연다.
     if (viewOnlySurveyIds.includes(grantedSurveyId)) {
       if (pathname === overviewPath || pathname.startsWith(`${overviewPath}/`)) return null;
       if (pathname === `${allowedPrefix}/profiles`) return null;
+      if (pathname === previewPath && viewOnlyPreviewSurveyIds.includes(grantedSurveyId)) {
+        return null;
+      }
       if (
         pathname === previewPath ||
         pathname.startsWith(`${previewPath}/`) ||
@@ -203,9 +229,15 @@ export function guestPostLoginRedirect(
   target: string,
   grantedSurveyIds: readonly string[],
   viewOnlySurveyIds: readonly string[] = [],
+  viewOnlyPreviewSurveyIds: readonly string[] = [],
 ): string {
   const path = target.split(/[?#]/)[0] ?? target;
-  const dest = guestPathRedirect(path, grantedSurveyIds, viewOnlySurveyIds);
+  const dest = guestPathRedirect(
+    path,
+    grantedSurveyIds,
+    viewOnlySurveyIds,
+    viewOnlyPreviewSurveyIds,
+  );
   // 허용 경로 — 단 로그인·로그아웃 라우트는 로그인 직후 목적지로 무의미
   if (dest === null && path !== '/admin/login' && path !== GUEST_FORCE_LOGOUT_PATH) {
     return target;

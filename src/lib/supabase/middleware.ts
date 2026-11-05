@@ -5,11 +5,18 @@ import { createServerClient } from '@supabase/ssr';
 import {
   GUEST_FORCE_LOGOUT_PATH,
   getGuestSurveyIds,
+  getViewOnlyPreviewSurveyIds,
   getViewOnlySurveyIds,
   guestPathRedirect,
+  sanitizeInternalPath,
 } from '@/lib/auth/guest-grants';
+import { REQUEST_PATH_HEADER } from '@/lib/auth/request-path-header';
 
 export async function updateSession(request: NextRequest) {
+  // 화면 렌더가 세션을 잃었을 때 로그인 뒤 돌아올 경로 — requirePageUser 가 읽는다.
+  // 바깥에서 보낸 같은 이름 헤더는 덮어쓴다(값은 다시 sanitizeInternalPath 로 거른다).
+  request.headers.set(REQUEST_PATH_HEADER, request.nextUrl.pathname + request.nextUrl.search);
+
   let supabaseResponse = NextResponse.next({
     request,
   });
@@ -69,6 +76,7 @@ export async function updateSession(request: NextRequest) {
           request.nextUrl.pathname,
           guestSurveyIds,
           getViewOnlySurveyIds(user.id),
+          getViewOnlyPreviewSurveyIds(user.id),
         );
         if (dest) {
           const url = request.nextUrl.clone();
@@ -88,10 +96,11 @@ export async function updateSession(request: NextRequest) {
           return redirectWithSessionCookies(url, supabaseResponse);
         }
       } else if (isLoginPage) {
-        // 이미 로그인된 관리자가 로그인 페이지에 접근하는 경우
-        const url = request.nextUrl.clone();
-        url.pathname = '/admin/surveys';
-        return redirectWithSessionCookies(url, supabaseResponse);
+        // 이미 로그인된 관리자가 로그인 페이지에 접근하는 경우 — 화면이 잠깐 세션을 잃어
+        // 로그인으로 보냈던 것이면(redirect 파라미터) 원래 화면으로 돌려보낸다.
+        const back = sanitizeInternalPath(request.nextUrl.searchParams.get('redirect'));
+        const target = back && !back.startsWith('/admin/login') ? back : '/admin/surveys';
+        return redirectWithSessionCookies(new URL(target, request.url), supabaseResponse);
       }
     }
   }

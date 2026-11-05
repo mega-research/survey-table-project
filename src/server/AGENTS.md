@@ -12,6 +12,8 @@
   - **`authed`** — 세션 + `ADMIN_USER_IDS` allowlist. grant-first: 게스트 유저는 allowlist fail-open 여부와 무관하게 FORBIDDEN.
   - **`scoped`** — 세션 + (admin allowlist ∨ 게스트 grant). **이 베이스를 쓰는 procedure는 핸들러 첫 줄에서 `assertSurveyAccess(context.user.id, input.surveyId)` 호출 필수** (유일한 예외: surveyId가 없는 `media.deleteMailAttachmentTmp`). **쓰기 procedure 는 `assertSurveyAccess` 대신 `assertSurveyWriteAccess`** 를 부른다 — 보기만 하는 게스트(`VIEW_ONLY_GUEST_GRANTS`)를 거부한다. 그 게스트의 화면 차단(미들웨어)은 `/api/rpc` 에 걸리지 않아 직접 요청을 막지 못한다(2026-11-03 발견). 새 scoped procedure 는 `orpc-scoped-write-guard.test.ts` 가 소스로 읽어 읽기면 목록 등재를, 쓰기면 이 확인을 요구한다.
 - 게스트 계정: `GUEST_SURVEY_GRANTS="<userId>:<surveyId>[,...]"` env로 설문 단위 위임 (한 유저가 복수 설문 grant 가능). 무권한 설문 콘솔 진입 시 강제 로그아웃 → 로그인 후 원래 목적지 복귀 (`lib/auth/guest-grants.ts`).
+- 보기 전용 게스트(`VIEW_ONLY_GUEST_GRANTS`)는 설문 보기(preview)도 막힌다 — grant 에 `allowPreview` 를 켠 고객 계정만 연다(dairy@ 유가공업). guest9(인공지능 실태조사)는 협업 업체 사정으로 막아 둔다.
+- 화면(RSC)이 세션을 확인할 때는 `requireAuth` 가 아니라 `lib/auth/require-page-user` 의 `requirePageUser` 를 쓴다 — 미들웨어를 통과한 뒤 렌더 중 세션을 잃으면 오류 화면 대신 원래 경로(미들웨어가 싣는 `x-request-path`)를 실어 로그인으로 보낸다. 게스트 판정(`guest-viewer`)·`requireAdminPage` 가 이것을 거친다. Route Handler·procedure 는 401 이 맞으니 `requireAuth` 그대로.
 - allowlist 미설정이면 fail-open(인증된 모든 유저 통과) + 최초 1회 경고. 게스트 콘솔은 전역 테스트 모드와 무관하게 항상 실데이터를 본다.
 
 ## 테스트 모드

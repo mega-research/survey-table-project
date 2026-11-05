@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   canAccessSurvey,
+  canViewOnlyGuestPreview,
   getGuestSurveyIds,
+  getViewOnlyPreviewSurveyIds,
   getViewOnlySurveyIds,
   guestPathRedirect,
   guestPostLoginRedirect,
@@ -177,6 +179,46 @@ describe('보기만 하는 게스트 grant', () => {
     const DAIRY_2026 = '24b15972-36fe-400a-adfe-7d4c80438204';
     vi.stubEnv('GUEST_SURVEY_GRANTS', `${CLIENT1}:${DAIRY_2026}`);
     expect(isViewOnlyGuest(CLIENT1, DAIRY_2026)).toBe(true);
+  });
+
+  it('설문 보기를 허용한 보기 전용 grant 는 설문 보기만 더 열린다(dairy@, 2026-11-05)', () => {
+    const DAIRY = '75060289-51b4-44e7-8fd1-dabf73a0bfaf';
+    const DAIRY_2026 = '24b15972-36fe-400a-adfe-7d4c80438204';
+    const dairyBase = `/admin/surveys/${DAIRY_2026}/operations`;
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `${DAIRY}:${DAIRY_2026}`);
+    const grants = getGuestSurveyIds(DAIRY);
+    const only = getViewOnlySurveyIds(DAIRY);
+    const previewOk = getViewOnlyPreviewSurveyIds(DAIRY);
+    expect(previewOk).toEqual([DAIRY_2026]);
+    expect(canViewOnlyGuestPreview(DAIRY, DAIRY_2026)).toBe(true);
+
+    expect(
+      guestPathRedirect(`/admin/surveys/${DAIRY_2026}/preview`, grants, only, previewOk),
+    ).toBeNull();
+    expect(
+      guestPostLoginRedirect(`/admin/surveys/${DAIRY_2026}/preview`, grants, only, previewOk),
+    ).toBe(`/admin/surveys/${DAIRY_2026}/preview`);
+    // 보기 전용의 나머지 제한은 그대로
+    expect(guestPathRedirect(`${dairyBase}/report`, grants, only, previewOk)).toBe(
+      `${dairyBase}/overview`,
+    );
+    expect(guestPathRedirect(`${dairyBase}/profiles/r1/edit`, grants, only, previewOk)).toBe(
+      `${dairyBase}/overview`,
+    );
+  });
+
+  it('guest9 의 인공지능 실태조사는 협업 업체 사정으로 설문 보기가 계속 막힌다', () => {
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `${GUEST9}:${AI_2026_PUBLIC}`);
+    expect(getViewOnlyPreviewSurveyIds(GUEST9)).toEqual([]);
+    expect(canViewOnlyGuestPreview(GUEST9, AI_2026_PUBLIC)).toBe(false);
+    expect(
+      guestPathRedirect(
+        `/admin/surveys/${AI_2026_PUBLIC}/preview`,
+        [AI_2026_PUBLIC],
+        [AI_2026_PUBLIC],
+        getViewOnlyPreviewSurveyIds(GUEST9),
+      ),
+    ).toBe(overview);
   });
 
   it('응답 현황·응답 내역 목록 밖의 콘솔 화면과 설문 보기는 응답 현황으로 돌려보낸다', () => {

@@ -1,7 +1,7 @@
 import { cache } from 'react';
 
-import { requireAuth } from '@/lib/auth';
-import { isGuestUser, isViewOnlyGuest } from '@/lib/auth/guest-grants';
+import { canViewOnlyGuestPreview, isGuestUser, isViewOnlyGuest } from '@/lib/auth/guest-grants';
+import { requirePageUser } from '@/lib/auth/require-page-user';
 
 /**
  * 현재 세션이 설문 단위 게스트(grant 보유자)인지 판정하는 서버 전용 헬퍼.
@@ -18,8 +18,8 @@ async function loadIsGuestViewer(): Promise<boolean> {
   // getCurrentUser 는 supabase 에러를 삼키고 null 을 돌려주는데, null 을 "게스트 아님"
   // 으로 해석하면 일시적 auth 장애가 게스트를 어드민 스코프로 흘려보낸다. 호출부는
   // 모두 미들웨어·procedure 인증을 통과한 뒤라 세션이 반드시 있으므로 fail-closed 로
-  // requireAuth 를 쓴다.
-  const user = await requireAuth();
+  // 세션을 요구한다 — 그 사이 세션이 사라졌으면 오류 대신 로그인으로 보낸다(requirePageUser).
+  const user = await requirePageUser();
   return isGuestUser(user.id);
 }
 
@@ -31,8 +31,20 @@ export const isGuestViewer = cache(loadIsGuestViewer);
  * 다른 화면 경로 차단은 미들웨어(guestPathRedirect)가 맡는다.
  */
 async function loadIsViewOnlyViewer(surveyId: string): Promise<boolean> {
-  const user = await requireAuth();
+  const user = await requirePageUser();
   return isViewOnlyGuest(user.id, surveyId);
 }
 
 export const isViewOnlyViewer = cache(loadIsViewOnlyViewer);
+
+/**
+ * 현재 세션이 이 설문의 설문 보기(preview)를 열 수 있는가 — 보기 전용 게스트는 `allowPreview`
+ * grant 일 때만 연다. 운영 콘솔 헤더의 「설문 보기」 버튼 분기용이고 경로 차단은 미들웨어가 맡는다.
+ */
+async function loadCanOpenSurveyPreview(surveyId: string): Promise<boolean> {
+  const user = await requirePageUser();
+  if (!isViewOnlyGuest(user.id, surveyId)) return true;
+  return canViewOnlyGuestPreview(user.id, surveyId);
+}
+
+export const canOpenSurveyPreview = cache(loadCanOpenSurveyPreview);

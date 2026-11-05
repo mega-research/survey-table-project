@@ -6,7 +6,7 @@ import { db } from '@/db';
 import { surveyDocuments } from '@/db/schema';
 import { OperationsPageHeader } from '@/features/operations/operations-page-header';
 import { OperationsTabStrip } from '@/features/operations/operations-tab-strip';
-import { isGuestViewer, isViewOnlyViewer } from '@/lib/auth/guest-viewer';
+import { canOpenSurveyPreview, isGuestViewer, isViewOnlyViewer } from '@/lib/auth/guest-viewer';
 import { getControlState } from '@/server/operations/services/control';
 import { getSurveyById } from '@/server/survey-builder/services/survey-read';
 
@@ -26,10 +26,11 @@ export default async function OperationsLayout({ children, params }: LayoutProps
   const { id: surveyId } = await params;
   const survey = await getSurveyById(surveyId);
   if (!survey || survey.deletedAt) notFound();
-  const [control, isGuest, viewOnly, documentRows] = await Promise.all([
+  const [control, isGuest, viewOnly, showPreview, documentRows] = await Promise.all([
     getControlState(surveyId),
     isGuestViewer(),
     isViewOnlyViewer(surveyId),
+    canOpenSurveyPreview(surveyId),
     // 조사표가 붙은 설문에서만 '문항 수요' 탭을 낸다 — 다른 설문에는 쓸 일이 없다.
     db
       .select({ id: surveyDocuments.id })
@@ -46,7 +47,7 @@ export default async function OperationsLayout({ children, params }: LayoutProps
         surveyId={surveyId}
         surveyTitle={survey.title}
         isGuest={isGuest}
-        viewOnly={viewOnly}
+        showPreview={showPreview}
         control={control}
       />
       <OperationsTabStrip

@@ -9,9 +9,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const notFound = vi.fn(() => {
   throw new Error('NEXT_NOT_FOUND');
 });
+const redirect = vi.fn((to: string) => {
+  throw new Error(`NEXT_REDIRECT ${to}`);
+});
 const requireAuth = vi.fn();
 
-vi.mock('next/navigation', () => ({ notFound }));
+vi.mock('next/navigation', () => ({ notFound, redirect }));
+vi.mock('next/headers', () => ({
+  headers: async () => new Headers({ 'x-request-path': '/admin/surveys/s1/analytics' }),
+}));
 vi.mock('@/lib/auth', () => ({ requireAuth }));
 
 async function loadGuard() {
@@ -53,11 +59,13 @@ describe('requireAdminPage', () => {
     expect(notFound).not.toHaveBeenCalled();
   });
 
-  it('미인증이면 requireAuth 가 먼저 막는다', async () => {
+  it('미인증이면 오류 대신 원래 경로를 실어 로그인으로 보낸다', async () => {
     requireAuth.mockRejectedValue(new Error('인증이 필요합니다.'));
 
     const requireAdminPage = await loadGuard();
-    await expect(requireAdminPage()).rejects.toThrow('인증이 필요합니다.');
+    await expect(requireAdminPage()).rejects.toThrow(
+      `NEXT_REDIRECT /admin/login?redirect=${encodeURIComponent('/admin/surveys/s1/analytics')}`,
+    );
     expect(notFound).not.toHaveBeenCalled();
   });
 });

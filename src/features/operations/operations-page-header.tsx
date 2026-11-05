@@ -13,8 +13,8 @@ interface Props {
   surveyTitle: string;
   /** 게스트(설문 단위 grant) 세션 — 설문 편집 등 admin 전용 버튼을 숨긴다. */
   isGuest: boolean;
-  /** 보기만 하는 게스트 — 설문 보기 버튼도 숨긴다. */
-  viewOnly?: boolean;
+  /** 「설문 보기」 버튼을 낼지 — 설문 보기를 허용하지 않은 보기 전용 게스트면 false. */
+  showPreview?: boolean;
   control: {
     isPaused: boolean;
     pausedMessage: string | null;
@@ -38,7 +38,7 @@ export function OperationsPageHeader({
   surveyId,
   surveyTitle,
   isGuest,
-  viewOnly = false,
+  showPreview = true,
   control,
 }: Props) {
   return (
@@ -67,7 +67,7 @@ export function OperationsPageHeader({
           <RefreshButton />
           {/* 설문 중단·테스트 모드는 어드민 전용 — 게스트에게는 렌더하지 않는다 */}
           {!isGuest && <SurveyControlButtons surveyId={surveyId} initial={control} />}
-          {!viewOnly && (
+          {showPreview && (
             <Link href={`/admin/surveys/${surveyId}/preview`}>
               <Button variant="outline" size="sm">
                 <Eye className="mr-2 h-4 w-4" />

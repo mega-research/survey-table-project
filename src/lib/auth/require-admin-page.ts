@@ -1,10 +1,9 @@
-import 'server-only';
-
 import { notFound } from 'next/navigation';
 
-import { requireAuth } from '@/lib/auth';
+import 'server-only';
 
 import { isAdminUserAllowed } from './admin-allowlist';
+import { requirePageUser } from './require-page-user';
 
 /**
  * admin 전용 RSC 페이지 진입 가드.
@@ -21,7 +20,7 @@ import { isAdminUserAllowed } from './admin-allowlist';
  * 존재 여부를 노출하지 않도록 거부는 notFound() 로 처리한다.
  */
 export async function requireAdminPage() {
-  const user = await requireAuth();
+  const user = await requirePageUser();
   if (!isAdminUserAllowed(user.id)) {
     notFound();
   }

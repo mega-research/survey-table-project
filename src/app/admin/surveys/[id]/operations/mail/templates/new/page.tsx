@@ -1,6 +1,6 @@
 import { TemplateEditForm } from '@/features/operations/mail-template/template-edit-form';
+import { requirePageUser } from '@/lib/auth/require-page-user';
 import { getVariableCatalog } from '@/server/read-models/variable-catalog';
-import { requireAuth } from '@/lib/auth';
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -10,13 +10,15 @@ export default async function NewMailTemplatePage({ params }: Props) {
   const { id: surveyId } = await params;
   const fromDomain = process.env['RESEND_FROM_DOMAIN'] ?? '';
   const catalog = await getVariableCatalog(surveyId);
-  const user = await requireAuth();
+  const user = await requirePageUser();
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-8">
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight text-gray-900">새 메일 템플릿</h1>
-        <p className="mt-1 text-sm text-gray-500">조사 대상 목록에 발송할 메일 템플릿을 작성합니다.</p>
+        <p className="mt-1 text-sm text-gray-500">
+          조사 대상 목록에 발송할 메일 템플릿을 작성합니다.
+        </p>
       </div>
       <TemplateEditForm
         surveyId={surveyId}
