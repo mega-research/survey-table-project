@@ -260,8 +260,10 @@ export function TokenWarningPanel({ questions, groups, lookups, thankYouMessage,
         }
       }
     }
+    // 응답 인용 {{{이름}}} 은 다른 채널이다 — 걷어 내지 않으면 컨택 패턴 `[^}]+` 가 여는 중괄호를 삼켜
+    // 「{q1_etc1」 같은 가짜 컨택 키로 센다(2026-11-05 유가공업 문2 오경고). 인용은 아래 경고들이 따로 본다.
     // 설문 전체 텍스트(수만 소스 가능)라 spread 금지 — 배열 그대로 전달 (Sentry 7665334735)
-    const usedKeys = extractVariableKeys(sources);
+    const usedKeys = extractVariableKeys(sources.map((text) => text.replace(QUOTE_TOKEN_PATTERN, '')));
     return usedKeys.filter((k) => !knownKeys.has(k));
   }, [questions, knownKeys, catalog]);
 
