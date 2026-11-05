@@ -44,6 +44,11 @@ const PASS: Array<[InputFormat, string, string]> = [
   ['phone', '1644-1234', '1644-1234'],
   ['phone', '1688-1234', '1688-1234'],
   ['phone', '1599-1234', '1599-1234'],
+  // 수신자 부담 080 · 안심번호 050X
+  ['phone', '0801234567', '080-123-4567'],
+  ['phone', '08012345678', '080-1234-5678'],
+  ['phone', '05051234567', '0505-123-4567'],
+  ['phone', '050212345678', '0502-1234-5678'],
   // 사업자번호 — 자릿수만 맞으면 통과한다(ENFORCE_CHECKSUM=false, 2026-09-09)
   ['biz_number', '1248100998', '124-81-00998'],
   ['biz_number', '124-81-00998', '124-81-00998'],
@@ -87,7 +92,13 @@ const FAIL: Array<[InputFormat, string, string]> = [
   ['mobile', '010일이삼사', 'not_a_number'],
   // 전화 — 지역번호·식별번호 어디에도 없음
   ['phone', '1700-1234', 'unknown_prefix'],
-  ['phone', '0801234567', 'unknown_prefix'],
+  ['phone', '0501-123-4567', 'unknown_prefix'],
+  ['phone', '0505-12-3456', 'wrong_length'],
+  // 대표번호 앞에 다른 번호를 붙임 — 대표번호는 앞 번호 없이 쓴다
+  ['phone', '080-1544-1234', 'representative_with_prefix'],
+  ['phone', '0505-1588-1234', 'representative_with_prefix'],
+  ['phone', '02-1588-1234', 'representative_with_prefix'],
+  ['phone', '031-1644-1234', 'representative_with_prefix'],
   ['phone', '1588-123', 'wrong_length'],
   ['phone', '1588-12345', 'wrong_length'],
   ['phone', '0091234567', 'unknown_prefix'],
@@ -193,6 +204,9 @@ describe('formatFailureMessage', () => {
     );
     expect(formatFailureMessage('date', 'malformed')).toBe(formatFailureMessage('date', 'wrong_length'));
     expect(formatFailureMessage('date', 'not_a_number')).toBe('날짜는 숫자로 입력해 주세요');
+    expect(formatFailureMessage('phone', 'representative_with_prefix')).toBe(
+      '15xx·16xx·18xx 대표번호는 앞에 다른 번호 없이 입력해 주세요',
+    );
   });
 
   it('같은 사유라도 형식이 다르면 문구가 다르다', () => {

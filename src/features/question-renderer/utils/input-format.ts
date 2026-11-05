@@ -24,7 +24,8 @@ export type FormatFailure =
   | 'checksum_mismatch'
   | 'malformed' // 이메일 구조 불량
   | 'non_ascii' // 이메일에 한글·전각 등 ASCII 밖 글자
-  | 'invalid_date'; // 날짜 모양은 맞는데 달력에 없는 날(13월·2월 30일) 또는 범위 밖 연도
+  | 'invalid_date' // 날짜 모양은 맞는데 달력에 없는 날(13월·2월 30일) 또는 범위 밖 연도
+  | 'representative_with_prefix'; // 대표번호(15xx·16xx·18xx) 앞에 지역번호·080 등을 붙임
 
 export type ParseResult = { ok: true; normalized: string } | { ok: false; reason: FormatFailure };
 
@@ -35,10 +36,8 @@ export type ParseResult = { ok: true; normalized: string } | { ok: false; reason
 const MOBILE_PREFIXES = ['010', '011', '016', '017', '018', '019'] as const;
 
 /**
- * 유선 지역번호 3자리 + 인터넷전화(070). 서울(02)은 2자리라 따로 본다.
- * 안심번호(050x)는 **일부러 뺐다** — 자릿수·형태가 제각각이라 정규형을 정할 수 없다. 수신자 부담(080)은
- * 사업체 전화로 받지 않기로 했다(2026-11-05). 담당자가 정당한 예외로 넣어야 할 값은 관리자 편집에서 경고로
- * 통과한다. 대표번호는 아래 따로 본다.
+ * 유선 지역번호 3자리 + 인터넷전화(070) + 수신자 부담(080). 서울(02)은 2자리, 안심번호(050X)는
+ * 4자리라 따로 본다. 대표번호는 아래 따로 본다.
  */
 const LANDLINE_AREA_CODES = [
   '031',
@@ -58,7 +57,11 @@ const LANDLINE_AREA_CODES = [
   '063',
   '064', // 전남·광주·전북·제주
   '070', // 인터넷전화
+  '080', // 수신자 부담
 ] as const;
+
+/** 안심번호 0502~0508 — 4자리 식별번호 + 3·4자리 국번 + 4자리 */
+const SAFE_NUMBER_PREFIX = /^050[2-8]/;
 
 /**
  * 전국 대표번호(1588·1544·1600·1899 …) — 지역번호 없이 앞 4자리 + 뒤 4자리, 늘 8자리다.
@@ -95,17 +98,27 @@ function parseMobile(digits: string): ParseResult {
   return { ok: true, normalized: `${prefix}-${splitSubscriber(rest)}` };
 }
 
+function isRepresentative(digits: string): boolean {
+  return REPRESENTATIVE_PREFIXES.some((p) => digits.startsWith(p));
+}
+
 function parsePhone(digits: string): ParseResult {
   if (MOBILE_PREFIXES.some((p) => digits.startsWith(p))) return parseMobile(digits);
-  if (REPRESENTATIVE_PREFIXES.some((p) => digits.startsWith(p))) {
+  if (isRepresentative(digits)) {
     if (digits.length !== 8) return { ok: false, reason: 'wrong_length' };
     return { ok: true, normalized: `${digits.slice(0, 4)}-${digits.slice(4)}` };
   }
   const area = digits.startsWith('02')
     ? '02'
-    : LANDLINE_AREA_CODES.find((c) => digits.startsWith(c));
+    : SAFE_NUMBER_PREFIX.test(digits)
+      ? digits.slice(0, 4)
+      : LANDLINE_AREA_CODES.find((c) => digits.startsWith(c));
   if (!area) return { ok: false, reason: 'unknown_prefix' };
   const rest = digits.slice(area.length);
+  // 080-1544-1234 처럼 대표번호 앞에 번호를 붙인 값 — 국번은 1 로 시작하지 않으니 정당한 번호가 아니다
+  if (rest.length === 8 && isRepresentative(rest)) {
+    return { ok: false, reason: 'representative_with_prefix' };
+  }
   if (rest.length !== 7 && rest.length !== 8) return { ok: false, reason: 'wrong_length' };
   return { ok: true, normalized: `${area}-${splitSubscriber(rest)}` };
 }
@@ -355,6 +368,9 @@ export function formatFailureMessage(
     case 'invalid_date':
       // 날짜만 나는 사유다(`parseDate`)
       return systemText('format.invalidDate', locale);
+    case 'representative_with_prefix':
+      // 전화만 나는 사유다(`parsePhone`)
+      return systemText('format.representativeWithPrefix', locale);
   }
 }
 
