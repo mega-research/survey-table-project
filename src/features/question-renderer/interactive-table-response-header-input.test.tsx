@@ -120,6 +120,28 @@ describe('머리글 입력칸 — 데스크톱 표', () => {
     expect(screen.getAllByRole('button', { name: '기타 원료 추가' })).toHaveLength(1);
   });
 
+  it('입력칸의 칸 글자(「기타」 왼쪽 배치)도 머리글 안에 함께 선다', () => {
+    const labeled = headerInputRows.map((row) =>
+      row.id === 'r-name'
+        ? { ...row, cells: row.cells.map((c) => (c.id === 'name1' ? { ...c, content: '기타', textPosition: 'left' as const } : c)) }
+        : row,
+    );
+    render(
+      <InteractiveTableResponse
+        questionId="q1"
+        columns={headerInputColumns}
+        rows={labeled}
+        tableHeaderGrid={headerInputGrid()}
+        value={{}}
+        onChange={() => {}}
+        enableSticky={false}
+      />,
+    );
+    const header = document.querySelector('[role="columnheader"][data-cell-id="name1"]') as HTMLElement;
+    expect(within(header).getByText('기타')).toBeInTheDocument();
+    expect(within(header).getByPlaceholderText('원료명(직접작성)')).toBeInTheDocument();
+  });
+
   it('필수 미응답이면 머리글 칸에 오류 링이 선다', () => {
     render(<Harness errorCellIds={new Set(['name1'])} />);
     const header = document.querySelector('[role="columnheader"][data-cell-id="name1"]')!;
