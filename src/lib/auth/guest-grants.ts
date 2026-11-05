@@ -135,12 +135,23 @@ export function isForeignSurveyConsolePath(
   return surveyId !== undefined && !grantedSurveyIds.includes(surveyId);
 }
 
+/** 정찰용 가짜 출처 — 경로를 이 출처 기준으로 해석해 출처가 바뀌는지 본다. */
+const INTERNAL_PATH_PROBE_ORIGIN = 'http://internal.invalid';
+
 /**
  * open redirect 방지 — 같은 출처 내부 절대경로만 통과, 그 외 null.
- * ('//', '/\\' 는 protocol-relative 외부 URL 우회 차단)
+ *
+ * 문자열 앞머리만 보면 뚫린다: URL 해석은 탭·개행을 지우고 역슬래시를 슬래시로 읽어
+ * `/\t/evil.example` 이 `//evil.example` 이 된다(2026-11-05 Codex 리뷰 재현). 그래서 제어문자와
+ * 역슬래시를 통째로 거부하고, 실제로 해석해 출처가 그대로인지 한 번 더 본다.
+ * 로그인 액션·로그아웃 라우트·미들웨어·requirePageUser 가 모두 이 함수로 거른다.
  */
 export function sanitizeInternalPath(raw: string | null | undefined): string | null {
-  if (!raw || !raw.startsWith('/') || raw.startsWith('//') || raw.startsWith('/\\')) {
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//')) return null;
+  if (/[\u0000-\u001F\u007F\\]/.test(raw)) return null;
+  try {
+    if (new URL(raw, INTERNAL_PATH_PROBE_ORIGIN).origin !== INTERNAL_PATH_PROBE_ORIGIN) return null;
+  } catch {
     return null;
   }
   return raw;

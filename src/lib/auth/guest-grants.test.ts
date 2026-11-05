@@ -13,6 +13,7 @@ import {
   isGuestUser,
   isViewOnlyGuest,
   parseGuestGrants,
+  sanitizeInternalPath,
 } from '@/lib/auth/guest-grants';
 
 afterEach(() => vi.unstubAllEnvs());
@@ -316,5 +317,46 @@ describe('isForeignSurveyConsolePath', () => {
     expect(isForeignSurveyConsolePath('/admin', grants)).toBe(false);
     expect(isForeignSurveyConsolePath('/admin/surveys', grants)).toBe(false);
     expect(isForeignSurveyConsolePath('/admin/surveys/other/edit', grants)).toBe(false);
+  });
+});
+
+describe('sanitizeInternalPath', () => {
+  it('같은 출처 내부 경로는 쿼리·해시와 함께 그대로 통과한다', () => {
+    for (const path of [
+      '/admin/surveys',
+      '/admin/surveys/s1/preview?x=1&y=%2F%2F',
+      '/admin/surveys/s1/operations/profiles#row',
+    ]) {
+      expect(sanitizeInternalPath(path)).toBe(path);
+    }
+  });
+
+  it('비었거나 상대 경로·절대 URL·protocol-relative 는 거부한다', () => {
+    for (const raw of [
+      null,
+      undefined,
+      '',
+      'admin',
+      'https://evil.example',
+      '//evil.example',
+      '/\\evil.example',
+    ]) {
+      expect(sanitizeInternalPath(raw)).toBeNull();
+    }
+  });
+
+  it('URL 해석이 지우는 탭·개행이나 역슬래시로 외부 호스트를 만드는 우회를 거부한다', () => {
+    for (const raw of [
+      '/\t/evil.example/signin',
+      '/\n/evil.example',
+      '/\r\n/evil.example',
+      '/\t\\evil.example',
+      '\t//evil.example',
+      '/x\\..\\..\\evil',
+      '/\u0000/evil.example',
+      '/\u007f/evil.example',
+    ]) {
+      expect(sanitizeInternalPath(raw)).toBeNull();
+    }
   });
 });
