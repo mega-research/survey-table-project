@@ -16,6 +16,7 @@ import { describe, expect, it } from 'vitest';
 const ROOT = process.cwd();
 const ROOT_LIMIT = 45_000;
 const AREA_LIMIT = 30_000;
+const CAUTION_ITEM_LIMIT = 1_500;
 
 function areaDocs(dir = path.join(ROOT, 'src')): string[] {
   const found: string[] = [];
@@ -42,6 +43,28 @@ describe('에이전트 문서 크기', () => {
       size,
       `루트 AGENTS.md 가 ${size}자다. 새 상세 절은 그 코드 옆 영역 문서(src/**/AGENTS.md)로 옮기고 루트 "문서 지도"에 한 줄만 둘 것`,
     ).toBeLessThanOrEqual(ROOT_LIMIT);
+  });
+
+  it(`루트 주의사항 항목은 하나에 ${CAUTION_ITEM_LIMIT.toLocaleString()}자를 넘지 않는다`, () => {
+    // 전체 상한만 있으면 기능 커밋이 한 문장씩 덧붙여 한 항목이 영역 문서 분량이 된다 —
+    // 2026-11-03 분리 직후에도 주의사항 4(행 반복)가 11번 덧붙어 2,300자, 14(문항 가시성)가 4,100자였다.
+    const root = readFileSync(path.join(ROOT, 'AGENTS.md'), 'utf8');
+    const section = root.split(/\n## 주의사항\n/)[1]?.split(/\n## /)[0] ?? '';
+    const items = section.split(/\n(?=\d+\. \*\*)/).filter((s) => /^\d+\. \*\*/.test(s));
+    expect(
+      items.length,
+      '주의사항 항목을 하나도 못 찾았다 — 제목·번호 모양이 바뀌었나',
+    ).toBeGreaterThan(10);
+    const over = items
+      .map((s) => ({
+        head: s.slice(0, s.indexOf('**', s.indexOf('**') + 2) + 2),
+        size: [...s].length,
+      }))
+      .filter((it) => it.size > CAUTION_ITEM_LIMIT);
+    expect(
+      over,
+      '상세를 그 코드 옆 영역 문서(src/**/AGENTS.md)로 옮기고 루트에는 규칙 한두 문장과 문서 위치만 둘 것',
+    ).toEqual([]);
   });
 
   it.each(AREA_DOCS)(`%s 는 ${AREA_LIMIT.toLocaleString()}자를 넘지 않는다`, (rel) => {

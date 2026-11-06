@@ -64,6 +64,14 @@
 - 검증 문구 자리표시자: 저작자 문구(합계 제약 `errorMessage` · 셀 수식 검증 `formulaErrorMessage` · 계산 칸 `calcValidation.errorMessage`)에 `{현재값}`·`{기준값}` 을 쓰면 검증에 쓴 실제 숫자로 바뀐다(`fillMessageValues`, numeric-validation). 쓰지 않으면 값은 드러나지 않는다 — 기준값 미노출은 기본 문구와 자리표시자 없는 문구에서 그대로다
 - 차단 검증과 분기 규칙은 분리된 개념 — `docs/adr/0013-blocking-validation-separate-from-branch-rules.md` 참조
 
+### 행 반복과 차례로 열기
+
+> 루트 AGENTS.md 주의사항 4에서 옮겨 왔다. 표 문항의 JSONB 필드 목록과 「choice 응답값은 `cell.id`」 규칙은 루트에 남아 있다.
+
+**행 차례로 열기**(`stagedRowsConfig`, 0132, ADR 0028)는 행 반복과 다른 기능이다 — 구조를 펼치지 않고 가시성만 정하며 내보내기 열은 늘 나간다. 열린 행 수와 필수 범위는 저장하지 않고 값에서 파생한다(`features/question-renderer/utils/staged-rows.ts` 의 `deriveOpenStagedCount`). 응답 화면과 검증은 `resolveStagedRows` 로 구조가 성립할 때만 동작시킨다. 묶음에 넣을 수 없는 행·버튼 줄 배치는 CONTEXT.md 「행 차례로 열기」.
+
+**행 반복**(`rowRepeatConfig`)은 동적 행 그룹과 다른 기능이다 — 저쪽은 빌더가 만들어 둔 행 풀에서 응답자가 고르는 것이고, 이쪽은 같은 모양의 칸을 원하는 벌 수만큼(최대 30, 기본 20) 반복하는 것이다. 설정은 분리하고 렌더 파이프라인(`use-dynamic-rows`)만 공유한다. 구조에는 저장 시점에 최대 벌까지 **실제로 펼쳐 둔다**(`lib/question/row-repeat.ts` 의 `expandRepeatRows`) — 응답값 키가 발행 스냅샷 안의 `cell.id` 로 유지되어 저장 경계·초안·이월 임포트·관리자 편집이 전부 무변경이다. **펼치기는 멱등**이어야 한다(이미 있는 벌은 행·셀 id 를 그대로 두고 템플릿 구조 변경만 전파). 표에 반복 블록을 켜면 그 표의 `rowCode` 를 **명시 발번**한다 — `buildTableCellVarName` 의 제로패딩 자릿수가 `rows.length` 기준이라 20벌로 펼치는 순간 같은 표의 비반복 행 변수명이 `r1` → `r01` 로 통째 바뀌기 때문이다. 내보내기는 모수 전체를 1회 스캔해(`lib/analytics/row-repeat-usage.ts`) 아무도 채우지 않은 뒤쪽 벌의 열을 뺀다(설문 전체 기준 — 분할 파일 간 열 구성이 갈리지 않도록). 필수 검증은 1벌만 본다 — 「적기 시작한 벌도 필수」(`requireStartedBundles`)를 켜면 값이 하나라도 든 벌도 본다(빈 채로 열어 둔 벌은 막지 않는다). 1벌 칸으로 만든 합계·칸 수 제약에 `perRepeatBundle` 을 달면 1벌과 적기 시작한 벌마다 복제해 검사한다(`resolveBundleSumConstraints` — 「원료 투입량 한 칸 이상」). 블록에는 입력·선택(드롭다운)·라디오·체크박스·글자 칸만 넣는다(`validateRowRepeatTemplate`). 복제 벌의 보기 id 는 템플릿 보기 id 에 벌 번호를 붙여 파생한다(`bundleOptionId`) — 상세 기재가 `__optTexts__[문항][보기 id]` 라 그대로 복사하면 한 벌의 「기타」 입력이 다른 벌을 덮는다. 라디오 묶음 이름도 같은 식으로 가른다(`bundleRadioGroupName`) — 내보내기가 표 전체에서 같은 이름을 변수 하나로 합친다. 단 한 행 안의(가로) 묶음만 넣을 수 있다 — 세로 묶음은 변수명이 `문항_열코드` 라 벌마다 겹친다. 1벌에 직접 지정한 엑셀 라벨은 복제 벌에 벌 번호를 붙여 잇는다(「연도」→「연도 ②」). 「변수명을 줄 번호로」(`rowRepeatConfig.flatRowCodes`, 기본 꺼짐)를 켜면 틀이 1줄인 반복의 벌을 `r01_01`·`r01_02` 대신 `r01`·`r02` …로 짓는다 — 미리 만든 행 표(행 차례로 열기)에서 바꿔도 변수명이 그대로다. 틀이 2줄 이상이거나, 다른 행 코드와 겹치거나, 밑동이 `_두 자리`로 끝나면(r_01 — 벌 접미와 구별되지 않아 다시 펼칠 때 잘린다) 무시한다(`canUseFlatRowCodes`). 같은 결로 열에는 「안 쓰면 내보내기에서 빼기」(`TableColumn.exportOmitIfUnused`)가 있다 — 응답 전체에서 아무도 안 채운 열의 변수를 내지 않는다(`lib/analytics/unused-column-usage`, CONTEXT.md 「안 쓴 열 빼기」). 화면에서 열을 `+` 로 하나씩 여는 것은 「열 차례로 열기」(`TableColumn.revealStep`, `features/question-renderer/utils/staged-columns`)다.
+
 ## 다국어 설문
 
 같은 링크 하나로 한국어·中文·English 조사표를 받고, 언어판끼리 같은 변수명으로 한 데이터 파일에 합친다(2026-10-27, ADR 0034 · PRD `.scratch/multilingual-survey/PRD.md` · CONTEXT.md 「다국어 설문」). **다국어 아닌 설문은 화면 글자·변수명·내보내기 열이 한 글자도 바뀌지 않는다** — 그것이 반목표 1번이고, 모든 `locale` 인자의 기본값이 `'ko'` 인 이유다. 관리자 화면(빌더·콘솔·관리자 응답 수정)은 다국어화하지 않는다.
