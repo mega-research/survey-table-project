@@ -12,6 +12,9 @@ import { stagedColumnOptionalCellIds } from '@/features/question-renderer/utils/
 import { stagedOptionalCellIds } from '@/features/question-renderer/utils/staged-rows';
 import {
   applyRepeatBlockCondition,
+  cellIdsOfBundlesBeyond,
+  deriveOpenRepeatCount,
+  isRowRepeatActive,
   repeatStartsCollapsed,
   resolveBundleSumConstraints,
   startedRepeatBundles,
@@ -49,7 +52,7 @@ import {
   priorOptionText,
 } from '@/lib/survey/prior-answers';
 import { isInputFormat } from '@/types/input-type';
-import type { Question, SumConstraint, SurveyLookup, TableCell } from '@/types/survey';
+import type { Question, SumConstraint, SurveyLookup, TableCell, TableRow } from '@/types/survey';
 import { DEFAULT_SURVEY_LOCALE, type SurveyLocale } from '@/types/survey-locale';
 import { type BranchEvalCtx, responsesToLookupShape } from '@/utils/branch-eval';
 import {
@@ -139,6 +142,43 @@ function isEmptyCellValue(v: unknown): boolean {
 export function isRequiredCell(cell: TableCell): boolean {
   return cell.required === true || cell.requiredWhenEnabled === true;
 }
+
+/**
+ * 행·열을 통째로 거르는 숨김 장치 — `collectVisibleTableCells` 본문이 행·열 목록에서 직접 뺀다.
+ * 이름은 장치 × 차단 검증 표 테스트(`hidden-cell-validation-matrix.test.ts`)가 쓴다 — 본문에 장치를 더하면 여기에도
+ * 이름을 더할 것. 행·열째 빠지므로 모든 차단 검증에 함께 적용된다.
+ */
+export const STRUCTURAL_CELL_HIDERS = [
+  'row-display-condition',
+  'column-display-condition',
+  'dynamic-row',
+  'repeat-block-condition',
+] as const;
+export type StructuralCellHider = (typeof STRUCTURAL_CELL_HIDERS)[number];
+
+type ValueDerivedCellHider = (
+  question: Question,
+  rows: TableRow[],
+  cellValues: Record<string, unknown>,
+  ctx: NumericValidationCtx | undefined,
+) => ReadonlySet<string>;
+
+/**
+ * 값으로 정해지는 숨김 장치 — 지금 화면에 없는 칸 id 를 낸다. `collectVisibleTableCells` 가 여기 있는 장치를 **전부**
+ * 빼므로, 장치를 이 등록부에 넣으면 필수·범위·형식·합계·칸 수·계산 칸 비교 등 모든 차단 검증에서 그 칸이 빠진다.
+ * 화면에서 숨는 칸을 새로 만들면 필수 판정에만 빼지 말고 여기에 더할 것 — 행·열 차례로 열기와 접힌 첫 벌이
+ * 필수에서만 빠져 보이지 않는 칸이 「다음」을 막은 일이 세 번 있었다(2026-11-04~06). 「필수에서만 빼기」
+ * (`collectRepeatOptionalCellIds`)는 화면에 있는 칸 전용이다. 키를 더하면 표 테스트가 시나리오를 요구한다(tsc).
+ */
+export const VALUE_DERIVED_CELL_HIDERS = {
+  'staged-rows': (question, rows, cellValues) =>
+    stagedOptionalCellIds(rows, question.stagedRowsConfig, cellValues),
+  'staged-columns': (question, rows, cellValues) =>
+    stagedColumnOptionalCellIds(question.tableColumns, rows, cellValues),
+  'unopened-repeat-bundles': (question, rows, cellValues, ctx) =>
+    unopenedRepeatBundleCellIds(question, rows, cellValues, ctx),
+} satisfies Record<string, ValueDerivedCellHider>;
+export type ValueDerivedCellHiderKey = keyof typeof VALUE_DERIVED_CELL_HIDERS;
 
 /**
  * 응답자에게 실제로 "보이는" 셀 목록 — 다음을 제외한다.
@@ -231,21 +271,14 @@ export function collectVisibleTableCells(
     rows.some((row) => row.cells.some((cell) => (cell.rowspan ?? 1) > 1))
       ? recalculateRowspansForVisibleRows(rows, new Set(visibleRows.map((row) => row.id)))
       : visibleRows;
-  // 행·열 차례로 열기 — 아직 열지 않은 행·단계의 칸은 화면에 없다. 필수뿐 아니라 계산 칸 비교·범위·
-  // 합계 등 모든 차단 검증에서 빼야 보이지 않는 칸의 오류가 「다음」을 막지 않는다. 열린 범위는 값에서
-  // 파생한다(세션에서 `+` 로 연 빈 행·단계는 검증이 알 수 없고, 비어 있어 빼도 잃는 판정이 없다).
-  const stagedHidden = stagedOptionalCellIds(rows, question.stagedRowsConfig, cellValues);
-  const stagedColumnHidden = stagedColumnOptionalCellIds(question.tableColumns, rows, cellValues);
-  const collapsedHidden = collapsedFirstBundleCellIds(question, cellValues, ctx);
+  // 값으로 정해지는 숨김(행·열 차례로 열기 · 접힌 첫 벌) — 등록부의 장치를 전부 뺀다(VALUE_DERIVED_CELL_HIDERS).
+  // 열린 범위는 값에서 파생한다(세션에서 `+` 로 연 빈 행·단계는 검증이 알 수 없고, 비어 있어 빼도 잃는 판정이 없다).
+  const valueHidden = Object.values(VALUE_DERIVED_CELL_HIDERS).map((hider: ValueDerivedCellHider) =>
+    hider(question, rows, cellValues, ctx),
+  );
   return projectedRows
     .flatMap((row) => row.cells.filter((_, idx) => !hiddenColIndices.has(idx)))
-    .filter(
-      (c) =>
-        !c.isHidden &&
-        !stagedHidden.has(c.id) &&
-        !stagedColumnHidden.has(c.id) &&
-        !collapsedHidden.has(c.id),
-    );
+    .filter((c) => !c.isHidden && !valueHidden.some((hidden) => hidden.has(c.id)));
 }
 
 /**
@@ -302,29 +335,28 @@ function collectRepeatOptionalCellIds(question: Question, cellValues: Record<str
 }
 
 /**
- * 「처음엔 접어 두기」로 접힌 첫 벌의 셀 — 화면에 없는 줄이라 필수뿐 아니라 모든 차단 검증(입력 개수·합계·
- * 계산 칸 비교)에서 뺀다(행 차례로 열기의 닫힌 행과 같은 자리, collectVisibleTableCells). 적기 시작하면 접힌 게
- * 아니다(렌더러도 값이 든 벌을 연다). 펼쳐 둘 조건은 렌더러와 같은 평가기로 보고, 재료가 없으면 접힌 것으로 본다.
+ * 아직 열지 않은 반복 벌의 셀 — 응답 화면은 `max(최소 벌, 값이 든 마지막 벌)` 까지만 그린다(`use-row-repeat`). 그 뒤 벌과,
+ * 「처음엔 접어 두기」로 접힌 채 비어 있는 첫 벌은 화면에 없다. 화면과 같은 두 함수(`deriveOpenRepeatCount` ·
+ * `cellIdsOfBundlesBeyond`)로 판정한다 — 세션에서 `+` 로 연 빈 벌은 검증이 알 수 없고, 비어 있어 빼도 잃는 판정이 없다.
+ * 접힌 첫 벌만 빼던 시절, 열지 않은 2벌째 계산 칸의 비교 검증이 「다음」을 막았다(2026-11-06 표 테스트가 찾음).
+ * 펼쳐 둘 조건은 렌더러와 같은 평가기로 보고, 재료가 없으면 접힌 것으로 본다.
  */
-function collapsedFirstBundleCellIds(
+function unopenedRepeatBundleCellIds(
   question: Question,
+  rows: TableRow[],
   cellValues: Record<string, unknown>,
   ctx: NumericValidationCtx | undefined,
-): Set<string> {
-  const ids = new Set<string>();
-  const rows = question.tableRowsData ?? [];
+): ReadonlySet<string> {
+  if (!isRowRepeatActive(question.rowRepeatConfig)) return EMPTY_IDS;
   const collapsed = repeatStartsCollapsed(question.rowRepeatConfig, (condition) =>
     ctx
       ? evaluateQuestionConditionGroup(condition, ctx.allResponses, ctx.allQuestions, toBranchEvalCtx(ctx))
       : false,
   );
-  if (!collapsed || startedRepeatBundles(rows, cellValues, 1).has(1)) return ids;
-  for (const row of rows) {
-    if (row.repeatIndex !== 1) continue;
-    for (const cell of row.cells) ids.add(cell.id);
-  }
-  return ids;
+  return new Set(cellIdsOfBundlesBeyond(rows, deriveOpenRepeatCount(rows, cellValues, collapsed ? 0 : 1)));
 }
+
+const EMPTY_IDS: ReadonlySet<string> = new Set();
 
 /**
  * NumericValidationCtx → 조건 평가 컨텍스트.

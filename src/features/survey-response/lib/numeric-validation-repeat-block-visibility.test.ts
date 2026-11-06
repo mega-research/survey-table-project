@@ -95,3 +95,51 @@ describe('접힌 첫 줄은 화면에 없는 칸이다 — 필수뿐 아니라 �
   });
 });
 
+
+describe('열지 않은 반복 벌은 화면에 없다 — 계산 칸 비교도 그 벌을 보지 않는다 (2026-11-06 표 테스트가 찾음)', () => {
+  // 화면은 값이 든 마지막 벌까지만 그린다. 2벌째 계산 칸이 기준을 못 넘어도, 그 벌을 열지 않았으면 막지 않는다.
+  // 계산 칸이 벌 밖(고정 행)을 보면 빈 벌에서도 값이 나와 비교가 돈다 — 자기 벌 칸만 보면 값이 없어 원래 건너뛴다.
+  function calcTable(): Question {
+    let n = 0;
+    const config: RowRepeatConfig = { enabled: true, templateRowIds: ['tpl'], maxRepeats: 3 };
+    const rows: TableRow[] = expandRepeatRows(
+      [
+        { id: 'fixed', label: '기준', cells: [{ id: 'base', content: '', type: 'input', inputType: 'number' }] },
+        {
+          id: 'tpl',
+          label: '품목',
+          cells: [
+            { id: 'amt', content: '', type: 'input', inputType: 'number' },
+            {
+              id: 'chk',
+              content: '',
+              type: 'calc',
+              formula: { kind: 'cell', cellId: 'base' },
+              calcValidation: { operator: 'gte', target: { kind: 'literal', value: 10 } },
+            } as TableRow['cells'][number],
+          ],
+        },
+      ],
+      config,
+      () => `g${++n}`,
+    );
+    return { id: 'q1', type: 'table', title: 't', required: false, order: 1, tableColumns: [{ id: 'c1', label: 'a' }, { id: 'c2', label: 'b' }], tableRowsData: rows, rowRepeatConfig: config } as Question;
+  }
+  const formulaCells = (q: Question, value: Record<string, unknown>) =>
+    collectNumericIssues(q, value, { allResponses: { q1: value }, allQuestions: [q] })
+      .filter((i) => i.kind === 'formula')
+      .flatMap((i) => i.cellIds ?? []);
+
+  it('1벌만 열렸으면 1벌 계산 칸만 검사한다', () => {
+    const q = calcTable();
+    expect(formulaCells(q, { base: '5', amt: '1' })).toEqual(['chk']);
+  });
+
+  it('2벌을 적기 시작하면 2벌 계산 칸도 검사한다', () => {
+    const q = calcTable();
+    const bundle2 = q.tableRowsData!.find((r) => r.repeatIndex === 2)!;
+    const amt2 = bundle2.cells[0]!.id;
+    const chk2 = bundle2.cells[1]!.id;
+    expect(formulaCells(q, { base: '5', amt: '9', [amt2]: '1' })).toEqual(['chk', chk2]);
+  });
+});
