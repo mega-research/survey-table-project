@@ -14,7 +14,7 @@ void (async () => {
     const surveyId = args.positionals[0];
     if (!surveyId)
       throw new Error('설문 id 를 적어 주세요: pnpm survey:vars <surveyId> --env prod');
-    const { host } = loadOpsEnv(args.env);
+    const { host, file: envSource } = loadOpsEnv(args.env);
     const { db } = await import('@/db');
     const { loadStructureRows, structureVariables, surveyTitle } = await import('./variables');
 
@@ -25,7 +25,7 @@ void (async () => {
     const pattern = typeof grep === 'string' ? new RegExp(grep) : null;
     const shown = pattern ? vars.filter((v) => pattern.test(v.name)) : vars;
 
-    console.log(`${args.env} (${host}) · ${title}`);
+    console.log(`${args.env} (${host} · ${envSource}) · ${title}`);
     console.log(
       `변수 ${vars.length}개${pattern ? ` 중 ${shown.length}개 (${pattern.source})` : ''}`,
     );

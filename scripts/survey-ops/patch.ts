@@ -21,8 +21,10 @@ export function runSurveyPatch(
     } catch (err) {
       exitWithError(err);
     }
-    const { host } = loadOpsEnv(args.env);
-    console.log(`접속: ${args.env} (${host})${args.commit ? ' · 커밋' : ' · 시험 실행'}`);
+    const { host, file: envSource } = loadOpsEnv(args.env);
+    console.log(
+      `접속: ${args.env} (${host} · ${envSource})${args.commit ? ' · 커밋' : ' · 시험 실행'}`,
+    );
     // env 를 채운 뒤에 앱 DB 를 연다(정적 import 면 셸 env 로 붙는다).
     const { db } = await import('@/db');
     const { executeSurveyPatch } = await import('./patch-core');

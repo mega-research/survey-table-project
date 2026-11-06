@@ -12,7 +12,12 @@ import { describe, expect, it } from 'vitest';
 import type { questionGroups, questions } from '@/db/schema';
 
 import { pruneOldDumps } from '../../scripts/survey-ops/dump';
-import { assertTargetHost, parseEnvFile, parseOpsArgs } from '../../scripts/survey-ops/env';
+import {
+  assertTargetHost,
+  parseEnvFile,
+  parseOpsArgs,
+  resolveOpsEnv,
+} from '../../scripts/survey-ops/env';
 import { diffVariables, structureVariables } from '../../scripts/survey-ops/variables';
 
 describe('parseOpsArgs', () => {
@@ -81,6 +86,57 @@ describe('접속 대상', () => {
     expect(assertTargetHost('local', 'postgresql://postgres:p@ss@127.0.0.1:54322/postgres')).toBe(
       '127.0.0.1',
     );
+  });
+});
+
+describe('resolveOpsEnv — --env local 이 붙을 DB', () => {
+  const LOCAL_SUPABASE = 'postgresql://postgres:postgres@127.0.0.1:54322/postgres';
+  const NATIVE = 'postgresql://postgres:postgres@127.0.0.1:5432/postgres';
+  const PROD = 'postgresql://postgres.ref:x@aws-1-ap-northeast-2.pooler.supabase.com:6543/postgres';
+  function root(files: Record<string, string>): string {
+    const dir = mkdtempSync(path.join(tmpdir(), 'survey-ops-env-'));
+    for (const [name, body] of Object.entries(files)) writeFileSync(path.join(dir, name), body);
+    return dir;
+  }
+
+  it('.env.local(로컬 supabase)을 .env(보통 닫힌 5432)보다 먼저 쓴다', () => {
+    const dir = root({
+      '.env.local': `DATABASE_URL=${LOCAL_SUPABASE}\n`,
+      '.env': `DATABASE_URL=${NATIVE}\n`,
+    });
+    expect(resolveOpsEnv('local', dir, undefined)).toMatchObject({
+      source: '.env.local',
+      host: '127.0.0.1',
+    });
+  });
+
+  it('.env.local 에 DATABASE_URL 이 없으면(주석) .env 로 넘어간다', () => {
+    const dir = root({
+      '.env.local': `# DATABASE_URL=${PROD}\nA=1\n`,
+      '.env': `DATABASE_URL=${NATIVE}\n`,
+    });
+    expect(resolveOpsEnv('local', dir, undefined).source).toBe('.env');
+  });
+
+  it('SURVEY_OPS_DATABASE_URL 이 local DB 를 바꿔 끼운다 — db:isolated 의 전용 DB', () => {
+    const dir = root({ '.env.local': `DATABASE_URL=${LOCAL_SUPABASE}\nOTHER=keep\n` });
+    const isolated = 'postgresql://postgres:postgres@127.0.0.1:54322/survey_ops';
+    const resolved = resolveOpsEnv('local', dir, isolated);
+    expect(resolved).toMatchObject({ source: 'SURVEY_OPS_DATABASE_URL', host: '127.0.0.1' });
+    expect(resolved.values).toMatchObject({ DATABASE_URL: isolated, OTHER: 'keep' });
+  });
+
+  it('덮어쓰기로 운영 URL 을 넣거나 prod 에서 쓰면 거부한다', () => {
+    const dir = root({
+      '.env.local': `DATABASE_URL=${LOCAL_SUPABASE}\n`,
+      '.env.production': `DATABASE_URL=${PROD}\n`,
+    });
+    expect(() => resolveOpsEnv('local', dir, PROD)).toThrow(/local/);
+    expect(() => resolveOpsEnv('prod', dir, LOCAL_SUPABASE)).toThrow(/--env local 에서만/);
+  });
+
+  it('어느 파일에도 없으면 후보를 이름으로 알린다', () => {
+    expect(() => resolveOpsEnv('local', root({}), undefined)).toThrow(/\.env\.local · \.env/);
   });
 });
 

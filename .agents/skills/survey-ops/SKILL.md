@@ -5,7 +5,7 @@ description: 운영 설문 작업 도구. 운영(prod) 설문의 문항·문구�
 
 # 운영 설문 작업 도구
 
-`scripts/survey-ops/` 의 명령 셋과 패치 도우미. 모두 `--env prod` 또는 `--env local` 을 꼭 적는다(기본값 없음).
+`scripts/survey-ops/` 의 명령 셋과 패치 도우미. 모두 `--env prod` 또는 `--env local` 을 꼭 적는다(기본값 없음). `--env local` 은 `.env.local`(로컬 supabase 54322) → `.env` 순으로 읽고, `pnpm db:isolated <이름>` 의 전용 DB 는 `SURVEY_OPS_DATABASE_URL=<그 URL>` 로 바꿔 끼운다(로컬 주소만 받는다).
 
 ## 변수명은 계산해서 인용한다
 

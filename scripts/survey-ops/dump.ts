@@ -49,7 +49,7 @@ async function main() {
   if (resid !== undefined && !Number.isInteger(resid))
     throw new Error(`--resid 는 정수여야 합니다: ${residFlag}`);
 
-  const { host } = loadOpsEnv(args.env);
+  const { host, file: envSource } = loadOpsEnv(args.env);
   const { getSurveyForResponse } = await import('@/server/survey-builder/services/survey-read');
   const { loadPreviewContactSeed } = await import('@/server/contacts/services/preview-contact');
 
@@ -97,7 +97,7 @@ async function main() {
   );
 
   const questions = (preview.survey as { questions?: unknown[] }).questions ?? [];
-  console.log(`${args.env} (${host}) · ${preview.survey.title}`);
+  console.log(`${args.env} (${host} · ${envSource}) · ${preview.survey.title}`);
   console.log(
     `${published ? '배포본' : '저장본'} · 문항 ${questions.length}개 · 버전 ${preview.versionId ?? '없음'}`,
   );
