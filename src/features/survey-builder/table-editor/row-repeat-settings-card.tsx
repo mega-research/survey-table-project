@@ -101,16 +101,20 @@ export function RowRepeatSettingsCard({
   const apply = (patch: Partial<RowRepeatConfig>) => {
     if (!onChange) return;
     setDraft(null);
+    // 범위·최대 벌만 새로 정하고 나머지 설정(문구·줄 번호·필수·블록 표시 조건·접어 두기 …)은 그대로 둔다 —
+    // 필드를 하나씩 나열하면 새 필드가 범위 적용 때 조용히 빠진다.
+    const { enabled: _enabled, templateRowIds: _ids, maxRepeats: _max, ...kept } = config ?? {};
     onChange({
+      ...kept,
       enabled: true,
       templateRowIds: selectedRowIds,
       maxRepeats,
-      ...(config?.addLabel !== undefined ? { addLabel: config.addLabel } : {}),
-      ...(config?.flatRowCodes ? { flatRowCodes: true } : {}),
-      ...(config?.requireStartedBundles ? { requireStartedBundles: true } : {}),
       ...patch,
     });
   };
+  // 블록 표시 조건 · 펼쳐 둘 조건 — 지금은 스크립트로 설정하고 이 카드는 개수만 보여 준다(편집 보존)
+  const blockConditionCount = config?.displayCondition?.conditions?.length ?? 0;
+  const expandConditionCount = config?.expandWhen?.conditions?.length ?? 0;
   // 줄 번호 변수명 — 틀이 1줄이고 표의 다른 행 코드와 겹치지 않을 때만(펼치기도 그 밖에서는 무시한다)
   const flatRowCodesAvailable = canUseFlatRowCodes(rows, selectedRowIds, maxRepeats);
 
@@ -260,6 +264,22 @@ export function RowRepeatSettingsCard({
             />
             적기 시작한 벌도 필수
           </label>
+          <label
+            className="flex items-center gap-1.5 self-end pb-1.5 text-xs text-gray-600"
+            title="첫 벌도 숨기고 추가 버튼만 보인다. 값이 든 벌은 보이고, 접힌 첫 벌은 적기 시작해야 필수 검사한다"
+          >
+            <input
+              type="checkbox"
+              checked={config?.startCollapsed === true}
+              disabled={!enabled}
+              onChange={(e) => {
+                if (!enabled) return;
+                const { startCollapsed: _collapsed, ...rest } = config!;
+                onChange?.(e.target.checked ? { ...rest, startCollapsed: true } : rest);
+              }}
+            />
+            처음엔 접어 두기
+          </label>
           {!enabled && (
             <Button size="sm" className="h-8 text-xs" disabled={!canApply} onClick={() => apply({})}>
               반복 켜기
@@ -271,6 +291,15 @@ export function RowRepeatSettingsCard({
             </Button>
           )}
         </div>
+
+        {enabled && (blockConditionCount > 0 || expandConditionCount > 0) && (
+          <p className="text-xs text-gray-500">
+            {blockConditionCount > 0 && `블록 표시 조건 ${blockConditionCount}개`}
+            {blockConditionCount > 0 && expandConditionCount > 0 && ' · '}
+            {expandConditionCount > 0 && `펼쳐 둘 조건 ${expandConditionCount}개`}
+            {' '}— 이 화면에서는 편집하지 않고 그대로 둔다
+          </p>
+        )}
 
         {violations.length > 0 && (
           <ul className="space-y-1 rounded-md bg-red-50 p-2 text-xs text-red-600">

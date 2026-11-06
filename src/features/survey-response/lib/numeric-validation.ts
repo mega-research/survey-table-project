@@ -10,7 +10,12 @@ import { findDistinctViolations } from '@/features/question-renderer/utils/disti
 import { optionTextTargetId } from '@/features/question-renderer/utils/option-text-target';
 import { stagedColumnOptionalCellIds } from '@/features/question-renderer/utils/staged-columns';
 import { stagedOptionalCellIds } from '@/features/question-renderer/utils/staged-rows';
-import { resolveBundleSumConstraints, startedRepeatBundles } from '@/lib/question/row-repeat';
+import {
+  applyRepeatBlockCondition,
+  repeatStartsCollapsed,
+  resolveBundleSumConstraints,
+  startedRepeatBundles,
+} from '@/lib/question/row-repeat';
 import {
   areAllFormulaRefsEmpty,
   evaluateCellFormula,
@@ -150,7 +155,8 @@ export function collectVisibleTableCells(
   cellValues: Record<string, unknown>,
   ctx: NumericValidationCtx | undefined,
 ): TableCell[] {
-  const rows = question.tableRowsData ?? [];
+  // 행 반복 블록 표시 조건은 블록 행의 행 조건으로 얹어 아래 행 조건 필터가 함께 거른다
+  const rows = applyRepeatBlockCondition(question.tableRowsData ?? [], question.rowRepeatConfig);
   const enabledDynamicGroupIds = new Set(
     (question.dynamicRowConfigs ?? []).filter((c) => c.enabled).map((c) => c.groupId),
   );
@@ -274,15 +280,28 @@ export function resolveChoiceTableVisibleCellIds(
  * 필수」(`rowRepeatConfig.requireStartedBundles`)를 켜면 값이 하나라도 든 벌은 빼지 않는다 — 빈 채로
  * 열어 둔 벌은 그래도 뺀다.
  */
-function collectRepeatOptionalCellIds(question: Question, cellValues: Record<string, unknown>): Set<string> {
+function collectRepeatOptionalCellIds(
+  question: Question,
+  cellValues: Record<string, unknown>,
+  ctx: NumericValidationCtx | undefined,
+): Set<string> {
   const rows = question.tableRowsData ?? [];
   const started = question.rowRepeatConfig?.requireStartedBundles
     ? startedRepeatBundles(rows, cellValues)
     : new Set<number>();
+  // 「처음엔 접어 두기」 — 접힌 첫 벌은 화면에 없는 줄이다. 적기 시작했을 때만 1벌처럼 검사한다.
+  // 펼쳐 둘 조건(expandWhen)은 렌더러와 같은 평가기로 본다 — 재료가 없으면 접힌 것으로 본다(막지 않는 쪽).
+  const firstCollapsed =
+    repeatStartsCollapsed(question.rowRepeatConfig, (condition) =>
+      ctx
+        ? evaluateQuestionConditionGroup(condition, ctx.allResponses, ctx.allQuestions, toBranchEvalCtx(ctx))
+        : false,
+    ) && !startedRepeatBundles(rows, cellValues, 1).has(1);
   const ids = new Set<string>();
   for (const row of rows) {
     const idx = row.repeatIndex ?? 1;
-    if (idx < 2 || started.has(idx)) continue;
+    if (idx < 2 && !(firstCollapsed && row.repeatIndex === 1)) continue;
+    if (idx >= 2 && started.has(idx)) continue;
     for (const cell of row.cells) ids.add(cell.id);
   }
   return ids;
@@ -1151,7 +1170,7 @@ export function collectNumericIssues(
     // 행 반복: 필수는 1벌만 본다. 2벌부터는 열어도 비워 둘 수 있어야 한다 —
     // 실수로 `+` 를 누른 응답자가 제출하지 못하는 상황을 막는다. 범위·합계 검증은
     // 값이 있을 때만 위반이 나므로 벌 수와 무관하게 그대로 둔다.
-    const repeatOptionalCellIds = collectRepeatOptionalCellIds(question, cellValues);
+    const repeatOptionalCellIds = collectRepeatOptionalCellIds(question, cellValues, ctx);
     // 행·열 차례로 열기의 닫힌 칸은 collectVisibleTableCells 가 이미 뺐다(모든 차단 검증 공통) —
     // 「처음 보이는 행」과 「값이 있는 마지막 행」까지는 평범한 행으로 검사한다.
     const ordinaryMissingCells = enabled.filter(

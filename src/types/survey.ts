@@ -846,6 +846,19 @@ export interface RowRepeatConfig {
    * 기본(꺼짐)은 1벌만 필수. 빈 채로 열어 둔 벌은 어느 쪽이든 막지 않는다.
    */
   requireStartedBundles?: boolean;
+  /**
+   * 블록 표시 조건 — 거짓이면 반복 블록 전체(모든 벌 행·추가/삭제 버튼)가 사라진다. 문항 표시 조건과 같은
+   * 모양·평가기. 블록 행에 런타임으로 행 표시 조건을 얹어(`applyRepeatBlockCondition`) 화면·필수 검증·
+   * 저장 경계 strip 이 기존 행 조건 경로를 그대로 탄다 — 숨은 블록의 값은 숨은 칸처럼 지워진다(2026-11-06).
+   */
+  displayCondition?: QuestionConditionGroup;
+  /**
+   * 처음엔 접어 두기 — 첫 벌도 숨기고 추가 버튼만 보인다. 값이 든 벌은 보인다(열린 벌 수는 값에서 파생).
+   * 접힌 첫 벌은 필수 검사하지 않는다(적기 시작하면 검사). `expandWhen` 이 참이면 펼쳐 둔다(2026-11-06).
+   */
+  startCollapsed?: boolean;
+  /** 접어 두기의 예외 — 이 조건이 참이면 첫 벌을 펼쳐 둔다. 문항 표시 조건과 같은 모양·평가기 */
+  expandWhen?: QuestionConditionGroup;
 }
 
 /**

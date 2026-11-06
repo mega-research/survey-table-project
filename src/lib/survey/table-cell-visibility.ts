@@ -1,3 +1,4 @@
+import { applyRepeatBlockCondition } from '@/lib/question/row-repeat';
 import type { Question } from '@/types/survey';
 import type { BranchEvalCtx } from '@/utils/branch-eval';
 import { isChoiceTableSource } from '@/utils/choice-source';
@@ -35,6 +36,8 @@ function isResponseTableQuestion(question: Question): boolean {
 function canHideCells(question: Question): boolean {
   const rows = question.tableRowsData ?? [];
   if (rows.some((row) => row.displayCondition)) return true;
+  // 행 반복 블록 표시 조건 — 블록 행에 런타임으로 얹히는 행 조건이다(applyRepeatBlockCondition)
+  if ((question.rowRepeatConfig?.displayCondition?.conditions ?? []).length > 0) return true;
   if ((question.tableColumns ?? []).some((column) => column.displayCondition)) return true;
   const enabledGroupIds = new Set(
     (question.dynamicRowConfigs ?? []).filter((c) => c.enabled).map((c) => c.groupId),
@@ -80,7 +83,7 @@ export function resolveTableCellVisibility(
   evalCtx?: BranchEvalCtx,
 ): TableCellVisibility | null {
   if (!isResponseTableQuestion(question) || !canHideCells(question)) return null;
-  const rows = question.tableRowsData ?? [];
+  const rows = applyRepeatBlockCondition(question.tableRowsData ?? [], question.rowRepeatConfig);
   const layout = projectResponseTableLayout({
     columns: question.tableColumns ?? [],
     rows,

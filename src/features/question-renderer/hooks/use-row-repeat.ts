@@ -28,12 +28,16 @@ export interface UseRowRepeatParams {
   /** 열 필터를 거친 렌더 대상 행 (구조에 펼쳐진 전체 벌을 담고 있다) */
   rows: TableRow[];
   rowRepeatConfig?: RowRepeatConfig | null | undefined;
+  /** 값이 없어도 열어 둘 벌 수 — 기본 1, 「처음엔 접어 두기」가 적용되면 0 (`repeatStartsCollapsed`) */
+  minOpenCount?: 0 | 1 | undefined;
+  /** 블록 표시 조건이 거짓 — 추가·삭제 버튼을 내지 않는다(벌 행은 행 조건으로 이미 숨는다) */
+  blockHidden?: boolean | undefined;
   value?: Record<string, unknown> | undefined;
   onChange?: ((v: Record<string, unknown>) => void) | undefined;
 }
 
 export interface UseRowRepeatReturn {
-  /** 반복 블록이 켜져 있고 구조에 펼친 벌이 있는가 */
+  /** 반복 블록이 켜져 있고 구조에 펼친 벌이 있는가 — 블록 표시 조건이 거짓이면 false(버튼을 내지 않는다) */
   isActive: boolean;
   /** 지금 보이는 벌 수 */
   openCount: number;
@@ -55,6 +59,8 @@ export function useRowRepeat({
   questionId,
   rows,
   rowRepeatConfig,
+  minOpenCount = 1,
+  blockHidden = false,
   value,
   onChange,
 }: UseRowRepeatParams): UseRowRepeatReturn {
@@ -86,8 +92,8 @@ export function useRowRepeat({
   const isActive = maxCount > 0;
 
   const derivedOpenCount = useMemo(
-    () => (isActive ? deriveOpenRepeatCount(rows, currentResponse) : 0),
-    [isActive, rows, currentResponse],
+    () => (isActive ? deriveOpenRepeatCount(rows, currentResponse, minOpenCount) : 0),
+    [isActive, rows, currentResponse, minOpenCount],
   );
 
   const openCount = isActive ? Math.min(maxCount, Math.max(derivedOpenCount, sessionOpenCount)) : 0;
@@ -102,7 +108,7 @@ export function useRowRepeat({
   }, [maxCount, openCount]);
 
   const removeBundle = useCallback(() => {
-    if (openCount <= 1) return;
+    if (openCount <= minOpenCount) return;
     const next = openCount - 1;
     // 접는 벌의 값은 비운다 — 화면에 없는 잔존 값이 다음 진입에서 그 벌을 다시 열고,
     // 내보내기의 "쓰인 벌" 판정에도 잡힌다.
@@ -111,15 +117,16 @@ export function useRowRepeat({
       mergePatch(Object.fromEntries(cleared.map((id) => [id, ''])));
     }
     setSessionOpenCount(next);
-  }, [openCount, rows, mergePatch]);
+  }, [openCount, minOpenCount, rows, mergePatch]);
 
+  const showsButtons = isActive && !blockHidden;
   return {
-    isActive,
+    isActive: showsButtons,
     openCount,
     maxCount,
     hiddenRowIds,
-    canAdd: isActive && openCount < maxCount,
-    canRemove: isActive && openCount > 1,
+    canAdd: showsButtons && openCount < maxCount,
+    canRemove: showsButtons && openCount > minOpenCount,
     addLabel: rowRepeatConfig?.addLabel?.trim() || defaultAddLabel,
     addBundle,
     removeBundle,

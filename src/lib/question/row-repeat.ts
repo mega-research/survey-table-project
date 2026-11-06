@@ -14,7 +14,14 @@
  * 비반복 행 변수명이 r1 에서 r01 로 통째 바뀐다. 펼치기 이전 행 수로 계산한 코드를
  * 행에 박아 그 길이 의존을 끊는다 (설계 결정 3).
  */
-import type { Question, RowRepeatConfig, SumConstraint, TableCell, TableRow } from '@/types/survey';
+import type {
+  Question,
+  QuestionConditionGroup,
+  RowRepeatConfig,
+  SumConstraint,
+  TableCell,
+  TableRow,
+} from '@/types/survey';
 import { generateId } from '@/lib/utils';
 import {
   collectCalcExprCellIds,
@@ -413,15 +420,75 @@ export function structuralRepeatCount(rows: TableRow[]): number {
 export function deriveOpenRepeatCount(
   rows: TableRow[],
   values: Record<string, unknown> | undefined,
+  /** 값이 없어도 열어 둘 벌 수 — 기본 1, 「처음엔 접어 두기」면 0 (`repeatStartsCollapsed`) */
+  minOpen: 0 | 1 = 1,
 ): number {
   const cellValues = values ?? {};
-  let open = 1;
+  let open: number = minOpen;
   for (const row of rows) {
     const idx = repeatIndexOf(row);
     if (idx === undefined || idx <= open) continue;
     if (row.cells.some((cell) => isCellValuePresent(cellValues[cell.id]))) open = idx;
   }
   return open;
+}
+
+/** 이 행이 반복 블록(틀 또는 펼친 벌)의 행인가 */
+export function isRepeatBlockRow(row: TableRow, config: RowRepeatConfig | null | undefined): boolean {
+  if (!isRowRepeatActive(config)) return false;
+  const templateIds = config!.templateRowIds;
+  return templateIds.includes(row.id) || (!!row.repeatSourceRowId && templateIds.includes(row.repeatSourceRowId));
+}
+
+/**
+ * 블록 표시 조건을 블록 행의 행 표시 조건으로 얹는다(런타임 전용 — 저장 데이터에 쓰지 않는다).
+ * 화면·필수 검증·저장 경계 strip·노출 행 목록이 기존 행 조건 경로를 그대로 타게 하는 한 곳이다.
+ * 블록 행에는 원래 행 조건이 없다(`validateRowRepeatTemplate` 가 막는다) — 혹시 있으면 둘 다 참이어야 보인다.
+ * 바꿀 것이 없으면 원본 배열을 그대로 돌려준다.
+ */
+export function applyRepeatBlockCondition(
+  rows: TableRow[],
+  config: RowRepeatConfig | null | undefined,
+): TableRow[] {
+  const condition = config?.displayCondition;
+  if (!condition || !isRowRepeatActive(config) || (condition.conditions ?? []).length === 0) return rows;
+  let changed = false;
+  const next = rows.map((row) => {
+    if (!isRepeatBlockRow(row, config)) return row;
+    changed = true;
+    const own = row.displayCondition;
+    return {
+      ...row,
+      displayCondition: own
+        ? { logicType: 'AND' as const, conditions: [...(own.conditions ?? []), ...condition.conditions] }
+        : condition,
+    };
+  });
+  return changed ? next : rows;
+}
+
+/**
+ * 「처음엔 접어 두기」가 지금 적용되는가 — 켜져 있고 펼쳐 둘 조건(`expandWhen`)이 참이 아니다.
+ * 조건 평가는 호출부가 문항 표시 조건과 같은 평가기로 한다(isConditionMet).
+ */
+export function repeatStartsCollapsed(
+  config: RowRepeatConfig | null | undefined,
+  isConditionMet: (condition: QuestionConditionGroup) => boolean,
+): boolean {
+  if (!isRowRepeatActive(config) || config!.startCollapsed !== true) return false;
+  const expandWhen = config!.expandWhen;
+  if (expandWhen && (expandWhen.conditions ?? []).length > 0 && isConditionMet(expandWhen)) return false;
+  return true;
+}
+
+/** 블록 표시 조건이 거짓이라 블록 전체가 숨는가 */
+export function isRepeatBlockHidden(
+  config: RowRepeatConfig | null | undefined,
+  isConditionMet: (condition: QuestionConditionGroup) => boolean,
+): boolean {
+  const condition = config?.displayCondition;
+  if (!condition || !isRowRepeatActive(config) || (condition.conditions ?? []).length === 0) return false;
+  return !isConditionMet(condition);
 }
 
 /** 열린 벌보다 뒤에 있는 반복 행 id — 렌더 파이프라인이 이 집합을 빼고 그린다. */
@@ -649,12 +716,14 @@ const RESPONDENT_CELL_TYPES = new Set<TableCell['type']>(['input', 'select', 'ra
 export function startedRepeatBundles(
   rows: readonly TableRow[],
   values: Record<string, unknown> | undefined,
+  /** 몇 번째 벌부터 보나 — 기본 2. 「처음엔 접어 두기」의 첫 벌을 볼 때 1 */
+  fromBundle: 1 | 2 = 2,
 ): Set<number> {
   const cellValues = values ?? {};
   const started = new Set<number>();
   for (const row of rows) {
     const idx = repeatIndexOf(row);
-    if (idx === undefined || idx < 2 || started.has(idx)) continue;
+    if (idx === undefined || idx < fromBundle || started.has(idx)) continue;
     if (row.cells.some((cell) => RESPONDENT_CELL_TYPES.has(cell.type) && isCellValuePresent(cellValues[cell.id]))) {
       started.add(idx);
     }

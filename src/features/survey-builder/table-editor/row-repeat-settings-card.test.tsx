@@ -204,4 +204,22 @@ describe('행 반복 설정 카드', () => {
     fireEvent.change(screen.getByPlaceholderText('행 추가'), { target: { value: '원료 추가' } });
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ addLabel: '원료 추가', requireStartedBundles: true }));
   });
+
+  it('「처음엔 접어 두기」를 켤 수 있고, 범위를 바꿔도 블록 표시 조건·펼쳐 둘 조건이 남는다', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const cond = { logicType: 'AND' as const, conditions: [{ id: 'c', logicType: 'AND' as const, conditionType: 'value-match' as const, sourceQuestionId: 'q0', requiredValues: ['1'] }] };
+    const config = { enabled: true, templateRowIds: ['a'], maxRepeats: 20, displayCondition: cond, expandWhen: cond };
+    render(<RowRepeatSettingsCard rows={rows} config={config} onChange={onChange} />);
+    expect(screen.getByText(/블록 표시 조건 1개 · 펼쳐 둘 조건 1개/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /처음엔 접어 두기/ }));
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ startCollapsed: true, displayCondition: cond }));
+
+    await user.selectOptions(screen.getByLabelText('끝 행'), 'b');
+    await user.click(screen.getByRole('button', { name: '범위 적용' }));
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ templateRowIds: ['a', 'b'], displayCondition: cond, expandWhen: cond }),
+    );
+  });
 });

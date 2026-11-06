@@ -11,6 +11,7 @@ import { consumeSeedWrite } from '@/features/survey-response/stores/live-respons
 import type { ClientSignals } from '@/lib/duplicate-detection/types';
 import { type CompletionOutcome, outcomeFromStatus } from '@/features/survey-response/lib/completion-screen';
 import { midSurveyClosedBody } from '@/lib/quota/closed-message';
+import { applyRepeatBlockCondition } from '@/lib/question/row-repeat';
 import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
 import { type FormulaEvalCtx, withCalcValues } from '@/lib/survey/cell-formula';
 import type { PriorAnswers } from '@/lib/survey/prior-answers';
@@ -1014,8 +1015,9 @@ export function useResponseLifecycle({
               }
             }
 
-            return q
-              .tableRowsData!.filter((row) => {
+            // 행 반복 블록 표시 조건은 블록 행의 행 조건으로 얹어 같은 판정을 탄다
+            return applyRepeatBlockCondition(q.tableRowsData!, q.rowRepeatConfig)
+              .filter((row) => {
                 if (
                   !shouldDisplayRow(row, responses as Record<string, unknown>, questions, evalCtx)
                 )

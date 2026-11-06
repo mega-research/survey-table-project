@@ -56,6 +56,11 @@ import {
   ValidationIssueBanner,
 } from '@/features/question-renderer/validation-issue-banner';
 import { useMobileView } from '@/hooks/use-media-query';
+import {
+  applyRepeatBlockCondition,
+  isRepeatBlockHidden,
+  repeatStartsCollapsed,
+} from '@/lib/question/row-repeat';
 import { collectTableCells } from '@/lib/survey/cell-gating';
 import { cn } from '@/lib/utils';
 import {
@@ -64,6 +69,7 @@ import {
   HeaderCell,
   MobileTableDisplayMode,
   Question,
+  QuestionConditionGroup,
   RowRepeatConfig,
   StagedRowsConfig,
   TableCell,
@@ -71,6 +77,7 @@ import {
   TableRow,
 } from '@/types/survey';
 import {
+  evaluateQuestionConditionGroup,
   shouldDisplayColumn,
   shouldDisplayDynamicGroup,
   shouldDisplayRow,
@@ -688,7 +695,7 @@ function InteractiveTableResponseBody({
   questionId,
   tableTitle,
   columns = [],
-  rows = [],
+  rows: authoredRowsProp = EMPTY_ROWS,
   tableHeaderGrid,
   value,
   onChange,
@@ -714,6 +721,11 @@ function InteractiveTableResponseBody({
   errorItems,
   softWarnings,
 }: InteractiveTableResponseProps) {
+  // 블록 표시 조건이 있으면 블록 행에 행 조건을 얹은 사본 — 없으면 원본 배열 그대로(applyRepeatBlockCondition)
+  const rows = useMemo(
+    () => applyRepeatBlockCondition(authoredRowsProp, rowRepeatConfig),
+    [authoredRowsProp, rowRepeatConfig],
+  );
   const mergedOnChange = useMergedResponseChange(value, onChange);
 
   const tableContainerRef = useRef<HTMLDivElement>(null);
@@ -769,6 +781,19 @@ function InteractiveTableResponseBody({
   // 조건 평가 컨텍스트 — attr/lookup 피연산자가 실제 값을 보게 하려면 반드시 넘겨야 한다.
   // 빠뜨리면 attr 이 undefined 가 되어 `!=` 비교가 항상 참이 된다.
   const branchEvalCtx = useBranchEvalCtx(allResponses);
+
+  // 행 반복 블록 — 블록 표시 조건은 블록 행의 행 조건으로 얹어 아래 행 조건 경로가 함께 거른다
+  // (검증·저장 경계 strip 과 같은 applyRepeatBlockCondition). 처음엔 접어 두기는 열린 벌의 최소를 0 으로.
+  const evaluatesConditions = !ignoreDisplayConditions && !!allResponses && !!allQuestions;
+  const isRepeatConditionMet = useCallback(
+    (condition: QuestionConditionGroup) =>
+      evaluatesConditions &&
+      evaluateQuestionConditionGroup(condition, allResponses!, allQuestions!, branchEvalCtx),
+    [evaluatesConditions, allResponses, allQuestions, branchEvalCtx],
+  );
+  const repeatBlockHidden =
+    evaluatesConditions && isRepeatBlockHidden(rowRepeatConfig, isRepeatConditionMet);
+  const repeatMinOpen: 0 | 1 = repeatStartsCollapsed(rowRepeatConfig, isRepeatConditionMet) ? 0 : 1;
 
   // 열 차례로 열기 — 아직 열지 않은 단계의 열은 표시 조건과 같은 자리에서 뺀다
   const stagedColumns = useStagedColumns({
@@ -951,6 +976,8 @@ function InteractiveTableResponseBody({
     hiddenGroupIds,
     dynamicRowConfigs,
     rowRepeatConfig,
+    repeatMinOpen,
+    repeatBlockHidden,
     stagedRowsConfig,
     value,
     onChange: mergedOnChange,
