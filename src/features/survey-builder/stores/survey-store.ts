@@ -17,6 +17,7 @@ import {
   remapConditionGroupValues,
   type CellRemapScope,
 } from '@/features/survey-builder/utils/option-value-remap';
+import { remapQuestionConditionGroups } from '@/features/survey-builder/utils/question-condition-groups';
 
 // ── 헬퍼 함수 ──
 
@@ -55,7 +56,6 @@ import { client } from '@/shared/lib/rpc';
 import { isMobileTableDisplayType, isOptionListType } from '@/types/question-types';
 import {
   Question,
-  QuestionConditionGroup,
   QuestionGroup,
   QuestionType,
   SelectLevel,
@@ -782,52 +782,9 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
           let changed = false;
 
           state.currentSurvey.questions.forEach((question) => {
-            if (question.displayCondition) {
-              const next = remapConditionGroupValues(
-                question.displayCondition,
-                questionId,
-                oldValue,
-                newValue,
-                cellScope,
-              );
-              if (next !== question.displayCondition) {
-                question.displayCondition = next;
-                changed = true;
-                affectedIds.add(question.id);
-                if (!state.questionChanges.added[question.id]) {
-                  state.questionChanges.updated[question.id] = true;
-                }
-              }
-            }
-
-            if (question.tableRowsData) {
-              let rowsChanged = false;
-              const nextRows = question.tableRowsData.map((row) => {
-                if (!row.displayCondition) return row;
-                const next = remapConditionGroupValues(
-                  row.displayCondition,
-                  questionId,
-                  oldValue,
-                  newValue,
-                  cellScope,
-                );
-                if (next === row.displayCondition) return row;
-                rowsChanged = true;
-                return { ...row, displayCondition: next };
-              });
-              if (rowsChanged) {
-                question.tableRowsData = nextRows;
-                changed = true;
-                affectedIds.add(question.id);
-                if (!state.questionChanges.added[question.id]) {
-                  state.questionChanges.updated[question.id] = true;
-                }
-              }
-            }
-
-            // 문항 표시 조건과 같은 모양의 다른 자리 조건 — 행 반복 블록 표시·펼쳐 둘 조건, 표 제약의 다른 문항 적용 조건
+            // 문항 안 조건 묶음 자리 전부(문항·행·열·동적 행 그룹 표시, 이월값 불러오기, 행 반복 블록, 표 제약 적용 조건)
             if (
-              remapExtraConditionGroups(question, (group) =>
+              remapQuestionConditionGroups(question, (group) =>
                 remapConditionGroupValues(group, questionId, oldValue, newValue, cellScope),
               )
             ) {
@@ -835,31 +792,6 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
               affectedIds.add(question.id);
               if (!state.questionChanges.added[question.id]) {
                 state.questionChanges.updated[question.id] = true;
-              }
-            }
-
-            if (question.tableColumns) {
-              let columnsChanged = false;
-              const nextColumns = question.tableColumns.map((column) => {
-                if (!column.displayCondition) return column;
-                const next = remapConditionGroupValues(
-                  column.displayCondition,
-                  questionId,
-                  oldValue,
-                  newValue,
-                  cellScope,
-                );
-                if (next === column.displayCondition) return column;
-                columnsChanged = true;
-                return { ...column, displayCondition: next };
-              });
-              if (columnsChanged) {
-                question.tableColumns = nextColumns;
-                changed = true;
-                affectedIds.add(question.id);
-                if (!state.questionChanges.added[question.id]) {
-                  state.questionChanges.updated[question.id] = true;
-                }
               }
             }
           });
@@ -915,26 +847,15 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
           let changed = false;
 
           state.currentSurvey.questions.forEach((question) => {
-            let questionChanged = false;
-
-            if (question.displayCondition) {
-              const next = remapConditionGroupQuestionRefs(question.displayCondition, oldId, newId);
-              if (next !== question.displayCondition) {
-                question.displayCondition = next;
-                questionChanged = true;
-              }
-            }
+            // 문항 안 조건 묶음 자리 전부 — 아래는 조건 밖의 문항 참조(분기 이동 대상)
+            let questionChanged = remapQuestionConditionGroups(question, (group) =>
+              remapConditionGroupQuestionRefs(group, oldId, newId),
+            );
 
             if (question.tableRowsData) {
               let rowsChanged = false;
               const nextRows = question.tableRowsData.map((row) => {
                 let nextRow = row;
-                if (row.displayCondition) {
-                  const nextCondition = remapConditionGroupQuestionRefs(row.displayCondition, oldId, newId);
-                  if (nextCondition !== row.displayCondition) {
-                    nextRow = { ...nextRow, displayCondition: nextCondition };
-                  }
-                }
                 let cellsChanged = false;
                 const nextCells = nextRow.cells.map((cell) => {
                   const radioOptions = remapBranchTargets(cell.radioOptions);
@@ -968,28 +889,6 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
               }
             }
 
-            if (question.tableColumns) {
-              let columnsChanged = false;
-              const nextColumns = question.tableColumns.map((column) => {
-                if (!column.displayCondition) return column;
-                const next = remapConditionGroupQuestionRefs(column.displayCondition, oldId, newId);
-                if (next === column.displayCondition) return column;
-                columnsChanged = true;
-                return { ...column, displayCondition: next };
-              });
-              if (columnsChanged) {
-                question.tableColumns = nextColumns;
-                questionChanged = true;
-              }
-            }
-
-            if (
-              remapExtraConditionGroups(question, (group) =>
-                remapConditionGroupQuestionRefs(group, oldId, newId),
-              )
-            ) {
-              questionChanged = true;
-            }
             const nextOptions = remapBranchTargets(question.options);
             if (nextOptions !== question.options && nextOptions !== undefined) {
               question.options = nextOptions;
@@ -1173,39 +1072,3 @@ function getDefaultTableRows(): TableRow[] {
   ];
 }
 
-/**
- * 문항 표시 조건과 같은 모양(QuestionConditionGroup)인데 문항·행·열·그룹 밖에 사는 조건을 같은 변환으로 옮긴다 —
- * 행 반복 블록 표시 조건(`rowRepeatConfig.displayCondition`)·펼쳐 둘 조건(`expandWhen`)·표 제약의 다른 문항 적용
- * 조건(`sumConstraints[].whenQuestion`). Immer draft 를 직접 고치고, 바뀐 것이 있으면 true.
- * 변환은 바꿀 것이 없으면 같은 참조를 돌려준다(remapConditionGroupValues·remapConditionGroupQuestionRefs 의 계약).
- */
-function remapExtraConditionGroups(
-  question: Question,
-  remap: (group: QuestionConditionGroup) => QuestionConditionGroup,
-): boolean {
-  let changed = false;
-  const config = question.rowRepeatConfig;
-  if (config?.displayCondition) {
-    const next = remap(config.displayCondition);
-    if (next !== config.displayCondition) {
-      config.displayCondition = next;
-      changed = true;
-    }
-  }
-  if (config?.expandWhen) {
-    const next = remap(config.expandWhen);
-    if (next !== config.expandWhen) {
-      config.expandWhen = next;
-      changed = true;
-    }
-  }
-  for (const constraint of question.sumConstraints ?? []) {
-    if (!constraint.whenQuestion) continue;
-    const next = remap(constraint.whenQuestion);
-    if (next !== constraint.whenQuestion) {
-      constraint.whenQuestion = next;
-      changed = true;
-    }
-  }
-  return changed;
-}

@@ -77,3 +77,42 @@ describe('다른 자리 조건 리매핑', () => {
     expect(scope.questionIds).toContain('q-table');
   });
 });
+
+describe('이월값 불러오기 조건 · 동적 행 그룹 표시 조건도 리매핑한다 (2026-11-06 타입 전수 테스트가 찾음)', () => {
+  // 둘 다 손으로 나열하던 리매핑 목록에 없었다 — 보기 value 를 바꾸면 이월값을 영영 안 불러오고,
+  // 새 문항의 임시 id 를 계속 가리켜 동적 행 고르기 버튼이 영영 숨었다.
+  const withPriorAndDynamic = (source: string, value: string): Question =>
+    ({
+      id: 'q-table',
+      type: 'table',
+      title: '표',
+      required: false,
+      order: 2,
+      tableRowsData: [],
+      priorAnswerCondition: cond(source, value),
+      dynamicRowConfigs: [{ groupId: 'g', enabled: true, displayCondition: cond(source, value) }],
+    }) as Question;
+
+  beforeEach(() => {
+    useSurveyBuilderStore.getState().resetSurvey();
+  });
+
+  it('보기 value 를 바꾸면 두 조건의 값도 바뀌고 그 문항이 저장 대상이 된다', () => {
+    useSurveyBuilderStore.getState().setSurvey(makeSurvey([withPriorAndDynamic('q-src', 'old')]));
+    const scope = useSurveyBuilderStore.getState().remapOptionValueInConditions('q-src', 'old', 'new');
+    const q = read();
+    expect(q.priorAnswerCondition?.conditions[0]?.requiredValues).toEqual(['new']);
+    expect(q.dynamicRowConfigs?.[0]?.displayCondition?.conditions[0]?.requiredValues).toEqual(['new']);
+    expect(scope.questionIds).toContain('q-table');
+    expect(useSurveyBuilderStore.getState().questionChanges.updated['q-table']).toBe(true);
+  });
+
+  it('새 문항의 임시 id 가 실제 id 로 바뀌면 두 조건의 문항 참조도 바뀐다', () => {
+    useSurveyBuilderStore.getState().setSurvey(makeSurvey([withPriorAndDynamic('q-temp', '1')]));
+    const scope = useSurveyBuilderStore.getState().remapQuestionRefs('q-temp', 'q-db');
+    const q = read();
+    expect(q.priorAnswerCondition?.conditions[0]?.sourceQuestionId).toBe('q-db');
+    expect(q.dynamicRowConfigs?.[0]?.displayCondition?.conditions[0]?.sourceQuestionId).toBe('q-db');
+    expect(scope.questionIds).toContain('q-table');
+  });
+});
