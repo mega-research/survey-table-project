@@ -89,6 +89,22 @@ describe('설문 보기 — 첫 번째 조사 대상의 값', () => {
     expect(screen.getByRole('textbox')).toHaveValue('');
   });
 
+  it('깔아 둔 응답(운영 도구 전용 initialResponses)으로 연다', async () => {
+    restoreMatchMedia = stubMatchMedia({ mobile: false, hover: true });
+    render(
+      <SurveyResponseFlow
+        mode="preview"
+        surveyIdentifier="preview-contact-seed"
+        previewContext={{
+          survey: buildSurvey(questions),
+          versionId: 'version-1',
+          initialResponses: { 'q-sales': '900' },
+        }}
+      />,
+    );
+    await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue('900'));
+  });
+
   it('값을 싣지 않으면 종전처럼 빈 명단 값으로 열린다', async () => {
     renderPreview({});
     expect(await screen.findByText(/담당자님/)).toBeInTheDocument();

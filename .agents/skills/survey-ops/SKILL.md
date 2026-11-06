@@ -21,13 +21,14 @@ pnpm survey:vars <surveyId> --env prod --grep '^Q2_'
 
 ```bash
 pnpm survey:dump <surveyId> --env prod [--published] [--test] [--resid N]
-pnpm survey:render .scratch/survey-ops/dumps/<파일>.json [--mobile] [--next N]
+pnpm survey:render .scratch/survey-ops/dumps/<파일>.json [--mobile] [--next N] [--answers <json>]
 ```
 
 - `dump` 는 관리자 「설문 보기」와 같은 로더로 설문·명단 값·이월 응답을 받는다. 기본은 저장본이라
   화면을 연 것처럼 테스트 버전 행이 생길 수 있다 — 아무것도 쓰지 않으려면 `--published`(배포본).
 - `render` 는 「설문 보기」와 같은 컴포넌트로 jsdom 에 그려 보이는 글자·입력값·선택 상태를 찍는다.
   `--next N` 은 「다음」을 누르고, 막히면 새로 뜬 오류 문구만 찍는다. CSS 는 계산하지 않는다.
+- `--answers` 는 처음부터 깔아 둘 응답 JSON — 문항 코드(또는 id)를 키로, 값은 저장 모양 그대로(표는 칸 id → 값). 필수 쪽을 넘겨 뒤쪽 쪽을 볼 때 쓴다.
 - 「새로고침하면 보인다」 같은 답은 render 출력으로 확인한 뒤에 한다.
 - dump 파일에는 그 대상의 명단 평문이 있다. 사용자에게 파일 내용을 옮기지 말고 필요한 줄만 인용한다.
   7일 지난 dump 는 다음 dump 때 지워진다.

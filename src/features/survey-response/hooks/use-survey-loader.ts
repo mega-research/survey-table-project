@@ -46,6 +46,11 @@ interface PreviewContext {
   contactAttrs?: Record<string, string>;
   /** 같은 대상의 이월 응답 원본 — `loadPriorAnswersForScreen` 으로 공개 경로와 똑같이 적재한다 */
   priorAnswers?: unknown;
+  /**
+   * 처음부터 깔아 둘 응답 — 운영 도구(`pnpm survey:render --answers`)가 필수 쪽을 넘겨 뒤쪽 쪽을 그려 볼 때만 쓴다.
+   * 화면(관리자 「설문 보기」·공개 미리보기)은 넘기지 않는다. 상세 기재는 관리자 수정과 같이 `__optTexts__` 사이드카로 받는다.
+   */
+  initialResponses?: ResponsesMap;
 }
 
 /**
@@ -286,7 +291,12 @@ export function useSurveyLoader({
           setLoadedSurvey(previewContext.survey);
           setVersionId(previewContext.versionId);
           setDocumentView(previewContext.documentView ?? null);
-          setResponses({});
+          setResponses(previewContext.initialResponses ?? {});
+          if (previewContext.initialResponses) {
+            useSurveyResponseStore
+              .getState()
+              .seedOptionTexts(readOptTextsSidecar(previewContext.initialResponses));
+          }
           setContactAttrs(previewContext.contactAttrs ?? {});
           if (previewContext.priorAnswers != null) {
             setPriorAnswers(loadPriorAnswersForScreen(previewContext.priorAnswers, previewContext.survey));

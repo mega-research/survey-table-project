@@ -215,6 +215,8 @@ export interface SurveyResponseFlowProps {
     contactAttrs?: Record<string, string>;
     /** 같은 대상의 이월 응답 원본 — 로더가 공개 경로와 같은 적재(정규화·끈 문항 제외·상세 기재 시드)를 거친다. */
     priorAnswers?: unknown;
+    /** 처음부터 깔아 둘 응답 — 운영 도구(`pnpm survey:render --answers`) 전용, 화면은 넘기지 않는다. */
+    initialResponses?: Record<string, unknown>;
   };
 }
 

@@ -2,7 +2,8 @@
  * `pnpm survey:render` 가 vitest(jsdom)로 돌리는 그리기 — 관리자 「설문 보기」와 같은 컴포넌트·같은 입력이다
  * (`SurveyResponseFlow mode="preview"` + previewContext). 테스트가 아니라 출력기라 단언하지 않는다.
  *
- * 입력은 env 로 받는다: SURVEY_OPS_DUMP(dump 파일) · SURVEY_OPS_OUT(결과 파일) · SURVEY_OPS_MOBILE · SURVEY_OPS_NEXT.
+ * 입력은 env 로 받는다: SURVEY_OPS_DUMP(dump 파일) · SURVEY_OPS_OUT(결과 파일) · SURVEY_OPS_MOBILE · SURVEY_OPS_NEXT ·
+ * SURVEY_OPS_ANSWERS(깔아 둘 응답 JSON — 키는 문항 코드 또는 문항 id).
  */
 import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -56,6 +57,26 @@ async function settle(root: HTMLElement) {
   }
 }
 
+/** 문항 코드 키를 문항 id 로 바꾼다 — `__` 로 시작하는 사이드카 키(`__optTexts__` 등)와 이미 id 인 키는 그대로. */
+function resolveAnswerKeys(
+  answers: Record<string, unknown>,
+  survey: Survey,
+): Record<string, unknown> {
+  const idByCode = new Map(
+    (survey.questions ?? []).flatMap((q) =>
+      q.questionCode ? [[q.questionCode, q.id] as const] : [],
+    ),
+  );
+  const ids = new Set((survey.questions ?? []).map((q) => q.id));
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(answers)) {
+    if (key.startsWith('__') || ids.has(key)) out[key] = value;
+    else if (idByCode.has(key)) out[idByCode.get(key)!] = value;
+    else throw new Error(`--answers 의 「${key}」 는 이 설문의 문항 코드도 문항 id 도 아닙니다`);
+  }
+  return out;
+}
+
 function findNextButton(root: HTMLElement): HTMLButtonElement | null {
   const buttons = Array.from(root.querySelectorAll('button')) as HTMLButtonElement[];
   return (
@@ -75,6 +96,13 @@ it('render', async () => {
   const mobile = process.env['SURVEY_OPS_MOBILE'] === '1';
   const nextCount = Number(process.env['SURVEY_OPS_NEXT'] ?? '0');
   const dump = JSON.parse(readFileSync(dumpPath, 'utf8')) as Dump;
+  const answersPath = process.env['SURVEY_OPS_ANSWERS'];
+  const initialResponses = answersPath
+    ? resolveAnswerKeys(
+        JSON.parse(readFileSync(answersPath, 'utf8')) as Record<string, unknown>,
+        dump.survey,
+      )
+    : undefined;
 
   stubMatchMedia({ mobile, hover: !mobile });
   const { container } = render(
@@ -87,6 +115,7 @@ it('render', async () => {
         documentView: (dump.documentView ?? null) as never,
         ...(dump.contactAttrs ? { contactAttrs: dump.contactAttrs } : {}),
         ...(dump.priorAnswers != null ? { priorAnswers: dump.priorAnswers } : {}),
+        ...(initialResponses ? { initialResponses } : {}),
       }}
     />,
   );
@@ -96,6 +125,7 @@ it('render', async () => {
   const header = [
     `# ${dump.survey.title} — ${dump.source === 'published' ? '배포본' : '저장본'} · ${mobile ? '모바일(<768px)' : '데스크톱'}`,
     `# 명단 값: ${dump.contact ? `${dump.contact.isTest ? '테스트 ' : ''}조사 대상 #${dump.contact.resid}` : '없음'}`,
+    `# 깔아 둔 응답: ${initialResponses ? `${Object.keys(initialResponses).length}개 문항` : '없음'}`,
     '# CSS 는 계산하지 않는다 — hidden·aria-hidden·인라인 display:none·Tailwind 화면 폭 클래스만 숨김으로 본다',
   ].join('\n');
   sections.push(header);
