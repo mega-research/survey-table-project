@@ -370,3 +370,51 @@ describe('HeaderBulkStyleDialog 확인 단계', () => {
     expect(onApply).not.toHaveBeenCalled();
   });
 });
+
+describe('TableHeaderSection 안 쓴 열 빼기', () => {
+  it('열 설정에서 체크하면 그 열 인덱스로 켜고, 켠 열은 머리에 표시된다', async () => {
+    const onUpdateColumnExportOmit = vi.fn();
+    const columns: TableColumn[] = [
+      { id: 'c1', label: '원유' },
+      { id: 'c2', label: '기타1', exportOmitIfUnused: true },
+      { id: 'c3', label: '기타2' },
+    ];
+    render(
+      <TableHeaderSection
+        columns={columns}
+        editingColumnWidth={null}
+        {...noopColumnCallbacks()}
+        onUpdateColumnStyle={vi.fn()}
+        onUpdateColumnExportOmit={onUpdateColumnExportOmit}
+      />,
+    );
+
+    expect(screen.getAllByText('안 쓰면 뺌')).toHaveLength(1);
+    await userEvent.click(screen.getAllByRole('button', { name: '열 설정' })[2]!);
+    await userEvent.click(await screen.findByRole('checkbox', { name: /안 쓰면 내보내기에서 빼기/ }));
+    expect(onUpdateColumnExportOmit).toHaveBeenCalledWith(2, true);
+  });
+});
+
+describe('TableHeaderSection 열 차례로 열기', () => {
+  it('단계를 적으면 그 열 인덱스로 전달되고, 2단계 이상인 열은 머리에 표시된다', async () => {
+    const onUpdateColumnReveal = vi.fn();
+    const columns: TableColumn[] = [
+      { id: 'c1', label: '기타1' },
+      { id: 'c2', label: '기타2', revealStep: 2, revealAddLabel: '기타 원료 추가' },
+    ];
+    render(
+      <TableHeaderSection
+        columns={columns}
+        editingColumnWidth={null}
+        {...noopColumnCallbacks()}
+        onUpdateColumnStyle={vi.fn()}
+        onUpdateColumnReveal={onUpdateColumnReveal}
+      />,
+    );
+    expect(screen.getByText('2단계')).toBeInTheDocument();
+    await userEvent.click(screen.getAllByRole('button', { name: '열 설정' })[0]!);
+    fireEvent.change(await screen.findByLabelText(/차례로 열기 단계/), { target: { value: '3' } });
+    expect(onUpdateColumnReveal).toHaveBeenCalledWith(0, { revealStep: 3 });
+  });
+});

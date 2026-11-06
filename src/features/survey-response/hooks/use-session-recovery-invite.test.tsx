@@ -96,6 +96,40 @@ describe('useSessionRecovery invite 크로스 기기 회복', () => {
     );
   });
 
+  it('저장된 답을 깐 뒤 미저장 답 버리기 신호를 보낸다 — 응답 id 를 세우기 전에', async () => {
+    resumeMock.mockResolvedValue({
+      id: 'response-1',
+      status: 'in_progress',
+      resumed: false,
+      questionResponses: { q1: '저장된 답' },
+      currentStepId: null,
+    } as unknown as Awaited<ReturnType<typeof client.surveyResponse.lifecycle.resume>>);
+    const order: string[] = [];
+    const onAnswersRestored = vi.fn(() => order.push('discard'));
+    const { setCurrentResponseId, setResponses } = renderRecovery({
+      inviteToken: 'invite-1',
+      onAnswersRestored,
+    });
+    setResponses.mockImplementation(() => order.push('restore'));
+    setCurrentResponseId.mockImplementation(() => order.push('id'));
+
+    await waitFor(() => expect(onAnswersRestored).toHaveBeenCalledTimes(1));
+    expect(order).toEqual(['restore', 'discard', 'id']);
+  });
+
+  it('회복할 응답이 없으면 미저장 답을 버리지 않는다 — 새 응답의 첫 값이다', async () => {
+    window.localStorage.setItem(sessionStorageKey('survey-1', null), 'saved-session');
+    resumeMock.mockResolvedValue(null as Awaited<
+      ReturnType<typeof client.surveyResponse.lifecycle.resume>
+    >);
+    const onAnswersRestored = vi.fn();
+    renderRecovery({ onAnswersRestored });
+
+    await waitFor(() => expect(resumeMock).toHaveBeenCalled());
+    await act(async () => {});
+    expect(onAnswersRestored).not.toHaveBeenCalled();
+  });
+
   it('invite 도 saved sessionId 도 없으면 resume 을 호출하지 않는다', async () => {
     renderRecovery();
     // effect 가 동기적으로 게이트에서 반환하는지 microtask flush 후 확인

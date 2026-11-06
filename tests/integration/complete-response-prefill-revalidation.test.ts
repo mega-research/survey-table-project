@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ========================
 // 모듈 모킹
@@ -14,11 +14,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 // 호출 순서대로 큐잉된 결과를 돌려주고, 트랜잭션 내부 메인 UPDATE 의 .set() 인자를
 // 캡처해 questionResponses 에 기록되는 최종값을 검증한다.
 
-const {
-  selectTerminalQueue,
-  capturedUpdateSets,
-  updateReturningMock,
-} = vi.hoisted(() => ({
+const { selectTerminalQueue, capturedUpdateSets, updateReturningMock } = vi.hoisted(() => ({
   selectTerminalQueue: [] as unknown[][],
   capturedUpdateSets: [] as Record<string, unknown>[],
   updateReturningMock: vi.fn(),
@@ -44,8 +40,7 @@ vi.mock('@/db', () => {
       // .where() 자체를 thenable 로 — 뒤에 .limit() 이 붙으면 그쪽이 우선 소비
       const whereResult: Record<string, unknown> = {
         limit: vi.fn(() => Promise.resolve(nextSelectTerminal())),
-        then: (resolve: (v: unknown) => unknown) =>
-          resolve(nextSelectTerminal()),
+        then: (resolve: (v: unknown) => unknown) => resolve(nextSelectTerminal()),
       };
       return whereResult;
     });
@@ -116,6 +111,8 @@ const PREFILL_QID = 'q-prefill';
 function queueSelects(opts: {
   attrs: Record<string, string>;
   template: string;
+  /** 단일선택 문항이면 유형·보기를 함께 싣는다 */
+  question?: Record<string, unknown>;
 }) {
   // 호출 순서: 0) 가용성 게이트 완료 카운트  1) 유효 questionId 집합(loadValidQuestionIds)
   //           2) contactTargets  3) contact_pii 행  4) prefillQuestions
@@ -128,7 +125,7 @@ function queueSelects(opts: {
     [{ attrs: opts.attrs }],
     // 개인정보 열 행(read-models/respondent-contact-attrs) — 없음
     [],
-    [{ id: PREFILL_QID, template: opts.template }],
+    [{ id: PREFILL_QID, template: opts.template, ...opts.question }],
   );
 }
 
@@ -150,9 +147,8 @@ describe('completeResponse — prefill 재검증 (비문자열 우회 조작 방
   it('비문자열(숫자)로 조작된 prefill 값을 expected 문자열로 강제 복원한다', async () => {
     queueSelects({ attrs: { name: '홍길동' }, template: '{{name}}' });
 
-    const { completeResponse } = await import(
-      '@/server/survey-response/services/response-completion'
-    );
+    const { completeResponse } =
+      await import('@/server/survey-response/services/response-completion');
 
     await completeResponse({
       responseId: RESPONSE_ID,
@@ -160,82 +156,64 @@ describe('completeResponse — prefill 재검증 (비문자열 우회 조작 방
       data: { questionResponses: { [PREFILL_QID]: 12345 } },
     });
 
-    const mainSet = capturedUpdateSets.find(
-      (s) => s['questionResponses'] !== undefined,
-    );
+    const mainSet = capturedUpdateSets.find((s) => s['questionResponses'] !== undefined);
     expect(mainSet).toBeDefined();
-    expect(
-      (mainSet!['questionResponses'] as Record<string, unknown>)[PREFILL_QID],
-    ).toBe('홍길동');
+    expect((mainSet!['questionResponses'] as Record<string, unknown>)[PREFILL_QID]).toBe('홍길동');
   });
 
   it('비문자열(배열)로 조작된 prefill 값도 강제 복원한다', async () => {
     queueSelects({ attrs: { name: '홍길동' }, template: '{{name}}' });
 
-    const { completeResponse } = await import(
-      '@/server/survey-response/services/response-completion'
-    );
+    const { completeResponse } =
+      await import('@/server/survey-response/services/response-completion');
 
     await completeResponse({
       responseId: RESPONSE_ID,
       data: { questionResponses: { [PREFILL_QID]: ['tampered'] } },
     });
 
-    const mainSet = capturedUpdateSets.find(
-      (s) => s['questionResponses'] !== undefined,
-    );
-    expect(
-      (mainSet!['questionResponses'] as Record<string, unknown>)[PREFILL_QID],
-    ).toBe('홍길동');
+    const mainSet = capturedUpdateSets.find((s) => s['questionResponses'] !== undefined);
+    expect((mainSet!['questionResponses'] as Record<string, unknown>)[PREFILL_QID]).toBe('홍길동');
   });
 
   it('expected 와 일치하는 정상 문자열 응답은 그대로 보존한다', async () => {
     queueSelects({ attrs: { name: '홍길동' }, template: '{{name}}' });
 
-    const { completeResponse } = await import(
-      '@/server/survey-response/services/response-completion'
-    );
+    const { completeResponse } =
+      await import('@/server/survey-response/services/response-completion');
 
     await completeResponse({
       responseId: RESPONSE_ID,
       data: { questionResponses: { [PREFILL_QID]: '홍길동' } },
     });
 
-    const mainSet = capturedUpdateSets.find(
-      (s) => s['questionResponses'] !== undefined,
-    );
-    expect(
-      (mainSet!['questionResponses'] as Record<string, unknown>)[PREFILL_QID],
-    ).toBe('홍길동');
+    const mainSet = capturedUpdateSets.find((s) => s['questionResponses'] !== undefined);
+    expect((mainSet!['questionResponses'] as Record<string, unknown>)[PREFILL_QID]).toBe('홍길동');
   });
 
   it('명단 값이 비어 잠기지 않은 prefill 질문은 응답자가 적은 값을 그대로 둔다', async () => {
     // 명단에 name 이 없다 — 화면은 이 문항을 잠그지 않고 응답자가 직접 적는다.
     queueSelects({ attrs: {}, template: '{{name}}' });
 
-    const { completeResponse } = await import(
-      '@/server/survey-response/services/response-completion'
-    );
+    const { completeResponse } =
+      await import('@/server/survey-response/services/response-completion');
 
     await completeResponse({
       responseId: RESPONSE_ID,
       data: { questionResponses: { [PREFILL_QID]: '직접 적은 이름' } },
     });
 
-    const mainSet = capturedUpdateSets.find(
-      (s) => s['questionResponses'] !== undefined,
+    const mainSet = capturedUpdateSets.find((s) => s['questionResponses'] !== undefined);
+    expect((mainSet!['questionResponses'] as Record<string, unknown>)[PREFILL_QID]).toBe(
+      '직접 적은 이름',
     );
-    expect(
-      (mainSet!['questionResponses'] as Record<string, unknown>)[PREFILL_QID],
-    ).toBe('직접 적은 이름');
   });
 
   it('응답에 포함되지 않은(미노출) prefill 질문에는 허위 답변을 주입하지 않는다', async () => {
     queueSelects({ attrs: { name: '홍길동' }, template: '{{name}}' });
 
-    const { completeResponse } = await import(
-      '@/server/survey-response/services/response-completion'
-    );
+    const { completeResponse } =
+      await import('@/server/survey-response/services/response-completion');
 
     await completeResponse({
       responseId: RESPONSE_ID,
@@ -243,10 +221,41 @@ describe('completeResponse — prefill 재검증 (비문자열 우회 조작 방
       data: { questionResponses: { other: 'value' } },
     });
 
-    const mainSet = capturedUpdateSets.find(
-      (s) => s['questionResponses'] !== undefined,
-    );
+    const mainSet = capturedUpdateSets.find((s) => s['questionResponses'] !== undefined);
     const qr = mainSet!['questionResponses'] as Record<string, unknown>;
     expect(PREFILL_QID in qr).toBe(false);
+  });
+
+  describe('단일선택 — 명단 값에 맞춘 보기로 복원', () => {
+    const radio = {
+      type: 'radio',
+      tableRowsData: null,
+      options: [
+        { id: 'o1', label: '① 예술분야 초기창업 지원사업', value: '1' },
+        { id: 'o2', label: '② 예술분야 창업도약 지원사업', value: '2' },
+        { id: 'o3', label: '③ 예술분야 성장도약 지원사업', value: '3' },
+      ],
+    };
+
+    async function submit(answer: unknown) {
+      const { completeResponse } =
+        await import('@/server/survey-response/services/response-completion');
+      await completeResponse({
+        responseId: RESPONSE_ID,
+        data: { questionResponses: { [PREFILL_QID]: answer } },
+      });
+      const mainSet = capturedUpdateSets.find((s) => s['questionResponses'] !== undefined);
+      return (mainSet!['questionResponses'] as Record<string, unknown>)[PREFILL_QID];
+    }
+
+    it('다른 보기로 조작된 값을 명단 값의 보기로 되돌린다', async () => {
+      queueSelects({ attrs: { 지원사업: '창업도약' }, template: '{{지원사업}}', question: radio });
+      expect(await submit('1')).toBe('2');
+    });
+
+    it('맞는 보기를 정하지 못하면(명단 값 없음) 응답자가 고른 값을 둔다', async () => {
+      queueSelects({ attrs: {}, template: '{{지원사업}}', question: radio });
+      expect(await submit('3')).toBe('3');
+    });
   });
 });

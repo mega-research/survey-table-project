@@ -31,6 +31,7 @@ import { computeTableEstimatedHeight } from '@/features/question-renderer/hooks/
 import { useEnsureSurveyInDb } from '@/features/survey-builder/hooks/use-ensure-survey-in-db';
 import { QuestionEditModal } from '@/features/survey-builder/question-edit/question-edit-modal';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
+import { collectPreviewPriorSeeds } from '@/features/survey-builder/lib/preview-prior-seeds';
 import { useTestResponseStore } from '@/features/survey-builder/stores/test-response-store';
 import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
 import { useSurveyResponseStore } from '@/features/survey-response/stores/survey-response-store';
@@ -56,7 +57,7 @@ import {
 import { SurveyLocaleProvider } from '@/features/question-renderer/survey-locale-context';
 import { FormulaEvalProvider } from '@/features/question-renderer/formula-context';
 import { resolveEffectiveOptionTextsByQuestion } from '@/features/question-renderer/utils/effective-option-texts';
-import { substituteTokens } from '@/lib/survey/substitute-tokens';
+import { substituteTokens, substituteTokensInHtml } from '@/lib/survey/substitute-tokens';
 import { resolveCurrentLocale } from '@/utils/survey-language';
 import { generateId, isEmptyHtml } from '@/lib/utils';
 import { client } from '@/shared/lib/rpc';
@@ -303,7 +304,7 @@ const SortableQuestion = React.memo(function SortableQuestion({
               }}
               dangerouslySetInnerHTML={{
                 __html: sanitizeRichHtml(
-                  substituteTokens(question.description ?? '', attrs, quotes),
+                  substituteTokensInHtml(question.description ?? '', attrs, quotes),
                 ),
               }}
             />
@@ -407,6 +408,13 @@ export function SortableQuestionList({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
 
+  // 콜백 안정화용 ref (questions 참조를 useCallback deps에서 제거)
+  const questionsRef = useRef(questions);
+  useSyncLatestRef(questionsRef, questions);
+  // 첫 컨택 샘플 응답(비동기) 시점의 최신 LUT — 이월값 불러오기 조건 평가용
+  const lookupsRef = useRef(lookups);
+  useSyncLatestRef(lookupsRef, lookups);
+
   // 첫 컨택의 attrs 를 fetch — 미리보기(실제 렌더링)의 {{변수}} 토큰 치환 + 분기 조건 평가에 사용.
   // 컨택 0건/인증 실패/키 부재 시 아래 Proxy 가 `[key]` placeholder 로 폴백.
   const [defaultContactAttrs, setDefaultContactAttrs] = useState<Record<string, string>>({});
@@ -418,6 +426,21 @@ export function SortableQuestionList({
       .then((sample) => {
         if (cancelled) return;
         setDefaultContactAttrs(sample ? sample.attrs : {});
+        // 그 대상의 이월 응답을 응답 화면처럼 미리 깐다 — 값이 이미 있는 문항은 덮지 않는다.
+        // 미리보기는 저장하지 않으므로 테스트 응답 스토어에만 쌓인다.
+        if (sample?.priorAnswers) {
+          const seeds = collectPreviewPriorSeeds(
+            sample.priorAnswers,
+            questionsRef.current,
+            useTestResponseStore.getState().testResponses,
+            { responses: {}, contactAttrs: sample.attrs, lookups: lookupsRef.current },
+          );
+          useSurveyResponseStore.getState().seedOptionTexts(seeds.optionTexts);
+          const { updateTestResponse } = useTestResponseStore.getState();
+          for (const entry of seeds.entries) {
+            updateTestResponse(entry.questionId, entry.value as Parameters<typeof updateTestResponse>[1]);
+          }
+        }
       })
       .catch((error) => {
         // 인증 실패/네트워크 오류 시 attrs 는 {} 유지 — 위 Proxy 가 placeholder 로 폴백.
@@ -471,9 +494,6 @@ export function SortableQuestionList({
   // querySelector 스코프용 컨테이너 ref
   const editContainerRef = useRef<HTMLDivElement>(null);
 
-  // 콜백 안정화용 ref (questions 참조를 useCallback deps에서 제거)
-  const questionsRef = useRef(questions);
-  useSyncLatestRef(questionsRef, questions);
 
   // content-visibility용 카드 높이 캐시 — 편집 카드가 실제 렌더링(테스트 입력)을 품으므로
   // 'test' 추정치를 사용한다

@@ -1,4 +1,5 @@
 import type {
+  CellEnableCondition,
   ExpressionConditionConfig,
   ExpressionOperand,
   QuestionCondition,
@@ -24,20 +25,37 @@ export function remapGatingValues(
   const nextRows = rows.map((row) => {
     let rowChanged = false;
 
-    const nextCells = row.cells.map((cell) => {
-      if (!cell.enabledWhen) return cell;
+    const remapCondition = (condition: CellEnableCondition) =>
       // 조건 묶음이면 트리의 모든 option 잎을 본다 — 같은 컨트롤러가 여러 잎에 나올 수 있다.
-      const enabledWhen = mapGateLeaves(cell.enabledWhen, (leaf) =>
+      mapGateLeaves(condition, (leaf) =>
         leaf.kind === 'option' &&
         leaf.controllerCellId === controllerCellId &&
         leaf.values.includes(oldValue)
           ? { ...leaf, values: leaf.values.map((v) => (v === oldValue ? newValue : v)) }
           : leaf,
       );
-      if (enabledWhen === cell.enabledWhen) return cell;
+    const nextCells = row.cells.map((cell) => {
+      let next = cell;
+      if (cell.enabledWhen) {
+        const enabledWhen = remapCondition(cell.enabledWhen);
+        if (enabledWhen !== cell.enabledWhen) next = { ...next, enabledWhen };
+      }
+      // 드롭다운 보기 표시 조건(QuestionOption.enabledWhen)도 같은 컨트롤러 value 를 가리킨다.
+      if (cell.selectOptions?.some((o) => o.enabledWhen)) {
+        let optionsChanged = false;
+        const selectOptions = cell.selectOptions.map((option) => {
+          if (!option.enabledWhen) return option;
+          const enabledWhen = remapCondition(option.enabledWhen);
+          if (enabledWhen === option.enabledWhen) return option;
+          optionsChanged = true;
+          return { ...option, enabledWhen };
+        });
+        if (optionsChanged) next = { ...next, selectOptions };
+      }
+      if (next === cell) return cell;
 
       rowChanged = true;
-      return { ...cell, enabledWhen };
+      return next;
     });
 
     if (!rowChanged) return row;

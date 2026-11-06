@@ -56,6 +56,26 @@ describe('sanitizeInternalPath', () => {
     }
   });
 
+  it('URL 해석이 지우는 탭·개행이나 역슬래시로 외부 호스트를 만드는 우회를 거부한다 (hotfix 이식)', () => {
+    for (const raw of [
+      '/\t/evil.example/signin',
+      '/\n/evil.example',
+      '/\r\n/evil.example',
+      '/\t\\evil.example',
+      '/x\\..\\..\\evil',
+      '/\u0000/evil.example',
+      '/\u007f/evil.example',
+    ]) {
+      expect(sanitizeInternalPath(raw)).toBeNull();
+    }
+  });
+
+  it('같은 출처 내부 경로는 쿼리·해시와 함께 그대로 통과한다', () => {
+    for (const path of ['/surveys', '/surveys/s1/preview?x=1&y=%2F%2F', '/surveys/s1/operations/profiles#row']) {
+      expect(sanitizeInternalPath(path)).toBe(path);
+    }
+  });
+
   it('루트와 로그인 페이지는 그대로 통과한다 — 기본값 대체는 상위 함수 몫', () => {
     expect(sanitizeInternalPath('/')).toBe('/');
     expect(sanitizeInternalPath('/login')).toBe('/login');

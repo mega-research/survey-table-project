@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveys } from '@/db/schema';
+import { lookupPriorAnswersByContactTarget } from '@/server/read-models/contact-prior-answers';
 import { getFirstContactSample } from '@/server/read-models/contact-sample';
 import { loadRespondentContactAttrs } from '@/server/read-models/respondent-contact-attrs';
 import { loadOperationsDataScope } from '@/server/data-scope';
@@ -17,7 +18,8 @@ import type { SurveyTestSample } from '../domain/test-sample';
  * 어드민 인증된 빌더 안에서만 첫 컨택 attrs 를 제공한다.
  * 컨택이 0건이면 null.
  *
- * inviteToken 은 노출하지 않고 attrs/resid 만 추출한다. 개인정보로 암호화된 열은 응답 화면처럼 attrs 에
+ * inviteToken 은 노출하지 않고 attrs/resid·이월 응답만 추출한다(이월 응답은 미리보기가 응답 화면처럼
+ * 지난 회차 값을 까는 데 쓴다 — 저장하지 않는 화면이다). 개인정보로 암호화된 열은 응답 화면처럼 attrs 에
  * 합친다 — 빌더는 관리자 인증 아래라 설문이 쓰는 열을 가리지 않고 전부 싣는다.
  *
  * **실컨택 값은 `contacts.view` 를 가진 사람에게만 준다.** attrs 는 업로드한 엑셀 행에서 PII
@@ -51,5 +53,9 @@ export async function getSurveyTestSample(
   if (!sample) return null;
   // 응답 화면과 같은 명단 값 — 개인정보 열까지 합친다. 빠지면 그 열을 읽는
   // 프리필 토큰이 미리보기에서 `[키]` 자리 표시 글자로 깔려 형식 검사에 걸린다.
-  return { attrs: await loadRespondentContactAttrs(sample.id), resid: sample.resid };
+  const [attrs, priorAnswers] = await Promise.all([
+    loadRespondentContactAttrs(sample.id),
+    lookupPriorAnswersByContactTarget({ surveyId, contactTargetId: sample.id, isTest: scope === 'test' }),
+  ]);
+  return { attrs, resid: sample.resid, priorAnswers };
 }

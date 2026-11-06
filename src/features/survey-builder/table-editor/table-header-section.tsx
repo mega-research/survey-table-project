@@ -51,6 +51,12 @@ interface ColumnHeaderCallbacks {
   onColumnWidthChange: (columnIndex: number, width: number) => void;
   onUpdateColumnStyle: (columnIndex: number, style: HeaderBulkStyle) => void;
   onOpenColumnConditionModal?: ((columnIndex: number) => void) | undefined;
+  /** 안 쓴 열 빼기 — 응답 전체에서 아무도 안 채우면 내보내기에서 이 열을 뺀다 */
+  onUpdateColumnExportOmit?: ((columnIndex: number, omit: boolean) => void) | undefined;
+  /** 열 차례로 열기 — 단계(2 이상이면 응답자가 `+` 로 연다)와 버튼 문구 */
+  onUpdateColumnReveal?:
+    | ((columnIndex: number, reveal: { revealStep?: number; revealAddLabel?: string }) => void)
+    | undefined;
 }
 
 export interface TableHeaderSectionProps extends ColumnHeaderCallbacks {
@@ -86,6 +92,8 @@ const ColumnHeader = React.memo(function ColumnHeader({
   onColumnWidthChange,
   onUpdateColumnStyle,
   onOpenColumnConditionModal,
+  onUpdateColumnExportOmit,
+  onUpdateColumnReveal,
 }: ColumnHeaderProps) {
   const handleLabelCommit = React.useCallback(
     (value: string) => onUpdateColumnLabel(columnIndex, value),
@@ -145,6 +153,10 @@ const ColumnHeader = React.memo(function ColumnHeader({
             <span>{localCode || `c${columnIndex + 1}`}</span>
             {isHeaderMerged && <span className="text-orange-500">🔗{headerColspan}</span>}
             {hasCondition && <Eye className="h-2.5 w-2.5 text-blue-500" />}
+            {column.exportOmitIfUnused && <span title="응답 전체에서 아무도 안 채우면 내보내기에서 뺍니다">안 쓰면 뺌</span>}
+            {(column.revealStep ?? 1) >= 2 && (
+              <span title="응답자가 + 를 눌러 여는 열">{column.revealStep}단계</span>
+            )}
           </div>
         </div>
       )}
@@ -197,6 +209,64 @@ const ColumnHeader = React.memo(function ColumnHeader({
                 className="h-6 bg-gray-50 px-1.5 text-xs"
               />
             </div>
+
+            {/* 안 쓴 열 빼기 */}
+            {onUpdateColumnExportOmit && (
+              <label className="flex cursor-pointer items-start gap-1.5 px-2 py-1.5 text-[11px] text-gray-600">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={column.exportOmitIfUnused === true}
+                  onChange={(e) => onUpdateColumnExportOmit(columnIndex, e.target.checked)}
+                />
+                <span>
+                  안 쓰면 내보내기에서 빼기
+                  <span className="block text-[10px] text-gray-400">응답 전체에서 아무도 안 채운 열</span>
+                </span>
+              </label>
+            )}
+
+            {/* 열 차례로 열기 */}
+            {onUpdateColumnReveal && (
+              <div className="px-2 py-1.5">
+                <label
+                  htmlFor={`reveal-step-${column.id}`}
+                  className="mb-1 block text-[10px] font-medium text-gray-500"
+                >
+                  차례로 열기 단계 (2 이상이면 + 로 엶)
+                </label>
+                <Input
+                  id={`reveal-step-${column.id}`}
+                  type="number"
+                  min={1}
+                  value={column.revealStep ?? ''}
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    onUpdateColumnReveal(columnIndex, {
+                      ...(Number.isFinite(n) && n >= 1 ? { revealStep: Math.floor(n) } : {}),
+                      ...(column.revealAddLabel ? { revealAddLabel: column.revealAddLabel } : {}),
+                    });
+                  }}
+                  className="h-6 bg-gray-50 px-1.5 text-xs"
+                  placeholder="항상 보임"
+                />
+                {(column.revealStep ?? 1) >= 2 && (
+                  <Input
+                    aria-label="열 추가 버튼 문구"
+                    defaultValue={column.revealAddLabel ?? ''}
+                    onBlur={(e) => {
+                      const label = e.target.value.trim();
+                      onUpdateColumnReveal(columnIndex, {
+                        revealStep: column.revealStep!,
+                        ...(label ? { revealAddLabel: label } : {}),
+                      });
+                    }}
+                    className="mt-1 h-6 bg-gray-50 px-1.5 text-xs"
+                    placeholder="버튼 문구 (기본: 열 추가)"
+                  />
+                )}
+              </div>
+            )}
 
             <MenuDivider />
 
@@ -324,6 +394,8 @@ export const TableHeaderSection = React.memo(function TableHeaderSection({
   onColumnWidthChange,
   onUpdateColumnStyle,
   onOpenColumnConditionModal,
+  onUpdateColumnExportOmit,
+  onUpdateColumnReveal,
 }: TableHeaderSectionProps) {
   const editingQuestionId = useSurveyUIStore((s) => s.editingQuestionId);
   const hideColumnLabels = useSurveyBuilderStore(
@@ -362,6 +434,8 @@ export const TableHeaderSection = React.memo(function TableHeaderSection({
             onColumnWidthChange={onColumnWidthChange}
             onUpdateColumnStyle={onUpdateColumnStyle}
             onOpenColumnConditionModal={onOpenColumnConditionModal}
+            onUpdateColumnExportOmit={onUpdateColumnExportOmit}
+            onUpdateColumnReveal={onUpdateColumnReveal}
           />
         );
       })}

@@ -4,6 +4,12 @@ import type { TableCell } from '@/types/survey';
 export interface InteractiveCellProps {
   cell: TableCell;
   cellResponse: unknown;
+  /**
+   * 응답에 실제로 저장된 이 칸의 값 — `cellResponse` 는 쓰는 즉시 바뀌는 로컬 사본이라 부모가 쓰기를 잃으면
+   * 둘이 갈린다(화면엔 값, 응답엔 없음). 「응답에 없으면 다시 쓴다」 판정은 이 값으로 한다. 미지정이면
+   * `cellResponse` 와 같다고 본다.
+   */
+  storedCellResponse?: unknown;
   onUpdateValue: (value: string | string[] | object) => void;
   /**
    * 같은 표의 여러 칸을 한 번에 쓴다(칸 id → 값). input 셀의 목록에서 찾기가 고른 행을 이 칸과
@@ -41,6 +47,11 @@ export interface InteractiveCellProps {
    * 키는 선택 칸이 `<option value>` 에 쓰는 것과 같다(`option.value ?? option.id`).
    */
   disabledOptionValues?: ReadonlySet<string> | undefined;
+  /**
+   * 목록에서 빼는 보기 값(select 셀 전용) — 보기 표시 조건(`QuestionOption.enabledWhen`)이 거짓인 보기.
+   * 키는 `disabledOptionValues` 와 같다. 판정은 `lib/survey/cell-gating` 의 `hiddenSelectOptionValues`.
+   */
+  hiddenOptionValues?: ReadonlySet<string> | undefined;
   /**
    * 캡션 오버라이드(image/video 셀 전용). 호출부가 토큰 치환을 끝낸 문구를 넘긴다.
    * 미지정 시 cell.content 를 셀이 직접 치환 — cell-options-container.tsx 와 동일한

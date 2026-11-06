@@ -1,5 +1,5 @@
 /**
- * 입력 형식 파서 — 휴대전화 · 전화 · 사업자번호 · 법인번호 · 이메일.
+ * 입력 형식 파서 — 휴대전화 · 전화 · 사업자번호 · 법인번호 · 이메일 · 날짜.
  *
  * 검증 · 체크섬 · 하이픈 정규화 · 실패 사유가 **한 함수에서** 나온다. 따로 두면
  * "통과했는데 정규형이 없다" 처럼 서로 어긋난다.
@@ -12,6 +12,7 @@
  *    응답자에게 전혀 다른 안내다.
  *
  * 국제번호 라이브러리(libphonenumber 류)는 쓰지 않는다 — 국내 조사에는 과하고 번들만 무겁다.
+ * 해외 번호는 `+` 로 시작할 때만 받고 나라별 규칙 없이 길이만 본다(`parseInternational`).
  */
 import type { InputFormat } from '@/types/input-type';
 import { DEFAULT_SURVEY_LOCALE, type SurveyLocale } from '@/types/survey-locale';
@@ -23,7 +24,8 @@ export type FormatFailure =
   | 'unknown_prefix' // 휴대전화 식별번호·지역번호가 아님
   | 'checksum_mismatch'
   | 'malformed' // 이메일 구조 불량
-  | 'non_ascii'; // 이메일에 한글·전각 등 ASCII 밖 글자
+  | 'non_ascii' // 이메일에 한글·전각 등 ASCII 밖 글자
+  | 'invalid_date'; // 날짜 모양은 맞는데 달력에 없는 날(13월·2월 30일) 또는 범위 밖 연도
 
 export type ParseResult = { ok: true; normalized: string } | { ok: false; reason: FormatFailure };
 
@@ -34,9 +36,8 @@ export type ParseResult = { ok: true; normalized: string } | { ok: false; reason
 const MOBILE_PREFIXES = ['010', '011', '016', '017', '018', '019'] as const;
 
 /**
- * 유선 지역번호 3자리 + 인터넷전화(070). 서울(02)은 2자리라 따로 본다.
- * 대표번호(15xx·16xx·18xx)와 안심번호(050x)는 **일부러 뺐다** — 자릿수·형태가 제각각이라
- * 정규형을 정할 수 없다. 담당자가 정당한 예외로 넣어야 할 값은 관리자 편집에서 경고로 통과한다.
+ * 유선 지역번호 3자리 + 인터넷전화(070) + 수신자 부담(080). 서울(02)은 2자리, 안심번호(050X)는
+ * 4자리라 따로 본다. 대표번호는 아래 따로 본다.
  */
 const LANDLINE_AREA_CODES = [
   '031',
@@ -56,7 +57,18 @@ const LANDLINE_AREA_CODES = [
   '063',
   '064', // 전남·광주·전북·제주
   '070', // 인터넷전화
+  '080', // 수신자 부담
 ] as const;
+
+/** 안심번호 0502~0508 — 4자리 식별번호 + 3·4자리 국번 + 4자리 */
+const SAFE_NUMBER_PREFIX = /^050[2-8]/;
+
+/**
+ * 전국 대표번호(1588·1544·1600·1899 …) — 지역번호 없이 앞 4자리 + 뒤 4자리, 늘 8자리다.
+ * 첫 두 자리 15·16·18 만 받는다(대표번호 대역). 사업체 전화로 대표번호만 가진 곳이 실제로 있어
+ * 막으면 응답자가 넘어갈 수 없었다(2026-11-05, 유가공업 실태조사).
+ */
+const REPRESENTATIVE_PREFIXES = ['15', '16', '18'] as const;
 
 /** 표기용 구분 문자 — 공백·하이픈류·괄호·점. 이것만 걷어내고 남은 것이 숫자가 아니면 실패다. */
 const SEPARATOR_PATTERN = /[\s\-–—().]/g;
@@ -86,15 +98,58 @@ function parseMobile(digits: string): ParseResult {
   return { ok: true, normalized: `${prefix}-${splitSubscriber(rest)}` };
 }
 
+function isRepresentative(digits: string): boolean {
+  return REPRESENTATIVE_PREFIXES.some((p) => digits.startsWith(p));
+}
+
 function parsePhone(digits: string): ParseResult {
   if (MOBILE_PREFIXES.some((p) => digits.startsWith(p))) return parseMobile(digits);
+  if (isRepresentative(digits)) {
+    if (digits.length !== 8) return { ok: false, reason: 'wrong_length' };
+    return { ok: true, normalized: `${digits.slice(0, 4)}-${digits.slice(4)}` };
+  }
   const area = digits.startsWith('02')
     ? '02'
-    : LANDLINE_AREA_CODES.find((c) => digits.startsWith(c));
+    : SAFE_NUMBER_PREFIX.test(digits)
+      ? digits.slice(0, 4)
+      : LANDLINE_AREA_CODES.find((c) => digits.startsWith(c));
   if (!area) return { ok: false, reason: 'unknown_prefix' };
   const rest = digits.slice(area.length);
   if (rest.length !== 7 && rest.length !== 8) return { ok: false, reason: 'wrong_length' };
   return { ok: true, normalized: `${area}-${splitSubscriber(rest)}` };
+}
+
+/** 국제 표준(E.164) 번호 길이 — 국가번호 포함 숫자만 */
+const INTERNATIONAL_MIN_DIGITS = 8;
+const INTERNATIONAL_MAX_DIGITS = 15;
+const KOREA_COUNTRY_CODE = '82';
+
+/**
+ * 해외 번호 — 전화·휴대전화 칸에서 값이 `+` 로 시작할 때만 탄다(국내 번호는 `+` 로 시작하지 않아
+ * 국내 응답에는 영향이 없다 — 2026-11-05 다국어 설문의 중·영판 자국 번호를 열려고 더했다).
+ * - `+82` 는 국내 번호로 바꿔 국내 규칙(`domestic`)으로 검사·정돈한다. 국가번호 뒤에 0 을 붙여 쓴
+ *   `+82 010…` 도 받는다. 대표번호(`+82 1588-1234` — 15·16·18 로 시작하는 **8자리**)는 앞에 0 을 붙이지
+ *   않는다. 자릿수까지 봐야 한다 — `+82 16 123 4567` 은 016 휴대 번호다(2026-11-05 리뷰).
+ * - 그 밖은 나라별 규칙 없이 숫자 8~15자리면 통과하고 `+` 와 숫자만으로 정돈한다. 국가번호는 0 으로
+ *   시작하지 않는다.
+ * 휴대전화 칸도 해외 번호는 휴대전화인지 가릴 수 없어 길이만 본다.
+ */
+function parseInternational(raw: string, domestic: (digits: string) => ParseResult): ParseResult {
+  const digits = digitsOf(raw.slice(1));
+  if (digits === null) return { ok: false, reason: 'not_a_number' };
+  if (digits.startsWith(KOREA_COUNTRY_CODE)) {
+    const national = digits.slice(KOREA_COUNTRY_CODE.length);
+    const asDomestic =
+      national.startsWith('0') || (national.length === 8 && isRepresentative(national))
+        ? national
+        : `0${national}`;
+    return domestic(asDomestic);
+  }
+  if (digits.startsWith('0')) return { ok: false, reason: 'unknown_prefix' };
+  if (digits.length < INTERNATIONAL_MIN_DIGITS || digits.length > INTERNATIONAL_MAX_DIGITS) {
+    return { ok: false, reason: 'wrong_length' };
+  }
+  return { ok: true, normalized: `+${digits}` };
 }
 
 /**
@@ -179,6 +234,43 @@ function parseEmail(raw: string): ParseResult {
   return { ok: true, normalized: value };
 }
 
+/** 받는 연도 범위 — 오타(0025·9999)를 거르는 선. 조사 대상 날짜(설립·인증·출생일)는 이 안에 있다. */
+const DATE_YEAR_MIN = 1900;
+const DATE_YEAR_MAX = 2100;
+const DATE_SEPARATOR_SPLIT = /[\s.\-/]+/;
+
+/**
+ * 날짜 — `YYYY.MM.DD` 로 정돈한다.
+ *
+ * 구분 문자(점·하이픈·슬래시·공백)가 있으면 연·월·일 세 조각으로 읽어 한 자리 월·일(`2025.3.1`)도
+ * 받는다. 구분 문자가 없으면 8자리(`20250131`)만 받는다 — `202531` 은 3월 1일인지 31일인지 모른다.
+ * 끝의 점(`2025. 3. 1.` — 한국식 표기)은 빈 조각이라 버린다.
+ */
+function parseDate(raw: string): ParseResult {
+  const value = raw.trim();
+  if (/[^0-9\s.\-/]/.test(value)) return { ok: false, reason: 'not_a_number' };
+  let parts: string[];
+  if (/[\s.\-/]/.test(value)) {
+    parts = value.split(DATE_SEPARATOR_SPLIT).filter((p) => p !== '');
+    if (parts.length !== 3) return { ok: false, reason: 'malformed' };
+    const [y, m, d] = parts as [string, string, string];
+    if (y.length !== 4 || m.length > 2 || d.length > 2) return { ok: false, reason: 'malformed' };
+  } else {
+    if (value.length !== 8) return { ok: false, reason: 'wrong_length' };
+    parts = [value.slice(0, 4), value.slice(4, 6), value.slice(6)];
+  }
+  const [year, month, day] = parts.map(Number) as [number, number, number];
+  // 윤년은 Date 로 판정한다 — UTC 로 만들어 시간대가 날짜를 밀지 않게 한다
+  const daysInMonth = month >= 1 && month <= 12 ? new Date(Date.UTC(year, month, 0)).getUTCDate() : 0;
+  if (year < DATE_YEAR_MIN || year > DATE_YEAR_MAX || day < 1 || day > daysInMonth) {
+    return { ok: false, reason: 'invalid_date' };
+  }
+  return {
+    ok: true,
+    normalized: `${year}.${String(month).padStart(2, '0')}.${String(day).padStart(2, '0')}`,
+  };
+}
+
 /**
  * 값 하나를 형식에 비추어 본다.
  *
@@ -188,8 +280,14 @@ function parseEmail(raw: string): ParseResult {
 export function parseInputFormat(format: InputFormat, raw: string): ParseResult {
   if (raw.trim() === '') return { ok: true, normalized: '' };
   if (format === 'email') return parseEmail(raw);
+  if (format === 'date') return parseDate(raw);
+  const trimmed = raw.trim();
+  if (trimmed.startsWith('+')) {
+    if (format === 'phone') return parseInternational(trimmed, parsePhone);
+    if (format === 'mobile') return parseInternational(trimmed, parseMobile);
+  }
 
-  const digits = digitsOf(raw.trim());
+  const digits = digitsOf(trimmed);
   if (digits === null) return { ok: false, reason: 'not_a_number' };
 
   switch (format) {
@@ -211,6 +309,7 @@ const FORMAT_LABEL_KEY: Record<InputFormat, SystemStringKey> = {
   biz_number: 'format.label.biz_number',
   corp_number: 'format.label.corp_number',
   email: 'format.label.email',
+  date: 'format.label.date',
 };
 
 /** 「숫자로 입력해 주세요」 — 한국어 조사(은/는)가 형식 이름마다 달라 형식마다 문장을 둔다. */
@@ -220,6 +319,7 @@ const NOT_A_NUMBER_KEY: Record<InputFormat, SystemStringKey> = {
   biz_number: 'format.notANumber.biz_number',
   corp_number: 'format.notANumber.corp_number',
   email: 'format.notANumber.email',
+  date: 'format.notANumber.date',
 };
 
 /** 자릿수가 정해진 형식 — 「N자리입니다」(조사 때문에 형식마다 문장). */
@@ -235,6 +335,7 @@ export const INPUT_FORMAT_LABEL: Record<InputFormat, string> = {
   biz_number: systemText(FORMAT_LABEL_KEY.biz_number),
   corp_number: systemText(FORMAT_LABEL_KEY.corp_number),
   email: systemText(FORMAT_LABEL_KEY.email),
+  date: systemText(FORMAT_LABEL_KEY.date),
 };
 
 /**
@@ -248,6 +349,7 @@ const INPUT_FORMAT_SAMPLE: Record<InputFormat, string> = {
   biz_number: '123-45-67891',
   corp_number: '110111-1234569',
   email: 'name@example.com',
+  date: '2025.01.31',
 };
 
 export function formatSampleValue(format: InputFormat): string {
@@ -273,6 +375,10 @@ export function formatFailureMessage(
   locale: SurveyLocale = DEFAULT_SURVEY_LOCALE,
 ): string {
   const values = { label: systemText(FORMAT_LABEL_KEY[format], locale) };
+  // 날짜는 자릿수·구조 실패를 한 문장(예시 값 포함)으로 안내한다 — 응답자에게는 같은 고칠 방향이다
+  if (format === 'date' && (reason === 'wrong_length' || reason === 'malformed')) {
+    return systemText('format.dateShape', locale);
+  }
   switch (reason) {
     case 'not_a_number':
       return systemText(NOT_A_NUMBER_KEY[format], locale);
@@ -293,17 +399,27 @@ export function formatFailureMessage(
     case 'non_ascii':
       // 이메일만 나는 사유다(`parseEmail`)
       return systemText('format.nonAscii', locale);
+    case 'invalid_date':
+      // 날짜만 나는 사유다(`parseDate`)
+      return systemText('format.invalidDate', locale);
   }
 }
 
 /**
  * 형식 칸 타이핑 필터 — 번호 형식은 숫자와 하이픈만 통과시킨다(글자·공백·괄호·점은 떨어뜨린다).
+ * 날짜는 숫자와 구분 문자(점·하이픈·슬래시)를 남긴다 — 정돈(`YYYY.MM.DD`)은 blur 때 한 번이다.
  * 검사(`parseInputFormat`)는 공백·괄호·점도 구분 문자로 받아 주지만, 타이핑 단계에서는
  * "숫자만 받는 칸"으로 보이는 것이 목적이라 하이픈 하나만 남긴다. 붙여넣기도 같은 필터를
  * 타므로 `(02) 123-4567` 을 붙이면 `02123-4567` 이 되고 blur 정돈이 `02-123-4567` 로 맞춘다.
+ * 전화·휴대전화는 맨 앞의 `+` 하나도 남긴다 — 해외 번호(`parseInternational`). 중간의 `+` 는 떨어뜨린다.
  * 이메일은 글자가 본문이라 손대지 않는다.
  */
 export function filterFormatTyping(format: InputFormat, raw: string): string {
   if (format === 'email') return raw;
+  if (format === 'date') return raw.replace(/[^0-9.\-/]/g, '');
+  if (format === 'phone' || format === 'mobile') {
+    const kept = raw.replace(/[^0-9+-]/g, '');
+    return (kept.startsWith('+') ? '+' : '') + kept.replace(/\+/g, '');
+  }
   return raw.replace(/[^0-9-]/g, '');
 }

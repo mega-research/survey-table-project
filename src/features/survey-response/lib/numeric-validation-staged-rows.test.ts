@@ -134,3 +134,37 @@ describe('행 차례로 열기 — 필수 판정 범위', () => {
     expect(requiredCellIds(broken, { a1: '가', a2: '나' })).toEqual(['a3', 'a4']);
   });
 });
+
+describe('행 차례로 열기 — 닫힌 행은 모든 차단 검증에서 빠진다', () => {
+  // 처음 보이는 2행 뒤의 s3 에 계산 칸 k = s1 입력, 검증 k == 100. s3 이 닫혀 있으면 k 는 화면에 없다 —
+  // 필수에서만 빼면 보이지 않는 칸의 계산 검증이 「다음」을 막는다(열 차례로 열기와 같은 틈).
+  const rows: TableRow[] = [
+    { id: 's1', label: 's1', cells: [{ id: 'a', type: 'input', content: '', inputType: 'number' }] },
+    { id: 's2', label: 's2', cells: [{ id: 'b', type: 'input', content: '' }] },
+    {
+      id: 's3',
+      label: 's3',
+      cells: [
+        {
+          id: 'k',
+          type: 'calc',
+          content: '',
+          formula: { kind: 'cell', cellId: 'a' },
+          calcValidation: { operator: 'eq', target: { kind: 'literal', value: 100 } },
+        } as TableCell,
+      ],
+    },
+    { id: 's4', label: 's4', cells: [{ id: 'd', type: 'input', content: '' }] },
+  ];
+  const q = { ...tableQuestion(rows), tableColumns: [{ id: 'c1', label: '값' }] } as Question;
+  const run = (values: Record<string, unknown>) =>
+    collectNumericIssues(q, values, { allResponses: { q1: values }, allQuestions: [q], contactAttrs: {} });
+
+  it('닫힌 행의 계산 칸 검증은 막지 않는다', () => {
+    expect(run({ a: '1' })).toEqual([]);
+  });
+
+  it('뒤 행에 값이 들어와 열린 행의 계산 칸은 검사한다', () => {
+    expect(run({ a: '1', d: 'x' }).map((i) => i.kind)).toContain('formula');
+  });
+});

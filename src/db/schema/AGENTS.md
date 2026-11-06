@@ -160,11 +160,11 @@ surveys                    # 설문 설정
 ├── contactColumns / testContactColumns (JSONB)  # 컨택리스트 표시 컬럼 스킴 (실/테스트 분리)
 │                                 #   컬럼별 플래그: hidden(목록 숨김) · piiType · groupLevel(진척보고 분류 축)
 │                                 #   · showInMail(단체 메일 위저드·캠페인 상세 수신자 표·수신거부 명단에 열 노출 — attrs.* 는 값, pii.* 는 마스킹 힌트(켠 열만 서버가 읽는다), system.contact_owner 는 컨택원 이름(외부 주체 화면 제외), system.resid 는 기본 보임이라 끈 경우만 false. 해석 lib/contacts/mail-display-columns)
-│                                 #   · mailOrder(메일 발송 주소 순서 1부터, 이메일로 암호화된 열 전용 — src/app/AGENTS.md 「메일 발송 주소 순서」)
+│                                 #   · mailOrder(메일 발송 주소 순서 1부터, 이메일로 암호화된 열 전용 — `src/server/mail/AGENTS.md` 「메일 발송 주소 순서」)
 ├── lookups (JSONB)               # 설문에 복사된 LUT 사본 목록
 ├── contactResultCodes (JSONB)    # 결과코드 사용자 정의
 ├── progressColumns (JSONB)       # 진척률 표 컬럼 픽커
-├── profileColumns (JSONB)        # 응답 내역 표 컬럼 픽커 — 열 키 sys.·attrs.·pii.·entry.·answer.<문항 id>[.<칸 id>](응답값 열, 2026-10-23: 단답형·장문형·표 입력 칸을 변수명으로 찾아 추가, 저장은 id, 쪽 행만 JSONB 에서 꺼내 암호문은 복호화, 정렬 없음. 검색바·전체 검색·머리 깔때기는 부분일치와 값 없음/있음(profiles-filters 의 answerTextSql), 암호화 저장 칸은 후보에서 빠진다. 후보 read-models/profile-column-scheme 의 getProfileAnswerSources, 값 server/operations/services/profile-answer-values)
+├── profileColumns (JSONB)        # 응답 내역 표 컬럼 픽커 — 열 키 sys.·attrs.·pii.·entry.·answer.<문항 id>[.<칸 id>](응답값 열, 2026-10-23: 단답형·장문형·표 입력 칸을 변수명으로 찾아 추가, 저장은 id, 쪽 행만 JSONB 에서 꺼내 암호문은 복호화, 정렬 없음. 2026-10-30 부터 선택형(단일·복수·드롭다운, 보기 그룹이 default 하나인 보기 표)과 표 선택 칸(단일·드롭다운·체크박스)도 — 보기 글자로 보이고(복수는 「, 」, 상세 기재는 괄호) 검색·깔때기도 보기 글자로 맞춘다(글자 → 저장값으로 바꿔 jsonb_path 로 비교, 번호로는 안 걸림). 후보·보기 목록 lib/operations/profile-answer-sources, 변환 profile-answer-choices. 검색바·전체 검색·머리 깔때기는 부분일치와 값 없음/있음(profiles-filters 의 answerTextSql), 암호화 저장 칸은 후보에서 빠진다. 후보 read-models/profile-column-scheme 의 getProfileAnswerSources, 값 server/operations/services/profile-answer-values)
 ├── quotaConfig (JSONB)           # 쿼터 플랜 (NULL = 쿼터 없음) — 라이브 컬럼
 ├── isPaused, pausedMessage       # 응답 일시중지 — 라이브 컬럼
 ├── testModeEnabled, testToken    # 테스트 환경 (테스트 링크가 산다). 콘솔이 테스트 파티션을 보는 건 브라우저 쿠키까지 켠 곳만 — src/server/AGENTS.md 「테스트 모드」
@@ -179,7 +179,7 @@ surveys                    # 설문 설정
 │                                 #   전이는 published ⇄ closed 뿐(operations.control.setClosed, survey.edit) + 재발행이 published 로 되돌린다.
 │                                 #   isPaused 와 독립이다. 스냅샷 밖 라이브 컬럼처럼 즉시 반영된다
 ├── currentVersionId              # 현재 활성 배포 버전
-├── testVersionId                 # 지금 테스트 버전 (0141) — 테스트 링크·대상자·관리자 미리보기가 보는 저장본 스냅샷. 아래 "테스트 모드"
+├── testVersionId                 # 지금 테스트 버전 (0141) — 테스트 링크·대상자·관리자 미리보기가 보는 저장본 스냅샷. `src/server/AGENTS.md` 「테스트 모드」
 ├── teamId                        # 소유 팀 (0116, nullable — 배치 대기면 NULL)
 ├── visibility                    # team | invite_only — invite_only 는 **소유 팀 팀원에게만** 숨김
 ├── ownerUserId, createdBy        # 소유자·작성자 (0116, 2단계 배포 중이라 아직 nullable)
@@ -199,6 +199,8 @@ questions                  # 개별 질문
 ├── id, surveyId, groupId
 ├── type                   # text|textarea|radio|checkbox|select|multiselect|ranking|table|notice
 ├── title, description, required, requiredMessage, order, hideTitle
+├── collapseButtonLabel           # 문항 접어 두기 버튼 글자(0154, NULL·공백=꺼짐) — 응답 화면에서 그 버튼을 눌러야 문항이 펼쳐진다(CONTEXT.md 「문항 접어 두기」)
+├── collapseAttachToPrevious      # 그 버튼을 바로 앞 문항 설명 밑에 붙이기(기본 false, 0155)
 ├── titleHtml                     # 제목 서식본(굵게·밑줄·글자색·글자 크기, 0125). 정본은 평문 title — 응답 화면 제목 표시만 우선하고, 글자가 평문과 어긋나면 버린다(lib/survey/question-title-html)
 ├── options, selectLevels, choiceGroups (JSONB)
 ├── tableTitle, tableColumns, tableRowsData, tableHeaderGrid (JSONB)  # 테이블
@@ -215,14 +217,14 @@ questions                  # 개별 질문
 ├── piiEncrypted                  # 응답값 암호화 저장 여부 (단답형·장문형). 표 input 셀은 tableRowsData 의 셀 piiEncrypted
 ├── questionCode, isCustomSpssVarName, exportLabel, spssVarType, spssMeasure, exportCellOrder  # SPSS export
 ├── answerQuoteEnabled, answerQuoteName, answerQuoteText  # 이전 응답 인용
-├── mobileOriginalTable, mobileTableDisplayMode,  # 표시 방식 auto|drilldown-original-row|row-wise-original|row-wise-scale|row-cards|row-group-cards|axis-cards|item-cards|original (0129 CHECK — 어휘를 늘리면 배열·check()·마이그레이션 셋을 함께, 주의사항 1). 방식별 규칙은 CONTEXT.md 「모바일 표시 방식」과 방식별 용어 절
+├── mobileOriginalTable, mobileTableDisplayMode,  # 표시 방식 auto|drilldown-original-row|row-wise-original|row-wise-scale|row-cards|row-group-cards|axis-cards|item-cards|original (0129 CHECK — 어휘를 늘리면 배열·check()·마이그레이션 셋을 함께, 루트 AGENTS.md 주의사항 1). 방식별 규칙은 CONTEXT.md 「모바일 표시 방식」과 방식별 용어 절
 │   mobileDrilldownOmitLeadingColumns,
 │   mobileDrilldownRepeatHeaderStartRow/EndRow      # 모바일 표 렌더
 ├── mobileItemCardBlockColumns (JSONB)  # 「항목 단위 카드」 블록 시작 열 번호 배열(1부터, 작성 열 순서, NULL=블록 없음, 0131). 경계는 저작자가 적는다(자동 추정 없음) — CONTEXT.md 「블록 단위로 세우기」
 ├── hideColumnLabels, pageBreakBefore
 ├── stickyColumnCount            # 좌측 고정 열 개수 (NULL=자동 판정, 0~3=명시 지정)
-├── fitTableToWidth              # 화면 폭에 맞춰 표 줄이기 (기본 false, 0146) — src/features/AGENTS.md "질문 유형"
-├── scaleMeanEnabled             # 평균 산출 = 운영 콘솔 「척도 평균」의 「문항 선택」 (기본 false, 0147) — radio·select·table 전용. 빌더는 쓰지 않는 콘솔 소유 컬럼(CONSOLE_OWNED_QUESTION_FIELDS)
+├── fitTableToWidth              # 화면 폭에 맞춰 표 줄이기 (기본 false, 0146) — `src/features/AGENTS.md` 「질문 유형」의 좌측 고정 열 다음 항목
+├── scaleMeanEnabled             # 평균 산출 = 운영 콘솔 「척도 평균」의 「문항 선택」 (기본 false, 0147) — 그 표의 줄. radio·select·table 전용. 빌더는 쓰지 않는 콘솔 소유 컬럼(CONSOLE_OWNED_QUESTION_FIELDS), `src/features/AGENTS.md` 「질문 유형」
 ├── priorAnswerCondition (JSONB), priorAnswerDisabled  # 추적조사 — 문항별 이월값 불러오기 조건(0102, 참→거짓으로 뒤집히면 프리필 회수)·끄기(0103, 켜면 이월값을 깔지 않고 Raw includePriorAnswers 도 비운다)
 ├── noticeContent, noticeBgColor, requiresAcknowledgment  # 공지 (배경색: NULL=기본 파랑, 'none'=무색, hex=커스텀)
 ├── imageUrl, videoUrl

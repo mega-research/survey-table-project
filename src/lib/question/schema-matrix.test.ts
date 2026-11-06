@@ -42,6 +42,8 @@ const BASE_KEYS = [
   'id',
   'title',
   'titleHtml',
+  'collapseButtonLabel',
+  'collapseAttachToPrevious',
   'description',
   'required',
   'groupId',
@@ -114,7 +116,7 @@ describe('유형별 필드 매트릭스 (실측 박제)', () => {
     );
   });
 
-  it('radio: base + 옵션 리스트 + 내장 테이블 + 모바일 표시 + choiceGroups', () => {
+  it('radio: base + 옵션 리스트 + 내장 테이블 + 모바일 표시 + choiceGroups + 명단 값 프리필', () => {
     expect(shapeKeys(RadioQuestionSchema)).toEqual(
       sorted([
         ...BASE_KEYS,
@@ -123,6 +125,7 @@ describe('유형별 필드 매트릭스 (실측 박제)', () => {
         ...MOBILE_TABLE_DISPLAY_KEYS,
         'choiceGroups',
         'scaleMeanEnabled',
+        'defaultValueTemplate',
       ]),
     );
   });

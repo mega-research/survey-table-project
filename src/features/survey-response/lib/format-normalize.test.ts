@@ -17,8 +17,8 @@ describe('normalizeFormatValues', () => {
 
   it('형식이 틀린 값은 손대지 않는다 — 차단이 이미 판단했거나 관리자가 통과시킨 값이다', () => {
     const q = textQ({ inputType: 'mobile' });
-    expect(normalizeFormatValues([q], { q1: '+81 90 1234 5678' }, null)).toEqual({
-      q1: '+81 90 1234 5678',
+    expect(normalizeFormatValues([q], { q1: '090-1234-5678' }, null)).toEqual({
+      q1: '090-1234-5678',
     });
   });
 

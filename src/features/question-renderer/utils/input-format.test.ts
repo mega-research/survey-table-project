@@ -34,6 +34,40 @@ const PASS: Array<[InputFormat, string, string]> = [
   ['phone', '07012345678', '070-1234-5678'],
   ['phone', '01012345678', '010-1234-5678'],
   ['phone', '010 1234 5678', '010-1234-5678'],
+  // 전국 대표번호 15xx·16xx·18xx — 늘 4자리-4자리
+  ['phone', '15881234', '1588-1234'],
+  ['phone', '1544-1234', '1544-1234'],
+  ['phone', '1600 1234', '1600-1234'],
+  ['phone', '1899-1234', '1899-1234'],
+  ['phone', '1577-1234', '1577-1234'],
+  ['phone', '1566-1234', '1566-1234'],
+  ['phone', '1644-1234', '1644-1234'],
+  ['phone', '1688-1234', '1688-1234'],
+  ['phone', '1599-1234', '1599-1234'],
+  // 수신자 부담 080 · 안심번호 050X
+  ['phone', '0801234567', '080-123-4567'],
+  ['phone', '08012345678', '080-1234-5678'],
+  ['phone', '05051234567', '0505-123-4567'],
+  ['phone', '050212345678', '0502-1234-5678'],
+  // 앞에 080·지역번호·안심번호가 붙은 대표번호 모양도 그 번호대로 받는다
+  ['phone', '080-1544-1234', '080-1544-1234'],
+  ['phone', '0215881234', '02-1588-1234'],
+  ['phone', '0505-1588-1234', '0505-1588-1234'],
+  // 해외 번호 — + 로 시작할 때만. +82 는 국내 규칙으로 정돈, 그 밖은 + 와 숫자(8~15자리)로
+  ['phone', '+82 2-123-4567', '02-123-4567'],
+  ['phone', '+82-10-1234-5678', '010-1234-5678'],
+  ['phone', '+82 010 1234 5678', '010-1234-5678'],
+  ['phone', '+86 138 0013 8000', '+8613800138000'],
+  ['phone', '+1 (212) 555-0100', '+12125550100'],
+  ['phone', '+8613800138000', '+8613800138000'],
+  ['phone', '+82 1588-1234', '1588-1234'],
+  // +82 뒤 016·018 은 대표번호(15·16·18 + 8자리)가 아니다 — 0 을 붙여 휴대 번호로
+  ['phone', '+82 16 123 4567', '016-123-4567'],
+  ['phone', '+82 18-1234-5678', '018-1234-5678'],
+  ['mobile', '+82 16 123 4567', '016-123-4567'],
+  ['mobile', '+82 18 123 4567', '018-123-4567'],
+  ['mobile', '+82 10 1234 5678', '010-1234-5678'],
+  ['mobile', '+86-138-0013-8000', '+8613800138000'],
   // 사업자번호 — 자릿수만 맞으면 통과한다(ENFORCE_CHECKSUM=false, 2026-09-09)
   ['biz_number', '1248100998', '124-81-00998'],
   ['biz_number', '124-81-00998', '124-81-00998'],
@@ -54,6 +88,15 @@ const PASS: Array<[InputFormat, string, string]> = [
   ['email', 'a@b.co.kr', 'a@b.co.kr'],
   ['email', ' Hong.Gil-Dong@Example.CO.KR ', 'hong.gil-dong@example.co.kr'],
   ['email', 'user+tag@sub.example.com', 'user+tag@sub.example.com'],
+  // 날짜 — 구분 문자(. - / 공백)가 무엇이든, 한 자리 월·일이든 YYYY.MM.DD 로 수렴한다
+  ['date', '2025.01.31', '2025.01.31'],
+  ['date', '20250131', '2025.01.31'],
+  ['date', '2025-01-31', '2025.01.31'],
+  ['date', '2025/1/31', '2025.01.31'],
+  ['date', '2025. 3. 1.', '2025.03.01'],
+  ['date', ' 2025.3.1 ', '2025.03.01'],
+  ['date', '2024.02.29', '2024.02.29'],
+  ['date', '2000.02.29', '2000.02.29'],
 ];
 
 /** 실패 케이스 — 넣은 값과 나와야 할 사유. */
@@ -67,7 +110,21 @@ const FAIL: Array<[InputFormat, string, string]> = [
   ['mobile', '010-1234-567a', 'not_a_number'],
   ['mobile', '010일이삼사', 'not_a_number'],
   // 전화 — 지역번호·식별번호 어디에도 없음
-  ['phone', '1544-1234', 'unknown_prefix'],
+  ['phone', '1700-1234', 'unknown_prefix'],
+  ['phone', '0501-123-4567', 'unknown_prefix'],
+  // 해외 번호 실패
+  ['phone', '+1234567', 'wrong_length'],
+  ['phone', '+1234567890123456', 'wrong_length'],
+  ['phone', '+0212345678', 'unknown_prefix'],
+  ['phone', '+82 1588', 'unknown_prefix'],
+  ['phone', '+82 99-123-4567', 'unknown_prefix'],
+  ['phone', '+', 'not_a_number'],
+  ['phone', '++8613800138000', 'not_a_number'],
+  ['mobile', '+82 2-123-4567', 'unknown_prefix'],
+  ['biz_number', '+1248100998', 'not_a_number'],
+  ['phone', '0505-12-3456', 'wrong_length'],
+  ['phone', '1588-123', 'wrong_length'],
+  ['phone', '1588-12345', 'wrong_length'],
   ['phone', '0091234567', 'unknown_prefix'],
   ['phone', '021234', 'wrong_length'],
   ['phone', '02123456789', 'wrong_length'],
@@ -93,6 +150,23 @@ const FAIL: Array<[InputFormat, string, string]> = [
   ['email', 'user@exam ple.com', 'malformed'],
   ['email', 'user@.example.com', 'malformed'],
   ['email', 'user@example..com', 'malformed'],
+  // 날짜
+  ['date', '2025.1월.31', 'not_a_number'],
+  ['date', '2025년1월31일', 'not_a_number'],
+  ['date', '202501311', 'wrong_length'],
+  ['date', '2025013', 'wrong_length'],
+  ['date', '25.01.31', 'malformed'],
+  ['date', '2025.01', 'malformed'],
+  ['date', '2025.001.31', 'malformed'],
+  ['date', '2025.01.31.01', 'malformed'],
+  ['date', '2025.13.01', 'invalid_date'],
+  ['date', '2025.00.10', 'invalid_date'],
+  ['date', '2025.02.29', 'invalid_date'],
+  ['date', '1900.02.29', 'invalid_date'],
+  ['date', '2025.04.31', 'invalid_date'],
+  ['date', '2025.01.00', 'invalid_date'],
+  ['date', '1899.12.31', 'invalid_date'],
+  ['date', '2101.01.01', 'invalid_date'],
 ];
 
 describe('parseInputFormat', () => {
@@ -148,6 +222,12 @@ describe('formatFailureMessage', () => {
     expect(formatFailureMessage('mobile', 'unknown_prefix')).toBe('휴대전화 번호가 아닙니다');
     expect(formatFailureMessage('email', 'malformed')).toBe('이메일 형식이 아닙니다');
     expect(formatFailureMessage('email', 'non_ascii')).toBe('이메일은 영문·숫자로만 입력해 주세요');
+    expect(formatFailureMessage('date', 'invalid_date')).toBe('없는 날짜입니다. 다시 확인해 주세요');
+    expect(formatFailureMessage('date', 'wrong_length')).toBe(
+      '날짜는 2025.01.31 처럼 연(4자리)·월·일로 입력해 주세요',
+    );
+    expect(formatFailureMessage('date', 'malformed')).toBe(formatFailureMessage('date', 'wrong_length'));
+    expect(formatFailureMessage('date', 'not_a_number')).toBe('날짜는 숫자로 입력해 주세요');
   });
 
   it('같은 사유라도 형식이 다르면 문구가 다르다', () => {
@@ -166,6 +246,7 @@ describe('formatFailureMessage', () => {
       'unknown_prefix',
       'checksum_mismatch',
       'malformed',
+      'invalid_date',
     ] as const;
     for (const format of INPUT_FORMATS) {
       for (const reason of reasons) {
@@ -191,6 +272,21 @@ describe('filterFormatTyping — 형식 칸 타이핑 필터', () => {
     expect(filterFormatTyping('biz_number', '(123)45-67890')).toBe('12345-67890');
     expect(filterFormatTyping('corp_number', '110111-1234567')).toBe('110111-1234567');
     expect(filterFormatTyping('phone', '')).toBe('');
+  });
+
+  it('전화·휴대전화는 맨 앞 + 하나를 남긴다 — 해외 번호', () => {
+    expect(filterFormatTyping('phone', '+86 138-0013')).toBe('+86138-0013');
+    expect(filterFormatTyping('mobile', '+82 10 1234')).toBe('+82101234');
+    expect(filterFormatTyping('phone', '02+123')).toBe('02123');
+    expect(filterFormatTyping('phone', '++82')).toBe('+82');
+    expect(filterFormatTyping('phone', ' +82')).toBe('+82');
+    expect(filterFormatTyping('biz_number', '+123')).toBe('123');
+  });
+
+  it('날짜는 숫자와 구분 문자(. - /)만 남긴다', () => {
+    expect(filterFormatTyping('date', '2025년 1월 31일')).toBe('2025131');
+    expect(filterFormatTyping('date', '2025.01.31')).toBe('2025.01.31');
+    expect(filterFormatTyping('date', '2025-01/31')).toBe('2025-01/31');
   });
 
   it('이메일 형식은 손대지 않는다', () => {

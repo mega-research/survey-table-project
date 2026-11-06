@@ -2,7 +2,7 @@
 
 import React from 'react';
 
-import { Minus, Plus } from 'lucide-react';
+import { ArrowRight, Minus, Plus } from 'lucide-react';
 
 import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
 import { cn } from '@/lib/utils';
@@ -18,6 +18,10 @@ export interface StagedRowsButtonsProps {
   maxCount: number;
   onAdd: () => void;
   onRemove: () => void;
+  /** `−` 버튼 문구 — 미지정이면 「마지막 줄 삭제」(열 차례로 열기는 「마지막 열 삭제」) */
+  removeLabel?: string | undefined;
+  /** `+` 버튼 아이콘 — 열 차례로 열기는 오른쪽으로 늘어나는 방향(`arrow-right`)으로 행 추가와 가른다 */
+  addIcon?: 'plus' | 'arrow-right' | undefined;
   className?: string | undefined;
 }
 
@@ -34,8 +38,11 @@ export const StagedRowsButtons = React.memo(function StagedRowsButtons({
   maxCount,
   onAdd,
   onRemove,
+  removeLabel,
+  addIcon = 'plus',
   className,
 }: StagedRowsButtonsProps) {
+  const AddIcon = addIcon === 'arrow-right' ? ArrowRight : Plus;
   const locale = useInlineSurveyLocale();
   return (
     <div className={cn('flex flex-wrap items-center gap-2', className)}>
@@ -45,7 +52,7 @@ export const StagedRowsButtons = React.memo(function StagedRowsButtons({
         disabled={!canAdd}
         className="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        <Plus className="h-4 w-4" />
+        <AddIcon className="h-4 w-4" aria-hidden="true" />
         {addLabel}
       </button>
       {canRemove && (
@@ -55,7 +62,7 @@ export const StagedRowsButtons = React.memo(function StagedRowsButtons({
           className="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
         >
           <Minus className="h-4 w-4" />
-          {systemText('table.removeLastRow', locale)}
+          {removeLabel ?? systemText('table.removeLastRow', locale)}
         </button>
       )}
       <span className="text-xs text-gray-500 tabular-nums">

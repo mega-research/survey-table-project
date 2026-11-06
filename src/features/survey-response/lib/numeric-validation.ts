@@ -8,13 +8,23 @@
  */
 import { findDistinctViolations } from '@/features/question-renderer/utils/distinct-select-group';
 import { optionTextTargetId } from '@/features/question-renderer/utils/option-text-target';
+import { stagedColumnOptionalCellIds } from '@/features/question-renderer/utils/staged-columns';
 import { stagedOptionalCellIds } from '@/features/question-renderer/utils/staged-rows';
+import {
+  applyRepeatBlockCondition,
+  cellIdsOfBundlesBeyond,
+  deriveOpenRepeatCount,
+  isRowRepeatActive,
+  repeatStartsCollapsed,
+  resolveBundleSumConstraints,
+  startedRepeatBundles,
+} from '@/lib/question/row-repeat';
 import {
   areAllFormulaRefsEmpty,
   evaluateCellFormula,
   roundFormulaValue,
 } from '@/lib/survey/cell-formula';
-import { collectTableCells, isCellEnabled } from '@/lib/survey/cell-gating';
+import { collectTableCells, isCellEnabled, isGateConditionMet } from '@/lib/survey/cell-gating';
 import { resolveCellTextQualityViolation } from '@/features/question-renderer/utils/cell-text-quality';
 import {
   cellLockTemplate,
@@ -22,6 +32,7 @@ import {
 } from '@/features/question-renderer/utils/token-prefill';
 import {
   collectSelectedChoiceCellIds,
+  collectTableChoiceSelection,
   isChoiceGroupTableQuestion,
   readTableChoiceGroups,
 } from '@/lib/survey/choice-selection';
@@ -41,10 +52,11 @@ import {
   priorOptionText,
 } from '@/lib/survey/prior-answers';
 import { isInputFormat } from '@/types/input-type';
-import type { Question, SumConstraint, SurveyLookup, TableCell } from '@/types/survey';
+import type { Question, SumConstraint, SurveyLookup, TableCell, TableRow } from '@/types/survey';
 import { DEFAULT_SURVEY_LOCALE, type SurveyLocale } from '@/types/survey-locale';
 import { type BranchEvalCtx, responsesToLookupShape } from '@/utils/branch-eval';
 import {
+  evaluateQuestionConditionGroup,
   shouldDisplayColumn,
   shouldDisplayDynamicGroup,
   shouldDisplayRow,
@@ -58,7 +70,7 @@ import { parseNumericInput } from '@/utils/numeric-input';
 import { collectSelectedOptionIds } from '@/utils/option-text-migration';
 import { requiredCellMessage } from '@/utils/required-message';
 import { type SystemStringKey, systemText } from '@/utils/system-strings';
-import { REQUIRED_CELL_TYPES, isCellValuePresent } from '@/utils/table-cell-semantics';
+import { REQUIRED_CELL_TYPES, isCellValuePresent, resolveSelectedValues } from '@/utils/table-cell-semantics';
 import { recalculateRowspansForVisibleRows } from '@/utils/table-merge-helpers';
 import {
   type TextQualityViolation,
@@ -132,6 +144,43 @@ export function isRequiredCell(cell: TableCell): boolean {
 }
 
 /**
+ * 행·열을 통째로 거르는 숨김 장치 — `collectVisibleTableCells` 본문이 행·열 목록에서 직접 뺀다.
+ * 이름은 장치 × 차단 검증 표 테스트(`hidden-cell-validation-matrix.test.ts`)가 쓴다 — 본문에 장치를 더하면 여기에도
+ * 이름을 더할 것. 행·열째 빠지므로 모든 차단 검증에 함께 적용된다.
+ */
+export const STRUCTURAL_CELL_HIDERS = [
+  'row-display-condition',
+  'column-display-condition',
+  'dynamic-row',
+  'repeat-block-condition',
+] as const;
+export type StructuralCellHider = (typeof STRUCTURAL_CELL_HIDERS)[number];
+
+type ValueDerivedCellHider = (
+  question: Question,
+  rows: TableRow[],
+  cellValues: Record<string, unknown>,
+  ctx: NumericValidationCtx | undefined,
+) => ReadonlySet<string>;
+
+/**
+ * 값으로 정해지는 숨김 장치 — 지금 화면에 없는 칸 id 를 낸다. `collectVisibleTableCells` 가 여기 있는 장치를 **전부**
+ * 빼므로, 장치를 이 등록부에 넣으면 필수·범위·형식·합계·칸 수·계산 칸 비교 등 모든 차단 검증에서 그 칸이 빠진다.
+ * 화면에서 숨는 칸을 새로 만들면 필수 판정에만 빼지 말고 여기에 더할 것 — 행·열 차례로 열기와 접힌 첫 벌이
+ * 필수에서만 빠져 보이지 않는 칸이 「다음」을 막은 일이 세 번 있었다(2026-11-04~06). 「필수에서만 빼기」
+ * (`collectRepeatOptionalCellIds`)는 화면에 있는 칸 전용이다. 키를 더하면 표 테스트가 시나리오를 요구한다(tsc).
+ */
+export const VALUE_DERIVED_CELL_HIDERS = {
+  'staged-rows': (question, rows, cellValues) =>
+    stagedOptionalCellIds(rows, question.stagedRowsConfig, cellValues),
+  'staged-columns': (question, rows, cellValues) =>
+    stagedColumnOptionalCellIds(question.tableColumns, rows, cellValues),
+  'unopened-repeat-bundles': (question, rows, cellValues, ctx) =>
+    unopenedRepeatBundleCellIds(question, rows, cellValues, ctx),
+} satisfies Record<string, ValueDerivedCellHider>;
+export type ValueDerivedCellHiderKey = keyof typeof VALUE_DERIVED_CELL_HIDERS;
+
+/**
  * 응답자에게 실제로 "보이는" 셀 목록 — 다음을 제외한다.
  * - 미선택 동적 행(enabledDynamicGroupIds에 속하고 __selectedRowIds에 없는 행)의 셀
  * - isHidden 셀(병합 피복 셀). 단 숨은 행에서 시작한 세로 병합 셀이 가시 행에 올라와 그려지면
@@ -146,7 +195,8 @@ export function collectVisibleTableCells(
   cellValues: Record<string, unknown>,
   ctx: NumericValidationCtx | undefined,
 ): TableCell[] {
-  const rows = question.tableRowsData ?? [];
+  // 행 반복 블록 표시 조건은 블록 행의 행 조건으로 얹어 아래 행 조건 필터가 함께 거른다
+  const rows = applyRepeatBlockCondition(question.tableRowsData ?? [], question.rowRepeatConfig);
   const enabledDynamicGroupIds = new Set(
     (question.dynamicRowConfigs ?? []).filter((c) => c.enabled).map((c) => c.groupId),
   );
@@ -221,9 +271,14 @@ export function collectVisibleTableCells(
     rows.some((row) => row.cells.some((cell) => (cell.rowspan ?? 1) > 1))
       ? recalculateRowspansForVisibleRows(rows, new Set(visibleRows.map((row) => row.id)))
       : visibleRows;
+  // 값으로 정해지는 숨김(행·열 차례로 열기 · 접힌 첫 벌) — 등록부의 장치를 전부 뺀다(VALUE_DERIVED_CELL_HIDERS).
+  // 열린 범위는 값에서 파생한다(세션에서 `+` 로 연 빈 행·단계는 검증이 알 수 없고, 비어 있어 빼도 잃는 판정이 없다).
+  const valueHidden = Object.values(VALUE_DERIVED_CELL_HIDERS).map((hider: ValueDerivedCellHider) =>
+    hider(question, rows, cellValues, ctx),
+  );
   return projectedRows
     .flatMap((row) => row.cells.filter((_, idx) => !hiddenColIndices.has(idx)))
-    .filter((c) => !c.isHidden);
+    .filter((c) => !c.isHidden && !valueHidden.some((hidden) => hidden.has(c.id)));
 }
 
 /**
@@ -261,16 +316,47 @@ export function resolveChoiceTableVisibleCellIds(
 
 /**
  * 필수 판정에서 빼는 셀 — 반복 2벌 이후의 셀.
- * 1벌은 평범한 필수 셀이고, 그 뒤 벌은 "더 적을 것이 있으면 적는" 자리다.
+ * 1벌은 평범한 필수 셀이고, 그 뒤 벌은 "더 적을 것이 있으면 적는" 자리다. 「적기 시작한 벌도 1벌처럼
+ * 필수」(`rowRepeatConfig.requireStartedBundles`)를 켜면 값이 하나라도 든 벌은 빼지 않는다 — 빈 채로
+ * 열어 둔 벌은 그래도 뺀다.
  */
-function collectRepeatOptionalCellIds(question: Question): Set<string> {
+function collectRepeatOptionalCellIds(question: Question, cellValues: Record<string, unknown>): Set<string> {
+  const rows = question.tableRowsData ?? [];
+  const started = question.rowRepeatConfig?.requireStartedBundles
+    ? startedRepeatBundles(rows, cellValues)
+    : new Set<number>();
   const ids = new Set<string>();
-  for (const row of question.tableRowsData ?? []) {
-    if ((row.repeatIndex ?? 1) < 2) continue;
+  for (const row of rows) {
+    const idx = row.repeatIndex ?? 1;
+    if (idx < 2 || started.has(idx)) continue;
     for (const cell of row.cells) ids.add(cell.id);
   }
   return ids;
 }
+
+/**
+ * 아직 열지 않은 반복 벌의 셀 — 응답 화면은 `max(최소 벌, 값이 든 마지막 벌)` 까지만 그린다(`use-row-repeat`). 그 뒤 벌과,
+ * 「처음엔 접어 두기」로 접힌 채 비어 있는 첫 벌은 화면에 없다. 화면과 같은 두 함수(`deriveOpenRepeatCount` ·
+ * `cellIdsOfBundlesBeyond`)로 판정한다 — 세션에서 `+` 로 연 빈 벌은 검증이 알 수 없고, 비어 있어 빼도 잃는 판정이 없다.
+ * 접힌 첫 벌만 빼던 시절, 열지 않은 2벌째 계산 칸의 비교 검증이 「다음」을 막았다(2026-11-06 표 테스트가 찾음).
+ * 펼쳐 둘 조건은 렌더러와 같은 평가기로 보고, 재료가 없으면 접힌 것으로 본다.
+ */
+function unopenedRepeatBundleCellIds(
+  question: Question,
+  rows: TableRow[],
+  cellValues: Record<string, unknown>,
+  ctx: NumericValidationCtx | undefined,
+): ReadonlySet<string> {
+  if (!isRowRepeatActive(question.rowRepeatConfig)) return EMPTY_IDS;
+  const collapsed = repeatStartsCollapsed(question.rowRepeatConfig, (condition) =>
+    ctx
+      ? evaluateQuestionConditionGroup(condition, ctx.allResponses, ctx.allQuestions, toBranchEvalCtx(ctx))
+      : false,
+  );
+  return new Set(cellIdsOfBundlesBeyond(rows, deriveOpenRepeatCount(rows, cellValues, collapsed ? 0 : 1)));
+}
+
+const EMPTY_IDS: ReadonlySet<string> = new Set();
 
 /**
  * NumericValidationCtx → 조건 평가 컨텍스트.
@@ -434,12 +520,25 @@ export function evaluateFilledCountConstraint(
   constraint: SumConstraint,
   cellValues: Record<string, unknown>,
   existingCellIds: Set<string>,
+  /** `countValues` 판정용 칸 정의 — 값 세기는 칸 종류별 선택값 해석기가 필요하다 */
+  tableCells?: readonly TableCell[],
 ): { skipped: boolean; ok: boolean; count: number; filledIds: string[]; emptyIds: string[] } {
   const targetIds = constraint.cellIds.filter((id) => existingCellIds.has(id));
   if (targetIds.length === 0) {
     return { skipped: true, ok: true, count: 0, filledIds: [], emptyIds: [] };
   }
-  const filledIds = targetIds.filter((id) => isCellValuePresent(cellValues[id]));
+  // 값 세기(countValues) — 채운 칸 대신 그 값을 고른 칸만 센다. 입력칸은 글자 그대로 비교한다.
+  const wanted = constraint.countValues && constraint.countValues.length > 0 ? new Set(constraint.countValues) : null;
+  const cellById = wanted ? new Map((tableCells ?? []).map((c) => [c.id, c])) : null;
+  const counts = (id: string): boolean => {
+    const value = cellValues[id];
+    if (!wanted) return isCellValuePresent(value);
+    const cell = cellById!.get(id);
+    if (!cell) return false;
+    if (cell.type === 'input') return typeof value === 'string' && wanted.has(value.trim());
+    return resolveSelectedValues(cell, value).some((v) => wanted.has(v));
+  };
+  const filledIds = targetIds.filter(counts);
   const emptyIds = targetIds.filter((id) => !filledIds.includes(id));
   const ok = compareValues(filledIds.length, constraint.target, constraint.operator, 0);
   return { skipped: false, ok, count: filledIds.length, filledIds, emptyIds };
@@ -482,6 +581,8 @@ const FILLED_COUNT_KEYS: Record<SumConstraint['operator'], SystemStringKey> = {
 /** 저작자 문구에서 실제 숫자로 바뀌는 자리표시자 — 쓰지 않으면 문구는 종전 그대로다. */
 export const MESSAGE_CURRENT_TOKEN = '{현재값}';
 export const MESSAGE_TARGET_TOKEN = '{기준값}';
+/** 경고 문구의 묶음 번호 — 행 반복 벌마다 제약이면 그 벌 번호(1벌 = 1), 아니면 빈 글자 */
+export const MESSAGE_BUNDLE_TOKEN = '{묶음}';
 
 function formatMessageNumber(n: number): string {
   return n.toLocaleString('ko-KR', { maximumFractionDigits: 9 });
@@ -561,6 +662,98 @@ function sumConstraintMessage(
     ? systemText('validation.sum.targetExpr', locale)
     : String(constraint.target);
   return comparisonMessage(constraint.operator, { subject, target, current: sum }, locale);
+}
+
+/**
+ * 적용 조건이 없거나 충족하면 검사 대상 — 칸 조건(`when`)은 게이팅과 같은 평가기, 다른 문항 조건(`whenQuestion`)은
+ * 문항 표시 조건과 같은 평가기·재료. 다른 문항 조건은 응답 전체(ctx)가 없으면 판정할 수 없어 검사하지 않는다.
+ */
+function isConstraintApplicable(
+  constraint: SumConstraint,
+  cellValues: Record<string, unknown>,
+  tableCells: readonly TableCell[],
+  ctx: NumericValidationCtx | undefined,
+): boolean {
+  // 컨트롤러가 보기 그룹 선택으로 열리는 칸일 수 있다 — 표 응답 안 선택 집합을 함께 넘긴다
+  if (
+    constraint.when &&
+    !isGateConditionMet(constraint.when, cellValues, tableCells, collectTableChoiceSelection(cellValues))
+  )
+    return false;
+  if (constraint.whenQuestion) {
+    if (!ctx) return false;
+    return evaluateQuestionConditionGroup(constraint.whenQuestion, ctx.allResponses, ctx.allQuestions, toBranchEvalCtx(ctx));
+  }
+  return true;
+}
+
+/** 묶음마다 복제된 제약의 벌 번호 — 복제본 id 는 `<원본>#<벌>`, 원본(1벌)은 1 */
+function bundleNumberOf(constraint: SumConstraint): string {
+  if (!constraint.perRepeatBundle) return '';
+  const match = /#(\d+)$/.exec(constraint.id);
+  return match ? match[1]! : '1';
+}
+
+export interface SoftWarning {
+  message: string;
+  /** 경고가 가리키는 칸 — 수식 제약은 비어 있다 */
+  cellIds?: string[];
+}
+
+/**
+ * 경고만 하는 표 제약(`severity: 'warn'`)에 걸린 목록 — 「다음」을 막지 않고 표 아래 노란 안내로만 보인다.
+ * 차단 검증과 같은 범위(보이고 활성인 칸)·같은 평가기로 판정하고, 적용 조건 미충족·참조 칸이 비면 내지 않는다.
+ * ctx 가 없으면 같은 표 칸만 보는 최소 ctx 로 수식을 푼다(다른 질문을 가리키는 항은 평가 불능 → 건너뜀).
+ */
+export function collectTableSoftWarnings(
+  question: Question,
+  response: unknown,
+  ctx: NumericValidationCtx | undefined,
+  locale: SurveyLocale = DEFAULT_SURVEY_LOCALE,
+): SoftWarning[] {
+  if (question.type !== 'table' || !question.sumConstraints?.some((c) => c.severity === 'warn')) return [];
+  const cellValues =
+    typeof response === 'object' && response !== null && !Array.isArray(response)
+      ? (response as Record<string, unknown>)
+      : {};
+  const tableCells = collectTableCells(question.tableRowsData);
+  const choiceSelection = collectSelectedChoiceCellIds(question, cellValues);
+  const existingIds = new Set(
+    collectVisibleTableCells(question, cellValues, ctx)
+      .filter((c) => isCellEnabled(c, cellValues, tableCells, choiceSelection))
+      .map((c) => c.id),
+  );
+  const evalCtx: NumericValidationCtx = ctx ?? {
+    allResponses: { [question.id]: cellValues },
+    allQuestions: [question],
+  };
+  const out: SoftWarning[] = [];
+  for (const constraint of resolveBundleSumConstraints(question, cellValues)) {
+    if (constraint.severity !== 'warn' || !isConstraintApplicable(constraint, cellValues, tableCells, ctx)) continue;
+    let message: string;
+    let cellIds: string[];
+    if (isFilledCountConstraint(constraint)) {
+      const result = evaluateFilledCountConstraint(constraint, cellValues, existingIds, tableCells);
+      if (result.skipped || result.ok) continue;
+      message = filledCountMessage(constraint, result.count, locale);
+      cellIds = filledCountHighlightIds(constraint, result);
+    } else {
+      const result = evaluateSumConstraint(constraint, cellValues, existingIds, {
+        ownQuestionId: question.id,
+        ctx: evalCtx,
+      });
+      if (result.skipped || result.ok) continue;
+      message = constraint.errorMessage?.trim()
+        ? sumConstraintMessage(constraint, result.sum, result.target, locale)
+        : systemText('validation.softWarning', locale);
+      cellIds = constraint.leftExpr ? [] : constraint.cellIds.filter((id) => existingIds.has(id));
+    }
+    out.push({
+      message: message.replaceAll(MESSAGE_BUNDLE_TOKEN, bundleNumberOf(constraint)),
+      ...(cellIds.length > 0 ? { cellIds } : {}),
+    });
+  }
+  return out;
 }
 
 /**
@@ -923,9 +1116,11 @@ export function collectNumericIssues(
   // 0) 입력된 칸 수 제약 — 미접촉 표에서도 평가한다. "이 칸들 중 N칸은 적어야 한다" 는 표를
   //    건드리지 않은 응답자에게도 걸려야 하므로 아래 미접촉 스킵 밖에 둔다. 모자라면 빈 칸을,
   //    넘치면 채운 칸을 짚는다.
-  for (const constraint of question.sumConstraints ?? []) {
+  for (const constraint of resolveBundleSumConstraints(question, cellValues)) {
     if (!isFilledCountConstraint(constraint)) continue;
-    const result = evaluateFilledCountConstraint(constraint, cellValues, existingIds);
+    // 경고만 하는 제약은 막지 않는다(collectTableSoftWarnings 소관). 적용 조건 미충족이면 검사하지 않는다.
+    if (constraint.severity === 'warn' || !isConstraintApplicable(constraint, cellValues, tableCells, ctx)) continue;
+    const result = evaluateFilledCountConstraint(constraint, cellValues, existingIds, tableCells);
     if (result.skipped || result.ok) continue;
     const highlightIds = filledCountHighlightIds(constraint, result);
     issues.push({
@@ -996,8 +1191,9 @@ export function collectNumericIssues(
 
     // 2) 합계 제약 — 합산 대상은 "보이고 활성인 셀"로 한정 (미선택 동적 행 잔존 값·isHidden 셀·
     //    숨은 열/행·비활성 게이팅 셀 제외)
-    for (const constraint of question.sumConstraints ?? []) {
+    for (const constraint of resolveBundleSumConstraints(question, cellValues)) {
       if (isFilledCountConstraint(constraint)) continue; // 위 0) 에서 평가했다
+      if (constraint.severity === 'warn' || !isConstraintApplicable(constraint, cellValues, tableCells, ctx)) continue;
       const result = evaluateSumConstraint(
         constraint,
         cellValues,
@@ -1025,20 +1221,14 @@ export function collectNumericIssues(
     // 행 반복: 필수는 1벌만 본다. 2벌부터는 열어도 비워 둘 수 있어야 한다 —
     // 실수로 `+` 를 누른 응답자가 제출하지 못하는 상황을 막는다. 범위·합계 검증은
     // 값이 있을 때만 위반이 나므로 벌 수와 무관하게 그대로 둔다.
-    const repeatOptionalCellIds = collectRepeatOptionalCellIds(question);
-    // 행 차례로 열기: 「처음 보이는 행」과 「값이 있는 마지막 행」 뒤의 묶음 행은 필수에서 뺀다.
-    // 행 반복과 달리 범위가 값에서 나온다 — 적기 시작한 행까지는 평범한 행으로 검사한다.
-    const stagedOptional = stagedOptionalCellIds(
-      question.tableRowsData,
-      question.stagedRowsConfig,
-      cellValues,
-    );
+    const repeatOptionalCellIds = collectRepeatOptionalCellIds(question, cellValues);
+    // 행·열 차례로 열기의 닫힌 칸은 collectVisibleTableCells 가 이미 뺐다(모든 차단 검증 공통) —
+    // 「처음 보이는 행」과 「값이 있는 마지막 행」까지는 평범한 행으로 검사한다.
     const ordinaryMissingCells = enabled.filter(
       (c) =>
         REQUIRED_CELL_TYPES.has(c.type) &&
         isRequiredCell(c) &&
         !repeatOptionalCellIds.has(c.id) &&
-        !stagedOptional.has(c.id) &&
         !isCellValuePresent(cellValues[c.id]),
     );
     // 셀별 지정 문구(requiredMessage)가 있으면 문구 단위로 별도 이슈를 만든다 —

@@ -14,13 +14,30 @@
  * 비반복 행 변수명이 r1 에서 r01 로 통째 바뀐다. 펼치기 이전 행 수로 계산한 코드를
  * 행에 박아 그 길이 의존을 끊는다 (설계 결정 3).
  */
-import type { Question, RowRepeatConfig, TableCell, TableRow } from '@/types/survey';
+import type {
+  Question,
+  QuestionConditionGroup,
+  RowRepeatConfig,
+  SumConstraint,
+  TableCell,
+  TableRow,
+} from '@/types/survey';
 import { generateId } from '@/lib/utils';
-import { remapCellRefs } from '@/utils/table-cell-refs';
-import { isCellValuePresent } from '@/utils/table-cell-semantics';
+import {
+  collectCalcExprCellIds,
+  remapCalcExprCellIds,
+  remapCellRefs,
+  remapGateConditionCellIds,
+} from '@/utils/table-cell-refs';
+import { collectGateControllerIds } from '@/utils/cell-gate-tree';
+import { hasRespondentValue } from '@/utils/table-cell-semantics';
 
-/** 최대 반복 벌 수 상한. 구조에 실제로 펼쳐지는 행이라 무한대는 없다. */
-export const ROW_REPEAT_MAX = 20;
+/**
+ * 최대 반복 벌 수 상한. 구조에 실제로 펼쳐지는 행이라 무한대는 없다.
+ * 30 — 제품 품목 15종 × 2개년처럼 「품목 × 연도」 한 벌짜리 표가 다 들어가야 해서 20 에서 올렸다
+ * (2026-11-04, 유가공업 실태조사 문1). 벌 번호 접미 `_NN` 두 자리 안이다. 기본값은 20 그대로.
+ */
+export const ROW_REPEAT_MAX = 30;
 /** 기본 최대 벌 수 */
 export const DEFAULT_ROW_REPEAT_MAX = 20;
 /** 추가 버튼 기본 문구 */
@@ -147,10 +164,102 @@ function baseRowCodeOf(row: TableRow, fallback: string): string {
   return raw;
 }
 
+/**
+ * 복제 벌의 보기 id — 템플릿 보기 id 에 벌 번호를 붙여 정한다(선택·라디오·체크박스 칸 공용).
+ *
+ * 상세 기재는 `__optTexts__[문항][보기 id]` 에 산다(OptionTextInput). 보기 id 를 그대로 복사하면
+ * 모든 벌이 같은 칸을 써서 한 벌의 「기타」 입력이 다른 벌의 입력을 덮는다. 발번하지 않고 파생하는
+ * 이유는 멱등성이다 — 다시 펼쳐도 같은 id 가 나오고, 템플릿에 보기를 끼우거나 순서를 바꿔도 기존
+ * 보기의 id 가 따라가 이미 저장된 상세 기재가 고아가 되지 않는다.
+ *
+ * 값이 없는 보기는 템플릿 보기 id 를 값으로 둔다. 칸은 `value ?? id` 를 저장하고 중복 불가 묶음·게이팅도
+ * 그 키로 비교하므로, 그래야 벌끼리 같은 보기가 같은 저장값으로 남는다(빌더는 늘 값을 준다).
+ */
+export function bundleOptionId(templateOptionId: string, bundle: number): string {
+  return `${templateOptionId}-r${bundle}`;
+}
+
+/**
+ * 복제 벌의 라디오 묶음 이름 — 내보내기가 표 전체에서 같은 `radioGroupName` 의 칸을 변수 하나로 합치므로
+ * (`collectRadioGroupColumns`) 그대로 복사하면 모든 벌이 한 변수로 뭉친다. 응답 화면의 묶음은 행 안에서만
+ * 짓기 때문에 같은 행의 칸이 같은 이름을 받으면 그대로 맞는다. 보기 id 와 같은 이유로 파생한다.
+ */
+export function bundleRadioGroupName(templateGroupName: string, bundle: number): string {
+  return `${templateGroupName}-r${bundle}`;
+}
+
+/**
+ * 줄 번호 변수명(`RowRepeatConfig.flatRowCodes`) — 틀이 1줄이면 벌마다 `r01`·`r02` …로 짓는다.
+ * 밑동의 끝 숫자를 벌 번호로 바꾼다(최소 두 자리). 끝 숫자가 없으면 밑동 뒤에 붙인다.
+ */
+function flatBundleCode(base: string, bundle: number): string {
+  const match = /^(.*?)(\d+)$/.exec(base);
+  const prefix = match ? match[1]! : base;
+  const width = Math.max(2, match ? match[2]!.length : 0);
+  return `${prefix}${String(bundle).padStart(width, '0')}`;
+}
+
+/**
+ * 줄 번호 변수명을 쓸 수 있으면 벌별 rowCode 목록, 아니면 null(종전 `<밑동>_NN` 으로 짓는다).
+ * 틀이 2줄 이상이면 줄 번호만으로는 어느 틀 줄인지 가를 수 없고, 표의 다른 행 코드와 겹치면 변수명이
+ * 겹친다 — 둘 다 조용히 깨지는 대신 종전 이름으로 둔다(빌더는 `canUseFlatRowCodes` 로 미리 막는다).
+ * 밑동이 `_두 자리`로 끝나는 행(r_01)도 줄 번호 코드가 벌 접미와 구별되지 않아 쓰지 않는다.
+ */
+function resolveFlatCodes(
+  collapsed: readonly TableRow[],
+  templateIdSet: ReadonlySet<string>,
+  baseCodes: ReadonlyMap<string, string>,
+  maxRepeats: number,
+): string[] | null {
+  const templates = collapsed.filter((row) => templateIdSet.has(row.id));
+  if (templates.length !== 1) return null;
+  const base = baseCodes.get(templates[0]!.id)!;
+  const codes = Array.from({ length: maxRepeats }, (_, i) => flatBundleCode(base, i + 1));
+  // 줄 번호 코드가 벌 접미 `_NN` 처럼 보이면(밑동이 r_01) 다시 펼칠 때 밑동이 잘려 변수명이 바뀐다
+  if (codes.some((code) => BUNDLE_CODE_SUFFIX.test(code))) return null;
+  const others = new Set(
+    collapsed.filter((row) => !templateIdSet.has(row.id)).map((row) => baseCodes.get(row.id)!),
+  );
+  return codes.some((code) => others.has(code)) ? null : codes;
+}
+
+function computeBaseCodes(collapsed: readonly TableRow[]): Map<string, string> {
+  // rowCode 밑동 — 펼치기 이전 행 수 기준 패딩 (buildTableCellVarName 과 같은 규칙)
+  const pad = collapsed.length >= 100 ? 3 : collapsed.length >= 10 ? 2 : 1;
+  const baseCodes = new Map<string, string>();
+  collapsed.forEach((row, index) => {
+    baseCodes.set(row.id, baseRowCodeOf(row, `r${String(index + 1).padStart(pad, '0')}`));
+  });
+  return baseCodes;
+}
+
+/** 빌더 — 이 템플릿·벌 수로 줄 번호 변수명을 쓸 수 있는가(틀 1줄 · 다른 행 코드와 안 겹침) */
+export function canUseFlatRowCodes(
+  rows: TableRow[],
+  templateRowIds: readonly string[],
+  maxRepeats: number,
+): boolean {
+  const collapsed = collapseRepeatRows(rows);
+  const templateIdSet = new Set(templateRowIds);
+  return resolveFlatCodes(collapsed, templateIdSet, computeBaseCodes(collapsed), clampMaxRepeats(maxRepeats)) !== null;
+}
+
+function cloneOptionsForBundle<O extends { id: string; value?: string }>(
+  options: readonly O[],
+  bundle: number,
+): O[] {
+  return options.map((option) => ({
+    ...option,
+    id: bundleOptionId(option.id, bundle),
+    value: option.value ?? option.id,
+  }));
+}
+
 function cloneCellForBundle(
   template: TableCell,
   newId: string,
   idMap: ReadonlyMap<string, string>,
+  bundle: number,
 ): TableCell {
   const rest: Omit<TableCell, ClonedAwayCellField> & Partial<Pick<TableCell, ClonedAwayCellField>> =
     { ...template };
@@ -159,7 +268,23 @@ function cloneCellForBundle(
   delete rest.exportLabel;
   delete rest.isCustomExportLabel;
   delete rest.rankVarNames;
-  return remapCellRefs({ ...(rest as TableCell), id: newId }, idMap);
+  const cloned: TableCell = { ...(rest as TableCell), id: newId };
+  // 직접 지정한 엑셀 라벨은 버리지 않고 벌 번호를 붙여 잇는다(「연도」→「연도 ②」) — 버리면 1벌만 지정 라벨이고
+  // 나머지는 자동 라벨(「Q1_연도_국내산 ②」)이라 한 표의 라벨 모양이 갈린다. 자동 라벨은 그대로 비워 자동으로 짓게 둔다.
+  const customLabel = template.isCustomExportLabel === true ? template.exportLabel?.trim() : undefined;
+  if (customLabel) {
+    cloned.exportLabel = bundleLabel(customLabel, bundle);
+    cloned.isCustomExportLabel = true;
+  }
+  if (template.selectOptions) cloned.selectOptions = cloneOptionsForBundle(template.selectOptions, bundle);
+  if (template.radioOptions) cloned.radioOptions = cloneOptionsForBundle(template.radioOptions, bundle);
+  if (template.checkboxOptions) {
+    cloned.checkboxOptions = cloneOptionsForBundle(template.checkboxOptions, bundle);
+  }
+  if (template.radioGroupName) {
+    cloned.radioGroupName = bundleRadioGroupName(template.radioGroupName, bundle);
+  }
+  return remapCellRefs(cloned, idMap);
 }
 
 /**
@@ -221,12 +346,12 @@ export function expandRepeatRows(
     }
   }
 
-  // rowCode 밑동 — 펼치기 이전 행 수 기준 패딩 (buildTableCellVarName 과 같은 규칙)
-  const pad = collapsed.length >= 100 ? 3 : collapsed.length >= 10 ? 2 : 1;
-  const baseCodes = new Map<string, string>();
-  collapsed.forEach((row, index) => {
-    baseCodes.set(row.id, baseRowCodeOf(row, `r${String(index + 1).padStart(pad, '0')}`));
-  });
+  const baseCodes = computeBaseCodes(collapsed);
+  const flatCodes = config!.flatRowCodes
+    ? resolveFlatCodes(collapsed, templateIdSet, baseCodes, maxRepeats)
+    : null;
+  const bundleCode = (templateId: string, bundle: number) =>
+    flatCodes ? flatCodes[bundle - 1]! : `${baseCodes.get(templateId)!}_${String(bundle).padStart(2, '0')}`;
 
   const firstTemplateId = templates[0]!.id;
   const out: TableRow[] = [];
@@ -241,7 +366,7 @@ export function expandRepeatRows(
           for (const template of templates) {
             out.push({
               ...template,
-              rowCode: `${baseCodes.get(template.id)!}_01`,
+              rowCode: bundleCode(template.id, 1),
               repeatIndex: 1,
               repeatSourceRowId: template.id,
             });
@@ -253,12 +378,12 @@ export function expandRepeatRows(
           out.push({
             ...template,
             id: rowIds.get(template.id)!,
-            rowCode: `${baseCodes.get(template.id)!}_${String(bundle).padStart(2, '0')}`,
+            rowCode: bundleCode(template.id, bundle),
             label: bundleLabel(template.label, bundle),
             repeatIndex: bundle,
             repeatSourceRowId: template.id,
             cells: template.cells.map((cell) =>
-              cloneCellForBundle(cell, cellIds.get(cell.id)!, cellIds),
+              cloneCellForBundle(cell, cellIds.get(cell.id)!, cellIds, bundle),
             ),
           });
         }
@@ -295,15 +420,75 @@ export function structuralRepeatCount(rows: TableRow[]): number {
 export function deriveOpenRepeatCount(
   rows: TableRow[],
   values: Record<string, unknown> | undefined,
+  /** 값이 없어도 열어 둘 벌 수 — 기본 1, 「처음엔 접어 두기」면 0 (`repeatStartsCollapsed`) */
+  minOpen: 0 | 1 = 1,
 ): number {
   const cellValues = values ?? {};
-  let open = 1;
+  let open: number = minOpen;
   for (const row of rows) {
     const idx = repeatIndexOf(row);
     if (idx === undefined || idx <= open) continue;
-    if (row.cells.some((cell) => isCellValuePresent(cellValues[cell.id]))) open = idx;
+    if (row.cells.some((cell) => hasRespondentValue(cell, cellValues))) open = idx;
   }
   return open;
+}
+
+/** 이 행이 반복 블록(틀 또는 펼친 벌)의 행인가 */
+export function isRepeatBlockRow(row: TableRow, config: RowRepeatConfig | null | undefined): boolean {
+  if (!isRowRepeatActive(config)) return false;
+  const templateIds = config!.templateRowIds;
+  return templateIds.includes(row.id) || (!!row.repeatSourceRowId && templateIds.includes(row.repeatSourceRowId));
+}
+
+/**
+ * 블록 표시 조건을 블록 행의 행 표시 조건으로 얹는다(런타임 전용 — 저장 데이터에 쓰지 않는다).
+ * 화면·필수 검증·저장 경계 strip·노출 행 목록이 기존 행 조건 경로를 그대로 타게 하는 한 곳이다.
+ * 블록 행에는 원래 행 조건이 없다(`validateRowRepeatTemplate` 가 막는다) — 혹시 있으면 둘 다 참이어야 보인다.
+ * 바꿀 것이 없으면 원본 배열을 그대로 돌려준다.
+ */
+export function applyRepeatBlockCondition(
+  rows: TableRow[],
+  config: RowRepeatConfig | null | undefined,
+): TableRow[] {
+  const condition = config?.displayCondition;
+  if (!condition || !isRowRepeatActive(config) || (condition.conditions ?? []).length === 0) return rows;
+  let changed = false;
+  const next = rows.map((row) => {
+    if (!isRepeatBlockRow(row, config)) return row;
+    changed = true;
+    const own = row.displayCondition;
+    return {
+      ...row,
+      displayCondition: own
+        ? { logicType: 'AND' as const, conditions: [...(own.conditions ?? []), ...condition.conditions] }
+        : condition,
+    };
+  });
+  return changed ? next : rows;
+}
+
+/**
+ * 「처음엔 접어 두기」가 지금 적용되는가 — 켜져 있고 펼쳐 둘 조건(`expandWhen`)이 참이 아니다.
+ * 조건 평가는 호출부가 문항 표시 조건과 같은 평가기로 한다(isConditionMet).
+ */
+export function repeatStartsCollapsed(
+  config: RowRepeatConfig | null | undefined,
+  isConditionMet: (condition: QuestionConditionGroup) => boolean,
+): boolean {
+  if (!isRowRepeatActive(config) || config!.startCollapsed !== true) return false;
+  const expandWhen = config!.expandWhen;
+  if (expandWhen && (expandWhen.conditions ?? []).length > 0 && isConditionMet(expandWhen)) return false;
+  return true;
+}
+
+/** 블록 표시 조건이 거짓이라 블록 전체가 숨는가 */
+export function isRepeatBlockHidden(
+  config: RowRepeatConfig | null | undefined,
+  isConditionMet: (condition: QuestionConditionGroup) => boolean,
+): boolean {
+  const condition = config?.displayCondition;
+  if (!condition || !isRowRepeatActive(config) || (condition.conditions ?? []).length === 0) return false;
+  return !isConditionMet(condition);
 }
 
 /** 열린 벌보다 뒤에 있는 반복 행 id — 렌더 파이프라인이 이 집합을 빼고 그린다. */
@@ -339,7 +524,8 @@ export type RowRepeatViolationKind =
   | 'validation-rule'
   | 'display-condition'
   | 'dynamic-row'
-  | 'already-expanded';
+  | 'already-expanded'
+  | 'radio-group';
 
 export interface RowRepeatViolation {
   kind: RowRepeatViolationKind;
@@ -348,14 +534,22 @@ export interface RowRepeatViolation {
   rowIds?: string[];
 }
 
-/** 반복 블록 안에 놓아도 되는 셀 종류 — 입력 셀과 라벨용 표시 셀뿐이다. */
-const REPEATABLE_CELL_TYPES = new Set<TableCell['type']>(['input', 'text']);
+/**
+ * 반복 블록 안에 놓아도 되는 셀 종류 — 입력 · 선택(드롭다운) · 라디오 · 체크박스 · 라벨용 표시 셀.
+ *
+ * 응답 칸은 모두 값이 셀 id 아래에 있어(선택·라디오는 문자열, 체크박스는 배열) 열린 벌 파생·접을 때 비우기·
+ * 사용 벌 pruning 이 그대로 맞는다(행 차례로 열기도 같은 칸을 같은 방식으로 다룬다). 상세 기재는
+ * `__optTexts__[문항][보기 id]` 라 셀 id 로 갈리지 않는다 — 복제 벌의 보기 id 를 벌마다 따로 정하고
+ * (`bundleOptionId`, 2026-11-04 유가공업 실태조사 문1), 라디오 묶음 이름도 벌마다 가른다(`bundleRadioGroupName`).
+ * 계산·랭킹·보기 소스 셀은 표 전체 규칙에 엮여 벌마다 의미가 갈려 여전히 뺀다.
+ */
+const REPEATABLE_CELL_TYPES = new Set<TableCell['type']>(['input', 'select', 'radio', 'checkbox', 'text']);
 
 /**
  * 반복 블록으로 지정해도 되는 묶음인지 검사한다. 빌더가 지정을 막는 데 쓰고,
  * 펼치기 함수는 이 판정을 신뢰한다(검증 실패 상태를 조용히 뭉개지 않는다).
  *
- * 선택·계산·랭킹 셀, 합계 제약·분기 규칙·행 표시 조건이 참조하는 행, 동적 행 그룹 소속
+ * 계산·랭킹·보기 소스 셀, 합계 제약·분기 규칙·행 표시 조건이 참조하는 행, 동적 행 그룹 소속
  * 행은 벌마다 의미가 갈려 규칙이 얽히므로 지정 대상에서 뺀다 (스펙 제외 목록).
  */
 export function validateRowRepeatTemplate(
@@ -400,19 +594,58 @@ export function validateRowRepeatTemplate(
   if (badCellRows.length > 0) {
     violations.push({
       kind: 'cell-type',
-      message: '반복 블록에는 입력 셀과 표시용 텍스트 셀만 넣을 수 있습니다.',
+      message: '반복 블록에는 입력·선택(드롭다운)·라디오·체크박스 셀과 표시용 텍스트 셀만 넣을 수 있습니다.',
       rowIds: badCellRows.map((row) => row.id),
     });
   }
 
-  const sumRefs = (question.sumConstraints ?? []).filter((constraint) =>
-    constraint.cellIds.some((id) => blockCellIds.has(id)),
-  );
+  // 라디오 묶음은 한 행 안(가로)일 때만 — 여러 행에 걸친 세로 묶음은 내보내기 변수명이 `문항_열코드` 라
+  // 벌마다 묶음 이름을 갈라도 변수명이 겹치고(배포의 변수명 검사가 막는다), 블록 밖 행과 걸친 묶음은
+  // 복제 벌만 이름이 갈려 묶음이 쪼개진다.
+  const groupRows = new Map<string, Set<string>>();
+  for (const row of rows) {
+    for (const cell of row.cells) {
+      if (cell.type !== 'radio' || !cell.radioGroupName) continue;
+      const set = groupRows.get(cell.radioGroupName) ?? new Set<string>();
+      set.add(row.id);
+      groupRows.set(cell.radioGroupName, set);
+    }
+  }
+  const badGroupRowIds = [...groupRows.values()]
+    .filter((ids) => [...ids].some((id) => blockRowIds.has(id)) && ids.size > 1)
+    .flatMap((ids) => [...ids].filter((id) => blockRowIds.has(id)));
+  if (badGroupRowIds.length > 0) {
+    violations.push({
+      kind: 'radio-group',
+      message: '여러 행에 걸친 라디오 묶음은 반복 블록에 넣을 수 없습니다. 한 행 안의 묶음만 반복할 수 있습니다.',
+      rowIds: [...new Set(badGroupRowIds)],
+    });
+  }
+
+  // 벌마다 제약(perRepeatBundle)은 참조하는 칸(cellIds·수식 셀 참조·적용 조건 컨트롤러)이 전부 블록 안이면
+  // 벌마다 그 벌의 칸으로 옮겨 검사하므로 막지 않는다(`resolveBundleSumConstraints`). 블록 밖 칸과 섞이거나
+  // 벌마다가 아닌데 블록 칸을 가리키면 1벌만 검사되거나 어느 벌의 제약인지 정할 수 없어 막는다.
+  // 묶음 가로지르기(acrossRepeatBundles)는 칸 목록만 넓히므로 수식·칸 조건과 같이 쓸 수 없다.
+  const isAcrossOk = (constraint: SumConstraint, refs: string[]) =>
+    constraint.acrossRepeatBundles === true &&
+    constraint.perRepeatBundle !== true &&
+    !constraint.leftExpr &&
+    !constraint.targetExpr &&
+    !constraint.when &&
+    refs.every((id) => blockCellIds.has(id));
+  const sumRefs = (question.sumConstraints ?? [])
+    .map((constraint) => ({ constraint, refs: sumConstraintCellRefs(constraint) }))
+    .filter(
+      ({ constraint, refs }) =>
+        refs.some((id) => blockCellIds.has(id)) &&
+        !(constraint.perRepeatBundle === true && refs.every((id) => blockCellIds.has(id))) &&
+        !isAcrossOk(constraint, refs),
+    );
   if (sumRefs.length > 0) {
     violations.push({
       kind: 'sum-constraint',
       message: '합계 제약이 참조하는 행은 반복 블록으로 지정할 수 없습니다.',
-      rowIds: badRowIdsOf(blockRows, blockCellIds, sumRefs.flatMap((c) => c.cellIds)),
+      rowIds: badRowIdsOf(blockRows, blockCellIds, sumRefs.flatMap((c) => c.refs)),
     });
   }
 
@@ -469,4 +702,102 @@ function badRowIdsOf(
   return blockRows
     .filter((row) => row.cells.some((cell) => hit.has(cell.id)))
     .map((row) => row.id);
+}
+
+// ── 적기 시작한 벌 · 벌마다 제약 (검증) ─────────────────────────────
+
+
+/**
+ * 적기 시작한 2벌 이후의 벌 번호 — 응답 칸에 값이 하나라도 든 벌. 빈 채로 열어 둔 벌은 안 쓴 것이다
+ * (열린 벌 수는 저장하지 않는다 — 검증은 값만 본다, 2026-11-04 사용자 결정).
+ */
+export function startedRepeatBundles(
+  rows: readonly TableRow[],
+  values: Record<string, unknown> | undefined,
+  /** 몇 번째 벌부터 보나 — 기본 2. 「처음엔 접어 두기」의 첫 벌을 볼 때 1 */
+  fromBundle: 1 | 2 = 2,
+): Set<number> {
+  const cellValues = values ?? {};
+  const started = new Set<number>();
+  for (const row of rows) {
+    const idx = repeatIndexOf(row);
+    if (idx === undefined || idx < fromBundle || started.has(idx)) continue;
+    if (row.cells.some((cell) => hasRespondentValue(cell, cellValues))) {
+      started.add(idx);
+    }
+  }
+  return started;
+}
+
+/**
+ * 검사할 합계·칸 수 제약 — 벌마다 제약(`perRepeatBundle`)을 1벌과 적기 시작한 벌마다 복제한다.
+ * 1벌 칸 id 를 (틀 행, 칸 자리)로 풀어 그 벌의 같은 자리 칸 id 로 옮긴다. 옮길 수 없는 칸(구조가 깨짐)은 뺀다.
+ * 표식 없는 제약과 반복이 꺼진 표는 그대로 돌려준다.
+ */
+/** 제약이 가리키는 표 칸 — cellIds · 좌변·우변 수식의 같은 질문 셀 참조 · 적용 조건 컨트롤러 */
+export function sumConstraintCellRefs(constraint: SumConstraint): string[] {
+  return [
+    ...constraint.cellIds,
+    ...collectCalcExprCellIds(constraint.leftExpr),
+    ...collectCalcExprCellIds(constraint.targetExpr),
+    ...collectGateControllerIds(constraint.when),
+  ];
+}
+
+export function resolveBundleSumConstraints(
+  question: Pick<Question, 'tableRowsData' | 'rowRepeatConfig' | 'sumConstraints'>,
+  values: Record<string, unknown> | undefined,
+): SumConstraint[] {
+  const constraints = question.sumConstraints ?? [];
+  if (
+    !constraints.some((c) => c.perRepeatBundle || c.acrossRepeatBundles) ||
+    !isRowRepeatActive(question.rowRepeatConfig)
+  ) {
+    return constraints;
+  }
+  const rows = question.tableRowsData ?? [];
+  const position = new Map<string, { sourceRowId: string; index: number }>();
+  const bundleRows = new Map<string, TableRow>();
+  for (const row of rows) {
+    const idx = repeatIndexOf(row);
+    if (idx === undefined || !row.repeatSourceRowId) continue;
+    bundleRows.set(`${row.repeatSourceRowId}#${idx}`, row);
+    if (idx === 1) row.cells.forEach((cell, index) => position.set(cell.id, { sourceRowId: row.repeatSourceRowId!, index }));
+  }
+  const bundles = [...startedRepeatBundles(rows, values)].sort((a, b) => a - b);
+  const out: SumConstraint[] = [];
+  for (const constraint of constraints) {
+    if (constraint.acrossRepeatBundles && !constraint.perRepeatBundle) {
+      // 묶음 가로지르기 — 1벌 칸 + 적기 시작한 벌의 같은 자리 칸을 한 제약에 모은다
+      const cellIds = [...constraint.cellIds];
+      for (const bundle of bundles) {
+        for (const id of constraint.cellIds) {
+          const at = position.get(id);
+          const mapped = at ? bundleRows.get(`${at.sourceRowId}#${bundle}`)?.cells[at.index]?.id : undefined;
+          if (mapped) cellIds.push(mapped);
+        }
+      }
+      out.push({ ...constraint, cellIds });
+      continue;
+    }
+    out.push(constraint);
+    if (!constraint.perRepeatBundle) continue;
+    for (const bundle of bundles) {
+      // 1벌 칸 id → 이 벌의 같은 자리 칸 id. 블록 밖 칸은 대응표에 없어 그대로 남는다.
+      const idMap = new Map<string, string>();
+      for (const [templateId, at] of position) {
+        const id = bundleRows.get(`${at.sourceRowId}#${bundle}`)?.cells[at.index]?.id;
+        if (id) idMap.set(templateId, id);
+      }
+      const cellIds = constraint.cellIds
+        .map((id) => idMap.get(id))
+        .filter((id): id is string => id !== undefined);
+      const next: SumConstraint = { ...constraint, id: `${constraint.id}#${bundle}`, cellIds };
+      if (constraint.leftExpr) next.leftExpr = remapCalcExprCellIds(constraint.leftExpr, idMap);
+      if (constraint.targetExpr) next.targetExpr = remapCalcExprCellIds(constraint.targetExpr, idMap);
+      if (constraint.when) next.when = remapGateConditionCellIds(constraint.when, idMap);
+      out.push(next);
+    }
+  }
+  return out;
 }

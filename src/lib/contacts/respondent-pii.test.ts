@@ -63,6 +63,15 @@ describe('collectReferencedContactKeys', () => {
     expect([...keys].sort()).toEqual(['대표 "직위"', '지역'].sort());
   });
 
+  it('대체 식 {{a || b}} 는 조각마다 키로 모은다 — 식 전체를 키로 내지 않는다', () => {
+    // 뒤 조각을 빠뜨리면 그 개인정보 열이 응답자 브라우저로 가지 않아 오류 없이 빈칸이 된다.
+    const keys = collectReferencedContactKeys({
+      cell: { defaultValueTemplate: '{{업체명 || 대표자명}}' },
+      html: '<p>{{<strong>a</strong> || b}}</p>',
+    });
+    expect([...keys].sort()).toEqual(['a', 'b', '대표자명', '업체명'].sort());
+  });
+
   it('구조가 없으면 빈 집합', () => {
     expect(collectReferencedContactKeys(null).size).toBe(0);
   });

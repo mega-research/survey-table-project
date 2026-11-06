@@ -1,3 +1,5 @@
+import { splitContactTokenKeys } from '@/lib/survey/substitute-tokens';
+
 /**
  * body_html / subject / from_name 에서 사용된 변수 토큰 키 추출.
  * 같은 키 반복은 중복 제거. 발송 시 검증/UX 캐시.
@@ -14,7 +16,8 @@ export function extractVariableKeys(sources: readonly string[]): string[] {
     re.lastIndex = 0;
     while ((m = re.exec(s)) !== null) {
       const key = m[1];
-      if (key !== undefined) set.add(key.trim());
+      // 대체 식 `{{업체명 || DQ2}}` 는 조각마다 키 — 빌더 경고가 없는 조각만 지목한다.
+      if (key !== undefined) for (const part of splitContactTokenKeys(key)) set.add(part);
     }
   }
   return Array.from(set);

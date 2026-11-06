@@ -8,14 +8,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * 내부 계정 capability 판정을 더한 대체재라, 그 가드의 테스트를 여기가 승계한다.
  */
 
-const { notFound, requireAuth } = vi.hoisted(() => ({
+const { notFound, redirect, requireAuth } = vi.hoisted(() => ({
   notFound: vi.fn((): never => {
     throw new Error('NEXT_NOT_FOUND');
+  }),
+  redirect: vi.fn((to: string): never => {
+    throw new Error(`NEXT_REDIRECT ${to}`);
   }),
   requireAuth: vi.fn(),
 }));
 
-vi.mock('next/navigation', () => ({ notFound }));
+vi.mock('next/navigation', () => ({ notFound, redirect }));
+vi.mock('next/headers', () => ({
+  headers: async () => new Headers({ 'x-request-path': '/surveys/s1/operations/contacts' }),
+}));
 vi.mock('@/lib/auth', () => ({ requireAuth }));
 vi.mock('./survey-access', () => {
   class SurveyAccessError extends Error {
@@ -127,10 +133,10 @@ describe('assertSurveyConsolePageAccess — 게스트 허용 콘솔 페이지 �
 
   // 티켓 21 이 이 가드의 env grant 게스트 분기를 걷었다 — 게스트는 내부 구역에 아예
   // 들어오지 못하고(레이아웃 유형 게이트) 자기 화면은 /guest 다.
-  it('세션이 없으면 capability 판정까지 가지 않는다', async () => {
+  it('세션이 없으면 capability 판정까지 가지 않고 원래 경로를 실어 로그인으로 보낸다', async () => {
     requireAuth.mockRejectedValue(new Error('인증이 필요합니다.'));
     await expect(assertSurveyConsolePageAccess(SURVEY_ID, 'contacts.view')).rejects.toThrow(
-      '인증이 필요합니다.',
+      `NEXT_REDIRECT /login?redirect=${encodeURIComponent('/surveys/s1/operations/contacts')}`,
     );
     expect(loadSurveyCapabilities).not.toHaveBeenCalled();
   });

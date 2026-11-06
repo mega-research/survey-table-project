@@ -35,6 +35,7 @@ export const SelectCell = React.memo(function SelectCell({
   ariaDescribedBy,
   priorChoiceValue,
   disabledOptionValues,
+  hiddenOptionValues,
 }: InteractiveCellProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
@@ -57,6 +58,10 @@ export const SelectCell = React.memo(function SelectCell({
   }
 
   const selectedValue = (cellResponse as string) || '';
+  // 보기 표시 조건으로 숨은 보기는 목록에서 뺀다 — 고른 보기가 숨으면 셀 컨테이너가 값을 지운다.
+  const visibleOptions = hiddenOptionValues?.size
+    ? cell.selectOptions.filter((opt) => !hiddenOptionValues.has(opt.value ?? opt.id))
+    : cell.selectOptions;
   const selectedOption = cell.selectOptions.find((opt) => (opt.value ?? opt.id) === selectedValue);
 
   return (
@@ -87,7 +92,7 @@ export const SelectCell = React.memo(function SelectCell({
             }`}
           >
             <option value="">{systemText('input.selectShort', locale)}</option>
-            {cell.selectOptions.map((option) => (
+            {visibleOptions.map((option) => (
               <option
                 key={option.id}
                 value={option.value ?? option.id}

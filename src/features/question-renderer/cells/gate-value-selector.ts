@@ -42,7 +42,8 @@ export function gateWantsChoiceSelection(
  * 컨트롤러가 그 자신도 게이팅 셀이면 **그 컨트롤러의 컨트롤러까지** 따라간다. 평가기는
  * 비활성 컨트롤러의 잔존값을 없는 것으로 보는데(cell-gating 의 effectiveControllerValue),
  * 그 판정에는 상류 값이 필요하다 — 구독이 직접 컨트롤러에서 멈추면 상류가 바뀌어도 이 셀이
- * 다시 판정되지 않는다. tableCells 가 없으면 직접 컨트롤러만 구독한다(종전 동작).
+ * 다시 판정되지 않는다. 컨트롤러 select 칸의 보기 표시 조건(`QuestionOption.enabledWhen`)도 같은
+ * 판정에 들어가므로 그 상류까지 따라간다. tableCells 가 없으면 직접 컨트롤러만 구독한다(종전 동작).
  */
 export function gateSubscriptionKeys(
   condition: CellEnableCondition,
@@ -59,8 +60,12 @@ export function gateSubscriptionKeys(
       keys.add(leaf.controllerCellId);
       if (seenControllers.has(leaf.controllerCellId)) continue;
       seenControllers.add(leaf.controllerCellId);
-      const upstream = tableCells?.find((c) => c.id === leaf.controllerCellId)?.enabledWhen;
-      if (upstream) walk(upstream);
+      const controller = tableCells?.find((c) => c.id === leaf.controllerCellId);
+      if (controller?.enabledWhen) walk(controller.enabledWhen);
+      // 컨트롤러가 고른 보기가 보기 표시 조건으로 숨으면 그 값도 없는 것으로 본다 — 그 조건의 상류도 구독한다.
+      for (const option of controller?.selectOptions ?? []) {
+        if (option.enabledWhen) walk(option.enabledWhen);
+      }
     }
   };
   walk(condition);

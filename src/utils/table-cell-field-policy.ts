@@ -68,6 +68,7 @@ export const TABLE_CELL_FIELD_POLICY = {
   lookupSearch: OWNED_NOT_LIBRARY,
   defaultValueTemplate: OWNED,
   prefillEditable: OWNED,
+  exportPrefillEdit: OWNED,
   inputType: OWNED,
   piiEncrypted: OWNED,
   emptyDefault: OWNED,

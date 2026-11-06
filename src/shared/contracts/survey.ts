@@ -317,5 +317,7 @@ export interface QuestionData {
   inputRows?: number | null;
   inputAutoGrow?: boolean | null;
   titleHtml?: string | null;
+  collapseButtonLabel?: string | null;
+  collapseAttachToPrevious?: boolean;
   sumConstraints?: SumConstraint[] | null;
 }

@@ -75,6 +75,8 @@ export async function createQuestion(data: CreateQuestionInput): Promise<Questio
     inputRows: data.inputRows ?? null,
     inputAutoGrow: data.inputAutoGrow ?? null,
     titleHtml: data.titleHtml ?? null,
+    collapseButtonLabel: data.collapseButtonLabel ?? null,
+    collapseAttachToPrevious: data.collapseAttachToPrevious ?? false,
     sumConstraints: data.sumConstraints as NewQuestion['sumConstraints'],
     displayCondition: data.displayCondition as NewQuestion['displayCondition'],
     priorAnswerCondition: data.priorAnswerCondition as NewQuestion['priorAnswerCondition'],

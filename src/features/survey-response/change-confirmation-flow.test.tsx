@@ -658,14 +658,27 @@ describe('변동 확인 스위치 꺼짐 — 이월 값 프리필', () => {
     expect(submittedResponses()).not.toHaveProperty('__changeConfirm__');
   });
 
-  it('프리필이 응답 쓰기 창구를 타 초안·응답 행에 남는다', async () => {
+  it('프리필이 응답 쓰기 창구를 타 초안에 남는다 — 단, 링크를 열기만 해서는 응답 행을 만들지 않는다', async () => {
     // 직접 setResponses 로 쓰면 초안 큐에 실리지 않아 서버에 남지 않는다. 그러면 중도
     // 이탈 후 재진입에서 회복이 응답 묶음을 갈아끼워 이미 지나온 페이지의 이월 값이
-    // 통째로 사라진다. 응답 행 INSERT 가 나가는 것이 창구를 탔다는 증거다.
+    // 통째로 사라진다. 그래서 창구(handleResponse)는 타되, 명단 값 칸처럼 응답자의 답이 아니라
+    // 첫 답 INSERT 는 건너뛴다 — 행은 응답자가 실제로 답할 때 생기고 이월 값은 그 초안에 실린다
+    // (2026-11-06, prior-prefill-resume-race.test.tsx).
+    const user = userEvent.setup();
     renderWithSwitchOff();
     await screen.findByText('지난 회차에 답한 질문');
     await screen.findByDisplayValue('작년 답');
+    expect(createWithFirstAnswer).not.toHaveBeenCalled();
+
+    await user.type(screen.getAllByRole('textbox')[1]!, '새');
     await waitFor(() => expect(createWithFirstAnswer).toHaveBeenCalled());
+    expect(createWithFirstAnswer.mock.calls[0]![0]).toMatchObject({ questionId: 'q-new' });
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    await waitFor(() =>
+      expect(saveDraft).toHaveBeenCalledWith(
+        expect.objectContaining({ answers: expect.objectContaining({ 'q-prior': '작년 답' }) }),
+      ),
+    );
   });
 
   /** 라디오 q-cond 가 '해당있음'(코드 A) 일 때만 q-dep 이 보이는 설문. */

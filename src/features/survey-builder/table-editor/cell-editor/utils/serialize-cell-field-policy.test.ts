@@ -113,6 +113,7 @@ const SAMPLES: Record<string, TableCell> = {
     inputWidth: 120,
     defaultValueTemplate: '{{회사명}}',
     prefillEditable: true,
+    exportPrefillEdit: true,
     inputType: 'text',
     piiEncrypted: true,
     textValidation: { minLength: 2, rejectMeaningless: true },

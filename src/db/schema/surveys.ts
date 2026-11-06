@@ -341,6 +341,10 @@ export const questions = pgTable(
     inputAutoGrow: boolean('input_auto_grow'),
     // 문항 제목 서식본 — 정본은 평문 title (0125)
     titleHtml: text('title_html'),
+    // 문항 접어 두기 버튼 글자 (0154). NULL·공백 = 꺼짐(기존 화면), 글자가 있으면 응답 화면에서 그 버튼을 눌러야 문항이 펼쳐진다
+    collapseButtonLabel: text('collapse_button_label'),
+    // 접어 둔 문항을 페이지에서 바로 앞 문항의 설명 밑에 붙인다 (0155). 버튼 글자가 있을 때만 의미가 있다
+    collapseAttachToPrevious: boolean('collapse_attach_previous').notNull().default(false),
 
     // 단답형·장문형 개인정보 암호화 토글 — 응답값을 encryptPii 암호문으로 저장 (ADR-0012)
     piiEncrypted: boolean('pii_encrypted').default(false).notNull(),

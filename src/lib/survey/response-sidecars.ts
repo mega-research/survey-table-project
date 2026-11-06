@@ -13,6 +13,7 @@
 
 import { OPT_TEXTS_KEY, readOptTextsSidecar } from '@/lib/option-text-read';
 import { CHANGE_CONFIRM_KEY, sanitizeChangeConfirmations } from '@/lib/survey/change-confirmation';
+import { PREFILL_EDITS_KEY, sanitizePrefillEdits } from '@/utils/prefill-edits-sidecar';
 import {
   DYNAMIC_ROW_SELECTIONS_KEY,
   sanitizeDynamicRowSelections,
@@ -41,6 +42,8 @@ const SANITIZERS: Record<string, SidecarSanitizer> = {
   // 설문은 그 문항을 건드리는 순간 초안 저장이 통째로 거부됐다(2026-09-09 발견).
   [DYNAMIC_ROW_SELECTIONS_KEY]: (raw, isKnownQuestionId) =>
     sanitizeDynamicRowSelections(raw, isKnownQuestionId),
+  // 고친 프리필 칸 id — 응답 확정이 계산해 덮어쓴다(응답자가 보낸 값은 믿지 않는다). 내보내기 `_upd` 열의 근거.
+  [PREFILL_EDITS_KEY]: (raw, isKnownQuestionId) => sanitizePrefillEdits(raw, isKnownQuestionId),
 };
 
 /** 루트 예약 키(사이드카) 접두. 문항 id 는 UUID 라 이 접두를 가질 수 없다. */

@@ -36,6 +36,8 @@ const base = z.object({
   title: z.string(),
   // 제목 서식본 — 정본은 평문 title (0125)
   titleHtml: z.string().nullable().optional(),
+  collapseButtonLabel: z.string().nullable().optional(),
+  collapseAttachToPrevious: z.boolean().optional(),
   description: z.string().optional(),
   required: z.boolean(),
   groupId: z.string().optional(),
@@ -111,7 +113,11 @@ export const RadioQuestionSchema = base
   .extend(mobileTableDisplay.shape)
   .extend(choiceGroups.shape)
   .extend(scaleMean.shape)
-  .extend({ type: z.literal('radio') });
+  .extend({
+    type: z.literal('radio'),
+    // 명단 값으로 보기를 미리 골라 잠근다(utils/choice-prefill) — 단답형과 같은 컬럼
+    defaultValueTemplate: z.string().nullable().optional(),
+  });
 
 export const CheckboxQuestionSchema = base
   .extend(optionList.shape)

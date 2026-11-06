@@ -57,6 +57,7 @@ import {
   resolveRankingOptionsFromCells,
 } from '@/utils/ranking-source';
 import { buildCheckboxItemVarName, buildOptionTextVarName } from '@/utils/spss-var-name';
+import { isPrefillEdited } from '@/utils/prefill-edits-sidecar';
 import {
   buildTableCellVarName,
   flattenLabelLineBreaks,
@@ -92,7 +93,9 @@ export interface SPSSExportColumn {
     | 'choice-group'
     | 'choice-group-item'
     // 추적조사 변동 확인 — 문항 변수 옆에 붙는 파생 변수 (질문 값이 아니라 응답자의 진술)
-    | 'change-confirm';
+    | 'change-confirm'
+    // 고친 프리필 — 응답자가 명단 값과 다르게 낸 경우에만 칸 값을 싣는 파생 변수(<변수>_upd)
+    | 'prefill-edit';
   optionIndex?: number;
   optionValue?: string;
   tableCellId?: string;
@@ -162,11 +165,17 @@ export interface SpssColumnOptions {
   changeConfirmQuestionIds?: ReadonlySet<string>;
   /**
    * 반복 블록별 "실제로 쓰인 최대 벌" (질문 id → 벌 번호). 이 번호를 넘는 벌의 열은
-   * 내지 않는다 — 구조에는 최대 20벌이 박혀 있어도 아무도 채우지 않은 벌은 빈 열이다.
+   * 내지 않는다 — 구조에는 최대 30벌이 박혀 있어도 아무도 채우지 않은 벌은 빈 열이다.
    * 미전달이면 구조에 있는 벌을 전부 낸다(발행 시점 변수명 게이트는 최악의 집합을 봐야 한다).
    * **설문 전체 기준**으로 계산해야 분할 내보내기의 파일 간 열 구성이 갈리지 않는다.
    */
   usedRepeatCounts?: ReadonlyMap<string, number>;
+  /**
+   * 안 쓴 열·행 빼기 — 질문 id → 아무도 채우지 않은 「안 쓰면 뺀다」 열·행 id (`unused-column-usage`).
+   * 그 열·행의 칸 변수를 내지 않는다. 미전달이면 전 열을 낸다(발행 시점 변수명 게이트는 최악의 집합).
+   * **설문 전체 기준**으로 계산해야 분할 내보내기의 파일 간 열 구성이 갈리지 않는다.
+   */
+  unusedColumnIds?: ReadonlyMap<string, ReadonlySet<string>>;
   /**
    * 문항 id → 그 문항이 속한 언어 묶음의 언어 (`resolveLanguageSetLocales`). 주어지면 서로 다른
    * 언어 묶음의 같은 변수명 열을 한 열로 합친다. 미전달·빈 맵이면 다국어 기능 도입 전과 같은 열이다.
@@ -308,6 +317,9 @@ function emitChoiceGroupColumns(
     }
   }
 }
+
+/** 고친 프리필 파생 변수의 꼬리 — `SQ1_r05_c02_upd` */
+export const PREFILL_EDIT_VAR_SUFFIX = '_upd';
 
 export function generateSPSSColumns(
   questions: QuestionVariant[],
@@ -557,9 +569,18 @@ export function generateSPSSColumns(
             cellCoords.push({ tRow, colIdx });
         }
       }
+      const unusedColumns = options?.unusedColumnIds?.get(q.id);
       for (const { tRow, colIdx } of cellCoords) {
         const cell = tRow.cells[colIdx];
         if (!cell) continue;
+        // 안 쓴 열 빼기 — 보기 그룹 칸은 그룹 열로 따로 나가므로 그대로 둔다
+        const columnId = q.tableColumns[colIdx]?.id;
+        if (
+          unusedColumns &&
+          ((columnId && unusedColumns.has(columnId)) || unusedColumns.has(tRow.id)) &&
+          !choiceGroupOfCell.has(cell.id)
+        )
+          continue;
         const choiceGroup = choiceGroupOfCell.get(cell.id);
         if (choiceGroup && !emittedChoiceGroups.has(choiceGroup)) {
           emittedChoiceGroups.add(choiceGroup);
@@ -731,6 +752,21 @@ export function generateSPSSColumns(
             ...(opts ? { cellOptions: opts } : {}),
           });
 
+          // 고친 경우만 따로 내보내기 — 원 변수 바로 옆에 <변수>_upd (String). 값은 응답 확정이 단 표식이 있을 때만.
+          if (cell.type === 'input' && cell.exportPrefillEdit && cell.prefillEditable && cell.defaultValueTemplate?.trim()) {
+            columns.push({
+              spssVarName: `${varName}${PREFILL_EDIT_VAR_SUFFIX}`,
+              questionText: q.title,
+              optionLabel: `${optionLabel || `${tRow.label} - ${q.tableColumns[colIdx]?.label ?? ''}`} (수정값)`,
+              questionId: q.id,
+              type: 'prefill-edit',
+              tableCellId: cell.id,
+              tableCellType: 'input',
+              cellSpssVarType: 'String',
+              ...(autoExportLabel !== undefined ? { cellExportLabel: `${autoExportLabel} (수정값)` } : {}),
+            });
+          }
+
           // radio/select 셀의 allowTextInput 옵션마다 STRING 사이드카 텍스트 변수 생성
           if (cell.type === 'radio' && cell.radioOptions) {
             for (let optIdx = 0; optIdx < cell.radioOptions.length; optIdx++) {
@@ -773,9 +809,23 @@ export function generateSPSSColumns(
       }
       const unreached = pendingChoiceGroups.filter((g) => !emittedChoiceGroups.has(g));
       if (unreached.length > 0) emitChoiceGroupColumns(q, q.questionCode, columns, unreached);
-      // 순회가 닿지 않은 묶음(멤버 행이 반복 pruning 으로 빠진 경우)은 표 끝에 — 열이 사라지지 않게
-      for (const column of new Set(radioGroupColumnOfCell.values())) {
-        if (!emittedRadioGroups.has(column)) columns.push(column);
+      // 순회가 닿지 않은 묶음은 표 끝에 — 열이 사라지지 않게. 단 멤버가 전부 아무도 안 쓴 뒤쪽 반복 벌에
+      // 있는 묶음은 뺀다 — 벌마다 묶음 이름이 갈리므로(`bundleRadioGroupName`) 그 벌의 다른 칸과 같이 빠져야
+      // 「안 쓴 벌의 열은 내지 않는다」가 라디오 묶음에도 성립한다.
+      const exportRowIds = new Set(exportRows.map((row) => row.id));
+      const prunedCellIds = new Set(
+        (q.tableRowsData ?? [])
+          .filter((row) => row.repeatIndex !== undefined && !exportRowIds.has(row.id))
+          .flatMap((row) => row.cells.map((cell) => cell.id)),
+      );
+      const membersOfGroup = new Map<SPSSExportColumn, string[]>();
+      for (const [cellId, column] of radioGroupColumnOfCell) {
+        membersOfGroup.set(column, [...(membersOfGroup.get(column) ?? []), cellId]);
+      }
+      for (const [column, members] of membersOfGroup) {
+        if (emittedRadioGroups.has(column)) continue;
+        if (members.every((id) => prunedCellIds.has(id))) continue;
+        columns.push(column);
       }
     } else {
       columns.push({
@@ -1373,6 +1423,14 @@ function buildColumnValue(
         return otherItem?.otherValue || null;
       }
       return null;
+    }
+
+    case 'prefill-edit': {
+      // 응답 확정이 「명단 값과 다르게 냈다」 표식을 단 칸만 그 값을 싣는다
+      if (!col.tableCellId || !isPrefillEdited(sub.questionResponses, col.questionId, col.tableCellId)) return null;
+      if (!rawValue || typeof rawValue !== 'object') return null;
+      const edited = (rawValue as Record<string, unknown>)[col.tableCellId];
+      return typeof edited === 'string' && edited.trim() !== '' ? edited : null;
     }
 
     case 'table-cell': {

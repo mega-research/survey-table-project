@@ -56,8 +56,6 @@ const KO = {
   'completion.screenedOutTitle': '설문 종료',
   'completion.defaultMessage': '설문에 참여해주셔서 감사합니다!',
   'completion.completedAt': '응답 완료 시간: {time}',
-  'completion.previewTitle': '설문 확인 완료',
-  'completion.previewMessage': '입력 내용은 저장되지 않았습니다.',
   'completion.startNew': '새 응답 시작',
 
   // 종료 후 이동
@@ -114,6 +112,8 @@ const KO = {
   'validation.sum.gte': '{subject}가 {target} 이상이어야 합니다 (현재 {current})',
   'validation.sum.lt': '{subject}가 {target} 미만이어야 합니다 (현재 {current})',
   'validation.sum.gt': '{subject}가 {target} 초과여야 합니다 (현재 {current})',
+  'validation.softWarning': '입력한 값을 다시 확인해 주세요. 맞다면 그대로 넘어가셔도 됩니다.',
+  'validation.softWarningMore': '외 {count}건',
   // 입력된 칸 수
   'validation.filledCount.eq': '선택된 칸 중 정확히 {target}칸을 입력해야 합니다 (현재 {count}칸)',
   'validation.filledCount.ne':
@@ -250,6 +250,8 @@ const KO = {
 
   'table.addRow': '행 추가',
   'table.removeLastRow': '마지막 줄 삭제',
+  'table.addColumn': '열 추가',
+  'table.removeLastColumn': '마지막 열 삭제',
   'table.maxRowsReached': '최대 {max}개까지 추가할 수 있습니다.',
   'table.rowControls': '행 추가·삭제',
   'table.collapse': '접기',
@@ -275,11 +277,13 @@ const KO = {
   'format.label.biz_number': '사업자번호',
   'format.label.corp_number': '법인번호',
   'format.label.email': '이메일',
+  'format.label.date': '날짜(YYYY.MM.DD)',
   'format.notANumber.mobile': '휴대전화는 숫자로 입력해 주세요',
   'format.notANumber.phone': '전화번호는 숫자로 입력해 주세요',
   'format.notANumber.biz_number': '사업자번호는 숫자로 입력해 주세요',
   'format.notANumber.corp_number': '법인번호는 숫자로 입력해 주세요',
   'format.notANumber.email': '이메일은 숫자로 입력해 주세요',
+  'format.notANumber.date': '날짜는 숫자로 입력해 주세요',
   'format.wrongLengthFixed.biz_number': '사업자번호는 {length}자리입니다',
   'format.wrongLengthFixed.corp_number': '법인번호는 {length}자리입니다',
   'format.wrongLength': '{label} 자릿수가 맞지 않습니다',
@@ -288,6 +292,12 @@ const KO = {
   'format.checksum': '{label} 확인번호가 맞지 않습니다. 다시 확인해 주세요',
   'format.malformed': '{label} 형식이 아닙니다',
   'format.nonAscii': '이메일은 영문·숫자로만 입력해 주세요',
+  'format.dateShape': '날짜는 2025.01.31 처럼 연(4자리)·월·일로 입력해 주세요',
+  'format.invalidDate': '없는 날짜입니다. 다시 확인해 주세요',
+
+  // 문항 접어 두기 — 붙임 줄의 동작 글자(버튼 글자는 저작자 문구라 번역하지 않는다)
+  'collapse.expand': '펼쳐 보기',
+  'collapse.collapse': '접기',
 
   // 저작자가 비웠을 때의 기본 문구 — 라이브 설정이라 저작 문구는 한국어 한 벌이다
   'default.paused': '설문이 일시 중단되었습니다. 잠시 후 다시 시도해 주세요.',
@@ -338,8 +348,6 @@ const ZH: Dictionary = {
   'completion.screenedOutTitle': '问卷结束',
   'completion.defaultMessage': '感谢您参与本次问卷调查！',
   'completion.completedAt': '作答完成时间：{time}',
-  'completion.previewTitle': '问卷检查完成',
-  'completion.previewMessage': '填写的内容未被保存。',
   'completion.startNew': '开始新的作答',
 
   'endRedirect.waiting': '请稍候。',
@@ -386,6 +394,8 @@ const ZH: Dictionary = {
   'validation.sum.gte': '{subject}应大于或等于{target}（当前 {current}）',
   'validation.sum.lt': '{subject}应小于{target}（当前 {current}）',
   'validation.sum.gt': '{subject}应大于{target}（当前 {current}）',
+  'validation.softWarning': '请再次确认输入的数值。如无误，可直接继续。',
+  'validation.softWarningMore': '另有 {count} 项',
   'validation.filledCount.eq': '所选单元格中须正好填写{target}格（当前 {count}格）',
   'validation.filledCount.ne': '所选单元格中填写的格数不能为{target}格（当前 {count}格）',
   'validation.filledCount.gte': '所选单元格中须至少填写{target}格（当前 {count}格）',
@@ -514,6 +524,8 @@ const ZH: Dictionary = {
 
   'table.addRow': '添加行',
   'table.removeLastRow': '删除最后一行',
+  'table.addColumn': '添加列',
+  'table.removeLastColumn': '删除最后一列',
   'table.maxRowsReached': '最多可添加{max}个。',
   'table.rowControls': '添加或删除行',
   'table.collapse': '收起',
@@ -538,11 +550,13 @@ const ZH: Dictionary = {
   'format.label.biz_number': '营业执照号码',
   'format.label.corp_number': '法人登记号码',
   'format.label.email': '电子邮箱',
+  'format.label.date': '日期(YYYY.MM.DD)',
   'format.notANumber.mobile': '手机号码请输入数字',
   'format.notANumber.phone': '电话号码请输入数字',
   'format.notANumber.biz_number': '营业执照号码请输入数字',
   'format.notANumber.corp_number': '法人登记号码请输入数字',
   'format.notANumber.email': '电子邮箱请输入数字',
+  'format.notANumber.date': '日期请输入数字',
   'format.wrongLengthFixed.biz_number': '营业执照号码应为{length}位',
   'format.wrongLengthFixed.corp_number': '法人登记号码应为{length}位',
   'format.wrongLength': '{label}位数不正确',
@@ -551,6 +565,11 @@ const ZH: Dictionary = {
   'format.checksum': '{label}校验码不正确，请再次确认',
   'format.malformed': '{label}格式不正确',
   'format.nonAscii': '电子邮箱只能输入英文字母和数字',
+  'format.dateShape': '日期请按 2025.01.31 的格式输入年(4位)·月·日',
+  'format.invalidDate': '该日期不存在，请再次确认',
+
+  'collapse.expand': '展开查看',
+  'collapse.collapse': '收起',
 
   'default.paused': '问卷已暂停。请稍后再试。',
   'default.quotaClosed': '该条件的名额已满，无法继续参与。感谢您的参与。',
@@ -599,8 +618,6 @@ const EN: Dictionary = {
   'completion.screenedOutTitle': 'Survey ended',
   'completion.defaultMessage': 'Thank you for taking part in the survey!',
   'completion.completedAt': 'Completed at: {time}',
-  'completion.previewTitle': 'Survey check complete',
-  'completion.previewMessage': 'Your entries were not saved.',
   'completion.startNew': 'Start a new response',
 
   'endRedirect.waiting': 'Please wait a moment.',
@@ -655,6 +672,8 @@ const EN: Dictionary = {
   'validation.sum.gte': '{subject} must be at least {target} (current: {current})',
   'validation.sum.lt': '{subject} must be less than {target} (current: {current})',
   'validation.sum.gt': '{subject} must be greater than {target} (current: {current})',
+  'validation.softWarning': 'Please double-check the values you entered. If they are correct, you can continue.',
+  'validation.softWarningMore': '+{count} more',
   'validation.filledCount.eq':
     'Of the selected fields, exactly {target} must be filled in (currently {count})',
   'validation.filledCount.ne':
@@ -793,6 +812,8 @@ const EN: Dictionary = {
 
   'table.addRow': 'Add row',
   'table.removeLastRow': 'Remove last row',
+  'table.addColumn': 'Add column',
+  'table.removeLastColumn': 'Remove last column',
   'table.maxRowsReached': 'You can add up to {max}.',
   'table.rowControls': 'Add or remove rows',
   'table.collapse': 'Collapse',
@@ -817,6 +838,7 @@ const EN: Dictionary = {
   'format.label.biz_number': 'business registration number',
   'format.label.corp_number': 'corporate registration number',
   'format.label.email': 'email address',
+  'format.label.date': 'date (YYYY.MM.DD)',
   'format.notANumber.mobile': 'Please enter the mobile number using numbers only',
   'format.notANumber.phone': 'Please enter the phone number using numbers only',
   'format.notANumber.biz_number':
@@ -824,6 +846,7 @@ const EN: Dictionary = {
   'format.notANumber.corp_number':
     'Please enter the corporate registration number using numbers only',
   'format.notANumber.email': 'Please enter the email address using numbers only',
+  'format.notANumber.date': 'Please enter the date using numbers only',
   'format.wrongLengthFixed.biz_number': 'The business registration number must be {length} digits',
   'format.wrongLengthFixed.corp_number':
     'The corporate registration number must be {length} digits',
@@ -833,6 +856,11 @@ const EN: Dictionary = {
   'format.checksum': 'The {label} check digit is incorrect. Please check it again',
   'format.malformed': 'This is not a valid {label}',
   'format.nonAscii': 'Please use only English letters and numbers in the email address',
+  'format.dateShape': 'Please enter the date as year (4 digits), month and day, e.g. 2025.01.31',
+  'format.invalidDate': 'This date does not exist. Please check it again',
+
+  'collapse.expand': 'Show',
+  'collapse.collapse': 'Hide',
 
   'default.paused': 'The survey has been paused. Please try again later.',
   'default.quotaClosed':

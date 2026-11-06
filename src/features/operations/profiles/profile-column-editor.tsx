@@ -4,6 +4,25 @@ import { useMemo, useState, useTransition } from 'react';
 
 import { useRouter } from 'next/navigation';
 
+import type { DragEndEvent } from '@dnd-kit/core';
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { GripVertical } from 'lucide-react';
+
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -89,6 +108,22 @@ export function ProfileColumnEditor({
     );
   };
 
+  // 라벨 입력칸 클릭이 드래그로 잡히지 않게 손잡이에서만 시작하고, 5px 이상 움직여야 드래그로 본다.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const handleDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return;
+    setColumns((prev) => {
+      const from = prev.findIndex((c) => c.key === active.id);
+      const to = prev.findIndex((c) => c.key === over.id);
+      if (from < 0 || to < 0) return prev;
+      return arrayMove(prev, from, to).map((c, idx) => ({ ...c, order: idx }));
+    });
+  };
+
   const move = (i: number, delta: -1 | 1) => {
     const j = i + delta;
     if (j < 0 || j >= columns.length) return;
@@ -162,82 +197,49 @@ export function ProfileColumnEditor({
       )}
 
       <div className="rounded border bg-white">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-xs text-slate-600 uppercase">
-            <tr>
-              <th className="px-3 py-2 text-left">순서</th>
-              <th className="px-3 py-2 text-left">라벨</th>
-              <th className="px-3 py-2 text-left">소스</th>
-              <th className="px-3 py-2 text-center">표시</th>
-              <th className="px-3 py-2" />
-            </tr>
-          </thead>
-          <tbody>
-            {columns.map((c, i) => (
-              <tr key={c.key} className="border-t hover:bg-slate-50">
-                <td className="px-3 py-2">
-                  <div className="flex gap-1">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={i === 0}
-                      onClick={() => move(i, -1)}
-                      aria-label="위로"
-                    >
-                      ↑
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={i === columns.length - 1}
-                      onClick={() => move(i, 1)}
-                      aria-label="아래로"
-                    >
-                      ↓
-                    </Button>
-                  </div>
-                </td>
-                <td className="px-3 py-2">
-                  <Input
-                    value={c.label}
-                    onChange={(e) => updateLabel(i, e.target.value)}
-                    className="h-8 text-sm"
-                  />
-                </td>
-                <td className="px-3 py-2 font-mono text-xs text-slate-500">
-                  {sourceLabel(c.key, answerSourceByKey)}
-                </td>
-                <td className="px-3 py-2 text-center">
-                  <Checkbox
-                    checked={!c.hidden}
-                    onCheckedChange={() => toggleHidden(i)}
-                    aria-label={`${c.label} 표시`}
-                  />
-                </td>
-                <td className="px-3 py-2 text-right">
-                  {answerKeyOf(c.key) !== null && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => removeColumn(i)}
-                      aria-label={`${c.label} 열 빼기`}
-                    >
-                      빼기
-                    </Button>
-                  )}
-                </td>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-xs text-slate-600 uppercase">
+              <tr>
+                <th className="px-3 py-2 text-left">순서</th>
+                <th className="px-3 py-2 text-left">라벨</th>
+                <th className="px-3 py-2 text-left">소스</th>
+                <th className="px-3 py-2 text-center">표시</th>
+                <th className="px-3 py-2" />
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <SortableContext
+              items={columns.map((c) => c.key)}
+              strategy={verticalListSortingStrategy}
+            >
+              <tbody>
+                {columns.map((c, i) => (
+                  <SortableColumnRow
+                    key={c.key}
+                    column={c}
+                    isFirst={i === 0}
+                    isLast={i === columns.length - 1}
+                    sourceText={sourceLabel(c.key, answerSourceByKey)}
+                    removable={answerKeyOf(c.key) !== null}
+                    onMoveUp={() => move(i, -1)}
+                    onMoveDown={() => move(i, 1)}
+                    onLabelChange={(label) => updateLabel(i, label)}
+                    onToggleHidden={() => toggleHidden(i)}
+                    onRemove={() => removeColumn(i)}
+                  />
+                ))}
+              </tbody>
+            </SortableContext>
+          </table>
+        </DndContext>
       </div>
 
       <div className="text-xs text-slate-500">
         조사 대상 정보(attrs)와 개인정보(pii) 컬럼은 컨택 매칭이 있는 응답에만 값이 표시됩니다. IP
         해시는 앞 8자만 노출됩니다. 개인정보 컬럼을 켜면 목록에서 복호화된 값이 그대로 보입니다.
         응답값 열은 응답자가 적은 값을 그대로 보이며, 개인정보로 암호화한 문항·칸도 복호화해
-        보입니다. 응답값 열은 검색바와 열 머리 깔때기로 일부만 입력해도 찾을 수 있지만 정렬은
-        되지 않고, 개인정보로 암호화한 문항·칸은 검색할 수 없습니다.
+        보입니다. 응답값 열은 검색바와 열 머리 깔때기로 일부만 입력해도 찾을 수 있지만 정렬은 되지
+        않고, 개인정보로 암호화한 문항·칸은 검색할 수 없습니다.
       </div>
 
       <div>
@@ -266,5 +268,108 @@ export function ProfileColumnEditor({
         </Button>
       </div>
     </div>
+  );
+}
+
+interface SortableColumnRowProps {
+  column: ProfileColumnDef;
+  isFirst: boolean;
+  isLast: boolean;
+  sourceText: string;
+  removable: boolean;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onLabelChange: (label: string) => void;
+  onToggleHidden: () => void;
+  onRemove: () => void;
+}
+
+/** 손잡이를 끌어 순서를 바꾸는 행 — 화살표 버튼은 키보드·한 칸 이동용으로 남긴다. */
+function SortableColumnRow({
+  column: c,
+  isFirst,
+  isLast,
+  sourceText,
+  removable,
+  onMoveUp,
+  onMoveDown,
+  onLabelChange,
+  onToggleHidden,
+  onRemove,
+}: SortableColumnRowProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: c.key });
+
+  return (
+    <tr
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Translate.toString(transform),
+        transition: isDragging ? undefined : transition,
+      }}
+      className={
+        isDragging
+          ? 'relative z-10 border-t bg-white shadow-md'
+          : 'border-t bg-white hover:bg-slate-50'
+      }
+    >
+      <td className="px-3 py-2">
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            ref={setActivatorNodeRef}
+            className={`rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 ${
+              isDragging ? 'cursor-grabbing' : 'cursor-grab'
+            }`}
+            aria-label={`${c.label} 끌어서 순서 바꾸기`}
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="h-4 w-4" />
+          </button>
+          <Button size="sm" variant="ghost" disabled={isFirst} onClick={onMoveUp} aria-label="위로">
+            ↑
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={isLast}
+            onClick={onMoveDown}
+            aria-label="아래로"
+          >
+            ↓
+          </Button>
+        </div>
+      </td>
+      <td className="px-3 py-2">
+        <Input
+          value={c.label}
+          onChange={(e) => onLabelChange(e.target.value)}
+          className="h-8 text-sm"
+        />
+      </td>
+      <td className="px-3 py-2 font-mono text-xs text-slate-500">{sourceText}</td>
+      <td className="px-3 py-2 text-center">
+        <Checkbox
+          checked={!c.hidden}
+          onCheckedChange={onToggleHidden}
+          aria-label={`${c.label} 표시`}
+        />
+      </td>
+      <td className="px-3 py-2 text-right">
+        {removable && (
+          <Button size="sm" variant="ghost" onClick={onRemove} aria-label={`${c.label} 열 빼기`}>
+            빼기
+          </Button>
+        )}
+      </td>
+    </tr>
   );
 }

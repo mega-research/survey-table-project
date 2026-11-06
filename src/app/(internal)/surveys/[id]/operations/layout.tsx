@@ -8,7 +8,7 @@ import { OperationsPageHeader } from '@/features/operations/operations-page-head
 import { internalOperationsBase } from '@/features/operations/operations-paths';
 import { OperationsTabStrip } from '@/features/operations/operations-tab-strip';
 import { ShareSettingsButton } from '@/features/survey-builder/sharing/share-settings-button';
-import { requireAuth } from '@/lib/auth';
+import { requirePageUser } from '@/lib/auth/require-page-user';
 import { getControlState } from '@/server/operations/services/control';
 import { loadSurveyCapabilities } from '@/server/survey-access';
 import { getSurveyById } from '@/server/survey-builder/services/survey-read';
@@ -32,7 +32,8 @@ export default async function OperationsLayout({ children, params }: LayoutProps
   // 관문은 상위 `[id]` 레이아웃이 survey.view 로 이미 졌다 — 여기서 다시 묻지 않고
   // 헤더·탭이 무엇을 그릴지 정할 판정 결과만 읽는다. 화면이 스스로 판정을 복제하지 않도록
   // 불리언이 아니라 capability 집합을 그대로 넘긴다.
-  const viewer = await requireAuth();
+  // 세션을 잃었으면 오류 화면 대신 원래 경로를 실어 로그인으로 보낸다(requirePageUser — hotfix 이식)
+  const viewer = await requirePageUser();
   const [control, capabilities, documentRows, ownerRows, teamRows] = await Promise.all([
     getControlState(surveyId),
     loadSurveyCapabilities(viewer, surveyId),

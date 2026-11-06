@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * 입력 형식(휴대전화·전화·사업자번호·법인번호·이메일) 칸의 화면 동작 공용 훅.
+ * 입력 형식(휴대전화·전화·사업자번호·법인번호·이메일·날짜) 칸의 화면 동작 공용 훅.
  * 단답형 문항 · 표 input 셀 · 보기 상세기재가 공유한다.
  *
  * **타이핑 중에는 정돈하지 않는다.** 자동 하이픈은 백스페이스·중간 수정·붙여넣기에서
@@ -43,8 +43,8 @@ export interface InputFormatField {
   handleBlur: () => void;
   /** 포커스가 빠진 뒤에만 채워지는 위반 문구. */
   violation: string | null;
-  /** 모바일 키패드 힌트 — 번호는 숫자 키패드, 이메일은 이메일 키패드. */
-  inputMode: 'tel' | 'email' | undefined;
+  /** 모바일 키패드 힌트 — 번호는 숫자 키패드, 날짜는 점이 있는 숫자 키패드, 이메일은 이메일 키패드. */
+  inputMode: 'tel' | 'email' | 'decimal' | undefined;
 }
 
 export function useInputFormatField({
@@ -81,11 +81,13 @@ export function useInputFormatField({
     if (!result.ok) violation = formatFailureMessage(format, result.reason, locale);
   }
 
-  const inputMode = format
-    ? format === 'email'
+  const inputMode = !format
+    ? undefined
+    : format === 'email'
       ? ('email' as const)
-      : ('tel' as const)
-    : undefined;
+      : format === 'date'
+        ? ('decimal' as const)
+        : ('tel' as const);
 
   return { handleChange, handleFocus, handleBlur, violation, inputMode };
 }

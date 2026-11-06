@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { getSessionCookie } from 'better-auth/cookies';
 
 import { AUTH_PAGES, LOGIN_PATH } from '@/lib/auth/protected-paths';
+import { REQUEST_PATH_HEADER } from '@/lib/auth/request-path-header';
 
 /**
  * 1차 게이트 — 세션 쿠키 존재만 빠르게 검사한다(DB 미조회).
@@ -31,6 +32,9 @@ export function proxy(request: NextRequest) {
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-pathname', pathname);
+  // 화면 렌더가 세션을 잃었을 때 로그인 뒤 돌아올 경로(쿼리 포함) — requirePageUser 가 읽는다.
+  // 바깥에서 보낸 같은 이름 헤더는 덮어쓴다(값은 다시 sanitizeInternalPath 로 거른다).
+  requestHeaders.set(REQUEST_PATH_HEADER, pathname + search);
   return NextResponse.next({ request: { headers: requestHeaders } });
 }
 

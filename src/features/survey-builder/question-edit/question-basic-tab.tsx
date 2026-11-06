@@ -281,6 +281,41 @@ export function QuestionBasicTab({
           />
         </div>
 
+        {/* 문항 접어 두기 — 글자가 있으면 응답 화면에서 이 버튼을 눌러야 문항이 펼쳐진다 */}
+        <div className="rounded-lg border border-gray-200 px-3 py-2.5">
+          <Label htmlFor="collapse-button-label">접어 두기 버튼 글자 (선택사항)</Label>
+          <p className="mt-0.5 mb-2 text-xs text-gray-500">
+            적으면 응답 페이지에서 이 질문 자리에 그 글자의 버튼만 보이고, 누르면 질문이 펼쳐집니다(다시 누르면 접힘).
+            비우면 그대로 보입니다. 코드표·참고 표처럼 필요할 때만 볼 내용에 씁니다.
+          </p>
+          <Input
+            id="collapse-button-label"
+            value={formData.collapseButtonLabel ?? ''}
+            maxLength={200}
+            placeholder="예: 제품 품목 코드표"
+            onChange={(e) =>
+              setFormData((prev) => ({ ...prev, collapseButtonLabel: e.target.value || null }))
+            }
+          />
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <div>
+              <Label htmlFor="collapse-attach-previous">바로 앞 질문 설명 밑에 붙이기</Label>
+              <p className="mt-0.5 text-xs text-gray-500">
+                켜면 이 버튼이 제자리가 아니라 같은 페이지 바로 앞 질문의 설명과 입력 사이에 글자 버튼으로 들어갑니다
+                (예: 문1 설명 밑 「[붙임] 제품 품목 코드표」). 앞 질문이 없으면 제자리에 보입니다.
+              </p>
+            </div>
+            <Switch
+              id="collapse-attach-previous"
+              checked={formData.collapseAttachToPrevious === true}
+              disabled={!(formData.collapseButtonLabel ?? '').trim()}
+              onCheckedChange={(checked) =>
+                setFormData((prev) => ({ ...prev, collapseAttachToPrevious: checked }))
+              }
+            />
+          </div>
+        </div>
+
         {/* SPSS 변수명 및 엑셀 라벨 */}
         <QuestionSpssFields
           question={question}
@@ -396,6 +431,7 @@ export function QuestionBasicTab({
           defaultTemplateRef={defaultTemplateRef}
           hasTokenPrefill={hasTokenPrefill}
           variableCatalog={variableCatalog}
+          showChoicePrefill={needsOptions}
         />
 
         {/* 평균 산출 (CONTEXT.md 「척도 평균」) — 켜고 끄는 곳은 현황 「척도 평균」의 「문항 선택」이다.

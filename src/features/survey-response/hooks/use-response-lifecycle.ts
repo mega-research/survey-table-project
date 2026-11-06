@@ -11,6 +11,8 @@ import { consumeSeedWrite } from '@/features/survey-response/stores/live-respons
 import type { ClientSignals } from '@/lib/duplicate-detection/types';
 import { type CompletionOutcome, outcomeFromStatus } from '@/features/survey-response/lib/completion-screen';
 import { midSurveyClosedBody } from '@/lib/quota/closed-message';
+import { applyRepeatBlockCondition } from '@/lib/question/row-repeat';
+import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
 import { type FormulaEvalCtx, withCalcValues } from '@/lib/survey/cell-formula';
 import type { PriorAnswers } from '@/lib/survey/prior-answers';
 import { type RenderStep, findStepIndexOfQuestion, stepIdOf } from '@/utils/group-ordering';
@@ -190,6 +192,10 @@ interface UseResponseLifecycleArgs {
 
 interface UseResponseLifecycleResult {
   handleResponse: (questionId: string, value: unknown) => void;
+  /** 이어하기 회복이 저장된 답을 깐 직후 — 그 전에 쌓인 미저장 답을 버린다(저장본을 덮지 않게). */
+  discardPendingAnswers: () => void;
+  /** 버전 갈아타기 — 미저장 답을 새 버전 구조로 거른다(화면과 같은 생존 판정). */
+  rebasePendingAnswers: (newQuestions: Question[]) => void;
   /** 현재 페이지에서 바뀐 답을 저장한다. 첫 응답 생성 중이면 완료까지 기다린다. */
   flushPendingAnswers: () => Promise<boolean>;
   /**
@@ -476,6 +482,44 @@ export function useResponseLifecycle({
     // 실패를 삼켜 후속 flush 가 영구히 막히지 않게 한다.
     flushChainRef.current = run.catch(() => false);
     return run;
+  };
+
+  /**
+   * 이어하기 회복이 저장된 답을 화면에 깔았을 때 그 전에 쌓인 미저장 답을 버린다.
+   *
+   * 회복 RPC 가 도는 동안에도 페이지는 그려지고, 「고칠 수 있게」 명단 값·숫자 빈값 기본치 칸은 응답이
+   * 비어 있다고 보고 스스로 쓴다. 그 쓰기는 문항 값 **통째**(그 칸들만 든 객체)라, 회복 뒤 초안 저장으로
+   * 나가면 서버의 문항 값을 갈아끼워 지난 세션에 적은 같은 문항의 다른 칸이 지워진다(2026-11-06 유가공업
+   * SQ1 — 재접속하면 HACCP 인증일·인허가일·전화번호가 사라지고 명단 값 세 칸만 남았다). 회복은 화면을
+   * 저장본으로 통째 바꾸므로, 그 전에 쌓인 값은 화면에도 없는 값이다 — 남길 이유가 없다.
+   */
+  const discardPendingAnswers = () => {
+    pendingAnswerSavesRef.current.clear();
+    lastBeaconSnapshotRef.current = null;
+    clearDraftAutosave();
+  };
+
+  /**
+   * 무중단 갈아타기로 응답이 새 버전에 묶이면 미저장 답도 화면과 같은 생존 판정으로 거른다.
+   *
+   * 화면만 거르고 대기열을 두면, 새 버전에 없는 문항의 답이 다음 초안 저장에 실려 서버의 소속 검증이
+   * 묶음 전체를 거부한다(부분 저장 없음) — 대기열에서 빠지지 않으니 그 뒤 임시 저장이 계속 실패한다.
+   * 모양이 바뀐 답(삭제된 보기·셀 참조)은 걸러진 값으로 갈아끼워 화면과 같은 값을 보낸다.
+   */
+  const rebasePendingAnswers = (newQuestions: Question[]) => {
+    if (pendingAnswerSavesRef.current.size === 0) return;
+    const { survivingResponses } = applyStructuralSurvival(
+      Object.fromEntries(pendingAnswerSavesRef.current),
+      newQuestions,
+    );
+    for (const key of [...pendingAnswerSavesRef.current.keys()]) {
+      if (!(key in survivingResponses)) {
+        pendingAnswerSavesRef.current.delete(key);
+      } else if (!Object.is(survivingResponses[key], pendingAnswerSavesRef.current.get(key))) {
+        pendingAnswerSavesRef.current.set(key, survivingResponses[key]);
+      }
+    }
+    lastBeaconSnapshotRef.current = null;
   };
 
   const flushPendingAnswers = (): Promise<boolean> => enqueueFlush(false);
@@ -971,8 +1015,9 @@ export function useResponseLifecycle({
               }
             }
 
-            return q
-              .tableRowsData!.filter((row) => {
+            // 행 반복 블록 표시 조건은 블록 행의 행 조건으로 얹어 같은 판정을 탄다
+            return applyRepeatBlockCondition(q.tableRowsData!, q.rowRepeatConfig)
+              .filter((row) => {
                 if (
                   !shouldDisplayRow(row, responses as Record<string, unknown>, questions, evalCtx)
                 )
@@ -1123,6 +1168,8 @@ export function useResponseLifecycle({
 
   return {
     handleResponse,
+    discardPendingAnswers,
+    rebasePendingAnswers,
     flushPendingAnswers,
     flushPendingAnswersInBackground,
     waitForResponseId,

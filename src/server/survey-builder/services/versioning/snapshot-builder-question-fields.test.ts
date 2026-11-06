@@ -73,6 +73,8 @@ const SENTINEL = {
   inputRows: 5,
   inputAutoGrow: true,
   titleHtml: '<p><strong>질문</strong></p>',
+  collapseButtonLabel: '코드표 보기',
+  collapseAttachToPrevious: true,
   piiEncrypted: true,
   tableValidationRules: [],
   sumConstraints: [],

@@ -12,26 +12,29 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 (각 폴더의 `CLAUDE.md` 는 그 파일의 심볼릭 링크). Claude Code 는 그 폴더의 파일을 읽을 때 자동으로
 싣지만, 다른 도구는 아니므로 **해당 영역을 만지기 전에 직접 읽을 것.**
 
-| 작업 영역                                                                                                        | 읽을 문서                                |
-| ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
-| 라우트 트리 · 운영 콘솔·게스트·링크 콘솔 주소                                                                    | `src/app/AGENTS.md`                      |
-| 운영 집계·파티션 · 진척 보고 분류 키                                                                             | `src/server/operations/AGENTS.md`        |
-| 메일 발송 주소·대체 발송                                                                                         | `src/server/mail/AGENTS.md`              |
-| 서버 트리 · 설문 관문·procedure 베이스·capability 코어 · soft delete · 테스트 모드 · 설문 목록 조회              | `src/server/AGENTS.md`                   |
-| 팀·소유권·참여자·공개 범위·그룹·재배치 · 외주/클라이언트 링크 · 설문 종료 · 대리 응답 · 옛 게스트/실사 계정 모델 | `src/server/workspace/AGENTS.md`         |
-| 계정 수명주기 · 프로필 · 계정 발급 입구                                                                          | `src/server/auth/AGENTS.md`              |
-| 세션(Better Auth) · 1차 게이트(proxy) · 로그인 · 유형별 목적지                                                   | `src/lib/auth/AGENTS.md`                 |
-| 쿼터                                                                                                             | `src/server/quota/AGENTS.md`             |
-| 문항 수요조사 (조사표·영역 앵커·분할 레이아웃)                                                                   | `src/server/survey-document/AGENTS.md`   |
-| R2 파일 수명주기                                                                                                 | `src/server/storage-lifecycle/AGENTS.md` |
-| 조사 대상 — 컨택원 배정 · 필터 해석 · ID 목록 검색 · 이월 응답 임포트                                            | `src/server/contacts/AGENTS.md`          |
-| 운영 콘솔 필터 바 구조                                                                                           | `src/features/operations/AGENTS.md`      |
-| DB 스키마 (테이블·컬럼·관계)                                                                                     | `src/db/schema/AGENTS.md`                |
-| 프론트 기능 묶음 트리 · 질문 유형·셀 타입·테이블 검증 규칙 · 다국어 설문                                         | `src/features/AGENTS.md`                 |
-| lib 트리 · 레이트리밋 · 로깅 · Sentry                                                                            | `src/lib/AGENTS.md`                      |
-| shadcn 받기 · ui 공식 규칙 | `src/components/AGENTS.md` |
-| 도메인 용어                                                                                                      | `CONTEXT.md`                             |
-| 결정 배경                                                                                                        | `docs/adr/`                              |
+| 작업 영역                                                                                                        | 읽을 문서                                        |
+| ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| 라우트 트리 · 운영 콘솔·게스트·링크 콘솔 주소 · 응답 진입 경로(초대 링크·짧은 링크)                              | `src/app/AGENTS.md`                              |
+| 운영 집계·파티션 · 진척 보고 분류 키                                                                             | `src/server/operations/AGENTS.md`                |
+| 메일 발송 주소·대체 발송                                                                                         | `src/server/mail/AGENTS.md`                      |
+| 서버 트리 · 설문 관문·procedure 베이스·capability 코어 · soft delete · 테스트 모드·테스트 버전 · 설문 목록 조회  | `src/server/AGENTS.md`                           |
+| 팀·소유권·참여자·공개 범위·그룹·재배치 · 외주/클라이언트 링크 · 설문 종료 · 대리 응답 · 옛 게스트/실사 계정 모델 | `src/server/workspace/AGENTS.md`                 |
+| 계정 수명주기 · 프로필 · 계정 발급 입구                                                                          | `src/server/auth/AGENTS.md`                      |
+| 세션(Better Auth) · 1차 게이트(proxy) · 로그인 · 유형별 목적지                                                   | `src/lib/auth/AGENTS.md`                         |
+| 쿼터                                                                                                             | `src/server/quota/AGENTS.md`                     |
+| 문항 수요조사 (조사표·영역 앵커·분할 레이아웃)                                                                   | `src/server/survey-document/AGENTS.md`           |
+| R2 파일 수명주기                                                                                                 | `src/server/storage-lifecycle/AGENTS.md`         |
+| 조사 대상 — 이월 응답 임포트 · 컨택원 배정 · 필터 해석 · ID 목록 검색 · 대상 정보 수정 현황                      | `src/server/contacts/AGENTS.md`                  |
+| 운영 콘솔 필터 바 구조                                                                                           | `src/features/operations/AGENTS.md`              |
+| DB 스키마 (테이블·컬럼·관계)                                                                                     | `src/db/schema/AGENTS.md`                        |
+| 프론트 기능 묶음 트리 · 질문 유형·셀 타입·테이블 검증 규칙 · 행 반복·차례로 열기 · 다국어 설문                   | `src/features/AGENTS.md`                         |
+| 설문 편집기 하위 폴더 지도 (설문 목록·공유·질문 편집·표 편집기 …)                                                | `src/features/survey-builder/AGENTS.md`          |
+| 숨은 답 지우기 — 저장 경계 순서·조건 평가 컨텍스트·경로 밖 문항·표의 숨은 칸                                     | `src/lib/survey/AGENTS.md`                       |
+| lib 트리 · 레이트리밋 · 로깅 · Sentry                                                                            | `src/lib/AGENTS.md`                              |
+| shadcn 받기 · ui 공식 규칙                                                                                       | `src/components/AGENTS.md`                       |
+| 기능 개발 체크리스트 (스펙·리뷰·완료 보고)                                                                       | `.agents/skills/write-change-checklist/SKILL.md` |
+| 도메인 용어                                                                                                      | `CONTEXT.md`                                     |
+| 결정 배경                                                                                                        | `docs/adr/`                                      |
 
 **변경 이력은 어느 문서에도 쌓지 않는다** — git log 와 ADR 이 그 자리다. 크기 상한(루트 4.5만·영역 3만 자)과 이 표의 등재는 `tests/repo/agent-docs-size.test.ts` 가 강제한다. 새 상세 절은 루트가 아니라
 해당 영역 문서에 쓴다.
@@ -166,7 +169,7 @@ src/
 │   │                           # shared/contracts/survey 와 심볼 겹침 0. 저쪽은 JSONB 문서 어휘라 역할이 다르다
 │   ├── question-types.ts       # 질문 유형 어휘 런타임 SoT — QUESTION_TYPES 배열 ↔ QuestionType 동치를 tsc 로 강제
 │   ├── mobile-table-display.ts # 모바일 표 표시 모드 어휘 + 타입 가드
-│   ├── input-type.ts           # 입력 형식 어휘 SSOT — text·number + 형식 5종(mobile·phone·biz_number·corp_number·email)
+│   ├── input-type.ts           # 입력 형식 어휘 SSOT — text·number + 형식 6종(mobile·phone·biz_number·corp_number·email·date)
 │   └── survey-locale.ts        # 다국어 언어 어휘 — SURVEY_LOCALES(ko·zh·en)·DEFAULT_SURVEY_LOCALE·isSurveyLocale
 ├── instrumentation.ts          # Sentry 서버 instrumentation
 ├── instrumentation-client.ts   # Sentry 클라이언트 instrumentation
@@ -251,8 +254,11 @@ pnpm test:watch       # Vitest watch
 pnpm test:coverage    # 커버리지 (spss 계열만 집계)
 pnpm test:e2e         # Playwright E2E
 pnpm test:integration # 실DB 왕복 (*.realdb.test.ts, 로컬 supabase 54322 필요)
-                      # pretest 가드가 「이 브랜치 스키마인가」를 먼저 본다 (아래 주의사항 13)
-pnpm db:setup-test    # 테스트 DB 준비 (마이그레이션 전량 재생 = 재생 검증)
+                      # pretest 가드가 「이 브랜치 스키마인가」를 먼저 본다 (아래 주의사항 12)
+pnpm db:setup-test    # 공유 테스트 DB 를 통째로 다시 만든다 — 형제 워크트리의 realdb 가 깨진다
+pnpm db:isolated <이름> # 내 브랜치 전용 테스트 DB(같은 컨테이너, 마이그레이션 전량 재생 = 재생 검증). 실행은 출력된 URL 로
+                      #   RUN_REALDB=1 DATABASE_URL=<URL> pnpm exec vitest run <realdb 파일> · 지우기 `--drop`
+pnpm worktree:new <브랜치> [시작점] # .claude/worktrees 에 워크트리 생성 + env·공유 자료 링크 + 설치 (아래 Worktree bootstrap)
 pnpm db:drift         # 실 DB ↔ 레포 객체 대조 (아래 "DB 드리프트 점검")
 pnpm db:size          # 실 DB 테이블·인덱스 크기·사용 횟수 (읽기 전용 — 부풀었으면 손으로 REINDEX)
 pnpm inngest          # Inngest 로컬 dev 서버
@@ -260,6 +266,7 @@ pnpm db:migrate       # 마이그레이션 실행 (_journal.json 기준 — 0019
 pnpm db:studio        # Drizzle Studio
 pnpm survey:backup    # 설문 백업
 pnpm survey:restore   # 백업에서 복원
+pnpm survey:vars · survey:dump · survey:render  # 운영 설문 변수명 계산 · 응답 화면 그려 보기 (survey-ops 스킬 — 설문 고치기 도우미 포함)
 pnpm versions:prune   # 버전 스냅샷 정리 (DRY_RUN 기본, :live 로 실행)
 pnpm ledger:seed      # R2 발송 장부 시드
 pnpm auth:seed        # 슈퍼어드민 발급/승격 — <email> <name> <password> (기존 계정이면 승격만)
@@ -278,15 +285,7 @@ pnpm worker:sentry-jandi:deploy  # 워커 배포 (Cloudflare)
 
 ## 경로 별칭
 
-```typescript
-// tsconfig.json
-"@/*" → "./src/*"
-
-// 사용 예시
-import { cn } from "@/lib/utils";
-import { useSurveyStore } from "@/features/survey-builder/stores/survey-store";
-import { Button } from "@/components/ui/button";
-```
+`@/*` → `./src/*` (tsconfig.json).
 
 ---
 
@@ -453,6 +452,8 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 개인정보·컴플라이언스)이고, 변경 종류를 정한 뒤 항목마다 「지킨다(어떻게) / 해당 없음(이유) / 일부러 안 지킨다(이유)」를
 이 레포의 기존 장치로 답한다. 스펙에 적히지 않은 성질은 TDD 가 테스트를 만들지 않고, 리뷰도 눈에 띄는 버그에서 멈춘다.
 
+**완료를 보고할 때도** 고른 변경 종류의 항목마다 한 줄씩 답을 붙인다 — 「지킨다」는 그것을 지키는 테스트 이름, 나머지는 이유. 화면 확인이 필요한 항목은 사용자가 어느 화면·기기에서 무엇을 볼지 적는다. 요청이 없어도 한다.
+
 ---
 
 ## 주의사항
@@ -463,13 +464,11 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 
 2. **상태 관리**: 서버 상태는 TanStack Query, 클라이언트 상태는 Zustand(+Immer).
 
-3. **응답 페이지는 snapshot 기반**: 빌더 수정은 publish 전까지 실응답 페이지 미반영(테스트 링크·관리자 미리보기는 저장본 — `src/server/AGENTS.md` 「테스트 모드」). "테스트 링크 OK + 응답 페이지 NG" 패턴이면 publish 누락 먼저 의심. 단, `quotaConfig`·`isPaused`·`pausedMessage`·`endRedirects`·`allowMultipleResponses`는 스냅샷 밖 라이브 컬럼이라 즉시 반영된다.
+3. **응답 페이지는 snapshot 기반**: 빌더 수정은 publish 전까지 실응답 페이지 미반영. 테스트 링크·테스트 대상자 링크·관리자 미리보기는 **저장본(테스트 버전)** 을 보므로 저장만 하면 반영된다(2026-10-23, `src/server/AGENTS.md` 「테스트 모드」) — "테스트 링크 OK + 응답 페이지 NG" 패턴이면 publish 누락 먼저 의심. 공개 미리보기 `/preview/<token>` 은 배포본이다. 단, `quotaConfig`·`isPaused`·`pausedMessage`·`endRedirects`·`allowMultipleResponses`는 스냅샷 밖 라이브 컬럼이라 즉시 반영된다.
 
 4. **테이블 질문**: `tableColumns`, `tableRowsData`, `tableHeaderGrid`, `tableValidationRules`, `dynamicRowConfigs`, `rowRepeatConfig`, `sumConstraints` JSONB 사용. choice 응답값은 `cell.id`.
 
-   **행 차례로 열기**(`stagedRowsConfig`, 0132, ADR 0028)는 행 반복과 다른 기능이다 — 구조를 펼치지 않고 가시성만 정하며 내보내기 열은 늘 나간다. 열린 행 수와 필수 범위는 저장하지 않고 값에서 파생한다(`features/question-renderer/utils/staged-rows.ts` 의 `deriveOpenStagedCount`). 응답 화면과 검증은 `resolveStagedRows` 로 구조가 성립할 때만 동작시킨다. 묶음에 넣을 수 없는 행·버튼 줄 배치는 CONTEXT.md 「행 차례로 열기」.
-
-   **행 반복**(`rowRepeatConfig`)은 동적 행 그룹과 다른 기능이다 — 저쪽은 빌더가 만들어 둔 행 풀에서 응답자가 고르는 것이고, 이쪽은 같은 모양의 칸을 원하는 벌 수만큼(최대 20) 반복하는 것이다. 설정은 분리하고 렌더 파이프라인(`use-dynamic-rows`)만 공유한다. 구조에는 저장 시점에 최대 벌까지 **실제로 펼쳐 둔다**(`lib/question/row-repeat.ts` 의 `expandRepeatRows`) — 응답값 키가 발행 스냅샷 안의 `cell.id` 로 유지되어 저장 경계·초안·이월 임포트·관리자 편집이 전부 무변경이다. **펼치기는 멱등**이어야 한다(이미 있는 벌은 행·셀 id 를 그대로 두고 템플릿 구조 변경만 전파). 표에 반복 블록을 켜면 그 표의 `rowCode` 를 **명시 발번**한다 — `buildTableCellVarName` 의 제로패딩 자릿수가 `rows.length` 기준이라 20벌로 펼치는 순간 같은 표의 비반복 행 변수명이 `r1` → `r01` 로 통째 바뀌기 때문이다. 내보내기는 모수 전체를 1회 스캔해(`lib/analytics/row-repeat-usage.ts`) 아무도 채우지 않은 뒤쪽 벌의 열을 뺀다(설문 전체 기준 — 분할 파일 간 열 구성이 갈리지 않도록). 필수 검증은 1벌만 본다.
+   행 반복(`rowRepeatConfig`) · 행 차례로 열기(`stagedRowsConfig`) · 열 차례로 열기(`revealStep`) · 안 쓴 열·행 빼기는 서로 다른 기능이다. 행 반복은 저장할 때 최대 벌까지 **실제로 펼쳐 두고**(펼치기는 멱등), 켜면 그 표의 `rowCode` 를 명시 발번한다 — 안 그러면 같은 표의 변수명이 `r1` → `r01` 로 통째 바뀐다. 상세와 함정은 `src/features/AGENTS.md` 「행 반복과 차례로 열기」.
 
 5. **다단계 선택**: `selectLevels` 배열로 3단계까지. 부모 선택에 따라 동적 로딩.
 
@@ -477,7 +476,7 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 
 7. **마이그레이션 — 수동 SQL 관행**: drizzle `_journal.json`은 **0019에서 동결**됐고 0020 이후는 전부 손으로 쓴 `.sql`을 `supabase/migrations/`에 두고 Supabase MCP `apply_migration` 또는 직접 SQL로 적용한다. 새 파일을 추가하면 **반드시 `supabase/migrations/manual-migrations.json`의 `migrations`에 tag(확장자 제외 파일명)를 등재**해야 한다 — 미등재는 추적 불가 drift로 보고 CI(`.github/migration-journal-gate.ts`)가 차단한다. `pnpm db:generate`/`db:push`는 이 관행과 충돌하므로 쓰지 않는다. `TRUNCATE CASCADE` 금지 (ON DELETE SET NULL 무시).
 
-   **새 마이그레이션은 빈 DB에서 재생 가능해야 한다.** 2026-08-19부터 테스트 DB는 `drizzle-kit push`가 아니라 마이그레이션 전량 재생으로 만들어진다(`scripts/setup-test-db.sh`). 즉 `pnpm db:setup-test`가 곧 재생 검증이며, 기존 상태를 전제한 문장을 넣으면 거기서 깨진다. 실 DB에만 있고 레포에 없는 객체는 `pnpm db:drift`가 잡는다 — 자세한 내용은 아래 "DB 드리프트 점검" 참조.
+   **새 마이그레이션은 빈 DB에서 재생 가능해야 한다.** 2026-08-19부터 테스트 DB는 `drizzle-kit push`가 아니라 마이그레이션 전량 재생으로 만들어진다(`scripts/setup-test-db.sh`). 즉 `pnpm db:setup-test`(공유 DB)·`pnpm db:isolated <이름>`(전용 DB)이 곧 재생 검증이며, 기존 상태를 전제한 문장을 넣으면 거기서 깨진다. 실 DB에만 있고 레포에 없는 객체는 `pnpm db:drift`가 잡는다 — 자세한 내용은 아래 "DB 드리프트 점검" 참조.
 
 8. **앱 생성값 NOT NULL 컬럼은 2단계 배포**: nullable 추가 + 백필(배포 전) → 앱 배포 → `SET NOT NULL`(라이브 후). 한 번에 걸면 구버전 앱 INSERT가 깨진다.
 
@@ -487,23 +486,17 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 
 11. **vitest의 `server-only` stub 사각지대**: 클라이언트/서버 경계 위반은 테스트가 통과해도 빌드에서만 드러난다. 경계를 건드렸으면 `pnpm build`로 확인할 것.
 
-12. **로컬 테스트 DB 는 워크트리 공용이다**: `question-demand-survey`·`tracking-survey`·`workspace-roles-v2` 가 같은 Supabase 컨테이너 하나(`project_id = survey-table-project`, 54322)를 쓴다. `config.toml` 이 추적 파일이라 포트·project_id 를 워크트리별로 가를 수 없다. `db:setup-test` 는 **전체 드롭 + 그 워크트리 마이그레이션만 재생**이므로 형제의 스키마를 통째로 덮는다. `pnpm test:integration` 앞에 `scripts/check-test-db-schema.mjs` 가드가 붙어 있어 스키마가 이 브랜치 것이 아니면 **재생하라는 메시지 하나로 멈춘다** — 그 가드가 없던 동안 47파일 전멸이 코드 회귀처럼 보였다. 가드는 DB 에 마커를 심지 않는다(심으면 `db:drift` 가 레포에 없는 객체로 잡는다) — 마이그레이션 파일에서 기대 테이블을 뽑아 대조하고, 판정이 애매하면 통과시킨다.
+12. **로컬 테스트 DB 는 워크트리 공용이다**: `question-demand-survey`·`tracking-survey`·`workspace-roles-v2` 가 같은 Supabase 컨테이너 하나(`project_id = survey-table-project`, 54322)를 쓴다. `config.toml` 이 추적 파일이라 포트·project_id 를 워크트리별로 가를 수 없다. `db:setup-test` 는 **전체 드롭 + 그 워크트리 마이그레이션만 재생**이므로 형제의 스키마를 통째로 덮는다. `pnpm test:integration` 앞에 `scripts/check-test-db-schema.ts` 가드가 붙어 있어 스키마가 이 브랜치 것이 아니면 **재생하라는 메시지 하나로 멈춘다** — 그 가드가 없던 동안 47파일 전멸이 코드 회귀처럼 보였다. 가드는 DB 에 마커를 심지 않는다(심으면 `db:drift` 가 레포에 없는 객체로 잡는다) — 마이그레이션 파일에서 기대 테이블을 뽑아 대조하고, 판정이 애매하면 통과시킨다.
 
     **마이그레이션 번호는 그보다 조용한 축이다** — 같은 base 에서 갈라진 브랜치가 같은 번호를 서로 다른 뜻으로 선점할 수 있다(실제로 0101·0102). 번호는 **세 워크트리의 최댓값 + 1**, 배열 append 규칙은 아래 「마이그레이션 번호」.
 
 13. **drizzle 함정**: timestamptz optimistic lock은 PG μs ↔ JS ms 정밀도 차로 거짓 충돌 (version int 또는 string mode 사용). `ANY(${arr})` 바인딩 금지 (length=1 silent unwrap) → `inArray`/`sql.join`. jsonb 컬럼에 `JSON.stringify` 바인딩 금지 (이중 인코딩) → 객체 그대로 전달.
 
-14. **응답 루트 사이드카**: `questionResponses` 최상위의 `__` 접두 키(`__optTexts__` 기타/상세 기재, `__changeConfirm__` 추적조사 변동 확인)는 실존 문항이 아니라 저장 경계마다 분기가 필요하다 — 분리를 빠뜨리면 `saveDraft` 는 소속 검증에서 500 이 되고 `complete` 는 멤버십 필터에서 값을 조용히 버린다(둘 다 실제로 겪은 사고). 키와 정제 함수는 `lib/survey/response-sidecars.ts` 한 곳에 등록하고, 저장 경계는 `splitRootSidecars`/`isPersistedRootSidecarKey`/`sanitizeRootSidecar` 로만 판정한다. 등록되지 않은 `__` 키는 **저장에서 빠지고 경고 로그만 남는다** — 거부하면 등록을 빠뜨린 키 하나가 그 응답자의 초안 저장을 통째로 막는다(부분 저장이 없다). 문항 id 는 UUID 라 `__` 접두를 가질 수 없어 진짜 답변이 이 분기로 새지 않는다. `__dynamicRowSelections__` 는 2026-09-09 에 등재했다.
+14. **응답 루트 사이드카**: `questionResponses` 최상위의 `__` 접두 키(`__optTexts__` 기타/상세 기재, `__changeConfirm__` 추적조사 변동 확인)는 실존 문항이 아니라 저장 경계마다 분기가 필요하다 — 분리를 빠뜨리면 `saveDraft` 는 소속 검증에서 500 이 되고 `complete` 는 멤버십 필터에서 값을 조용히 버린다(둘 다 실제로 겪은 사고). 키와 정제 함수는 `lib/survey/response-sidecars.ts` 한 곳에 등록하고, 저장 경계는 `splitRootSidecars`/`isPersistedRootSidecarKey`/`sanitizeRootSidecar` 로만 판정한다. 등록되지 않은 `__` 키는 **저장에서 빠지고 경고 로그만 남는다** — 거부하면 등록을 빠뜨린 키 하나가 그 응답자의 초안 저장을 통째로 막는다(부분 저장이 없다). 문항 id 는 UUID 라 `__` 접두를 가질 수 없어 진짜 답변이 이 분기로 새지 않는다. `__dynamicRowSelections__` 는 2026-09-09 에 등재했다. `__prefillEdits__`(고친 프리필 칸 id — 응답 확정이 계산해 덮어쓴다, CONTEXT.md 「고친 프리필 따로 내보내기」)는 2026-11-05.
 
     **키 상수는 import 0 인 잎 모듈이 소유하고, 어느 키 모듈도 등록부를 되부르면 안 된다.** 순환이 닫히면 등록부가 남의 상수를 초기화 전에 읽어 계산 키가 `undefined` 로 등록되고, 그 사이드카가 등록 목록에서 **조용히 빠진다** — 저장이 거부가 아니라 누락으로 끝나므로 아무도 모른다. 2026-09-16 에 실제로 닫혀 있었고(`__optTexts__` 를 `lib/option-text-read.ts` 로 내려 끊었다), 순환을 만든 것은 등록부의 직접 import 가 아니라 `prior-answers → response-sidecars` 라는 **전이 closure 안쪽 간선**이었다. 그래서 등록부에 새 import 를 들일 때는 그 모듈의 closure 가 등록부로 돌아오지 않는지 봐야 한다. `lib/survey/response-sidecars-import-order.test.ts` 가 소스를 읽어 이 간선을 막고, 등록 키 집합 전체를 리터럴로 못박는다 — 키 문자열은 `question_responses` JSONB 에 그대로 저장되므로 개명하면 이미 저장된 응답의 사이드카가 고아가 된다.
 
-15. **문항 가시성**: 표시 조건으로 숨겨진 문항의 응답은 **그 순간 지워진다. 되돌려도 살아나지 않는다** (2026-09-07 결정 — 세션 되돌리기 버퍼는 검토 후 미채택). 판정·삭제는 `lib/survey/question-visibility.ts` 의 `resolveVisibleQuestionIds`/`stripHiddenQuestionValues` 한 곳이다. 복제 금지 — 셀 게이팅(`cell-gating.ts`)과 같은 규약. 저장 경계 순서는 **숨은 문항 strip → 경로 밖 strip(둘을 고정점까지) → 게이팅 strip → calc 재계산**이고, 앞의 세 단계(숨은 문항·경로 밖·게이팅)는 **답할 수 있는 범위** `lib/survey/answerable-scope.ts` 의 `pruneToAnswerableScope` 한 곳이 소유하고(2026-10-23 — 응답 확정과 Raw 내보내기 마지막 그물이 순서를 각자 조립하던 사본을 걷어냈다, CONTEXT.md 「답할 수 있는 범위」), 완료 제출(페이로드·빈 complete)과 관리자 수정은 이 순서를 직접 조립하지 않고 **응답 확정** `server/survey-response/services/answer-finalization.ts` 의 `loadFinalizationMaterial`(잠금 밖) + `finalizeAnswers`(동기, 잠금 아래 가능)를 거친다 — 세 단계는 설문 구성·변경 유무와 무관하게 늘 돌고, 등록 사이드카 정제·자격미달 판정·암호화까지 한 번에 낸다(2026-10-19 — 계산 칸·게이팅 칸 유무로 건너뛰던 시절 표시 조건만 있는 설문의 빈 complete 와 안 고친 이탈 응답의 관리자 저장이 strip 을 빠뜨렸다). **초안·구간 저장에는 걸지 않는다.** 그쪽 answers 는 더티 키만 담은 부분 패치이고 저장이 jsonb 합집합 병합이라, strip 을 걸면 조건이 참조하는 상류 문항이 패치에 없어 멀쩡한 답이 지워진다. 새 저장 경로를 만들 때 이 구분을 지킬 것.
-
-    **조건 평가 컨텍스트는 응답 화면과 같다**(2026-10-22): 화면은 조건(문항·그룹·행·열 표시 조건, 동적 행, 분기)을 `{ ...명단 값, ...응답 인용값 }` 으로 푼다 — 조건식의 `attrsKey` 피연산자가 두 채널을 구분하지 못해 인용 우선이다. 응답 확정과 Raw 내보내기 마지막 그물도 같은 컨텍스트를 `lib/survey/answer-eval-ctx.ts` 의 `createAnswerEvalCtx` 로 만든다 — 명단 값만 넘기던 시절, 명단 열과 같은 이름의 인용값을 읽는 조건이 서버에서만 거짓이 되어 화면에서 보이고 입력한 문항·행·열의 답을 지웠다. 인용값은 공용 `utils/answer-quote` 의 `collectAnswerQuotes` 로, 상세 기재 재료는 응답 루트 `__optTexts__`(`readOptTextsSidecar` — 화면의 `resolveEffectiveOptionTextsByQuestion` 도 저장분은 이것으로 읽고 편집 중인 값만 얹는다)로 계산한다. 응답에서 파생되는 값이라 **strip 바퀴마다 지운 결과로 다시 계산한다** — `stripHiddenQuestionValues` 는 뷰마다 컨텍스트를 만드는 함수를 받으면 그 컨텍스트로 지우고 더 지울 것이 없을 때까지 다시 돈다(화면이 지운 뒤 다시 그리며 인용값을 다시 계산하는 것과 같은 수렴). 고정 컨텍스트를 넘기는 응답 화면의 동작은 그대로다. 명단 값도 화면과 같아야 한다 — 내보내기 마지막 그물도 개인정보 열을 합친 명단 값(`server/read-models/respondent-contact-attrs` 의 일괄판 `loadRespondentContactAttrsMany`, 단건과 같은 규칙)으로 판정한다. 없는 명단 열을 읽는 비교는 보이는 쪽으로 풀려, attrs 만 넘기던 시절 화면에서 숨은 문항의 값이 진행 중 응답의 Raw 파일에 실렸다(2026-10-23). 계산 칸 수식(`withCalcValues`)은 화면도 명단 값만 쓰므로 이 컨텍스트를 쓰지 않는다.
-
-    **경로 밖 문항도 지운다**(2026-10-22, CONTEXT.md 「경로 밖 문항」): 분기 이동(goto·end)으로 건너뛴 페이지의 답은 표시 조건이 참이라 숨은 문항 strip 이 못 지우고, 그 값이 자격미달 보기면 응답 확정의 자격미달 판정이 정상 완료를 screened_out 으로 뒤집었다. 판정·삭제는 `lib/survey/answer-path.ts` 의 `stripUnreachedQuestionValues` 한 곳이고(숨은 문항 strip 을 안에서 함께 돌린다) **답할 수 있는 범위(`lib/survey/answerable-scope` 의 `pruneToAnswerableScope`)를 거쳐 응답 확정과 Raw 내보내기 마지막 그물(`stripHiddenFromExportRows`)만** 쓴다 — 응답 화면은 즉시 지우지 않고 초안·구간 저장에도 걸지 않는다(위와 같은 부분 패치 이유). 경로는 응답 화면이 제출 검증에 쓰는 `buildRenderSteps(questions, groups)` + `collectTraversedQuestionIds` 그대로라, **응답 화면이 페이지를 다르게 만들기 시작하면(기기 폭·조사표 분할로 페이지를 쪼개는 등) 서버 경로가 어긋나 멀쩡한 답을 지운다** — `answer-path.test.ts` 의 소스 단언이 먼저 깨지니 그때 같이 고칠 것. 경로를 확정할 수 없으면 건너뛴다(fail-safe — 문항 섞기, 기록된 마지막 페이지 `current_step_id` 가 경로 밖이거나 지금 구조에 없음). calc 는 범위 안 문항(표시 + 경로 위)에만 새로 채우고(`withCalcValues` 의 `inScopeQuestionIds`, 이미 값이 남은 문항은 다시 계산), 응답 화면의 저장 시 주입은 표시 조건상 보이는 문항에만 채운다.
-
-    **표의 숨은 칸도 같다**(2026-09-29 표 행 → 2026-10-22 확장): 보기를 표로 그리는 문항(표 문항 · 보기 소스 radio/checkbox)에서 **행 표시조건 · 열 표시조건 · 고르지 않은 동적 행**으로 숨은 칸을 가리키는 선택은 답이 아니다. `stripHiddenQuestionValues` 가 그 셀 값·`__choiceGroups` 선택·보기 소스 표의 문항 값(셀 id · 셀 id 배열 · 그룹 맵)·`__optTexts__` 항목을 지운다(문항 숨김과 번갈아 고정점 수렴). 판정은 `lib/survey/table-cell-visibility.ts` 의 `resolveTableCellVisibility` 하나이고 투영은 `utils/conditional-table-layout.ts` 의 `projectResponseTableLayout`(행·열 조건 + 동적 행 선택) — 렌더러(`choice-table-response` 의 모든 표시 방식)·차단 검증·strip 이 같은 투영을 쓴다. 동적 행 선택은 표 문항이 표 응답 안 `__selectedRowIds`, 보기 소스 표가 루트 사이드카 `__dynamicRowSelections__` 다. 숨김이 생길 수 없는 표(조건·켜진 동적 그룹 없음)는 판정을 건너뛴다. 필수 판정은 숨은 칸의 그룹을 빼고 숨은 칸의 선택도 세지 않는다 — `resolveChoiceTableVisibleCellIds`(numeric-validation) 로 만든 집합을 `isQuestionAnswered`·`collectUnfilledChoiceGroup*`·`resolveGroupedRequiredMessage`·`collectRequiredOptionTextIssues` 에 **같이** 넘길 것(하나라도 빠지면 「빨갛지 않은데 다음이 막힘」). 보기 소스 표는 데스크톱·모바일 전부 동적 행 고르기 버튼을 표 위에 그린다(전에는 행별 원본 계열 모바일에서만 골랐다). 순위형 내장 표는 렌더러가 조건을 읽지 않아 대상이 아니고, 빌더가 행·열 조건부 표시와 동적 행 그룹 입구를 내지 않는다(`DynamicTableEditor` 의 `allowDisplayConditions`). 저장 경계 calc 재계산은 숨은 칸의 계산 칸에도 값을 넣는다(미해결).
+15. **문항 가시성**: 표시 조건으로 숨겨진 문항의 응답은 **그 순간 지워진다. 되돌려도 살아나지 않는다** (2026-09-07 결정). 판정·삭제는 `lib/survey` 한 곳이고 복제 금지다. 완료 제출과 관리자 수정은 순서를 직접 조립하지 않고 응답 확정(`server/survey-response/services/answer-finalization.ts`)을 거친다. **초안·구간 저장에는 strip 을 걸지 않는다** — 그쪽 answers 는 더티 키만 담은 부분 패치라, 조건이 참조하는 상류 문항이 없어 멀쩡한 답이 지워진다. 새 저장 경로를 만들 때 이 구분을 지킬 것. 저장 경계 순서 · 조건 평가 컨텍스트 · 경로 밖 문항 · 표의 숨은 칸은 `src/lib/survey/AGENTS.md`.
 
 16. **응답 종결 판정은 `status` 로 한다 — `is_completed` 는 종결 게이트가 아니다**: 자격미달(`screened_out`)은 완료 수 분자에서 빠지도록 `is_completed=false` 로 저장된다(`response-completion` 의 `isCompleted: !screenedOut`). 그래서 `is_completed` 를 "끝난 응답인가" 게이트로 쓰면 자격미달만 조용히 빠진다 — 재응답 허용이 `ok:true` 를 돌려주면서 아무것도 안 하던 사고가 이것이다(2026-09-21 수리). 어휘와 술어는 `shared/contracts/survey-response.ts` 가 SSOT 다: 열림 `isOpenResponseStatus` · 종결 `isConcludedResponseStatus` · 재응답 허용 대상 `isReeditableResponseStatus`(completed·screened_out). `is_completed=false` 를 쿼리에 쓰는 것 자체는 무방하나(열린 행 **후보** 조회 범위), 판정은 반드시 status 술어로 한 번 더 한다 — `lifecycle`·`response-row-create` 의 컨택 재사용 조회가 그 패턴이다.
 
@@ -538,7 +531,7 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 - 그래서 번호와 배열 순서가 어긋나 보일 수 있다. 만지는 객체가 서로소면 정상이다
 - **배열 순서를 지켜야 하는 쌍**: 0128 과 0129 는 같은 CHECK(`mobile_table_display_mode`)를 차례로 갈아끼운다 — 0128 을 뒤에 재생하면 `item-cards` 가 빠진다. **0152 는 0121 앞**(운영 순서 — 0121 이 같은 FK 를 다시 건다)
 - **배포 전후가 갈리는 쌍**: 0142(이관 이력 표)는 앱 배포 **전**, 0143(`response_answers` 삭제 등)은 배포 **뒤** — 거꾸로 하면 구버전 앱의 완료 제출이 실패한다. 0145(언어별 설문 글자 `surveys.localized_messages`)도 배포 **전**이다(새 앱이 읽는다, nullable 이라 2단계 불필요)
-- **승격 때 프로덕션에 적용할 것**(staging 에만 있는 번호 — 0146·0147·0152·0153 은 운영에 이미 있다): 역할 모델 v2 는 **0112~0122·0151** 다(0111 은 선반영 재현용이라 적용 금지 — 파일 머리 참조). 팀 종류(실사팀 표시) **0139** 는 teams 를 만지므로 역할 v2 와 함께 간다. 외주·클라이언트 링크는 **0126·0127·0133·0134 를 함께** 적용하고, 0134 는 테이블 개명이라 옛 코드와 양립하지 않아 **앱 배포 직전에** 적용한다. 설문 즐겨찾기·내 태그 **0149·0150** 은 새 테이블만 만들어 앱 배포 **전**에 적용한다(목록 제목순이 쓰는 `ko-x-icu` 정렬이 프로덕션에 있는지도 함께 본다)
+- **승격 때 프로덕션에 적용할 것**(staging 에만 있는 번호 — 0146·0147·0152·0153·0154·0155 는 운영에 이미 있다): 역할 모델 v2 는 **0112~0122·0151** 다(0111 은 선반영 재현용이라 적용 금지 — 파일 머리 참조). 팀 종류(실사팀 표시) **0139** 는 teams 를 만지므로 역할 v2 와 함께 간다. 외주·클라이언트 링크는 **0126·0127·0133·0134 를 함께** 적용하고, 0134 는 테이블 개명이라 옛 코드와 양립하지 않아 **앱 배포 직전에** 적용한다. 설문 즐겨찾기·내 태그 **0149·0150** 은 새 테이블만 만들어 앱 배포 **전**에 적용한다(목록 제목순이 쓰는 `ko-x-icu` 정렬이 프로덕션에 있는지도 함께 본다)
 - 번호를 옮긴 이력은 문서에 두지 않는다 — 역할 v2 의 옛 번호 매핑(0101→0111 …)은 병합 커밋 `c7197701` 의 `AGENTS.md`, 외주 링크 0128→0133 은 0133 파일 머리에 있다. 이미 적용한 DB 는 번호와 무관하다(적용 이력 표가 없다)
 
 ---
@@ -572,10 +565,8 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 
 ### Worktree bootstrap
 
-- `superpowers:using-git-worktrees`로 프로젝트 로컬 worktree를 만들 때는 메인 checkout의 런타임 환경을 우선 공유한다.
-- worktree 의 `node_modules` 는 **심볼릭 링크하지 않고 `pnpm install --frozen-lockfile` 로 실제 설치한다**(전역 store 하드링크라 십여 초). pnpm 11 의 `verify-deps-before-run` 이 링크된 `node_modules` 를 이물로 보고 자동 `pnpm install` 을 돌리는데, 모듈 퍼지 확인에서 멈춰 명령이 실행되지 않은 채 exit 0 으로 끝나고, 퍼지가 진행되면 링크 너머 메인 checkout 의 `node_modules` 가 지워진다 (2026-08-25 발견, 2026-10-06 재발).
-- 메인 checkout에 존재하는 ignored 환경 파일(`.env`, `.env.local`, `.env.development`, `.env.development.local`)은 내용을 읽거나 출력하지 않고 worktree에 심볼릭 링크한다.
-- worktree 준비 완료를 보고하기 전에 의존성 링크와 환경 파일 링크가 유효한지 확인한다.
+- 워크트리는 `pnpm worktree:new <브랜치> [시작점]` 으로 만든다(이미 있는 경로면 링크·설치만 다시). 링크할 것·하지 않을 것과 그 이유는 `scripts/worktree-bootstrap.sh` 머리 주석이 정본이다 — 요점은 env·`.scratch`·`pencil`·`docs` 미추적 하위는 링크, `node_modules` 는 실제 설치.
+- 그 워크트리의 realdb 테스트는 `pnpm db:isolated <이름>` 으로 만든 DB 에서 돌린다. 공유 DB 를 리셋하는 `db:setup-test` 는 형제 워크트리가 없을 때만.
 
 ### 문서 갱신
 

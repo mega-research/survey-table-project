@@ -180,6 +180,31 @@ export interface SumConstraint {
   targetExpr?: CalcExpr; // 있으면 우변 = 이 수식 (셀/질문응답/attrs/LUT/복합)
   tolerance?: number; // eq/ne 전용 절대 오차. 기본 0 — 부등호 연산자는 무시
   errorMessage?: string; // 미지정 시 자동 생성 메시지 사용
+  /**
+   * 행 반복 벌마다 — 1벌(틀) 칸으로 만든 제약을 1벌과 적기 시작한 벌마다 복제해 검사한다
+   * (`resolveBundleSumConstraints`). 참조하는 칸(cellIds·수식의 같은 질문 셀 참조·적용 조건 컨트롤러)이
+   * 전부 블록 안일 때만 쓴다 — 묶음마다 그 묶음의 칸으로 옮긴다.
+   */
+  perRepeatBundle?: boolean;
+  /**
+   * 경고만 — 걸려도 「다음」을 막지 않고 표 아래 노란 안내만 띄운다(「단위를 확인해 주세요」).
+   * 판정은 차단과 같은 평가기, 목록은 `collectTableSoftWarnings`(numeric-validation). 없으면 차단.
+   */
+  severity?: 'warn';
+  /** 적용 조건 — 같은 표 칸 조건(게이팅과 같은 모양). 충족할 때만 이 제약을 검사한다(경고·차단 공용). */
+  when?: CellEnableCondition;
+  /**
+   * 다른 문항 적용 조건 — 문항 표시 조건과 같은 모양·같은 평가기. 충족할 때만 검사한다(경고·차단 공용).
+   * 평가 재료(응답 전체)가 없으면 검사하지 않는다(막지 않는 쪽).
+   */
+  whenQuestion?: QuestionConditionGroup;
+  /** 칸 수 모드(`aggregate: 'count'`)에서 채운 칸 대신 이 값을 고른 칸만 센다(선택값 정본 해석기). */
+  countValues?: string[];
+  /**
+   * 행 반복 묶음 가로지르기 — 1벌 칸을 1벌 + 적기 시작한 벌의 같은 자리 칸으로 넓혀 **한 제약**으로 검사한다
+   * (「2025를 고른 줄 수 = 0」). `perRepeatBundle` 과 배타, 수식·`when` 과 같이 쓰지 않는다.
+   */
+  acrossRepeatBundles?: boolean;
 }
 
 // 질문 표시 조건 논리 타입
@@ -378,6 +403,13 @@ export interface QuestionOption {
   branchRule?: BranchRule;
   /** 응답 인용 문구. 이 항목이 선택되면 이 문구가 인용에 합류한다. 비우면 수집 제외. */
   answerQuoteText?: string;
+  /**
+   * 보기 표시 조건 — **표 문항 select 셀의 보기 전용**. 같은 표의 컨트롤러 칸 값이 조건을 만족할 때만
+   * 드롭다운 목록에 나온다(유가공업 문3: 설비구분 → 주요 설비명). 칸 게이팅(`TableCell.enabledWhen`)과
+   * 같은 조건 모델·평가기를 쓰고, 고른 보기가 거짓이 되면 값을 지운다(화면·저장 경계 모두).
+   * 미지정 = 늘 보인다. 판정은 `lib/survey/cell-gating` 의 `hiddenSelectOptionValues`.
+   */
+  enabledWhen?: CellEnableCondition;
 }
 
 // 셀 수식 트리 — 계산 셀(표시)과 숫자 input 셀(검증)이 공유한다.
@@ -564,6 +596,12 @@ export interface TableCell {
    * 미지정이면 종전대로 명단 값으로 잠근다. 표 input 셀 전용(단답형 문항에는 없다).
    */
   prefillEditable?: boolean;
+  /**
+   * 고친 경우만 따로 내보내기 — 고칠 수 있는 프리필 칸에서 응답자가 명단 값과 다르게 낸 경우에만 채워지는
+   * `<변수>_upd` 열을 내보내기에 더한다(웹 버전의 「수정 전화번호」). 판정은 응답 확정 때 사이드카
+   * `__prefillEdits__`(`utils/prefill-edits-sidecar`)에 적는다. `prefillEditable` 과 템플릿이 있을 때만 의미가 있다.
+   */
+  exportPrefillEdit?: boolean;
   // input 셀 입력 모드 — 'number' 면 응답자가 숫자만 입력 가능. 미지정/'text' 면 기존 자유 입력.
   inputType?: InputType;
   // input 셀 개인정보 암호화 — 이 셀의 응답값을 encryptPii 암호문으로 저장 (질문 단위
@@ -763,6 +801,12 @@ export interface TableRow {
   height?: number; // 행 높이 (픽셀 단위)
   minHeight?: number; // 최소 높이
   displayCondition?: QuestionConditionGroup; // 행 표시 조건
+  /**
+   * 안 쓰면 내보내기에서 빼기 — 응답 전체에서 이 행의 칸에 값이 하나도 없으면 엑셀·SPSS 에 이 행의 변수를
+   * 내지 않는다(열의 `TableColumn.exportOmitIfUnused` 와 같은 판정, 2026-11-06). 조건으로 나타나는 줄을
+   * 넉넉히 만들어 둔 표용 — 행 반복 벌은 이미 미사용 벌을 뺀다. 판정 `lib/analytics/unused-column-usage`.
+   */
+  exportOmitIfUnused?: boolean;
   dynamicGroupId?: string; // 소속 동적 그룹 ID (undefined = 항상 표시)
   showWhenDynamicGroupId?: string; // 이 그룹에 선택 있으면 함께 표시 (소계 행용)
   /**
@@ -792,6 +836,29 @@ export interface RowRepeatConfig {
   maxRepeats: number;
   /** 추가 버튼 문구 (기본 '행 추가') */
   addLabel?: string;
+  /**
+   * 줄 번호 변수명 — 틀이 1줄이면 벌마다 rowCode 를 `r01`·`r02` …로 짓는다(기본은 `r01_01`·`r01_02` …).
+   * 틀이 2줄 이상이거나 표의 다른 행 코드와 겹치면 무시한다(`lib/question/row-repeat`).
+   */
+  flatRowCodes?: boolean;
+  /**
+   * 적기 시작한 벌도 1벌처럼 필수 — 응답 칸에 값이 하나라도 든 2벌 이후의 필수 칸을 검사한다.
+   * 기본(꺼짐)은 1벌만 필수. 빈 채로 열어 둔 벌은 어느 쪽이든 막지 않는다.
+   */
+  requireStartedBundles?: boolean;
+  /**
+   * 블록 표시 조건 — 거짓이면 반복 블록 전체(모든 벌 행·추가/삭제 버튼)가 사라진다. 문항 표시 조건과 같은
+   * 모양·평가기. 블록 행에 런타임으로 행 표시 조건을 얹어(`applyRepeatBlockCondition`) 화면·필수 검증·
+   * 저장 경계 strip 이 기존 행 조건 경로를 그대로 탄다 — 숨은 블록의 값은 숨은 칸처럼 지워진다(2026-11-06).
+   */
+  displayCondition?: QuestionConditionGroup;
+  /**
+   * 처음엔 접어 두기 — 첫 벌도 숨기고 추가 버튼만 보인다. 값이 든 벌은 보인다(열린 벌 수는 값에서 파생).
+   * 접힌 첫 벌은 필수 검사하지 않는다(적기 시작하면 검사). `expandWhen` 이 참이면 펼쳐 둔다(2026-11-06).
+   */
+  startCollapsed?: boolean;
+  /** 접어 두기의 예외 — 이 조건이 참이면 첫 벌을 펼쳐 둔다. 문항 표시 조건과 같은 모양·평가기 */
+  expandWhen?: QuestionConditionGroup;
 }
 
 /**
@@ -861,6 +928,22 @@ export interface TableColumn {
   colspan?: number; // 헤더 가로 병합
   isHeaderHidden?: boolean; // 다른 컬럼의 colspan에 의해 숨겨진 헤더
   displayCondition?: QuestionConditionGroup; // 열 표시 조건
+  /**
+   * 안 쓰면 내보내기에서 뺀다 — 응답 전체에서 이 열의 칸에 값이 하나도 없으면 엑셀·SPSS 에
+   * 이 열의 변수를 내지 않는다(CONTEXT.md 「안 쓴 열 빼기」). 「기타 원료 1~3」처럼 넉넉히
+   * 만들어 둔 열용이다. 판정은 설문 전체 기준이고(분할 파일 간 열 구성이 같도록) 응답 화면·
+   * 저장·변수명은 무변경이다. 판정 `lib/analytics/unused-column-usage`.
+   */
+  exportOmitIfUnused?: boolean;
+  /**
+   * 열 차례로 열기 단계 (CONTEXT.md 「열 차례로 열기」) — 2 이상이면 처음에는 가려 두고 응답자가
+   * 표 아래 `+` 를 누를 때마다 다음 단계의 열이 함께 열린다(「기타1」 원료명·투입량 두 열이
+   * 한 단계). 미지정·1 은 항상 보인다. 열린 단계는 저장하지 않고 값에서 파생한다
+   * (`features/question-renderer/utils/staged-columns`). 테이블 유형 문항 전용.
+   */
+  revealStep?: number;
+  /** 열 차례로 열기 버튼 문구 — 단계 열 중 처음 적힌 것을 쓴다(기본 「열 추가」). */
+  revealAddLabel?: string;
 }
 
 // 다단계 헤더 셀 (headerGrid용)
@@ -872,6 +955,14 @@ export interface HeaderCell {
   textColor?: string;
   colspan: number; // 가로 병합 (기본 1)
   rowspan: number; // 세로 병합 (기본 1)
+  /**
+   * 머리글 입력칸 — 같은 표 본문의 입력칸 하나를 이 머리글 자리에 그린다(「기타(원료명 직접 작성)」).
+   * 값은 그 본문 칸 키에 그대로 산다(저장·검증·내보내기 무변경). 판정·올린 행은
+   * `features/question-renderer/utils/header-input-cells` 하나. 무효 연결은 무시하고 글자로 그린다.
+   */
+  inputCellId?: string;
+  /** 열 차례로 열기 버튼(추가·빼기)을 이 머리글 칸 안에 둔다 — 데스크톱 표·모바일 원본만. */
+  hostsColumnReveal?: boolean;
 }
 
 export interface SelectLevel {
@@ -960,6 +1051,18 @@ export interface Question {
   // 문항 제목 서식본 (0125) — 굵게·밑줄·글자색·글자 크기. 정본은 평문 title 이고 응답 화면 표시만
   // 이것을 우선한다(표 셀 contentHtml 과 같은 규칙). 서식이 없으면 두지 않는다.
   titleHtml?: string | null;
+  /**
+   * 문항 접어 두기 버튼 글자 (모든 유형, 2026-11-05). 비었거나 공백뿐이면 꺼짐 = 기존 화면. 글자가 있으면 응답 화면에서
+   * 문항 자리에 이 글자의 버튼만 보이고, 누르면 문항 전체가 펼쳐지며 다시 누르면 접힌다. 펼침은 저장하지 않고,
+   * 검증 문제가 있는 문항은 접힌 채로 두지 않는다(GroupStepItem `resolveCollapsedQuestionOpen`).
+   */
+  collapseButtonLabel?: string | null;
+  /**
+   * 접어 둔 문항을 페이지에서 바로 앞에 보이는 문항의 설명 밑에 붙인다(`collapseButtonLabel` 이 있을 때만, 2026-11-05).
+   * 문항 id 로 잇지 않고 「바로 앞」으로 정해 복제·보관함에서 연결이 깨지지 않는다. 앞에 보이는 문항이 없으면(페이지 첫 문항)
+   * 제자리에 그린다(survey-response `groupAttachedItems`).
+   */
+  collapseAttachToPrevious?: boolean;
   // 단답형·장문형 입력칸 줄 수 (0124). 미지정 = 유형 기본(단답형 한 줄, 장문형 4줄).
   // 단답형에서 2 이상이면 여러 줄 칸. 숫자 모드·입력 형식은 한 줄 고정(표 input 셀 inputRows 와 같은 규칙).
   inputRows?: number | null;

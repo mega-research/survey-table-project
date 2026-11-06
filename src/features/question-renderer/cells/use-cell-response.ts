@@ -94,5 +94,7 @@ export function useCellResponse(
     [cellId, mergePatch],
   );
 
-  return { cellResponse: localResponse, updateValue, clearValue, patchValues };
+  // storedResponse = 응답에 실제로 저장된 값. 로컬 사본은 쓰는 즉시 바뀌므로 부모가 쓰기를 잃으면 둘이 갈린다 —
+  // 「응답에 없으면 다시 쓴다」(고칠 수 있는 명단 값)는 이것을 봐야 한다(2026-11-05 유가공업 SQ1).
+  return { cellResponse: localResponse, storedResponse: valueFromProps, updateValue, clearValue, patchValues };
 }

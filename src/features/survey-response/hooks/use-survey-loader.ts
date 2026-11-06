@@ -42,6 +42,28 @@ interface PreviewContext {
   survey: Survey;
   versionId: string | null;
   documentView?: SurveyDocumentView | null;
+  /** 관리자 「설문 보기」의 첫 번째 조사 대상 명단 값 — 없으면 빈 명단 값(종전 동작) */
+  contactAttrs?: Record<string, string>;
+  /** 같은 대상의 이월 응답 원본 — `loadPriorAnswersForScreen` 으로 공개 경로와 똑같이 적재한다 */
+  priorAnswers?: unknown;
+  /**
+   * 처음부터 깔아 둘 응답 — 운영 도구(`pnpm survey:render --answers`)가 필수 쪽을 넘겨 뒤쪽 쪽을 그려 볼 때만 쓴다.
+   * 화면(관리자 「설문 보기」·공개 미리보기)은 넘기지 않는다. 상세 기재는 관리자 수정과 같이 `__optTexts__` 사이드카로 받는다.
+   */
+  initialResponses?: ResponsesMap;
+}
+
+/**
+ * 이월 응답 원본을 응답 화면용으로 적재한다 — 공개 경로와 관리자 「설문 보기」가 같은 규칙을 쓴다.
+ * 「이월값 불러오기」를 끈 문항은 통째로 걷어낸다(이 시드는 프리필 effect 보다 먼저 돌고 문항별 게이트가
+ * 없어서, 걸러 두지 않으면 스위치를 꺼도 상세 기재 칸에 지난 회차 값이 보인다). 기타·상세 기재 사이드카는
+ * 스토어에 시드한다. 남는 것이 없으면 null.
+ */
+function loadPriorAnswersForScreen(raw: unknown, survey: Survey): PriorAnswers | null {
+  const prior = omitDisabledPriorAnswers(normalizePriorAnswers(raw), survey.questions ?? []) ?? {};
+  if (Object.keys(prior).length === 0) return null;
+  useSurveyResponseStore.getState().seedOptionTexts(readOptTextsSidecar(prior));
+  return prior;
 }
 
 interface UseSurveyLoaderArgs {
@@ -269,8 +291,16 @@ export function useSurveyLoader({
           setLoadedSurvey(previewContext.survey);
           setVersionId(previewContext.versionId);
           setDocumentView(previewContext.documentView ?? null);
-          setResponses({});
-          setContactAttrs({});
+          setResponses(previewContext.initialResponses ?? {});
+          if (previewContext.initialResponses) {
+            useSurveyResponseStore
+              .getState()
+              .seedOptionTexts(readOptTextsSidecar(previewContext.initialResponses));
+          }
+          setContactAttrs(previewContext.contactAttrs ?? {});
+          if (previewContext.priorAnswers != null) {
+            setPriorAnswers(loadPriorAnswersForScreen(previewContext.priorAnswers, previewContext.survey));
+          }
           setShowInviteRequired(false);
           return;
         }
@@ -403,18 +433,8 @@ export function useSurveyLoader({
             if (priorSettled.status === 'rejected') {
               console.error('이월 응답 조회 오류 (프리필 생략):', priorSettled.reason);
             } else if (priorSettled.value) {
-              // 「이월값 불러오기」를 끈 문항은 여기서 통째로 걷어낸다. 이 시드는 프리필
-              // effect 보다 먼저 돌고 문항별 게이트가 없어서, 걸러 두지 않으면 스위치를
-              // 꺼도 상세 기재 칸에 지난 회차 값이 그대로 보인다.
-              const prior =
-                omitDisabledPriorAnswers(
-                  normalizePriorAnswers(priorSettled.value),
-                  result.survey.questions ?? [],
-                ) ?? {};
-              if (Object.keys(prior).length > 0) {
-                setPriorAnswers(prior);
-                useSurveyResponseStore.getState().seedOptionTexts(readOptTextsSidecar(prior));
-              }
+              const prior = loadPriorAnswersForScreen(priorSettled.value, result.survey);
+              if (prior) setPriorAnswers(prior);
             }
 
             if (attrs) {

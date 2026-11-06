@@ -562,6 +562,16 @@ describe('buildUpdatedCell — 셀타입별 characterization', () => {
     expect(off.defaultValueTemplate).toBe('{{기업명}}');
   });
 
+  it('고친 경우만 따로 내보내기는 고칠 수 있는 프리필일 때만 exportPrefillEdit 키를 남긴다', () => {
+    const form = { ...baseForm('input'), inputDefaultValueTemplate: '{{전화번호}}', inputPrefillEditable: true, inputExportPrefillEdit: true };
+    const on = buildUpdatedCell(form, baseCell);
+    expect(on.exportPrefillEdit).toBe(true);
+    expect(cellToFormState(on).inputExportPrefillEdit).toBe(true);
+    // 고칠 수 있게를 끄거나 템플릿을 지우면 함께 사라진다 — 깔린 명단 값이 없으면 「고쳤다」가 성립하지 않는다
+    expect(buildUpdatedCell({ ...form, inputPrefillEditable: false }, on)).not.toHaveProperty('exportPrefillEdit');
+    expect(buildUpdatedCell({ ...form, inputDefaultValueTemplate: '' }, on)).not.toHaveProperty('exportPrefillEdit');
+  });
+
   it('입력한 만큼 높이 늘리기는 평문 칸에서 켰을 때만 inputAutoGrow 키를 남긴다', () => {
     const on = buildUpdatedCell({ ...baseForm('input'), inputAutoGrow: true }, baseCell);
     expect(on.inputAutoGrow).toBe(true);

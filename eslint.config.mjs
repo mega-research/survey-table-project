@@ -81,6 +81,15 @@ const eslintConfig = [
     },
   },
   {
+    // .scratch/ 의 일회성 .js 스크립트는 node 로 바로 돌리는 CommonJS 다. 디렉터리를 통째로
+    // 빼지 않고(다른 규칙은 그대로 본다) require() 만 허용해, 로컬 `pnpm lint` 종료 코드가
+    // 레포 코드의 오류만 말하게 한다. .scratch 는 gitignore 라 CI 에는 없다.
+    files: [".scratch/**/*.js"],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
+  {
     // 서버 코드 no-console — pino 로거(@/lib/logger) 사용 강제.
     // 클라이언트(브라우저) 코드는 pino 대상이 아니므로 범위에서 제외한다 (티켓 07 정책).
     // src/lib 에는 더 이상 클라이언트 전용 파일이 없다(프론트 전용 조각은 feature·공용 구역으로

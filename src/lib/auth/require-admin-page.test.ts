@@ -9,9 +9,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const notFound = vi.fn(() => {
   throw new Error('NEXT_NOT_FOUND');
 });
+const redirect = vi.fn((to: string) => {
+  throw new Error(`NEXT_REDIRECT ${to}`);
+});
 const requireAuth = vi.fn();
 
-vi.mock('next/navigation', () => ({ notFound }));
+vi.mock('next/navigation', () => ({ notFound, redirect }));
+vi.mock('next/headers', () => ({
+  headers: async () => new Headers({ 'x-request-path': '/surveys/s1/analytics' }),
+}));
 vi.mock('@/lib/auth', () => ({ requireAuth }));
 
 async function loadGuard() {
@@ -42,12 +48,14 @@ describe('requireAdminPage', () => {
   });
 
   // 게스트·실사 차단은 티켓 21 부터 requireAuth 의 유형 게이트가 진다 —
-  // 이 가드는 그 결과를 그대로 통과시킬 뿐이다.
-  it('미인증·비활성·비내부 계정은 requireAuth 가 먼저 막는다', async () => {
+  // 이 가드는 그 결과를 받아, 막혔으면 오류 화면 대신 원래 경로를 실어 로그인으로 보낸다.
+  it('미인증·비활성·비내부 계정은 원래 경로를 실어 로그인으로 보낸다', async () => {
     requireAuth.mockRejectedValue(new Error('인증이 필요합니다.'));
 
     const requireAdminPage = await loadGuard();
-    await expect(requireAdminPage()).rejects.toThrow('인증이 필요합니다.');
+    await expect(requireAdminPage()).rejects.toThrow(
+      `NEXT_REDIRECT /login?redirect=${encodeURIComponent('/surveys/s1/analytics')}`,
+    );
     expect(notFound).not.toHaveBeenCalled();
   });
 });
@@ -83,7 +91,7 @@ describe('requireSuperadminPage', () => {
     requireAuth.mockRejectedValue(new Error('인증이 필요합니다.'));
 
     const requireSuperadminPage = await loadSuperadminGuard();
-    await expect(requireSuperadminPage()).rejects.toThrow('인증이 필요합니다.');
+    await expect(requireSuperadminPage()).rejects.toThrow('NEXT_REDIRECT /login');
     expect(notFound).not.toHaveBeenCalled();
   });
 });

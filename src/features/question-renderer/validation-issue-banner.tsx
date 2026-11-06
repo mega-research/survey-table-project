@@ -93,3 +93,27 @@ export function ValidationIssueBanner({
     </div>
   );
 }
+
+const SOFT_WARNING_LIMIT = 5;
+
+/**
+ * 경고만 하는 표 제약의 안내 — 「다음」을 막지 않는다(`collectTableSoftWarnings`). 오류 배너와 같은 자리·모양이되
+ * 노란색이고 `role="status"` 다(막는 안내가 아니라 검증 안내 표식도 달지 않는다). 값을 고치면 바로 사라진다.
+ */
+export function SoftWarningNotice({ messages }: { messages?: readonly string[] | undefined }) {
+  const locale = useInlineSurveyLocale();
+  if (!messages || messages.length === 0) return null;
+  const shown = messages.slice(0, SOFT_WARNING_LIMIT);
+  const rest = messages.length - shown.length;
+  return (
+    <div
+      role="status"
+      className={`mt-2 space-y-1 rounded-md border px-3 py-2 text-sm ${TONE_CLASSES.amber.container}`}
+    >
+      {shown.map((message, index) => (
+        <p key={index}>{message}</p>
+      ))}
+      {rest > 0 && <p>{systemText('validation.softWarningMore', locale, { count: rest })}</p>}
+    </div>
+  );
+}

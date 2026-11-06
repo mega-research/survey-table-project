@@ -275,6 +275,8 @@ export async function commitCellEdit({
               inputRows: question.inputRows,
               inputAutoGrow: question.inputAutoGrow,
               titleHtml: question.titleHtml,
+              collapseButtonLabel: question.collapseButtonLabel,
+              collapseAttachToPrevious: question.collapseAttachToPrevious,
               tableValidationRules: question.tableValidationRules,
               sumConstraints: question.sumConstraints,
               dynamicRowConfigs: question.dynamicRowConfigs,

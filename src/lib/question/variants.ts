@@ -25,6 +25,8 @@ type QuestionBase = Pick<
   | 'id'
   | 'title'
   | 'titleHtml'
+  | 'collapseButtonLabel'
+  | 'collapseAttachToPrevious'
   | 'description'
   | 'required'
   | 'groupId'
@@ -103,7 +105,8 @@ export interface RadioQuestion
     EmbeddedTableFields,
     MobileTableDisplayFields,
     ChoiceGroupFields,
-    ScaleMeanFields {
+    ScaleMeanFields,
+    Pick<Question, 'defaultValueTemplate'> {
   type: 'radio';
 }
 

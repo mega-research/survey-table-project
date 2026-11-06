@@ -5,7 +5,7 @@ import { db } from '@/db';
 import { contactTargets, surveys, surveyVersions } from '@/db/schema';
 import type { SurveyAnchorSnapshot } from '@/shared/contracts/survey-document';
 import { buildDocumentView } from '@/server/survey-builder/services/survey-read';
-import { lookupPriorAnswersByContactTarget } from '@/server/contacts/services/contact-prior-answers';
+import { lookupPriorAnswersByContactTarget } from '@/server/read-models/contact-prior-answers';
 import { pinnedVersionId } from '@/shared/contracts/survey';
 import { ensureTestVersion } from '@/server/workflows/test-version';
 import { getResponseById } from '@/server/read-models/responses';

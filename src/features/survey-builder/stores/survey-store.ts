@@ -17,6 +17,7 @@ import {
   remapConditionGroupValues,
   type CellRemapScope,
 } from '@/features/survey-builder/utils/option-value-remap';
+import { remapQuestionConditionGroups } from '@/features/survey-builder/utils/question-condition-groups';
 
 // ── 헬퍼 함수 ──
 
@@ -792,71 +793,16 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
           let changed = false;
 
           state.currentSurvey.questions.forEach((question) => {
-            if (question.displayCondition) {
-              const next = remapConditionGroupValues(
-                question.displayCondition,
-                questionId,
-                oldValue,
-                newValue,
-                cellScope,
-              );
-              if (next !== question.displayCondition) {
-                question.displayCondition = next;
-                changed = true;
-                affectedIds.add(question.id);
-                if (!state.questionChanges.added[question.id]) {
-                  state.questionChanges.updated[question.id] = true;
-                }
-              }
-            }
-
-            if (question.tableRowsData) {
-              let rowsChanged = false;
-              const nextRows = question.tableRowsData.map((row) => {
-                if (!row.displayCondition) return row;
-                const next = remapConditionGroupValues(
-                  row.displayCondition,
-                  questionId,
-                  oldValue,
-                  newValue,
-                  cellScope,
-                );
-                if (next === row.displayCondition) return row;
-                rowsChanged = true;
-                return { ...row, displayCondition: next };
-              });
-              if (rowsChanged) {
-                question.tableRowsData = nextRows;
-                changed = true;
-                affectedIds.add(question.id);
-                if (!state.questionChanges.added[question.id]) {
-                  state.questionChanges.updated[question.id] = true;
-                }
-              }
-            }
-
-            if (question.tableColumns) {
-              let columnsChanged = false;
-              const nextColumns = question.tableColumns.map((column) => {
-                if (!column.displayCondition) return column;
-                const next = remapConditionGroupValues(
-                  column.displayCondition,
-                  questionId,
-                  oldValue,
-                  newValue,
-                  cellScope,
-                );
-                if (next === column.displayCondition) return column;
-                columnsChanged = true;
-                return { ...column, displayCondition: next };
-              });
-              if (columnsChanged) {
-                question.tableColumns = nextColumns;
-                changed = true;
-                affectedIds.add(question.id);
-                if (!state.questionChanges.added[question.id]) {
-                  state.questionChanges.updated[question.id] = true;
-                }
+            // 문항 안 조건 묶음 자리 전부(문항·행·열·동적 행 그룹 표시, 이월값 불러오기, 행 반복 블록, 표 제약 적용 조건)
+            if (
+              remapQuestionConditionGroups(question, (group) =>
+                remapConditionGroupValues(group, questionId, oldValue, newValue, cellScope),
+              )
+            ) {
+              changed = true;
+              affectedIds.add(question.id);
+              if (!state.questionChanges.added[question.id]) {
+                state.questionChanges.updated[question.id] = true;
               }
             }
           });
@@ -912,26 +858,15 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
           let changed = false;
 
           state.currentSurvey.questions.forEach((question) => {
-            let questionChanged = false;
-
-            if (question.displayCondition) {
-              const next = remapConditionGroupQuestionRefs(question.displayCondition, oldId, newId);
-              if (next !== question.displayCondition) {
-                question.displayCondition = next;
-                questionChanged = true;
-              }
-            }
+            // 문항 안 조건 묶음 자리 전부 — 아래는 조건 밖의 문항 참조(분기 이동 대상)
+            let questionChanged = remapQuestionConditionGroups(question, (group) =>
+              remapConditionGroupQuestionRefs(group, oldId, newId),
+            );
 
             if (question.tableRowsData) {
               let rowsChanged = false;
               const nextRows = question.tableRowsData.map((row) => {
                 let nextRow = row;
-                if (row.displayCondition) {
-                  const nextCondition = remapConditionGroupQuestionRefs(row.displayCondition, oldId, newId);
-                  if (nextCondition !== row.displayCondition) {
-                    nextRow = { ...nextRow, displayCondition: nextCondition };
-                  }
-                }
                 let cellsChanged = false;
                 const nextCells = nextRow.cells.map((cell) => {
                   const radioOptions = remapBranchTargets(cell.radioOptions);
@@ -961,21 +896,6 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
               });
               if (rowsChanged) {
                 question.tableRowsData = nextRows;
-                questionChanged = true;
-              }
-            }
-
-            if (question.tableColumns) {
-              let columnsChanged = false;
-              const nextColumns = question.tableColumns.map((column) => {
-                if (!column.displayCondition) return column;
-                const next = remapConditionGroupQuestionRefs(column.displayCondition, oldId, newId);
-                if (next === column.displayCondition) return column;
-                columnsChanged = true;
-                return { ...column, displayCondition: next };
-              });
-              if (columnsChanged) {
-                question.tableColumns = nextColumns;
                 questionChanged = true;
               }
             }
@@ -1162,3 +1082,4 @@ function getDefaultTableRows(): TableRow[] {
     },
   ];
 }
+

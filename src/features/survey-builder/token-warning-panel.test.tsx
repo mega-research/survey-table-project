@@ -332,6 +332,42 @@ describe('TokenWarningPanel - 기존 컨택 토큰 경고 (회귀)', () => {
     expect(screen.getByText('{{모르는키}}')).toBeInTheDocument();
   });
 
+  it('셀 글자의 응답 인용 {{{이름}}} 은 컨택 토큰으로 세지 않는다 — 2026-11-05 유가공업 문2 「{{{q1_etc1}}}」 오경고', () => {
+    render(
+      <TokenWarningPanel
+        questions={[
+          q({
+            id: 'q1',
+            order: 1,
+            type: 'table',
+            tableRowsData: [
+              {
+                id: 'r',
+                label: '',
+                cells: [{ id: 'name', type: 'input', content: '', answerQuoteEnabled: true, answerQuoteName: 'q1_etc1' }],
+              },
+            ],
+          }),
+          q({
+            id: 'q2',
+            order: 2,
+            type: 'table',
+            description: '{{{q1_etc1}}} 수입 방식',
+            tableRowsData: [{ id: 'r2', label: '', cells: [{ id: 'c', type: 'text', content: '{{{q1_etc1}}} · {{모르는키}}' }] }],
+          }),
+        ]}
+        groups={[]}
+        lookups={[]}
+        thankYouMessage=""
+        catalog={[{ key: '아는키', label: '아는키', category: 'attrs' }] as never}
+      />,
+    );
+    // 진짜 없는 컨택 키만 남는다
+    expect(screen.getByText(/컨택 컬럼에 없는 토큰 1개/)).toBeInTheDocument();
+    expect(screen.getByText('{{모르는키}}')).toBeInTheDocument();
+    expect(screen.queryByText(/q1_etc1\}\}/)).not.toBeInTheDocument();
+  });
+
   it('아무 문제도 없으면 아무 것도 렌더하지 않는다', () => {
     const { container } = render(
       <TokenWarningPanel

@@ -56,8 +56,22 @@ describe('validateRowRepeatTemplate', () => {
     ).toEqual(['not-contiguous']);
   });
 
-  it('선택·계산·랭킹·보기소스 셀이 들어 있으면 위반이다', () => {
-    for (const type of ['radio', 'checkbox', 'select', 'calc', 'ranking', 'ranking_opt', 'choice_opt'] as const) {
+  it('선택 칸(드롭다운)은 반복할 수 있다 — 값이 입력 칸처럼 셀 id 아래 문자열 하나다', () => {
+    const rows = plainRows();
+    rows[1]!.cells = [cell('b1', 'select')];
+    expect(validateRowRepeatTemplate(tableQuestion(rows), ['a', 'b'])).toEqual([]);
+  });
+
+  it('라디오·체크박스 칸도 반복할 수 있다 — 값이 셀 id 아래에 있고 보기 id·묶음 이름은 벌마다 갈라 복제한다', () => {
+    for (const type of ['radio', 'checkbox'] as const) {
+      const rows = plainRows();
+      rows[1]!.cells = [cell('b1', type)];
+      expect(validateRowRepeatTemplate(tableQuestion(rows), ['a', 'b']), type).toEqual([]);
+    }
+  });
+
+  it('계산·랭킹·보기소스 셀이 들어 있으면 위반이다', () => {
+    for (const type of ['calc', 'ranking', 'ranking_opt', 'choice_opt'] as const) {
       const rows = plainRows();
       rows[1]!.cells = [cell('b1', type)];
       const kinds = validateRowRepeatTemplate(tableQuestion(rows), ['a', 'b']).map((v) => v.kind);
@@ -116,5 +130,31 @@ describe('validateRowRepeatTemplate', () => {
   it('위반마다 사람이 읽을 문구가 붙는다', () => {
     const violations = validateRowRepeatTemplate(tableQuestion(plainRows()), ['a', 'c']);
     expect(violations[0]!.message.length).toBeGreaterThan(0);
+  });
+});
+
+describe('validateRowRepeatTemplate — 라디오 묶음', () => {
+  const radio = (id: string, group: string) =>
+    ({ id, type: 'radio', content: '', radioGroupName: group, radioOptions: [{ id: `${id}o`, label: 'a', value: '1' }] }) as TableCell;
+
+  it('여러 행에 걸친(세로) 라디오 묶음은 막는다 — 변수명이 열 코드라 벌마다 겹친다', () => {
+    const rows = [
+      { id: 'a', label: 'a', cells: [radio('a1', 'v')] },
+      { id: 'b', label: 'b', cells: [radio('b1', 'v')] },
+    ] as TableRow[];
+    expect(validateRowRepeatTemplate(tableQuestion(rows), ['a', 'b']).map((v) => v.kind)).toContain('radio-group');
+  });
+
+  it('블록 안팎에 걸친 라디오 묶음은 막는다', () => {
+    const rows = [
+      { id: 'a', label: 'a', cells: [radio('a1', 'v')] },
+      { id: 'b', label: 'b', cells: [radio('b1', 'v')] },
+    ] as TableRow[];
+    expect(validateRowRepeatTemplate(tableQuestion(rows), ['a']).map((v) => v.kind)).toContain('radio-group');
+  });
+
+  it('한 행 안의(가로) 라디오 묶음은 반복할 수 있다', () => {
+    const rows = [{ id: 'a', label: 'a', cells: [radio('a1', 'h'), radio('a2', 'h')] }] as TableRow[];
+    expect(validateRowRepeatTemplate(tableQuestion(rows), ['a'])).toEqual([]);
   });
 });

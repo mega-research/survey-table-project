@@ -34,7 +34,7 @@ import {
   countSelectionsTowardMax,
   satisfiesMinSelections,
 } from '@/features/question-renderer/utils/exclusive-choice';
-import { substituteTokens } from '@/lib/survey/substitute-tokens';
+import { substituteTokensInHtml } from '@/lib/survey/substitute-tokens';
 import { Question, SurveyLookup } from '@/types/survey';
 import { evaluateNumericComparisonV2 } from '@/utils/branch-logic';
 import { isChoiceTableSource } from '@/utils/choice-source';
@@ -624,7 +624,7 @@ function QuestionTestInput({
     case 'notice':
       return (
         <NoticeRenderer
-          content={substituteTokens(question.noticeContent || '', attrs, quotes)}
+          content={substituteTokensInHtml(question.noticeContent || '', attrs, quotes)}
           bgColor={question.noticeBgColor}
           requiresAcknowledgment={question.requiresAcknowledgment}
           value={typeof value === 'boolean' ? value : false}

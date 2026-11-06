@@ -79,6 +79,7 @@ import { ResponseDocumentPane } from '@/features/survey-response/response-docume
 import { ResumeToast } from '@/features/survey-response/resume-toast';
 import { DemandChecklist } from '@/features/survey-response/step-views/demand-checklist';
 import { PageStepView } from '@/features/survey-response/step-views/page-step-view';
+import { markSeedWrite } from '@/features/survey-response/stores/live-response-sources';
 import { useSurveyResponseStore } from '@/features/survey-response/stores/survey-response-store';
 import { SurveyResponseLayout } from '@/features/survey-response/survey-response-layout';
 import {
@@ -210,6 +211,12 @@ export interface SurveyResponseFlowProps {
     survey: Survey;
     versionId: string | null;
     documentView?: SurveyDocumentView | null;
+    /** 관리자 「설문 보기」가 싣는 첫 번째 조사 대상의 명단 값(응답자 경로와 같은 규칙). 없으면 빈 명단 값. */
+    contactAttrs?: Record<string, string>;
+    /** 같은 대상의 이월 응답 원본 — 로더가 공개 경로와 같은 적재(정규화·끈 문항 제외·상세 기재 시드)를 거친다. */
+    priorAnswers?: unknown;
+    /** 처음부터 깔아 둘 응답 — 운영 도구(`pnpm survey:render --answers`) 전용, 화면은 넘기지 않는다. */
+    initialResponses?: Record<string, unknown>;
   };
 }
 
@@ -820,7 +827,16 @@ function SurveyResponseFlowActive({
     // 같은 참조가 돌아와 set 을 부르지 않으므로 렌더 루프가 생기지 않는다.
     // (react-hooks/set-state-in-effect 는 이 조건부 set 을 보고하지 않는다 — 보고되지도
     //  않는 규칙에 disable 을 달면 "쓰이지 않은 disable" 경고가 새로 뜬다.)
-    if (next !== responses) setResponses(next as ResponsesMap);
+    // 갱신 함수로 넣는다 — 같은 커밋에 자식 칸이 넣은 쓰기(미리 채운 명단 값 등)가 아직 이 렌더의
+    // responses 에 없을 수 있다. 계산한 결과를 그대로 넣으면 그 쓰기를 덮어 지운다. 그사이 바뀌었으면
+    // 최신 값에서 다시 지운다.
+    if (next !== responses) {
+      setResponses((prev) =>
+        (prev === responses
+          ? next
+          : stripHiddenQuestionValues(questions, prev, groups, evalCtx)) as ResponsesMap,
+      );
+    }
   }, [questions, responses, groups, evalCtx, setResponses, skipHiddenStrip]);
 
   // ── 분할 레이아웃 파생 ──
@@ -1096,6 +1112,10 @@ function SurveyResponseFlowActive({
   // useResponseLifecycle 호출 시점(아래)에 prop 으로 넘긴다. 훅 호출 순서상 useSessionRecovery
   // 가 먼저이므로 콜백은 useResponseLifecycle 내부 값을 직접 참조하지 않고 이 state 를 경유한다.
   const [recoveredDraftSeq, setRecoveredDraftSeq] = useState<number | undefined>(undefined);
+  // 회복이 저장된 답을 깐 직후 미저장 답 버리기 — 버리는 함수는 아래 useResponseLifecycle 이 갖고 있어
+  // 훅 호출 순서상 ref 를 경유한다(콜백은 안정 참조여야 회복 effect 가 다시 돌지 않는다).
+  const discardPendingAnswersRef = useRef<(() => void) | null>(null);
+  const handleAnswersRestored = useCallback(() => discardPendingAnswersRef.current?.(), []);
 
   // 운영 현황 콘솔(T6): localStorage 기반 응답 회복 + 회복 토스트 자동 dismiss.
   // 회복 effect + dismiss effect 와 isRecovering/showResumeNotice state 를
@@ -1119,6 +1139,7 @@ function SurveyResponseFlowActive({
     setResponses,
     onRestoreStep: restoreStepFromRecovery,
     onDraftSeqRecovered: setRecoveredDraftSeq,
+    onAnswersRestored: handleAnswersRestored,
     setCurrentResponseId,
     setDuplicateStatus,
     setPausedMessage: setRefetchedPausedMessage,
@@ -1434,6 +1455,8 @@ function SurveyResponseFlowActive({
   // 최신 스냅샷을 재취득하고(steps 는 loadedSurvey 파생이라 자동 재계산), 메모리의 응답 맵을
   // 구조 생존 판정(티켓 01)으로 걸러 신버전 구조와 비양립인 답만 버린 뒤 안내 문구를 띄운다.
   // 신버전 질문 목록은 state 커밋을 기다리지 않고 refetchSnapshot 의 반환값을 직접 쓴다.
+  // 저장 대기열도 같은 판정으로 거른다 — 거르는 함수는 아래 useResponseLifecycle 이 갖고 있어 ref 를 경유한다.
+  const rebasePendingAnswersRef = useRef<((newQuestions: Question[]) => void) | null>(null);
   const handleVersionRebase = useCallback(() => {
     void (async () => {
       const refetched = await refetchSnapshot();
@@ -1441,65 +1464,72 @@ function SurveyResponseFlowActive({
       setResponses(
         (prev) => applyStructuralSurvival(prev, refetched.survey.questions).survivingResponses,
       );
+      rebasePendingAnswersRef.current?.(refetched.survey.questions);
       setShowRebaseNotice(true);
     })();
   }, [refetchSnapshot, setResponses]);
 
   // 첫 답변 INSERT 가드는 훅 내부 동기 ref 전용이라 컴포넌트가 볼 값이 없다(반환하지 않는다).
-  const { handleResponse, flushPendingAnswersInBackground, waitForResponseId, handleSubmit } =
-    useResponseLifecycle({
-      isAdminEdit,
-      isPreview,
-      isCompleted,
-      terminalBlocked: duplicateStatus.kind === 'blocked',
-      adminContext,
-      inviteToken,
-      testToken,
-      entryParams,
-      isTestSession,
-      testIdentity,
-      hasTestAttemptOwnership,
-      setHasTestAttemptOwnership,
-      loadedSurvey,
-      contactAttrs,
-      priorAnswers,
-      currentStep,
-      currentStepIndex,
-      steps,
-      questions,
-      groups,
-      visibleQuestions,
-      evalCtx,
-      responses,
-      setResponses,
-      sessionId,
-      versionId,
-      onVersionRebase: handleVersionRebase,
-      signals,
-      honeypotRef,
-      currentResponseId,
-      setCurrentResponseId,
-      setPendingResponse,
-      resetResponseState,
-      isRecovering,
-      recoveredDraftSeq,
-      isQuestionAnswered,
-      isQuestionRequired,
-      optionTextsByQuestion: effectiveOptionTextsByQuestion,
-      visibleProgressRef,
-      setHighlightQuestionIds,
-      setDuplicateStatus,
-      setPausedMessage: setRefetchedPausedMessage,
-      setQuotaClosedMessage,
-      localeRef: systemLocaleRef,
-      setInviteIsInvalid,
-      setIsSubmitting,
-      setCurrentStepIndex,
-      setIsCompleted,
-      setCompletionOutcome,
-      buildOptTextsPayload: buildSubmissionPayload,
-      setNumericErrorStepIndex,
-    });
+  const {
+    handleResponse,
+    discardPendingAnswers,
+    rebasePendingAnswers,
+    flushPendingAnswersInBackground,
+    waitForResponseId,
+    handleSubmit,
+  } = useResponseLifecycle({
+    isAdminEdit,
+    isPreview,
+    isCompleted,
+    terminalBlocked: duplicateStatus.kind === 'blocked',
+    adminContext,
+    inviteToken,
+    testToken,
+    entryParams,
+    isTestSession,
+    testIdentity,
+    hasTestAttemptOwnership,
+    setHasTestAttemptOwnership,
+    loadedSurvey,
+    contactAttrs,
+    priorAnswers,
+    currentStep,
+    currentStepIndex,
+    steps,
+    questions,
+    groups,
+    visibleQuestions,
+    evalCtx,
+    responses,
+    setResponses,
+    sessionId,
+    versionId,
+    onVersionRebase: handleVersionRebase,
+    signals,
+    honeypotRef,
+    currentResponseId,
+    setCurrentResponseId,
+    setPendingResponse,
+    resetResponseState,
+    isRecovering,
+    recoveredDraftSeq,
+    isQuestionAnswered,
+    isQuestionRequired,
+    optionTextsByQuestion: effectiveOptionTextsByQuestion,
+    visibleProgressRef,
+    setHighlightQuestionIds,
+    setDuplicateStatus,
+    setPausedMessage: setRefetchedPausedMessage,
+    setQuotaClosedMessage,
+    localeRef: systemLocaleRef,
+    setInviteIsInvalid,
+    setIsSubmitting,
+    setCurrentStepIndex,
+    setIsCompleted,
+    setCompletionOutcome,
+    buildOptTextsPayload: buildSubmissionPayload,
+    setNumericErrorStepIndex,
+  });
 
   // 변동 확인은 문항 id 가 아니라 사이드카 키로 들어오므로, handleResponse 안의
   // "답하면 하이라이트를 푼다" 처리가 문항을 찾지 못한다. 확인이 채워진 문항의
@@ -1546,6 +1576,15 @@ function SurveyResponseFlowActive({
    * 근거다 — 응답자가 손댔는지 여부와 무관하게 회수해야 하므로 값 자체로는 판정할 수 없다.
    */
   const prefilledQuestionIdsRef = useRef<Set<string>>(new Set());
+  // 회복이 저장된 답을 깔면 그 전에 쌓인 미저장 답과 「이 세션에서 깐 이월 값」 기록을 함께 버린다 —
+  // 회복 전에 깐 문항은 이제 응답자의 저장된 답을 들고 있어, 기록이 남으면 조건이 뒤집힐 때 회수가 그 답을 지운다.
+  useEffect(() => {
+    discardPendingAnswersRef.current = () => {
+      discardPendingAnswers();
+      prefilledQuestionIdsRef.current.clear();
+    };
+    rebasePendingAnswersRef.current = rebasePendingAnswers;
+  });
   useEffect(() => {
     if (changeConfirmEnabled) return;
     // 관리자 편집은 이월 값을 **표시만** 한다. 여기서 프리필이 돌면 관리자가 응답을 열어
@@ -1564,6 +1603,11 @@ function SurveyResponseFlowActive({
       evalCtx,
     );
     for (const entry of entries) {
+      // 작년 값을 까는 것은 응답자의 답이 아니다 — 명단 값 칸과 같이 응답 행을 만들지 않는다. 첫 답으로
+      // 다루면 링크를 열기만 해도 행을 만들고, 서버는 같은 컨택의 진행 중 행을 물려받아 이 문항을 작년 값으로
+      // 덮으며, 그 생성이 이어하기 회복보다 먼저 돌아오면 회복이 취소돼 저장된 답이 화면에 깔리지 않았다
+      // (2026-11-06, prior-prefill-resume-race.test.tsx).
+      markSeedWrite(entry.questionId);
       handleResponse(entry.questionId, entry.value);
       prefilledQuestionIdsRef.current.add(entry.questionId);
     }
@@ -1606,6 +1650,7 @@ function SurveyResponseFlowActive({
       evalCtx,
     );
     for (const questionId of retractions) {
+      markSeedWrite(questionId);
       handleResponse(questionId, undefined);
       prefilledQuestionIdsRef.current.delete(questionId);
     }
@@ -2044,13 +2089,12 @@ function SurveyResponseFlowActive({
       completionOutcome,
       completionLocale,
     );
+    // 미리보기도 실응답과 같은 완료 화면이다 — 고객이 미리보기로 마지막 화면을 확인한다
+    // (2026-11-06, 「설문 확인 완료 / 입력 내용은 저장되지 않았습니다」 카드를 걷어냄)
     return (
       <SurveyCompletedScreen
-        title={isPreview ? systemText('completion.previewTitle', completionLocale) : screen.title}
-        thankYouMessage={
-          isPreview ? systemText('completion.previewMessage', completionLocale) : screen.message
-        }
-        showCompletedTime={!isPreview}
+        title={screen.title}
+        thankYouMessage={screen.message}
         locale={completionLocale}
         footer={endRedirectFooter}
         {...(canStartNewResponse ? { onStartNew: () => window.location.reload() } : {})}

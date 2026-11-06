@@ -1,4 +1,5 @@
 import type { PiiFieldType } from '@/lib/crypto/pii-fields';
+import { splitContactTokenKeys } from '@/lib/survey/substitute-tokens';
 
 /**
  * 응답 화면의 명단 값에 개인정보 열 합치기 — 명단에서 개인정보로 암호화된 열(사업자번호 · 이름 …)도
@@ -77,7 +78,8 @@ export function collectReferencedContactKeys(structure: unknown): Set<string> {
       .replace(/<[^>]*>/g, '')
       .replace(/&(?:amp|lt|gt|quot|#39|nbsp);/g, (e) => HTML_ENTITIES[e] ?? e)
       .trim();
-    if (key) keys.add(key);
+    // 대체 식(`{{업체명 || 대표자명}}`)은 조각마다 키다 — 식 전체를 키로 넣으면 뒤 조각 열이 안 간다.
+    for (const part of splitContactTokenKeys(key)) keys.add(part);
   }
   return keys;
 }

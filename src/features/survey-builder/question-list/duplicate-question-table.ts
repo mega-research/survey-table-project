@@ -23,6 +23,7 @@ export interface DuplicatedQuestionTable {
   dynamicRowConfigs?: NonNullable<Question['dynamicRowConfigs']>;
   rowRepeatConfig?: NonNullable<Question['rowRepeatConfig']>;
   stagedRowsConfig?: NonNullable<Question['stagedRowsConfig']>;
+  tableHeaderGrid?: NonNullable<Question['tableHeaderGrid']>;
 }
 
 export function duplicateQuestionTable(
@@ -73,6 +74,15 @@ export function duplicateQuestionTable(
   const repeat = remapRowRepeatIds(remappedRows ?? [], question.rowRepeatConfig, rowIdMap);
   // 행 차례로 열기 묶음도 행 id 를 담는다 — 옮기지 않으면 복제본의 묶음이 통째로 빈다.
   const staged = remapStagedRowIds(question.stagedRowsConfig, rowIdMap);
+  // 머리글 입력칸도 셀 id 를 담는다 — 옮기지 않으면 복제본 머리글이 원본 표의 칸을 가리켜 연결이 끊긴다.
+  const headerGrid = question.tableHeaderGrid?.some((line) => line.some((cell) => cell.inputCellId))
+    ? question.tableHeaderGrid.map((line) =>
+        line.map((cell) => {
+          const mapped = cell.inputCellId ? cellIdMap.get(cell.inputCellId) : undefined;
+          return mapped ? { ...cell, inputCellId: mapped } : cell;
+        }),
+      )
+    : undefined;
 
   return {
     ...(newColumns !== undefined ? { tableColumns: newColumns } : {}),
@@ -82,5 +92,6 @@ export function duplicateQuestionTable(
     ...(newDynamicRowConfigs !== undefined ? { dynamicRowConfigs: newDynamicRowConfigs } : {}),
     ...(repeat.config ? { rowRepeatConfig: repeat.config } : {}),
     ...(staged ? { stagedRowsConfig: staged } : {}),
+    ...(headerGrid ? { tableHeaderGrid: headerGrid } : {}),
   };
 }

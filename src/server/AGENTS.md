@@ -209,6 +209,7 @@ src/
   이 걷었다.
 - REST 라우트·RSC 는 `lib/auth.ts` 의 `requireAuth`(세션 + status='active' + userType='internal')를 쓴다 — oRPC `authed` 와
   같은 정책이라 REST 가 형제 우회 경로가 되지 않는다. admin 전용 RSC 는 `requireAdminPage` 가 게스트도 막고, 전역 관리 RSC 는 `requireSuperadminPage` 가 슈퍼어드민만 통과시킨다(둘 다 거부는 notFound).
+- 화면(RSC)이 세션을 확인하는 가드(`requireAdminPage`·`assertSurveyConsolePageAccess`·운영 콘솔 레이아웃)는 `lib/auth/require-page-user` 의 `requirePageUser` 를 거친다 — 1차 게이트를 통과한 뒤 렌더 중 세션을 잃으면 오류 화면 대신 원래 경로(`proxy.ts` 가 싣는 `x-request-path`)를 실어 `/login?redirect=<경로>` 로 보낸다. Route Handler·procedure 는 401 이 맞으니 `requireAuth` 그대로.
 - procedure 베이스 5종 (`server/orpc.ts`):
   - **`pub`** — 인증 불필요 (응답자 표면: 응답 mutation·공개 설문 조회·컨택 attrs·수신거부 lookup). 남용 방지가 필요한 표면은 `.use(withRateLimit(group))` 부착.
   - **`authed`** — 세션 + `status === 'active'` + `userType === 'internal'`. 비활성 계정은 세션이 이미 있어도 FORBIDDEN(발급 후 상태가 바뀐 경우). 티켓 21 전에는 env grant 보유자를 userId 로 한 번 더 걸렀는데, 게스트가 계정 유형이 되면서 그 줄이 사라졌다.

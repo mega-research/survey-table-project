@@ -4,10 +4,11 @@ import { useEffect, useEffectEvent, useMemo, useRef } from 'react';
 
 import { Input } from '@/components/ui/input';
 import { ChoiceTableResponse } from '@/features/question-renderer/choice-table-response';
-import { withResolvedMaxSelections } from '@/features/question-renderer/utils/dynamic-selection-limit';
-import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
-import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
-import { useAutoGrowTextarea } from '@/hooks/use-auto-grow-textarea';
+import {
+  useAnswerQuotes,
+  useContactAttrs,
+  useSurveyLookups,
+} from '@/features/question-renderer/contact-attrs-context';
 import { useClearDeselectedOptionTexts } from '@/features/question-renderer/hooks/use-clear-deselected-option-texts';
 import { useFieldFocus } from '@/features/question-renderer/hooks/use-field-focus';
 import { useInputFormatField } from '@/features/question-renderer/hooks/use-input-format-field';
@@ -15,51 +16,64 @@ import { InteractiveTableResponse } from '@/features/question-renderer/interacti
 import { NoticeRenderer } from '@/features/question-renderer/notice-renderer';
 import { OptionTextInput } from '@/features/question-renderer/option-text-input';
 import { OptionTextInputStack } from '@/features/question-renderer/option-text-input-stack';
+import {
+  usePriorAnswers,
+  usePriorHighlight,
+} from '@/features/question-renderer/prior-answers-context';
 import { RankingQuestion } from '@/features/question-renderer/ranking-question';
 import {
   ResponseSourcesProvider,
   useResponseSources,
 } from '@/features/question-renderer/response-sources';
+import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
 import { UserDefinedMultiLevelSelect } from '@/features/question-renderer/user-defined-multi-level-select';
-import {
-  applyMobileOptionsGridOverride,
-  resolveMobileOptionsColumns,
-} from '@/features/question-renderer/utils/mobile-card-options';
-import { getOptionsLayout } from '@/features/question-renderer/utils/options-layout';
-import {
-  type ValidationBannerItem,
-  ValidationIssueBanner,
-} from '@/features/question-renderer/validation-issue-banner';
-import { collectUnfilledChoiceGroupCellIds } from '@/features/survey-response/lib/answer-validation';
-import type { NumericIssue } from '@/features/survey-response/lib/numeric-validation';
-import { resolveTextQualityViolation } from '@/features/survey-response/lib/numeric-validation';
-import { liveResponseSources } from '@/features/survey-response/stores/live-response-sources';
-import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
-import { useMobileView } from '@/hooks/use-media-query';
-import { isChoiceGroupTableQuestion } from '@/lib/survey/choice-selection';
+import { withResolvedMaxSelections } from '@/features/question-renderer/utils/dynamic-selection-limit';
 import {
   applyExclusiveSelection,
   choiceValueKey,
   countSelectionsTowardMax,
   satisfiesMinSelections,
 } from '@/features/question-renderer/utils/exclusive-choice';
+import { formatSampleValue } from '@/features/question-renderer/utils/input-format';
+import {
+  applyMobileOptionsGridOverride,
+  resolveMobileOptionsColumns,
+} from '@/features/question-renderer/utils/mobile-card-options';
+import { getOptionsLayout } from '@/features/question-renderer/utils/options-layout';
 import {
   PRIOR_HIGHLIGHT_CONTROL_CLS,
   PRIOR_HIGHLIGHT_TEXT_CLS,
   isPriorChoice,
   isPriorText,
 } from '@/features/question-renderer/utils/prior-answer-highlight';
-import { type PriorAnswers, hasPriorAnswer, priorAnswerText } from '@/lib/survey/prior-answers';
-import { usePriorAnswers, usePriorHighlight } from '@/features/question-renderer/prior-answers-context';
+import {
+  effectiveMaxLength,
+  isPlainTextInput,
+} from '@/features/question-renderer/utils/text-quality';
 import { resolveTokenPrefill } from '@/features/question-renderer/utils/token-prefill';
-import { substituteTokens } from '@/lib/survey/substitute-tokens';
+import {
+  type ValidationBannerItem,
+  ValidationIssueBanner,
+} from '@/features/question-renderer/validation-issue-banner';
+import { collectUnfilledChoiceGroupCellIds } from '@/features/survey-response/lib/answer-validation';
+import type { NumericIssue } from '@/features/survey-response/lib/numeric-validation';
+import {
+  collectTableSoftWarnings,
+  resolveTextQualityViolation,
+} from '@/features/survey-response/lib/numeric-validation';
+import { liveResponseSources } from '@/features/survey-response/stores/live-response-sources';
+import { useAutoGrowTextarea } from '@/hooks/use-auto-grow-textarea';
+import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
+import { useMobileView } from '@/hooks/use-media-query';
+import { isChoiceGroupTableQuestion } from '@/lib/survey/choice-selection';
+import { type PriorAnswers, hasPriorAnswer, priorAnswerText } from '@/lib/survey/prior-answers';
+import { substituteTokens, substituteTokensInHtml } from '@/lib/survey/substitute-tokens';
 import { type InputFormat, isInputFormat } from '@/types/input-type';
 import { Question, QuestionOption } from '@/types/survey';
 import type { SurveyLocale } from '@/types/survey-locale';
+import { resolveChoicePrefill } from '@/utils/choice-prefill';
 import { isChoiceTableSource } from '@/utils/choice-source';
 import { systemText } from '@/utils/system-strings';
-import { formatSampleValue } from '@/features/question-renderer/utils/input-format';
-import { effectiveMaxLength, isPlainTextInput } from '@/features/question-renderer/utils/text-quality';
 
 /**
  * 라디오·체크박스 옵션 목록의 좌우 인셋 — 질문 제목보다 옵션 블록을 안쪽으로 들여쓴다.
@@ -242,6 +256,8 @@ function QuestionInputControl({
   const quotes = useAnswerQuotes();
   const priorHighlight = usePriorHighlight();
   const { answers: priorAnswersForQuality } = usePriorAnswers();
+  const inlineLocale = useInlineSurveyLocale();
+  const lookups = useSurveyLookups();
   // 최대 선택 개수가 다른 문항 응답을 따라가는 문항은 여기서 상한을 갈아 끼운다 — 아래 렌더러들은
   // 고정 숫자만 읽는다. 출처가 없는 문항은 같은 참조가 그대로 돌아온다.
   const question = withResolvedMaxSelections(questionProp, allResponses);
@@ -283,7 +299,7 @@ function QuestionInputControl({
           : { agreed: typeof value === 'boolean' ? value : false };
       return (
         <NoticeRenderer
-          content={substituteTokens(question.noticeContent || '', attrs, quotes)}
+          content={substituteTokensInHtml(question.noticeContent || '', attrs, quotes)}
           bgColor={question.noticeBgColor}
           {...(question.requiresAcknowledgment !== undefined
             ? { requiresAcknowledgment: question.requiresAcknowledgment }
@@ -412,9 +428,9 @@ function QuestionInputControl({
           {...(question.mobileDrilldownRepeatHeaderEndRow !== undefined
             ? { mobileDrilldownRepeatHeaderEndRow: question.mobileDrilldownRepeatHeaderEndRow }
             : {})}
-            {...(question.mobileItemCardBlockColumns != null
-              ? { mobileItemCardBlockColumns: question.mobileItemCardBlockColumns }
-              : {})}
+          {...(question.mobileItemCardBlockColumns != null
+            ? { mobileItemCardBlockColumns: question.mobileItemCardBlockColumns }
+            : {})}
           choiceGroups={question.choiceGroups}
           errorCellIds={resolveTableErrorCellIds(
             question,
@@ -424,6 +440,19 @@ function QuestionInputControl({
             requiredVisibleCellIds,
           )}
           errorItems={buildTableValidationBannerItems(question, numericIssues)}
+          // 경고만 하는 제약 — 「다음」을 막지 않고 값을 고칠 때까지 표 아래 노란 안내로만 보인다
+          softWarnings={collectTableSoftWarnings(
+            question,
+            value,
+            // 차단 검증과 같은 평가 재료 — 명단 값·참조표를 빠뜨리면 attr·lookup 수식 경고가 조용히 건너뛴다
+            {
+              allResponses: allResponses ?? { [question.id]: value },
+              allQuestions: allQuestions ?? [question],
+              contactAttrs: attrs,
+              lookups,
+            },
+            inlineLocale,
+          ).map((warning) => warning.message)}
         />
       ) : (
         <div className="py-4 text-center text-gray-500">테이블이 구성되지 않았습니다.</div>
@@ -446,6 +475,11 @@ function RadioQuestion({
 }) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
+  // 명단 값 프리필 — 맞는 보기를 하나로 정했을 때만 골라 두고 잠근다(utils/choice-prefill).
+  // 서버 완료 검사가 같은 판정으로 조작을 되돌린다(restorePrefillAnswers).
+  const { markSeedWrite } = useResponseSources();
+  const prefilledValue = resolveChoicePrefill(question, attrs);
+  const isLocked = prefilledValue !== null;
   const isSelected = (optionValue: string) => {
     if (isOtherChoiceValue(value)) {
       return value.selectedValue === optionValue;
@@ -453,7 +487,19 @@ function RadioQuestion({
     return value === optionValue;
   };
 
+  // 프리필 결과가 바뀔 때만 저장값을 덮어쓴다 — 단답형 TextResponseInput 과 같은 패턴.
+  const applyPrefill = useEffectEvent(() => {
+    if (prefilledValue !== null && !isSelected(prefilledValue)) {
+      markSeedWrite?.(question.id);
+      onChange(prefilledValue);
+    }
+  });
+  useEffect(() => {
+    applyPrefill();
+  }, [prefilledValue]);
+
   const handleOptionChange = (optionValue: string) => {
+    if (isLocked) return;
     if (isSelected(optionValue)) {
       onChange(null);
       return;
@@ -493,9 +539,12 @@ function RadioQuestion({
               name={question.id}
               value={option.value}
               checked={isSelected(option.value)}
+              disabled={isLocked}
               onChange={() => handleOptionChange(option.value)}
               onClick={() => handleOptionChange(option.value)}
-              className={`mt-1 h-4 w-4 shrink-0 cursor-pointer border-gray-300 text-blue-600 focus:ring-blue-500 ${
+              className={`mt-1 h-4 w-4 shrink-0 border-gray-300 text-blue-600 focus:ring-blue-500 ${
+                isLocked ? 'cursor-not-allowed' : 'cursor-pointer'
+              } ${
                 isSelected(option.value) && isPriorChoice(priorHighlight, question.id, option.value)
                   ? PRIOR_HIGHLIGHT_CONTROL_CLS
                   : ''
@@ -507,7 +556,11 @@ function RadioQuestion({
                 e.preventDefault();
                 handleOptionChange(option.value);
               }}
-              className="flex-1 cursor-pointer text-base whitespace-pre-line text-gray-700"
+              className={`flex-1 text-base whitespace-pre-line ${
+                isLocked
+                  ? `cursor-not-allowed ${isSelected(option.value) ? 'text-gray-700' : 'text-gray-400'}`
+                  : 'cursor-pointer text-gray-700'
+              }`}
             >
               {substituteTokens(option.label, attrs, quotes)}
             </label>

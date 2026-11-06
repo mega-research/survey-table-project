@@ -1,18 +1,30 @@
 'use client';
 
-import { useCallback, useMemo } from 'react';
+import { type ReactNode, useCallback, useId, useMemo, useState } from 'react';
 
-import { useMobileView } from '@/hooks/use-media-query';
+import { ChevronDown, Paperclip } from 'lucide-react';
 
-import { QuestionInput } from '@/features/survey-response/question-input';
+import {
+  useAnswerQuotes,
+  useContactAttrs,
+} from '@/features/question-renderer/contact-attrs-context';
+import { usePriorAnswers } from '@/features/question-renderer/prior-answers-context';
+import { RootGroupNameBadge } from '@/features/question-renderer/root-group-name-badge';
+import { VALIDATION_NOTICE_ATTRIBUTE } from '@/features/question-renderer/scroll-to-issue';
+import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
 import { ChangeConfirmControl } from '@/features/survey-response/change-confirm-control';
-import { RichDescription } from '@/features/survey-response/step-views/rich-description';
-import { StepItem } from '@/utils/group-ordering';
-import { sanitizeRichHtml, sanitizeTitleHtml } from '@/lib/sanitize';
 import {
   collectUnfilledChoiceGroupIssues,
   resolveGroupedRequiredMessage,
 } from '@/features/survey-response/lib/answer-validation';
+import {
+  type NumericIssue,
+  resolveChoiceTableVisibleCellIds,
+} from '@/features/survey-response/lib/numeric-validation';
+import { QuestionInput } from '@/features/survey-response/question-input';
+import { RichDescription } from '@/features/survey-response/step-views/rich-description';
+import { useMobileView } from '@/hooks/use-media-query';
+import { sanitizeRichHtml, sanitizeTitleHtml } from '@/lib/sanitize';
 import {
   CHANGE_CONFIRM_KEY,
   type ChangeConfirmation,
@@ -22,15 +34,8 @@ import {
   resolveAnswerOnConfirmation,
   updateChangeConfirmations,
 } from '@/lib/survey/change-confirmation';
-import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
-import {
-  type NumericIssue,
-  resolveChoiceTableVisibleCellIds,
-} from '@/features/survey-response/lib/numeric-validation';
-import { usePriorAnswers } from '@/features/question-renderer/prior-answers-context';
-import { RootGroupNameBadge } from '@/features/question-renderer/root-group-name-badge';
 import { resolveQuestionTitleHtml } from '@/lib/survey/question-title-html';
-import { substituteTokens } from '@/lib/survey/substitute-tokens';
+import { substituteTokens, substituteTokensInHtml } from '@/lib/survey/substitute-tokens';
 import { isEmptyHtml } from '@/lib/utils';
 import type { GroupNameDesign, Question } from '@/types/survey';
 import type { BranchEvalCtx } from '@/utils/branch-eval';
@@ -40,14 +45,26 @@ import {
   getDynamicRowSelections,
   updateDynamicRowSelections,
 } from '@/utils/dynamic-row-selection-sidecar';
+import { StepItem } from '@/utils/group-ordering';
 import { requiredCellMessage } from '@/utils/required-message';
 import { systemText } from '@/utils/system-strings';
-import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
-import { VALIDATION_NOTICE_ATTRIBUTE } from '@/features/question-renderer/scroll-to-issue';
 
 type ResponsesMap = Record<string, unknown>;
 
 /** 디자인 설정을 하나라도 지정했는가 — 기본값으로 되돌린 빈 객체는 지정 없음(종전 회색 소제목) */
+/**
+ * 문항 접어 두기(`Question.collapseButtonLabel`)의 펼침 판정 — 글자가 없으면 늘 펼침(기존 화면). 글자가 있으면
+ * 응답자가 열었거나 검증 문제(필수 강조·이슈)가 있을 때 펼친다. 막힌 이유가 접힌 문항 안에 숨으면 안 된다.
+ */
+export function resolveCollapsedQuestionOpen(input: {
+  label: string;
+  userOpen: boolean;
+  hasProblem: boolean;
+}): boolean {
+  if (input.label.trim() === '') return true;
+  return input.userOpen || input.hasProblem;
+}
+
 function hasNameDesign(design: GroupNameDesign | undefined): design is GroupNameDesign {
   return !!design && (design.fullWidth === true || !!design.bgColor || !!design.textColor);
 }
@@ -63,6 +80,7 @@ export function GroupStepItem({
   showChangeConfirmMessage,
   issues,
   evalCtx,
+  attachedSlot,
 }: {
   item: StepItem;
   showSubgroupHeading: boolean;
@@ -77,6 +95,8 @@ export function GroupStepItem({
   issues?: NumericIssue[] | undefined;
   /** 표 행·열 표시조건 평가용 — 숨은 보기 그룹을 필수 안내에서 빼는 데 쓴다. */
   evalCtx?: BranchEvalCtx | undefined;
+  /** 설명 밑·입력 위에 들어갈 붙인 문항(앞 문항 설명 밑에 붙이기 — PageStepView 가 만든다) */
+  attachedSlot?: ReactNode;
 }) {
   const q = item.question;
   // 보기를 표로 그리는 문항에서 화면에 보이는 셀 — 필수 게이트(survey-response-flow)와 같은 판정이라야
@@ -139,7 +159,7 @@ export function GroupStepItem({
     return resolved !== undefined ? sanitizeTitleHtml(resolved) : null;
   }, [q, attrs, quotes]);
   const descriptionHtml = useMemo(
-    () => sanitizeRichHtml(substituteTokens(q.description ?? '', attrs, quotes)),
+    () => sanitizeRichHtml(substituteTokensInHtml(q.description ?? '', attrs, quotes)),
     [q.description, attrs, quotes],
   );
   const subgroupNameText = useMemo(
@@ -163,11 +183,13 @@ export function GroupStepItem({
     (q.type === 'radio' || q.type === 'checkbox');
   const { visibleIssues, requiredMessageInBanner } = useMemo(() => {
     const groupIssues: NumericIssue[] = showRequiredMessage
-      ? collectUnfilledChoiceGroupIssues(q, responses[q.id], choiceGroupVisibility, locale).map((issue) => ({
-          kind: 'required-cells' as const,
-          message: issue.message,
-          cellIds: issue.cellIds,
-        }))
+      ? collectUnfilledChoiceGroupIssues(q, responses[q.id], choiceGroupVisibility, locale).map(
+          (issue) => ({
+            kind: 'required-cells' as const,
+            message: issue.message,
+            cellIds: issue.cellIds,
+          }),
+        )
       : [];
     if (!showRequiredMessage || (!issues?.length && groupIssues.length === 0)) {
       return { visibleIssues: issues, requiredMessageInBanner: false };
@@ -187,6 +209,19 @@ export function GroupStepItem({
     });
     return { visibleIssues: [...groupIssues, ...next], requiredMessageInBanner: merged };
   }, [issues, showRequiredMessage, q, responses, axisCardsOnMobile, choiceGroupVisibility, locale]);
+
+  // 문항 접어 두기 — 버튼 글자는 저작자 문구라 번역하지 않고 토큰만 푼다(텍스트 노드로 그린다)
+  const collapseLabel = useMemo(
+    () => substituteTokens(q.collapseButtonLabel?.trim() ?? '', attrs, quotes).trim(),
+    [q.collapseButtonLabel, attrs, quotes],
+  );
+  const collapsePanelId = useId();
+  const [userOpen, setUserOpen] = useState(false);
+  const hasProblem =
+    isHighlighted || showRequiredMessage || showChangeConfirmMessage || (issues?.length ?? 0) > 0;
+  // 문제로 펼친 문항은 문제를 고친 뒤에도 펼친 채로 둔다 — 고치는 도중에 접히면 안 된다(렌더 중 조정)
+  if (collapseLabel !== '' && hasProblem && !userOpen) setUserOpen(true);
+  const isOpen = resolveCollapsedQuestionOpen({ label: collapseLabel, userOpen, hasProblem });
 
   return (
     // 페이지 내 문항 간 여백은 PageStepView 래퍼가 소유한다 (first/last 판정이 래퍼 형제 기준이어야 해서)
@@ -208,99 +243,133 @@ export function GroupStepItem({
           isHighlighted ? '-mx-3 rounded-md bg-red-50/40 p-3 ring-1 ring-red-200' : ''
         }`}
       >
-        {!q.hideTitle && (
-          <div className="flex items-start">
-            <div
-              id={`q-label-${q.id}`}
-              className="px-1 text-lg leading-snug font-semibold break-keep text-gray-900"
-            >
-              {titleHtml ? (
-                // 제목은 한 줄 편집기라 문단 하나 — 필수 표시(*)가 같은 줄에 붙게 문단을 인라인으로 편다.
-                <span
-                  className="[&_p]:m-0 [&_p]:inline"
-                  data-testid="question-title-rich"
-                  dangerouslySetInnerHTML={{ __html: titleHtml }}
-                />
-              ) : (
-                titleText
-              )}
-              {q.required && (
-                <span
-                  className="ml-1 text-red-500"
-                  aria-label={systemText('a11y.requiredQuestion', locale)}
-                >
-                  *
-                </span>
-              )}
+        {collapseLabel !== '' && (
+          <button
+            type="button"
+            aria-expanded={isOpen}
+            aria-controls={collapsePanelId}
+            onClick={() => setUserOpen(!isOpen)}
+            // 붙임 파일 모양 — 이름(저작자 글자)과 동작 글자(펼쳐 보기·접기)를 한 줄에. 주 행동 파랑 버튼은 문항 흐름을
+            // 끊고(2026-11-05 「따로 논다」), 맨 글자 링크는 누를 것인지 안 보여서 둘 다 쓰지 않는다.
+            // 앞 문항 설명 밑에 붙이면 설명의 「*」 줄과 같은 들여쓰기에서 시작한다(PageStepView 가 px-2 로 감싼다).
+            className="group/attach inline-flex max-w-full items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 py-2 pr-3 pl-2.5 text-left text-sm break-keep text-gray-800 transition-colors hover:border-gray-300 hover:bg-gray-100 focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:outline-none"
+          >
+            {q.collapseAttachToPrevious && (
+              <Paperclip aria-hidden="true" className="h-4 w-4 shrink-0 text-gray-500" />
+            )}
+            <span className="font-medium">{collapseLabel}</span>
+            <span className="inline-flex shrink-0 items-center gap-0.5 text-[13px] font-medium text-blue-600 group-hover/attach:text-blue-700">
+              {systemText(isOpen ? 'collapse.collapse' : 'collapse.expand', locale)}
+              <ChevronDown
+                aria-hidden="true"
+                className={`h-3.5 w-3.5 transition-transform duration-200 ease-out ${isOpen ? 'rotate-180' : ''}`}
+              />
+            </span>
+          </button>
+        )}
+        {/* 접힌 동안에도 그려 두고 숨기기만 한다 — 입력이 마운트돼야 명단 값·빈값 기본치 자동 채움이 펼친 경우와
+            같게 돈다(접는 것은 보이기만 바꾼다, 2026-11-05 리뷰). hidden 이라 탭 순서·스크린리더에서도 빠진다. */}
+        <div
+          id={collapseLabel !== '' ? collapsePanelId : undefined}
+          hidden={!isOpen}
+          className="space-y-2"
+        >
+          {!q.hideTitle && (
+            <div className="flex items-start">
+              <div
+                id={`q-label-${q.id}`}
+                className="px-1 text-lg leading-snug font-semibold break-keep text-gray-900"
+              >
+                {titleHtml ? (
+                  // 제목은 한 줄 편집기라 문단 하나 — 필수 표시(*)가 같은 줄에 붙게 문단을 인라인으로 편다.
+                  <span
+                    className="[&_p]:m-0 [&_p]:inline"
+                    data-testid="question-title-rich"
+                    dangerouslySetInnerHTML={{ __html: titleHtml }}
+                  />
+                ) : (
+                  titleText
+                )}
+                {q.required && (
+                  <span
+                    className="ml-1 text-red-500"
+                    aria-label={systemText('a11y.requiredQuestion', locale)}
+                  >
+                    *
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
-        )}
-        {!isEmptyHtml(q.description) && (
-          <RichDescription
-            html={descriptionHtml}
-            size="sm"
-            className="px-2 pb-2 text-sm text-gray-500 md:overflow-x-auto md:text-xs [&_p]:min-h-[1.3em] [&_table]:my-1.5 [&_table_td]:px-2.5 [&_table_td]:py-1 [&_table_th]:px-2.5 [&_table_th]:py-1"
-          />
-        )}
-        {hasPrior && (
-          <ChangeConfirmControl
-            questionId={q.id}
-            waveLabel={waveLabel}
-            value={changeConfirmation}
-            onSelect={onChangeConfirm}
-            showRequiredMessage={showChangeConfirmMessage}
-          />
-        )}
-        {/* fieldset[disabled] 은 안쪽 폼 컨트롤 전체를 브라우저가 직접 비활성화한다 —
+          )}
+          {!isEmptyHtml(q.description) && (
+            <RichDescription
+              html={descriptionHtml}
+              size="sm"
+              className="px-2 pb-2 text-sm text-gray-500 md:overflow-x-auto md:text-xs [&_p]:min-h-[1.3em] [&_table]:my-1.5 [&_table_td]:px-2.5 [&_table_td]:py-1 [&_table_th]:px-2.5 [&_table_th]:py-1"
+            />
+          )}
+          {/* 앞 문항 설명 밑에 붙인 문항(PageStepView) — 설명과 입력 사이 */}
+          {attachedSlot}
+          {hasPrior && (
+            <ChangeConfirmControl
+              questionId={q.id}
+              waveLabel={waveLabel}
+              value={changeConfirmation}
+              onSelect={onChangeConfirm}
+              showRequiredMessage={showChangeConfirmMessage}
+            />
+          )}
+          {/* fieldset[disabled] 은 안쪽 폼 컨트롤 전체를 브라우저가 직접 비활성화한다 —
             타입별 disabled prop 을 9종 + 표 셀까지 흘리지 않고도 잠금이 성립하고,
             값은 그대로 읽히며(스크린리더 포함) 탭 순서에서만 빠진다. */}
-        {/* pointer-events-none 은 쓰지 않는다 — 넓은 표의 가로 스크롤까지 죽어
+          {/* pointer-events-none 은 쓰지 않는다 — 넓은 표의 가로 스크롤까지 죽어
             응답자가 이월 값을 끝까지 볼 수 없게 된다. 그 대가로 폼 컨트롤이 아닌
             div onClick(모바일 옵션 카드 토글)은 잠기지 않는데, 새어 나간 편집은
             "같음"이 이월 값을 다시 복사하므로 값이 어긋난 채 제출되지는 않는다. */}
-        <fieldset
-          disabled={isLocked}
-          className={`m-0 min-w-0 border-0 p-0 ${isLocked ? 'opacity-70' : ''}`}
-        >
-          <div
-            role="group"
-            aria-labelledby={`q-label-${q.id}`}
-            // 표 형태(테이블 질문·설명 테이블 소스)만 모바일에서 좌우/하단 margin 을 빼고
-            // 제목과의 간격 8px(mt-2)만 남긴다 — 입력 카드가 화면 폭을 그대로 쓰게.
-            // 그 외 질문(일반 라디오·체크박스·단답 등)은 좌우 margin 을 빼면 선택지가
-            // 제목(px-1)보다 왼쪽으로 삐져나가므로 모든 화면에서 m-2 유지.
-            // 데스크탑(md 이상) 표 형태는 설명이 없으면 제목과 표가 8px 로 붙어 보여
-            // 24px(mt-6)로 벌린다. 제목 숨김(hideTitle) 질문은 벌릴 기준(제목)이 없으므로
-            // 제외 — 그룹 헤더와 표 사이가 불필요하게 벌어지는 회귀 방지.
-            className={
-              q.type === 'table' ||
-              ((q.type === 'radio' || q.type === 'checkbox') && isChoiceTableSource(q))
-                ? `mt-2 md:m-2 ${!q.hideTitle && isEmptyHtml(q.description) ? 'md:mt-6' : ''}`
-                : 'm-2'
-            }
+          <fieldset
+            disabled={isLocked}
+            className={`m-0 min-w-0 border-0 p-0 ${isLocked ? 'opacity-70' : ''}`}
           >
-            <QuestionInput
-              question={q}
-              value={inputValue}
-              onChange={onChange}
-              allResponses={responses as Record<string, unknown>}
-              allQuestions={questions}
-              numericIssues={visibleIssues}
-              selectedDynamicRowIds={selectedDynamicRowIds}
-              onDynamicRowSelectionChange={onDynamicRowSelectionChange}
-              showRequiredHighlight={showRequiredMessage}
-              requiredVisibleCellIds={choiceGroupVisibility.visibleCellIds}
-            />
-          </div>
-        </fieldset>
-        {showRequiredMessage && !requiredMessageInBanner && (
-          <p
-            {...{ [VALIDATION_NOTICE_ATTRIBUTE]: q.id }}
-            className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
-          >
-            {resolveGroupedRequiredMessage(q, responses[q.id], choiceGroupVisibility, locale)}
-          </p>
-        )}
+            <div
+              role="group"
+              aria-labelledby={`q-label-${q.id}`}
+              // 표 형태(테이블 질문·설명 테이블 소스)만 모바일에서 좌우/하단 margin 을 빼고
+              // 제목과의 간격 8px(mt-2)만 남긴다 — 입력 카드가 화면 폭을 그대로 쓰게.
+              // 그 외 질문(일반 라디오·체크박스·단답 등)은 좌우 margin 을 빼면 선택지가
+              // 제목(px-1)보다 왼쪽으로 삐져나가므로 모든 화면에서 m-2 유지.
+              // 데스크탑(md 이상) 표 형태는 설명이 없으면 제목과 표가 8px 로 붙어 보여
+              // 24px(mt-6)로 벌린다. 제목 숨김(hideTitle) 질문은 벌릴 기준(제목)이 없으므로
+              // 제외 — 그룹 헤더와 표 사이가 불필요하게 벌어지는 회귀 방지.
+              className={
+                q.type === 'table' ||
+                ((q.type === 'radio' || q.type === 'checkbox') && isChoiceTableSource(q))
+                  ? `mt-2 md:m-2 ${!q.hideTitle && isEmptyHtml(q.description) ? 'md:mt-6' : ''}`
+                  : 'm-2'
+              }
+            >
+              <QuestionInput
+                question={q}
+                value={inputValue}
+                onChange={onChange}
+                allResponses={responses as Record<string, unknown>}
+                allQuestions={questions}
+                numericIssues={visibleIssues}
+                selectedDynamicRowIds={selectedDynamicRowIds}
+                onDynamicRowSelectionChange={onDynamicRowSelectionChange}
+                showRequiredHighlight={showRequiredMessage}
+                requiredVisibleCellIds={choiceGroupVisibility.visibleCellIds}
+              />
+            </div>
+          </fieldset>
+          {showRequiredMessage && !requiredMessageInBanner && (
+            <p
+              {...{ [VALIDATION_NOTICE_ATTRIBUTE]: q.id }}
+              className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+            >
+              {resolveGroupedRequiredMessage(q, responses[q.id], choiceGroupVisibility, locale)}
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );

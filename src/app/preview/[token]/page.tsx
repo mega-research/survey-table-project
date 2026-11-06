@@ -6,6 +6,8 @@ import { Eye } from 'lucide-react';
 import { SurveyResponseFlow } from '@/features/survey-response/survey-response-flow';
 import { TooManyRequestsScreen } from '@/features/survey-response/survey-response-screens';
 import { isRscRateLimited } from '@/lib/rate-limit/rsc-guard';
+import { loadPreviewContactSeed } from '@/server/contacts/services/preview-contact';
+import { loadOperationsDataScope } from '@/server/data-scope';
 import {
   getSurveyById,
   getSurveyByPreviewToken,
@@ -37,6 +39,10 @@ export const metadata: Metadata = {
  * 크레덴셜로 전혀 사용되지 않는 별도 컬럼이라 이 문제가 없다.
  *
  * mode="preview" 라 응답을 저장하지 않으므로 인증 없이 노출해도 안전하다.
+ *
+ * 관리자 「설문 보기」처럼 첫 번째 조사 대상(resid 최소)의 명단 값·이월 응답으로 연다(2026-11-04 사용자 결정 —
+ * 링크를 받은 사람이 그 대상의 명단 값을 보게 되는 것을 알고 골랐다). 개인정보 열은 배포본이 토큰·조건으로
+ * 읽는 열만 싣는다(`collectReferencedContactKeys`). 파티션은 콘솔과 같은 판정이라 로그인 없는 방문자는 실데이터다.
  */
 export default async function PublicSurveyPreviewPage({ params }: PageProps) {
   // /i/<code> 와 같은 이유 — 공개 RSC 라 procedure 를 지나지 않아 조회가 계측 밖이다.
@@ -74,6 +80,12 @@ export default async function PublicSurveyPreviewPage({ params }: PageProps) {
     );
   }
 
+  const seed = await loadPreviewContactSeed({
+    surveyId: survey.id,
+    isTest: (await loadOperationsDataScope(survey.id)) === 'test',
+    structure: preview.survey,
+  });
+
   return (
     <>
       <div className="border-b border-blue-200 bg-blue-50 px-6 py-3">
@@ -81,6 +93,9 @@ export default async function PublicSurveyPreviewPage({ params }: PageProps) {
           <Eye className="h-4 w-4 shrink-0" />
           <span className="truncate">
             설문 보기 모드 — 배포된 응답 화면이며 입력 내용은 저장되지 않습니다.
+            {seed
+              ? ` 명단 값·이월 값은 ${seed.isTest ? '테스트 ' : ''}조사 대상 #${seed.resid} 기준입니다.`
+              : ''}
           </span>
         </div>
       </div>
@@ -98,6 +113,7 @@ export default async function PublicSurveyPreviewPage({ params }: PageProps) {
           versionId: preview.versionId,
           // 두 미리보기 경로 모두 발행 스냅샷을 읽으므로 앵커도 발행 시점 좌표로 온다
           documentView: preview.documentView,
+          ...(seed ? { contactAttrs: seed.contactAttrs, priorAnswers: seed.priorAnswers } : {}),
         }}
       />
     </>

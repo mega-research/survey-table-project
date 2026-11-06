@@ -16,6 +16,12 @@
 # (_journal.json idx 순) → manual(manual-migrations.json 등재 순)으로 결정한다.
 set -euo pipefail
 
+# 공유 DB 를 통째로 다시 만든다 — 다른 워크트리의 realdb 테스트가 이 DB 를 같이 쓴다.
+# 내 브랜치만 확인할 때는 scripts/test-db-isolated.sh (pnpm db:isolated) 로 따로 만든 DB 를 쓴다.
+cd "$(dirname "$0")/.."
+# shellcheck source=scripts/lib/test-db.sh
+source scripts/lib/test-db.sh
+
 redact_supabase_local_secrets() {
   sed -E \
     -e 's/sb_publishable_[A-Za-z0-9_-]+/sb_publishable_[redacted]/g' \
@@ -47,51 +53,14 @@ echo "  기동 $(( $(date +%s) - START_AT ))초"
 echo "[2/4] 빈 public 스키마로 reset"
 supabase db reset
 
-CONTAINER="$(docker ps --filter name=supabase_db --format '{{.Names}}' | head -1)"
-if [ -z "$CONTAINER" ]; then
-  echo "ERROR: supabase_db 컨테이너를 찾지 못했습니다." >&2
-  exit 1
-fi
+CONTAINER="$(test_db_container)"
 
 echo "[3/4] 마이그레이션 전량 재생"
+replay_migrations "$CONTAINER" postgres
 TOTAL="$(node scripts/migration-order.mjs | wc -l | tr -d ' ')"
-APPLIED=0
-while IFS= read -r tag; do
-  APPLIED=$((APPLIED + 1))
-  if ! docker exec -i "$CONTAINER" psql -U postgres -d postgres -q -v ON_ERROR_STOP=1 \
-      -f - <"supabase/migrations/${tag}.sql" >/dev/null; then
-    echo "ERROR: 마이그레이션 적용 실패 — ${tag}.sql" >&2
-    echo "  빈 DB 재생이 깨졌다. 새 마이그레이션이 기존 상태를 전제하고 있지 않은지 확인할 것." >&2
-    exit 1
-  fi
-done < <(node scripts/migration-order.mjs)
-echo "  ${APPLIED}/${TOTAL} 적용 완료"
 
 echo "[4/4] 검증: 프로덕션 고유 객체가 실제로 생성됐는지"
-# 재생이 조용히 반쪽만 되는 것을 막는 최소 확인. 더 촘촘한 대조는 pnpm db:drift 소관이다.
-verify() {
-  local label="$1" query="$2" expected="$3" actual
-  actual="$(docker exec "$CONTAINER" psql -U postgres -d postgres -tAc "$query" | tr -d '[:space:]')"
-  if [ "$actual" -lt "$expected" ]; then
-    echo "ERROR: ${label} 검증 실패 — 기대 ${expected} 이상, 실제 ${actual}" >&2
-    exit 1
-  fi
-  echo "  ${label}: ${actual}"
-}
-
-verify "public 테이블" \
-  "select count(*) from information_schema.tables where table_schema='public';" 19
-# 앱이 SQL 로 직접 호출하는 DB 함수. 신규 함수를 추가하면 이 목록에도 넣을 것 —
-# 여기 빠지면 "테스트는 통과하는데 프로덕션 경로만 깨지는" 상태를 다시 만든다.
-verify "앱이 호출하는 DB 함수" \
-  "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-   where n.nspname='public' and p.proname in
-   ('next_campaign_run_number','next_single_send_run_number','next_contact_resid','lookup_contact_by_invite_token');" 4
-verify "r2_deletion_candidates partial unique" \
-  "select count(*) from pg_indexes where tablename='r2_deletion_candidates'
-   and indexname='r2_deletion_candidates_pending_key_uq';" 1
-verify "RLS 활성 테이블" \
-  "select count(*) from pg_tables where schemaname='public' and rowsecurity;" 15
+verify_test_db "$CONTAINER" postgres
 
 # 이 DB 가 "어느 레포 상태로" 만들어졌는지 남긴다.
 #

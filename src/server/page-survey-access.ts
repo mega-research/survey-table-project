@@ -2,7 +2,7 @@ import 'server-only';
 
 import { notFound } from 'next/navigation';
 
-import { requireAuth } from '@/lib/auth';
+import { requirePageUser } from '@/lib/auth/require-page-user';
 import type { AuthUser } from '@/shared/contracts/auth';
 import type { SurveyCapability } from '@/shared/contracts/workspace';
 
@@ -67,7 +67,8 @@ export async function assertSurveyConsolePageAccess(
   surveyId: string,
   capability: SurveyCapability,
 ): Promise<SurveyConsolePageViewer> {
-  const user = await requireAuth();
+  // 세션을 잃었으면 오류 화면 대신 원래 경로를 실어 로그인으로 보낸다(requirePageUser — hotfix 이식)
+  const user = await requirePageUser();
   // 관문과 같은 조회 하나다 — 거부 사유 접기(notFound)는 아래 `has` 검사가 대신한다.
   let capabilities: ReadonlySet<SurveyCapability>;
   try {

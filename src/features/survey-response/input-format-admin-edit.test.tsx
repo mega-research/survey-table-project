@@ -79,7 +79,7 @@ describe('admin-edit — 입력 형식은 경고 후 통과', () => {
 
   it('형식이 틀리면 첫 클릭은 경고, 값 변경 없는 두 번째 클릭은 그대로 저장한다', async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
-    renderAdminEdit({ 'q-mobile': '+81 90 1234 5678' }, onSubmit);
+    renderAdminEdit({ 'q-mobile': '090-1234-5678' }, onSubmit);
     const user = userEvent.setup();
 
     await screen.findByText('휴대전화');
@@ -93,7 +93,7 @@ describe('admin-edit — 입력 형식은 경고 후 통과', () => {
 
     await user.click(nextButton());
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
-    expect(onSubmit.mock.calls[0]?.[0].questionResponses['q-mobile']).toBe('+81 90 1234 5678');
+    expect(onSubmit.mock.calls[0]?.[0].questionResponses['q-mobile']).toBe('090-1234-5678');
   });
 
   it('형식이 맞으면 경고 없이 한 번에 저장한다', async () => {

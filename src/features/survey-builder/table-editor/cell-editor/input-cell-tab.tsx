@@ -80,6 +80,7 @@ export function InputCellTab({
     inputPlaceholder,
     inputDefaultValueTemplate,
     inputPrefillEditable,
+    inputExportPrefillEdit,
     inputLookupSearch,
     inputMaxLength,
     inputRows,
@@ -106,6 +107,7 @@ export function InputCellTab({
     setInputPlaceholder,
     setInputDefaultValueTemplate,
     setInputPrefillEditable,
+    setInputExportPrefillEdit,
     setInputLookupSearch,
     setInputMaxLength,
     setInputRows,
@@ -349,6 +351,24 @@ export function InputCellTab({
                 />
               </div>
             )}
+          {prefillSupported && inputPrefillEditable && (
+            <div className="flex items-start justify-between gap-4 pt-1">
+              <div>
+                <Label htmlFor="input-export-prefill-edit" className="text-sm font-medium">
+                  고친 경우만 따로 내보내기
+                </Label>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  응답자가 명단 값과 다르게 냈을 때만 채워지는 열(변수명_upd)을 엑셀·SPSS 에 더합니다. 원래 변수는
+                  그대로입니다
+                </p>
+              </div>
+              <Switch
+                id="input-export-prefill-edit"
+                checked={inputExportPrefillEdit}
+                onCheckedChange={setInputExportPrefillEdit}
+              />
+            </div>
+          )}
         </div>
       )}
 

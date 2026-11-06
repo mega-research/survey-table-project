@@ -35,19 +35,19 @@ describe('행 반복 설정 카드', () => {
     );
   });
 
-  it('선택 셀이 든 행을 고르면 위반을 알리고 켜지 못하게 한다', async () => {
+  it('계산 셀이 든 행을 고르면 위반을 알리고 켜지 못하게 한다', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    const withRadio: TableRow[] = [
+    const withCalc: TableRow[] = [
       rows[0]!,
-      { id: 'a', label: '성과명', cells: [cell('a1', 'radio')] },
+      { id: 'a', label: '성과명', cells: [cell('a1', 'calc')] },
       rows[2]!,
     ];
-    render(<RowRepeatSettingsCard rows={withRadio} onChange={onChange} />);
+    render(<RowRepeatSettingsCard rows={withCalc} onChange={onChange} />);
 
     await pickRange(user, 'a', 'a');
 
-    expect(screen.getByText(/입력 셀과 표시용 텍스트 셀만/)).toBeInTheDocument();
+    expect(screen.getByText(/입력·선택\(드롭다운\)·라디오·체크박스 셀과 표시용 텍스트 셀만/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '반복 켜기' })).toBeDisabled();
   });
 
@@ -170,5 +170,56 @@ describe('행 반복 설정 카드', () => {
       />,
     );
     expect(screen.getByLabelText('끝 행')).toHaveValue('b');
+  });
+  it('틀이 1줄이면 「변수명을 줄 번호로」를 켤 수 있고 켜면 설정에 싣는다', () => {
+    const onChange = vi.fn();
+    const config = { enabled: true, templateRowIds: ['a'], maxRepeats: 5 };
+    render(<RowRepeatSettingsCard rows={rows} config={config} onChange={onChange} />);
+    const box = screen.getByRole('checkbox', { name: /변수명을 줄 번호로/ });
+    expect(box).toBeEnabled();
+    fireEvent.click(box);
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ templateRowIds: ['a'], flatRowCodes: true }));
+  });
+
+  it('틀이 2줄이면 「변수명을 줄 번호로」를 켤 수 없다', () => {
+    const config = { enabled: true, templateRowIds: ['a', 'b'], maxRepeats: 5 };
+    render(<RowRepeatSettingsCard rows={rows} config={config} onChange={vi.fn()} />);
+    expect(screen.getByRole('checkbox', { name: /변수명을 줄 번호로/ })).toBeDisabled();
+  });
+
+  it('다른 칸을 고쳐도 켜 둔 「변수명을 줄 번호로」가 남는다', () => {
+    const onChange = vi.fn();
+    const config = { enabled: true, templateRowIds: ['a'], maxRepeats: 5, flatRowCodes: true };
+    render(<RowRepeatSettingsCard rows={rows} config={config} onChange={onChange} />);
+    fireEvent.change(screen.getByPlaceholderText('행 추가'), { target: { value: '원료 추가' } });
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ addLabel: '원료 추가', flatRowCodes: true }));
+  });
+  it('「적기 시작한 벌도 필수」를 켜고 끌 수 있고 다른 칸을 고쳐도 남는다', () => {
+    const onChange = vi.fn();
+    const config = { enabled: true, templateRowIds: ['a'], maxRepeats: 5 };
+    const { rerender } = render(<RowRepeatSettingsCard rows={rows} config={config} onChange={onChange} />);
+    fireEvent.click(screen.getByRole('checkbox', { name: /적기 시작한 벌도 필수/ }));
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ requireStartedBundles: true }));
+    rerender(<RowRepeatSettingsCard rows={rows} config={{ ...config, requireStartedBundles: true }} onChange={onChange} />);
+    fireEvent.change(screen.getByPlaceholderText('행 추가'), { target: { value: '원료 추가' } });
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ addLabel: '원료 추가', requireStartedBundles: true }));
+  });
+
+  it('「처음엔 접어 두기」를 켤 수 있고, 범위를 바꿔도 블록 표시 조건·펼쳐 둘 조건이 남는다', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const cond = { logicType: 'AND' as const, conditions: [{ id: 'c', logicType: 'AND' as const, conditionType: 'value-match' as const, sourceQuestionId: 'q0', requiredValues: ['1'] }] };
+    const config = { enabled: true, templateRowIds: ['a'], maxRepeats: 20, displayCondition: cond, expandWhen: cond };
+    render(<RowRepeatSettingsCard rows={rows} config={config} onChange={onChange} />);
+    expect(screen.getByText(/블록 표시 조건 1개 · 펼쳐 둘 조건 1개/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /처음엔 접어 두기/ }));
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ startCollapsed: true, displayCondition: cond }));
+
+    await user.selectOptions(screen.getByLabelText('끝 행'), 'b');
+    await user.click(screen.getByRole('button', { name: '범위 적용' }));
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ templateRowIds: ['a', 'b'], displayCondition: cond, expandWhen: cond }),
+    );
   });
 });

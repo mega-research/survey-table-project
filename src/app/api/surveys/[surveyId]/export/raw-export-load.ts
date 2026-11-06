@@ -601,7 +601,7 @@ export async function loadLanguageSetLocales(
 }
 
 // ============================================================
-// 행 반복 사용 벌 스캔 — .sps 라우트 전용
+// 행 반복 사용 벌 · 안 쓴 열 스캔 — .sps 라우트 전용
 // ============================================================
 
 /**
@@ -622,8 +622,36 @@ export async function loadUsedRepeatCounts(
   const { collectUsedRepeatCounts, repeatQuestionIds } = await import(
     '@/lib/analytics/row-repeat-usage'
   );
-  const scanQuestionIds = repeatQuestionIds(questions);
-  if (scanQuestionIds.length === 0) return new Map();
+  const rows = await loadCompletedAnswerSlices(surveyId, scope, repeatQuestionIds(questions));
+  return rows === null ? new Map() : collectUsedRepeatCounts(questions, rows);
+}
+
+/**
+ * 안 쓴 열 빼기 — 아무도 채우지 않은 「안 쓰면 뺀다」 열(질문 id → 열 id). 행 반복 스캔과
+ * 같은 모수·같은 가드다(표시 열이 없으면 질의 없음, 상한 초과면 빈 맵 = 전 열을 낸다).
+ */
+export async function loadUnusedColumnIds(
+  surveyId: string,
+  scope: OperationsDataScope,
+  questions: readonly Question[],
+): Promise<Map<string, Set<string>>> {
+  const { collectUnusedColumnIds, omittableColumnQuestionIds } = await import(
+    '@/lib/analytics/unused-column-usage'
+  );
+  const rows = await loadCompletedAnswerSlices(surveyId, scope, omittableColumnQuestionIds(questions));
+  return rows === null ? new Map() : collectUnusedColumnIds(questions, rows);
+}
+
+/**
+ * 완료 응답에서 지정 문항의 응답 조각만 읽는다. 대상 문항이 없거나 모수가 상한을 넘으면 null
+ * (판정 포기 — 호출측이 전 열을 낸다).
+ */
+async function loadCompletedAnswerSlices(
+  surveyId: string,
+  scope: OperationsDataScope,
+  scanQuestionIds: readonly string[],
+): Promise<Array<{ questionResponses: Record<string, unknown> }> | null> {
+  if (scanQuestionIds.length === 0) return null;
 
   const scanScope = and(
     eq(surveyResponses.surveyId, surveyId),
@@ -635,7 +663,7 @@ export async function loadUsedRepeatCounts(
     .select({ total: count() })
     .from(surveyResponses)
     .where(scanScope);
-  if ((scanTotalRows[0]?.total ?? 0) > MAX_EXPORT_RESPONSES) return new Map();
+  if ((scanTotalRows[0]?.total ?? 0) > MAX_EXPORT_RESPONSES) return null;
 
   // 문항 조각만 뽑는다 — 응답 JSONB 를 통째로 메모리에 올리지 않는다.
   const slice = sql<Record<string, unknown>>`jsonb_build_object(${sql.join(
@@ -645,14 +673,11 @@ export async function loadUsedRepeatCounts(
     ]),
     sql`, `,
   )})`;
-  const repeatScanRows = await db
+  const scanRows = await db
     .select({ questionResponses: slice })
     .from(surveyResponses)
     .where(scanScope);
-  return collectUsedRepeatCounts(
-    questions,
-    repeatScanRows.map((r) => ({
-      questionResponses: (r.questionResponses ?? {}) as Record<string, unknown>,
-    })),
-  );
+  return scanRows.map((r) => ({
+    questionResponses: (r.questionResponses ?? {}) as Record<string, unknown>,
+  }));
 }

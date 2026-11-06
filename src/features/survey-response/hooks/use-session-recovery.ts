@@ -45,6 +45,11 @@ interface UseSessionRecoveryArgs {
    * 안정 참조 필수(onRestoreStep 과 동일 패턴). use-response-lifecycle 의 draftSeqRef seed 용.
    */
   onDraftSeqRecovered?: (seq: number) => void;
+  /**
+   * 저장된 답을 화면에 깐 직후 — 회복 전에 쌓인 미저장 답을 버리라는 신호(use-response-lifecycle 의
+   * discardPendingAnswers). 안정 참조 필수(onRestoreStep 과 동일 패턴).
+   */
+  onAnswersRestored?: () => void;
   /** 회복된 응답 row id 를 응답 스토어에 반영 (Zustand 액션). */
   setCurrentResponseId: (id: string) => void;
   /** resume 이 survey_paused 로 실패하면 중단 화면으로 전환 (공통 채널, use-duplicate-guard 소유). */
@@ -94,6 +99,7 @@ export function useSessionRecovery({
   setResponses,
   onRestoreStep,
   onDraftSeqRecovered,
+  onAnswersRestored,
   setCurrentResponseId,
   setDuplicateStatus,
   setPausedMessage,
@@ -198,6 +204,8 @@ export function useSessionRecovery({
         // 이월 값은 responses 에 깔지 않는다(로더 주석 참조) — 저장된 답이 곧 전부다.
         const restored = { ...(result.questionResponses ?? {}) };
         setResponses?.(restored);
+        // 회복 전에 쌓인 미저장 답(명단 값 칸이 빈 응답을 보고 스스로 쓴 값 등)은 저장본을 덮지 않게 버린다.
+        onAnswersRestored?.();
         // 저장된 기타/상세 기재(__optTexts__)를 입력란 스토어로 되살린다 — 없으면
         // 재진입 화면에서 빈칸으로 보이고, 재제출 시 사이드카가 스토어 내용으로
         // 통째로 교체되며 다른 질문의 텍스트까지 소실된다.
@@ -291,6 +299,7 @@ export function useSessionRecovery({
     setPausedMessage,
     onRestoreStep,
     onDraftSeqRecovered,
+    onAnswersRestored,
   ]);
 
   // 토스트 dismiss 는 <ResumeToast> 가 자체 마운트 시점부터 4초 타이머로 호출한다.

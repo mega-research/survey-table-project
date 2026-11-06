@@ -129,6 +129,8 @@
     "0151_accounts_issuer_relax",
     "0146_fit_table_to_width",
     "0147_scale_mean_enabled",
-    "0153_result_code_9_closed_business"
+    "0153_result_code_9_closed_business",
+    "0154_question_collapse_button_label",
+    "0155_question_collapse_attach_previous"
   ]
 }

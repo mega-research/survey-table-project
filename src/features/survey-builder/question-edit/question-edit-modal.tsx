@@ -134,6 +134,8 @@ function buildFormDataFromQuestion(question: Question): Partial<Question> {
       ? { dynamicRowConfigs: question.dynamicRowConfigs }
       : {}),
     hideTitle: question.hideTitle ?? false,
+    collapseButtonLabel: question.collapseButtonLabel ?? null,
+    collapseAttachToPrevious: question.collapseAttachToPrevious ?? false,
     ...(question.displayCondition !== undefined
       ? { displayCondition: question.displayCondition }
       : {}),
@@ -644,6 +646,12 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
               rowRepeatConfig: currentFormData.rowRepeatConfig ?? question?.rowRepeatConfig,
               stagedRowsConfig: currentFormData.stagedRowsConfig ?? question?.stagedRowsConfig,
               hideTitle: currentFormData.hideTitle ?? question?.hideTitle,
+              collapseButtonLabel:
+                currentFormData.collapseButtonLabel !== undefined
+                  ? currentFormData.collapseButtonLabel
+                  : question?.collapseButtonLabel,
+              collapseAttachToPrevious:
+                currentFormData.collapseAttachToPrevious ?? question?.collapseAttachToPrevious,
               // pageBreakBefore 는 질문 목록의 가위 토글로 store 에만 쓰여 formData 가
               // 소유하지 않는다 — hideColumnLabels 와 동일한 silent drop 방지 머지.
               pageBreakBefore: currentFormData.pageBreakBefore ?? question?.pageBreakBefore,

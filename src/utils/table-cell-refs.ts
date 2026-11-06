@@ -10,7 +10,7 @@
  * 죽은 참조를 지우는 일은 이 모듈 소관이 아니다 — 붙여넣기 경로의
  * `resolvePastedGating`/`pruneDeadGatingAfterPaste` 가 그 판정을 소유한다.
  */
-import type { CalcExpr, TableCell } from '@/types/survey';
+import type { CalcExpr, CellEnableCondition, TableCell } from '@/types/survey';
 
 import { mapGateLeaves } from './cell-gate-tree';
 
@@ -37,6 +37,32 @@ export function remapCalcExprCellIds(
   }
 }
 
+/** 수식이 가리키는 같은 질문 셀 id(질문을 명시한 참조는 뺀다) — 중첩 항까지 */
+export function collectCalcExprCellIds(expr: CalcExpr | undefined): string[] {
+  if (!expr) return [];
+  switch (expr.kind) {
+    case 'cell':
+      return expr.questionId ? [] : [expr.cellId];
+    case 'agg':
+      return expr.items.flatMap(collectCalcExprCellIds);
+    case 'group':
+      return expr.terms.flatMap(collectCalcExprCellIds);
+    default:
+      return [];
+  }
+}
+
+/** 게이팅 조건 트리의 컨트롤러를 대응표로 옮긴다 — 대응표에 없는 컨트롤러는 그대로 */
+export function remapGateConditionCellIds(
+  condition: CellEnableCondition,
+  idMap: ReadonlyMap<string, string>,
+): CellEnableCondition {
+  return mapGateLeaves(condition, (leaf) => {
+    const mapped = idMap.get(leaf.controllerCellId);
+    return mapped ? { ...leaf, controllerCellId: mapped } : leaf;
+  });
+}
+
 /** 셀 하나의 게이팅·수식·목록에서 찾기 참조를 대응표로 옮긴다 (바뀔 것이 없으면 원본 참조 반환). */
 export function remapCellRefs(
   cell: TableCell,
@@ -51,6 +77,22 @@ export function remapCellRefs(
       return mapped ? { ...leaf, controllerCellId: mapped } : leaf;
     });
     if (enabledWhen !== cell.enabledWhen) next = { ...next, enabledWhen };
+  }
+
+  if (cell.selectOptions?.some((o) => o.enabledWhen)) {
+    // 보기 표시 조건도 같은 표의 컨트롤러를 가리킨다 — 행 반복 벌·복사본은 자기 쪽 컨트롤러를 봐야 한다.
+    let changed = false;
+    const selectOptions = cell.selectOptions.map((option) => {
+      if (!option.enabledWhen) return option;
+      const enabledWhen = mapGateLeaves(option.enabledWhen, (leaf) => {
+        const mapped = idMap.get(leaf.controllerCellId);
+        return mapped ? { ...leaf, controllerCellId: mapped } : leaf;
+      });
+      if (enabledWhen === option.enabledWhen) return option;
+      changed = true;
+      return { ...option, enabledWhen };
+    });
+    if (changed) next = { ...next, selectOptions };
   }
 
   if (cell.formula) {

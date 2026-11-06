@@ -36,7 +36,7 @@ const REGISTRY_FILE = join(SRC_DIR, 'lib/survey/response-sidecars.ts');
  * 개별 리터럴은 다른 동작 테스트의 픽스처에도 박혀 있지만(예 `question-visibility.test.ts`),
  * 등록 집합 전체를 한 자리에서 못박는 것은 여기뿐이다 — 개명과 목록 드리프트를 같이 본다.
  */
-const PERSISTED_KEY_LITERALS = ['__changeConfirm__', '__dynamicRowSelections__', '__optTexts__'];
+const PERSISTED_KEY_LITERALS = ['__changeConfirm__', '__dynamicRowSelections__', '__optTexts__', '__prefillEdits__'];
 
 /**
  * 등록부가 직접 import 하는 모듈. 새 사이드카를 올리면 여기도 한 줄 는다.
@@ -48,6 +48,7 @@ const REGISTRY_DIRECT_IMPORTS = [
   '@/lib/option-text-read',
   '@/lib/survey/change-confirmation',
   '@/utils/dynamic-row-selection-sidecar',
+  '@/utils/prefill-edits-sidecar',
 ];
 
 function importRegistry(): Promise<typeof import('@/lib/survey/response-sidecars')> {

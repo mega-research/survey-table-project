@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { cn, generateId } from '@/lib/utils';
 import { headerPath } from '@/features/question-renderer/utils/column-axis-cards';
 import { resolveUngroupedSelectionType } from '@/features/question-renderer/utils/row-scale-bars';
+import { isStagedColumnsActive } from '@/features/question-renderer/utils/staged-columns';
 import { diagnoseRowScaleBars } from '@/features/survey-builder/lib/scale-bar-diagnostics';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
@@ -190,6 +191,8 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
     moveColumn,
     updateColumnLabel,
     updateColumnStyle,
+    updateColumnExportOmit,
+    updateColumnReveal,
     updateColumnCode,
     handleColumnWidthChange,
     setEditingColumnWidth,
@@ -203,6 +206,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
     deleteRow,
     updateRowLabel,
     updateRowCode,
+    updateRowExportOmit,
     handleSelectCell,
     setSelectedCell,
     updateCell,
@@ -507,6 +511,9 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
             headerGrid={currentHeaderGrid}
             columnCount={currentColumns.length}
             onChange={updateHeaderGrid}
+            rows={currentRows}
+            stagedRowsConfig={props.stagedRowsConfig}
+            columnRevealAvailable={isStagedColumnsActive(currentColumns)}
           />
         )}
       </div>
@@ -765,6 +772,8 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
                 hasQuestions={hasQuestions}
                 onUpdateColumnLabel={updateColumnLabel}
                 onUpdateColumnStyle={updateColumnStyle}
+                onUpdateColumnExportOmit={updateColumnExportOmit}
+                onUpdateColumnReveal={updateColumnReveal}
                 onUpdateColumnCode={updateColumnCode}
                 onMoveColumn={moveColumn}
                 onDeleteColumn={deleteColumn}
@@ -797,6 +806,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
                   onStartDragCopy={startDragCopy}
                   onUpdateRowLabel={updateRowLabel}
                   onUpdateRowCode={updateRowCode}
+                  onUpdateRowExportOmit={updateRowExportOmit}
                   onOpenRowConditionModal={
                     props.allowDisplayConditions === false ? undefined : openRowConditionModal
                   }

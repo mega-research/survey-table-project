@@ -53,6 +53,10 @@ interface UseDynamicRowsParams {
   dynamicRowConfigs?: DynamicRowGroupConfig[] | undefined;
   /** 행 반복 설정 — 구조에 펼쳐진 벌 중 몇 벌을 보일지 정하는 데만 쓴다 */
   rowRepeatConfig?: RowRepeatConfig | null | undefined;
+  /** 행 반복 — 값이 없어도 열어 둘 벌 수(「처음엔 접어 두기」면 0). 호출부가 조건을 평가한다 */
+  repeatMinOpen?: 0 | 1 | undefined;
+  /** 행 반복 블록 표시 조건이 거짓 — 버튼을 내지 않는다(행은 행 조건으로 이미 숨는다) */
+  repeatBlockHidden?: boolean | undefined;
   /** 행 차례로 열기 설정 — 저작된 행 묶음 중 몇 행을 보일지 정하는 데만 쓴다 */
   stagedRowsConfig?: StagedRowsConfig | null | undefined;
   value?: Record<string, unknown> | undefined;
@@ -97,6 +101,8 @@ export function useDynamicRows({
   hiddenGroupIds,
   dynamicRowConfigs,
   rowRepeatConfig,
+  repeatMinOpen,
+  repeatBlockHidden,
   stagedRowsConfig,
   value,
   onChange,
@@ -133,6 +139,8 @@ export function useDynamicRows({
     questionId,
     rows,
     rowRepeatConfig,
+    minOpenCount: repeatMinOpen,
+    blockHidden: repeatBlockHidden,
     value,
     onChange,
   });

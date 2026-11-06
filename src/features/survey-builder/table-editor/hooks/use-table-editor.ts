@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { produce } from 'immer';
 import { toast } from 'sonner';
 
+import { isColumnStageable } from '@/features/question-renderer/utils/staged-columns';
 import { useSyncLatestRef } from '@/hooks/use-latest-ref';
 import { collectTableCells } from '@/lib/survey/cell-gating';
 import { generateId } from '@/lib/utils';
@@ -642,6 +643,61 @@ export function useTableEditor({
     [commitColumns, notifyChange],
   );
 
+  // 안 쓴 열 빼기 — 체크박스라 스타일과 같이 즉시 커밋한다
+  const updateColumnExportOmit = useCallback(
+    (columnIndex: number, omit: boolean) => {
+      if (pendingChangeRef.current) {
+        clearTimeout(pendingChangeRef.current);
+        pendingChangeRef.current = null;
+      }
+      if (pendingRowsSyncRef.current) {
+        pendingRowsSyncRef.current = false;
+        setCurrentRows(currentRowsRef.current);
+      }
+      const updatedColumns = currentColumnsRef.current.map((col, index) => {
+        if (index !== columnIndex) return col;
+        if (omit) return { ...col, exportOmitIfUnused: true };
+        const { exportOmitIfUnused: _omit, ...rest } = col;
+        return rest;
+      });
+      commitColumns(updatedColumns);
+      notifyChange(currentTitleRef.current, updatedColumns, currentRowsRef.current);
+    },
+    [commitColumns, notifyChange],
+  );
+
+  // 열 차례로 열기 — 단계·버튼 문구를 통째로 바꾼다(빈 값은 키를 지운다)
+  const updateColumnReveal = useCallback(
+    (columnIndex: number, reveal: { revealStep?: number; revealAddLabel?: string }) => {
+      // 보기·순위 옵션 칸이 든 열은 단계를 걸지 못한다 — 선택이 칸 값이 아닌 곳에 살아 열린 단계
+      // 파생·닫을 때 비우기가 보지 못한다(응답 화면도 이런 열의 단계는 무시한다).
+      if ((reveal.revealStep ?? 1) >= 2 && !isColumnStageable(currentRowsRef.current, columnIndex)) {
+        toast.error('보기·순위 옵션 칸이 있는 열은 차례로 열 수 없습니다.');
+        return;
+      }
+      if (pendingChangeRef.current) {
+        clearTimeout(pendingChangeRef.current);
+        pendingChangeRef.current = null;
+      }
+      if (pendingRowsSyncRef.current) {
+        pendingRowsSyncRef.current = false;
+        setCurrentRows(currentRowsRef.current);
+      }
+      const updatedColumns = currentColumnsRef.current.map((col, index) => {
+        if (index !== columnIndex) return col;
+        const { revealStep: _step, revealAddLabel: _label, ...rest } = col;
+        return {
+          ...rest,
+          ...(reveal.revealStep && reveal.revealStep >= 1 ? { revealStep: reveal.revealStep } : {}),
+          ...(reveal.revealAddLabel ? { revealAddLabel: reveal.revealAddLabel } : {}),
+        };
+      });
+      commitColumns(updatedColumns);
+      notifyChange(currentTitleRef.current, updatedColumns, currentRowsRef.current);
+    },
+    [commitColumns, notifyChange],
+  );
+
   // ── 행 CRUD ──
 
   const addRow = useCallback(() => {
@@ -963,6 +1019,21 @@ export function useTableEditor({
       scheduleCellCodeRecalc();
     },
     [notifyChangeDebounced, scheduleCellCodeRecalc],
+  );
+
+  // 안 쓴 행 빼기 — 체크박스라 즉시 커밋한다(열의 updateColumnExportOmit 과 같다)
+  const updateRowExportOmit = useCallback(
+    (rowIndex: number, omit: boolean) => {
+      const updatedRows = currentRowsRef.current.map((row, index) => {
+        if (index !== rowIndex) return row;
+        if (omit) return { ...row, exportOmitIfUnused: true };
+        const { exportOmitIfUnused: _omit, ...rest } = row;
+        return rest;
+      });
+      commitRows(updatedRows);
+      notifyChange(currentTitleRef.current, currentColumnsRef.current, updatedRows);
+    },
+    [notifyChange, commitRows],
   );
 
   // ── 행 조건부 표시 ──
@@ -1506,6 +1577,8 @@ export function useTableEditor({
       moveRow,
       updateColumnLabel,
       updateColumnStyle,
+      updateColumnExportOmit,
+      updateColumnReveal,
       updateColumnCode,
       handleColumnWidthChange,
       setEditingColumnWidth,
@@ -1519,6 +1592,7 @@ export function useTableEditor({
       deleteRow,
       updateRowLabel,
       updateRowCode,
+      updateRowExportOmit,
       // 셀
       handleSelectCell,
       setSelectedCell,

@@ -32,6 +32,12 @@ export const optionTextSource: OptionTextSource = {
  */
 const seedWrites = new Set<string>();
 
+/** 쓰기 직전에 남긴다 — 렌더러 밖에서 미리 채우는 쓰기(이월 값 깔기·회수)도 같은 표시를 쓴다. */
+export function markSeedWrite(questionId: string): void {
+  seedWrites.add(questionId);
+  queueMicrotask(() => seedWrites.delete(questionId));
+}
+
 /** 표시가 있었으면 지우고 true. 없으면 false. */
 export function consumeSeedWrite(questionId: string): boolean {
   return seedWrites.delete(questionId);
@@ -45,8 +51,5 @@ export function consumeSeedWrite(questionId: string): boolean {
 export const liveResponseSources: ResponseSources = {
   questionResponses: null,
   optionTexts: optionTextSource,
-  markSeedWrite: (questionId) => {
-    seedWrites.add(questionId);
-    queueMicrotask(() => seedWrites.delete(questionId));
-  },
+  markSeedWrite,
 };
