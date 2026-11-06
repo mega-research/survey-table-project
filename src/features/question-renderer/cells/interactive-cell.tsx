@@ -330,7 +330,11 @@ export const InteractiveCell = React.memo(function InteractiveCell({
   const hiddenOptionValues = useMemo(() => {
     if (!optionGateCondition) return undefined;
     const optionGateCellValues = source ? sourceOptionGateValues : (value ?? {});
-    return hiddenSelectOptionValues(cell, optionGateCellValues, gatingCells);
+    // 보기 선택(choice-selected) 조건이 조건 트리나 컨트롤러 상류에 있으면 선택 집합을 함께 넘긴다.
+    const optionChoiceSelection = gateWantsChoiceSelection(optionGateCondition, gatingCells)
+      ? collectTableChoiceSelection(optionGateCellValues)
+      : undefined;
+    return hiddenSelectOptionValues(cell, optionGateCellValues, gatingCells, optionChoiceSelection);
   }, [cell, optionGateCondition, source, sourceOptionGateValues, value, gatingCells]);
   // 고른 보기가 숨었으면(컨트롤러를 바꿈) 값을 지운다 — 게이팅 지움과 같은 자리. 저장 경계는
   // stripDisabledCellValues 가 같은 판정으로 보증한다.

@@ -40,6 +40,18 @@ describe('gate-value-selector', () => {
     expect(gateWantsChoiceSelection(undefined)).toBe(false);
   });
 
+  it('컨트롤러 select 칸의 보기 표시 조건 상류까지 구독한다 — 고른 보기가 숨으면 컨트롤러 값이 없는 것이 된다', () => {
+    const cells = [
+      {
+        id: 'a',
+        content: '',
+        type: 'select',
+        selectOptions: [{ id: 'o', label: 'O', value: 'o', enabledWhen: { kind: 'filled', controllerCellId: 'x' } }],
+      },
+    ] as TableCell[];
+    expect(gateSubscriptionKeys({ kind: 'filled', controllerCellId: 'a' }, cells)).toEqual(['a', 'x']);
+  });
+
   it('필요한 키만 뽑고, 컨트롤러 값이 그대로면 같은 객체를 돌려준다', () => {
     const select = createGateValueSelector(or);
     const first = select({ now: '1', want: '', other: 'a' });

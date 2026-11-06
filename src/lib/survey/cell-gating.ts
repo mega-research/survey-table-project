@@ -116,8 +116,24 @@ function effectiveControllerValue(controllerCellId: string, ctx: GateEvalContext
   const raw = ctx.cellValues[controllerCellId];
   if (ctx.visiting.has(controllerCellId)) return raw;
   const controller = ctx.tableCells?.find((c) => c.id === controllerCellId);
-  if (!controller || !isGatedCell(controller)) return raw;
-  return evaluateCell(controller, ctx) ? raw : undefined;
+  if (!controller) return raw;
+  if (isGatedCell(controller) && !evaluateCell(controller, ctx)) return undefined;
+  // 고른 보기가 보기 표시 조건으로 숨었으면 그 값도 곧 지워질 잔존값이다 — 같은 이유로 없는 것으로 본다.
+  if (isSelectedOptionHiddenInCtx(controller, raw, ctx)) return undefined;
+  return raw;
+}
+
+/** 이 select 칸에서 고른 보기가 표시 조건으로 숨었는가 — 평가 중 표식을 걸어 순환을 끊는다. */
+function isSelectedOptionHiddenInCtx(cell: TableCell, raw: unknown, ctx: GateEvalContext): boolean {
+  if (cell.type !== 'select' || cell.isHidden || typeof raw !== 'string' || raw === '') return false;
+  const option = cell.selectOptions?.find((o) => (o.value ?? o.id) === raw);
+  if (!option?.enabledWhen) return false;
+  ctx.visiting.add(cell.id);
+  try {
+    return !evaluate(option.enabledWhen, ctx);
+  } finally {
+    ctx.visiting.delete(cell.id);
+  }
 }
 
 function evaluateLeaf(condition: CellEnableLeafCondition, ctx: GateEvalContext): boolean {
@@ -234,13 +250,16 @@ export function hiddenSelectOptionValues(
   cell: TableCell,
   cellValues: Record<string, unknown>,
   tableCells?: readonly TableCell[],
+  /** 보기 그룹 표의 선택된 보기 id 집합(collectTableChoiceSelection) — choice-selected 조건 전용. */
+  choiceSelection?: ReadonlySet<string>,
 ): Set<string> {
   const hidden = new Set<string>();
   if (cell.type !== 'select') return hidden;
   for (const option of cell.selectOptions ?? []) {
-    if (option.enabledWhen && !isGateConditionMet(option.enabledWhen, cellValues, tableCells)) {
-      hidden.add(option.value ?? option.id);
-    }
+    if (!option.enabledWhen) continue;
+    // 칸 자신을 평가 중으로 걸어 둔다 — 보기 조건이 이 칸을 다시 가리키는 순환을 끊는다.
+    const ctx: GateEvalContext = { cellValues, tableCells, choiceSelection, visiting: new Set([cell.id]) };
+    if (!evaluate(option.enabledWhen, ctx)) hidden.add(option.value ?? option.id);
   }
   return hidden;
 }
@@ -261,9 +280,10 @@ function isSelectedOptionHidden(
   value: unknown,
   cellValues: Record<string, unknown>,
   tableCells: readonly TableCell[],
+  choiceSelection: ReadonlySet<string> | undefined,
 ): boolean {
   if (typeof value !== 'string' || value === '') return false;
-  return hiddenSelectOptionValues(cell, cellValues, tableCells).has(value);
+  return hiddenSelectOptionValues(cell, cellValues, tableCells, choiceSelection).has(value);
 }
 
 function hasOptionGate(cell: TableCell): boolean {
@@ -392,7 +412,7 @@ export function stripDisabledCellValues(
           // 칸이 닫혔거나, 고른 보기가 표시 조건으로 숨었으면 지운다 — 같은 고정점 루프에서 함께 수렴한다.
           if (
             (gated && !isCellEnabled(cell, next, tableCells, choiceSelection)) ||
-            isSelectedOptionHidden(cell, next[cell.id], next, tableCells)
+            isSelectedOptionHidden(cell, next[cell.id], next, tableCells, choiceSelection)
           ) {
             delete next[cell.id];
             removedInPass = true;

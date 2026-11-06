@@ -87,3 +87,56 @@ describe('remapCellRefs — 보기 조건의 컨트롤러', () => {
     expect(remapCellRefs(name, new Map([['other', 'x']]))).toBe(name);
   });
 });
+
+describe('보기 조건 — 리뷰 지적 회귀 (2026-11-06)', () => {
+  // x 가 채워졌을 때만 보이는 보기를 a·b 가 골랐고, c 는 「a 채움 또는 NOT(b 채움)」일 때 열린다.
+  // x 를 비우면 a·b 는 숨은 보기의 잔존값이다 — 최종 상태(a·b 없음)에서 c 는 열려 있어야 한다.
+  const gatedSelect = (id: string): TableCell => ({
+    id,
+    content: '',
+    type: 'select',
+    selectOptions: [{ id: `${id}-o`, label: 'O', value: 'o', enabledWhen: { kind: 'filled', controllerCellId: 'x' } }],
+  });
+  const x: TableCell = { id: 'x', content: '', type: 'input' };
+  const c: TableCell = {
+    id: 'c',
+    content: '',
+    type: 'input',
+    enabledWhen: {
+      kind: 'group',
+      op: 'OR',
+      terms: [
+        { kind: 'filled', controllerCellId: 'a' },
+        { kind: 'group', op: 'NOT', terms: [{ kind: 'filled', controllerCellId: 'b' }] },
+      ],
+    },
+  };
+  const tableOf = (order: TableCell[]): Question =>
+    ({ id: 'q', type: 'table', title: '', required: false, order: 1, tableRowsData: [{ id: 'r', label: '', cells: order }] }) as Question;
+
+  it.each([
+    ['x,a,b,c', [x, gatedSelect('a'), gatedSelect('b'), c]],
+    ['x,a,c,b', [x, gatedSelect('a'), c, gatedSelect('b')]],
+  ])('숨은 보기를 고른 컨트롤러의 잔존값은 없는 것으로 본다 — 칸 순서와 무관 (%s)', (_label, order) => {
+    const out = stripDisabledCellValues([tableOf(order)], { q: { a: 'o', b: 'o', c: '5' } });
+    expect(out['q']).toEqual({ c: '5' });
+  });
+
+  it('보기 선택(choice-selected) 조건도 실제 선택으로 판정한다 — 목록과 저장 경계 모두', () => {
+    const s: TableCell = {
+      id: 's',
+      content: '',
+      type: 'select',
+      selectOptions: [{ id: 's1', label: '1', value: '1', enabledWhen: { kind: 'choice-selected', controllerCellId: 'opt' } }],
+    };
+    const grouped = {
+      id: 't', type: 'table', title: '', required: false, order: 0,
+      choiceGroups: [{ id: 'g', groupKey: 'g', type: 'radio', label: 'G' }],
+      tableRowsData: [{ id: 'r', label: '', cells: [{ id: 'opt', type: 'choice_opt', content: '예', choiceGroupId: 'g' }, s] }],
+    } as unknown as Question;
+    const met = { t: { __choiceGroups: { g: 'opt' }, s: '1' } };
+    expect(stripDisabledCellValues([grouped], met)).toBe(met);
+    expect(hiddenSelectOptionValues(s, {}, [s], new Set(['opt'])).size).toBe(0);
+    expect([...hiddenSelectOptionValues(s, {}, [s], new Set())]).toEqual(['1']);
+  });
+});
