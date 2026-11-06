@@ -63,6 +63,8 @@
 - 합계형(`sumConstraints`): 좌변(선택 셀 합계 또는 `leftExpr` 수식) `eq|ne|gte|lte|gt|lt` 우변(리터럴 또는 `targetExpr` 수식), `tolerance`는 eq/ne 전용 절대 오차. `aggregate: 'count'` 면 좌변이 **입력된 칸 수**다 — 인터랙티브 셀 전부가 대상이고, 합계와 달리 전부 비었거나 표를 건드리지 않아도 검사한다("10행 중 하나 이상 입력" — CONTEXT.md "입력된 칸 수"). `severity: 'warn'` 이면 막지 않고 표 아래 노란 안내만 띄우고(`collectTableSoftWarnings`, 값을 고치면 사라진다), `when`(칸 활성 조건과 같은 모양)을 달면 충족할 때만 검사한다(경고·차단 공용). 행 반복 `perRepeatBundle` 은 수식 셀 참조·조건 컨트롤러도 묶음마다 옮긴다 — 경고 문구의 `{묶음}` 은 그 벌 번호. `whenQuestion`(다른 문항 조건) · `countValues`(그 값을 고른 칸만 세기) · `acrossRepeatBundles`(반복 줄 전체를 한 제약으로)도 있다(CONTEXT.md "경고만 하는 제약")
 - 검증 문구 자리표시자: 저작자 문구(합계 제약 `errorMessage` · 셀 수식 검증 `formulaErrorMessage` · 계산 칸 `calcValidation.errorMessage`)에 `{현재값}`·`{기준값}` 을 쓰면 검증에 쓴 실제 숫자로 바뀐다(`fillMessageValues`, numeric-validation). 쓰지 않으면 값은 드러나지 않는다 — 기준값 미노출은 기본 문구와 자리표시자 없는 문구에서 그대로다
 - 차단 검증과 분기 규칙은 분리된 개념 — `docs/adr/0013-blocking-validation-separate-from-branch-rules.md` 참조
+- 화면에 없는 칸은 어떤 차단 검증도 일으키지 않는다. 값으로 정해지는 숨김(행·열 차례로 열기 · 열지 않은 반복 벌 — 접힌 첫 벌 포함)은 `survey-response/lib/numeric-validation` 의 `VALUE_DERIVED_CELL_HIDERS` 등록부가, 행·열째 숨김은 `collectVisibleTableCells` 본문이 뺀다. 새 숨김 장치는 필수에서만 빼지 말고 등록부에 넣을 것 — `hidden-cell-validation-matrix.test.ts` 가 장치 × 검증 표 전부를 tsc 로 요구한다
+- 빌더의 보기 value · 임시 문항 id 리매핑은 문항 안 조건 묶음 자리를 `survey-builder/utils/question-condition-groups` 한 곳에서 돈다. `Question` 타입에 조건 묶음 필드를 더하면 거기에 한 줄 — 옆 테스트가 컴파일러로 타입을 훑어 빠진 자리를 잡는다
 
 ### 행 반복과 차례로 열기
 
