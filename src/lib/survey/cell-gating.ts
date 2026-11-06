@@ -227,6 +227,50 @@ export function isGateConditionMet(
 }
 
 /**
+ * 표 select 셀에서 지금 숨길 보기 value 집합 — 보기 표시 조건(`QuestionOption.enabledWhen`)이 거짓인 보기.
+ * 조건 없는 보기는 늘 보인다. 값은 응답에 저장되는 형태(`value ?? id`)다.
+ */
+export function hiddenSelectOptionValues(
+  cell: TableCell,
+  cellValues: Record<string, unknown>,
+  tableCells?: readonly TableCell[],
+): Set<string> {
+  const hidden = new Set<string>();
+  if (cell.type !== 'select') return hidden;
+  for (const option of cell.selectOptions ?? []) {
+    if (option.enabledWhen && !isGateConditionMet(option.enabledWhen, cellValues, tableCells)) {
+      hidden.add(option.value ?? option.id);
+    }
+  }
+  return hidden;
+}
+
+/**
+ * 보기 표시 조건들을 OR 묶음 하나로 — 응답 화면이 컨트롤러 값만 구독하는 데 쓴다(gate-value-selector).
+ * 보기 조건이 없는 셀은 undefined.
+ */
+export function selectOptionGateCondition(cell: TableCell): CellEnableCondition | undefined {
+  if (cell.type !== 'select') return undefined;
+  const terms = (cell.selectOptions ?? []).flatMap((o) => (o.enabledWhen ? [o.enabledWhen] : []));
+  return terms.length > 0 ? { kind: 'group', op: 'OR', terms } : undefined;
+}
+
+/** 고른 보기가 표시 조건으로 숨었는가 — 저장 경계 strip 과 화면 지움이 같은 판정을 쓴다. */
+function isSelectedOptionHidden(
+  cell: TableCell,
+  value: unknown,
+  cellValues: Record<string, unknown>,
+  tableCells: readonly TableCell[],
+): boolean {
+  if (typeof value !== 'string' || value === '') return false;
+  return hiddenSelectOptionValues(cell, cellValues, tableCells).has(value);
+}
+
+function hasOptionGate(cell: TableCell): boolean {
+  return cell.type === 'select' && (cell.selectOptions ?? []).some((o) => o.enabledWhen);
+}
+
+/**
  * 보기 소스 표의 게이팅 셀 사이드카 정리 — 미충족 셀의 `__optTexts__[q.id][cell.id]` 를 뺀다.
  * 지울 것이 없으면 null. 보기 선택 자체는 건드리지 않는다(보기는 게이팅 대상이 아니다).
  */
@@ -294,7 +338,10 @@ export function stripDisabledCellValues(
     const hasGatedCell = rows.some((row) =>
       row.cells.some((c) => GATABLE_CELL_TYPES.has(c.type) && c.enabledWhen && !c.isHidden),
     );
-    if (!hasGatedCell) continue;
+    // 보기 표시 조건은 표 문항 select 셀 전용이다(보기 소스 표는 범위 밖).
+    const hasOptionGatedCell =
+      q.type === 'table' && rows.some((row) => row.cells.some((c) => hasOptionGate(c) && !c.isHidden));
+    if (!hasGatedCell && !hasOptionGatedCell) continue;
 
     // 보기 소스 표(radio/checkbox 문항의 내장 표) — 게이팅 셀 값이 문항 응답이 아니라
     // `__optTexts__[q.id][cell.id]` 사이드카에 있고, 컨트롤러는 선택된 보기 id 집합이다.
@@ -329,7 +376,7 @@ export function stripDisabledCellValues(
       (n, row) =>
         n +
         row.cells.filter(
-          (c) => GATABLE_CELL_TYPES.has(c.type) && c.enabledWhen && !c.isHidden,
+          (c) => ((GATABLE_CELL_TYPES.has(c.type) && c.enabledWhen) || hasOptionGate(c)) && !c.isHidden,
         ).length,
       0,
     );
@@ -339,9 +386,14 @@ export function stripDisabledCellValues(
       removedInPass = false;
       for (const row of rows) {
         for (const cell of row.cells) {
-          if (!GATABLE_CELL_TYPES.has(cell.type) || !cell.enabledWhen || cell.isHidden) continue;
-          if (!Object.hasOwn(next, cell.id)) continue;
-          if (!isCellEnabled(cell, next, tableCells, choiceSelection)) {
+          if (cell.isHidden || !Object.hasOwn(next, cell.id)) continue;
+          const gated = GATABLE_CELL_TYPES.has(cell.type) && cell.enabledWhen;
+          if (!gated && !hasOptionGate(cell)) continue;
+          // 칸이 닫혔거나, 고른 보기가 표시 조건으로 숨었으면 지운다 — 같은 고정점 루프에서 함께 수렴한다.
+          if (
+            (gated && !isCellEnabled(cell, next, tableCells, choiceSelection)) ||
+            isSelectedOptionHidden(cell, next[cell.id], next, tableCells)
+          ) {
             delete next[cell.id];
             removedInPass = true;
             changed = true;

@@ -15,7 +15,12 @@ import {
   distinctSubscriptionKeys,
   takenDistinctValues,
 } from '@/features/question-renderer/utils/distinct-select-group';
-import { GATABLE_CELL_TYPES, isCellEnabled } from '@/lib/survey/cell-gating';
+import {
+  GATABLE_CELL_TYPES,
+  hiddenSelectOptionValues,
+  isCellEnabled,
+  selectOptionGateCondition,
+} from '@/lib/survey/cell-gating';
 import { collectTableChoiceSelection } from '@/lib/survey/choice-selection';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import type { TableCell } from '@/types/survey';
@@ -59,6 +64,7 @@ const CellRouter = React.memo(function CellRouter({
   hintInFlow,
   ignoreInputWidth,
   disabledOptionValues,
+  hiddenOptionValues,
 }: InteractiveCellProps) {
   switch (cell.type) {
     case 'checkbox':
@@ -97,6 +103,7 @@ const CellRouter = React.memo(function CellRouter({
           ariaInvalid={ariaInvalid}
           ariaDescribedBy={ariaDescribedBy}
           disabledOptionValues={disabledOptionValues}
+          hiddenOptionValues={hiddenOptionValues}
         />
       );
     case 'input':
@@ -305,6 +312,36 @@ export const InteractiveCell = React.memo(function InteractiveCell({
     }
   }, [gatingDisabled, hasLeftoverValue, clearValue]);
 
+  // 드롭다운 보기 표시 조건 — 컨트롤러 칸 값에 따라 목록을 거른다. 게이팅과 같은 구독 원칙으로
+  // 보기 조건이 가리키는 컨트롤러 값만 구독한다. 보기 조건이 없는 셀(대다수)은 모듈 상수 선택자다.
+  const optionGateCondition = useMemo(() => selectOptionGateCondition(cell), [cell]);
+  const selectOptionGateValues = useMemo(
+    () =>
+      optionGateCondition
+        ? createGateValueSelector(optionGateCondition, gatingCells)
+        : selectNoGateValues,
+    [optionGateCondition, gatingCells],
+  );
+  const sourceOptionGateValues = useQuestionResponseSelector(
+    source,
+    questionId,
+    selectOptionGateValues,
+  );
+  const hiddenOptionValues = useMemo(() => {
+    if (!optionGateCondition) return undefined;
+    const optionGateCellValues = source ? sourceOptionGateValues : (value ?? {});
+    return hiddenSelectOptionValues(cell, optionGateCellValues, gatingCells);
+  }, [cell, optionGateCondition, source, sourceOptionGateValues, value, gatingCells]);
+  // 고른 보기가 숨었으면(컨트롤러를 바꿈) 값을 지운다 — 게이팅 지움과 같은 자리. 저장 경계는
+  // stripDisabledCellValues 가 같은 판정으로 보증한다.
+  const selectedOptionHidden =
+    typeof cellResponse === 'string' &&
+    cellResponse !== '' &&
+    hiddenOptionValues?.has(cellResponse) === true;
+  useEffect(() => {
+    if (selectedOptionHidden) clearValue();
+  }, [selectedOptionHidden, clearValue]);
+
   // 보기 그룹 표의 보기 옵션 셀 — 그룹 정의가 공급됐고 이 셀이 radio/checkbox 그룹에 속하면
   // 컨트롤로 그린다. 아니면(보기 그룹 없는 표·빌더 편집 화면) 아래 라우터의 글자 셀 그대로다.
   // 보기 셀 자체는 게이팅 대상이 아니다(문항 보기 집합을 바꾸는 일 — 별도 설계).
@@ -362,6 +399,7 @@ export const InteractiveCell = React.memo(function InteractiveCell({
       hintInFlow={hintInFlow}
       ignoreInputWidth={ignoreInputWidth}
       disabledOptionValues={disabledOptionValues}
+      hiddenOptionValues={hiddenOptionValues}
       {...(groupName !== undefined ? { groupName } : {})}
     />
   );

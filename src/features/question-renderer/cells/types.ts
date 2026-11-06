@@ -48,6 +48,11 @@ export interface InteractiveCellProps {
    */
   disabledOptionValues?: ReadonlySet<string> | undefined;
   /**
+   * 목록에서 빼는 보기 값(select 셀 전용) — 보기 표시 조건(`QuestionOption.enabledWhen`)이 거짓인 보기.
+   * 키는 `disabledOptionValues` 와 같다. 판정은 `lib/survey/cell-gating` 의 `hiddenSelectOptionValues`.
+   */
+  hiddenOptionValues?: ReadonlySet<string> | undefined;
+  /**
    * 캡션 오버라이드(image/video 셀 전용). 호출부가 토큰 치환을 끝낸 문구를 넘긴다.
    * 미지정 시 cell.content 를 셀이 직접 치환 — cell-options-container.tsx 와 동일한
    * opt-in 패턴(이미 치환된 셀을 넘겨받는 PreviewCell 경로의 이중 치환 방지).

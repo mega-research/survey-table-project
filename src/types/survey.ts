@@ -403,6 +403,13 @@ export interface QuestionOption {
   branchRule?: BranchRule;
   /** 응답 인용 문구. 이 항목이 선택되면 이 문구가 인용에 합류한다. 비우면 수집 제외. */
   answerQuoteText?: string;
+  /**
+   * 보기 표시 조건 — **표 문항 select 셀의 보기 전용**. 같은 표의 컨트롤러 칸 값이 조건을 만족할 때만
+   * 드롭다운 목록에 나온다(유가공업 문3: 설비구분 → 주요 설비명). 칸 게이팅(`TableCell.enabledWhen`)과
+   * 같은 조건 모델·평가기를 쓰고, 고른 보기가 거짓이 되면 값을 지운다(화면·저장 경계 모두).
+   * 미지정 = 늘 보인다. 판정은 `lib/survey/cell-gating` 의 `hiddenSelectOptionValues`.
+   */
+  enabledWhen?: CellEnableCondition;
 }
 
 // 셀 수식 트리 — 계산 셀(표시)과 숫자 input 셀(검증)이 공유한다.

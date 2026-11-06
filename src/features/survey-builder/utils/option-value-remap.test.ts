@@ -20,6 +20,29 @@ describe('remapGatingValues', () => {
     expect(cells[2]!.enabledWhen).toMatchObject({ values: ['option-2'] });
   });
 
+  it('드롭다운 보기 표시 조건의 컨트롤러 value 도 함께 바꾼다', () => {
+    const src = [
+      {
+        id: 'r',
+        label: '',
+        cells: [
+          {
+            id: 'name',
+            type: 'select',
+            content: '',
+            selectOptions: [
+              { id: 'a', label: 'A', value: 'a', enabledWhen: { kind: 'option', controllerCellId: 'ctrl', values: ['option-2'] } },
+              { id: 'b', label: 'B', value: 'b' },
+            ],
+          },
+        ],
+      },
+    ] as unknown as TableRow[];
+    const out = remapGatingValues(src, 'ctrl', 'option-2', '5');
+    expect(out[0]!.cells[0]!.selectOptions?.[0]?.enabledWhen).toMatchObject({ values: ['5'] });
+    expect(out[0]!.cells[0]!.selectOptions?.[1]).toBe(src[0]!.cells[0]!.selectOptions?.[1]);
+  });
+
   it('참조가 없으면 원본 배열 참조를 그대로 반환한다', () => {
     const src = rows();
     expect(remapGatingValues(src, 'nobody', 'x', 'y')).toBe(src);

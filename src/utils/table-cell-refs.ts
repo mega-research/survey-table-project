@@ -79,6 +79,22 @@ export function remapCellRefs(
     if (enabledWhen !== cell.enabledWhen) next = { ...next, enabledWhen };
   }
 
+  if (cell.selectOptions?.some((o) => o.enabledWhen)) {
+    // 보기 표시 조건도 같은 표의 컨트롤러를 가리킨다 — 행 반복 벌·복사본은 자기 쪽 컨트롤러를 봐야 한다.
+    let changed = false;
+    const selectOptions = cell.selectOptions.map((option) => {
+      if (!option.enabledWhen) return option;
+      const enabledWhen = mapGateLeaves(option.enabledWhen, (leaf) => {
+        const mapped = idMap.get(leaf.controllerCellId);
+        return mapped ? { ...leaf, controllerCellId: mapped } : leaf;
+      });
+      if (enabledWhen === option.enabledWhen) return option;
+      changed = true;
+      return { ...option, enabledWhen };
+    });
+    if (changed) next = { ...next, selectOptions };
+  }
+
   if (cell.formula) {
     const formula = remapCalcExprCellIds(cell.formula, idMap);
     if (formula !== cell.formula) next = { ...next, formula };
