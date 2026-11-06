@@ -100,4 +100,13 @@ describe('처음엔 접어 두기', () => {
     render(<Harness config={{ ...base, startCollapsed: true }} initial={{ t1: '버터' }} />);
     expect(screen.getAllByRole('textbox')).toHaveLength(2);
   });
+
+  it('펼쳐 둘 조건이 참이었다가 거짓으로 돌아오면 비어 있는 첫 줄은 다시 접힌다', () => {
+    const config = { ...base, startCollapsed: true, expandWhen: whenQ0Is('1') };
+    const { rerender } = render(<Harness config={config} q0Value="1" />);
+    expect(screen.getAllByRole('textbox')).toHaveLength(2);
+    rerender(<Harness config={config} />);
+    expect(screen.getAllByRole('textbox')).toHaveLength(1);
+  });
 });
+
