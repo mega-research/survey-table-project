@@ -5,12 +5,12 @@
  * 행 반복의 사용 벌 스캔(`row-repeat-usage`)과 같은 결이다 — 넉넉히 만들어 둔 칸 중 쓰인 것만
  * 내보낸다. **파일별이 아니라 설문 전체 기준**이어야 분할 내보내기의 파일 간 열 구성이 같다.
  * 열 하나는 그 열의 모든 행 칸을 본다(행 반복으로 펼친 벌 포함). 값이 있는지는
- * `isCellValuePresent` 로 판정한다 — 빈 문자열·공백은 쓴 것이 아니다.
+ * `hasRespondentValue` 로 판정한다 — 빈 문자열·공백과 계산 칸 값(저장 경계가 늘 넣는다)은 쓴 것이 아니다.
  *
  * 응답 화면·저장·변수명은 이 판정을 모른다. 남은 열의 이름은 빠진 열과 무관하게 그대로다.
  */
-import type { Question } from '@/types/survey';
-import { isCellValuePresent } from '@/utils/table-cell-semantics';
+import type { Question, TableCell } from '@/types/survey';
+import { hasRespondentValue } from '@/utils/table-cell-semantics';
 
 /** 응답 한 건에서 스캔이 보는 부분 — 호출부마다 행 타입이 달라 구조만 요구한다. */
 interface SubmissionLike {
@@ -45,25 +45,25 @@ export function collectUnusedColumnIds(
   submissions: readonly SubmissionLike[],
 ): Map<string, Set<string>> {
   // 질문별로 「열 id → 그 열의 칸 id 목록」을 미리 만든다
-  const candidates = new Map<string, Map<string, string[]>>();
+  const candidates = new Map<string, Map<string, TableCell[]>>();
   for (const question of questions) {
     const columns = question.tableColumns ?? [];
-    const byColumn = new Map<string, string[]>();
+    const byColumn = new Map<string, TableCell[]>();
     columns.forEach((column, colIdx) => {
       if (column.exportOmitIfUnused !== true) return;
-      const cellIds: string[] = [];
+      const cells: TableCell[] = [];
       for (const row of question.tableRowsData ?? []) {
         const cell = row.cells[colIdx];
-        if (cell && !cell.isHidden) cellIds.push(cell.id);
+        if (cell && !cell.isHidden) cells.push(cell);
       }
-      byColumn.set(column.id, cellIds);
+      byColumn.set(column.id, cells);
     });
     // 「안 쓰면 뺀다」 행 — 그 행의 모든 칸을 본다(열과 같은 판정, 키는 행 id)
     for (const row of question.tableRowsData ?? []) {
       if (row.exportOmitIfUnused !== true) continue;
       byColumn.set(
         row.id,
-        row.cells.filter((cell) => !cell.isHidden).map((cell) => cell.id),
+        row.cells.filter((cell) => !cell.isHidden),
       );
     }
     if (byColumn.size > 0) candidates.set(question.id, byColumn);
@@ -78,7 +78,7 @@ export function collectUnusedColumnIds(
       if (typeof answer !== 'object' || answer === null) continue;
       const cellValues = answer as Record<string, unknown>;
       for (const columnId of [...remaining]) {
-        if (byColumn.get(columnId)!.some((id) => isCellValuePresent(cellValues[id]))) remaining.delete(columnId);
+        if (byColumn.get(columnId)!.some((cell) => hasRespondentValue(cell, cellValues))) remaining.delete(columnId);
       }
     }
     if (remaining.size > 0) unused.set(questionId, remaining);

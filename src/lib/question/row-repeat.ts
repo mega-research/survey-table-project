@@ -30,7 +30,7 @@ import {
   remapGateConditionCellIds,
 } from '@/utils/table-cell-refs';
 import { collectGateControllerIds } from '@/utils/cell-gate-tree';
-import { isCellValuePresent } from '@/utils/table-cell-semantics';
+import { hasRespondentValue } from '@/utils/table-cell-semantics';
 
 /**
  * 최대 반복 벌 수 상한. 구조에 실제로 펼쳐지는 행이라 무한대는 없다.
@@ -428,7 +428,7 @@ export function deriveOpenRepeatCount(
   for (const row of rows) {
     const idx = repeatIndexOf(row);
     if (idx === undefined || idx <= open) continue;
-    if (row.cells.some((cell) => isCellValuePresent(cellValues[cell.id]))) open = idx;
+    if (row.cells.some((cell) => hasRespondentValue(cell, cellValues))) open = idx;
   }
   return open;
 }
@@ -706,8 +706,6 @@ function badRowIdsOf(
 
 // ── 적기 시작한 벌 · 벌마다 제약 (검증) ─────────────────────────────
 
-/** 응답 칸 — 글자·이미지·계산 칸은 값이 응답이 아니다(계산 칸은 저장 경계가 값을 넣는다) */
-const RESPONDENT_CELL_TYPES = new Set<TableCell['type']>(['input', 'select', 'radio', 'checkbox', 'ranking']);
 
 /**
  * 적기 시작한 2벌 이후의 벌 번호 — 응답 칸에 값이 하나라도 든 벌. 빈 채로 열어 둔 벌은 안 쓴 것이다
@@ -724,7 +722,7 @@ export function startedRepeatBundles(
   for (const row of rows) {
     const idx = repeatIndexOf(row);
     if (idx === undefined || idx < fromBundle || started.has(idx)) continue;
-    if (row.cells.some((cell) => RESPONDENT_CELL_TYPES.has(cell.type) && isCellValuePresent(cellValues[cell.id]))) {
+    if (row.cells.some((cell) => hasRespondentValue(cell, cellValues))) {
       started.add(idx);
     }
   }

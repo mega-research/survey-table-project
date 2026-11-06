@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { expandRepeatRows } from '@/lib/question/row-repeat';
+import { withCalcValues, type FormulaEvalCtx } from '@/lib/survey/cell-formula';
 import { stripHiddenQuestionValues } from '@/lib/survey/question-visibility';
 import type { Question, QuestionConditionGroup, RowRepeatConfig, TableRow } from '@/types/survey';
 
@@ -133,6 +134,14 @@ describe('열지 않은 반복 벌은 화면에 없다 — 계산 칸 비교도 
   it('1벌만 열렸으면 1벌 계산 칸만 검사한다', () => {
     const q = calcTable();
     expect(formulaCells(q, { base: '5', amt: '1' })).toEqual(['chk']);
+  });
+
+  it('저장된 응답으로 다시 들어와도 같다 — 저장 경계가 모든 벌의 계산 칸에 넣은 값은 벌을 열지 않는다', () => {
+    const q = calcTable();
+    const answers = { q1: { base: '5', amt: '1' } };
+    const ctx: FormulaEvalCtx = { questions: [q], responses: answers, lookups: [], contactAttrs: {} };
+    const stored = (withCalcValues(answers, ctx) as Record<string, Record<string, unknown>>)['q1']!;
+    expect(formulaCells(q, stored)).toEqual(['chk']);
   });
 
   it('2벌을 적기 시작하면 2벌 계산 칸도 검사한다', () => {

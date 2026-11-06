@@ -232,6 +232,19 @@ export function isCellValuePresent(value: unknown): boolean {
   return Boolean(value);
 }
 
+/** 응답 칸 — 글자·이미지·영상·계산 칸은 값이 응답이 아니다(계산 칸은 저장 경계가 값을 넣는다) */
+const RESPONDENT_CELL_TYPES = new Set<TableCell['type']>(['input', 'select', 'radio', 'checkbox', 'ranking']);
+
+/**
+ * 응답자가 적은 값이 든 칸인가 — 「쓴 벌」·「쓴 열·행」을 셀 때 쓰는 판정(행 반복의 열린 벌·적기 시작한 벌,
+ * 내보내기의 안 쓴 벌·열·행 빼기). 계산 칸 값은 세지 않는다: 저장 경계(`withCalcValues`)가 모든 계산 칸에 값을 넣어
+ * (빈 벌의 합계도 "0"), 세면 다시 들어올 때 최대 벌까지 저절로 열리고 안 쓴 벌·열·행이 내보내기에서 빠지지 않는다
+ * (2026-11-06 발견 — 행·열 차례로 열기의 `hasLiveValue` 와 같은 규칙).
+ */
+export function hasRespondentValue(cell: TableCell, values: Record<string, unknown>): boolean {
+  return RESPONDENT_CELL_TYPES.has(cell.type) && isCellValuePresent(values[cell.id]);
+}
+
 /**
  * 해석된 선택값 전부 — optionId 를 옵션 value 로 언랩한 string 배열.
  * checkbox: 체크 순서대로 0~N개 / radio·select: 0~1개 / input: trim 값 0~1개 / 그 외: [].

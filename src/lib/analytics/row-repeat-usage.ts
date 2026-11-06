@@ -8,8 +8,8 @@
  * 1벌은 아무도 채우지 않았어도 항상 낸다 (문항이 있었다는 사실 자체가 기록이다).
  */
 import { repeatIndexOf } from '@/lib/question/row-repeat';
-import type { Question } from '@/types/survey';
-import { isCellValuePresent } from '@/utils/table-cell-semantics';
+import type { Question, TableCell } from '@/types/survey';
+import { hasRespondentValue } from '@/utils/table-cell-semantics';
 
 /**
  * 응답 한 건에서 이 스캔이 보는 부분만 추린 모양 — 이름이 아니라 구조만 요구한다.
@@ -49,15 +49,15 @@ export function collectUsedRepeatCounts(
   const used = new Map<string, number>();
 
   // 반복 행을 가진 질문만 대상 — 벌 번호별 셀 id 목록을 미리 만든다.
-  const bundleCellsByQuestion = new Map<string, Map<number, string[]>>();
+  const bundleCellsByQuestion = new Map<string, Map<number, TableCell[]>>();
   for (const question of questions) {
-    const byBundle = new Map<number, string[]>();
+    const byBundle = new Map<number, TableCell[]>();
     for (const row of question.tableRowsData ?? []) {
       const bundle = repeatIndexOf(row);
       if (bundle === undefined) continue;
-      const ids = byBundle.get(bundle) ?? [];
-      for (const cell of row.cells) ids.push(cell.id);
-      byBundle.set(bundle, ids);
+      const cells = byBundle.get(bundle) ?? [];
+      cells.push(...row.cells);
+      byBundle.set(bundle, cells);
     }
     if (byBundle.size === 0) continue;
     bundleCellsByQuestion.set(question.id, byBundle);
@@ -71,9 +71,10 @@ export function collectUsedRepeatCounts(
       if (typeof answer !== 'object' || answer === null) continue;
       const cellValues = answer as Record<string, unknown>;
       let max = used.get(questionId) ?? 1;
-      for (const [bundle, cellIds] of byBundle) {
+      for (const [bundle, cells] of byBundle) {
         if (bundle <= max) continue;
-        if (cellIds.some((id) => isCellValuePresent(cellValues[id]))) max = bundle;
+        // 계산 칸 값은 쓴 것이 아니다 — 저장 경계가 모든 벌에 넣는다(hasRespondentValue)
+        if (cells.some((cell) => hasRespondentValue(cell, cellValues))) max = bundle;
       }
       used.set(questionId, max);
     }
