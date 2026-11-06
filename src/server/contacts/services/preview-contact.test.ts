@@ -30,6 +30,15 @@ vi.mock('@/server/read-models/contact-prior-answers', () => ({
 
 const SURVEY = '11111111-1111-4111-8111-111111111111';
 
+// drizzle SQL 객체를 글자로 펴서 어느 열이 조건에 들어갔는지만 본다(순환 참조는 끊는다).
+function whereReplacer(this: unknown, key: string, value: unknown) {
+  if (key === 'table' || key === 'decoder' || key === 'encoder') return undefined;
+  if (value && typeof value === 'object' && 'name' in value && 'columnType' in value) {
+    return `col:${String((value as { name: string }).name)}`;
+  }
+  return value;
+}
+
 describe('loadPreviewContactSeed', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -58,6 +67,20 @@ describe('loadPreviewContactSeed', () => {
       priorAnswers: { q1: '작년 값' },
     });
     expect(lookupPriorAnswersByContactTarget).toHaveBeenCalledWith({ surveyId: SURVEY, contactTargetId: 't1', isTest: true });
+  });
+
+  it('resid 를 주면 그 대상으로 좁힌다 — 주지 않으면 조건이 파티션 둘뿐이다', async () => {
+    limitMock.mockResolvedValue([{ id: 't9', resid: 9, attrs: {} }]);
+    appendContactPii.mockResolvedValue({});
+    lookupPriorAnswersByContactTarget.mockResolvedValue(null);
+
+    await loadPreviewContactSeed({ surveyId: SURVEY, isTest: false, structure: {} });
+    const withoutResid = JSON.stringify(calls.where, whereReplacer);
+    await loadPreviewContactSeed({ surveyId: SURVEY, isTest: false, structure: {}, resid: 9 });
+    const withResid = JSON.stringify(calls.where, whereReplacer);
+
+    expect(withoutResid).not.toContain('col:resid');
+    expect(withResid).toContain('col:resid');
   });
 
   it('개인정보 열은 설문 구조가 읽는 열만 합친다 — 응답자 경로와 같은 규칙', async () => {

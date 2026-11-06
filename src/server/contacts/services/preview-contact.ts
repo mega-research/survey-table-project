@@ -24,17 +24,25 @@ export interface PreviewContactSeed {
  * 토큰·조건으로 읽는 열만 합친다(`collectReferencedContactKeys`). 응답자가 그 대상의 링크로 보는 것과
  * 같은 값이고, 설문이 쓰지 않는 연락처 평문은 RSC props 로 나가지 않는다.
  * 파티션(`isTest`)은 호출부가 콘솔과 같은 `loadOperationsDataScope` 로 정해 넘긴다.
+ * `resid` 를 주면 첫 대상 대신 그 대상을 싣는다 — 운영 도구(`pnpm survey:dump --resid`)용이고 화면은 넘기지 않는다.
  */
 export async function loadPreviewContactSeed(input: {
   surveyId: string;
   isTest: boolean;
   structure: unknown;
+  resid?: number;
 }): Promise<PreviewContactSeed | null> {
-  const { surveyId, isTest, structure } = input;
+  const { surveyId, isTest, structure, resid } = input;
   const [row] = await db
     .select({ id: contactTargets.id, resid: contactTargets.resid, attrs: contactTargets.attrs })
     .from(contactTargets)
-    .where(and(eq(contactTargets.surveyId, surveyId), eq(contactTargets.isTest, isTest)))
+    .where(
+      and(
+        eq(contactTargets.surveyId, surveyId),
+        eq(contactTargets.isTest, isTest),
+        resid === undefined ? undefined : eq(contactTargets.resid, resid),
+      ),
+    )
     .orderBy(asc(contactTargets.resid))
     .limit(1);
   if (!row) return null;
