@@ -238,8 +238,14 @@ export function isGateConditionMet(
   condition: CellEnableCondition,
   cellValues: Record<string, unknown>,
   tableCells?: readonly TableCell[],
+  /**
+   * 보기 그룹 표의 선택된 보기 id 집합(collectTableChoiceSelection). 조건이나 그 컨트롤러의 상류(칸 게이팅·
+   * 드롭다운 보기 표시 조건)에 보기 선택 조건이 있으면 넘겨야 한다 — 없으면 보기 선택으로 열린 컨트롤러의
+   * 정상 값을 잔존값으로 본다(2026-11-06 리뷰 지적).
+   */
+  choiceSelection?: ReadonlySet<string>,
 ): boolean {
-  return evaluate(condition, { cellValues, tableCells, choiceSelection: undefined, visiting: new Set() });
+  return evaluate(condition, { cellValues, tableCells, choiceSelection, visiting: new Set() });
 }
 
 /**

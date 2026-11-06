@@ -24,6 +24,7 @@ import {
 } from '@/features/question-renderer/utils/token-prefill';
 import {
   collectSelectedChoiceCellIds,
+  collectTableChoiceSelection,
   isChoiceGroupTableQuestion,
   readTableChoiceGroups,
 } from '@/lib/survey/choice-selection';
@@ -603,7 +604,12 @@ function isConstraintApplicable(
   tableCells: readonly TableCell[],
   ctx: NumericValidationCtx | undefined,
 ): boolean {
-  if (constraint.when && !isGateConditionMet(constraint.when, cellValues, tableCells)) return false;
+  // 컨트롤러가 보기 그룹 선택으로 열리는 칸일 수 있다 — 표 응답 안 선택 집합을 함께 넘긴다
+  if (
+    constraint.when &&
+    !isGateConditionMet(constraint.when, cellValues, tableCells, collectTableChoiceSelection(cellValues))
+  )
+    return false;
   if (constraint.whenQuestion) {
     if (!ctx) return false;
     return evaluateQuestionConditionGroup(constraint.whenQuestion, ctx.allResponses, ctx.allQuestions, toBranchEvalCtx(ctx));
