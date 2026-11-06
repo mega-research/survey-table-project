@@ -236,9 +236,16 @@ export function collectVisibleTableCells(
   // 파생한다(세션에서 `+` 로 연 빈 행·단계는 검증이 알 수 없고, 비어 있어 빼도 잃는 판정이 없다).
   const stagedHidden = stagedOptionalCellIds(rows, question.stagedRowsConfig, cellValues);
   const stagedColumnHidden = stagedColumnOptionalCellIds(question.tableColumns, rows, cellValues);
+  const collapsedHidden = collapsedFirstBundleCellIds(question, cellValues, ctx);
   return projectedRows
     .flatMap((row) => row.cells.filter((_, idx) => !hiddenColIndices.has(idx)))
-    .filter((c) => !c.isHidden && !stagedHidden.has(c.id) && !stagedColumnHidden.has(c.id));
+    .filter(
+      (c) =>
+        !c.isHidden &&
+        !stagedHidden.has(c.id) &&
+        !stagedColumnHidden.has(c.id) &&
+        !collapsedHidden.has(c.id),
+    );
 }
 
 /**
@@ -280,28 +287,40 @@ export function resolveChoiceTableVisibleCellIds(
  * 필수」(`rowRepeatConfig.requireStartedBundles`)를 켜면 값이 하나라도 든 벌은 빼지 않는다 — 빈 채로
  * 열어 둔 벌은 그래도 뺀다.
  */
-function collectRepeatOptionalCellIds(
-  question: Question,
-  cellValues: Record<string, unknown>,
-  ctx: NumericValidationCtx | undefined,
-): Set<string> {
+function collectRepeatOptionalCellIds(question: Question, cellValues: Record<string, unknown>): Set<string> {
   const rows = question.tableRowsData ?? [];
   const started = question.rowRepeatConfig?.requireStartedBundles
     ? startedRepeatBundles(rows, cellValues)
     : new Set<number>();
-  // 「처음엔 접어 두기」 — 접힌 첫 벌은 화면에 없는 줄이다. 적기 시작했을 때만 1벌처럼 검사한다.
-  // 펼쳐 둘 조건(expandWhen)은 렌더러와 같은 평가기로 본다 — 재료가 없으면 접힌 것으로 본다(막지 않는 쪽).
-  const firstCollapsed =
-    repeatStartsCollapsed(question.rowRepeatConfig, (condition) =>
-      ctx
-        ? evaluateQuestionConditionGroup(condition, ctx.allResponses, ctx.allQuestions, toBranchEvalCtx(ctx))
-        : false,
-    ) && !startedRepeatBundles(rows, cellValues, 1).has(1);
   const ids = new Set<string>();
   for (const row of rows) {
     const idx = row.repeatIndex ?? 1;
-    if (idx < 2 && !(firstCollapsed && row.repeatIndex === 1)) continue;
-    if (idx >= 2 && started.has(idx)) continue;
+    if (idx < 2 || started.has(idx)) continue;
+    for (const cell of row.cells) ids.add(cell.id);
+  }
+  return ids;
+}
+
+/**
+ * 「처음엔 접어 두기」로 접힌 첫 벌의 셀 — 화면에 없는 줄이라 필수뿐 아니라 모든 차단 검증(입력 개수·합계·
+ * 계산 칸 비교)에서 뺀다(행 차례로 열기의 닫힌 행과 같은 자리, collectVisibleTableCells). 적기 시작하면 접힌 게
+ * 아니다(렌더러도 값이 든 벌을 연다). 펼쳐 둘 조건은 렌더러와 같은 평가기로 보고, 재료가 없으면 접힌 것으로 본다.
+ */
+function collapsedFirstBundleCellIds(
+  question: Question,
+  cellValues: Record<string, unknown>,
+  ctx: NumericValidationCtx | undefined,
+): Set<string> {
+  const ids = new Set<string>();
+  const rows = question.tableRowsData ?? [];
+  const collapsed = repeatStartsCollapsed(question.rowRepeatConfig, (condition) =>
+    ctx
+      ? evaluateQuestionConditionGroup(condition, ctx.allResponses, ctx.allQuestions, toBranchEvalCtx(ctx))
+      : false,
+  );
+  if (!collapsed || startedRepeatBundles(rows, cellValues, 1).has(1)) return ids;
+  for (const row of rows) {
+    if (row.repeatIndex !== 1) continue;
     for (const cell of row.cells) ids.add(cell.id);
   }
   return ids;
@@ -1170,7 +1189,7 @@ export function collectNumericIssues(
     // 행 반복: 필수는 1벌만 본다. 2벌부터는 열어도 비워 둘 수 있어야 한다 —
     // 실수로 `+` 를 누른 응답자가 제출하지 못하는 상황을 막는다. 범위·합계 검증은
     // 값이 있을 때만 위반이 나므로 벌 수와 무관하게 그대로 둔다.
-    const repeatOptionalCellIds = collectRepeatOptionalCellIds(question, cellValues, ctx);
+    const repeatOptionalCellIds = collectRepeatOptionalCellIds(question, cellValues);
     // 행·열 차례로 열기의 닫힌 칸은 collectVisibleTableCells 가 이미 뺐다(모든 차단 검증 공통) —
     // 「처음 보이는 행」과 「값이 있는 마지막 행」까지는 평범한 행으로 검사한다.
     const ordinaryMissingCells = enabled.filter(

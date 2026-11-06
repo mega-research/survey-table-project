@@ -74,3 +74,24 @@ describe('저장 경계', () => {
     expect(stripHiddenQuestionValues([q0, q], kept)['q1']).toEqual({ f1: '10', t1: '버터' });
   });
 });
+
+describe('접힌 첫 줄은 화면에 없는 칸이다 — 필수뿐 아니라 모든 차단 검증에서 빠진다 (리뷰 지적)', () => {
+  const withCount = (config: RowRepeatConfig): Question => ({
+    ...table(config),
+    sumConstraints: [{ id: 'need-t1', aggregate: 'count', cellIds: ['t1'], operator: 'gte', target: 1, errorMessage: '품목을 적어 주세요' }],
+  }) as Question;
+  const countIssues = (q: Question, value: Record<string, unknown>, all: Record<string, unknown> = {}) =>
+    collectNumericIssues(q, value, { allResponses: { ...all, q1: value }, allQuestions: [q0, q] }).filter((i) =>
+      i.message.includes('품목을 적어'),
+    );
+
+  it('접힌 채 비어 있으면 입력 개수 제약이 막지 않는다', () => {
+    expect(countIssues(withCount({ ...base, startCollapsed: true }), { f1: '10' })).toHaveLength(0);
+  });
+
+  it('펼쳐 둔 첫 줄(조건 참)이나 접어 두지 않은 첫 줄은 그대로 검사한다', () => {
+    expect(countIssues(withCount(base), { f1: '10' })).toHaveLength(1);
+    expect(countIssues(withCount({ ...base, startCollapsed: true, expandWhen: whenQ0Is('1') }), { f1: '10' }, { q0: '1' })).toHaveLength(1);
+  });
+});
+

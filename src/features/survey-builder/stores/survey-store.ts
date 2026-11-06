@@ -55,6 +55,7 @@ import { client } from '@/shared/lib/rpc';
 import { isMobileTableDisplayType, isOptionListType } from '@/types/question-types';
 import {
   Question,
+  QuestionConditionGroup,
   QuestionGroup,
   QuestionType,
   SelectLevel,
@@ -824,6 +825,19 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
               }
             }
 
+            // 문항 표시 조건과 같은 모양의 다른 자리 조건 — 행 반복 블록 표시·펼쳐 둘 조건, 표 제약의 다른 문항 적용 조건
+            if (
+              remapExtraConditionGroups(question, (group) =>
+                remapConditionGroupValues(group, questionId, oldValue, newValue, cellScope),
+              )
+            ) {
+              changed = true;
+              affectedIds.add(question.id);
+              if (!state.questionChanges.added[question.id]) {
+                state.questionChanges.updated[question.id] = true;
+              }
+            }
+
             if (question.tableColumns) {
               let columnsChanged = false;
               const nextColumns = question.tableColumns.map((column) => {
@@ -969,6 +983,13 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
               }
             }
 
+            if (
+              remapExtraConditionGroups(question, (group) =>
+                remapConditionGroupQuestionRefs(group, oldId, newId),
+              )
+            ) {
+              questionChanged = true;
+            }
             const nextOptions = remapBranchTargets(question.options);
             if (nextOptions !== question.options && nextOptions !== undefined) {
               question.options = nextOptions;
@@ -1150,4 +1171,41 @@ function getDefaultTableRows(): TableRow[] {
       ],
     },
   ];
+}
+
+/**
+ * 문항 표시 조건과 같은 모양(QuestionConditionGroup)인데 문항·행·열·그룹 밖에 사는 조건을 같은 변환으로 옮긴다 —
+ * 행 반복 블록 표시 조건(`rowRepeatConfig.displayCondition`)·펼쳐 둘 조건(`expandWhen`)·표 제약의 다른 문항 적용
+ * 조건(`sumConstraints[].whenQuestion`). Immer draft 를 직접 고치고, 바뀐 것이 있으면 true.
+ * 변환은 바꿀 것이 없으면 같은 참조를 돌려준다(remapConditionGroupValues·remapConditionGroupQuestionRefs 의 계약).
+ */
+function remapExtraConditionGroups(
+  question: Question,
+  remap: (group: QuestionConditionGroup) => QuestionConditionGroup,
+): boolean {
+  let changed = false;
+  const config = question.rowRepeatConfig;
+  if (config?.displayCondition) {
+    const next = remap(config.displayCondition);
+    if (next !== config.displayCondition) {
+      config.displayCondition = next;
+      changed = true;
+    }
+  }
+  if (config?.expandWhen) {
+    const next = remap(config.expandWhen);
+    if (next !== config.expandWhen) {
+      config.expandWhen = next;
+      changed = true;
+    }
+  }
+  for (const constraint of question.sumConstraints ?? []) {
+    if (!constraint.whenQuestion) continue;
+    const next = remap(constraint.whenQuestion);
+    if (next !== constraint.whenQuestion) {
+      constraint.whenQuestion = next;
+      changed = true;
+    }
+  }
+  return changed;
 }
