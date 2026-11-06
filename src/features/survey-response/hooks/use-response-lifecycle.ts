@@ -11,6 +11,7 @@ import { consumeSeedWrite } from '@/features/survey-response/stores/live-respons
 import type { ClientSignals } from '@/lib/duplicate-detection/types';
 import { type CompletionOutcome, outcomeFromStatus } from '@/features/survey-response/lib/completion-screen';
 import { midSurveyClosedBody } from '@/lib/quota/closed-message';
+import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
 import { type FormulaEvalCtx, withCalcValues } from '@/lib/survey/cell-formula';
 import type { PriorAnswers } from '@/lib/survey/prior-answers';
 import { type RenderStep, findStepIndexOfQuestion, stepIdOf } from '@/utils/group-ordering';
@@ -192,6 +193,8 @@ interface UseResponseLifecycleResult {
   handleResponse: (questionId: string, value: unknown) => void;
   /** 이어하기 회복이 저장된 답을 깐 직후 — 그 전에 쌓인 미저장 답을 버린다(저장본을 덮지 않게). */
   discardPendingAnswers: () => void;
+  /** 버전 갈아타기 — 미저장 답을 새 버전 구조로 거른다(화면과 같은 생존 판정). */
+  rebasePendingAnswers: (newQuestions: Question[]) => void;
   /** 현재 페이지에서 바뀐 답을 저장한다. 첫 응답 생성 중이면 완료까지 기다린다. */
   flushPendingAnswers: () => Promise<boolean>;
   /**
@@ -493,6 +496,29 @@ export function useResponseLifecycle({
     pendingAnswerSavesRef.current.clear();
     lastBeaconSnapshotRef.current = null;
     clearDraftAutosave();
+  };
+
+  /**
+   * 무중단 갈아타기로 응답이 새 버전에 묶이면 미저장 답도 화면과 같은 생존 판정으로 거른다.
+   *
+   * 화면만 거르고 대기열을 두면, 새 버전에 없는 문항의 답이 다음 초안 저장에 실려 서버의 소속 검증이
+   * 묶음 전체를 거부한다(부분 저장 없음) — 대기열에서 빠지지 않으니 그 뒤 임시 저장이 계속 실패한다.
+   * 모양이 바뀐 답(삭제된 보기·셀 참조)은 걸러진 값으로 갈아끼워 화면과 같은 값을 보낸다.
+   */
+  const rebasePendingAnswers = (newQuestions: Question[]) => {
+    if (pendingAnswerSavesRef.current.size === 0) return;
+    const { survivingResponses } = applyStructuralSurvival(
+      Object.fromEntries(pendingAnswerSavesRef.current),
+      newQuestions,
+    );
+    for (const key of [...pendingAnswerSavesRef.current.keys()]) {
+      if (!(key in survivingResponses)) {
+        pendingAnswerSavesRef.current.delete(key);
+      } else if (!Object.is(survivingResponses[key], pendingAnswerSavesRef.current.get(key))) {
+        pendingAnswerSavesRef.current.set(key, survivingResponses[key]);
+      }
+    }
+    lastBeaconSnapshotRef.current = null;
   };
 
   const flushPendingAnswers = (): Promise<boolean> => enqueueFlush(false);
@@ -1141,6 +1167,7 @@ export function useResponseLifecycle({
   return {
     handleResponse,
     discardPendingAnswers,
+    rebasePendingAnswers,
     flushPendingAnswers,
     flushPendingAnswersInBackground,
     waitForResponseId,

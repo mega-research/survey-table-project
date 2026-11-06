@@ -1447,6 +1447,8 @@ function SurveyResponseFlowActive({
   // 최신 스냅샷을 재취득하고(steps 는 loadedSurvey 파생이라 자동 재계산), 메모리의 응답 맵을
   // 구조 생존 판정(티켓 01)으로 걸러 신버전 구조와 비양립인 답만 버린 뒤 안내 문구를 띄운다.
   // 신버전 질문 목록은 state 커밋을 기다리지 않고 refetchSnapshot 의 반환값을 직접 쓴다.
+  // 저장 대기열도 같은 판정으로 거른다 — 거르는 함수는 아래 useResponseLifecycle 이 갖고 있어 ref 를 경유한다.
+  const rebasePendingAnswersRef = useRef<((newQuestions: Question[]) => void) | null>(null);
   const handleVersionRebase = useCallback(() => {
     void (async () => {
       const refetched = await refetchSnapshot();
@@ -1454,6 +1456,7 @@ function SurveyResponseFlowActive({
       setResponses(
         (prev) => applyStructuralSurvival(prev, refetched.survey.questions).survivingResponses,
       );
+      rebasePendingAnswersRef.current?.(refetched.survey.questions);
       setShowRebaseNotice(true);
     })();
   }, [refetchSnapshot, setResponses]);
@@ -1462,6 +1465,7 @@ function SurveyResponseFlowActive({
   const {
     handleResponse,
     discardPendingAnswers,
+    rebasePendingAnswers,
     flushPendingAnswersInBackground,
     waitForResponseId,
     handleSubmit,
@@ -1571,6 +1575,7 @@ function SurveyResponseFlowActive({
       discardPendingAnswers();
       prefilledQuestionIdsRef.current.clear();
     };
+    rebasePendingAnswersRef.current = rebasePendingAnswers;
   });
   useEffect(() => {
     if (changeConfirmEnabled) return;
