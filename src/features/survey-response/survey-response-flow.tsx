@@ -2051,13 +2051,12 @@ function SurveyResponseFlowActive({
       completionOutcome,
       completionLocale,
     );
+    // 미리보기도 실응답과 같은 완료 화면이다 — 고객이 미리보기로 마지막 화면을 확인한다
+    // (2026-11-06, 「설문 확인 완료 / 입력 내용은 저장되지 않았습니다」 카드를 걷어냄)
     return (
       <SurveyCompletedScreen
-        title={isPreview ? systemText('completion.previewTitle', completionLocale) : screen.title}
-        thankYouMessage={
-          isPreview ? systemText('completion.previewMessage', completionLocale) : screen.message
-        }
-        showCompletedTime={!isPreview}
+        title={screen.title}
+        thankYouMessage={screen.message}
         locale={completionLocale}
         footer={endRedirectFooter}
         {...(canStartNewResponse ? { onStartNew: () => window.location.reload() } : {})}

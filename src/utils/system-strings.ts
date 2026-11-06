@@ -56,8 +56,6 @@ const KO = {
   'completion.screenedOutTitle': '설문 종료',
   'completion.defaultMessage': '설문에 참여해주셔서 감사합니다!',
   'completion.completedAt': '응답 완료 시간: {time}',
-  'completion.previewTitle': '설문 확인 완료',
-  'completion.previewMessage': '입력 내용은 저장되지 않았습니다.',
   'completion.startNew': '새 응답 시작',
 
   // 종료 후 이동
@@ -350,8 +348,6 @@ const ZH: Dictionary = {
   'completion.screenedOutTitle': '问卷结束',
   'completion.defaultMessage': '感谢您参与本次问卷调查！',
   'completion.completedAt': '作答完成时间：{time}',
-  'completion.previewTitle': '问卷检查完成',
-  'completion.previewMessage': '填写的内容未被保存。',
   'completion.startNew': '开始新的作答',
 
   'endRedirect.waiting': '请稍候。',
@@ -622,8 +618,6 @@ const EN: Dictionary = {
   'completion.screenedOutTitle': 'Survey ended',
   'completion.defaultMessage': 'Thank you for taking part in the survey!',
   'completion.completedAt': 'Completed at: {time}',
-  'completion.previewTitle': 'Survey check complete',
-  'completion.previewMessage': 'Your entries were not saved.',
   'completion.startNew': 'Start a new response',
 
   'endRedirect.waiting': 'Please wait a moment.',

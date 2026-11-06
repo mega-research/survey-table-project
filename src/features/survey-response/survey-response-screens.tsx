@@ -235,7 +235,7 @@ export function SurveyCompletedScreen({
           <h2 className="mb-2 text-2xl font-semibold text-gray-900">
             {title ?? <SystemText k="completion.title" locale={locale} />}
           </h2>
-          <p className="mb-6 text-gray-600">
+          <p className="mb-6 whitespace-pre-line text-gray-600">
             {thankYouMessage || <SystemText k="completion.defaultMessage" locale={locale} />}
           </p>
           {showCompletedTime && (
