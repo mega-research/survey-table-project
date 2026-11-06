@@ -330,6 +330,37 @@ describe('useResponseLifecycle - handleResponse INSERT 가드', () => {
     });
   });
 
+  it('회복이 저장된 답을 깔면 그 전에 쌓인 미저장 답은 저장하지 않는다 — 명단 값 칸의 통째 쓰기가 저장본을 덮지 않는다', async () => {
+    // 2026-11-06 유가공업 SQ1: 회복 RPC 도중 「고칠 수 있게」 명단 값 칸이 빈 응답을 보고 문항 값을
+    // 명단 칸만 든 객체로 썼고, 회복 뒤 초안 저장이 서버의 SQ1 을 갈아끼워 인증일·전화번호가 지워졌다.
+    const args = baseArgs({ currentResponseId: 'restored' });
+    const { result } = renderHook(() => useResponseLifecycle(args));
+
+    act(() => {
+      result.current.handleResponse('sq1', { name: '(주)비락' });
+    });
+    act(() => {
+      result.current.discardPendingAnswers();
+    });
+    await act(async () => {
+      await result.current.flushPendingAnswers();
+    });
+    expect(saveDraft).not.toHaveBeenCalled();
+
+    // 회복 뒤의 입력은 그대로 저장된다
+    act(() => {
+      result.current.handleResponse('sq1', { name: '(주)비락', haccp: '2011.02.02' });
+    });
+    await act(async () => {
+      await result.current.flushPendingAnswers();
+    });
+    expect(saveDraft).toHaveBeenCalledWith({
+      responseId: 'restored',
+      answers: { sq1: { name: '(주)비락', haccp: '2011.02.02' } },
+      seq: expect.any(Number),
+    });
+  });
+
   it('첫 응답 생성 중 다음을 눌러도 생성 완료 뒤 현재 페이지 답변을 저장한다', async () => {
     let resolveCreate!: (value: { id: string; contactTargetId: string }) => void;
     createWithFirstAnswer.mockReturnValue(

@@ -1103,6 +1103,10 @@ function SurveyResponseFlowActive({
   // useResponseLifecycle 호출 시점(아래)에 prop 으로 넘긴다. 훅 호출 순서상 useSessionRecovery
   // 가 먼저이므로 콜백은 useResponseLifecycle 내부 값을 직접 참조하지 않고 이 state 를 경유한다.
   const [recoveredDraftSeq, setRecoveredDraftSeq] = useState<number | undefined>(undefined);
+  // 회복이 저장된 답을 깐 직후 미저장 답 버리기 — 버리는 함수는 아래 useResponseLifecycle 이 갖고 있어
+  // 훅 호출 순서상 ref 를 경유한다(콜백은 안정 참조여야 회복 effect 가 다시 돌지 않는다).
+  const discardPendingAnswersRef = useRef<(() => void) | null>(null);
+  const handleAnswersRestored = useCallback(() => discardPendingAnswersRef.current?.(), []);
 
   // 운영 현황 콘솔(T6): localStorage 기반 응답 회복 + 회복 토스트 자동 dismiss.
   // 회복 effect + dismiss effect 와 isRecovering/showResumeNotice state 를
@@ -1126,6 +1130,7 @@ function SurveyResponseFlowActive({
     setResponses,
     onRestoreStep: restoreStepFromRecovery,
     onDraftSeqRecovered: setRecoveredDraftSeq,
+    onAnswersRestored: handleAnswersRestored,
     setCurrentResponseId,
     setDuplicateStatus,
     setPausedMessage: setRefetchedPausedMessage,
@@ -1453,60 +1458,68 @@ function SurveyResponseFlowActive({
   }, [refetchSnapshot, setResponses]);
 
   // 첫 답변 INSERT 가드는 훅 내부 동기 ref 전용이라 컴포넌트가 볼 값이 없다(반환하지 않는다).
-  const { handleResponse, flushPendingAnswersInBackground, waitForResponseId, handleSubmit } =
-    useResponseLifecycle({
-      isAdminEdit,
-      isPreview,
-      isCompleted,
-      terminalBlocked: duplicateStatus.kind === 'blocked',
-      adminContext,
-      inviteToken,
-      testToken,
-      entryParams,
-      isTestSession,
-      testIdentity,
-      hasTestAttemptOwnership,
-      setHasTestAttemptOwnership,
-      loadedSurvey,
-      contactAttrs,
-      priorAnswers,
-      currentStep,
-      currentStepIndex,
-      steps,
-      questions,
-      groups,
-      visibleQuestions,
-      evalCtx,
-      responses,
-      setResponses,
-      sessionId,
-      versionId,
-      onVersionRebase: handleVersionRebase,
-      signals,
-      honeypotRef,
-      currentResponseId,
-      setCurrentResponseId,
-      setPendingResponse,
-      resetResponseState,
-      isRecovering,
-      recoveredDraftSeq,
-      isQuestionAnswered,
-      isQuestionRequired,
-      optionTextsByQuestion: effectiveOptionTextsByQuestion,
-      visibleProgressRef,
-      setHighlightQuestionIds,
-      setDuplicateStatus,
-      setPausedMessage: setRefetchedPausedMessage,
-      setQuotaClosedMessage,
-      localeRef: systemLocaleRef,
-      setInviteIsInvalid,
-      setIsSubmitting,
-      setCurrentStepIndex,
-      setIsCompleted,
-      setCompletionOutcome,
-      buildOptTextsPayload: buildSubmissionPayload,
-      setNumericErrorStepIndex,
-    });
+  const {
+    handleResponse,
+    discardPendingAnswers,
+    flushPendingAnswersInBackground,
+    waitForResponseId,
+    handleSubmit,
+  } = useResponseLifecycle({
+    isAdminEdit,
+    isPreview,
+    isCompleted,
+    terminalBlocked: duplicateStatus.kind === 'blocked',
+    adminContext,
+    inviteToken,
+    testToken,
+    entryParams,
+    isTestSession,
+    testIdentity,
+    hasTestAttemptOwnership,
+    setHasTestAttemptOwnership,
+    loadedSurvey,
+    contactAttrs,
+    priorAnswers,
+    currentStep,
+    currentStepIndex,
+    steps,
+    questions,
+    groups,
+    visibleQuestions,
+    evalCtx,
+    responses,
+    setResponses,
+    sessionId,
+    versionId,
+    onVersionRebase: handleVersionRebase,
+    signals,
+    honeypotRef,
+    currentResponseId,
+    setCurrentResponseId,
+    setPendingResponse,
+    resetResponseState,
+    isRecovering,
+    recoveredDraftSeq,
+    isQuestionAnswered,
+    isQuestionRequired,
+    optionTextsByQuestion: effectiveOptionTextsByQuestion,
+    visibleProgressRef,
+    setHighlightQuestionIds,
+    setDuplicateStatus,
+    setPausedMessage: setRefetchedPausedMessage,
+    setQuotaClosedMessage,
+    localeRef: systemLocaleRef,
+    setInviteIsInvalid,
+    setIsSubmitting,
+    setCurrentStepIndex,
+    setIsCompleted,
+    setCompletionOutcome,
+    buildOptTextsPayload: buildSubmissionPayload,
+    setNumericErrorStepIndex,
+  });
+  useEffect(() => {
+    discardPendingAnswersRef.current = discardPendingAnswers;
+  });
 
   // 변동 확인은 문항 id 가 아니라 사이드카 키로 들어오므로, handleResponse 안의
   // "답하면 하이라이트를 푼다" 처리가 문항을 찾지 못한다. 확인이 채워진 문항의
