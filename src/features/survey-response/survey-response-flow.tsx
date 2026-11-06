@@ -79,6 +79,7 @@ import { ResponseDocumentPane } from '@/features/survey-response/response-docume
 import { ResumeToast } from '@/features/survey-response/resume-toast';
 import { DemandChecklist } from '@/features/survey-response/step-views/demand-checklist';
 import { PageStepView } from '@/features/survey-response/step-views/page-step-view';
+import { markSeedWrite } from '@/features/survey-response/stores/live-response-sources';
 import { useSurveyResponseStore } from '@/features/survey-response/stores/survey-response-store';
 import { SurveyResponseLayout } from '@/features/survey-response/survey-response-layout';
 import {
@@ -1517,9 +1518,6 @@ function SurveyResponseFlowActive({
     buildOptTextsPayload: buildSubmissionPayload,
     setNumericErrorStepIndex,
   });
-  useEffect(() => {
-    discardPendingAnswersRef.current = discardPendingAnswers;
-  });
 
   // 변동 확인은 문항 id 가 아니라 사이드카 키로 들어오므로, handleResponse 안의
   // "답하면 하이라이트를 푼다" 처리가 문항을 찾지 못한다. 확인이 채워진 문항의
@@ -1566,6 +1564,14 @@ function SurveyResponseFlowActive({
    * 근거다 — 응답자가 손댔는지 여부와 무관하게 회수해야 하므로 값 자체로는 판정할 수 없다.
    */
   const prefilledQuestionIdsRef = useRef<Set<string>>(new Set());
+  // 회복이 저장된 답을 깔면 그 전에 쌓인 미저장 답과 「이 세션에서 깐 이월 값」 기록을 함께 버린다 —
+  // 회복 전에 깐 문항은 이제 응답자의 저장된 답을 들고 있어, 기록이 남으면 조건이 뒤집힐 때 회수가 그 답을 지운다.
+  useEffect(() => {
+    discardPendingAnswersRef.current = () => {
+      discardPendingAnswers();
+      prefilledQuestionIdsRef.current.clear();
+    };
+  });
   useEffect(() => {
     if (changeConfirmEnabled) return;
     // 관리자 편집은 이월 값을 **표시만** 한다. 여기서 프리필이 돌면 관리자가 응답을 열어
@@ -1584,6 +1590,11 @@ function SurveyResponseFlowActive({
       evalCtx,
     );
     for (const entry of entries) {
+      // 작년 값을 까는 것은 응답자의 답이 아니다 — 명단 값 칸과 같이 응답 행을 만들지 않는다. 첫 답으로
+      // 다루면 링크를 열기만 해도 행을 만들고, 서버는 같은 컨택의 진행 중 행을 물려받아 이 문항을 작년 값으로
+      // 덮으며, 그 생성이 이어하기 회복보다 먼저 돌아오면 회복이 취소돼 저장된 답이 화면에 깔리지 않았다
+      // (2026-11-06, prior-prefill-resume-race.test.tsx).
+      markSeedWrite(entry.questionId);
       handleResponse(entry.questionId, entry.value);
       prefilledQuestionIdsRef.current.add(entry.questionId);
     }
@@ -1626,6 +1637,7 @@ function SurveyResponseFlowActive({
       evalCtx,
     );
     for (const questionId of retractions) {
+      markSeedWrite(questionId);
       handleResponse(questionId, undefined);
       prefilledQuestionIdsRef.current.delete(questionId);
     }
