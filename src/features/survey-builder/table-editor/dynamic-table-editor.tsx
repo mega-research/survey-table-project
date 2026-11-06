@@ -206,6 +206,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
     deleteRow,
     updateRowLabel,
     updateRowCode,
+    updateRowExportOmit,
     handleSelectCell,
     setSelectedCell,
     updateCell,
@@ -805,6 +806,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
                   onStartDragCopy={startDragCopy}
                   onUpdateRowLabel={updateRowLabel}
                   onUpdateRowCode={updateRowCode}
+                  onUpdateRowExportOmit={updateRowExportOmit}
                   onOpenRowConditionModal={
                     props.allowDisplayConditions === false ? undefined : openRowConditionModal
                   }

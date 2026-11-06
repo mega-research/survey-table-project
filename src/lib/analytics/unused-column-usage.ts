@@ -19,15 +19,25 @@ interface SubmissionLike {
 
 type ColumnQuestion = Pick<Question, 'id' | 'tableColumns' | 'tableRowsData'>;
 
-/** 「안 쓰면 뺀다」 열이 있는 표 문항 id — 이 목록이 비면 스캔을 건너뛴다. */
+/**
+ * 「안 쓰면 뺀다」 열 또는 행이 있는 표 문항 id — 이 목록이 비면 스캔을 건너뛴다.
+ *
+ * 행에도 같은 표시가 있다(`TableRow.exportOmitIfUnused`, 2026-11-06) — 조건으로 나타나는 줄을 넉넉히
+ * 만들어 둔 표(유가공업 문2 수입 원료 「기타1~10」). 행 반복 벌의 미사용 벌 빼기(`row-repeat-usage`)와는 별개다.
+ * 열 id 와 행 id 는 같은 결과 맵에 담긴다(둘 다 UUID 라 겹치지 않는다).
+ */
 export function omittableColumnQuestionIds(questions: readonly ColumnQuestion[]): string[] {
   return questions
-    .filter((question) => (question.tableColumns ?? []).some((column) => column.exportOmitIfUnused === true))
+    .filter(
+      (question) =>
+        (question.tableColumns ?? []).some((column) => column.exportOmitIfUnused === true) ||
+        (question.tableRowsData ?? []).some((row) => row.exportOmitIfUnused === true),
+    )
     .map((question) => question.id);
 }
 
 /**
- * 질문 id → 아무도 채우지 않은 「안 쓰면 뺀다」 열 id 집합.
+ * 질문 id → 아무도 채우지 않은 「안 쓰면 뺀다」 열·행 id 집합.
  * 뺄 열이 하나도 없는 질문은 담지 않는다.
  */
 export function collectUnusedColumnIds(
@@ -48,6 +58,14 @@ export function collectUnusedColumnIds(
       }
       byColumn.set(column.id, cellIds);
     });
+    // 「안 쓰면 뺀다」 행 — 그 행의 모든 칸을 본다(열과 같은 판정, 키는 행 id)
+    for (const row of question.tableRowsData ?? []) {
+      if (row.exportOmitIfUnused !== true) continue;
+      byColumn.set(
+        row.id,
+        row.cells.filter((cell) => !cell.isHidden).map((cell) => cell.id),
+      );
+    }
     if (byColumn.size > 0) candidates.set(question.id, byColumn);
   }
 

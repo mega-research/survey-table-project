@@ -801,6 +801,12 @@ export interface TableRow {
   height?: number; // 행 높이 (픽셀 단위)
   minHeight?: number; // 최소 높이
   displayCondition?: QuestionConditionGroup; // 행 표시 조건
+  /**
+   * 안 쓰면 내보내기에서 빼기 — 응답 전체에서 이 행의 칸에 값이 하나도 없으면 엑셀·SPSS 에 이 행의 변수를
+   * 내지 않는다(열의 `TableColumn.exportOmitIfUnused` 와 같은 판정, 2026-11-06). 조건으로 나타나는 줄을
+   * 넉넉히 만들어 둔 표용 — 행 반복 벌은 이미 미사용 벌을 뺀다. 판정 `lib/analytics/unused-column-usage`.
+   */
+  exportOmitIfUnused?: boolean;
   dynamicGroupId?: string; // 소속 동적 그룹 ID (undefined = 항상 표시)
   showWhenDynamicGroupId?: string; // 이 그룹에 선택 있으면 함께 표시 (소계 행용)
   /**

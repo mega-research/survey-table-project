@@ -119,6 +119,8 @@ export interface EditorTableRowProps {
   onStartDragCopy: (rowIndex: number, cellIndex: number) => void;
   onUpdateRowLabel: (rowIndex: number, label: string) => void;
   onUpdateRowCode: (rowIndex: number, rowCode: string) => void;
+  /** 안 쓰면 내보내기에서 빼기(TableRow.exportOmitIfUnused). 주지 않으면 체크박스를 내지 않는다 */
+  onUpdateRowExportOmit?: ((rowIndex: number, omit: boolean) => void) | undefined;
   /** 주지 않으면 행 조건부 표시 입구를 내지 않는다(순위형 내장 표 — 응답 화면이 행 조건을 읽지 않는다) */
   onOpenRowConditionModal?: ((rowIndex: number) => void) | undefined;
   dynamicRowConfigs: DynamicRowGroupConfig[];
@@ -150,6 +152,7 @@ export const EditorTableRow = React.memo(function EditorTableRow({
   onStartDragCopy,
   onUpdateRowLabel,
   onUpdateRowCode,
+  onUpdateRowExportOmit,
   onOpenRowConditionModal,
   dynamicRowConfigs,
   onSetDynamicGroupId,
@@ -233,6 +236,21 @@ export const EditorTableRow = React.memo(function EditorTableRow({
                       placeholder="행 코드"
                     />
                   </div>
+                  {/* 안 쓴 행 빼기 — 열 설정 메뉴의 같은 체크박스와 같은 모양 */}
+                  {onUpdateRowExportOmit && (
+                    <label className="flex cursor-pointer items-start gap-1.5 px-2 py-1.5 text-[11px] text-gray-600">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={row.exportOmitIfUnused === true}
+                        onChange={(e) => onUpdateRowExportOmit(rowIndex, e.target.checked)}
+                      />
+                      <span>
+                        안 쓰면 내보내기에서 빼기
+                        <span className="block text-[10px] text-gray-400">응답 전체에서 아무도 안 채운 행</span>
+                      </span>
+                    </label>
+                  )}
                   {hasQuestions && onOpenRowConditionModal && (
                     <>
                       <div className="my-1 border-t" />

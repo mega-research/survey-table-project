@@ -1021,6 +1021,21 @@ export function useTableEditor({
     [notifyChangeDebounced, scheduleCellCodeRecalc],
   );
 
+  // 안 쓴 행 빼기 — 체크박스라 즉시 커밋한다(열의 updateColumnExportOmit 과 같다)
+  const updateRowExportOmit = useCallback(
+    (rowIndex: number, omit: boolean) => {
+      const updatedRows = currentRowsRef.current.map((row, index) => {
+        if (index !== rowIndex) return row;
+        if (omit) return { ...row, exportOmitIfUnused: true };
+        const { exportOmitIfUnused: _omit, ...rest } = row;
+        return rest;
+      });
+      commitRows(updatedRows);
+      notifyChange(currentTitleRef.current, currentColumnsRef.current, updatedRows);
+    },
+    [notifyChange, commitRows],
+  );
+
   // ── 행 조건부 표시 ──
 
   const openRowConditionModal = useCallback((rowIndex: number) => {
@@ -1577,6 +1592,7 @@ export function useTableEditor({
       deleteRow,
       updateRowLabel,
       updateRowCode,
+      updateRowExportOmit,
       // 셀
       handleSelectCell,
       setSelectedCell,
