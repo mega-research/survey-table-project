@@ -6,9 +6,12 @@ import { InquiriesEmptyCard } from '@/features/operations/inquiries-empty-card';
 import { KpiRow } from '@/features/operations/kpi-row';
 import { PageDwellDistribution } from '@/features/operations/page-dwell-distribution';
 import { QuotaStatusPanel } from '@/features/operations/quota/quota-status-panel';
+import { ShareQuotaStatusPanel } from '@/features/operations/quota/share-quota-status-panel';
 import { ResponseTimeStats } from '@/features/operations/response-time-stats';
 import { kstTodayIsoDate } from '@/lib/date-formatters';
+import { summarizeShareQuota } from '@/lib/quota/quota-status-calc';
 import type { OperationsDataScope } from '@/server/data-scope';
+import type { FieldworkShare } from '@/server/fieldwork-share';
 import {
   aggregateDaily,
   aggregateDailyAvailableDates,
@@ -18,7 +21,7 @@ import { getDailyStats } from '@/server/operations/services/daily-stats';
 import { getDropFunnel } from '@/server/operations/services/drop-funnel';
 import { getPageDwell } from '@/server/operations/services/page-dwell';
 import { getResponseTime } from '@/server/operations/services/response-time';
-import { getQuotaStatus } from '@/server/quota/services/quota-status';
+import { getQuotaStatus, getShareQuotaStatus } from '@/server/quota/services/quota-status';
 import { getSurveyById } from '@/server/survey-builder/services/survey-read';
 import type { SurveyCapability } from '@/shared/contracts/workspace';
 
@@ -46,9 +49,10 @@ import type { SurveyCapability } from '@/shared/contracts/workspace';
  *    던진다. 판정 결과로 물으면 주체 종류가 늘어도 이 줄은 그대로다.
  *  - `scope` — 링크는 언제나 real 파티션이다(스펙 §11-3).
  *
- * 쿼터 현황판은 **감추지 않는다.** 외주가 보는 숫자는 연구원이 보는 것과 같아야 하고
- * (스토리 34), 남은 목표치는 실사 배분에 직접 쓰이는 값이다. 쿼터 **탭**(플랜 편집)이
- * 링크에 안 서는 것과 다른 축이다 — 저쪽은 내부 셸 전용 화면이다.
+ * 쿼터 조각은 **외주에게 다른 투영**이다(fieldwork-multi-company 티켓 08) — `fieldworkQuotaShare` 를 받으면
+ * KPI 쿼터 칸과 현황판이 셀마다 내 완료 수·마감 여부만 받는다. 전체 목표·전체 달성 수는 이 본문이
+ * 클라이언트 조각에 넘기는 props(= RSC payload)에 아예 실리지 않는다. 비우면(내부 콘솔) 지금 그대로다.
+ * **외주 실사 링크 트리는 반드시 넘긴다** — 나누지 않은 링크도(`all`) 투영은 같다.
  */
 export interface OperationsOverviewSearchParams {
   mode?: 'day' | 'hour';
@@ -62,6 +66,19 @@ interface Props {
   capabilities: ReadonlySet<SurveyCapability>;
   scope: OperationsDataScope;
   searchParams: OperationsOverviewSearchParams;
+  /** 외주 실사 링크의 담당 범위 — 있으면 쿼터 조각을 외주 투영으로 그린다(위 주석). */
+  fieldworkQuotaShare?: FieldworkShare | undefined;
+}
+
+/** 쿼터 조각 — 계정 주체는 전체 현황, 외주 링크는 내 몫 투영. 갈래를 한 값으로 들고 다닌다. */
+async function loadQuotaFragment(surveyId: string, scope: OperationsDataScope, share: FieldworkShare | undefined) {
+  if (share) {
+    const status = await getShareQuotaStatus(surveyId, share);
+    return status ? { kind: 'share' as const, status } : null;
+  }
+  // 테스트 모드에서도 테스트 응답 기준으로 집계해 보여준다(표시 전용 — 집행은 실응답만).
+  const status = await getQuotaStatus(surveyId, scope);
+  return status ? { kind: 'full' as const, status } : null;
 }
 
 export async function OperationsOverviewScreen({
@@ -69,6 +86,7 @@ export async function OperationsOverviewScreen({
   capabilities,
   scope,
   searchParams,
+  fieldworkQuotaShare,
 }: Props) {
   const { mode = 'day', date, weekOffset: weekOffsetStr, dwellOffset: dwellOffsetStr } = searchParams;
   const weekOffset = Math.max(0, parseInt(weekOffsetStr ?? '0', 10) || 0);
@@ -90,7 +108,7 @@ export async function OperationsOverviewScreen({
     responseTime,
     dropFunnel,
     pageDwell,
-    quotaStatus,
+    quota,
     survey,
   ] = await Promise.all([
     aggregateStatus(surveyId, scope),
@@ -104,8 +122,7 @@ export async function OperationsOverviewScreen({
     getResponseTime(surveyId, scope),
     getDropFunnel(surveyId, scope),
     getPageDwell(surveyId, scope),
-    // 테스트 모드에서도 테스트 응답 기준으로 집계해 보여준다(표시 전용 — 집행은 실응답만).
-    getQuotaStatus(surveyId, scope),
+    loadQuotaFragment(surveyId, scope, fieldworkQuotaShare),
     // 내보내기 모달의 제목 말고는 쓰지 않는다 — 그릴 일이 없으면 읽지도 않는다.
     canExport ? getSurveyById(surveyId) : null,
   ]);
@@ -123,10 +140,16 @@ export async function OperationsOverviewScreen({
         {canExport && <ExportDataModal surveyId={surveyId} surveyTitle={survey?.title ?? '설문'} />}
       </div>
 
-      <KpiRow counts={statusCounts} quota={quotaStatus?.summary ?? null} />
+      <KpiRow
+        counts={statusCounts}
+        quota={
+          quota === null ? null : quota.kind === 'share' ? summarizeShareQuota(quota.status) : quota.status.summary
+        }
+      />
 
       {/* 플랜이 있으면 셀이 비어 있어도 그린다 — 카드 안에서 "목표 없음" 을 안내한다 */}
-      {quotaStatus && <QuotaStatusPanel status={quotaStatus} isTestScope={scope === 'test'} />}
+      {quota?.kind === 'full' && <QuotaStatusPanel status={quota.status} isTestScope={scope === 'test'} />}
+      {quota?.kind === 'share' && <ShareQuotaStatusPanel status={quota.status} />}
 
       <DailyParticipationChart
         data={dailyBuckets}

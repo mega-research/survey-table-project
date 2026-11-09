@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 
 import { getOperationsDataScope } from '@/server/data-scope';
+import { resolveFieldworkShare } from '@/server/fieldwork-share';
 import { assertFieldworkLinkPageAccess } from '@/server/page-fieldwork-link-access';
 
 import {
@@ -23,6 +24,9 @@ interface PageProps {
  * 축약본을 따로 만들지 않는 것이 요점이다. 연구원과 외주가 다른 숫자를 보면 진척 보고가
  * 어느 쪽이 맞는지 알 수 없어진다. 빠지는 것은 **내보내기 모달 하나**이고 그것도 화면이
  * 아니라 판정(`export.download` 미보유)이 정한다.
+ *
+ * 쿼터 조각만은 외주 투영이다(fieldwork-multi-company 티켓 08) — 담당 범위를 넘겨 KPI 쿼터 칸·현황판이
+ * 셀마다 내 달성 수·마감 여부만 받는다. 전체 목표·전체 달성 수는 이 화면의 payload 에 없다.
  */
 export default async function FieldworkLinkOverviewPage({ params, searchParams }: PageProps) {
   const { token } = await params;
@@ -38,6 +42,7 @@ export default async function FieldworkLinkOverviewPage({ params, searchParams }
       capabilities={capabilities}
       scope={scope}
       searchParams={await searchParams}
+      fieldworkQuotaShare={resolveFieldworkShare(actor, surveyId)}
     />
   );
 }
