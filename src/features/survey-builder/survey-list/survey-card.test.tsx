@@ -207,20 +207,21 @@ describe('SurveyCard — 내 태그 줄', () => {
     expect(screen.queryByRole('listbox', { name: '내 태그' })).toBeNull();
   });
 
-  it('태그가 없으면 줄이 없고 「+ 태그」 단추만 있다', () => {
+  it('태그가 없으면 태그는 없고 「+ 태그」 단추만 있다', () => {
     renderCard(item(), undefined, tagging([]));
     expect(screen.queryByRole('button', { name: '태그 편집' })).toBeNull();
     expect(screen.getByRole('button', { name: '태그 추가' })).toBeInTheDocument();
   });
 
-  it('숨은 「+ 태그」는 응답 수 줄의 자리를 차지하지 않는다 — 흐름 밖에 겹쳐 뜬다', () => {
+  it('태그가 없어도 태그 줄 자리는 남고 「+ 태그」는 그 줄에 선다 — 응답 수 줄 폭을 먹지 않는다', () => {
     renderCard(item(), undefined, tagging([]));
     const add = screen.getByRole('button', { name: '태그 추가' });
-    // 흐름 안(형제 flex 항목)이면 숨어 있어도 폭을 먹어 응답 수 글자가 일찍 잘린다(1280 실측).
-    expect(add).toHaveClass('absolute');
-    expect(add.parentElement).toHaveClass('relative');
-    expect(add.parentElement?.children).toHaveLength(2);
-    expect(screen.getByText(/온라인 응답 완료/)).toHaveClass('truncate');
+    // 같은 줄 카드끼리 뼈대가 같아야 태그 있는 이웃 옆에서 가운데가 비어 보이지 않는다.
+    expect(add.parentElement).toHaveClass('h-7');
+    const responseLine = screen.getByText(/온라인 응답 완료/);
+    expect(responseLine).toHaveClass('truncate');
+    expect(responseLine.contains(add)).toBe(false);
+    expect(add.parentElement?.contains(responseLine)).toBe(false);
   });
 
   it('태그 줄을 누르면 태그 창이 열리고, 목록에서 누르면 그 설문에 붙이기를 올린다', async () => {

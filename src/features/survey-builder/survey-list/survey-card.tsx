@@ -296,32 +296,30 @@ export function SurveyCard({
           같은 자리에서 열리게 묶음 전체를 기준점으로 둔다. */}
       <Popover open={tagsOpen} onOpenChange={setTagsOpen}>
         <div ref={tagsAnchorRef} className="flex flex-col gap-2">
-          <div className="relative flex items-center">
-            <p className="min-w-0 flex-1 truncate text-[14px] text-[#6E6E73]">
-              {responseLine(survey, scope)}
-            </p>
-            {/* 태그가 없을 때만 — 마우스를 올리거나 포커스가 오면 보인다. 줄을 따로 차지하지 않고 응답 수
-                  줄의 폭도 먹지 않게 흐름 밖에서 줄 끝에 겹쳐 뜬다(흐름 안이면 숨어 있어도 글자가 일찍
-                  잘린다). 보일 때는 흰 바탕과 왼쪽 번짐이 밑의 글자 끝을 덮는다. */}
-            {cardTags.shown.length === 0 && (
+          <p className="min-w-0 truncate text-[14px] text-[#6E6E73]">
+            {responseLine(survey, scope)}
+          </p>
+          {/* 카드 태그 줄 — 최대 2개 + 「+N」, 회색 바탕 + 색 점. 걸린 검색 칩과 같은 태그는 연한 파랑으로
+                맨 앞에 서고(티켓 09), 다른 태그를 누르면 그 태그가 검색 칩으로 더해진다. 「+N」과 줄의 빈 자리는
+                태그 창을 연다 — 키보드로는 「태그 편집」 단추(「+N」 자리, 없으면 마우스를 올리면 보이는 연필). */}
+          {cardTags.shown.length === 0 ? (
+            // 태그가 없어도 태그 줄 높이는 늘 둔다 — 같은 줄의 다른 카드에 태그가 있을 때 이 카드만 가운데가
+            // 비어 보이지 않게, 모든 카드가 같은 뼈대를 갖는다. 「+ 태그」는 마우스를 올리거나 포커스가 오면 보인다.
+            <div className="flex h-7 items-center">
               <button
                 type="button"
                 aria-label="태그 추가"
                 onClick={() => setTagsOpen(true)}
                 className={cn(
-                  'absolute top-1/2 right-0 flex h-6 -translate-y-1/2 items-center gap-0.5 rounded-md bg-white px-1.5 text-[12.5px] text-[#6E6E73] shadow-[-10px_0_8px_white] hover:bg-[#F5F5F7] hover:text-[#1C1C1E] focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-[#2E4FCE]/40 focus-visible:outline-none',
+                  '-ml-1 flex h-6 items-center gap-0.5 rounded-md px-1.5 text-[12.5px] text-[#6E6E73] hover:bg-[#F5F5F7] hover:text-[#1C1C1E] focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-[#2E4FCE]/40 focus-visible:outline-none',
                   tagsOpen ? 'opacity-100' : 'opacity-0 group-hover/card:opacity-100',
                 )}
               >
                 <Plus className="h-3 w-3" />
                 태그
               </button>
-            )}
-          </div>
-          {/* 카드 태그 줄 — 최대 2개 + 「+N」, 회색 바탕 + 색 점. 걸린 검색 칩과 같은 태그는 연한 파랑으로
-                맨 앞에 서고(티켓 09), 다른 태그를 누르면 그 태그가 검색 칩으로 더해진다. 「+N」과 줄의 빈 자리는
-                태그 창을 연다 — 키보드로는 「태그 편집」 단추(「+N」 자리, 없으면 마우스를 올리면 보이는 연필). */}
-          {cardTags.shown.length > 0 && (
+            </div>
+          ) : (
             <div
               role="group"
               aria-label="내 태그"
@@ -329,7 +327,7 @@ export function SurveyCard({
                 if (event.target === event.currentTarget) setTagsOpen(true);
               }}
               className={cn(
-                '-mx-1 flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 hover:bg-[#F5F5F7]',
+                '-mx-1 flex h-7 min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1 hover:bg-[#F5F5F7]',
                 tagsOpen && 'ring-2 ring-[#2E4FCE]/40',
               )}
             >
@@ -395,8 +393,8 @@ export function SurveyCard({
         </PopoverContent>
       </Popover>
 
-      {/* 수정일·배지·액션 줄은 카드 바닥에 붙는다 — 그리드가 같은 줄 카드 높이를 맞추므로, 태그 줄 유무나
-          제목 줄 수가 달라도 같은 줄 카드끼리 이 묶음의 위치가 같다. 남는 높이는 응답 수 줄 아래 빈칸이 된다. */}
+      {/* 수정일·배지·액션 줄은 카드 바닥에 붙는다 — 그리드가 같은 줄 카드 높이를 맞추므로, 제목이 한 줄인
+          카드도 두 줄인 이웃과 이 묶음의 위치가 같다(태그 줄은 늘 자리를 차지해 차이를 만들지 않는다). */}
       <div className="mt-auto flex flex-col gap-[11px]">
         <div className="flex items-center justify-between gap-2">
           <span className="truncate text-[13px] text-[#9CA3AF]">
