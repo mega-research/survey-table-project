@@ -425,7 +425,7 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
     const result = await resolveLinkActor(token, cookieHeaders(cookie));
     expect(result).toEqual({
       ok: true,
-      actor: { kind: 'link', linkId, surveyId, linkKind: 'fieldwork' },
+      actor: { kind: 'link', linkId, surveyId, linkKind: 'fieldwork', shareDivided: false },
     });
   });
 
