@@ -304,15 +304,16 @@ export function SurveyCard({
                 태그 창을 연다 — 키보드로는 「태그 편집」 단추(「+N」 자리, 없으면 마우스를 올리면 보이는 연필). */}
           {cardTags.shown.length === 0 ? (
             // 태그가 없어도 태그 줄 높이는 늘 둔다 — 같은 줄의 다른 카드에 태그가 있을 때 이 카드만 가운데가
-            // 비어 보이지 않게, 모든 카드가 같은 뼈대를 갖는다. 「+ 태그」는 마우스를 올리거나 포커스가 오면 보인다.
+            // 비어 보이지 않게, 모든 카드가 같은 뼈대를 갖는다. 「+ 태그」는 늘 보인다 — 태그 칩과 같은 크기의 점선 칸이라 빈 자리가
+            // 「여기에 태그가 붙는다」로 읽힌다.
             <div className="flex h-7 items-center">
               <button
                 type="button"
                 aria-label="태그 추가"
                 onClick={() => setTagsOpen(true)}
                 className={cn(
-                  '-ml-1 flex h-6 items-center gap-0.5 rounded-md px-1.5 text-[12.5px] text-[#6E6E73] hover:bg-[#F5F5F7] hover:text-[#1C1C1E] focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-[#2E4FCE]/40 focus-visible:outline-none',
-                  tagsOpen ? 'opacity-100' : 'opacity-0 group-hover/card:opacity-100',
+                  'flex h-6 items-center gap-0.5 rounded-md border border-dashed border-[#D1D1D6] px-1.5 text-[12.5px] text-[#6E6E73] hover:border-[#C7C7CC] hover:bg-[#F5F5F7] hover:text-[#1C1C1E] focus-visible:ring-2 focus-visible:ring-[#2E4FCE]/40 focus-visible:outline-none',
+                  tagsOpen && 'border-[#2E4FCE]/40 bg-[#F5F5F7] text-[#1C1C1E]',
                 )}
               >
                 <Plus className="h-3 w-3" />
