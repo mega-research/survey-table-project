@@ -3,6 +3,8 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { AssignmentEditor } from './assignment-editor';
+
 const preview = vi.fn();
 const apply = vi.fn();
 vi.mock('@/shared/lib/rpc', () => ({
@@ -25,12 +27,12 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
 }));
 
-import { AssignmentEditor } from './assignment-editor';
-
 const SURVEY = '00000000-0000-4000-8000-000000000001';
 const AID = '00000000-0000-4000-8000-0000000000a1';
 
-function renderEditor(lastClauses: Array<{ source: string; value: string; op: '' | 'AND' | 'OR' }> | null) {
+function renderEditor(
+  lastClauses: Array<{ source: string; value: string; op: '' | 'AND' | 'OR' }> | null,
+) {
   return render(
     <QueryClientProvider client={new QueryClient()}>
       <AssignmentEditor
@@ -80,7 +82,13 @@ describe('AssignmentEditor — 교체 적용', () => {
 
   it('확인 창에 새로·다른 컨택원에서·빠짐 인원이 보이고 적용하면 같은 조건을 보낸다', async () => {
     const user = userEvent.setup();
-    apply.mockResolvedValue({ matched: 41, current: 59, incoming: 10, fromOthers: [], leaving: 31 });
+    apply.mockResolvedValue({
+      matched: 41,
+      current: 59,
+      incoming: 10,
+      fromOthers: [],
+      leaving: 31,
+    });
     renderEditor([{ source: 'system.resid', value: '1-100', op: '' }]);
     expect(await screen.findByText('41명', undefined, { timeout: 5000 })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '배정 적용' }));
@@ -102,5 +110,58 @@ describe('AssignmentEditor — 교체 적용', () => {
     expect(screen.getByText('조건을 하나 이상 넣어야 적용할 수 있습니다')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '배정 적용' })).toBeDisabled();
     expect(preview).not.toHaveBeenCalled();
+  });
+});
+
+/** 조건 줄의 ID 목록 칸 — 이름 칸(input)과 달리 textarea 다. */
+function idListBox(): HTMLTextAreaElement {
+  const box = document.querySelector('textarea');
+  if (!box) throw new Error('ID 목록 칸이 없다');
+  return box;
+}
+
+describe('AssignmentEditor — 연속 번호 구간 합치기', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    preview.mockResolvedValue({ matched: 8, current: 0, incoming: 8, fromOthers: [], leaving: 0 });
+  });
+
+  it('낱개로 저장된 옛 조건도 열면 구간으로 합쳐 보인다', async () => {
+    renderEditor([{ source: 'system.resid', value: '3 1 2 4 5 9 200 201', op: '' }]);
+    expect(idListBox()).toHaveValue('1-5, 9, 200-201');
+    expect(await screen.findByText('8명', undefined, { timeout: 5000 })).toBeInTheDocument();
+    expect(preview).toHaveBeenCalledWith({
+      surveyId: SURVEY,
+      assignmentId: AID,
+      clauses: [{ source: 'system.resid', value: '1-5, 9, 200-201', op: '' }],
+    });
+  });
+
+  it('손으로 적은 낱개 번호는 적용할 때 합쳐 보내고, 칸도 합친 모양으로 바뀐다', async () => {
+    const user = userEvent.setup();
+    apply.mockResolvedValue({ matched: 8, current: 0, incoming: 8, fromOthers: [], leaving: 0 });
+    renderEditor([{ source: 'system.resid', value: '1-2', op: '' }]);
+    const box = idListBox();
+    await user.clear(box);
+    await user.type(box, '7 5 6 1');
+    expect(box).toHaveValue('7 5 6 1');
+    expect(await screen.findByText('8명', undefined, { timeout: 5000 })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: '배정 적용' })).toBeEnabled());
+    await user.click(screen.getByRole('button', { name: '배정 적용' }));
+    await user.click(screen.getByRole('button', { name: '배정 적용' }));
+    await waitFor(() =>
+      expect(apply).toHaveBeenCalledWith({
+        surveyId: SURVEY,
+        assignmentId: AID,
+        clauses: [{ source: 'system.resid', value: '1, 5-7', op: '' }],
+      }),
+    );
+    await waitFor(() => expect(box).toHaveValue('1, 5-7'));
+  });
+
+  it('명단 열 값 목록에서 고른 여러 값(구분자 형식)은 건드리지 않는다', () => {
+    const multi = '\u001f3\u001f1\u001f2\u001f';
+    renderEditor([{ source: 'attrs.기업명', value: multi, op: '' }]);
+    expect(screen.queryByDisplayValue('1-3')).not.toBeInTheDocument();
   });
 });

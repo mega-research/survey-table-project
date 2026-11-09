@@ -29,7 +29,13 @@ import {
   newDraftRowId,
 } from '@/features/operations/filters/filter-bar-core';
 import { getErrorMessage } from '@/lib/get-error-message';
-import { type ColumnCandidate, FILTER_SOURCE } from '@/lib/operations/filter-shared';
+import {
+  type ColumnCandidate,
+  FILTER_SOURCE,
+  decodeMultiClauseValue,
+} from '@/lib/operations/filter-shared';
+import { isIdListSource } from '@/lib/operations/id-list-paste';
+import { compactIdList } from '@/lib/operations/range-list';
 import type { ContactAssignmentClause, ContactResultCode } from '@/shared/contracts/contacts';
 import type { ContactAssignmentOption } from '@/shared/contracts/contacts-io';
 import { client } from '@/shared/lib/rpc';
@@ -52,6 +58,15 @@ type Summary = Awaited<ReturnType<typeof client.contacts.assignments.preview>>;
 const fmt = (n: number) => n.toLocaleString('ko-KR');
 const PREVIEW_DEBOUNCE_MS = 400;
 
+/**
+ * ID 목록 칸 값의 연속 번호를 `1-100, 200-300` 구간으로 합친다 — 고르는 대상은 같다
+ * (`compactIdList`). 오른쪽 값 목록에서 고른 여러 값(구분자 형식)은 목록 입력이 아니라 손대지 않는다.
+ */
+function compactClauseValue(source: string, value: string): string {
+  if (!isIdListSource(source) || decodeMultiClauseValue(value) !== null) return value;
+  return compactIdList(value);
+}
+
 function initialRows(
   lastClauses: ContactAssignmentClause[] | null,
   candidates: ColumnCandidate[],
@@ -61,7 +76,8 @@ function initialRows(
       id: `init-${i}`,
       op: c.op === 'OR' ? 'OR' : 'AND',
       source: c.source,
-      value: c.value,
+      // 낱개로 저장된 옛 조건도 열면 정리돼 보인다.
+      value: compactClauseValue(c.source, c.value),
     }));
   }
   const source =
@@ -188,14 +204,24 @@ export function AssignmentEditor({
 
   const runApply = () => {
     if (!readyClauses) return;
+    // 손으로 적은 낱개 번호도 합친 모양으로 저장한다(다음에 열 때 lastClauses 가 정리돼 있게).
+    // 저장 목록 토큰은 compactIdList 가 손대지 않는다.
+    const clauses = readyClauses.map((c) => ({
+      ...c,
+      value: compactClauseValue(c.source, c.value),
+    }));
     startTransition(async () => {
       try {
         const result = await client.contacts.assignments.apply({
           surveyId,
           assignmentId: assignment.id,
-          clauses: readyClauses,
+          clauses,
         });
         setConfirmOpen(false);
+        // 칸도 보낸 모양과 같게 — 적용이 성공한 뒤에만 바꾼다.
+        setRows((prev) =>
+          prev.map((r) => ({ ...r, value: compactClauseValue(r.source, r.value) })),
+        );
         toast.success(
           `배정 적용했습니다 — ${savedName} ${fmt(result.matched)}명 (새로 ${fmt(result.incoming)} · 다른 컨택원에서 ${fmt(sumOthers(result))} · 빠짐 ${fmt(result.leaving)})`,
         );
@@ -288,7 +314,8 @@ export function AssignmentEditor({
                     assignmentOptions={assignmentOptions}
                     surveyId={surveyId}
                     idListAutoGrow
-                  emptyToggles
+                    idListCompact
+                    emptyToggles
                     {...(inputId !== undefined ? { inputId } : {})}
                   />
                 </div>

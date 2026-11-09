@@ -3,6 +3,7 @@ import {
   type NumRange,
   type Parity,
   SINGLE_COLUMN_ID_LIST_MAX,
+  countDistinctIds,
   hasLeadingZeroToken,
   parseIdListDetailed,
   parseParityKeyword,
@@ -46,8 +47,11 @@ export type IdListStatus =
   | { kind: 'token'; count: number | null }
   /** `짝수`/`홀수` 한 단어 — 번호 홀짝으로 건다 */
   | { kind: 'parity'; parity: Parity }
-  /** 숫자 2개 이상 인식 — overLimit 면 검색 시 저장 경로로 간다 */
-  | { kind: 'list'; count: number; duplicates: number; overLimit: boolean }
+  /**
+   * 번호 2개 이상 인식 — count 는 토큰 수(인라인 상한 판정), ids 는 겹침을 뺀 실제 번호 수
+   * (구간 `1-100` 은 토큰 1·번호 100). overLimit 면 검색 시 저장 경로로 간다
+   */
+  | { kind: 'list'; count: number; ids: number; duplicates: number; overLimit: boolean }
   /** 숫자 아닌 토큰이 섞임 — 검색 전에 고치도록 경고 */
   | { kind: 'invalid'; count: number; invalid: string[] }
   /** attrs 목록에 선행 0 번호("0001")가 섞임 — 서버가 숫자로 접지 않아 목록 검색 불가 */
@@ -57,7 +61,8 @@ export type IdListStatus =
  * 입력값 → 배지/경고 판정.
  * - 시스템ID: 숫자 아닌 토큰이 하나라도 있으면 invalid (resid 는 항상 숫자).
  * - attrs: 숫자가 2개 이상 섞였을 때만 invalid — "메가 리서치" 같은 일반 텍스트 검색은 none.
- * - 숫자 하나는 none — 단일 값 검색은 종전 그대로라 배지가 소음이다.
+ * - 번호 하나는 none — 단일 값 검색은 종전 그대로라 배지가 소음이다. 구간 하나(`1-100`)는
+ *   번호가 여럿이라 list — 연속 번호를 구간으로 합친 뒤에도 실제 번호 수가 보여야 한다.
  * - attrs 목록에 선행 0 번호가 섞이면 leadingZero — 서버(hasLeadingZeroToken)가 텍스트 검색으로
  *   보내 목록 전체가 0건이 되므로 검색 전에 알린다. 단일 값 "0001" 은 텍스트 검색으로 맞으니 none.
  */
@@ -76,10 +81,11 @@ export function describeIdListValue(source: string, value: string): IdListStatus
       ? { kind: 'invalid', count: r.count, invalid: r.invalid }
       : { kind: 'none' };
   }
-  if (r.count < 2) return { kind: 'none' };
+  const ids = countDistinctIds(r.ranges);
+  if (ids < 2) return { kind: 'none' };
   if (source !== FILTER_SOURCE.RESID && hasLeadingZeroToken(trimmed)) {
     const tokens = trimmed.split(/[\s,;]+/).filter((t) => /(^|-)0\d/.test(t));
     return { kind: 'leadingZero', tokens };
   }
-  return { kind: 'list', count: r.count, duplicates: r.duplicates, overLimit: r.overLimit };
+  return { kind: 'list', count: r.count, ids, duplicates: r.duplicates, overLimit: r.overLimit };
 }

@@ -4,7 +4,13 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { ValueWidget } from '@/features/operations/contacts/value-widget';
 
-function renderWidget(source: string, value: string, onChange = vi.fn(), onSubmit = vi.fn()) {
+function renderWidget(
+  source: string,
+  value: string,
+  onChange = vi.fn(),
+  onSubmit = vi.fn(),
+  extra: { idListCompact?: boolean } = {},
+) {
   render(
     <form
       onSubmit={(e) => {
@@ -18,6 +24,7 @@ function renderWidget(source: string, value: string, onChange = vi.fn(), onSubmi
         onChange={onChange}
         resultCodeOptions={[]}
         inputId="v"
+        {...extra}
       />
     </form>,
   );
@@ -86,6 +93,42 @@ describe('ValueWidget — 시스템ID/attrs 컬럼의 ID 목록 붙여넣기', (
     renderWidget('attrs.회사명', '메가 리서치');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.queryByText(/인식/)).not.toBeInTheDocument();
+  });
+});
+
+describe('ValueWidget — 연속 번호 구간 합치기 (idListCompact)', () => {
+  it('켜면 여러 줄 붙여넣기 결과의 연속 번호를 구간으로 합친다', () => {
+    const { onChange } = renderWidget('system.resid', '', vi.fn(), vi.fn(), {
+      idListCompact: true,
+    });
+    const pasted = [1, 2, 3, 4, 5, 200, 201, 202, 9].join('\r\n');
+    fireEvent.paste(screen.getByRole('textbox'), { clipboardData: { getData: () => pasted } });
+    expect(onChange).toHaveBeenCalledWith('1-5, 9, 200-202');
+  });
+
+  it('기존 값과 이어 붙인 전체를 합친다', () => {
+    const { onChange } = renderWidget('attrs.ID', '1-3', vi.fn(), vi.fn(), { idListCompact: true });
+    fireEvent.paste(screen.getByRole('textbox'), { clipboardData: { getData: () => '4\n5\n7' } });
+    expect(onChange).toHaveBeenCalledWith('1-5, 7');
+  });
+
+  it('숫자 아닌 값이 섞이면 합치지 않고 이어 붙이기만 한다', () => {
+    const { onChange } = renderWidget('system.resid', '', vi.fn(), vi.fn(), {
+      idListCompact: true,
+    });
+    fireEvent.paste(screen.getByRole('textbox'), { clipboardData: { getData: () => '1\n2\nabc' } });
+    expect(onChange).toHaveBeenCalledWith('1 2 abc');
+  });
+
+  it('끄면(기본) 붙여넣기는 종전대로 정렬·합치기 없이 이어 붙인다', () => {
+    const { onChange } = renderWidget('system.resid', '');
+    fireEvent.paste(screen.getByRole('textbox'), { clipboardData: { getData: () => '3\n1\n2' } });
+    expect(onChange).toHaveBeenCalledWith('3 1 2');
+  });
+
+  it('합친 구간도 상태줄에 실제 번호 수를 보인다', () => {
+    renderWidget('system.resid', '1-100, 200-300');
+    expect(screen.getByText('ID 201개 인식')).toBeInTheDocument();
   });
 });
 

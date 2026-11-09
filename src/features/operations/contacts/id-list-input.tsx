@@ -1,13 +1,14 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
 import { useId, useRef } from 'react';
+
+import { useQuery } from '@tanstack/react-query';
 
 import { Textarea } from '@/components/ui/textarea';
 import { useAutoGrowTextarea } from '@/hooks/use-auto-grow-textarea';
 import { FILTER_SOURCE } from '@/lib/operations/filter-shared';
 import { describeIdListValue, normalizePastedIdList } from '@/lib/operations/id-list-paste';
-import { parityLabel, SINGLE_COLUMN_ID_LIST_MAX } from '@/lib/operations/range-list';
+import { SINGLE_COLUMN_ID_LIST_MAX, compactIdList, parityLabel } from '@/lib/operations/range-list';
 import { cn } from '@/lib/utils';
 import { client } from '@/shared/lib/rpc';
 
@@ -26,6 +27,11 @@ interface Props {
   autoGrow?: boolean;
   /** 빈 값 토글이 켜져 입력을 쓰지 않을 때 */
   disabled?: boolean;
+  /**
+   * 여러 줄 붙여넣기 결과의 연속 번호를 `1-100, 200-300` 구간으로 합친다 (컨택원 수정 화면).
+   * 끄면(기본) 붙여넣은 순서 그대로 이어 붙인다 — 조사 대상 검색바는 종전 동작.
+   */
+  compactOnPaste?: boolean;
 }
 
 const INVALID_PREVIEW = 5;
@@ -46,6 +52,7 @@ export function IdListInput({
   surveyId,
   autoGrow = false,
   disabled = false,
+  compactOnPaste = false,
 }: Props) {
   const statusId = useId();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -64,7 +71,8 @@ export function IdListInput({
     e.preventDefault();
     const pasted = normalizePastedIdList(text);
     const base = value.trim();
-    onChange(base.length > 0 ? `${base} ${pasted}` : pasted);
+    const joined = base.length > 0 ? `${base} ${pasted}` : pasted;
+    onChange(compactOnPaste ? compactIdList(joined) : joined);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -80,7 +88,7 @@ export function IdListInput({
     statusLine = (
       <div id={statusId} className="text-xs text-slate-500">
         <span>
-          ID {fmt(status.count)}개 인식
+          ID {fmt(status.ids)}개 인식
           {status.duplicates > 0 ? ` · 중복 ${fmt(status.duplicates)}개 제거` : ''}
         </span>
         {status.overLimit ? (

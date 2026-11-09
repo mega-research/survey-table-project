@@ -153,3 +153,43 @@ export function parseIdListInput(
   if (result.count === 0 || result.invalid.length > 0 || result.overLimit) return null;
   return result.ranges;
 }
+
+/** 정렬하고 겹치거나 맞닿은(끝+1 = 다음 시작) 구간을 하나로 합친다. 입력은 바꾸지 않는다. */
+export function mergeIdRanges(ranges: readonly NumRange[]): NumRange[] {
+  const sorted = [...ranges].sort((a, b) => a.from - b.from || a.to - b.to);
+  const merged: NumRange[] = [];
+  for (const r of sorted) {
+    const last = merged[merged.length - 1];
+    if (last && r.from <= last.to + 1) {
+      last.to = Math.max(last.to, r.to);
+    } else {
+      merged.push({ from: r.from, to: r.to });
+    }
+  }
+  return merged;
+}
+
+/** 겹침을 뺀 실제 번호 수 — 상태줄 「ID N개 인식」. */
+export function countDistinctIds(ranges: readonly NumRange[]): number {
+  return mergeIdRanges(ranges).reduce((sum, r) => sum + (r.to - r.from + 1), 0);
+}
+
+/**
+ * ID 목록 입력을 `1-100, 200-300` 모양으로 정리한다 — 엑셀 열 붙여넣기가 낱개로 늘어놓은 연속
+ * 번호를 구간 하나로 접는다(컨택원 수정 화면).
+ *
+ * 고르는 번호 집합은 그대로다: 서버는 낱개를 IN, 구간을 BETWEEN 으로 걸어 같은 정수를 고르고,
+ * 단일 숫자의 텍스트 폴백은 입력이 원래 단일 숫자일 때만 붙는데 이 함수는 단일 숫자를 새로 만들지
+ * 않는다. 토큰 수도 늘지 않아 인라인 상한(2,000) 판정이 나빠지지 않는다.
+ *
+ * 손대지 않는 입력(그대로 돌려준다): 빈 값 · 숫자/범위가 아닌 토큰이 섞인 값(`짝수`·`list:` 토큰
+ * 포함 — 위젯이 경고하는 값을 고쳐 쓰지 않는다) · 앞자리 0 토큰(`0001` 을 1 로 접으면 원 값이 사라진다).
+ */
+export function compactIdList(input: string): string {
+  if (hasLeadingZeroToken(input)) return input;
+  const r = parseIdListDetailed(input, { maxTokens: Number.POSITIVE_INFINITY });
+  if (r.count === 0 || r.invalid.length > 0) return input;
+  return mergeIdRanges(r.ranges)
+    .map((x) => (x.from === x.to ? String(x.from) : `${x.from}-${x.to}`))
+    .join(', ');
+}

@@ -48,6 +48,7 @@ describe('describeIdListValue — 위젯 배지/경고 판정', () => {
     expect(describeIdListValue('attrs.ID', '99 292 99')).toEqual({
       kind: 'list',
       count: 2,
+      ids: 2,
       duplicates: 1,
       overLimit: false,
     });
@@ -61,6 +62,21 @@ describe('describeIdListValue — 위젯 배지/경고 판정', () => {
 
   it('숫자 하나는 배지 없음 — 단일 값 검색은 종전 그대로', () => {
     expect(describeIdListValue('attrs.ID', '99')).toEqual({ kind: 'none' });
+  });
+
+  it('구간 하나라도 번호가 둘 이상이면 list — 합친 「1-100」 도 실제 번호 수를 알린다', () => {
+    expect(describeIdListValue('system.resid', '1-100')).toEqual({
+      kind: 'list',
+      count: 1,
+      ids: 100,
+      duplicates: 0,
+      overLimit: false,
+    });
+    expect(describeIdListValue('attrs.ID', '1-10, 5, 200-201')).toMatchObject({
+      kind: 'list',
+      count: 3,
+      ids: 12,
+    });
   });
 
   it('시스템ID 는 숫자 아닌 토큰이 하나라도 있으면 invalid', () => {
@@ -89,6 +105,7 @@ describe('describeIdListValue — 위젯 배지/경고 판정', () => {
     expect(describeIdListValue('system.resid', '007 8')).toEqual({
       kind: 'list',
       count: 2,
+      ids: 2,
       duplicates: 0,
       overLimit: false,
     });

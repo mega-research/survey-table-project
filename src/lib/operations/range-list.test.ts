@@ -1,10 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import {
+  SINGLE_COLUMN_ID_LIST_MAX,
+  compactIdList,
+  countDistinctIds,
   hasLeadingZeroToken,
   parseIdListDetailed,
   parseIdListInput,
-  SINGLE_COLUMN_ID_LIST_MAX,
 } from '@/lib/operations/range-list';
 
 describe('parseIdListInput', () => {
@@ -130,5 +132,70 @@ describe('hasLeadingZeroToken — attrs 숫자 매칭에서 제외할 선행 0 �
     expect(hasLeadingZeroToken('1;07')).toBe(true);
     expect(hasLeadingZeroToken('10 20 0')).toBe(false);
     expect(hasLeadingZeroToken('1-30')).toBe(false);
+  });
+});
+
+describe('compactIdList — 연속 번호를 구간으로 합치기', () => {
+  it('엑셀에서 붙여넣은 연속 번호를 구간 하나로', () => {
+    const pasted = Array.from({ length: 100 }, (_, i) => String(i + 1)).join(' ');
+    expect(compactIdList(pasted)).toBe('1-100');
+  });
+
+  it('끊긴 곳마다 구간을 나눈다 — 1-100, 200-300', () => {
+    const a = Array.from({ length: 100 }, (_, i) => i + 1);
+    const b = Array.from({ length: 101 }, (_, i) => i + 200);
+    expect(compactIdList([...a, ...b].join('\n'))).toBe('1-100, 200-300');
+  });
+
+  it('오름차순으로 세우고 외톨이 번호는 그대로 둔다', () => {
+    expect(compactIdList('9 3 1 2 7')).toBe('1-3, 7, 9');
+  });
+
+  it('겹치거나 맞닿은 구간·중복도 합친다', () => {
+    expect(compactIdList('1-10, 5, 11 12-15 3 3')).toBe('1-15');
+    expect(compactIdList('20-30 10-19')).toBe('10-30');
+  });
+
+  it('합친 결과는 같은 번호 집합을 고른다', () => {
+    const input = '5 1 2 3 40-42 43 100 101 7';
+    const expand = (s: string) =>
+      new Set(
+        (parseIdListInput(s, { maxTokens: 10_000 }) ?? []).flatMap((r) =>
+          Array.from({ length: r.to - r.from + 1 }, (_, i) => r.from + i),
+        ),
+      );
+    expect(expand(compactIdList(input))).toEqual(expand(input));
+  });
+
+  it('토큰 수를 늘리지 않는다 — 인라인 상한 판정이 나빠지지 않는다', () => {
+    expect(compactIdList('1 3 5')).toBe('1, 3, 5');
+  });
+
+  it('숫자·범위가 아닌 토큰이 섞이거나 앞자리 0 이면 손대지 않는다', () => {
+    expect(compactIdList('1 2 abc')).toBe('1 2 abc');
+    expect(compactIdList('짝수')).toBe('짝수');
+    expect(compactIdList('list:0f3a4b5c-1111-4222-8333-444455556666:5000')).toBe(
+      'list:0f3a4b5c-1111-4222-8333-444455556666:5000',
+    );
+    expect(compactIdList('0001 0002 3')).toBe('0001 0002 3');
+    expect(compactIdList('  ')).toBe('  ');
+  });
+
+  it('토큰 상한(200)과 무관하게 합친다', () => {
+    const many = Array.from({ length: 5000 }, (_, i) => String(i + 1)).join(' ');
+    expect(compactIdList(many)).toBe('1-5000');
+  });
+});
+
+describe('countDistinctIds — 겹침을 뺀 실제 번호 수', () => {
+  it('구간을 펼친 고유 번호 수', () => {
+    expect(
+      countDistinctIds([
+        { from: 1, to: 10 },
+        { from: 5, to: 12 },
+        { from: 20, to: 20 },
+      ]),
+    ).toBe(13);
+    expect(countDistinctIds([])).toBe(0);
   });
 });

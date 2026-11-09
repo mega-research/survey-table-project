@@ -11,12 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { ContactResultCode } from '@/shared/contracts/contacts';
-import type { ContactAssignmentOption } from '@/shared/contracts/contacts-io';
 import {
-  contactResultFilterOptions,
-  decodeMultiClauseValue,
-  encodeMultiClauseValue,
   FILTER_NONE_LABEL,
   FILTER_NONE_TOGGLE_LABEL,
   FILTER_NONE_VALUE,
@@ -24,11 +19,16 @@ import {
   FILTER_NOT_NONE_VALUE,
   FILTER_SOURCE,
   MAIL_FILTER_OPTIONS,
+  contactResultFilterOptions,
+  decodeMultiClauseValue,
+  encodeMultiClauseValue,
   placeholderFor,
   webFilterOptionsFor,
   withNoneOption,
 } from '@/lib/operations/filter-shared';
 import { isIdListSource } from '@/lib/operations/id-list-paste';
+import type { ContactResultCode } from '@/shared/contracts/contacts';
+import type { ContactAssignmentOption } from '@/shared/contracts/contacts-io';
 
 import { IdListInput } from './id-list-input';
 
@@ -44,6 +44,8 @@ interface Props {
   surveyId?: string;
   /** ID 목록 입력칸이 입력한 만큼 끝없이 늘어난다 (컨택원 수정 화면). */
   idListAutoGrow?: boolean;
+  /** ID 목록 붙여넣기의 연속 번호를 구간으로 합친다 (컨택원 수정 화면 — IdListInput compactOnPaste). */
+  idListCompact?: boolean;
   /**
    * 명단 열·개인정보 열 아래에 「— 인 것만 보기」/「— 제외하고 보기」 토글 (컨택원 수정 화면).
    * 조사 대상 목록 열 머리 필터와 같은 빈 값 조건을 조건 줄로 만든다 — 「ID 값 있는 대상 전부」.
@@ -86,7 +88,9 @@ export function ValueWidget(props: Props) {
               id={`${toggleId}-${t.sentinel}`}
               checked={emptyMode === t.sentinel}
               // 둘은 서로를 끈다 — 동시에 켜면 0건이다.
-              onCheckedChange={(c) => onChange(c === true ? encodeMultiClauseValue([t.sentinel]) : '')}
+              onCheckedChange={(c) =>
+                onChange(c === true ? encodeMultiClauseValue([t.sentinel]) : '')
+              }
             />
             <label htmlFor={`${toggleId}-${t.sentinel}`} className="cursor-pointer">
               {t.label}
@@ -115,6 +119,7 @@ function ValueInput({
   inputId,
   surveyId,
   idListAutoGrow = false,
+  idListCompact = false,
   disabled = false,
 }: Props & { disabled?: boolean }) {
   // 여러 값(오른쪽 값 목록에서 체크한 값들) — 칩으로 보이고 × 로 하나씩 뺀다.
@@ -175,7 +180,7 @@ function ValueInput({
           if (value !== null) onChange(value);
         }}
       >
-        <SelectTrigger id={inputId} className="w-[260px] h-10">
+        <SelectTrigger id={inputId} className="h-10 w-[260px]">
           <SelectValue placeholder="컨택원 선택" />
         </SelectTrigger>
         <SelectContent className="max-h-72">
@@ -205,7 +210,7 @@ function ValueInput({
           if (value !== null) onChange(value);
         }}
       >
-        <SelectTrigger id={inputId} className="w-[260px] h-10">
+        <SelectTrigger id={inputId} className="h-10 w-[260px]">
           <SelectValue placeholder="결과코드 선택" />
         </SelectTrigger>
         <SelectContent className="max-h-72">
@@ -228,7 +233,7 @@ function ValueInput({
           if (value !== null) onChange(value);
         }}
       >
-        <SelectTrigger id={inputId} className="w-[260px] h-10">
+        <SelectTrigger id={inputId} className="h-10 w-[260px]">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -258,7 +263,7 @@ function ValueInput({
           if (value !== null) onChange(value);
         }}
       >
-        <SelectTrigger id={inputId} className="w-[260px] h-10">
+        <SelectTrigger id={inputId} className="h-10 w-[260px]">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -283,6 +288,7 @@ function ValueInput({
         {...(inputId !== undefined ? { inputId } : {})}
         {...(surveyId !== undefined ? { surveyId } : {})}
         autoGrow={idListAutoGrow}
+        compactOnPaste={idListCompact}
         disabled={disabled}
       />
     );
@@ -295,7 +301,7 @@ function ValueInput({
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholderFor(source)}
       disabled={disabled}
-      className="w-[260px] h-10"
+      className="h-10 w-[260px]"
     />
   );
 }
