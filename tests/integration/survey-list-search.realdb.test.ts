@@ -64,7 +64,8 @@ const S = {
 const allSurveyIds = Object.values(S);
 
 function query(q: string): SurveyListPageInput {
-  return { ...INITIAL_SURVEY_LIST_PAGE_QUERY, scope: TEAM_A, q };
+  // 팀 전체로 고정 — 주소 없는 조회는 팀원에게 「내 설문」이 기본이라(0158) 동료 설문 검색의 뜻이 바뀐다.
+  return { ...INITIAL_SURVEY_LIST_PAGE_QUERY, scope: TEAM_A, q, whose: 'team' };
 }
 
 async function idsOf(q: string): Promise<string[]> {

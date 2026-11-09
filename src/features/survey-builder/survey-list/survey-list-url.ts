@@ -44,6 +44,8 @@ export const SURVEY_LIST_URL_PARAMS = {
   responsesMax: 'rmax',
   deleted: 'trash',
   page: 'page',
+  /** 보는 자리 — `mine=1` 내 설문 · `mine=0` 팀 전체, 없으면 서버가 저장된 선택·역할 기본값으로 정한다. */
+  whose: 'mine',
 } as const;
 
 const P = SURVEY_LIST_URL_PARAMS;
@@ -122,7 +124,14 @@ export function parseSurveyListQuery(params: SearchParamsLike): SurveyListPageQu
     sort: oneOf(surveyListSortValues, params.get(P.sort)) ?? INITIAL_SURVEY_LIST_PAGE_QUERY.sort,
     page: page !== null && page >= 1 ? page : 1,
     deleted,
+    whose: whoseOrNull(params.get(P.whose)),
   };
+}
+
+function whoseOrNull(raw: string | null): SurveyListPageQuery['whose'] {
+  if (raw === '1') return 'mine';
+  if (raw === '0') return 'team';
+  return null;
 }
 
 /**
@@ -168,6 +177,7 @@ export function serializeSurveyListQuery(query: SurveyListPageQuery): string {
   if (a.responsesMin !== null) out.set(P.responsesMin, String(a.responsesMin));
   if (a.responsesMax !== null) out.set(P.responsesMax, String(a.responsesMax));
   if (query.deleted) out.set(P.deleted, '1');
+  if (query.whose !== null) out.set(P.whose, query.whose === 'mine' ? '1' : '0');
   if (query.page !== 1) out.set(P.page, String(query.page));
   return out.toString();
 }

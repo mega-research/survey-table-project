@@ -10,6 +10,7 @@ import { getErrorMessage } from '@/lib/get-error-message';
 import type {
   SurveyListPageItem,
   SurveyListPageResult,
+  SurveyListWhose,
 } from '@/shared/contracts/survey-builder-io';
 import type { PersonalTagColor } from '@/shared/contracts/workspace';
 import type { MinePersonalTagsOutput, PersonalTagItem } from '@/shared/contracts/workspace-io';
@@ -379,5 +380,15 @@ export function useDeletePersonalTag(): (tagId: string) => Promise<boolean> {
 export function useRecordTagFilter(): (tagId: string) => void {
   return (tagId) => {
     void client.workspace.personalMarks.recordFilter({ tagId }).catch(() => {});
+  };
+}
+
+/**
+ * 설문 목록의 보는 자리를 계정에 남긴다 (0158) — `(whose) => void`. 지금 화면은 주소(`mine=`)가 이미 바꿨고
+ * 이것은 다음에 주소 없이 열 때를 위한 기록이라 기다리지 않고, 실패해도 알리지 않는다.
+ */
+export function useSaveSurveyListWhose(): (whose: SurveyListWhose) => void {
+  return (whose) => {
+    void client.workspace.personalMarks.setListWhose({ whose }).catch(() => {});
   };
 }

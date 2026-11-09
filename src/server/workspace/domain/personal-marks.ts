@@ -15,6 +15,8 @@ export {
   RecordTagFilterInput,
   RecordTagFilterOutput,
   SetFavoriteInput,
+  SetSurveyListWhoseInput,
+  SetSurveyListWhoseOutput,
   SetFavoriteOutput,
   SetTagLinkInput,
   SetTagLinkOutput,

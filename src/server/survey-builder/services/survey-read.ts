@@ -8,6 +8,7 @@ import {
   surveyDocuments,
   surveyVersions,
   surveys,
+  users,
 } from '@/db/schema';
 import { logger } from '@/lib/logger';
 import { normalizeQuestions } from '@/lib/question';
@@ -54,6 +55,8 @@ import {
   type SurveyListItem,
   type SurveyListPageInput,
   type SurveyListPageResult,
+  type SurveyListWhose,
+  defaultSurveyListWhose,
   normalizeSurveyStatus,
 } from '@/shared/contracts/survey-builder-io';
 import type { SurveyAnchorSnapshot } from '@/shared/contracts/survey-document';
@@ -258,7 +261,18 @@ export async function listSurveyPage(
   ]);
   const base = { scope, teams, canSeeSystemScope: subject.isSuperadmin, deletedCount };
 
-  const { scope: _requested, deleted, ...query } = input;
+  const { scope: _requested, deleted, whose: requestedWhose, ...query } = input;
+  // 보는 자리 — 주소에 있으면 그것, 없으면 계정에 저장된 마지막 선택, 그것도 없으면 역할 기본값.
+  // 휴지통은 언제나 팀 전체다(내 설문이라는 자리가 없다).
+  const whose: SurveyListWhose = deleted
+    ? 'team'
+    : (requestedWhose ??
+      (await loadSavedSurveyListWhose(subject.userId)) ??
+      defaultSurveyListWhose({
+        isSuperadmin: subject.isSuperadmin,
+        isLeaderOfScopeTeam: scope.kind === 'team' && subject.leaderTeamIds.includes(scope.teamId),
+        scopeKind: scope.kind,
+      }));
   let source: SurveyListSource;
   if (deleted) {
     source = { kind: 'deleted', viewerId: subject.userId };
@@ -274,11 +288,13 @@ export async function listSurveyPage(
       favoriteCount: 0,
       owners: [],
       activeTeam: null,
+      whose: 'team',
+      teamWideTotal: null,
     };
   } else {
     source = { kind: 'scoped', filter };
   }
-  const result = await querySurveyListPage({ ...query, source });
+  const result = await querySurveyListPage({ ...query, source, whose });
 
   const pageIds = result.rows.map((row) => row.id);
   // 목록은 실데이터만 센다 — 응답 수(notTestResponse)와 같은 파티션.
@@ -302,7 +318,19 @@ export async function listSurveyPage(
     favoriteCount: result.favoriteCount,
     owners: result.owners,
     activeTeam: result.activeTeam,
+    whose,
+    teamWideTotal: result.teamWideTotal,
   };
+}
+
+/** 계정에 저장된 「팀 전체 | 내 설문」 — 고른 적이 없으면 null(0158). users 는 auth 소관이라 직접 읽는다. */
+async function loadSavedSurveyListWhose(userId: string): Promise<SurveyListWhose | null> {
+  const [row] = await db
+    .select({ whose: users.surveyListWhose })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  return row?.whose ?? null;
 }
 
 /**

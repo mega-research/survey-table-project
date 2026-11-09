@@ -2,7 +2,7 @@ import { and, asc, eq, ne, sql } from 'drizzle-orm';
 import 'server-only';
 
 import { db } from '@/db';
-import { personalSurveyTagLinks, personalSurveyTags, surveyFavorites } from '@/db/schema';
+import { personalSurveyTagLinks, personalSurveyTags, surveyFavorites, users } from '@/db/schema';
 import { isForeignKeyViolation, isUniqueViolation } from '@/lib/pg-error';
 
 import {
@@ -20,6 +20,8 @@ import {
   type RecordTagFilterOutput,
   type SetFavoriteInput,
   type SetFavoriteOutput,
+  type SetSurveyListWhoseInput,
+  type SetSurveyListWhoseOutput,
   type SetTagLinkInput,
   type SetTagLinkOutput,
   type UpdatePersonalTagInput,
@@ -315,4 +317,16 @@ export async function deleteTag(
     .returning({ id: personalSurveyTags.id });
   if (deleted.length === 0) throw new PersonalTagNotFoundError();
   return { tagId: input.tagId };
+}
+
+/**
+ * 설문 목록의 보는 자리 저장 (0158) — 요청자 본인 행만 쓴다(입력에 사용자 칸이 없다). 같은 값을 두 번
+ * 보내도 결과가 같다. users 는 auth 소관이지만 이 칸은 목록 화면의 개인 설정이라 여기서 쓴다.
+ */
+export async function setSurveyListWhose(
+  userId: string,
+  input: SetSurveyListWhoseInput,
+): Promise<SetSurveyListWhoseOutput> {
+  await db.update(users).set({ surveyListWhose: input.whose }).where(eq(users.id, userId));
+  return { whose: input.whose };
 }

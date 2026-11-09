@@ -21,6 +21,7 @@ import {
   personalSurveyTags,
   surveyFavorites,
   surveyGroups,
+  surveyParticipants,
   surveyResponses,
   surveys,
   teams,
@@ -43,6 +44,7 @@ import {
   type SurveyListOwner,
   type SurveyListPageQuery,
   type SurveyListSortBy,
+  type SurveyListWhose,
   type SurveySuggestion,
   splitSurveyListSearchWords,
 } from '@/shared/contracts/survey-builder-io';
@@ -52,7 +54,7 @@ import {
 //
 // 조건은 세 겹이다.
 //   ① 원천(source)   — 작업 범위(`scopedSurveyWhere`) 또는 휴지통(`deleted_at IS NOT NULL`)
-//   ② 좁힘(narrowing) — 그룹 화면·팀 좁힘·미분류. 여기까지가 세그먼트 숫자·소유자 목록의 기준
+//   ② 좁힘(narrowing) — 그룹 화면·팀 좁힘·미분류·「내 설문」. 여기까지가 세그먼트 숫자·소유자 목록의 기준
 //   ③ 거르기(filters) — 검색·목록 상태·상세 검색·즐겨찾기·검색 칩(태그). `total` 과 페이지 항목은 셋 모두를 적용한다
 //
 // 즐겨찾기(티켓 06)·내 태그(티켓 07)는 요청자 본인의 행만 본다(`viewerId`) — 동료의 별·태그는
@@ -75,8 +77,10 @@ type ScopedFilter = Exclude<SurveyScopeFilter, { kind: 'none' }>;
 export type SurveyListSource =
   { kind: 'scoped'; filter: ScopedFilter } | { kind: 'deleted'; viewerId: string };
 
-export type SurveyListPageParams = Omit<SurveyListPageQuery, 'deleted'> & {
+/** `whose` 는 서비스가 정한 값이다(주소에 없으면 저장된 선택·역할 기본값) — 여기서는 null 이 없다. */
+export type SurveyListPageParams = Omit<SurveyListPageQuery, 'deleted' | 'whose'> & {
   source: SurveyListSource;
+  whose: SurveyListWhose;
 };
 
 export interface SurveyListPageRows {
@@ -88,6 +92,8 @@ export interface SurveyListPageRows {
   favoriteCount: number;
   owners: SurveyListOwner[];
   activeTeam: { id: string; name: string | null } | null;
+  /** 「내 설문」일 때 같은 조건의 팀 전체 결과 수 — 팀 전체 보기에서는 null. */
+  teamWideTotal: number | null;
 }
 
 /** 원천의 요청자. */
@@ -157,6 +163,14 @@ function surveyListSearchSql(q: string, tagViewerId: string | null): SQL | undef
   const words = splitSurveyListSearchWords(q);
   if (words.length === 0) return undefined;
   return and(...words.map((word) => surveyListWordMatchSql(word, tagViewerId)));
+}
+
+/**
+ * 「내 설문」 — 요청자가 소유하거나 참여자로 초대된 설문. 참여는 survey_participants(survey_id, user_id)
+ * 유일 행 한 번 찾기다. 원천(작업 범위) 안에서만 거른다 — 범위 밖 설문을 여기로 끌어오지 않는다.
+ */
+function isMineSql(viewerId: string): SQL {
+  return sql`(${surveys.ownerUserId} = ${viewerId} or exists (select 1 from ${surveyParticipants} where ${surveyParticipants.surveyId} = ${surveys.id} and ${surveyParticipants.userId} = ${viewerId}))`;
 }
 
 /** 요청자가 이 설문에 별을 켰는가 — PK(user_id, survey_id) 한 번 찾기. */
@@ -383,10 +397,13 @@ export async function querySurveyListPage(
   params: SurveyListPageParams,
 ): Promise<SurveyListPageRows> {
   const activeTeam = await resolveActiveTeam(params.source, params.teamId);
-  const narrowed = narrowedWhere(params, activeTeam);
-
   const viewerId = viewerOf(params.source);
-  const filters: SQL[] = [narrowed];
+  // 「내 설문」은 좁힘 단계다 — 세그먼트 숫자·별 숫자·소유자 목록도 내 설문만 센다. 휴지통에는 없다.
+  const mine = params.whose === 'mine' && params.source.kind === 'scoped';
+  const teamWide = narrowedWhere(params, activeTeam);
+  const narrowed = mine ? and(teamWide, isMineSql(viewerId))! : teamWide;
+
+  const filters: SQL[] = [];
   const search = surveyListSearchSql(params.q, params.source.kind === 'deleted' ? null : viewerId);
   if (search) filters.push(search);
   if (params.lifecycle !== 'all') {
@@ -395,21 +412,33 @@ export async function querySurveyListPage(
   filters.push(...advancedConditions(params.advanced));
   if (params.favorites) filters.push(isFavoriteSql(viewerId));
   if (params.tagIds.length > 0) filters.push(allTagsAttachedSql(viewerId, params.tagIds));
-  const where = and(...filters)!;
+  const where = and(narrowed, ...filters)!;
 
   const requestedPage = Math.max(1, params.page);
-  const [total, lifecycleCounts, favoriteCount, owners, optimisticRows] = await Promise.all([
-    countMatches(where),
-    countLifecycles(narrowed),
-    countFavorites(params, narrowed),
-    listOwners(narrowed),
-    selectPage(params, where, requestedPage),
-  ]);
+  const [total, lifecycleCounts, favoriteCount, owners, optimisticRows, teamWideTotal] =
+    await Promise.all([
+      countMatches(where),
+      countLifecycles(narrowed),
+      countFavorites(params, narrowed),
+      listOwners(narrowed),
+      selectPage(params, where, requestedPage),
+      mine ? countMatches(and(teamWide, ...filters)!) : Promise.resolve(null),
+    ]);
   const totalPages = Math.max(1, Math.ceil(total / SURVEY_LIST_PAGE_SIZE));
   const page = Math.min(requestedPage, totalPages);
   const rows = page === requestedPage ? optimisticRows : await selectPage(params, where, page);
 
-  return { rows, total, page, totalPages, lifecycleCounts, favoriteCount, owners, activeTeam };
+  return {
+    rows,
+    total,
+    page,
+    totalPages,
+    lifecycleCounts,
+    favoriteCount,
+    owners,
+    activeTeam,
+    teamWideTotal,
+  };
 }
 
 /**

@@ -25,6 +25,8 @@ import {
   RecordTagFilterOutput,
   SetFavoriteInput,
   SetFavoriteOutput,
+  SetSurveyListWhoseInput,
+  SetSurveyListWhoseOutput,
   SetTagLinkInput,
   SetTagLinkOutput,
   UpdatePersonalTagInput,
@@ -110,6 +112,12 @@ const recordFilter = authed
     svc.recordTagFilter(context.user.id, input).catch(rethrowPersonalMarksError),
   );
 
+/** 설문 목록의 보는 자리 저장 (0158) — 요청자 본인 행만. 설문·태그를 지목하지 않아 관문이 없다. */
+const setListWhose = authed
+  .input(SetSurveyListWhoseInput)
+  .output(SetSurveyListWhoseOutput)
+  .handler(({ input, context }) => svc.setSurveyListWhose(context.user.id, input));
+
 export const personalMarks = {
   setFavorite,
   mine,
@@ -118,4 +126,5 @@ export const personalMarks = {
   updateTag,
   deleteTag,
   recordFilter,
+  setListWhose,
 };

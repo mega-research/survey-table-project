@@ -209,6 +209,26 @@ export function isSurveyListSearchWithinLimits(q: string): boolean {
 export const surveyListLifecycleFilterValues = ['all', ...surveyListLifecycleValues] as const;
 export type SurveyListLifecycleFilter = (typeof surveyListLifecycleFilterValues)[number];
 
+/**
+ * 누구의 설문을 보나 — 「팀 전체」(범위가 보는 설문 전부) · 「내 설문」(내가 소유하거나 참여자로 초대된
+ * 설문). 거르기가 아니라 보는 자리라 세그먼트 숫자·소유자 목록도 따라 바뀐다(좁힘 단계, 0158).
+ */
+export const surveyListWhoseValues = ['team', 'mine'] as const;
+export type SurveyListWhose = (typeof surveyListWhoseValues)[number];
+
+/**
+ * 고른 적이 없을 때의 기본 — 팀장·슈퍼어드민은 팀 전체, 팀원은 내 설문. 시스템 전체 보기·미배치는 팀 전체.
+ * 한 번 고르면 계정에 저장되고(`users.survey_list_whose`) 그 값이 이것보다 앞선다.
+ */
+export function defaultSurveyListWhose(viewer: {
+  isSuperadmin: boolean;
+  isLeaderOfScopeTeam: boolean;
+  scopeKind: 'team' | 'system' | 'none';
+}): SurveyListWhose {
+  if (viewer.scopeKind !== 'team') return 'team';
+  return viewer.isSuperadmin || viewer.isLeaderOfScopeTeam ? 'team' : 'mine';
+}
+
 /** 정렬 — 방향은 값마다 고정(최신 수정·생성은 최신 먼저, 제목은 가나다, 응답은 많은 순). */
 export const surveyListSortValues = ['updatedAt', 'createdAt', 'title', 'responses'] as const;
 export type SurveyListSortBy = (typeof surveyListSortValues)[number];
@@ -298,6 +318,8 @@ export const SurveyListPageQuerySchema = z.object({
   sort: z.enum(surveyListSortValues),
   page: z.number().int().min(1).max(1_000_000),
   deleted: z.boolean(),
+  /** null — 주소에 없다. 서버가 저장된 선택, 없으면 역할 기본값(`defaultSurveyListWhose`)으로 정한다. */
+  whose: z.enum(surveyListWhoseValues).nullable(),
 });
 export type SurveyListPageQuery = z.infer<typeof SurveyListPageQuerySchema>;
 
@@ -313,6 +335,7 @@ export const INITIAL_SURVEY_LIST_PAGE_QUERY: SurveyListPageQuery = {
   sort: 'updatedAt',
   page: 1,
   deleted: false,
+  whose: null,
 };
 
 /** listPage RPC 입력 — 조건 + 화면이 기억하는 작업 범위(서버가 멤버십으로 다시 판정). */
@@ -362,6 +385,13 @@ export interface SurveyListPageResult extends Pick<
   lifecycleCounts: Record<SurveyListLifecycleFilter, number>;
   /** 내 별 개수 — `lifecycleCounts` 와 같은 기준(범위·그룹·팀 좁힘까지). 휴지통에서는 0. */
   favoriteCount: number;
+  /** 실제로 적용한 보는 자리 — 주소에 없으면 서버가 정한 값. 휴지통·미배치는 늘 팀 전체. */
+  whose: SurveyListWhose;
+  /**
+   * 「내 설문」일 때 같은 조건으로 팀 전체에서 찾으면 몇 개인가 — 결과가 비었을 때 「팀 전체에서 n개」
+   * 안내의 재료. 팀 전체 보기에서는 null.
+   */
+  teamWideTotal: number | null;
   owners: SurveyListOwner[];
   /**
    * 실제로 걸린 팀 좁힘 — 화면 제목(「팀 이름 · 미분류」)용. 지목한 팀의 설문이 범위에 하나도

@@ -133,6 +133,7 @@
     "0153_result_code_9_closed_business",
     "0154_question_collapse_button_label",
     "0155_question_collapse_attach_previous",
-    "0157_personal_tag_filter_score"
+    "0157_personal_tag_filter_score",
+    "0158_users_survey_list_whose"
   ]
 }

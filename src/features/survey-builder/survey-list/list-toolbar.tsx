@@ -23,6 +23,7 @@ import { resolveQuickTags } from './personal-tags';
 import { QuickTagRow } from './quick-tag-row';
 import { type SearchChips, SearchCombobox, type TagSuggestions } from './search-combobox';
 import { TagFilterMenu } from './tag-filter-menu';
+import { WhoseToggle } from './whose-toggle';
 
 // 문의 칩(.pen FLOW 6 「칩 문의」)은 Plan 3 게이트로 미노출 — 어휘 자체를 뺐다(티켓 08).
 
@@ -86,6 +87,11 @@ interface ListToolbarProps {
    * 태그 조건이 없다.
    */
   tagFilter: ComponentProps<typeof TagFilterMenu> | null;
+  /**
+   * 보는 자리 「팀 전체 | 내 설문」(0158) — **null 이면 그리지 않는다**. 팀 범위에만 있다(시스템 전체 보기·
+   * 휴지통·미배치에는 「내 설문」이라는 자리가 없다).
+   */
+  whose: ComponentProps<typeof WhoseToggle> | null;
 }
 
 /**
@@ -93,7 +99,7 @@ interface ListToolbarProps {
  *
  * 첫 줄 — 검색창(넓게, 자동완성 F8-b · 검색 칩 F8-c) · 즐겨찾기 · 「# 태그 ▾」(F8-d) · 상세 검색(툴바가
  * 좁으면 검색창 아래 줄로 내려간다). 둘째 줄 —
- * 왼쪽 목록 상태 세그먼트(+ 휴지통) · 자주 쓰는 태그 한 줄, 오른쪽 「N개 · 정렬 ▾」.
+ * 왼쪽 보는 자리(팀 전체 | 내 설문) · 목록 상태 세그먼트(+ 휴지통) · 자주 쓰는 태그 한 줄, 오른쪽 「N개 · 정렬 ▾」.
  */
 export function ListToolbar({
   counts,
@@ -119,6 +125,7 @@ export function ListToolbar({
   searchChips,
   tagSuggestions,
   tagFilter,
+  whose,
 }: ListToolbarProps) {
   return (
     // 첫 줄의 배치는 화면 폭이 아니라 툴바 폭으로 가른다 — 사이드바를 펴고 접는 데 따라 남는 자리가
@@ -185,6 +192,7 @@ export function ListToolbar({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
+        {whose && <WhoseToggle {...whose} />}
         <LifecycleSegment value={lifecycle} counts={counts} onChange={onLifecycleChange} />
 
         {/* 휴지통은 세그먼트와 나란히 서지만 성격이 다르다 — 세그먼트는 지금 목록 안의 거르기이고

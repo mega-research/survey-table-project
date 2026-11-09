@@ -66,7 +66,8 @@ const TAG = {
 };
 
 function query(over: Partial<SurveyListPageInput> = {}): SurveyListPageInput {
-  return { ...INITIAL_SURVEY_LIST_PAGE_QUERY, scope: TEAM_A, q: RUN, ...over };
+  // 팀 전체로 고정 — 주소 없는 조회는 팀원에게 「내 설문」이 기본이라(0158) 동료 설문의 뜻이 바뀐다.
+  return { ...INITIAL_SURVEY_LIST_PAGE_QUERY, scope: TEAM_A, q: RUN, whose: 'team', ...over };
 }
 
 async function idsOf(over: Partial<SurveyListPageInput>, user = viewer): Promise<Set<string>> {

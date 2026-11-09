@@ -50,7 +50,32 @@ const FULL: SurveyListPageQuery = {
   sort: 'responses',
   page: 3,
   deleted: false,
+  whose: 'mine',
 };
+
+describe('보는 자리 「팀 전체 | 내 설문」 주소', () => {
+  it('mine=1 은 내 설문, mine=0 은 팀 전체, 없거나 모르는 값은 null(서버가 정한다)', () => {
+    expect(parse('mine=1').whose).toBe('mine');
+    expect(parse('mine=0').whose).toBe('team');
+    expect(parse('').whose).toBeNull();
+    expect(parse('mine=yes').whose).toBeNull();
+  });
+
+  it('고른 자리는 주소에 남고 null 은 생략한다', () => {
+    const base = INITIAL_SURVEY_LIST_PAGE_QUERY;
+    expect(serializeSurveyListQuery({ ...base, whose: 'mine' })).toBe('mine=1');
+    expect(serializeSurveyListQuery({ ...base, whose: 'team' })).toBe('mine=0');
+    expect(serializeSurveyListQuery(base)).toBe('');
+  });
+
+  it('자리를 바꾸면 1페이지로 돌아간다', () => {
+    const onPage3 = { ...INITIAL_SURVEY_LIST_PAGE_QUERY, page: 3 };
+    expect(changeSurveyListQuery(onPage3, { whose: 'mine' })).toMatchObject({
+      whose: 'mine',
+      page: 1,
+    });
+  });
+});
 
 describe('주소 ↔ 목록 조건', () => {
   it('빈 주소는 기본 조건이고, 기본 조건은 빈 주소다', () => {
@@ -67,7 +92,7 @@ describe('주소 ↔ 목록 조건', () => {
   it('주소 이름은 사람이 읽을 수 있는 짧은 이름이다', () => {
     expect(serializeSurveyListQuery(FULL)).toBe(
       `team=${TEAM}&ungrouped=1&q=2026+%EC%8B%A4%ED%83%9C&status=closed&fav=1&tag=${TAG_A}&tag=${TAG_B}&sort=responses` +
-        `&date=endDate&from=2026-01-01&to=2026-12-31&owner=${OWNER}&vis=invite_only&rmin=0&rmax=300&page=3`,
+        `&date=endDate&from=2026-01-01&to=2026-12-31&owner=${OWNER}&vis=invite_only&rmin=0&rmax=300&mine=1&page=3`,
     );
   });
 
@@ -272,12 +297,13 @@ describe('걸린 조건이 있는가 — 결과 0개 화면의 「조건 풀기�
 });
 
 describe('조건 풀기', () => {
-  it('검색·검색 칩·목록 상태·상세 검색·즐겨찾기만 되돌리고 그룹·팀·휴지통·정렬은 남긴다', () => {
+  it('검색·검색 칩·목록 상태·상세 검색·즐겨찾기만 되돌리고 그룹·팀·휴지통·정렬·보는 자리는 남긴다', () => {
     expect(clearNarrowingFilters(FULL)).toEqual({
       ...INITIAL_SURVEY_LIST_PAGE_QUERY,
       teamId: TEAM,
       ungrouped: true,
       sort: 'responses',
+      whose: 'mine',
     });
   });
 });

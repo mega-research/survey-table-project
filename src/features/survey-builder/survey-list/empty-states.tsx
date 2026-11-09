@@ -18,12 +18,12 @@ export function NoTeamEmptyState() {
       </span>
       <h3 className="text-[17px] font-semibold text-[#1C1C1E]">소속 팀이 없습니다</h3>
       <p className="max-w-[420px] text-[13.5px] leading-relaxed text-[#6E6E73]">
-        관리자에게 팀 배정을 요청하세요. 팀이 배정되기 전에는 초대받은 설문을 포함해 어떤
-        설문도 볼 수 없습니다.
+        관리자에게 팀 배정을 요청하세요. 팀이 배정되기 전에는 초대받은 설문을 포함해 어떤 설문도 볼
+        수 없습니다.
       </p>
       <Link
         href="/profile"
-        className="mt-1 h-9 rounded-[9px] border border-[#E5E5EA] bg-white px-4 leading-9 text-[13px] font-medium text-[#374151] hover:bg-[#F5F5F7]"
+        className="mt-1 h-9 rounded-[9px] border border-[#E5E5EA] bg-white px-4 text-[13px] leading-9 font-medium text-[#374151] hover:bg-[#F5F5F7]"
       >
         프로필 보기
       </Link>
@@ -95,8 +95,7 @@ export function NoSurveysEmptyState({ canCreate }: { canCreate: boolean }) {
           href="/surveys/create"
           className="mt-1 flex h-9 items-center gap-1.5 rounded-[9px] bg-[#2E4FCE] px-4 text-[13px] font-semibold text-white hover:bg-[#2743AE]"
         >
-          <Plus className="h-4 w-4" />
-          새 설문 만들기
+          <Plus className="h-4 w-4" />새 설문 만들기
         </Link>
       )}
     </div>
@@ -148,6 +147,40 @@ export function EmptyDeletedState() {
       <p className="max-w-[420px] text-[13.5px] leading-relaxed text-[#6E6E73]">
         삭제된 설문은 응답 데이터와 함께 보관되며 여기서 되돌릴 수 있습니다.
       </p>
+    </div>
+  );
+}
+
+/**
+ * 「내 설문」에서 결과가 없는데 같은 조건으로 팀 전체에는 있는 상태 (0158).
+ *
+ * 「아직 설문이 없습니다」·「조건에 맞는 설문이 없습니다」로 접으면 남이 소유한 설문을 함께 맡는 팀원이
+ * 설문이 사라졌다고 읽는다. 팀 전체에 몇 개 있는지와 한 번에 넘어가는 단추를 준다.
+ */
+export function MineEmptyState({
+  teamWideTotal,
+  onShowTeam,
+}: {
+  teamWideTotal: number;
+  onShowTeam: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">
+      <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[#F5F5F7]">
+        <UsersRound className="h-6 w-6 text-[#9CA3AF]" />
+      </span>
+      <h3 className="text-[16px] font-semibold text-[#1C1C1E]">내 설문에는 없습니다</h3>
+      <p className="text-[13.5px] text-[#6E6E73]">
+        팀 전체에서 <span className="tabular-nums">{teamWideTotal.toLocaleString('ko-KR')}</span>
+        개를 찾았습니다. 내가 소유하거나 참여자로 초대된 설문만 「내 설문」에 보입니다.
+      </p>
+      <button
+        type="button"
+        onClick={onShowTeam}
+        className="mt-1 flex h-9 items-center rounded-[9px] border border-[#E5E5EA] bg-white px-4 text-[13px] font-semibold text-[#1C1C1E] hover:bg-[#F5F5F7]"
+      >
+        팀 전체 보기
+      </button>
     </div>
   );
 }

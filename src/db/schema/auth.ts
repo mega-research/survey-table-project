@@ -1,14 +1,7 @@
-import {
-  boolean,
-  index,
-  pgTable,
-  text,
-  timestamp,
-  uniqueIndex,
-  uuid,
-} from 'drizzle-orm/pg-core';
+import { boolean, index, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 
 import type { FieldworkRole, UserStatus, UserType } from '@/shared/contracts/auth';
+import type { SurveyListWhose } from '@/shared/contracts/survey-builder-io';
 
 /**
  * Better Auth 관할 인증 테이블 4종(users/sessions/accounts/verifications)
@@ -36,6 +29,9 @@ export const users = pgTable('users', {
   // 소속 기관 메모 — guest 전용 자유 입력 (0113). internal 은 팀 멤버십(티켓 06),
   // fieldwork 는 실사 업체 엔티티(티켓 24)에서 소속을 얻으므로 이 컬럼을 쓰지 않는다.
   organization: text('organization'),
+  // 설문 목록에서 마지막으로 고른 보는 자리 — 'team' | 'mine', null 이면 역할 기본값 (0158).
+  // CHECK 는 마이그레이션에 있다 — 어휘는 `surveyListWhoseValues`(shared/contracts/survey-builder-io).
+  surveyListWhose: text('survey_list_whose').$type<SurveyListWhose>(),
   // 계정 유형 — internal | guest | fieldwork (ADR-0018, 0112 마이그레이션)
   userType: text('user_type').$type<UserType>().notNull().default('internal'),
   // 소속 실사 업체 — fieldwork 전용 (0120, 티켓 24).

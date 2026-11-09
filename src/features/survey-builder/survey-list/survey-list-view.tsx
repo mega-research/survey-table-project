@@ -16,6 +16,7 @@ import {
   INITIAL_SURVEY_LIST_PAGE_QUERY,
   SURVEY_LIST_PAGE_SIZE,
   type SurveyListPageQuery,
+  type SurveyListWhose,
 } from '@/shared/contracts/survey-builder-io';
 import type { PersonalTagItem } from '@/shared/contracts/workspace-io';
 import { surveyListPageQueryOptions, surveyListScopeParam } from '@/shared/lib/survey-list-queries';
@@ -26,6 +27,7 @@ import {
   useCreatePersonalTag,
   useMyPersonalTags,
   useRecordTagFilter,
+  useSaveSurveyListWhose,
   useSetFavorite,
   useSetTagLink,
 } from '../queries/use-personal-marks';
@@ -37,6 +39,7 @@ import { DeletedSurveyCard } from './deleted-survey-card';
 import {
   EmptyDeletedState,
   EmptyGroupState,
+  MineEmptyState,
   NoResultsEmptyState,
   NoSurveysEmptyState,
   NoTeamEmptyState,
@@ -150,6 +153,7 @@ export function SurveyListView() {
   const setTagLink = useSetTagLink();
   // 태그를 검색에 걸 때마다 기록한다 — 툴바 「자주 쓰는 태그」 줄의 순서(0157). 거르기는 주소가 한다.
   const recordTagFilter = useRecordTagFilter();
+  const saveWhose = useSaveSurveyListWhose();
   const createTag = useCreatePersonalTag();
 
   const requestedGroupId = query.groupId;
@@ -229,6 +233,19 @@ export function SurveyListView() {
     const found = myTagsById.get(id);
     return found ? [found] : [];
   });
+
+  // 보는 자리 「팀 전체 | 내 설문」(0158) — 주소에 없으면 서버가 정한 값(저장된 선택·역할 기본값)을 보인다.
+  // 팀 범위에만 있다. 고르면 주소를 바꾸고(지금 화면) 계정에도 남긴다(다음에 주소 없이 열 때).
+  const whose = data?.whose ?? query.whose;
+  const showWhose = resolvedScope?.kind === 'team' && !showDeleted && whose !== null;
+  function changeWhose(next: SurveyListWhose) {
+    saveWhose(next);
+    updateQuery({ whose: next });
+  }
+  const mineEmpty =
+    data?.whose === 'mine' && data.total === 0 && (data.teamWideTotal ?? 0) > 0
+      ? (data.teamWideTotal ?? 0)
+      : null;
 
   /** 결과 0개 화면이 푸는 조건 — 검색·검색 칩·목록 상태·즐겨찾기·상세 검색. 그룹·팀 좁힘은 주소가 가리키는 화면이다. */
   const activeConditions = [
@@ -485,6 +502,7 @@ export function SurveyListView() {
                     onClearSelection: () => updateQuery({ tagIds: [] }),
                   }
             }
+            whose={showWhose && whose ? { value: whose, onChange: changeWhose } : null}
             advancedPanel={
               advancedOpen && (
                 <AdvancedSearchPanel
@@ -503,6 +521,9 @@ export function SurveyListView() {
           {scope.kind === 'none' ? (
             // 셸 밖 트리에서 서버가 미배치로 해석한 경우 — FLOW 9-1 문구로 안내한다.
             <NoTeamEmptyState />
+          ) : mineEmpty !== null ? (
+            // 「내 설문」은 비었는데 같은 조건으로 팀 전체에는 있다 — 「설문이 없다」로 읽히지 않게 먼저 본다.
+            <MineEmptyState teamWideTotal={mineEmpty} onShowTeam={() => changeWhose('team')} />
           ) : counts.all === 0 ? (
             // 「전체」 숫자는 범위·그룹·팀 좁힘까지만 센다 — 0 이면 조건과 무관하게 빈 화면이다.
             // 휴지통이 비어 있는 것·그룹이 비어 있는 것·팀에 설문이 없는 것은 다른 화면이다 —

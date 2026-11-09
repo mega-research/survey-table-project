@@ -7,7 +7,7 @@
  * 하나만 관찰 방식이 다르다 — 「응답 수는 페이지 항목만 센다」는 성능 계약이라, 응답 수 집계
  * 함수에 들어간 설문 id 수를 본다(PRD Testing Decisions 의 예외).
  */
-import { inArray } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { db } from '@/db';
@@ -26,6 +26,7 @@ import {
 import { SurveyAccessError } from '@/server/survey-access';
 import { listSurveyPage } from '@/server/survey-builder/services/survey-read';
 import { WorkScopeError } from '@/server/work-scope';
+import { setSurveyListWhose } from '@/server/workspace/services/personal-marks';
 import {
   INITIAL_ADVANCED_FILTERS,
   INITIAL_SURVEY_LIST_PAGE_QUERY,
@@ -101,8 +102,12 @@ const S = {
 const GROUP_B = crypto.randomUUID();
 const allSurveyIds = [...bulk, ...Object.values(S)];
 
+/**
+ * 기본은 「팀 전체」로 고정한다 — 주소 없는 조회(whose null)는 팀원에게 「내 설문」이 기본이라(0158) 그대로
+ * 두면 범위 전체를 전제한 아래 검사들의 뜻이 바뀐다. 보는 자리 자체는 「보는 자리」 묶음이 본다.
+ */
 function query(over: Partial<SurveyListPageInput> = {}): SurveyListPageInput {
-  return { ...INITIAL_SURVEY_LIST_PAGE_QUERY, scope: TEAM_A, ...over };
+  return { ...INITIAL_SURVEY_LIST_PAGE_QUERY, scope: TEAM_A, whose: 'team', ...over };
 }
 
 async function seedUser(id: string, name: string, isSuperadmin = false): Promise<void> {
@@ -300,6 +305,81 @@ describe.skipIf(!isLocalDb)('설문 목록 페이지 조회 (real local DB)', ()
 
   beforeEach(() => {
     countedIds.calls = [];
+  });
+
+  describe('보는 자리 「팀 전체 | 내 설문」 (0158)', () => {
+    // viewer 는 묶음 30개를 소유하고 B팀 설문 둘에 참여자로 초대됐다. 나머지 A팀 설문은 동료 소유다.
+    const MINE_COUNT = bulk.length + 2;
+
+    it('내 설문은 내가 소유하거나 참여자로 초대된 설문만 — 상태별 숫자도 그 기준이다', async () => {
+      const mine = await listSurveyPage(viewer, query({ whose: 'mine' }));
+      const team = await listSurveyPage(viewer, query({ whose: 'team' }));
+      expect(mine.whose).toBe('mine');
+      expect(mine.total).toBe(MINE_COUNT);
+      expect(mine.lifecycleCounts.all).toBe(MINE_COUNT);
+      expect(mine.owners.map((o) => o.id).sort()).toEqual([OUTSIDER_ID, VIEWER_ID].sort());
+      expect(team.total).toBeGreaterThan(mine.total);
+      expect(team.teamWideTotal).toBeNull();
+      // 같은 조건의 팀 전체 결과 수를 함께 준다 — 빈 「내 설문」에서 안내할 재료.
+      expect(mine.teamWideTotal).toBe(team.total);
+    });
+
+    it('내 설문에서 동료 설문을 찾으면 0개이고, 팀 전체에는 있다고 알린다', async () => {
+      const result = await listSurveyPage(viewer, query({ whose: 'mine', q: '가가 카드' }));
+      expect(result.total).toBe(0);
+      expect(result.teamWideTotal).toBe(1);
+    });
+
+    it('주소에 없으면 — 팀원은 내 설문, 팀장은 팀 전체가 기본이다', async () => {
+      const asMember = await listSurveyPage(viewer, query({ whose: null }));
+      expect(asMember.whose).toBe('mine');
+      expect(asMember.total).toBe(MINE_COUNT);
+
+      await db
+        .update(teamMembersTable)
+        .set({ role: 'leader' })
+        .where(eq(teamMembersTable.userId, VIEWER_ID));
+      try {
+        const asLeader = await listSurveyPage(viewer, query({ whose: null }));
+        expect(asLeader.whose).toBe('team');
+      } finally {
+        await db
+          .update(teamMembersTable)
+          .set({ role: 'member' })
+          .where(eq(teamMembersTable.userId, VIEWER_ID));
+      }
+    });
+
+    it('한 번 고르면 계정에 남아 주소 없는 조회가 그 자리로 열린다 — 역할 기본값보다 앞선다', async () => {
+      try {
+        await setSurveyListWhose(VIEWER_ID, { whose: 'team' });
+        const reopened = await listSurveyPage(viewer, query({ whose: null }));
+        expect(reopened.whose).toBe('team');
+        // 주소에 적힌 자리는 저장된 값보다 앞선다.
+        const explicit = await listSurveyPage(viewer, query({ whose: 'mine' }));
+        expect(explicit.whose).toBe('mine');
+        // 내 행만 쓴다 — 동료의 저장값은 그대로다.
+        const [colleague] = await db
+          .select({ whose: usersTable.surveyListWhose })
+          .from(usersTable)
+          .where(eq(usersTable.id, COLLEAGUE_ID));
+        expect(colleague?.whose).toBeNull();
+      } finally {
+        await db
+          .update(usersTable)
+          .set({ surveyListWhose: null })
+          .where(eq(usersTable.id, VIEWER_ID));
+      }
+    });
+
+    it('휴지통은 늘 팀 전체다 — 내 설문을 보내도 삭제된 설문 전부', async () => {
+      const trash = await listSurveyPage(
+        superadmin,
+        query({ scope: SYSTEM_SCOPE, deleted: true, whose: 'mine' }),
+      );
+      expect(trash.whose).toBe('team');
+      expect(trash.items.map((i) => i.id)).toContain(S.deleted);
+    });
   });
 
   describe('페이지', () => {

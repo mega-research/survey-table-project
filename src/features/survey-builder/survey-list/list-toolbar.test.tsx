@@ -4,7 +4,10 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { SurveyListLifecycleFilter } from '@/shared/contracts/survey-builder-io';
+import type {
+  SurveyListLifecycleFilter,
+  SurveyListWhose,
+} from '@/shared/contracts/survey-builder-io';
 
 import { ListToolbar } from './list-toolbar';
 
@@ -35,11 +38,13 @@ function Harness({
   initial = 'all',
   favorites = null,
   tagFilter = null,
+  whose = null,
 }: {
   onLifecycleChange: (next: SurveyListLifecycleFilter) => void;
   initial?: SurveyListLifecycleFilter;
   favorites?: { on: boolean; count: number; onToggle: (next: boolean) => void } | null;
   tagFilter?: typeof TAG_FILTER | null;
+  whose?: { value: SurveyListWhose; onChange: (next: SurveyListWhose) => void } | null;
 }) {
   const [lifecycle, setLifecycle] = useState<SurveyListLifecycleFilter>(initial);
   return (
@@ -66,6 +71,7 @@ function Harness({
       searchChips={SEARCH_CHIPS}
       tagSuggestions={TAG_SUGGESTIONS}
       tagFilter={tagFilter}
+      whose={whose}
     />
   );
 }
@@ -223,6 +229,7 @@ describe('ListToolbar — 검색창 상한', () => {
         searchChips={SEARCH_CHIPS}
         tagSuggestions={TAG_SUGGESTIONS}
         tagFilter={null}
+        whose={null}
       />,
     );
     return { input: screen.getByRole('combobox', { name: '설문 검색' }), onSearch };
@@ -276,5 +283,27 @@ describe('ListToolbar — 좁은 폭 배치', () => {
     expect(search).toHaveClass('w-full', '@2xl:w-auto', '@2xl:flex-1');
     // 상자 안도 접힌다 — 칩·입력칸·「모두 지우기」가 상자 밖으로 넘치지 않는다.
     expect(box).toHaveClass('flex-wrap');
+  });
+});
+
+describe('ListToolbar — 보는 자리 「팀 전체 | 내 설문」 (0158)', () => {
+  it('고른 자리가 눌려 있고, 다른 자리를 누르면 그 자리를 올린다', async () => {
+    const onChange = vi.fn();
+    render(<Harness onLifecycleChange={vi.fn()} whose={{ value: 'mine', onChange }} />);
+    expect(screen.getByRole('radio', { name: '내 설문' })).toHaveAttribute('aria-checked', 'true');
+    await userEvent.setup().click(screen.getByRole('radio', { name: '팀 전체' }));
+    expect(onChange).toHaveBeenCalledExactlyOnceWith('team');
+  });
+
+  it('이미 고른 자리를 다시 눌러도 아무것도 올리지 않는다', async () => {
+    const onChange = vi.fn();
+    render(<Harness onLifecycleChange={vi.fn()} whose={{ value: 'team', onChange }} />);
+    await userEvent.setup().click(screen.getByRole('radio', { name: '팀 전체' }));
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('null 이면 그리지 않는다 — 시스템 전체 보기·휴지통', () => {
+    render(<Harness onLifecycleChange={vi.fn()} />);
+    expect(screen.queryByRole('radiogroup', { name: '보는 자리' })).toBeNull();
   });
 });

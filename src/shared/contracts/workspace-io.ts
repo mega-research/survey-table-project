@@ -4,6 +4,7 @@
 import * as z from 'zod';
 
 import { fieldworkRoleValues, userStatusValues } from './auth';
+import { surveyListWhoseValues } from './survey-builder-io';
 import {
   type ClientLinkTabs,
   PERSONAL_TAG_MESSAGE,
@@ -585,6 +586,16 @@ export type RecordTagFilterInput = z.infer<typeof RecordTagFilterInput>;
 
 export const RecordTagFilterOutput = RecordTagFilterInput;
 export type RecordTagFilterOutput = z.infer<typeof RecordTagFilterOutput>;
+
+/**
+ * 설문 목록의 보는 자리 저장 (0158) — 「팀 전체 | 내 설문」을 고를 때마다 계정에 남긴다. 다음에 주소 없이
+ * 목록을 열면 이 값으로 연다. 목록 조회 자체는 주소(`mine=`)가 한다 — 저장이 실패해도 지금 화면은 바뀐다.
+ */
+export const SetSurveyListWhoseInput = z.object({ whose: z.enum(surveyListWhoseValues) }).strict();
+export type SetSurveyListWhoseInput = z.infer<typeof SetSurveyListWhoseInput>;
+
+export const SetSurveyListWhoseOutput = SetSurveyListWhoseInput;
+export type SetSurveyListWhoseOutput = z.infer<typeof SetSurveyListWhoseOutput>;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 설문 참여자 (.pen FLOW 4-2 참여자 블록, 티켓 18)
