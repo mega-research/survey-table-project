@@ -1,5 +1,7 @@
 import * as z from 'zod';
 
+import { FIELDWORK_SHARE_OVERLAPS } from '@/shared/contracts/contacts-io';
+
 import { AssignmentClausesSchema } from './contact-assignment';
 
 /**
@@ -20,6 +22,15 @@ export const FieldworkShareClausesInput = FieldworkShareTargetInput.extend({
 });
 export type FieldworkShareClausesInput = z.infer<typeof FieldworkShareClausesInput>;
 
+/**
+ * 적용 입력 — 겹침 처리는 **필수**다(기본값 없음, 티켓 04). 겹침이 없을 때도 화면이 하나를 골라 보낸다
+ * (적용 시점에 조건을 다시 계산하므로 그 사이 생긴 겹침도 고른 대로 처리된다).
+ */
+export const FieldworkShareApplyInput = FieldworkShareClausesInput.extend({
+  overlap: z.enum(FIELDWORK_SHARE_OVERLAPS),
+});
+export type FieldworkShareApplyInput = z.infer<typeof FieldworkShareApplyInput>;
+
 export const FieldworkShareMatchesInput = FieldworkShareClausesInput.extend({
   page: z.number().int().min(1).max(100_000),
 });
@@ -35,8 +46,14 @@ export const FieldworkShareChangeSummarySchema = z.object({
   matched: z.number().int(),
   current: z.number().int(),
   incoming: z.number().int(),
+  overlap: z.number().int(),
   fromOthers: z.array(z.object({ linkId: z.uuid(), name: z.string(), count: z.number().int() })),
   leaving: z.number().int(),
+});
+
+export const FieldworkShareApplyOutput = FieldworkShareChangeSummarySchema.extend({
+  overlapChoice: z.enum(FIELDWORK_SHARE_OVERLAPS),
+  after: z.number().int(),
 });
 
 export const FieldworkShareListOutput = z.object({

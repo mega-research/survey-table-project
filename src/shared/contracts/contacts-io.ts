@@ -174,18 +174,40 @@ export interface FieldworkShareListResult {
   links: FieldworkShareLinkRow[];
 }
 
+/**
+ * 담당 범위 적용의 겹침 처리 — 조건 결과 중 **이 링크에 아직 없고 다른 열린 외주 링크에 있는** 대상을
+ * 어떻게 할지(티켓 04). 적용 입력의 필수 값이다(기본값 없음).
+ *
+ * - `take` 가져오기 — 이쪽에 넣고 그 링크에서 뺀다
+ * - `keep` 남겨 두기 — 이쪽에 넣지 않는다(나머지만 적용)
+ * - `share` 같이 맡기기 — 양쪽에 둔다
+ *
+ * 이미 이 링크와 다른 링크가 같이 맡고 있는 대상은 겹침이 아니다 — 무엇을 골라도 그대로 남는다.
+ * 의미론은 `lib/operations/fieldwork-share-overlap` 의 `shareTargetOutcome`.
+ */
+export const FIELDWORK_SHARE_OVERLAPS = ['take', 'keep', 'share'] as const;
+export type FieldworkShareOverlap = (typeof FIELDWORK_SHARE_OVERLAPS)[number];
+
 /** 나누기 미리보기·적용 결과 — 둘이 같은 모양이다(적용은 적용 시점에 조건을 다시 계산한 실제 결과). */
 export interface FieldworkShareChangeSummary {
-  /** 조건에 맞는 대상 = 적용 뒤 이 링크의 범위 */
+  /** 조건에 맞는 대상 */
   matched: number;
   /** 적용 전 이 링크의 범위 */
   current: number;
   /** 어느 열린 링크에도 없다가 새로 들어오는 대상 */
   incoming: number;
-  /** 다른 열린 외주 링크에 이미 있는 대상 — 링크별(이름은 이름표 또는 「링크 N」) */
+  /** 겹침 — 조건 결과 중 이 링크에 없고 다른 열린 외주 링크에 있는 대상(서로 다른 사람 수) */
+  overlap: number;
+  /** 겹침의 링크별 인원(이름은 이름표 또는 「링크 N」). 두 링크가 같이 맡은 대상은 양쪽에 센다 */
   fromOthers: Array<{ linkId: string; name: string; count: number }>;
   /** 조건 밖이라 이 링크에서 빠지는 대상 */
   leaving: number;
+}
+
+/** 적용 결과 — 고른 겹침 처리와 적용 뒤 이 링크의 실제 인원(트랜잭션 안에서 다시 센 값). */
+export interface FieldworkShareApplyResult extends FieldworkShareChangeSummary {
+  overlapChoice: FieldworkShareOverlap;
+  after: number;
 }
 
 /** 담당 범위 수정 화면 오른쪽 대상 목록 한 줄 — 「현재 링크」 열은 그 대상이 지금 속한 열린 링크 이름들. */
