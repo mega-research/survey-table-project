@@ -1,3 +1,4 @@
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 import { Param } from 'drizzle-orm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -172,6 +173,7 @@ async function save(answers: Record<string, unknown>) {
     { surveyId: SURVEY_ID, responseId: RESPONSE_ID, versionId: VERSION_ID, questionResponses: answers },
     EDITOR,
     false,
+    FIELDWORK_SHARE_ALL,
   );
 }
 

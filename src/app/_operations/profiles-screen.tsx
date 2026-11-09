@@ -26,6 +26,7 @@ import {
   normalizeListArgs,
 } from '@/lib/operations/profiles-format';
 import type { OperationsDataScope } from '@/server/data-scope';
+import type { FieldworkShare } from '@/server/fieldwork-share';
 import { getSurveyContactStats } from '@/server/operations/services/contact-stats';
 import { loadProfileAnswerValues } from '@/server/operations/services/profile-answer-values';
 import { listResponsesForProfiles } from '@/server/operations/services/profiles';
@@ -62,6 +63,8 @@ import type { SurveyCapability } from '@/shared/contracts/workspace';
  *    관문인 `survey.edit` 로 갈린다. 예전에는 `isExternalViewer()`(계정 유형)로 물었는데 그
  *    문은 계정을 요구해 링크 세션에서 던진다 — 판정 결과로 물으면 주체 종류가 늘어도 그대로다.
  *  - `scope` — 링크는 언제나 real 파티션이다.
+ *  - `share` — 담당 범위(ADR-0035). 내부는 설문 전체, `/fw` 는 페이지가 링크 주체로 해석해 넘긴다 —
+ *    나눈 링크에서는 자기 범위 대상의 응답만 보이고 공개 링크 응답은 빠진다.
  *
  * 관문(`responses.view`)은 라우트가 먼저 지난다 — 이 화면은 그 결과를 받기만 한다.
  */
@@ -84,6 +87,7 @@ interface Props {
   basePath: string;
   capabilities: ReadonlySet<SurveyCapability>;
   scope: OperationsDataScope;
+  share: FieldworkShare;
   searchParams: ProfilesSearchParams;
 }
 
@@ -92,6 +96,7 @@ export async function ProfilesScreen({
   basePath,
   capabilities,
   scope,
+  share,
   searchParams: sp,
 }: Props) {
   const canManageResponses = capabilities.has('responses.manage');
@@ -176,6 +181,7 @@ export async function ProfilesScreen({
     listResponsesForProfiles({
       surveyId,
       scope,
+      share,
       pageSize: PROFILES_PAGE_SIZE,
       page: args.page,
       status: args.status,

@@ -6,6 +6,7 @@ import { db } from '@/db';
 import { TEST_VERSION_STATUS } from '@/shared/contracts/survey';
 import { surveyResponses, surveyVersions } from '@/db/schema';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
+import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share';
 import { notDeletedResponse, notTestResponse } from '@/server/response-filters';
 import { openResponseStatusValues } from '@/shared/contracts/survey-response';
 
@@ -25,11 +26,21 @@ export async function getResponseById(
    * 화면에는 안 나가지만 서버 안에서 팀 경계를 넘는다. 필수 인자로 두어 다음 호출자가
    * 빠뜨릴 수 없게 한다.
    */
-  options: { surveyId: string; includeDeleted?: boolean },
+  options: {
+    surveyId: string;
+    includeDeleted?: boolean;
+    /**
+     * 담당 범위(ADR-0035) — **필수**, 같은 이유로 조회 조건이다. 범위 밖 응답은 복호화 전에 WHERE 에서
+     * 떨어져 「없음」이 된다(외주가 남의 범위 응답 id 를 알아도 존재가 드러나지 않는다). 내부 콘솔은
+     * `FIELDWORK_SHARE_ALL`.
+     */
+    share: FieldworkShare;
+  },
 ) {
   const scoped = and(
     eq(surveyResponses.id, responseId),
     eq(surveyResponses.surveyId, options.surveyId),
+    shareTargetCondition(options.share, surveyResponses.contactTargetId),
   );
   const where = options.includeDeleted ? scoped : and(scoped, notDeletedResponse);
   const response = await db.query.surveyResponses.findFirst({ where });

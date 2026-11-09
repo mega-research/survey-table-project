@@ -50,7 +50,7 @@ export const SCOPED_SHARE_SURFACES: Record<LinkOpenScopedPath, ShareSurfaceStatu
   'mail.preview.contactSample': pending('05'),
 
   // 06 — 응답 수정
-  'surveyResponse.edit.saveAdminEdit': pending('06'),
+  'surveyResponse.edit.saveAdminEdit': FILTERED,
 };
 
 /**
@@ -72,8 +72,8 @@ export const FW_PAGE_SHARE_SURFACES: Record<string, ShareSurfaceStatus> = {
   'fw/[token]/operations/contacts/[contactId]/page.tsx': pending('05'),
 
   // 06 — 응답 내역·상세 수정
-  'fw/[token]/operations/profiles/page.tsx': pending('06'),
-  'fw/[token]/operations/profiles/[responseId]/edit/page.tsx': pending('06'),
+  'fw/[token]/operations/profiles/page.tsx': FILTERED,
+  'fw/[token]/operations/profiles/[responseId]/edit/page.tsx': FILTERED,
 
   // 07 — 응답 현황(응답 수)·진척 보고
   'fw/[token]/operations/overview/page.tsx#응답 수': pending('07'),

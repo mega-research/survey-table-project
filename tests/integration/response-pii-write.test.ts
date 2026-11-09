@@ -1,3 +1,4 @@
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 process.env['CONTACT_PII_AES_KEY'] = Buffer.alloc(32, 7).toString('base64');
@@ -963,6 +964,7 @@ describe('saveAdminEdit — 크기 가드 (종전에는 가드가 전무했다)'
         },
         { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
         false,
+        FIELDWORK_SHARE_ALL,
       ),
     ).rejects.toMatchObject({ reason: 'answer_value_too_large' });
     expect(updateSetLogMock).not.toHaveBeenCalled();
@@ -982,6 +984,7 @@ describe('saveAdminEdit — 크기 가드 (종전에는 가드가 전무했다)'
         },
         { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
         false,
+        FIELDWORK_SHARE_ALL,
       ),
     ).rejects.toMatchObject({ reason: 'answer_value_too_large' });
     expect(updateSetLogMock).not.toHaveBeenCalled();
@@ -1001,6 +1004,7 @@ describe('saveAdminEdit — 크기 가드 (종전에는 가드가 전무했다)'
       },
       { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
       false,
+      FIELDWORK_SHARE_ALL,
     );
     expect(updateSetLogMock).toHaveBeenCalledTimes(1);
   });
@@ -1063,6 +1067,7 @@ describe('saveAdminEdit — 복호화 diff 안정성 + 재암호화 저장', () 
       },
       { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
       false,
+      FIELDWORK_SHARE_ALL,
     );
 
     // 변경 0건 → responseEditLogs insert 미호출.
@@ -1092,6 +1097,7 @@ describe('saveAdminEdit — 복호화 diff 안정성 + 재암호화 저장', () 
       },
       { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
       false,
+      FIELDWORK_SHARE_ALL,
     );
 
     // 변경은 비PII 문항 1건만 — PII 문항이 diff 에 끼지 않는다.
@@ -1183,6 +1189,7 @@ describe('saveAdminEdit — calc 셀 서버 재계산 (Task 13)', () => {
       },
       { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
       false,
+      FIELDWORK_SHARE_ALL,
     );
 
     const setArg = updateSetLogMock.mock.calls[0]![0] as {
@@ -1225,6 +1232,7 @@ describe('saveAdminEdit — calc 셀 서버 재계산 (Task 13)', () => {
       },
       { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
       false,
+      FIELDWORK_SHARE_ALL,
     );
 
     // 스냅샷을 조회할 수 없으므로(versionId null) 재계산 없이 제출값 그대로 저장된다.
@@ -1305,6 +1313,7 @@ describe('saveAdminEdit — calc 셀 서버 재계산 (Task 13)', () => {
       },
       { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
       false,
+      FIELDWORK_SHARE_ALL,
     );
 
     // 저장값: cross-question calc 셀이 재계산으로 20 을 반영한다.
@@ -1352,6 +1361,7 @@ describe('saveAdminEdit — calc 셀 서버 재계산 (Task 13)', () => {
         },
         { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
         false,
+        FIELDWORK_SHARE_ALL,
       ),
     ).resolves.toEqual({ ok: true });
 

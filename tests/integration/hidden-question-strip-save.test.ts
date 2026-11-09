@@ -1,3 +1,4 @@
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -327,6 +328,7 @@ describe('saveAdminEdit — 숨은 문항 strip 게이트', () => {
       },
       { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
       false,
+      FIELDWORK_SHARE_ALL,
     );
 
     const setArg = updateSetLogMock.mock.calls[0]![0] as {
@@ -360,6 +362,7 @@ describe('saveAdminEdit — 숨은 문항 strip 게이트', () => {
       },
       { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
       false,
+      FIELDWORK_SHARE_ALL,
     );
 
     const setArg = updateSetLogMock.mock.calls[0]![0] as {
@@ -659,6 +662,7 @@ describe('저장 경계 — 응답 인용값을 읽는 조건', () => {
       },
       { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
       false,
+      FIELDWORK_SHARE_ALL,
     );
 
     const setArg = updateSetLogMock.mock.calls[0]![0] as {

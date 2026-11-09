@@ -1,3 +1,4 @@
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { extractRawSql } from './_helpers/result-code-mock';
 
@@ -454,6 +455,7 @@ describe('listResponsesForProfiles — negative exclusion', () => {
       dir: 'desc',
       view: 'active',
       scope: 'real',
+      share: FIELDWORK_SHARE_ALL,
     });
     expect(result.total).toBe(1);
   });
@@ -471,6 +473,7 @@ describe('listResponsesForProfiles — negative exclusion', () => {
       dir: 'desc',
       view: 'active',
       scope: 'real',
+      share: FIELDWORK_SHARE_ALL,
     });
     expect(result.total).toBe(1);
   });
@@ -488,6 +491,7 @@ describe('listResponsesForProfiles — negative exclusion', () => {
       dir: 'desc',
       view: 'active',
       scope: 'real',
+      share: FIELDWORK_SHARE_ALL,
     });
     expect(result.total).toBe(1);
   });
@@ -506,6 +510,7 @@ describe('listResponsesForProfiles — negative exclusion', () => {
       dir: 'desc',
       view: 'active',
       scope: 'real',
+      share: FIELDWORK_SHARE_ALL,
     });
     expect(result.total).toBe(2);
     expect(result.rows.map((r) => r.idx).sort()).toEqual([1, 2]);
@@ -542,6 +547,7 @@ describe('listResponsesForProfiles — negative exclusion', () => {
       dir: 'desc',
       view: 'active',
       scope: 'real',
+      share: FIELDWORK_SHARE_ALL,
     });
 
     expect(result.total).toBe(1);
@@ -578,6 +584,7 @@ describe('listResponsesForProfiles — negative exclusion', () => {
       dir: 'desc',
       view: 'active',
       scope: 'real',
+      share: FIELDWORK_SHARE_ALL,
     });
 
     expect(result.total).toBe(1);
@@ -672,6 +679,7 @@ describe('listResponsesForProfiles — negative exclusion', () => {
       dir: 'desc',
       view: 'active',
       scope: 'real',
+      share: FIELDWORK_SHARE_ALL,
     });
 
     expect(result.total).toBe(0);
@@ -718,6 +726,7 @@ describe('listResponsesForProfiles — negative exclusion', () => {
       dir: 'desc',
       view: 'active',
       scope: 'real',
+      share: FIELDWORK_SHARE_ALL,
     });
 
     expect(result.total).toBe(0);
@@ -746,6 +755,7 @@ describe('listResponsesForProfiles — 서버 데이터 scope', () => {
       dir: 'desc',
       view: 'active',
       scope: 'real',
+      share: FIELDWORK_SHARE_ALL,
     });
     expect(result.total).toBe(1);
     expect(result.rows.every((r) => !r.isTest)).toBe(true);
@@ -764,6 +774,7 @@ describe('listResponsesForProfiles — 서버 데이터 scope', () => {
       dir: 'desc',
       view: 'active',
       scope: 'test',
+      share: FIELDWORK_SHARE_ALL,
     });
     expect(result.total).toBe(1);
     expect(result.rows.every((r) => r.isTest)).toBe(true);
