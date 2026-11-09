@@ -6,6 +6,7 @@ import { attempts } from '@/server/contacts/procedures/attempts';
 import { attrs } from '@/server/contacts/procedures/attrs';
 import { attrValues } from '@/server/contacts/procedures/attr-values';
 import { columns } from '@/server/contacts/procedures/columns';
+import { fieldworkShares } from '@/server/contacts/procedures/fieldwork-shares';
 import { idLists } from '@/server/contacts/procedures/id-lists';
 import { priorAnswers } from '@/server/contacts/procedures/prior-answers';
 import { resultCodes } from '@/server/contacts/procedures/result-codes';
@@ -104,6 +105,7 @@ export const router = {
     idLists,
     priorAnswers,
     assignments,
+    fieldworkShares,
   },
   mail: {
     templates,

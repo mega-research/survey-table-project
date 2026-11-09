@@ -49,6 +49,7 @@ import {
   resolveLinkActorForSurvey,
 } from '@/server/access-link';
 import { loadOperationsDataScope } from '@/server/data-scope';
+import { FIELDWORK_SHARE_ALL, resolveFieldworkShare } from '@/server/fieldwork-share';
 import { setClosed } from '@/server/operations/services/control';
 import { loadContactsListPage } from '@/server/read-models/contacts-list-page';
 import { router } from '@/server/router';
@@ -1163,6 +1164,7 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
         scope: await loadOperationsDataScope(surveyId, session.actor),
         canViewMail: false,
         includeContactOwner: false,
+        share: resolveFieldworkShare(session.actor, surveyId),
         searchParams: {},
       });
       expect(page.total).toBe(1);
@@ -1200,6 +1202,7 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
         surveyId,
         scope: 'real' as const,
         includeContactOwner: false,
+        share: FIELDWORK_SHARE_ALL,
         searchParams: { sort: 'mailStatus' },
       };
       const researcher = await loadContactsListPage({ ...args, canViewMail: true });

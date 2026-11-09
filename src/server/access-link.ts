@@ -85,6 +85,12 @@ interface LinkRow {
   /** 어휘는 workspace 계약이 소유한다 — 문자열로 넓히면 오타가 tsc 를 지나간다. */
   assignmentStatus: SurveyAssignmentStatus;
   deletedAt: Date | null;
+  /**
+   * 담당 범위를 나눈 적 있는 시각(0160) — 주체의 `shareDivided` 재료. 매 요청 여기서 읽으므로 범위를
+   * 나누거나 없애면 같은 세션의 다음 요청에 반영된다. 범위의 **대상**은 읽지 않는다 — 소비자가
+   * 서브쿼리로 건다(`server/fieldwork-share`).
+   */
+  shareAppliedAt: Date | null;
 }
 
 /**
@@ -116,6 +122,7 @@ async function loadLinkRow(kind: AccessLinkKind, token: string): Promise<LinkRow
       surveyClosed: surveyClosedColumn,
       assignmentStatus: surveys.assignmentStatus,
       deletedAt: surveys.deletedAt,
+      shareAppliedAt: surveyAccessLinks.shareAppliedAt,
     })
     .from(surveyAccessLinks)
     .innerJoin(surveys, eq(surveys.id, surveyAccessLinks.surveyId))
@@ -134,7 +141,7 @@ function toLinkActor(row: LinkRow): LinkActor {
   const base = { kind: 'link' as const, linkId: row.linkId, surveyId: row.surveyId };
   return row.kind === 'client'
     ? { ...base, linkKind: 'client', clientTabs: normalizeClientLinkTabs(row.clientTabs) }
-    : { ...base, linkKind: 'fieldwork' };
+    : { ...base, linkKind: 'fieldwork', shareDivided: row.shareAppliedAt !== null };
 }
 
 /**

@@ -1,4 +1,5 @@
 import { loadOperationsDataScope } from '@/server/data-scope';
+import { resolveFieldworkShare } from '@/server/fieldwork-share';
 import { scoped } from '@/server/orpc';
 import { assertScopedSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 
@@ -27,8 +28,10 @@ const list = scoped
   .handler(async ({ input, context, errors }) => {
     await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'contacts.view');
     const scope = await loadOperationsDataScope(input.surveyId, context.actor);
+    // 외주 링크는 자기 담당 범위 대상의 값만 — 값 목록으로 남의 대상이 새지 않게(티켓 03).
+    const share = resolveFieldworkShare(context.actor, input.surveyId);
     try {
-      return await svc.listContactAttrValues({ ...input, scope });
+      return await svc.listContactAttrValues({ ...input, scope, share });
     } catch (error) {
       if (error instanceof svc.ForbiddenAttrColumnError) {
         throw errors.FORBIDDEN_COLUMN();
@@ -53,8 +56,10 @@ const nonNumericCount = scoped
   .handler(async ({ input, context, errors }) => {
     await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'contacts.view');
     const scope = await loadOperationsDataScope(input.surveyId, context.actor);
+    // 외주 링크는 자기 담당 범위 대상의 값만 — 값 목록으로 남의 대상이 새지 않게(티켓 03).
+    const share = resolveFieldworkShare(context.actor, input.surveyId);
     try {
-      return { count: await svc.countNonNumericAttrValues({ ...input, scope }) };
+      return { count: await svc.countNonNumericAttrValues({ ...input, scope, share }) };
     } catch (error) {
       if (error instanceof svc.ForbiddenAttrColumnError) {
         throw errors.FORBIDDEN_COLUMN();

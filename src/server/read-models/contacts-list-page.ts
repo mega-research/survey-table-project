@@ -9,6 +9,7 @@ import {
 import type { ContactsListPageData } from '@/shared/contracts/contacts-io';
 
 import type { OperationsDataScope } from '../data-scope';
+import type { FieldworkShare } from '../fieldwork-share';
 import {
   contactFilterInputFromUrl,
   loadContactFilterContext,
@@ -51,6 +52,12 @@ export interface ContactsListPageArgs {
    * 외주 실사 링크 목록에는 열·값·후보·선택지 모두 보내지 않는다.
    */
   includeContactOwner: boolean;
+  /**
+   * 담당 범위(`server/fieldwork-share`) — 목록·총수·검색(ID 목록 포함)이 이 범위 안에서만 돈다. 해석
+   * 컨텍스트에 강제 절로 실려 주소의 조건으로는 지울 수 없다. **필수다** — 내부 콘솔은
+   * `FIELDWORK_SHARE_ALL`, `/fw` 는 `resolveFieldworkShare(actor, surveyId)` 를 넘긴다.
+   */
+  share: FieldworkShare;
   /** 라우트가 읽은 URL 쿼리 그대로. 키 이름은 주소 계약이라 두 트리가 같다. */
   searchParams: {
     col?: string | string[];
@@ -70,6 +77,7 @@ export async function loadContactsListPage({
   scope,
   canViewMail,
   includeContactOwner,
+  share,
   searchParams: sp,
 }: ContactsListPageArgs): Promise<ContactsListPageData> {
   const pageRaw = Number(sp.page);
@@ -82,6 +90,7 @@ export async function loadContactsListPage({
     isExternal: !includeContactOwner,
     surface: 'contacts',
     canViewMail,
+    share,
   });
   const { scheme, resultCodes, assignmentOptions, columnCandidates } = filterCtx;
 

@@ -28,8 +28,10 @@ import type {
   TeamRole,
   TeamStatus,
 } from '@/shared/contracts/workspace';
+import type { ContactAssignmentClause } from '@/shared/contracts/contacts';
 
 import { users } from './auth';
+import { contactTargets } from './contacts';
 import { surveys } from './surveys';
 
 /**
@@ -268,6 +270,15 @@ export const surveyAccessLinks = pgTable(
      * 어떤 응답 모양에도 싣지 않는다** — 링크 세션 쪽 조회(`server/access-link`)는 이 칸을 고르지 않는다.
      */
     label: text('label'),
+    /**
+     * 담당 범위를 **나눈 적 있음**(0160, ADR-0035) — `kind='fieldwork'` 전용. NULL 이면 한 번도 나누지
+     * 않은 링크라 설문 전체를 보고, 값이 있으면 `fieldworkLinkShares` 의 대상만 본다(0명이어도 0명).
+     * 「범위 0명」과 「한 번도 안 나눔」을 가르는 유일한 재료다. 「담당 범위 없애기」가 NULL 로 되돌린다.
+     * 링크 세션 판정(`server/access-link`)이 매 요청 이 칸을 읽어 주체에 싣는다.
+     */
+    shareAppliedAt: timestamp('share_applied_at', { withTimezone: true }),
+    /** 마지막으로 적용한 담당 범위 조건 — 수정 화면을 다시 열면 채운다. `shareAppliedAt` 과 함께 서고 함께 빈다(0160 CHECK). */
+    shareClauses: jsonb('share_clauses').$type<ContactAssignmentClause[]>(),
     createdBy: uuid('created_by')
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),
@@ -285,6 +296,36 @@ export const surveyAccessLinks = pgTable(
     index('survey_access_links_active_survey_kind_idx')
       .on(t.surveyId, t.kind)
       .where(sql`closed_at IS NULL`),
+  ],
+);
+
+/**
+ * 외주 실사 링크의 **담당 범위** — 조사 대상 × 외주 링크 (마이그레이션 0160, ADR-0035).
+ *
+ * 행 하나 = 「이 대상은 지금 이 링크에 맡겨져 있다」. 같이 맡기기 때문에 다대다다. 컨택원 배정과 다른
+ * 층이라 컨택원 교체 적용은 이 표를 건드리지 않는다. 읽는 자리는 담당 범위 해석(`server/fieldwork-share`)
+ * 의 술어 하나, 쓰는 자리는 나누기 적용(`server/contacts/services/fieldwork-shares`) 하나다.
+ *
+ * - 대상 FK 는 CASCADE — 명단 교체 업로드가 대상을 지우면 범위가 풀린다.
+ * - 링크 FK 는 NO ACTION(문장 끝 검사) — 링크 행은 지우지 않으므로 RESTRICT 와 같은 뜻이고, 설문 하드
+ *   삭제의 cascade 순서에 흔들리지 않는다.
+ * - 「실데이터 대상만 · 외주 링크만 · 같은 설문」은 교차 테이블 조건이라 DB 가 아니라 쓰기 서비스가 막는다.
+ */
+export const fieldworkLinkShares = pgTable(
+  'fieldwork_link_shares',
+  {
+    linkId: uuid('link_id')
+      .notNull()
+      .references(() => surveyAccessLinks.id),
+    contactTargetId: uuid('contact_target_id')
+      .notNull()
+      .references(() => contactTargets.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ name: 'fieldwork_link_shares_pk', columns: [t.linkId, t.contactTargetId] }),
+    // 대상 쪽 — 겹침 집계와 대상 삭제 cascade 가 이 표를 훑지 않게. PK 첫 칸이 link_id 라 그 방향은 못 받는다.
+    index('fieldwork_link_shares_target_idx').on(t.contactTargetId),
   ],
 );
 

@@ -11,5 +11,6 @@ export function resolvedFilterForTest(clauses: FilterClause[] = []): ResolvedCon
     builderClauses: clauses,
     headerClauses: [],
     unresolved: [],
+    share: { kind: 'all' },
   } as unknown as ResolvedContactFilter<'write'>;
 }

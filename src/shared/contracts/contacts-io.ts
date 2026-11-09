@@ -154,6 +154,56 @@ export interface ContactAssignmentMatchesResult {
   pageSize: number;
 }
 
+/**
+ * 외주 담당 범위(fieldwork share) — 연구원 화면의 모양 (ADR-0035, fieldwork-multi-company 티켓 03).
+ * 내부 표면(`survey.manageAccess`)만 받는다 — 이름표가 실려 있어 링크 세션이 여는 표면에는 나가지 않는다.
+ */
+export interface FieldworkShareLinkRow {
+  linkId: string;
+  /** 이름표 또는 「링크 N」(`fieldworkLinkName`). */
+  name: string;
+  /** 나눈 적 있음 — false 면 이 링크는 설문 전체를 본다. */
+  divided: boolean;
+  /** 지금 범위의 인원(나누지 않았으면 0). */
+  count: number;
+  /** 마지막으로 적용한 시각 — 나누지 않았으면 null. */
+  appliedAt: Date | null;
+}
+
+export interface FieldworkShareListResult {
+  links: FieldworkShareLinkRow[];
+}
+
+/** 나누기 미리보기·적용 결과 — 둘이 같은 모양이다(적용은 적용 시점에 조건을 다시 계산한 실제 결과). */
+export interface FieldworkShareChangeSummary {
+  /** 조건에 맞는 대상 = 적용 뒤 이 링크의 범위 */
+  matched: number;
+  /** 적용 전 이 링크의 범위 */
+  current: number;
+  /** 어느 열린 링크에도 없다가 새로 들어오는 대상 */
+  incoming: number;
+  /** 다른 열린 외주 링크에 이미 있는 대상 — 링크별(이름은 이름표 또는 「링크 N」) */
+  fromOthers: Array<{ linkId: string; name: string; count: number }>;
+  /** 조건 밖이라 이 링크에서 빠지는 대상 */
+  leaving: number;
+}
+
+/** 담당 범위 수정 화면 오른쪽 대상 목록 한 줄 — 「현재 링크」 열은 그 대상이 지금 속한 열린 링크 이름들. */
+export interface FieldworkShareMatchRow {
+  id: string;
+  resid: number;
+  attrs: Record<string, string>;
+  piiMaskHints: Record<string, { fieldType: PiiFieldType; maskHint: string | null }>;
+  links: string[];
+}
+
+export interface FieldworkShareMatchesResult {
+  rows: FieldworkShareMatchRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export interface ContactsRow {
   id: string;
   resid: number;

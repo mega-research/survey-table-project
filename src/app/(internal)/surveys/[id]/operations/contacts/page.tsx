@@ -4,6 +4,7 @@ import { listQueryFromSearchParams } from '@/features/operations/contacts/contac
 import { ContactsListView } from '@/features/operations/contacts/contacts-list-view';
 import { internalOperationsBase } from '@/features/operations/operations-paths';
 import { getOperationsDataScope } from '@/server/data-scope';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
 import { loadContactsListPage } from '@/server/read-models/contacts-list-page';
 
@@ -46,6 +47,8 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
     canViewMail: capabilities.has('mail.view'),
     // 내부 콘솔 — 내부 계정만 지난다. 컨택원 열·필터·정렬을 싣는다.
     includeContactOwner: true,
+    // 계정 주체는 담당 범위 축이 없다 — 설문 전체(fieldwork-multi-company 티켓 03).
+    share: FIELDWORK_SHARE_ALL,
     searchParams: sp,
   });
 

@@ -30,6 +30,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { router } from '@/server/router';
 import { assertSurveyCapability, loadSurveyAccess } from '@/server/survey-access';
 import { surveyCapabilityValues, type SurveyCapability } from '@/shared/contracts/workspace';
+import { loadAppFiles } from '@tests/helpers/app-files';
+import {
+  FW_PAGE_SHARE_SURFACES,
+  SCOPED_SHARE_SURFACES,
+} from '@tests/helpers/fieldwork-share-surfaces';
 import { linkActorContext } from '@tests/helpers/rpc-context';
 import { enumerateProcedures, takesSurveyId } from '@tests/helpers/rpc-surface';
 import {
@@ -179,7 +184,13 @@ describe('계정 축 표면은 외주 실사 링크에게 닫혀 있다', () => 
 // scoped — 링크가 지나는 유일한 문. 통과하는 것이 정확히 열이다
 // ─────────────────────────────────────────────────────────────────────────────
 
-const linkActor = { kind: 'link' as const, linkId: LINK_ID, surveyId: SURVEY_ID, linkKind: 'fieldwork' as const };
+const linkActor = {
+  kind: 'link' as const,
+  linkId: LINK_ID,
+  surveyId: SURVEY_ID,
+  linkKind: 'fieldwork' as const,
+  shareDivided: false,
+};
 
 /** 링크 열 — 스펙 §8 의 「외주 링크」. 여기 없는 것이 「항상 차단」 목록이다. */
 const LINK_COLUMN: SurveyCapability[] = [
@@ -258,5 +269,46 @@ describe('scoped 표면 전수 — 열린 열과 막힌 나머지', () => {
     // 죽는다), FORBIDDEN 이면 링크 열에서 그 capability 가 빠진 것이다.
     expect(code).not.toBe('UNAUTHORIZED');
     expect(code).not.toBe('FORBIDDEN');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 담당 범위 — 링크가 지나는 표면마다 「거름 / 해당 없음 / 미처리(티켓)」 등재 (fieldwork-multi-company 티켓 03)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('담당 범위 표면 등재 — 링크가 지나는 표면은 전부 범위 판정을 적어 둔다', () => {
+  const fwFiles = [...loadAppFiles('page.tsx'), ...loadAppFiles('layout.tsx')].filter((f) =>
+    f.rel.startsWith('fw/'),
+  );
+  const registeredFiles = new Set(
+    Object.keys(FW_PAGE_SHARE_SURFACES).map((key) => key.split('#')[0]!),
+  );
+
+  it('링크에 열린 scoped procedure 마다 한 줄이 있다 — 새로 열리면 등재 전까지 빨갛다', () => {
+    expect(Object.keys(SCOPED_SHARE_SURFACES).sort()).toEqual([...LINK_OPEN_SCOPED_PATHS].sort());
+  });
+
+  it('/fw 트리의 page·layout 마다 한 줄 이상 있고, 없는 파일을 가리키는 줄이 없다', () => {
+    expect([...registeredFiles].sort()).toEqual(fwFiles.map((f) => f.rel).sort());
+  });
+
+  it('「거름」으로 적힌 /fw 화면은 담당 범위 해석을 실제로 부른다', () => {
+    // 등재만 바꾸고 배선을 잊는 일을 막는 최소한의 정적 확인이다 — 결과가 맞는지는 실DB 스위트가 본다.
+    const unwired = Object.entries(FW_PAGE_SHARE_SURFACES)
+      .filter(([, status]) => status.kind === 'filtered')
+      .map(([key]) => key.split('#')[0]!)
+      .filter((rel) => !fwFiles.find((f) => f.rel === rel)?.source.includes('resolveFieldworkShare('));
+    expect(unwired).toEqual([]);
+  });
+
+  it('「해당 없음」에는 사유가, 「미처리」에는 담당 티켓(05~09)이 적혀 있다', () => {
+    const statuses = [
+      ...Object.values(SCOPED_SHARE_SURFACES),
+      ...Object.values(FW_PAGE_SHARE_SURFACES),
+    ];
+    for (const status of statuses) {
+      if (status.kind === 'exempt') expect(status.reason.trim().length).toBeGreaterThan(10);
+      if (status.kind === 'pending') expect(['05', '06', '07', '08', '09']).toContain(status.ticket);
+    }
   });
 });

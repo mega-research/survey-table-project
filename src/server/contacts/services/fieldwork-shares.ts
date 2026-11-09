@@ -1,0 +1,396 @@
+import { ORPCError } from '@orpc/server';
+import { type SQL, and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import 'server-only';
+
+import { type DbOrTx, db } from '@/db';
+import { fieldworkLinkShares, surveyAccessLinks } from '@/db/schema';
+import { retryOnTxConflict } from '@/lib/pg-error';
+import { logger } from '@/lib/logger';
+import { EXTERNAL_VIEWER_DATA_SCOPE, lockWriteScope } from '@/server/data-scope';
+import {
+  type ResolvedContactFilter,
+  loadContactFilterContext,
+  resolveContactFilter,
+  resolvedContactFilterSql,
+} from '@/server/read-models/contact-filter-resolution';
+import { listContactsForSurvey } from '@/server/read-models/contacts';
+import { loadFieldworkLinkNames } from '@/server/read-models/fieldwork-link-names';
+import type { ContactAssignmentClause } from '@/shared/contracts/contacts';
+import type {
+  FieldworkShareChangeSummary,
+  FieldworkShareListResult,
+  FieldworkShareMatchesResult,
+} from '@/shared/contracts/contacts-io';
+
+import type {
+  FieldworkShareClausesInput,
+  FieldworkShareMatchesInput,
+  FieldworkShareTargetInput,
+} from '../domain/fieldwork-share';
+
+/**
+ * 외주 담당 범위 나누기 (CONTEXT.md 「담당 범위」, ADR-0035, fieldwork-multi-company 티켓 03).
+ *
+ * 연구원이 외주 링크 하나를 골라 조건을 적용하면 **그 링크의 담당 범위 = 조건 결과**가 된다(결과 상태
+ * 지정 — 같은 요청 두 번이 같은 결과다). 조건 밖이던 기존 대상은 그 링크에서만 빠진다.
+ *
+ * - **컨택원과 다른 층이다.** 이 파일은 `contact_targets.assignment_id` 를 읽지도 쓰지도 않고, 컨택원
+ *   교체 적용도 이 표를 건드리지 않는다. 그래서 조건 편집기의 열 후보에서 「현재 컨택원」을 뺀다
+ *   (`isExternal: true` 로 컨텍스트를 읽는 이유) — 범위를 컨택원으로 고르게 두면 일 나누기가 업체
+ *   접근을 정하는 입구가 된다.
+ * - **실데이터만.** 외부 주체는 늘 실데이터를 보므로 범위도 실데이터 대상에만 선다. 연구원 브라우저가
+ *   「테스트 데이터 보기」를 켜 두어도 이 화면은 실데이터다(`EXTERNAL_VIEWER_DATA_SCOPE`).
+ * - **겹침은 이 티켓에서 「가져오기」 하나다** — 조건 결과 중 다른 열린 외주 링크에 있던 대상은 그
+ *   링크에서 빠져 이쪽으로 온다. 남겨 두기·같이 맡기기 선택지는 티켓 04 가 적용 입력에 더한다
+ *   (`fromOthers` 집계가 그 미리보기 재료다).
+ * - 조건은 조사 대상 필터 해석의 **쓰기 모드**로 읽는다 — 해석 안 되는 절은 거부한다(버리면 조건이
+ *   넓어져 연락처가 엉뚱한 업체로 간다).
+ *
+ * 무결성 중 DB 가 못 거는 교차 테이블 조건(외주 링크만 · 같은 설문 · 실데이터 대상만)은 이 파일이
+ * 잠근 행에서 다시 본다 — 담당 범위 표에 쓰는 자리는 여기 하나뿐이다.
+ */
+
+const SHARE_SCOPE = EXTERNAL_VIEWER_DATA_SCOPE;
+
+/** 이 설문의 열린 외주 링크 하나 — 종류·설문·열림 셋이 다 맞아야 한다(존재 은닉 — 전부 NOT_FOUND). */
+function openFieldworkLink(surveyId: string, linkId: string): SQL {
+  return and(
+    eq(surveyAccessLinks.id, linkId),
+    eq(surveyAccessLinks.surveyId, surveyId),
+    eq(surveyAccessLinks.kind, 'fieldwork'),
+    isNull(surveyAccessLinks.closedAt),
+  )!;
+}
+
+function linkNotFound(): ORPCError<'NOT_FOUND', unknown> {
+  return new ORPCError('NOT_FOUND', {
+    message: '외주 링크를 찾을 수 없습니다. 이미 종료된 링크일 수 있으니 목록을 다시 확인해 주세요.',
+  });
+}
+
+async function assertOpenFieldworkLink(
+  executor: DbOrTx,
+  surveyId: string,
+  linkId: string,
+  lock: boolean,
+): Promise<void> {
+  const query = executor
+    .select({ id: surveyAccessLinks.id })
+    .from(surveyAccessLinks)
+    .where(openFieldworkLink(surveyId, linkId));
+  const rows = lock ? await query.for('update') : await query.limit(1);
+  if (rows.length === 0) throw linkNotFound();
+}
+
+/** 조건 줄 → 쓰기 해석. 컨택원 축은 싣지 않는다(위 머리 주석). */
+async function resolveShareFilter(
+  surveyId: string,
+  clauses: ContactAssignmentClause[],
+  executor: DbOrTx = db,
+): Promise<ResolvedContactFilter<'write'>> {
+  const ctx = await loadContactFilterContext(surveyId, SHARE_SCOPE, {
+    isExternal: true,
+    surface: 'contacts',
+    executor,
+  });
+  return resolveContactFilter(ctx, { clauses }, { mode: 'write' });
+}
+
+/** 조건을 이 화면의 조건 편집기에 그릴 재료 — 페이지가 같은 컨텍스트로 열 후보를 그린다. */
+export function loadFieldworkShareFilterContext(surveyId: string) {
+  return loadContactFilterContext(surveyId, SHARE_SCOPE, { isExternal: true, surface: 'contacts' });
+}
+
+/** NULL 없는 불리언 — 조건 밖을 셀 때·뺄 때 3값 논리로 빠지는 행이 없게. */
+function matchOf(filter: ResolvedContactFilter<'write'>): SQL {
+  return sql`COALESCE((${resolvedContactFilterSql(filter)}), FALSE)`;
+}
+
+const targetsInScope = (surveyId: string): SQL =>
+  sql`"contact_targets".survey_id = ${surveyId} AND "contact_targets".is_test = FALSE`;
+
+/** 이 대상이 이 링크의 범위에 있는가. */
+const inLink = (linkId: string): SQL => sql`EXISTS (
+  SELECT 1 FROM fieldwork_link_shares s
+  WHERE s.link_id = ${linkId} AND s.contact_target_id = "contact_targets".id
+)`;
+
+/** 이 대상이 이 설문의 **다른 열린** 외주 링크 범위에 있는가 — 종료된 링크는 몫이 없다. */
+const inOtherOpenLink = (surveyId: string, linkId: string): SQL => sql`EXISTS (
+  SELECT 1 FROM fieldwork_link_shares s
+  JOIN survey_access_links l ON l.id = s.link_id
+  WHERE s.contact_target_id = "contact_targets".id
+    AND s.link_id <> ${linkId}
+    AND l.survey_id = ${surveyId}
+    AND l.closed_at IS NULL
+)`;
+
+async function summarize(
+  executor: DbOrTx,
+  surveyId: string,
+  linkId: string,
+  match: SQL,
+): Promise<FieldworkShareChangeSummary> {
+  const [totals, others, names] = await Promise.all([
+    executor.execute(sql`
+      SELECT
+        count(*) FILTER (WHERE ${match})::int AS matched,
+        count(*) FILTER (WHERE ${inLink(linkId)})::int AS current,
+        count(*) FILTER (
+          WHERE ${match} AND NOT ${inLink(linkId)} AND NOT ${inOtherOpenLink(surveyId, linkId)}
+        )::int AS incoming,
+        count(*) FILTER (WHERE NOT ${match} AND ${inLink(linkId)})::int AS leaving
+      FROM contact_targets
+      WHERE ${targetsInScope(surveyId)}
+    `),
+    executor.execute(sql`
+      SELECT s.link_id, count(*)::int AS n
+      FROM contact_targets
+      JOIN fieldwork_link_shares s ON s.contact_target_id = "contact_targets".id
+      JOIN survey_access_links l ON l.id = s.link_id
+      WHERE ${targetsInScope(surveyId)} AND ${match}
+        AND s.link_id <> ${linkId} AND l.survey_id = ${surveyId} AND l.closed_at IS NULL
+      GROUP BY s.link_id, l.created_at
+      ORDER BY l.created_at, s.link_id
+    `),
+    loadFieldworkLinkNames(surveyId),
+  ]);
+  const t = (totals as unknown as Array<Record<string, unknown>>)[0] ?? {};
+  return {
+    matched: Number(t['matched'] ?? 0),
+    current: Number(t['current'] ?? 0),
+    incoming: Number(t['incoming'] ?? 0),
+    leaving: Number(t['leaving'] ?? 0),
+    fromOthers: (others as unknown as Array<Record<string, unknown>>).map((r) => {
+      const id = String(r['link_id']);
+      return { linkId: id, name: names.get(id) ?? '', count: Number(r['n']) };
+    }),
+  };
+}
+
+/** 링크별 범위 요약 — 「외주 담당 범위」 탭의 목록. 열린 외주 링크만, 발급 순. */
+export async function listFieldworkShares(surveyId: string): Promise<FieldworkShareListResult> {
+  const [rows, names] = await Promise.all([
+    db
+      .select({
+        linkId: surveyAccessLinks.id,
+        appliedAt: surveyAccessLinks.shareAppliedAt,
+        count: sql<number>`(
+          SELECT count(*)::int FROM fieldwork_link_shares s WHERE s.link_id = ${surveyAccessLinks.id}
+        )`,
+      })
+      .from(surveyAccessLinks)
+      .where(
+        and(
+          eq(surveyAccessLinks.surveyId, surveyId),
+          eq(surveyAccessLinks.kind, 'fieldwork'),
+          isNull(surveyAccessLinks.closedAt),
+        ),
+      )
+      .orderBy(asc(surveyAccessLinks.createdAt), asc(surveyAccessLinks.id)),
+    loadFieldworkLinkNames(surveyId),
+  ]);
+  return {
+    links: rows.map((r) => ({
+      linkId: r.linkId,
+      name: names.get(r.linkId) ?? '',
+      divided: r.appliedAt !== null,
+      count: Number(r.count),
+      appliedAt: r.appliedAt,
+    })),
+  };
+}
+
+/** 수정 화면이 다시 열 때 채울 마지막 조건 — 나눈 적 없으면 null. 링크가 없으면 null 이 아니라 undefined. */
+export async function getFieldworkShareForEdit(
+  surveyId: string,
+  linkId: string,
+): Promise<{ linkId: string; name: string; lastClauses: ContactAssignmentClause[] | null } | null> {
+  const [row] = await db
+    .select({ clauses: surveyAccessLinks.shareClauses })
+    .from(surveyAccessLinks)
+    .where(openFieldworkLink(surveyId, linkId))
+    .limit(1);
+  if (!row) return null;
+  const names = await loadFieldworkLinkNames(surveyId);
+  return { linkId, name: names.get(linkId) ?? '', lastClauses: row.clauses ?? null };
+}
+
+/** 미리보기 — 조건에 맞는 인원과 적용하면 바뀌는 인원. 아무것도 쓰지 않는다. */
+export async function previewFieldworkShare(
+  input: FieldworkShareClausesInput,
+): Promise<FieldworkShareChangeSummary> {
+  await assertOpenFieldworkLink(db, input.surveyId, input.linkId, false);
+  const filter = await resolveShareFilter(input.surveyId, input.clauses);
+  return summarize(db, input.surveyId, input.linkId, matchOf(filter));
+}
+
+/** 다시 돈 일은 경고 로그로 남긴다 — 대상 id·조건 값은 싣지 않는다. */
+function retryShareWrite<T>(rpc: string, input: FieldworkShareTargetInput, run: () => Promise<T>) {
+  return retryOnTxConflict(run, {
+    onRetry: (attempt, error) =>
+      logger.warn(
+        {
+          rpc,
+          surveyId: input.surveyId,
+          targetLinkId: input.linkId,
+          attempt,
+          err: error instanceof Error ? error.message : String(error),
+        },
+        '[fieldwork-share] 트랜잭션 충돌 — 다시 실행',
+      ),
+  });
+}
+
+/**
+ * 적용 — 한 트랜잭션. 잠금 순서는 **설문 스코프(FOR SHARE) → 링크(FOR UPDATE) → 대상(id 오름차순 FOR
+ * UPDATE)** 다(PRD 「동시성」). 조건은 잠금 뒤에 다시 계산한다 — 미리보기 이후 명단이 바뀌어도 적용
+ * 시점이 정본이고, 실제 결과 집계를 돌려준다. 교착·직렬화 실패는 처음부터 다시(조건도 새로).
+ * 결과가 0명이어도 적용한다 — 나눈 링크는 0명을 본다.
+ */
+export async function applyFieldworkShare(
+  input: FieldworkShareClausesInput,
+): Promise<FieldworkShareChangeSummary> {
+  return retryShareWrite('contacts.fieldworkShares.apply', input, () =>
+    db.transaction(async (tx) => {
+      // 외부 주체 판정을 true 로 넘기는 것은 「실데이터로 고정」의 뜻이다 — 브라우저 쿠키와 무관.
+      const locked = await lockWriteScope(tx, input.surveyId, true, { lock: 'share' });
+      if (!locked) throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
+      await assertOpenFieldworkLink(tx, input.surveyId, input.linkId, true);
+
+      const filter = await resolveShareFilter(input.surveyId, input.clauses, tx);
+      const match = matchOf(filter);
+      const scope = targetsInScope(input.surveyId);
+
+      // 이번에 범위가 움직일 수 있는 대상 — 조건 결과와 지금 이 링크의 범위. id 순으로 잠가 두 적용이
+      // 같은 대상을 다른 순서로 잡지 않게 한다.
+      await tx.execute(sql`
+        SELECT "contact_targets".id FROM contact_targets
+        WHERE ${scope} AND (${match} OR ${inLink(input.linkId)})
+        ORDER BY "contact_targets".id
+        FOR UPDATE
+      `);
+
+      const summary = await summarize(tx, input.surveyId, input.linkId, match);
+
+      // ① 조건 밖 — 이 링크에서만 뺀다.
+      await tx.execute(sql`
+        DELETE FROM fieldwork_link_shares s
+        USING contact_targets
+        WHERE s.link_id = ${input.linkId}
+          AND s.contact_target_id = "contact_targets".id
+          AND NOT ${match}
+      `);
+      // ② 가져오기 — 조건 결과가 이 설문의 다른 링크에 있으면 거기서 뺀다.
+      await tx.execute(sql`
+        DELETE FROM fieldwork_link_shares s
+        USING contact_targets, survey_access_links l
+        WHERE s.contact_target_id = "contact_targets".id
+          AND l.id = s.link_id
+          AND l.survey_id = ${input.surveyId}
+          AND s.link_id <> ${input.linkId}
+          AND ${scope}
+          AND ${match}
+      `);
+      // ③ 조건 결과를 이 링크로 — 이미 있는 줄은 그대로.
+      await tx.execute(sql`
+        INSERT INTO fieldwork_link_shares (link_id, contact_target_id)
+        SELECT ${input.linkId}::uuid, "contact_targets".id FROM contact_targets
+        WHERE ${scope} AND ${match}
+        ON CONFLICT DO NOTHING
+      `);
+      const now = new Date();
+      await tx
+        .update(surveyAccessLinks)
+        .set({ shareAppliedAt: now, shareClauses: input.clauses, updatedAt: now })
+        .where(eq(surveyAccessLinks.id, input.linkId));
+      return summary;
+    }),
+  );
+}
+
+/**
+ * 담당 범위 없애기 — 범위 행을 지우고 「나눈 적 있음」을 되돌린다. 그 링크는 다시 **설문 전체**를 본다.
+ * 0명 범위와 달리 넓어지는 동작이라 명시적 버튼으로만 온다.
+ */
+export async function clearFieldworkShare(
+  input: FieldworkShareTargetInput,
+): Promise<{ released: number }> {
+  return retryShareWrite('contacts.fieldworkShares.clear', input, () =>
+    db.transaction(async (tx) => {
+      const locked = await lockWriteScope(tx, input.surveyId, true, { lock: 'share' });
+      if (!locked) throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
+      await assertOpenFieldworkLink(tx, input.surveyId, input.linkId, true);
+      const released = await tx
+        .delete(fieldworkLinkShares)
+        .where(eq(fieldworkLinkShares.linkId, input.linkId))
+        .returning({ id: fieldworkLinkShares.contactTargetId });
+      const now = new Date();
+      await tx
+        .update(surveyAccessLinks)
+        .set({ shareAppliedAt: null, shareClauses: null, updatedAt: now })
+        .where(eq(surveyAccessLinks.id, input.linkId));
+      return { released: released.length };
+    }),
+  );
+}
+
+export const FIELDWORK_SHARE_MATCHES_PAGE_SIZE = 10;
+
+/**
+ * 조건에 맞는 대상 목록(시스템ID 순, 10명씩) — 수정 화면 오른쪽. 조사 대상 목록과 같은 read model 을
+ * 써서 같은 조건이면 같은 사람이 나오고 개인정보 열은 마스킹 힌트만 싣는다. 각 줄에 그 대상이 지금
+ * 속한 **열린** 외주 링크 이름을 붙인다(내부 화면 — 이름표가 실려도 된다).
+ */
+export async function listFieldworkShareMatches(
+  input: FieldworkShareMatchesInput,
+): Promise<FieldworkShareMatchesResult> {
+  await assertOpenFieldworkLink(db, input.surveyId, input.linkId, false);
+  const filter = await resolveShareFilter(input.surveyId, input.clauses);
+  const { rows, total, page } = await listContactsForSurvey({
+    surveyId: input.surveyId,
+    scope: SHARE_SCOPE,
+    filter,
+    page: input.page,
+    pageSize: FIELDWORK_SHARE_MATCHES_PAGE_SIZE,
+    sort: 'resid',
+    dir: 'asc',
+    includeAssignment: false,
+  });
+  const ids = rows.map((r) => r.id);
+  const [shareRows, names] = await Promise.all([
+    ids.length === 0
+      ? Promise.resolve([])
+      : db
+          .select({ targetId: fieldworkLinkShares.contactTargetId, linkId: fieldworkLinkShares.linkId })
+          .from(fieldworkLinkShares)
+          .innerJoin(surveyAccessLinks, eq(surveyAccessLinks.id, fieldworkLinkShares.linkId))
+          .where(
+            and(
+              inArray(fieldworkLinkShares.contactTargetId, ids),
+              eq(surveyAccessLinks.surveyId, input.surveyId),
+              isNull(surveyAccessLinks.closedAt),
+            ),
+          )
+          .orderBy(asc(surveyAccessLinks.createdAt)),
+    loadFieldworkLinkNames(input.surveyId),
+  ]);
+  const linksByTarget = new Map<string, string[]>();
+  for (const s of shareRows) {
+    const list = linksByTarget.get(s.targetId) ?? [];
+    list.push(names.get(s.linkId) ?? '');
+    linksByTarget.set(s.targetId, list);
+  }
+  return {
+    rows: rows.map((r) => ({
+      id: r.id,
+      resid: r.resid,
+      attrs: r.attrs,
+      piiMaskHints: r.piiMaskHints,
+      links: linksByTarget.get(r.id) ?? [],
+    })),
+    total,
+    page,
+    pageSize: FIELDWORK_SHARE_MATCHES_PAGE_SIZE,
+  };
+}

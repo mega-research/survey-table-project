@@ -60,6 +60,8 @@ describe('contacts.attrValues procedures', () => {
       surveyId: SURVEY_ID,
       attrsKey: '기업유형',
       scope: 'test',
+      // 계정 주체는 담당 범위 축이 없다 — 설문 전체.
+      share: { kind: 'all' },
     });
     expect(res).toEqual({ values: ['상장', '코스닥'], truncated: false, hasEmpty: false });
   });
@@ -87,6 +89,7 @@ describe('contacts.attrValues procedures', () => {
       surveyId: SURVEY_ID,
       attrsKey: '명단ID',
       scope: 'real',
+      share: { kind: 'all' },
     });
     expect(res).toEqual({ count: 3 });
   });

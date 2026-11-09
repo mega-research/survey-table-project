@@ -10,6 +10,7 @@ import {
   type OperationsDataScope,
 } from '@/server/data-scope';
 import { FILTER_NONE_VALUE, FILTER_SOURCE } from '@/lib/operations/filter-shared';
+import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share';
 import { hydrateProfileColumns } from '@/lib/operations/profile-columns-format';
 import { getProfileColumnScheme } from '@/server/read-models/profile-column-scheme';
 
@@ -31,6 +32,11 @@ export interface ListContactAttrValuesInput {
   surveyId: string;
   attrsKey: string;
   scope: OperationsDataScope;
+  /**
+   * 담당 범위(`server/fieldwork-share`) — 값 목록·숫자 아님 수가 범위 밖 대상의 값으로 새지 않게.
+   * 필수다: 빠뜨린 호출이 설문 전체의 attrs 값을 외주에게 보내는 일이 타입상 생기지 않게.
+   */
+  share: FieldworkShare;
 }
 
 export interface ListContactAttrValuesResult {
@@ -87,7 +93,7 @@ export async function assertAttrColumnAllowed(
 export async function listContactAttrValues(
   input: ListContactAttrValuesInput,
 ): Promise<ListContactAttrValuesResult> {
-  const { surveyId, attrsKey, scope } = input;
+  const { surveyId, attrsKey, scope, share } = input;
   await assertAttrColumnAllowed(surveyId, attrsKey, scope);
 
   const valueExpr = sql<string>`${contactTargets.attrs} ->> ${attrsKey}`;
@@ -103,6 +109,7 @@ export async function listContactAttrValues(
         and(
           eq(contactTargets.surveyId, surveyId),
           targetScopeCondition(scope),
+          shareTargetCondition(share),
           sql`${valueExpr} IS NOT NULL AND ${valueExpr} <> ''`,
         ),
       )
@@ -118,6 +125,7 @@ export async function listContactAttrValues(
         and(
           eq(contactTargets.surveyId, surveyId),
           targetScopeCondition(scope),
+          shareTargetCondition(share),
           sql`(${valueExpr} IS NULL OR ${valueExpr} = '')`,
         ),
       )
@@ -145,7 +153,7 @@ export async function listContactAttrValues(
 export async function countNonNumericAttrValues(
   input: ListContactAttrValuesInput,
 ): Promise<number> {
-  const { surveyId, attrsKey, scope } = input;
+  const { surveyId, attrsKey, scope, share } = input;
   await assertAttrColumnAllowed(surveyId, attrsKey, scope);
   const valueExpr = sql<string>`${contactTargets.attrs} ->> ${attrsKey}`;
   const [row] = await db
@@ -155,6 +163,7 @@ export async function countNonNumericAttrValues(
       and(
         eq(contactTargets.surveyId, surveyId),
         targetScopeCondition(scope),
+        shareTargetCondition(share),
         sql`${valueExpr} IS NOT NULL AND ${valueExpr} <> '' AND ${valueExpr} !~ '^[0-9]+$'`,
       ),
     );

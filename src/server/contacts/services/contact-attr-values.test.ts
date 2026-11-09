@@ -2,6 +2,7 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 import type { SQL } from 'drizzle-orm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 
 // db.select() 호출 순서대로 결과를 돌려주는 큐 기반 mock.
@@ -64,7 +65,7 @@ describe('listContactAttrValues', () => {
     selectResults.push([{ scheme: visibleScheme }]);
     selectResults.push([]);
 
-    await listContactAttrValues({ surveyId: 'sv-1', attrsKey: '기업유형', scope: 'real' });
+    await listContactAttrValues({ surveyId: 'sv-1', attrsKey: '기업유형', scope: 'real', share: FIELDWORK_SHARE_ALL });
 
     expect(orderByArgs).toHaveLength(1);
     const rendered = new PgDialect().sqlToQuery(orderByArgs[0] as SQL);
@@ -80,6 +81,7 @@ describe('listContactAttrValues', () => {
       surveyId: 'sv-1',
       attrsKey: '기업유형',
       scope: 'real',
+      share: FIELDWORK_SHARE_ALL,
     });
 
     expect(result).toEqual({ values: ['상장', '코스닥'], truncated: false, hasEmpty: false });
@@ -94,6 +96,7 @@ describe('listContactAttrValues', () => {
       surveyId: 'sv-1',
       attrsKey: '기업유형',
       scope: 'real',
+      share: FIELDWORK_SHARE_ALL,
     });
 
     // 파서는 이 문자열을 무조건 빈 값 플래그로 승격시키므로, 선택지로 내밀면
@@ -110,6 +113,7 @@ describe('listContactAttrValues', () => {
       surveyId: 'sv-1',
       attrsKey: '기업유형',
       scope: 'real',
+      share: FIELDWORK_SHARE_ALL,
     });
 
     // 빈 값은 values 에 섞이지 않고 플래그로만 알린다.
@@ -126,6 +130,7 @@ describe('listContactAttrValues', () => {
       surveyId: 'sv-1',
       attrsKey: '기업유형',
       scope: 'real',
+      share: FIELDWORK_SHARE_ALL,
     });
 
     expect(result.truncated).toBe(true);
@@ -142,6 +147,7 @@ describe('listContactAttrValues', () => {
       surveyId: 'sv-1',
       attrsKey: '기업유형',
       scope: 'real',
+      share: FIELDWORK_SHARE_ALL,
     });
 
     expect(result.values).toEqual(['값1', '값2', '값10']);
@@ -151,7 +157,7 @@ describe('listContactAttrValues', () => {
     selectResults.push([{ scheme: visibleScheme }]);
 
     await expect(
-      listContactAttrValues({ surveyId: 'sv-1', attrsKey: '없는컬럼', scope: 'real' }),
+      listContactAttrValues({ surveyId: 'sv-1', attrsKey: '없는컬럼', scope: 'real', share: FIELDWORK_SHARE_ALL }),
     ).rejects.toBeInstanceOf(ForbiddenAttrColumnError);
   });
 
@@ -161,7 +167,7 @@ describe('listContactAttrValues', () => {
     selectResults.push([]);
 
     await expect(
-      listContactAttrValues({ surveyId: 'sv-1', attrsKey: '숨김컬럼', scope: 'real' }),
+      listContactAttrValues({ surveyId: 'sv-1', attrsKey: '숨김컬럼', scope: 'real', share: FIELDWORK_SHARE_ALL }),
     ).rejects.toBeInstanceOf(ForbiddenAttrColumnError);
   });
 
@@ -183,6 +189,7 @@ describe('listContactAttrValues', () => {
       surveyId: 'sv-1',
       attrsKey: '숨김컬럼',
       scope: 'real',
+      share: FIELDWORK_SHARE_ALL,
     });
     expect(result.values).toEqual(['A', 'B']);
   });
@@ -191,7 +198,7 @@ describe('listContactAttrValues', () => {
     selectResults.push([]);
 
     await expect(
-      listContactAttrValues({ surveyId: 'sv-1', attrsKey: '기업유형', scope: 'real' }),
+      listContactAttrValues({ surveyId: 'sv-1', attrsKey: '기업유형', scope: 'real', share: FIELDWORK_SHARE_ALL }),
     ).rejects.toBeInstanceOf(ForbiddenAttrColumnError);
   });
 });

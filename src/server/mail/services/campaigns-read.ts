@@ -28,7 +28,6 @@ import {
   getResultCodeStatuses,
 } from '@/server/read-models/result-code-statuses';
 import {
-  buildContactsFilterSql,
   latestResultCodeExpr,
   latestResultUnsubscribedSql,
   matchedResponseSubquery,
@@ -45,8 +44,10 @@ import {
   targetScopeCondition,
   testFlagForScope,
 } from '@/server/data-scope';
-import type { FilterClause } from '@/lib/operations/filter-shared';
-import type { ResolvedContactFilter } from '@/server/read-models/contact-filter-resolution';
+import {
+  type ResolvedContactFilter,
+  resolvedContactFilterSql,
+} from '@/server/read-models/contact-filter-resolution';
 import type {
   CampaignFilterSnapshot,
   MailAttachment,
@@ -663,7 +664,7 @@ function buildNotExcludedByNegativeCode(negativeCodes: string[]): SQL {
 function buildCandidateWhere(
   surveyId: string,
   scope: OperationsDataScope,
-  clauses: FilterClause[],
+  filter: ResolvedContactFilter,
   unrespondedOnly: boolean,
   negativeCodes: string[],
   emailOrder: MailEmailOrder,
@@ -675,7 +676,7 @@ function buildCandidateWhere(
     sql`NOT (${latestResultUnsubscribedSql})`,
     hasEmailCandidateSql(emailOrder),
     buildNotExcludedByNegativeCode(negativeCodes),
-    buildContactsFilterSql(clauses),
+    resolvedContactFilterSql(filter),
   ];
 
   if (unrespondedOnly) {
@@ -696,7 +697,7 @@ function buildCandidateWhere(
 async function countCandidateExclusions(
   surveyId: string,
   scope: OperationsDataScope,
-  clauses: FilterClause[],
+  filter: ResolvedContactFilter,
   unrespondedOnly: boolean,
   negativeCodes: string[],
   bouncedContactIds: readonly string[],
@@ -706,7 +707,7 @@ async function countCandidateExclusions(
   const baseParts: SQL[] = [
     eq(contactTargets.surveyId, surveyId),
     targetScopeCondition(scope),
-    buildContactsFilterSql(clauses),
+    resolvedContactFilterSql(filter),
   ];
   if (unrespondedOnly) {
     baseParts.push(isNull(contactTargets.respondedAt));
@@ -830,7 +831,7 @@ export async function previewCampaignCandidates(args: {
   const where = buildCandidateWhere(
     args.surveyId,
     args.scope,
-    args.filter.clauses,
+    args.filter,
     args.unrespondedOnly,
     negativeCodes,
     emailOrder,
@@ -844,7 +845,7 @@ export async function previewCampaignCandidates(args: {
     countCandidateExclusions(
       args.surveyId,
       args.scope,
-      args.filter.clauses,
+      args.filter,
       args.unrespondedOnly,
       negativeCodes,
       bouncedContactIds,
@@ -925,7 +926,7 @@ export async function countCampaignCandidates(args: {
   const where = buildCandidateWhere(
     args.surveyId,
     args.scope,
-    args.filter.clauses,
+    args.filter,
     args.unrespondedOnly,
     negativeCodes,
     emailOrder,

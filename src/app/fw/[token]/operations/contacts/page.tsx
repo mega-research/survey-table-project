@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { ContactsListView } from '@/features/operations/contacts/contacts-list-view';
 import { fieldworkLinkOperationsBase } from '@/features/operations/operations-paths';
 import { getOperationsDataScope } from '@/server/data-scope';
+import { resolveFieldworkShare } from '@/server/fieldwork-share';
 import { assertFieldworkLinkPageAccess } from '@/server/page-fieldwork-link-access';
 import { loadContactsListPage } from '@/server/read-models/contacts-list-page';
 
@@ -54,6 +55,9 @@ export default async function FieldworkLinkContactsPage({ params, searchParams }
     canViewMail: capabilities.has('mail.view'),
     // 컨택원은 내부 실사 운영 정보 — 외주 실사 링크에는 열·값·필터 후보를 보내지 않는다.
     includeContactOwner: false,
+    // 자기 담당 범위만 — 나눈 적 없는 링크는 설문 전체, 나눈 링크는 범위 대상만(0명이어도 0명).
+    // 해석 컨텍스트의 강제 절이라 주소의 조건으로 지울 수 없다(fieldwork-multi-company 티켓 03).
+    share: resolveFieldworkShare(actor, surveyId),
     searchParams: await searchParams,
   });
 

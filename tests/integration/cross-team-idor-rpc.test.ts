@@ -563,6 +563,43 @@ const SURFACES: Record<string, SurfaceSpec> = {
       page: 1,
     },
   },
+  // 외주 담당 범위(fieldwork-multi-company 티켓 03) — 링크 발급과 같은 관문. 링크 id 는 전역 PK 라
+  // 서비스가 설문·종류·열림을 함께 건다(`fieldwork-share.realdb` 「남의 설문·종료된 링크…」).
+  'contacts.fieldworkShares.list': {
+    gate: 'rpc',
+    capability: 'survey.manageAccess',
+    input: { surveyId: S },
+  },
+  'contacts.fieldworkShares.preview': {
+    gate: 'rpc',
+    capability: 'survey.manageAccess',
+    input: { surveyId: S, linkId: C, clauses: [{ source: 'system.resid', value: '1', op: '' }] },
+  },
+  'contacts.fieldworkShares.apply': {
+    gate: 'rpc',
+    capability: 'survey.manageAccess',
+    input: { surveyId: S, linkId: C, clauses: [{ source: 'system.resid', value: '1', op: '' }] },
+  },
+  'contacts.fieldworkShares.clear': {
+    gate: 'rpc',
+    capability: 'survey.manageAccess',
+    input: { surveyId: S, linkId: C },
+  },
+  'contacts.fieldworkShares.matches': {
+    gate: 'rpc',
+    capability: 'survey.manageAccess',
+    input: {
+      surveyId: S,
+      linkId: C,
+      clauses: [{ source: 'system.resid', value: '1', op: '' }],
+      page: 1,
+    },
+  },
+  'contacts.fieldworkShares.facets': {
+    gate: 'rpc',
+    capability: 'survey.manageAccess',
+    input: { surveyId: S, source: 'attrs.지역' },
+  },
 
   // ── 메일 ────────────────────────────────────────────────────────────────
   'mail.templates.create': {

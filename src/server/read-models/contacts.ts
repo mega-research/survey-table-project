@@ -41,7 +41,6 @@ import {
 } from '@/lib/operations/contacts-format';
 import {
   attrsNaturalSortExprs,
-  buildContactsFilterSql,
   effectiveMailStatusExpr,
   latestResultCodeExpr,
   mailStatusRankExpr,
@@ -70,7 +69,7 @@ import type {
 } from '@/shared/contracts/contacts-io';
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
 
-import type { ResolvedContactFilter } from './contact-filter-resolution';
+import { type ResolvedContactFilter, resolvedContactFilterSql } from './contact-filter-resolution';
 import type { FieldworkLinkNames } from './fieldwork-link-names';
 
 // 표가 props 로 받는 행 모양은 계약(@/shared/contracts/contacts-io) 소관 — 여기서 다시 내보내
@@ -189,7 +188,8 @@ export async function listContactsForSurvey(args: ListContactsArgs): Promise<Lis
 
   if (groupValue !== undefined) whereParts.push(eq(contactTargets.groupValue, groupValue));
 
-  whereParts.push(buildContactsFilterSql(filter.clauses));
+  // 사용자 조건 + 강제 절(담당 범위) — 강제 절은 화면이 지울 수 없다.
+  whereParts.push(resolvedContactFilterSql(filter));
 
   const whereClause = and(...whereParts)!;
 

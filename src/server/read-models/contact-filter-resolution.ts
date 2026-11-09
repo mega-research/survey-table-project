@@ -1,7 +1,9 @@
 import { ORPCError } from '@orpc/server';
+import { type SQL, and } from 'drizzle-orm';
 import 'server-only';
 
 import { type DbOrTx } from '@/db';
+import { buildContactsFilterSql } from '@/lib/operations/contacts-filter-sql.server';
 import {
   withoutContactOwnerColumn,
   type NormalizedContactColumnScheme,
@@ -14,6 +16,11 @@ import {
   type FilterClause,
 } from '@/lib/operations/filter-shared';
 import type { OperationsDataScope } from '@/server/data-scope';
+import {
+  FIELDWORK_SHARE_ALL,
+  type FieldworkShare,
+  shareTargetCondition,
+} from '@/server/fieldwork-share';
 import type { ContactResultCode } from '@/shared/contracts/contacts';
 import type { ContactAssignmentOption } from '@/shared/contracts/contacts-io';
 
@@ -61,6 +68,11 @@ export type ContactFilterContext = Readonly<{
   /** 이 파티션의 컨택원 — 외부 주체면 빈 배열 */
   assignmentOptions: ContactAssignmentOption[];
   isExternal: boolean;
+  /**
+   * 담당 범위(`server/fieldwork-share`) — 해석 결과에 **강제 절**로 실린다. 사용자가 고른 조건과 AND 로
+   * 묶이고 입력으로는 지울 수 없다(입력 모양에 이 칸이 없다). 계정 주체·안 나눈 링크는 `all`.
+   */
+  share: FieldworkShare;
 }> & { readonly [contextBrand]: true };
 
 /** 입력 — 캠페인 스냅샷과 같은 모양. 주소는 `contactFilterInputFromUrl` 로 바꾼다. */
@@ -86,7 +98,23 @@ export type ResolvedContactFilter<M extends ContactFilterMode = ContactFilterMod
   /** 열 머리 필터 절만 */
   headerClauses: FilterClause[];
   unresolved: UnresolvedClause[];
+  /**
+   * 강제 절 — 컨텍스트의 담당 범위. `clauses` 와 따로 두는 이유는 그것이 열 조건이 아니라 주체의
+   * 경계라서다: 「조건 줄 복원」·「필터가 걸렸는가」에 섞이면 외주 화면에 지울 수 없는 조건이 보인다.
+   * SQL 소비자는 `resolvedContactFilterSql` 로 둘을 함께 건다 — `clauses` 만 따로 쓰지 말 것.
+   */
+  share: FieldworkShare;
 }> & { readonly [resolvedBrand]: M };
+
+/**
+ * 해석 결과의 SQL — 사용자 조건(`clauses`) AND 강제 절(담당 범위). 조사 대상 행(`contact_targets`)에
+ * 거는 술어다. 필터를 SQL 로 바꾸는 자리는 전부 이것을 쓴다.
+ */
+export function resolvedContactFilterSql(filter: ResolvedContactFilter): SQL {
+  const forced = shareTargetCondition(filter.share);
+  const user = buildContactsFilterSql(filter.clauses);
+  return forced ? and(user, forced)! : user;
+}
 
 export async function loadContactFilterContext(
   surveyId: string,
@@ -99,10 +127,12 @@ export async function loadContactFilterContext(
      * 빼 후보·헤더 필터·정렬이 보이지 않는 축을 받지 않는다(외주 실사 링크 목록, ADR-0026).
      */
     canViewMail?: boolean;
+    /** 담당 범위 — 외주 링크가 지나는 표면만 넘긴다. 기본 `all`(계정 주체). */
+    share?: FieldworkShare;
     executor?: DbOrTx;
   },
 ): Promise<ContactFilterContext> {
-  const { isExternal, surface, canViewMail = true, executor } = opts;
+  const { isExternal, surface, canViewMail = true, share = FIELDWORK_SHARE_ALL, executor } = opts;
   const [loadedScheme, resultCodes, assignmentOptions] = await Promise.all([
     getContactColumnScheme(surveyId, scope),
     getContactResultCodes(surveyId),
@@ -130,6 +160,7 @@ export async function loadContactFilterContext(
     resultCodes,
     assignmentOptions,
     isExternal,
+    share,
   } as ContactFilterContext;
 }
 
@@ -158,6 +189,8 @@ export function contactFilterFromServerClauses(
     builderClauses: clauses,
     headerClauses: [],
     unresolved: [],
+    // 서버 고정 절 표면(실사 계정·클라이언트 링크)은 외주 링크가 지나지 않는다 — 담당 범위 축이 없다.
+    share: FIELDWORK_SHARE_ALL,
   } as unknown as ResolvedContactFilter<'read'>;
 }
 
@@ -241,7 +274,13 @@ export function resolveContactFilterWith<M extends ContactFilterMode>(
       op: builderClauses.length === 0 && i === 0 ? null : ('AND' as const),
     })),
   ];
-  return { clauses, builderClauses, headerClauses, unresolved } as unknown as ResolvedContactFilter<M>;
+  return {
+    clauses,
+    builderClauses,
+    headerClauses,
+    unresolved,
+    share: ctx.share,
+  } as unknown as ResolvedContactFilter<M>;
 }
 
 /**

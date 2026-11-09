@@ -4,12 +4,12 @@ import 'server-only';
 
 import { type DbOrTx, db } from '@/db';
 import { contactAssignments, contactTargets } from '@/db/schema';
-import { buildContactsFilterSql } from '@/lib/operations/contacts-filter-sql.server';
 import { type OperationsDataScope, lockWriteScope, testFlagForScope } from '@/server/data-scope';
 import {
   type ResolvedContactFilter,
   loadContactFilterContext,
   resolveContactFilter,
+  resolvedContactFilterSql,
 } from '@/server/read-models/contact-filter-resolution';
 import { listContactsForSurvey } from '@/server/read-models/contacts';
 import type { ContactAssignmentClause } from '@/shared/contracts/contacts';
@@ -98,7 +98,7 @@ async function summarize(
 
 /** NULL 없는 불리언 — 조건 밖을 셀 때·풀 때 3값 논리로 빠지는 행이 없게. */
 function matchOf(filter: ResolvedContactFilter<'write'>): SQL {
-  return sql`COALESCE((${buildContactsFilterSql(filter.clauses)}), FALSE)`;
+  return sql`COALESCE((${resolvedContactFilterSql(filter)}), FALSE)`;
 }
 
 async function assertAssignmentInScope(
