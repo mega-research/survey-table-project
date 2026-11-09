@@ -395,71 +395,75 @@ export function SurveyCard({
         </PopoverContent>
       </Popover>
 
-      <div className="flex items-center justify-between gap-2">
-        <span className="truncate text-[13px] text-[#9CA3AF]">
-          수정일: {formatLocalDate(survey.updatedAt)}
-          {modifiedDateSuffix(survey, scope, currentUserId)}
-        </span>
-        <div className="flex shrink-0 items-center gap-1.5">
-          {/* 종료 배지(ADR-0030) — 진행중·작성중에는 달지 않는다. 대부분의 카드가 같은 배지를
+      {/* 수정일·배지·액션 줄은 카드 바닥에 붙는다 — 그리드가 같은 줄 카드 높이를 맞추므로, 태그 줄 유무나
+          제목 줄 수가 달라도 같은 줄 카드끼리 이 묶음의 위치가 같다. 남는 높이는 응답 수 줄 아래 빈칸이 된다. */}
+      <div className="mt-auto flex flex-col gap-[11px]">
+        <div className="flex items-center justify-between gap-2">
+          <span className="truncate text-[13px] text-[#9CA3AF]">
+            수정일: {formatLocalDate(survey.updatedAt)}
+            {modifiedDateSuffix(survey, scope, currentUserId)}
+          </span>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {/* 종료 배지(ADR-0030) — 진행중·작성중에는 달지 않는다. 대부분의 카드가 같은 배지를
               달면 아무것도 말하지 않게 되고, 눈에 띄어야 하는 것은 「더는 응답을 받지 않는다」
               하나다. 공개/비공개보다 앞에 두는 것도 그래서다. */}
-          {survey.status === 'closed' && (
-            <span className="flex items-center gap-[5px] rounded-full bg-[#F1F5F9] px-[11px] py-1 text-[13px] font-medium text-[#475569]">
-              <CircleStop className="h-3 w-3" />
-              종료
-            </span>
-          )}
-          {survey.isPublic ? (
-            <span className="flex items-center gap-[5px] rounded-full bg-[#E8F6EE] px-[11px] py-1 text-[13px] font-medium text-[#1D8A4E]">
-              <Globe className="h-3 w-3" />
-              공개
-            </span>
-          ) : (
-            <span className="flex items-center gap-[5px] rounded-full bg-[#FEF3C7] px-[11px] py-1 text-[13px] font-medium text-[#D97706]">
-              <Lock className="h-3 w-3" />
-              비공개
-            </span>
-          )}
-          {isPending ? (
-            <span className="flex items-center gap-[5px] rounded-full bg-[#FEF3C7] px-[11px] py-1 text-[13px] font-medium text-[#D97706]">
-              <Clock className="h-3 w-3" />
-              배치 대기
-            </span>
-          ) : survey.visibility === 'invite_only' ? (
-            <span className="flex items-center gap-[5px] rounded-full bg-[#F5F5F7] px-[11px] py-1 text-[13px] font-medium text-[#6E6E73]">
-              <Lock className="h-3 w-3" />
-              {SURVEY_VISIBILITY_LABEL.invite_only}
-            </span>
-          ) : null}
+            {survey.status === 'closed' && (
+              <span className="flex items-center gap-[5px] rounded-full bg-[#F1F5F9] px-[11px] py-1 text-[13px] font-medium text-[#475569]">
+                <CircleStop className="h-3 w-3" />
+                종료
+              </span>
+            )}
+            {survey.isPublic ? (
+              <span className="flex items-center gap-[5px] rounded-full bg-[#E8F6EE] px-[11px] py-1 text-[13px] font-medium text-[#1D8A4E]">
+                <Globe className="h-3 w-3" />
+                공개
+              </span>
+            ) : (
+              <span className="flex items-center gap-[5px] rounded-full bg-[#FEF3C7] px-[11px] py-1 text-[13px] font-medium text-[#D97706]">
+                <Lock className="h-3 w-3" />
+                비공개
+              </span>
+            )}
+            {isPending ? (
+              <span className="flex items-center gap-[5px] rounded-full bg-[#FEF3C7] px-[11px] py-1 text-[13px] font-medium text-[#D97706]">
+                <Clock className="h-3 w-3" />
+                배치 대기
+              </span>
+            ) : survey.visibility === 'invite_only' ? (
+              <span className="flex items-center gap-[5px] rounded-full bg-[#F5F5F7] px-[11px] py-1 text-[13px] font-medium text-[#6E6E73]">
+                <Lock className="h-3 w-3" />
+                {SURVEY_VISIBILITY_LABEL.invite_only}
+              </span>
+            ) : null}
+          </div>
         </div>
-      </div>
 
-      {/* 액션 순서 — 수정 · 현황 · 분석 · 문의(.pen 설문 카드의 문의·분석 순서를 바꿨다). 구분선은 없다. */}
-      <div className="flex gap-1.5 pt-1.5">
-        <CardActionLink
-          href={`/surveys/${survey.id}/edit`}
-          icon={<Pencil className="h-3.5 w-3.5" />}
-          label="수정"
-          disabled={!canEdit}
-        />
-        <CardActionLink
-          href={`/surveys/${survey.id}/operations/overview`}
-          icon={<Activity className="h-3.5 w-3.5" />}
-          label="현황"
-        />
-        {/* 분석은 당분간 막아 둔다. 다시 열 때는 href 를 되돌리고 canViewSurveyAnalyticsCard 로
+        {/* 액션 순서 — 수정 · 현황 · 분석 · 문의(.pen 설문 카드의 문의·분석 순서를 바꿨다). 구분선은 없다. */}
+        <div className="flex gap-1.5 pt-1.5">
+          <CardActionLink
+            href={`/surveys/${survey.id}/edit`}
+            icon={<Pencil className="h-3.5 w-3.5" />}
+            label="수정"
+            disabled={!canEdit}
+          />
+          <CardActionLink
+            href={`/surveys/${survey.id}/operations/overview`}
+            icon={<Activity className="h-3.5 w-3.5" />}
+            label="현황"
+          />
+          {/* 분석은 당분간 막아 둔다. 다시 열 때는 href 를 되돌리고 canViewSurveyAnalyticsCard 로
             비활성을 정한다(분석 화면이 responses.view 를 요구해 팀원에게는 404 다). */}
-        <CardActionLink
-          icon={<ChartColumn className="h-3.5 w-3.5" />}
-          label="분석"
-          disabledReason="분석 기능은 준비 중입니다"
-        />
-        <CardActionLink
-          icon={<MessageCircle className="h-3.5 w-3.5" />}
-          label="문의"
-          disabledReason="문의 기능은 준비 중입니다"
-        />
+          <CardActionLink
+            icon={<ChartColumn className="h-3.5 w-3.5" />}
+            label="분석"
+            disabledReason="분석 기능은 준비 중입니다"
+          />
+          <CardActionLink
+            icon={<MessageCircle className="h-3.5 w-3.5" />}
+            label="문의"
+            disabledReason="문의 기능은 준비 중입니다"
+          />
+        </div>
       </div>
 
       {cardTitleOpen && (
