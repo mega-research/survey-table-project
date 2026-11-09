@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -7,6 +7,7 @@ import { AssignmentEditor } from './assignment-editor';
 
 const preview = vi.fn();
 const apply = vi.fn();
+const idListsCreate = vi.fn();
 vi.mock('@/shared/lib/rpc', () => ({
   client: {
     contacts: {
@@ -18,7 +19,7 @@ vi.mock('@/shared/lib/rpc', () => ({
         facets: vi.fn(async () => ({ kind: 'many' })),
         matches: vi.fn(async () => ({ rows: [], total: 0, page: 1, pageSize: 10 })),
       },
-      idLists: { create: vi.fn() },
+      idLists: { create: (...a: unknown[]) => idListsCreate(...a) },
       attrValues: { nonNumericCount: vi.fn() },
     },
   },
@@ -163,5 +164,25 @@ describe('AssignmentEditor — 연속 번호 구간 합치기', () => {
     const multi = '\u001f3\u001f1\u001f2\u001f';
     renderEditor([{ source: 'attrs.기업명', value: multi, op: '' }]);
     expect(screen.queryByDisplayValue('1-3')).not.toBeInTheDocument();
+  });
+
+  it('2,000개 넘는 연속 번호는 합친 뒤에 준비해 저장 목록을 만들지 않는다', async () => {
+    const user = userEvent.setup();
+    apply.mockResolvedValue({ matched: 8, current: 0, incoming: 8, fromOthers: [], leaving: 0 });
+    renderEditor([{ source: 'system.resid', value: '1', op: '' }]);
+    const many = Array.from({ length: 2500 }, (_, i) => String(i + 1)).join(' ');
+    const box = idListBox();
+    await user.clear(box);
+    // 타이핑으로 넣으면 2,500 단어를 한 자씩 친다 — 값 바꾸기 이벤트로 넣는다.
+    fireEvent.change(box, { target: { value: many } });
+    expect(await screen.findByText('8명', undefined, { timeout: 5000 })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(preview).toHaveBeenLastCalledWith({
+        surveyId: SURVEY,
+        assignmentId: AID,
+        clauses: [{ source: 'system.resid', value: '1-2500', op: '' }],
+      }),
+    );
+    expect(idListsCreate).not.toHaveBeenCalled();
   });
 });

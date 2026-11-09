@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  compactIdListValue,
   describeIdListValue,
   expandRangesToIds,
   isIdListSource,
@@ -111,9 +112,28 @@ describe('describeIdListValue — 위젯 배지/경고 판정', () => {
     });
   });
 
+  it('attrs 의 앞자리 0 토큰 하나("010-1234")는 종전대로 none — 서버가 텍스트 검색으로 받는 값', () => {
+    expect(describeIdListValue('attrs.전화', '010-1234')).toEqual({ kind: 'none' });
+    expect(describeIdListValue('attrs.코드', '0001')).toEqual({ kind: 'none' });
+  });
+
   it('저장 토큰은 token — 개수 접미사를 그대로 보여준다', () => {
     expect(
       describeIdListValue('attrs.ID', 'list:0f3a4b5c-1111-4222-8333-444455556666:5000'),
     ).toEqual({ kind: 'token', count: 5000 });
+  });
+});
+
+describe('compactIdListValue — 조건 줄 값의 연속 번호 합치기', () => {
+  it('시스템ID·명단 열 목록이면 구간으로 합친다', () => {
+    expect(compactIdListValue('system.resid', '3 1 2 9')).toBe('1-3, 9');
+    expect(compactIdListValue('attrs.ID', '5\n6\n7')).toBe('5-7');
+  });
+
+  it('목록 칸이 아니거나 여러 값 구분자 형식이면 손대지 않는다', () => {
+    expect(compactIdListValue('pii.name', '1 2 3')).toBe('1 2 3');
+    expect(compactIdListValue('system.web', '1 2')).toBe('1 2');
+    const multi = '\u001f3\u001f1\u001f2\u001f';
+    expect(compactIdListValue('attrs.기업명', multi)).toBe(multi);
   });
 });

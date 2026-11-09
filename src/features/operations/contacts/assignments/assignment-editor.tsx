@@ -29,13 +29,8 @@ import {
   newDraftRowId,
 } from '@/features/operations/filters/filter-bar-core';
 import { getErrorMessage } from '@/lib/get-error-message';
-import {
-  type ColumnCandidate,
-  FILTER_SOURCE,
-  decodeMultiClauseValue,
-} from '@/lib/operations/filter-shared';
-import { isIdListSource } from '@/lib/operations/id-list-paste';
-import { compactIdList } from '@/lib/operations/range-list';
+import { type ColumnCandidate, FILTER_SOURCE } from '@/lib/operations/filter-shared';
+import { compactIdListValue } from '@/lib/operations/id-list-paste';
 import type { ContactAssignmentClause, ContactResultCode } from '@/shared/contracts/contacts';
 import type { ContactAssignmentOption } from '@/shared/contracts/contacts-io';
 import { client } from '@/shared/lib/rpc';
@@ -58,15 +53,6 @@ type Summary = Awaited<ReturnType<typeof client.contacts.assignments.preview>>;
 const fmt = (n: number) => n.toLocaleString('ko-KR');
 const PREVIEW_DEBOUNCE_MS = 400;
 
-/**
- * ID 목록 칸 값의 연속 번호를 `1-100, 200-300` 구간으로 합친다 — 고르는 대상은 같다
- * (`compactIdList`). 오른쪽 값 목록에서 고른 여러 값(구분자 형식)은 목록 입력이 아니라 손대지 않는다.
- */
-function compactClauseValue(source: string, value: string): string {
-  if (!isIdListSource(source) || decodeMultiClauseValue(value) !== null) return value;
-  return compactIdList(value);
-}
-
 function initialRows(
   lastClauses: ContactAssignmentClause[] | null,
   candidates: ColumnCandidate[],
@@ -77,7 +63,7 @@ function initialRows(
       op: c.op === 'OR' ? 'OR' : 'AND',
       source: c.source,
       // 낱개로 저장된 옛 조건도 열면 정리돼 보인다.
-      value: compactClauseValue(c.source, c.value),
+      value: compactIdListValue(c.source, c.value),
     }));
   }
   const source =
@@ -118,7 +104,9 @@ export function AssignmentEditor({
     const key = `${source}\u0000${value}`;
     let hit = prepareCache.current.get(key);
     if (!hit) {
-      hit = prepareContactClauseValue(surveyId, source, value);
+      // 합친 뒤에 준비한다 — 낱개 2,000개를 넘던 연속 번호도 구간 하나로 접혀 저장 목록을 만들지
+      // 않고, 적용 때 보내는 값이 적용 뒤 칸에 남는 합친 값과 같다.
+      hit = prepareContactClauseValue(surveyId, source, compactIdListValue(source, value));
       prepareCache.current.set(key, hit);
       // 실패한 변환은 다시 시도할 수 있게 캐시에서 뺀다.
       hit.catch(() => prepareCache.current.delete(key));
@@ -204,23 +192,23 @@ export function AssignmentEditor({
 
   const runApply = () => {
     if (!readyClauses) return;
-    // 손으로 적은 낱개 번호도 합친 모양으로 저장한다(다음에 열 때 lastClauses 가 정리돼 있게).
-    // 저장 목록 토큰은 compactIdList 가 손대지 않는다.
-    const clauses = readyClauses.map((c) => ({
-      ...c,
-      value: compactClauseValue(c.source, c.value),
-    }));
+    // readyClauses 는 합친 값으로 준비됐다(prepareCached). 적용 뒤 칸도 그 모양으로 바꾸되,
+    // 요청이 도는 사이 사람이 고친 줄은 건드리지 않는다.
+    const sentValues = new Map(rows.map((r) => [r.id, r.value]));
     startTransition(async () => {
       try {
         const result = await client.contacts.assignments.apply({
           surveyId,
           assignmentId: assignment.id,
-          clauses,
+          clauses: readyClauses,
         });
         setConfirmOpen(false);
-        // 칸도 보낸 모양과 같게 — 적용이 성공한 뒤에만 바꾼다.
         setRows((prev) =>
-          prev.map((r) => ({ ...r, value: compactClauseValue(r.source, r.value) })),
+          prev.map((r) =>
+            sentValues.get(r.id) === r.value
+              ? { ...r, value: compactIdListValue(r.source, r.value) }
+              : r,
+          ),
         );
         toast.success(
           `배정 적용했습니다 — ${savedName} ${fmt(result.matched)}명 (새로 ${fmt(result.incoming)} · 다른 컨택원에서 ${fmt(sumOthers(result))} · 빠짐 ${fmt(result.leaving)})`,

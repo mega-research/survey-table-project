@@ -62,6 +62,8 @@ pii 는 암호문이라 대조하려면 blind index 경로를 타야 한다.
 
 조사 대상·단체 메일 위저드의 시스템ID/attrs 컬럼 검색은 **엑셀 열 붙여넣기 ID 목록**을 받는다 (`lib/operations/range-list.ts` — 공백·개행·탭·콤마 구분, 중복 제거). 단일 컬럼 인라인 상한 2,000개(URL 헤더 한계), 초과분은 `contacts.idLists.create` 로 `contact_id_lists` 에 저장하고 `q=list:<uuid>:<count>` 토큰으로 검색한다. 토큰은 조사 대상 필터 해석이 읽는다(`loadIdListsForValues`, `server/read-models/contact-id-lists.ts`) — 호출자가 따로 읽을 일이 없다. 「전체」 컬럼 검색의 200개 상한은 컬럼 곱연산 SQL 보호용으로 별개다.
 
+**컨택원 수정 화면만 연속 번호를 구간으로 합친다** — 붙여넣기 직후 · 저장된 조건을 열 때 · 미리보기·적용용 값 준비(저장 목록 변환보다 먼저) 세 자리에서 `1 2 … 100` 을 `1-100, 200-300` 으로 접는다(`compactIdListValue` → `range-list` 의 `compactIdList`, 위젯 prop `idListCompact`). 고르는 대상은 같다: 낱개는 IN, 구간은 BETWEEN 이고 단일 숫자의 텍스트 폴백은 원래 단일 숫자일 때만 붙는다. 숫자 아닌 토큰·앞자리 0·`list:` 토큰·여러 값 구분자 형식은 손대지 않는다. 조사 대상 검색바·단체 메일 위저드는 합치지 않는다. 상태줄 「ID N개 인식」은 토큰 수가 아니라 겹침을 뺀 번호 수(`IdListStatus.list.ids`)다.
+
 ---
 
 ## 대상 정보 수정 현황

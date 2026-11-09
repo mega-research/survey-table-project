@@ -1,8 +1,9 @@
-import { FILTER_SOURCE, parseIdListToken } from './filter-shared';
+import { FILTER_SOURCE, decodeMultiClauseValue, parseIdListToken } from './filter-shared';
 import {
   type NumRange,
   type Parity,
   SINGLE_COLUMN_ID_LIST_MAX,
+  compactIdList,
   countDistinctIds,
   hasLeadingZeroToken,
   parseIdListDetailed,
@@ -84,8 +85,19 @@ export function describeIdListValue(source: string, value: string): IdListStatus
   const ids = countDistinctIds(r.ranges);
   if (ids < 2) return { kind: 'none' };
   if (source !== FILTER_SOURCE.RESID && hasLeadingZeroToken(trimmed)) {
+    // 토큰 하나("010-1234", "0001")는 서버가 텍스트 검색으로 받아 그대로 맞는다 — 목록이 아니다.
+    if (r.count < 2) return { kind: 'none' };
     const tokens = trimmed.split(/[\s,;]+/).filter((t) => /(^|-)0\d/.test(t));
     return { kind: 'leadingZero', tokens };
   }
   return { kind: 'list', count: r.count, ids, duplicates: r.duplicates, overLimit: r.overLimit };
+}
+
+/**
+ * 조건 줄 값의 연속 번호를 `1-100, 200-300` 구간으로 합친다 (컨택원 수정 화면) — 고르는 대상은
+ * 같다(`compactIdList`). 목록 칸이 아닌 열, 오른쪽 값 목록에서 고른 여러 값(구분자 형식)은 손대지 않는다.
+ */
+export function compactIdListValue(source: string, value: string): string {
+  if (!isIdListSource(source) || decodeMultiClauseValue(value) !== null) return value;
+  return compactIdList(value);
 }
