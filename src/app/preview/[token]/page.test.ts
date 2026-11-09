@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import PublicSurveyPreviewPage from '@/app/preview/[token]/page';
+
 // notFound() 는 실제 Next.js 에서 렌더를 즉시 중단시키는 throw 다 — 페이지 이후 코드가
 // idRow/survey 를 null-check 없이 계속 쓰는 계약(admin preview 와 동일 패턴)을 재현하려면
 // mock 도 반드시 throw 해야 한다. vi.mock factory 는 호이스팅되므로 참조 변수는
@@ -12,7 +14,9 @@ const {
   isRscRateLimitedMock,
   loadPreviewContactSeedMock,
   loadOperationsDataScopeMock,
+  getCurrentUserMock,
 } = vi.hoisted(() => ({
+  getCurrentUserMock: vi.fn(),
   loadPreviewContactSeedMock: vi.fn(),
   loadOperationsDataScopeMock: vi.fn(),
   notFoundMock: vi.fn(() => {
@@ -41,6 +45,10 @@ vi.mock('@/server/survey-builder/services/survey-read', () => ({
 vi.mock('@/server/contacts/services/preview-contact', () => ({
   loadPreviewContactSeed: (...a: unknown[]) => loadPreviewContactSeedMock(...a),
 }));
+// 공개 표면이라 세션이 없을 수 있다 — 로그인 여부만 갈아끼운다.
+vi.mock('@/lib/auth', () => ({
+  getCurrentUser: (...a: unknown[]) => getCurrentUserMock(...a),
+}));
 vi.mock('@/server/data-scope', () => ({
   loadOperationsDataScope: (...a: unknown[]) => loadOperationsDataScopeMock(...a),
 }));
@@ -51,8 +59,6 @@ function SurveyResponseFlowStub(): null {
 vi.mock('@/features/survey-response/survey-response-flow', () => ({
   SurveyResponseFlow: SurveyResponseFlowStub,
 }));
-
-import PublicSurveyPreviewPage from '@/app/preview/[token]/page';
 
 const SURVEY_ID = '00000000-0000-4000-8000-000000000901';
 const PREVIEW_TOKEN = '11111111-2222-4333-8444-555555555555';
@@ -107,6 +113,39 @@ describe('PublicSurveyPreviewPage (/preview/[token])', () => {
     isRscRateLimitedMock.mockResolvedValue(false);
     loadPreviewContactSeedMock.mockResolvedValue(null);
     loadOperationsDataScopeMock.mockResolvedValue('real');
+    getCurrentUserMock.mockResolvedValue({ id: 'u1', status: 'active', userType: 'internal' });
+  });
+
+  it('로그인하지 않은 방문자도 연다 — 테스트 보기 판정(세션 필수)을 부르지 않고 실데이터 대상자로 채운다', async () => {
+    getCurrentUserMock.mockResolvedValue(null);
+    getSurveyByPreviewTokenMock.mockResolvedValue({ id: SURVEY_ID });
+    getSurveyByIdMock.mockResolvedValue(SURVEY_ROW);
+    getSurveyForResponseMock.mockResolvedValue({ survey: { id: SURVEY_ID }, versionId: 'v1' });
+    // 실제 함수는 세션이 없으면 「인증이 필요합니다」를 던진다 — 불리면 페이지가 깨진다.
+    loadOperationsDataScopeMock.mockRejectedValue(new Error('인증이 필요합니다.'));
+
+    const result = await PublicSurveyPreviewPage({
+      params: Promise.resolve({ token: PREVIEW_TOKEN }),
+    });
+
+    expect(findElementByType(result, SurveyResponseFlowStub)).not.toBeNull();
+    expect(loadOperationsDataScopeMock).not.toHaveBeenCalled();
+    expect(loadPreviewContactSeedMock).toHaveBeenCalledWith(
+      expect.objectContaining({ surveyId: SURVEY_ID, isTest: false }),
+    );
+  });
+
+  it('로그인한 직원은 자기 테스트 보기 선택을 따른다', async () => {
+    getSurveyByPreviewTokenMock.mockResolvedValue({ id: SURVEY_ID });
+    getSurveyByIdMock.mockResolvedValue(SURVEY_ROW);
+    getSurveyForResponseMock.mockResolvedValue({ survey: { id: SURVEY_ID }, versionId: 'v1' });
+    loadOperationsDataScopeMock.mockResolvedValue('test');
+
+    await PublicSurveyPreviewPage({ params: Promise.resolve({ token: PREVIEW_TOKEN }) });
+
+    expect(loadPreviewContactSeedMock).toHaveBeenCalledWith(
+      expect.objectContaining({ isTest: true }),
+    );
   });
 
   it('유효한 previewToken은 해당 설문을 resolve해 SurveyResponseFlow를 preview 모드로 렌더한다', async () => {
@@ -237,7 +276,9 @@ describe('PublicSurveyPreviewPage (/preview/[token])', () => {
       priorAnswers: { q1: '작년 값' },
     });
 
-    const result = await PublicSurveyPreviewPage({ params: Promise.resolve({ token: PREVIEW_TOKEN }) });
+    const result = await PublicSurveyPreviewPage({
+      params: Promise.resolve({ token: PREVIEW_TOKEN }),
+    });
 
     expect(loadPreviewContactSeedMock).toHaveBeenCalledWith({
       surveyId: SURVEY_ID,
@@ -262,6 +303,8 @@ describe('PublicSurveyPreviewPage (/preview/[token])', () => {
 
     await PublicSurveyPreviewPage({ params: Promise.resolve({ token: PREVIEW_TOKEN }) });
 
-    expect(loadPreviewContactSeedMock).toHaveBeenCalledWith(expect.objectContaining({ isTest: true }));
+    expect(loadPreviewContactSeedMock).toHaveBeenCalledWith(
+      expect.objectContaining({ isTest: true }),
+    );
   });
 });

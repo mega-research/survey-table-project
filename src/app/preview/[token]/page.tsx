@@ -5,6 +5,7 @@ import { Eye } from 'lucide-react';
 
 import { SurveyResponseFlow } from '@/features/survey-response/survey-response-flow';
 import { TooManyRequestsScreen } from '@/features/survey-response/survey-response-screens';
+import { getCurrentUser } from '@/lib/auth';
 import { isRscRateLimited } from '@/lib/rate-limit/rsc-guard';
 import { loadPreviewContactSeed } from '@/server/contacts/services/preview-contact';
 import { loadOperationsDataScope } from '@/server/data-scope';
@@ -13,6 +14,7 @@ import {
   getSurveyByPreviewToken,
   getSurveyForResponse,
 } from '@/server/survey-builder/services/survey-read';
+import { isActiveUser } from '@/shared/contracts/auth';
 
 interface PageProps {
   params: Promise<{ token: string }>;
@@ -57,10 +59,7 @@ export default async function PublicSurveyPreviewPage({ params }: PageProps) {
   const survey = await getSurveyById(idRow.id);
   if (!survey || survey.deletedAt) notFound();
 
-  const preview = await getSurveyForResponse(
-    { surveyId: survey.id },
-    { requirePublished: true },
-  );
+  const preview = await getSurveyForResponse({ surveyId: survey.id }, { requirePublished: true });
 
   if (!preview) {
     return (
@@ -80,9 +79,17 @@ export default async function PublicSurveyPreviewPage({ params }: PageProps) {
     );
   }
 
+  // 공개 표면이다 — 고객사처럼 로그인하지 않은 방문자가 대부분이다. 테스트 보기는 로그인한 직원의
+  // 선택일 뿐이고 그 판정(`loadOperationsDataScope`)은 세션이 없으면 던지므로, 세션이 있는 활성 계정에만
+  // 묻는다. 나머지는 실데이터 대상자로 채운다.
+  const viewer = await getCurrentUser();
+  const isTest =
+    viewer !== null &&
+    isActiveUser(viewer.status) &&
+    (await loadOperationsDataScope(survey.id)) === 'test';
   const seed = await loadPreviewContactSeed({
     surveyId: survey.id,
-    isTest: (await loadOperationsDataScope(survey.id)) === 'test',
+    isTest,
     structure: preview.survey,
   });
 
