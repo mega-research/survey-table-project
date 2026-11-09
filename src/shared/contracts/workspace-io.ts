@@ -504,12 +504,17 @@ export const PersonalTagNameField = z
 
 export const PersonalTagColorSchema = z.enum(personalTagColorValues);
 
-/** 내 태그 한 줄 — `linkCount` 는 내가 붙인 설문 수(볼 수 없게 된 설문도 센다). */
+/**
+ * 내 태그 한 줄 — `linkCount` 는 내가 붙인 설문 수(볼 수 없게 된 설문도 센다).
+ * `recentFilterScore` 는 검색에 건 빈도를 지금 시각으로 감쇠한 값(0157) — 툴바 「자주 쓰는 태그」
+ * 줄의 순서다. 서버 목록에는 늘 있고, 화면이 방금 만든 태그 행을 낙관적으로 그릴 때만 비어 있다(0 으로 본다).
+ */
 export const PersonalTagItem = z.object({
   id: z.uuid(),
   name: z.string(),
   color: PersonalTagColorSchema,
   linkCount: z.number().int().nonnegative(),
+  recentFilterScore: z.number().nonnegative().optional(),
 });
 export type PersonalTagItem = z.infer<typeof PersonalTagItem>;
 
@@ -570,6 +575,16 @@ export type DeletePersonalTagInput = z.infer<typeof DeletePersonalTagInput>;
 
 export const DeletePersonalTagOutput = DeletePersonalTagInput;
 export type DeletePersonalTagOutput = z.infer<typeof DeletePersonalTagOutput>;
+
+/**
+ * 태그를 검색에 걸었다 (0157) — 「자주 쓰는 태그」 순서의 재료. 거르기 자체는 주소가 하고 이것은
+ * 기록만 한다(실패해도 거르기는 된다).
+ */
+export const RecordTagFilterInput = z.object({ tagId: z.uuid() });
+export type RecordTagFilterInput = z.infer<typeof RecordTagFilterInput>;
+
+export const RecordTagFilterOutput = RecordTagFilterInput;
+export type RecordTagFilterOutput = z.infer<typeof RecordTagFilterOutput>;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 설문 참여자 (.pen FLOW 4-2 참여자 블록, 티켓 18)

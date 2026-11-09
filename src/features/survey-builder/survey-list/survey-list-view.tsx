@@ -25,6 +25,7 @@ import {
   personalTagKeys,
   useCreatePersonalTag,
   useMyPersonalTags,
+  useRecordTagFilter,
   useSetFavorite,
   useSetTagLink,
 } from '../queries/use-personal-marks';
@@ -147,6 +148,8 @@ export function SurveyListView() {
   const { mutate: duplicateSurvey, isPending: isDuplicating } = useDuplicateSurvey();
   const setFavorite = useSetFavorite();
   const setTagLink = useSetTagLink();
+  // 태그를 검색에 걸 때마다 기록한다 — 툴바 「자주 쓰는 태그」 줄의 순서(0157). 거르기는 주소가 한다.
+  const recordTagFilter = useRecordTagFilter();
   const createTag = useCreatePersonalTag();
 
   const requestedGroupId = query.groupId;
@@ -461,7 +464,10 @@ export function SurveyListView() {
             // 고르면 칩 + 남은 검색어를 한 번에 — 고르는 칸이라 push(뒤로 가기로 되돌린다).
             tagSuggestions={{
               tags: myTags,
-              onPick: (tagId, q) => navigateTo(pickTagSuggestion(urlQuery, tagId, q)),
+              onPick: (tagId, q) => {
+                recordTagFilter(tagId);
+                navigateTo(pickTagSuggestion(urlQuery, tagId, q));
+              },
             }}
             // 휴지통에는 태그 조건이 없다 — 단추 자체를 그리지 않는다(서버도 그 조합을 거부한다).
             tagFilter={
@@ -470,10 +476,12 @@ export function SurveyListView() {
                 : {
                     tags: myTags,
                     selectedIds: query.tagIds,
-                    onToggle: (tagId, on) =>
+                    onToggle: (tagId, on) => {
+                      if (on) recordTagFilter(tagId);
                       navigateTo(
                         on ? addTagFilter(urlQuery, tagId) : removeTagFilter(urlQuery, tagId),
-                      ),
+                      );
+                    },
                     onClearSelection: () => updateQuery({ tagIds: [] }),
                   }
             }
@@ -546,7 +554,10 @@ export function SurveyListView() {
                         onToggle: (tagId, on) => setTagLink(survey.id, tagId, on),
                         onCreate: (name) => createTag(survey.id, name),
                         activeTagIds: query.tagIds,
-                        onFilterByTag: (tagId) => navigateTo(addTagFilter(urlQuery, tagId)),
+                        onFilterByTag: (tagId) => {
+                          recordTagFilter(tagId);
+                          navigateTo(addTagFilter(urlQuery, tagId));
+                        },
                       }}
                       viewer={{ scope, currentUserId, isSuperadmin, leaderTeamIds }}
                       onDelete={handleDelete}

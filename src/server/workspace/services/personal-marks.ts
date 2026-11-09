@@ -11,10 +11,13 @@ import {
   type DeletePersonalTagInput,
   type DeletePersonalTagOutput,
   type MinePersonalTagsOutput,
+  PERSONAL_TAG_FILTER_HALF_LIFE_DAYS,
   PersonalMarkTargetGoneError,
   PersonalTagLimitError,
   PersonalTagNameTakenError,
   PersonalTagNotFoundError,
+  type RecordTagFilterInput,
+  type RecordTagFilterOutput,
   type SetFavoriteInput,
   type SetFavoriteOutput,
   type SetTagLinkInput,
@@ -126,11 +129,19 @@ const linkCountSql =
     Number,
   );
 
+/**
+ * 검색에 건 점수를 지금 시각으로 감쇠한 값 — `점수 × 0.5^(지난 일수 / 반감기)`. 걸 때(`recordTagFilter`)도
+ * 같은 식으로 줄인 뒤 1 을 더하므로, 점수는 「최근 얼마나 자주 걸었나」를 하나의 수로 담는다.
+ */
+const HALF_LIFE_SECONDS = PERSONAL_TAG_FILTER_HALF_LIFE_DAYS * 86_400;
+const decayedFilterScoreSql = sql`(${personalSurveyTags.filterScore} * power(0.5, extract(epoch from (now() - coalesce(${personalSurveyTags.lastFilteredAt}, now()))) / ${HALF_LIFE_SECONDS}))`;
+
 const tagItemColumns = {
   id: personalSurveyTags.id,
   name: personalSurveyTags.name,
   color: personalSurveyTags.color,
   linkCount: linkCountSql,
+  recentFilterScore: sql<number>`${decayedFilterScoreSql}`.mapWith(Number),
 };
 
 /** 내 태그 전부 — 요청자 행만. 순서는 화면이 정한다(많이 쓴 순·가나다순). */
@@ -141,6 +152,27 @@ export async function listMyTags(userId: string): Promise<MinePersonalTagsOutput
     .where(eq(personalSurveyTags.userId, userId))
     .orderBy(asc(personalSurveyTags.createdAt), asc(personalSurveyTags.id));
   return { tags };
+}
+
+/**
+ * 태그를 검색에 걸었다 (0157) — 점수를 지금 시각으로 감쇠한 뒤 1 을 더하고 시각을 남긴다. 한 문장이라
+ * 연타·탭 두 개가 겹쳐도 더하기가 빠지지 않는다. 남의 태그·없는 태그는 바뀐 행이 없어 NOT_FOUND 다.
+ * `updatedAt` 은 건드리지 않는다 — 이름·색을 고친 시각이지 쓴 시각이 아니다.
+ */
+export async function recordTagFilter(
+  userId: string,
+  input: RecordTagFilterInput,
+): Promise<RecordTagFilterOutput> {
+  const rows = await db
+    .update(personalSurveyTags)
+    .set({
+      filterScore: sql`${decayedFilterScoreSql} + 1`,
+      lastFilteredAt: sql`now()`,
+    })
+    .where(and(eq(personalSurveyTags.id, input.tagId), eq(personalSurveyTags.userId, userId)))
+    .returning({ id: personalSurveyTags.id });
+  if (rows.length === 0) throw new PersonalTagNotFoundError();
+  return { tagId: input.tagId };
 }
 
 /**

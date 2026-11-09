@@ -966,6 +966,8 @@ const OTHER_BOUNDARY_SURFACES: Record<string, string> = {
   'workspace.personalMarks.updateTag':
     '태그 소유는 user_id WHERE — 남의 태그 NOT_FOUND (personal-marks.realdb)',
   'workspace.personalMarks.deleteTag': '위와 같음',
+  'workspace.personalMarks.recordFilter':
+    '태그 소유는 user_id WHERE — 남의 태그 NOT_FOUND, 점수도 안 바뀐다 (personal-marks.realdb)',
 };
 
 /**

@@ -21,6 +21,8 @@ import {
   PersonalTagLimitError,
   PersonalTagNameTakenError,
   PersonalTagNotFoundError,
+  RecordTagFilterInput,
+  RecordTagFilterOutput,
   SetFavoriteInput,
   SetFavoriteOutput,
   SetTagLinkInput,
@@ -97,6 +99,17 @@ const deleteTag = authed
     svc.deleteTag(context.user.id, input).catch(rethrowPersonalMarksError),
   );
 
+/**
+ * 태그를 검색에 걸었다 — 「자주 쓰는 태그」 순서의 기록(0157). 설문을 지목하지 않아 설문 관문이 없고,
+ * 태그 소유는 서비스가 요청자 id 로 본다.
+ */
+const recordFilter = authed
+  .input(RecordTagFilterInput)
+  .output(RecordTagFilterOutput)
+  .handler(({ input, context }) =>
+    svc.recordTagFilter(context.user.id, input).catch(rethrowPersonalMarksError),
+  );
+
 export const personalMarks = {
   setFavorite,
   mine,
@@ -104,4 +117,5 @@ export const personalMarks = {
   createTag,
   updateTag,
   deleteTag,
+  recordFilter,
 };

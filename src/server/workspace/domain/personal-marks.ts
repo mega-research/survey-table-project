@@ -12,6 +12,8 @@ export {
   DeletePersonalTagInput,
   DeletePersonalTagOutput,
   MinePersonalTagsOutput,
+  RecordTagFilterInput,
+  RecordTagFilterOutput,
   SetFavoriteInput,
   SetFavoriteOutput,
   SetTagLinkInput,
@@ -25,6 +27,12 @@ export {
   isPersonalTagLimitReached,
   pickPersonalTagColor,
 } from '@/shared/contracts/workspace';
+
+/**
+ * 「자주 쓰는 태그」 점수의 반감기(일) — 14일 동안 걸지 않으면 점수가 절반이 된다. 설문이 몇 달 단위
+ * 프로젝트라 끝난 사업 태그가 옛 클릭 수로 앞자리를 계속 차지하지 않게 한다(0157).
+ */
+export const PERSONAL_TAG_FILTER_HALF_LIFE_DAYS = 14;
 
 /** 내 태그가 아니거나 없는 태그 — 둘을 가르지 않는다(남의 태그 존재를 알리지 않는다). */
 export class PersonalTagNotFoundError extends Error {

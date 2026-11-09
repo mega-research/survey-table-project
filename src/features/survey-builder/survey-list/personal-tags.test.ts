@@ -165,7 +165,16 @@ describe('resolveQuickTags — 툴바 자주 쓰는 태그 줄', () => {
     linkCount,
   });
 
-  it('많이 쓴 순, 동점은 가나다순이다', () => {
+  it('최근 자주 검색에 건 순이다 — 붙인 수보다 앞선다 (0157)', () => {
+    const tags = [
+      { ...used('a', '가', 9), recentFilterScore: 0.5 },
+      { ...used('b', '나', 1), recentFilterScore: 3 },
+      used('c', '다', 5),
+    ];
+    expect(resolveQuickTags(tags).map((t) => t.id)).toEqual(['b', 'a', 'c']);
+  });
+
+  it('검색에 건 적이 없으면(점수 0·없음) 많이 쓴 순, 동점은 가나다순이다', () => {
     const tags = [used('a', '나', 1), used('b', '가', 3), used('c', '다', 3)];
     expect(resolveQuickTags(tags).map((t) => t.id)).toEqual(['b', 'c', 'a']);
   });

@@ -81,16 +81,19 @@ export function resolveTagFilterList(
 export const QUICK_TAG_LIMIT = 10;
 
 /**
- * 툴바 「자주 쓰는 태그」 줄 — 설문에 하나 이상 붙은 내 태그를 많이 쓴 순(동점은 가나다순)으로 최대
- * `QUICK_TAG_LIMIT` 개. 붙은 설문이 없는 태그는 눌러도 빈 목록이라 빼고, 걸린 검색 칩이어도 자리를
- * 옮기지 않는다(누를 때마다 줄이 뒤섞이면 다음 칩을 다시 찾아야 한다).
+ * 툴바 「자주 쓰는 태그」 줄 — 설문에 하나 이상 붙은 내 태그를 **최근 자주 검색에 건 순**으로 최대
+ * `QUICK_TAG_LIMIT` 개(0157). 점수가 같으면(아직 아무것도 걸지 않았을 때 포함) 많이 붙인 순, 그다음
+ * 가나다순이다. 붙은 설문이 없는 태그는 눌러도 빈 목록이라 빼고, 걸린 검색 칩이어도 자리를 옮기지 않는다.
  */
 export function resolveQuickTags(tags: readonly PersonalTagItem[]): PersonalTagItem[] {
-  return resolveTagFilterList(
-    tags.filter((t) => t.linkCount > 0),
-    '',
-    'usage',
-  ).slice(0, QUICK_TAG_LIMIT);
+  const score = (t: PersonalTagItem) => t.recentFilterScore ?? 0;
+  return tags
+    .filter((t) => t.linkCount > 0)
+    .sort(
+      (a, b) =>
+        score(b) - score(a) || b.linkCount - a.linkCount || a.name.localeCompare(b.name, 'ko'),
+    )
+    .slice(0, QUICK_TAG_LIMIT);
 }
 
 /**

@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
   check,
+  doublePrecision,
   index,
   integer,
   jsonb,
@@ -363,6 +364,9 @@ export const personalSurveyTags = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
     color: text('color').$type<PersonalTagColor>().notNull(),
+    // 검색에 건 빈도(0157) — 걸 때마다 +1, 14일마다 절반. 감쇠는 last_filtered_at 으로 계산한다.
+    filterScore: doublePrecision('filter_score').notNull().default(0),
+    lastFilteredAt: timestamp('last_filtered_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -376,6 +380,7 @@ export const personalSurveyTags = pgTable(
       'personal_survey_tags_color_check',
       sql`${t.color} IN ('blue', 'red', 'green', 'purple', 'amber', 'teal', 'pink', 'gray')`,
     ),
+    check('personal_survey_tags_filter_score_check', sql`${t.filterScore} >= 0`),
   ],
 );
 

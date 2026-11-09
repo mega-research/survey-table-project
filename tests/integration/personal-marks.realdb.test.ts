@@ -38,6 +38,7 @@ import {
   deleteTag,
   listMyTags,
   lockPersonalTags,
+  recordTagFilter,
   setFavorite,
   setTagLink,
   updateTag,
@@ -281,6 +282,48 @@ describe.skipIf(!isLocalDb)('개인 표시 — 내 태그 (real local DB)', () =
       on: false,
     });
     expect(await linkRows(TS.link)).toEqual([]);
+  });
+
+  it('검색에 걸 때마다 점수가 1 씩 오르고 내 목록에 보인다 — 남의 태그·없는 태그는 NOT_FOUND (0157)', async () => {
+    const tagId = await seedTag(T_ME, '자주 거름');
+    const othersTag = await seedTag(T_OTHER, '남이 거름');
+
+    const before = (await listMyTags(T_ME)).tags.find((t) => t.id === tagId);
+    expect(before?.recentFilterScore).toBe(0);
+
+    await recordTagFilter(T_ME, { tagId });
+    await recordTagFilter(T_ME, { tagId });
+    const after = (await listMyTags(T_ME)).tags.find((t) => t.id === tagId);
+    // 두 번 사이 감쇠는 밀리초 단위라 2 에 아주 가깝다.
+    expect(after?.recentFilterScore).toBeGreaterThan(1.99);
+    expect(after?.recentFilterScore).toBeLessThanOrEqual(2);
+
+    await expect(recordTagFilter(T_ME, { tagId: othersTag })).rejects.toBeInstanceOf(
+      PersonalTagNotFoundError,
+    );
+    await expect(recordTagFilter(T_ME, { tagId: crypto.randomUUID() })).rejects.toBeInstanceOf(
+      PersonalTagNotFoundError,
+    );
+    const [others] = await db
+      .select({ score: personalSurveyTagsTable.filterScore })
+      .from(personalSurveyTagsTable)
+      .where(eq(personalSurveyTagsTable.id, othersTag));
+    expect(others?.score).toBe(0);
+  });
+
+  it('점수는 14일마다 절반이 된다 — 마지막으로 건 시각에서 감쇠한 뒤 1 을 더한다 (0157)', async () => {
+    const tagId = await seedTag(T_ME, '오래전 거름');
+    // 28일 전에 4점이었다 → 지금 1점, 한 번 더 걸면 2점.
+    await db
+      .update(personalSurveyTagsTable)
+      .set({ filterScore: 4, lastFilteredAt: new Date(Date.now() - 28 * 86_400_000) })
+      .where(eq(personalSurveyTagsTable.id, tagId));
+    const decayed = (await listMyTags(T_ME)).tags.find((t) => t.id === tagId);
+    expect(decayed?.recentFilterScore).toBeCloseTo(1, 3);
+
+    await recordTagFilter(T_ME, { tagId });
+    const bumped = (await listMyTags(T_ME)).tags.find((t) => t.id === tagId);
+    expect(bumped?.recentFilterScore).toBeCloseTo(2, 3);
   });
 
   it('남의 태그 id 로 붙이기·떼기 → 없는 태그와 같은 NOT_FOUND, 행도 안 생긴다', async () => {
@@ -557,7 +600,13 @@ describe.skipIf(!isLocalDb)('개인 표시 — 내 태그 고치기·지우기 (
 
     const result = await updateTag(ME_E, { tagId: target, color: 'teal' });
 
-    expect(result).toEqual({ id: target, name: '색 바꿀 태그', color: 'teal', linkCount: 1 });
+    expect(result).toEqual({
+      id: target,
+      name: '색 바꿀 태그',
+      color: 'teal',
+      linkCount: 1,
+      recentFilterScore: 0,
+    });
     const after = await tagRow(target);
     expect(after?.updatedAt.getTime()).toBeGreaterThan(before!.updatedAt.getTime());
   });

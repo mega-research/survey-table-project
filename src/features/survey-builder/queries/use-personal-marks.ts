@@ -370,3 +370,14 @@ export function useDeletePersonalTag(): (tagId: string) => Promise<boolean> {
     return true;
   };
 }
+
+/**
+ * 태그를 검색에 걸었다고 기록한다 (0157) — `(tagId) => void`. 툴바 「자주 쓰는 태그」 순서의 재료일 뿐이라
+ * 기다리지 않고, 실패해도 알리지 않는다(거르기는 주소가 이미 했다). 내 태그를 다시 읽지 않는다 — 누를
+ * 때마다 줄이 뒤섞이면 다음 칩을 다시 찾아야 한다. 순서는 다음에 내 태그를 읽을 때 바뀐다.
+ */
+export function useRecordTagFilter(): (tagId: string) => void {
+  return (tagId) => {
+    void client.workspace.personalMarks.recordFilter({ tagId }).catch(() => {});
+  };
+}
