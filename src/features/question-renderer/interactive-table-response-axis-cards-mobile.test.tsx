@@ -204,3 +204,81 @@ describe('InteractiveTableResponse — 축 단위 카드의 글자 없는 체크
     expect(within(card).getAllByText('⑦ 기타')).toHaveLength(2);
   });
 });
+
+describe('InteractiveTableResponse — 축 단위 카드의 보기 그룹 열', () => {
+  // 청암대 재학생 문14 — 표 유형 + 열마다 복수선택 보기 그룹. 전에는 축 카드가 보기 칸을 세지 않아 아무것도 안 그렸다.
+  const groupColumns: TableColumn[] = [
+    { id: 'know', label: '알고 있음', width: 140 },
+    { id: 'used', label: '이용한 적 있음', width: 140 },
+    { id: 'dept', label: '행정부서', width: 600 },
+  ];
+  const opt = (id: string, group: string, choiceLabel: string) => ({
+    id,
+    type: 'choice_opt' as const,
+    content: '',
+    choiceGroupId: group,
+    choiceLabel,
+    spssNumericCode: 1,
+  });
+  const groupRows: TableRow[] = [
+    {
+      id: 'r1',
+      label: '교무처',
+      cells: [
+        opt('r1-k', 'gK', '교무처'),
+        opt('r1-u', 'gU', '교무처'),
+        { id: 'r1-d', type: 'text', content: '1. 교무처 (증명 발급 등)' },
+      ],
+    },
+    {
+      id: 'r2',
+      label: '사무처',
+      cells: [
+        opt('r2-k', 'gK', '사무처'),
+        opt('r2-u', 'gU', '사무처'),
+        { id: 'r2-d', type: 'text', content: '2. 사무처 (등록금 수납 등)' },
+      ],
+    },
+  ];
+
+  function GroupHarness() {
+    const [value, setValue] = useState<Record<string, unknown>>({});
+    return (
+      <>
+        <InteractiveTableResponse
+          questionId="q14"
+          columns={groupColumns}
+          rows={groupRows}
+          choiceGroups={[
+            { id: 'gK', groupKey: 'chk01', type: 'checkbox', label: '알고 있음' },
+            { id: 'gU', groupKey: 'chk02', type: 'checkbox', label: '이용한 적 있음' },
+          ]}
+          mobileTableDisplayMode="axis-cards"
+          value={value}
+          onChange={setValue}
+        />
+        <output data-testid="value">{JSON.stringify(value)}</output>
+      </>
+    );
+  }
+
+  it('보기 그룹 열마다 카드가 서고, 보기 타일의 글자는 행 제목이다', () => {
+    render(<GroupHarness />);
+    const know = screen.getByTestId('column-axis-card-know');
+    const used = screen.getByTestId('column-axis-card-used');
+    expect(within(know).getByTestId('column-axis-card-header')).toHaveTextContent('알고 있음');
+    expect(within(used).getByTestId('column-axis-card-header')).toHaveTextContent('이용한 적 있음');
+    expect(within(know).getAllByRole('checkbox')).toHaveLength(2);
+    expect(within(know).getByText('1. 교무처 (증명 발급 등)')).toBeInTheDocument();
+    expect(screen.queryByTestId('column-axis-card-dept')).toBeNull();
+  });
+
+  it('고르면 그 그룹 키 아래에 보기 칸 id 가 쓰인다', () => {
+    render(<GroupHarness />);
+    const used = screen.getByTestId('column-axis-card-used');
+    fireEvent.click(within(used).getAllByRole('checkbox')[1]!);
+    expect(JSON.parse(screen.getByTestId('value').textContent ?? '{}')).toEqual({
+      __choiceGroups: { chk02: ['r2-u'] },
+    });
+  });
+});
