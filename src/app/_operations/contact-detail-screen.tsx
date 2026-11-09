@@ -19,6 +19,7 @@ import {
 } from '@/server/read-models/contacts';
 import { listAssignmentOptions } from '@/server/read-models/contact-assignment-options';
 import { getContactTargetEditLogs } from '@/server/read-models/contact-target-edit-logs';
+import { loadFieldworkLinkNames } from '@/server/read-models/fieldwork-link-names';
 import { LINK_CONTACT_EDITOR_LABEL } from '@/shared/contracts/contacts';
 import { isReeditableResponseStatus } from '@/shared/contracts/survey-response';
 import type { SurveyCapability } from '@/shared/contracts/workspace';
@@ -64,6 +65,11 @@ interface Props {
    * 외주는 응답을 고칠 수 있어 편집 이력을 보지만, 그 행에 실린 연구원 이메일은 외주의 일과
    * 무관한 내부 명단이다. capability 로 물을 수 없다 — 이력을 볼 자격과 명단을 볼 자격이 같지
    * 않다. 걷은 행은 화면이 「관리자」로, 외주가 고친 행은 「외주」로 읽는다.
+   *
+   * **링크 이름표도 같은 스위치다** (fieldwork-multi-company 티켓 02). 내부 콘솔은 외주가 남긴 줄을
+   * 「외주 · <이름표>」로 읽고(어느 업체가 걸었는지), 외주 콘솔은 「외주」 하나다 — 이름표는 연구원의
+   * 메모라 외주 쪽에서는 **읽지도 않는다**(`loadFieldworkLinkNames` 를 부르지 않는다). 내부 명단과
+   * 같은 부류의 정보라 스위치를 따로 두지 않았다 — 둘이 갈리는 화면이 없다.
    */
   hideStaffEmails?: boolean;
   /**
@@ -86,7 +92,9 @@ export async function ContactDetailScreen({
 }: Props) {
   // surveyId 는 read-model 의 WHERE 로 내려간다 — 사후 비교로 두면 타 팀 컨택의 PII 가
   // 이미 복호화된 뒤에 접히게 된다(티켓 15).
-  const detail = await getContactDetailById(contactId, surveyId, scope);
+  // 내부 콘솔만 링크 이름을 읽는다 — 외주 콘솔에는 이름표가 어떤 모양으로도 실리지 않는다.
+  const linkNames = hideStaffEmails ? undefined : await loadFieldworkLinkNames(surveyId);
+  const detail = await getContactDetailById(contactId, surveyId, scope, linkNames);
   if (!detail) notFound();
 
   const permissions = contactDetailPermissions(capabilities, { proxyRespond: canProxyRespond });
@@ -116,9 +124,14 @@ export async function ContactDetailScreen({
     getContactColumnScheme(surveyId, scope),
     getContactResultCodes(surveyId),
     permissions.viewMail ? getMailRecipientsForTarget(detail.contact.id, scope) : [],
-    permissions.editResponses ? getResponseEditLogs(editableResponseId, detail.contact.id) : [],
+    permissions.editResponses
+      ? getResponseEditLogs(editableResponseId, detail.contact.id, linkNames)
+      : [],
     // 대상 정보 수정 현황 — 컨택원을 내리지 않는 화면(외주 링크)이면 로더가 컨택원 변경을 빼고 싣는다.
-    getContactTargetEditLogs(detail.contact.id, scope, { isGuest: !includeContactOwner }),
+    getContactTargetEditLogs(detail.contact.id, scope, {
+      isGuest: !includeContactOwner,
+      ...(linkNames ? { linkNames } : {}),
+    }),
     permissions.sendMail ? getMailTemplatesBySurvey(surveyId) : [],
     showAssignment ? listAssignmentOptions(surveyId, scope) : null,
   ]);

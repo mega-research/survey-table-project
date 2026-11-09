@@ -4,8 +4,14 @@ import 'server-only';
 import { db } from '@/db';
 import { contactTargetEditLogs, contactTargets } from '@/db/schema';
 import { type OperationsDataScope, targetScopeCondition } from '@/server/data-scope';
-import type { ContactTargetEditChange } from '@/shared/contracts/contacts';
+import {
+  type ContactTargetEditChange,
+  LINK_EDITOR_ID_PREFIX,
+  linkEditorLabel,
+} from '@/shared/contracts/contacts';
 import type { ContactTargetEditLogRow } from '@/shared/contracts/contacts-io';
+
+import type { FieldworkLinkNames } from './fieldwork-link-names';
 
 /** 상세 화면이 한 번에 읽는 기록 상한. 대상당 기록은 사람이 손으로 고친 횟수라 작다. */
 export const CONTACT_TARGET_EDIT_LOG_LIMIT = 200;
@@ -32,12 +38,20 @@ export function visibleContactTargetEditChanges(
 export async function getContactTargetEditLogs(
   contactTargetId: string,
   scope: OperationsDataScope,
-  viewer: { isGuest: boolean },
+  viewer: {
+    isGuest: boolean;
+    /**
+     * 내부 콘솔만 넘긴다 — 링크가 남긴 줄(`edited_by = link:<id>`)의 기록자를 「외주 · <링크 이름>」
+     * 으로 읽는다(fieldwork-multi-company 티켓 02). 없으면 저장된 글자(「외주」) 그대로다.
+     */
+    linkNames?: FieldworkLinkNames;
+  },
 ): Promise<ContactTargetEditLogRow[]> {
   const rows = await db
     .select({
       id: contactTargetEditLogs.id,
       action: contactTargetEditLogs.action,
+      editedBy: contactTargetEditLogs.editedBy,
       editorEmail: contactTargetEditLogs.editorEmail,
       changes: contactTargetEditLogs.changes,
       createdAt: contactTargetEditLogs.createdAt,
@@ -51,10 +65,16 @@ export async function getContactTargetEditLogs(
     .limit(CONTACT_TARGET_EDIT_LOG_LIMIT);
 
   const visible: ContactTargetEditLogRow[] = [];
-  for (const row of rows) {
+  for (const { editedBy, ...row } of rows) {
     const changes = visibleContactTargetEditChanges(row.changes, viewer);
     if (changes.length === 0) continue;
-    visible.push({ ...row, changes });
+    const linkId = editedBy?.startsWith(LINK_EDITOR_ID_PREFIX)
+      ? editedBy.slice(LINK_EDITOR_ID_PREFIX.length)
+      : null;
+    // 편집자 id 는 행 모양에 싣지 않는다 — 이름으로 바꾸는 데만 쓴다.
+    const editorEmail =
+      viewer.linkNames && linkId ? linkEditorLabel(viewer.linkNames.get(linkId)) : row.editorEmail;
+    visible.push({ ...row, editorEmail, changes });
   }
   return visible;
 }

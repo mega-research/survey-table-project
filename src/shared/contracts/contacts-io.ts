@@ -214,7 +214,10 @@ export interface ContactAttemptRow {
   attemptNo: number;
   resultCode: string;
   note: string | null;
-  /** 기록자 이메일 스냅샷 — 기록자 기능(0152) 전에 적힌 회차는 null(화면은 「-」). */
+  /**
+   * 기록자 이메일 스냅샷 — 기록자 기능(0152) 전에 적힌 회차는 null(화면은 「-」). 외주 링크가 넣은
+   * 회차는 「외주」이고, 내부 콘솔에서는 「외주 · <링크 이름>」으로 읽어 싣는다(티켓 02).
+   */
   createdByEmail: string | null;
   createdAt: Date;
 }
@@ -238,6 +241,10 @@ export interface MailHistoryRow {
 export interface ResponseEditLogRow {
   id: string;
   action: 'edit' | 'reset' | 'reedit_allow';
+  /**
+   * 기록자 글자. 계정이면 이메일, 링크가 고친 행이면 **내부 콘솔에서만** 「외주 · <링크 이름>」을
+   * 서버가 채운다(fieldwork-multi-company 티켓 02). 외주 콘솔은 전부 걷어 null 이다.
+   */
   editorEmail: string | null;
   /** 외주 실사 링크가 고친 행인가 (0133, ADR-0027) — 계정이 없어 이메일 대신 「외주」로 읽는다. */
   byFieldworkLink: boolean;

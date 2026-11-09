@@ -6,6 +6,7 @@ import { attrsKeyOf, piiKeyOf } from '@/lib/operations/contacts-format';
 import {
   CONTACT_TARGET_EDIT_VALUE_MAX,
   LINK_CONTACT_EDITOR_LABEL,
+  LINK_EDITOR_ID_PREFIX,
   type ContactColumnScheme,
   type ContactTargetEditAttemptSnapshot,
   type ContactTargetEditChange,
@@ -25,7 +26,7 @@ export function contactEditorOf(user: { id: string; email?: string | null }): Co
 
 /** 외주 실사 링크 → 편집자. id 는 감사 추적용 `link:<링크 id>` (edited_by 는 text 다). */
 export function linkContactEditor(linkId: string): ContactEditor {
-  return { id: `link:${linkId}`, email: LINK_CONTACT_EDITOR_LABEL };
+  return { id: `${LINK_EDITOR_ID_PREFIX}${linkId}`, email: LINK_CONTACT_EDITOR_LABEL };
 }
 
 /** 대상 정보 저장이 비교하는 값 묶음. attrs 는 PII 정제 뒤의 값이어야 한다. */

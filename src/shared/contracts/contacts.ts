@@ -244,6 +244,20 @@ export const CONTACT_TARGET_EDIT_VALUE_MAX = 1000;
  */
 export const LINK_CONTACT_EDITOR_LABEL = '외주';
 
+/**
+ * 내부 화면의 기록자 글자 — 외주 링크가 남긴 줄을 「외주 · <링크 이름>」으로 읽는다
+ * (fieldwork-multi-company 티켓 02, ADR-0035). 링크 이름은 **읽는 시점의** 이름표(없으면 순번 —
+ * `fieldworkLinkName`)라 이름표를 고치면 지난 줄도 새 이름으로 보인다. 이름을 모르면 「외주」다.
+ *
+ * 외주 콘솔에는 쓰지 않는다 — 그쪽은 `LINK_CONTACT_EDITOR_LABEL` 하나다(링크끼리 서로를 모른다).
+ */
+export function linkEditorLabel(linkName: string | null | undefined): string {
+  return linkName ? `${LINK_CONTACT_EDITOR_LABEL} · ${linkName}` : LINK_CONTACT_EDITOR_LABEL;
+}
+
+/** 대상 정보 수정 현황의 `edited_by` 가 링크를 가리킬 때의 접두 — `link:<링크 id>` (text 칸이다). */
+export const LINK_EDITOR_ID_PREFIX = 'link:';
+
 export type ContactTargetEditPiiOp = 'set' | 'changed' | 'cleared';
 
 /** 컨택원 스냅샷 — 이름은 그때 이름이다(나중에 바뀌거나 지워져도 기록은 읽힌다). */

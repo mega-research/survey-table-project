@@ -1,6 +1,7 @@
 import { ChevronDown } from 'lucide-react';
 
 import { LocalDateTime } from '@/components/ui/local-date-time';
+import { LINK_CONTACT_EDITOR_LABEL } from '@/shared/contracts/contacts';
 import type { ResponseEditLogRow } from '@/shared/contracts/contacts-io';
 import type { ResponseEditChange } from '@/shared/contracts/survey-response';
 
@@ -41,7 +42,11 @@ export function ContactEditHistoryCard({ rows, hasResponse }: Props) {
             {rows.map((r) => (
               <li key={r.id} className="border-b border-slate-100 pb-2 last:border-0 last:pb-0">
                 <div className="text-sm text-slate-700">
-                  {r.byFieldworkLink ? '외주' : (r.editorEmail ?? '관리자')}
+                  {/* 링크가 고친 행 — 내부 콘솔은 서버가 「외주 · 이름표」를 채워 보내고, 외주 콘솔은
+                      이메일을 걷어 보내 「외주」 하나로 읽힌다(fieldwork-multi-company 티켓 02). */}
+                  {r.byFieldworkLink
+                    ? (r.editorEmail ?? LINK_CONTACT_EDITOR_LABEL)
+                    : (r.editorEmail ?? '관리자')}
                 </div>
                 <div className="text-xs text-slate-500">
                   <LocalDateTime value={r.createdAt} /> ·{' '}

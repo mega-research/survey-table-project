@@ -54,7 +54,7 @@ import {
   responseScopeCondition,
   targetScopeCondition,
 } from '@/server/data-scope';
-import type { ContactColumnScheme } from '@/shared/contracts/contacts';
+import { type ContactColumnScheme, linkEditorLabel } from '@/shared/contracts/contacts';
 import {
   CONTACT_METHOD_LABEL,
   type ContactMethod,
@@ -71,6 +71,7 @@ import type {
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
 
 import type { ResolvedContactFilter } from './contact-filter-resolution';
+import type { FieldworkLinkNames } from './fieldwork-link-names';
 
 // 표가 props 로 받는 행 모양은 계약(@/shared/contracts/contacts-io) 소관 — 여기서 다시 내보내
 // 기존 호출부(RSC·서비스)의 import 경로를 유지한다.
@@ -454,6 +455,11 @@ export async function getContactDetailById(
    */
   surveyId: string,
   scope: OperationsDataScope,
+  /**
+   * 내부 콘솔만 넘긴다 — 외주 링크가 남긴 회차의 기록자를 「외주 · <링크 이름>」으로 읽는다
+   * (fieldwork-multi-company 티켓 02). 없으면 저장된 글자(「외주」) 그대로다.
+   */
+  linkNames?: FieldworkLinkNames,
 ): Promise<ContactDetailResult | null> {
   const [contact] = await db
     .select({
@@ -485,7 +491,7 @@ export async function getContactDetailById(
 
   if (!contact) return null;
 
-  const [piiDecrypted, attempts] = await Promise.all([
+  const [piiDecrypted, attemptRows] = await Promise.all([
     decryptForTarget(id),
     db
       .select({
@@ -494,12 +500,19 @@ export async function getContactDetailById(
         resultCode: contactAttempts.resultCode,
         note: contactAttempts.note,
         createdByEmail: contactAttempts.createdByEmail,
+        fieldworkLinkId: contactAttempts.fieldworkLinkId,
         createdAt: contactAttempts.createdAt,
       })
       .from(contactAttempts)
       .where(eq(contactAttempts.contactTargetId, id))
       .orderBy(desc(contactAttempts.attemptNo)),
   ]);
+  // 링크 id 는 행 모양에 싣지 않는다 — 이름으로 바꾸는 데만 쓴다(외주 콘솔에 다른 링크 id 가 실리지 않게).
+  const attempts = attemptRows.map(({ fieldworkLinkId, ...row }) => ({
+    ...row,
+    createdByEmail:
+      linkNames && fieldworkLinkId ? linkEditorLabel(linkNames.get(fieldworkLinkId)) : row.createdByEmail,
+  }));
 
   return {
     contact: {
@@ -601,6 +614,8 @@ export async function getMailRecipientsForTarget(
 export async function getResponseEditLogs(
   responseId: string | null,
   contactTargetId?: string | null,
+  /** 내부 콘솔만 넘긴다 — 링크가 고친 행의 기록자를 「외주 · <링크 이름>」으로 읽는다(티켓 02). */
+  linkNames?: FieldworkLinkNames,
 ): Promise<ResponseEditLogRow[]> {
   const conds: SQL[] = [];
   if (responseId) conds.push(eq(responseEditLogs.responseId, responseId));
@@ -643,7 +658,8 @@ export async function getResponseEditLogs(
   return rows.map((r) => ({
     id: r.id,
     action: r.action,
-    editorEmail: r.editorEmail,
+    editorEmail:
+      linkNames && r.fieldworkLinkId ? linkEditorLabel(linkNames.get(r.fieldworkLinkId)) : r.editorEmail,
     byFieldworkLink: r.fieldworkLinkId !== null,
     changedQuestions: mergeChangeLabels(r.changedQuestions, labelMap),
     changedCount: r.changedCount,
