@@ -1,3 +1,4 @@
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 import { createRouterClient, ORPCError } from '@orpc/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -73,6 +74,7 @@ describe('surveyResponse.edit procedures', () => {
       input,
       { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
       false,
+      FIELDWORK_SHARE_ALL,
     );
     expect(res).toEqual({ ok: true });
   });
@@ -192,6 +194,7 @@ describe('surveyResponse.edit procedures', () => {
       input,
       { attribution: { accountUserId: 'guest-1', fieldworkLinkId: null }, email: 'g@b.com' },
       true,
+      FIELDWORK_SHARE_ALL,
     );
     expect(res).toEqual({ ok: true });
   });
@@ -220,6 +223,7 @@ describe('surveyResponse.edit procedures', () => {
       input,
       { attribution: { accountUserId: 'guest-1', fieldworkLinkId: null }, email: 'g@b.com' },
       true,
+      FIELDWORK_SHARE_ALL,
     );
     expect(res).toEqual({ ok: true });
   });
@@ -236,6 +240,7 @@ describe('surveyResponse.edit procedures', () => {
     await client.edit.saveAdminEdit(input);
     expect(vi.mocked(svc.saveAdminEdit)).toHaveBeenCalledWith(
       expect.objectContaining({ versionId: 'v-latest' }),
+      expect.anything(),
       expect.anything(),
       expect.anything(),
     );
@@ -282,6 +287,7 @@ describe('surveyResponse.edit — 외주 실사 링크 (ADR-0027)', () => {
       input,
       { attribution: { accountUserId: null, fieldworkLinkId: LINK_ID }, email: null },
       true,
+      FIELDWORK_SHARE_ALL,
     );
   });
 });

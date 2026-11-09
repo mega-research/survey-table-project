@@ -17,6 +17,7 @@ import {
   normalizeListArgs,
 } from '@/lib/operations/profiles-format';
 import { EXTERNAL_VIEWER_DATA_SCOPE } from '@/server/data-scope';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 import {
   getActiveClientLinkResponseColumns,
   loadClientResponseColumnMaterial,
@@ -82,6 +83,8 @@ export async function listClientResponses(
     listResponsesForProfiles({
       surveyId,
       scope,
+      // 클라이언트 링크에는 담당 범위 축이 없다 — 설문 전체(ADR-0029, ADR-0035).
+      share: FIELDWORK_SHARE_ALL,
       pageSize: PROFILES_PAGE_SIZE,
       page: args.page,
       status: args.status,

@@ -1,3 +1,4 @@
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 import { Param } from 'drizzle-orm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -133,6 +134,7 @@ async function edit() {
     { surveyId: SURVEY_ID, responseId: RESPONSE_ID, questionResponses: { q1: '남' }, versionId: null },
     EDITOR,
     false,
+    FIELDWORK_SHARE_ALL,
   );
 }
 

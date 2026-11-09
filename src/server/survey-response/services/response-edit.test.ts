@@ -1,3 +1,4 @@
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 import { Param } from 'drizzle-orm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -215,6 +216,7 @@ describe('saveAdminEdit 파티션 가드', () => {
         { surveyId: SURVEY_ID, responseId: RESPONSE_ID, questionResponses: {}, versionId: null },
         EDITOR,
         true,
+        FIELDWORK_SHARE_ALL,
       ),
     ).rejects.toMatchObject({ reason: 'response_not_found' });
 
@@ -240,6 +242,7 @@ describe('saveAdminEdit 파티션 가드', () => {
         { surveyId: SURVEY_ID, responseId: RESPONSE_ID, questionResponses: {}, versionId: null },
         EDITOR,
         true,
+        FIELDWORK_SHARE_ALL,
       ),
     ).resolves.toEqual({ ok: true });
   });
@@ -262,6 +265,7 @@ describe('saveAdminEdit 파티션 가드', () => {
         { surveyId: SURVEY_ID, responseId: RESPONSE_ID, questionResponses: {}, versionId: null },
         EDITOR,
         false,
+        FIELDWORK_SHARE_ALL,
       ),
     ).resolves.toEqual({ ok: true });
   });
@@ -301,6 +305,7 @@ describe('saveAdminEdit 이탈 응답 완료 전환', () => {
         },
         EDITOR,
         false,
+        FIELDWORK_SHARE_ALL,
       ),
     ).resolves.toEqual({ ok: true });
 
@@ -323,6 +328,7 @@ describe('saveAdminEdit 이탈 응답 완료 전환', () => {
       },
       EDITOR,
       false,
+      FIELDWORK_SHARE_ALL,
     );
 
     const row = h.responses[0]!;
@@ -343,6 +349,7 @@ describe('saveAdminEdit 이탈 응답 완료 전환', () => {
       },
       EDITOR,
       false,
+      FIELDWORK_SHARE_ALL,
     );
 
     const row = h.responses[0]!;
@@ -387,6 +394,7 @@ describe('버전 가드와 이관', () => {
         { surveyId: SURVEY_ID, responseId: RESPONSE_ID, questionResponses: {}, versionId: 'v84' },
         EDITOR,
         false,
+        FIELDWORK_SHARE_ALL,
       ),
     ).rejects.toMatchObject({ reason: 'version_conflict' });
 
@@ -408,6 +416,7 @@ describe('버전 가드와 이관', () => {
         },
         EDITOR,
         false,
+        FIELDWORK_SHARE_ALL,
       ),
     ).resolves.toEqual({ ok: true });
 
@@ -445,6 +454,7 @@ describe('버전 가드와 이관', () => {
       },
       EDITOR,
       false,
+      FIELDWORK_SHARE_ALL,
     );
 
     expect(h.lastSetPayload?.['versionId']).toBe('v84');
@@ -465,6 +475,7 @@ describe('버전 가드와 이관', () => {
         },
         EDITOR,
         false,
+        FIELDWORK_SHARE_ALL,
       ),
     ).resolves.toEqual({ ok: true });
 
@@ -488,6 +499,7 @@ describe('버전 가드와 이관', () => {
         },
         EDITOR,
         false,
+        FIELDWORK_SHARE_ALL,
       ),
     ).resolves.toEqual({ ok: true });
 
@@ -510,6 +522,7 @@ describe('버전 가드와 이관', () => {
         { surveyId: SURVEY_ID, responseId: RESPONSE_ID, questionResponses: {}, versionId: null },
         EDITOR,
         false,
+        FIELDWORK_SHARE_ALL,
       ),
     ).resolves.toEqual({ ok: true });
 

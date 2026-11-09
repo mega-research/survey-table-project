@@ -1,3 +1,4 @@
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 import { describe, expect, it, vi } from 'vitest';
 import { extractRawSql } from './_helpers/result-code-mock';
 
@@ -72,6 +73,7 @@ function renderScreen() {
     basePath: `/surveys/${SURVEY_ID}/operations`,
     scope: 'real' as never,
     idx: null,
+    share: FIELDWORK_SHARE_ALL,
   });
 }
 

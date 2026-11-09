@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 
 import { fieldworkLinkOperationsBase } from '@/features/operations/operations-paths';
 import { getOperationsDataScope } from '@/server/data-scope';
+import { resolveFieldworkShare } from '@/server/fieldwork-share';
 import { assertFieldworkLinkPageAccess } from '@/server/page-fieldwork-link-access';
 
 import { ProfilesScreen, type ProfilesSearchParams } from '@/app/_operations/profiles-screen';
@@ -23,6 +24,8 @@ interface PageProps {
  *
  * 파티션은 언제나 real 이다 — 링크 주체를 넘기면 「내부가 아니면 real」 술어가 정한다.
  * 설문 id 는 관문이 돌려준 값만 쓴다(주소에는 토큰뿐이다).
+ *
+ * 담당 범위를 나눈 링크는 자기 범위 대상의 응답만 본다 — 공개 링크 응답은 빠진다(ADR-0035).
  */
 export default async function FieldworkLinkProfilesPage({ params, searchParams }: PageProps) {
   const { token } = await params;
@@ -39,6 +42,7 @@ export default async function FieldworkLinkProfilesPage({ params, searchParams }
       basePath={fieldworkLinkOperationsBase(token)}
       capabilities={capabilities}
       scope={scope}
+      share={resolveFieldworkShare(actor, surveyId)}
       searchParams={sp}
     />
   );

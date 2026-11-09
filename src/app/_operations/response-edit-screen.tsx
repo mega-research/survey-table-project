@@ -12,6 +12,7 @@ import { getResponseById } from '@/server/read-models/responses';
 import { loadRespondentContactAttrs } from '@/server/read-models/respondent-contact-attrs';
 import { isResponseExcluded } from '@/server/operations/services/profiles';
 import { testFlagForScope, type OperationsDataScope } from '@/server/data-scope';
+import type { FieldworkShare } from '@/server/fieldwork-share';
 import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
 import { normalizeQuestions } from '@/lib/question/normalize';
 import { toFlatQuestion } from '@/lib/question/variants';
@@ -25,8 +26,9 @@ import { AdminResponseEditor } from './admin-response-editor';
  * 형제 `overview-screen` 의 주석에 이 폴더의 규칙이 있다: **가로질러 읽는 화면만 여기 온다.**
  * 이 조립은 응답·컨택·이월 응답·버전 스냅샷·조사표를 함께 읽는다.
  *
- * 관문(`responses.view`)은 라우트가 먼저 지난다. 트리마다 다른 것은 둘이다 — 저장 뒤 돌아갈
- * 주소(`basePath`)와 파티션(`scope`, 링크는 언제나 real).
+ * 관문(`responses.view`)은 라우트가 먼저 지난다. 트리마다 다른 것은 셋이다 — 저장 뒤 돌아갈
+ * 주소(`basePath`), 파티션(`scope`, 링크는 언제나 real), 담당 범위(`share`, 범위 밖 응답은 notFound).
+ * 저장도 같은 범위로 다시 막힌다(`saveAdminEdit` procedure).
  *
  * - getResponseById 로 응답 조회 (soft delete 포함).
  *   - 삭제된 응답이면 안내 화면 (복원 안내).
@@ -43,14 +45,23 @@ interface Props {
   /** 이 콘솔의 주소 접두. */
   basePath: string;
   scope: OperationsDataScope;
+  /** 담당 범위 — 내부는 설문 전체, `/fw` 는 페이지가 링크 주체로 해석해 넘긴다. */
+  share: FieldworkShare;
   /** 응답 내역의 순번(배너 표시용). 없으면 null. */
   idx: number | null;
 }
 
-export async function ResponseEditScreen({ surveyId, responseId, basePath, scope, idx }: Props) {
+export async function ResponseEditScreen({
+  surveyId,
+  responseId,
+  basePath,
+  scope,
+  share,
+  idx,
+}: Props) {
   // surveyId 는 read-model 의 WHERE 로 내려간다 — 사후 비교로 두면 타 팀 응답 원문이
   // 이미 복호화된 뒤에 접히게 된다(티켓 15).
-  const response = await getResponseById(responseId, { surveyId, includeDeleted: true });
+  const response = await getResponseById(responseId, { surveyId, includeDeleted: true, share });
   if (!response || response.isTest !== testFlagForScope(scope)) {
     notFound();
   }

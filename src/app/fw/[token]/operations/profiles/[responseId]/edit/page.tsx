@@ -1,5 +1,6 @@
 import { fieldworkLinkOperationsBase } from '@/features/operations/operations-paths';
 import { getOperationsDataScope } from '@/server/data-scope';
+import { resolveFieldworkShare } from '@/server/fieldwork-share';
 import { assertFieldworkLinkPageAccess } from '@/server/page-fieldwork-link-access';
 
 import { parseResponseIdx } from '@/app/_operations/response-edit-idx';
@@ -19,7 +20,8 @@ export const metadata = { title: '응답 수정' };
  *
  * 저장(`surveyResponse.edit.saveAdminEdit`)은 scoped 표면이라 링크 세션으로 지나고, 편집 이력에는
  * 계정 칸이 아니라 링크 칸이 남는다(0133). 응답은 관문이 돌려준 설문 id 로만 찾는다 — 주소의
- * responseId 가 남의 설문 것이면 read-model 의 WHERE 에서 떨어져 notFound 다.
+ * responseId 가 남의 설문 것이거나 이 링크의 담당 범위 밖이면 read-model 의 WHERE 에서 떨어져
+ * notFound 다(ADR-0035).
  */
 export default async function FieldworkLinkResponseEditPage({ params, searchParams }: PageProps) {
   const { token, responseId } = await params;
@@ -33,6 +35,7 @@ export default async function FieldworkLinkResponseEditPage({ params, searchPara
       responseId={responseId}
       basePath={fieldworkLinkOperationsBase(token)}
       scope={scope}
+      share={resolveFieldworkShare(actor, surveyId)}
       idx={parseResponseIdx(sp.idx)}
     />
   );

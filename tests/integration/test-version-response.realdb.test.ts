@@ -10,6 +10,7 @@
  *
  * 실행: pnpm test:integration (로컬 supabase 54322 필요)
  */
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 import { eq, inArray } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { afterAll, describe, expect, it, vi } from 'vitest';
@@ -318,6 +319,7 @@ describe.skipIf(!isLocalDb)('테스트 버전 위의 테스트 응답 실DB 왕�
         { surveyId: s.surveyId, responseId, versionId: published.id, questionResponses: { [s.ctrl]: 'no' } },
         { attribution: { accountUserId: null, fieldworkLinkId: null }, email: null },
         false,
+        FIELDWORK_SHARE_ALL,
       ),
     ).rejects.toBeInstanceOf(ResponseEditError);
 
@@ -330,6 +332,7 @@ describe.skipIf(!isLocalDb)('테스트 버전 위의 테스트 응답 실DB 왕�
       },
       { attribution: { accountUserId: null, fieldworkLinkId: null }, email: null },
       false,
+      FIELDWORK_SHARE_ALL,
     );
 
     const row = await rowOf(responseId);

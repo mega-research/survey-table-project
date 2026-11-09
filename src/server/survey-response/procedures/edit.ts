@@ -1,6 +1,7 @@
 import { ORPCError } from '@orpc/server';
 
 import { isExternalActor } from '@/server/data-scope';
+import { resolveFieldworkShare } from '@/server/fieldwork-share';
 import { scoped } from '@/server/orpc';
 import {
   assertScopedSurveyCapabilityRpc,
@@ -70,6 +71,8 @@ const saveAdminEdit = scoped
         },
         // 인증된 context 에서 1회 파생 — 서비스가 auth 를 재조회하지 않는다.
         isExternalActor(context.actor),
+        // 외주는 자기 담당 범위의 응답만 고친다 — 범위 밖은 「없음」(티켓 06).
+        resolveFieldworkShare(actor, input.surveyId),
       );
     } catch (err) {
       mapServiceError(err);

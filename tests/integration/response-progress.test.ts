@@ -1,3 +1,4 @@
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 // ========================
@@ -155,6 +156,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
       { surveyId: 's1', responseId: 'r1', questionResponses: { q1: 'v' }, versionId: null },
       { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
       false,
+      FIELDWORK_SHARE_ALL,
     );
 
     const completedCall = updateSetMock.mock.calls[0];
@@ -180,6 +182,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
       { surveyId: 's1', responseId: 'r1', questionResponses: {}, versionId: null },
       { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
       false,
+      FIELDWORK_SHARE_ALL,
     );
 
     const dropEmptyCall = updateSetMock.mock.calls[0];
@@ -212,6 +215,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
       },
       { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
       false,
+      FIELDWORK_SHARE_ALL,
     );
 
     const dropAnsweredCall = updateSetMock.mock.calls[0];
@@ -239,6 +243,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
         { surveyId: 's1', responseId: 'r1', questionResponses: { q1: 'a' }, versionId: null },
         { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
         false,
+        FIELDWORK_SHARE_ALL,
       ),
     ).resolves.toEqual({ ok: true });
 
@@ -265,6 +270,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
       },
       { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
       false,
+      FIELDWORK_SHARE_ALL,
     );
 
     const nullVersionCall = updateSetMock.mock.calls[0];
@@ -293,6 +299,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
         { surveyId: 's1', responseId: 'r1', questionResponses: { q1: 'a' }, versionId: null },
         { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
         false,
+        FIELDWORK_SHARE_ALL,
       ),
     ).rejects.toMatchObject({ reason: 'response_deleted' });
   });

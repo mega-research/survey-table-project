@@ -7,6 +7,7 @@
  *
  * 실행: pnpm test:integration (로컬 supabase 54322 필요)
  */
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 import { eq, inArray } from 'drizzle-orm';
 import { afterAll, describe, expect, it } from 'vitest';
 
@@ -172,6 +173,7 @@ describe.skipIf(!isLocalDb)('응답 확정 실DB 왕복', () => {
       },
       { attribution: { accountUserId: null, fieldworkLinkId: null }, email: null },
       false,
+      FIELDWORK_SHARE_ALL,
     );
 
     const row = await readRow(responseId);

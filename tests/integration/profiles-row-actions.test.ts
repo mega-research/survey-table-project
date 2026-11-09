@@ -1,3 +1,4 @@
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ========================
@@ -233,7 +234,8 @@ vi.mock('drizzle-orm', async (importOriginal) => {
       };
     },
     and: (...conds: Array<(row: Record<string, unknown>) => boolean>) => {
-      return (row: Record<string, unknown>) => conds.every((c) => c(row));
+      // drizzle 의 and() 처럼 undefined 조건은 건너뛴다(담당 범위 술어가 「설문 전체」면 undefined).
+      return (row: Record<string, unknown>) => conds.filter(Boolean).every((c) => c(row));
     },
     isNull: (col: { __col?: string }) => {
       // saveAdminEdit 의 isNull(deletedAt) 가드를 predicate 로 변환
@@ -534,6 +536,7 @@ describe('profiles-row-actions', () => {
         view: 'active' as const,
         clauses: [],
         scope: 'real' as const,
+        share: FIELDWORK_SHARE_ALL,
       };
 
       const before = await profilesServer.listResponsesForProfiles(normalizedArgs);
@@ -544,10 +547,12 @@ describe('profiles-row-actions', () => {
       const afterActive = await profilesServer.listResponsesForProfiles({
         ...normalizedArgs,
         view: 'active',
+        share: FIELDWORK_SHARE_ALL,
       });
       const afterDeleted = await profilesServer.listResponsesForProfiles({
         ...normalizedArgs,
         view: 'deleted',
+        share: FIELDWORK_SHARE_ALL,
       });
       expect(afterActive.total).toBe(0);
       expect(afterDeleted.total).toBe(1);
@@ -591,6 +596,7 @@ describe('profiles-row-actions', () => {
         view: 'active' as const,
         clauses: [],
         scope: 'real' as const,
+        share: FIELDWORK_SHARE_ALL,
       };
 
       // 1단계: softDelete
@@ -599,10 +605,12 @@ describe('profiles-row-actions', () => {
       const midActive = await profilesServer.listResponsesForProfiles({
         ...normalizedArgs,
         view: 'active',
+        share: FIELDWORK_SHARE_ALL,
       });
       const midDeleted = await profilesServer.listResponsesForProfiles({
         ...normalizedArgs,
         view: 'deleted',
+        share: FIELDWORK_SHARE_ALL,
       });
       const midCounts = await aggregateStatusServer.aggregateStatus(surveyId, 'real');
       expect(midActive.total).toBe(0);
@@ -615,10 +623,12 @@ describe('profiles-row-actions', () => {
       const afterActive = await profilesServer.listResponsesForProfiles({
         ...normalizedArgs,
         view: 'active',
+        share: FIELDWORK_SHARE_ALL,
       });
       const afterDeleted = await profilesServer.listResponsesForProfiles({
         ...normalizedArgs,
         view: 'deleted',
+        share: FIELDWORK_SHARE_ALL,
       });
       const afterCounts = await aggregateStatusServer.aggregateStatus(surveyId, 'real');
       expect(afterActive.total).toBe(1);
@@ -652,6 +662,7 @@ describe('profiles-row-actions', () => {
         },
         { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
         false,
+        FIELDWORK_SHARE_ALL,
       );
 
       const after = h.responseStore.get(responseId);
@@ -674,6 +685,7 @@ describe('profiles-row-actions', () => {
           { surveyId, responseId, questionResponses: {}, versionId: null },
           { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
           false,
+          FIELDWORK_SHARE_ALL,
         ),
       ).rejects.toMatchObject({ reason: 'response_deleted' });
     });
@@ -685,6 +697,7 @@ describe('profiles-row-actions', () => {
           { surveyId, responseId: 'nonexistent-id', questionResponses: {}, versionId: null },
           { attribution: { accountUserId: 'admin-1', fieldworkLinkId: null }, email: 'a@b.com' },
           false,
+          FIELDWORK_SHARE_ALL,
         ),
       ).rejects.toMatchObject({ reason: 'response_not_found' });
     });

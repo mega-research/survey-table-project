@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 
 import { internalOperationsBase } from '@/features/operations/operations-paths';
 import { getOperationsDataScope } from '@/server/data-scope';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
 
 import { ProfilesScreen, type ProfilesSearchParams } from '@/app/_operations/profiles-screen';
@@ -31,6 +32,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
       basePath={internalOperationsBase(surveyId)}
       capabilities={capabilities}
       scope={scope}
+      share={FIELDWORK_SHARE_ALL}
       searchParams={sp}
     />
   );

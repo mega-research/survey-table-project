@@ -1,5 +1,6 @@
 import { internalOperationsBase } from '@/features/operations/operations-paths';
 import { getOperationsDataScope } from '@/server/data-scope';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
 
 import { parseResponseIdx } from '@/app/_operations/response-edit-idx';
@@ -33,6 +34,7 @@ export default async function AdminResponseEditPage({ params, searchParams }: Pa
       responseId={responseId}
       basePath={internalOperationsBase(surveyId)}
       scope={scope}
+      share={FIELDWORK_SHARE_ALL}
       idx={parseResponseIdx(sp.idx)}
     />
   );

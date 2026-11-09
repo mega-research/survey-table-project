@@ -20,6 +20,7 @@ import {
 } from '@/server/data-scope';
 import type { FilterClause } from '@/lib/operations/filter-shared';
 import { readStoredEntryParams } from '@/lib/survey/end-redirect';
+import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share';
 import {
   buildNegativeCodeExists,
   getResultCodeStatuses,
@@ -35,6 +36,11 @@ export type { ProfilesRow };
 export type ListProfilesArgs = Omit<NormalizedListArgs, 'q' | 'col'> & {
   surveyId: string;
   scope: OperationsDataScope;
+  /**
+   * 담당 범위(ADR-0035) — **필수**. 내부 콘솔·클라이언트 링크는 `FIELDWORK_SHARE_ALL`, `/fw` 는
+   * `resolveFieldworkShare(actor, surveyId)`. 나눈 링크에서는 조사 대상에 묶이지 않은 공개 응답이 빠진다.
+   */
+  share: FieldworkShare;
   pageSize: number;
   /** 다중 조건 필터 (검색바 + 헤더 깔때기, 조사 대상과 동일 절 파이프라인) */
   clauses: FilterClause[];
@@ -64,6 +70,8 @@ function orderExpr(col: AnyColumn | SQL, direction: SortDir): SQL {
  *   ct 는 base subquery 에 LEFT JOIN 하되 row_number 는 전체 기준 유지.
  * - **condition 필터**: profilesConditionToSql 로 idx/browser/resid/attrs/pii 를
  *   subquery 위에서 적용. idx 비숫자/빈 입력은 파서가 ranges=[] 으로 넘겨 0건.
+ * - **담당 범위**: base subquery 의 WHERE 에 건다 — 순번이 범위 안에서 다시 매겨져 외주가 남의 응답 수를
+ *   순번으로 읽지 못한다(부정 결과코드 가림과 같은 자리). 대상 없는 응답은 나눈 링크에서 자연히 빠진다.
  * - **page 클램프**: page > totalPages 면 totalPages 로 보정해 마지막 페이지 노출
  *   (검색 0건과 시각적 혼동 방지).
  * - **보안**: raw ip_address 컬럼 제거됨. 접속IP 정보는 수집하지 않음.
@@ -71,7 +79,8 @@ function orderExpr(col: AnyColumn | SQL, direction: SortDir): SQL {
 export async function listResponsesForProfiles(
   args: ListProfilesArgs,
 ): Promise<ListProfilesResult> {
-  const { surveyId, scope, page, pageSize, status, sort, dir, view, clauses, answerChoices } = args;
+  const { surveyId, scope, share, page, pageSize, status, sort, dir, view, clauses, answerChoices } =
+    args;
 
   // negative result codes — base subquery WHERE 의 NOT EXISTS 분기에 사용.
   // 빈 배열이면 unsubscribed_at 만 검사 (negative code 분기는 SQL 차원에서 생략).
@@ -122,6 +131,7 @@ export async function listResponsesForProfiles(
         eq(surveyResponses.surveyId, surveyId),
         view === 'deleted' ? deletedResponse : notDeletedResponse,
         responseScopeCondition(scope),
+        shareTargetCondition(share, surveyResponses.contactTargetId),
         // negative ct 의 응답 가림. 익명 (contact_target_id IS NULL) 은
         // NOT EXISTS 가 자동 true → 통과. excluded 가 빠진 후 row_number 가
         // 다시 매겨지므로 idx 가 자동 보정된다.
