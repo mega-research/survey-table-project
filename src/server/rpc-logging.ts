@@ -17,7 +17,7 @@ import { getSentryContext, isSentryWorthyRpcError, markSentryCaptured } from './
  * 컨텍스트에 접근할 수 있고, RPCHandler(/api/rpc)와 OpenAPIHandler(/api/v1) 양쪽을
  * 핸들러 수정 없이 동일하게 커버한다.
  *
- * allowlist 관례: 바인딩은 식별자(rpc·userId·linkId·role·ip·surveyId)와 durationMs 뿐이다.
+ * allowlist 관례: 바인딩은 식별자(rpc·userId·linkId·role·ip·surveyId·targetLinkId)와 durationMs 뿐이다.
  * input/output 본문·JSONB 컨테이너·PII 평문은 싣지 않는다 — redact 는 안전망일 뿐.
  */
 
@@ -67,6 +67,26 @@ export function extractSurveyIdOrUndefined(input: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
+/** 링크 id 의 모양 — uuid. 검증 전 입력이라 모양이 아닌 값은 로그에 싣지 않는다. */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * **지목 대상** 링크 id — 검증 전 입력의 최상위 `linkId` (fieldwork-multi-company 티켓 02).
+ *
+ * 외주 링크가 설문당 여럿이 되면 「누가 **어느 링크의** 비밀번호를 읽었는가」가 감사의 핵심이다
+ * (비밀번호 평문 조회의 감사 근거는 이 로그 한 줄이다 — 별도 감사 테이블이 없다). 주체 칸
+ * `linkId`(호출자의 링크 세션)와 **다른 칸**에 싣는다 — 같은 칸에 섞으면 「링크가 한 일」과 「링크에
+ * 한 일」이 구별되지 않는다. 입력에 `linkId` 를 받는 표면은 전부 대상 링크를 지목하는 관리 표면이다
+ * (열람·변경·종료·이름표). 모양이 uuid 가 아니면 싣지 않는다 — 식별자만 싣는 관례를 지킨다.
+ */
+export function extractTargetLinkIdOrUndefined(input: unknown): string | undefined {
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+    return undefined;
+  }
+  const value = (input as Record<string, unknown>)['linkId'];
+  return typeof value === 'string' && UUID_PATTERN.test(value) ? value : undefined;
+}
+
 export const rpcLoggingMiddleware = os
   .$context<ORPCContext>()
   .middleware(async ({ context, path, next }, input: unknown) => {
@@ -79,6 +99,7 @@ export const rpcLoggingMiddleware = os
       role: resolveLogRole(context),
       ip: getTrustedClientIpOrNull(context.headers ?? new Headers()) ?? undefined,
       surveyId: extractSurveyIdOrUndefined(input),
+      targetLinkId: extractTargetLinkIdOrUndefined(input),
     };
 
     try {

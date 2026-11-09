@@ -100,6 +100,9 @@ const testRouter = {
   listPage: pub.input(SurveyListPageInputSchema).handler(() => []),
   suggest: pub.input(SurveySuggestInputSchema).handler(() => []),
   createTag: pub.input(CreatePersonalTagInput).handler(() => null),
+  revealPassword: pub
+    .input(z.object({ surveyId: z.string(), linkId: z.string() }))
+    .handler(() => ({ password: 'Secret2026' })),
   boomWithDetail: pub.handler(() => {
     throw Object.assign(new Error('해당 설문에 존재하지 않는 질문입니다.'), {
       sentryContext: { versionId: 'v1', missingQuestionIds: ['q1'] },
@@ -171,6 +174,30 @@ describe('rpcLoggingMiddleware', () => {
     const [fields] = logged.info.mock.calls[0] as [Record<string, unknown>];
     expect(fields).toMatchObject({ role: 'link' });
     expect(fields['linkId']).toBeUndefined();
+  });
+
+  /**
+   * 지목 대상 링크 id 는 주체 칸(linkId)과 **다른 칸**이다 (fieldwork-multi-company 티켓 02).
+   * 외주 링크가 여럿이면 「누가 어느 링크의 비밀번호를 읽었는가」가 이 한 줄에만 남는다.
+   */
+  it('입력의 linkId 는 targetLinkId 칸에 싣고 주체 linkId 칸에 섞지 않는다', async () => {
+    const target = '3f0c8a1e-9b2d-4c7a-8e5f-1a2b3c4d5e6f';
+    const client = createRouterClient(testRouter, { context: ctx('admin-1') });
+    await client.revealPassword({ surveyId: 'svy-1', linkId: target });
+
+    const [fields] = logged.info.mock.calls[0] as [Record<string, unknown>];
+    expect(fields).toMatchObject({ rpc: 'revealPassword', userId: 'admin-1', targetLinkId: target });
+    expect(fields['linkId']).toBeUndefined();
+    // 응답 본문(평문 비밀번호)은 어떤 칸으로도 실리지 않는다.
+    expect(JSON.stringify(fields)).not.toContain('Secret2026');
+  });
+
+  it('uuid 모양이 아닌 linkId 는 싣지 않는다 — 검증 전 입력이라 식별자 모양만 받는다', async () => {
+    const client = createRouterClient(testRouter, { context: ctx('admin-1') });
+    await client.revealPassword({ surveyId: 'svy-1', linkId: 'not-a-uuid\n가짜 줄' });
+
+    const [fields] = logged.info.mock.calls[0] as [Record<string, unknown>];
+    expect(fields['targetLinkId']).toBeUndefined();
   });
 
   it('계정 세션이 있으면 링크 쿠키가 있어도 계정이 이긴다 — 연구원 요청이 link 로 뭉개지지 않는다', async () => {
