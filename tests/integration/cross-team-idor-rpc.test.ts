@@ -578,7 +578,12 @@ const SURFACES: Record<string, SurfaceSpec> = {
   'contacts.fieldworkShares.apply': {
     gate: 'rpc',
     capability: 'survey.manageAccess',
-    input: { surveyId: S, linkId: C, clauses: [{ source: 'system.resid', value: '1', op: '' }] },
+    input: {
+      surveyId: S,
+      linkId: C,
+      clauses: [{ source: 'system.resid', value: '1', op: '' }],
+      overlap: 'take',
+    },
   },
   'contacts.fieldworkShares.clear': {
     gate: 'rpc',

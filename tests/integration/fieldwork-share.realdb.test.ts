@@ -160,8 +160,8 @@ function range(from: number, to: number): number[] {
 
 /** 기본 나누기 — A 1–100, B 101–200. C 는 나누지 않는다. */
 async function splitAB() {
-  await owner.contacts.fieldworkShares.apply({ surveyId, linkId: A.linkId, clauses: residClause('1-100') });
-  await owner.contacts.fieldworkShares.apply({ surveyId, linkId: B.linkId, clauses: residClause('101-200') });
+  await owner.contacts.fieldworkShares.apply({ surveyId, linkId: A.linkId, clauses: residClause('1-100'), overlap: 'take' });
+  await owner.contacts.fieldworkShares.apply({ surveyId, linkId: B.linkId, clauses: residClause('101-200'), overlap: 'take' });
 }
 
 run('담당 범위 첫 줄기 (real DB)', () => {
@@ -260,8 +260,9 @@ run('담당 범위 첫 줄기 (real DB)', () => {
         surveyId,
         linkId: A.linkId,
         clauses: residClause('1-100'),
+        overlap: 'take',
       });
-      expect(preview).toEqual(applied);
+      expect(applied).toMatchObject({ ...preview, overlapChoice: 'take', after: preview.matched });
       expect(applied.matched).toBe(100);
       expect(applied.incoming).toBe(100);
       // 테스트 파티션의 1번은 들어오지 않는다.
@@ -285,6 +286,7 @@ run('담당 범위 첫 줄기 (real DB)', () => {
         surveyId,
         linkId: A.linkId,
         clauses: residClause('51-150'),
+        overlap: 'take',
       });
       expect(summary).toMatchObject({ matched: 100, current: 100, incoming: 0, leaving: 50 });
       expect(summary.fromOthers).toEqual([{ linkId: B.linkId, name: '프라임', count: 50 }]);
@@ -294,11 +296,12 @@ run('담당 범위 첫 줄기 (real DB)', () => {
     });
 
     it('같은 적용을 두 번 해도 결과가 같다 — 결과 상태 지정', async () => {
-      await owner.contacts.fieldworkShares.apply({ surveyId, linkId: A.linkId, clauses: residClause('1-30') });
+      await owner.contacts.fieldworkShares.apply({ surveyId, linkId: A.linkId, clauses: residClause('1-30'), overlap: 'take' });
       const again = await owner.contacts.fieldworkShares.apply({
         surveyId,
         linkId: A.linkId,
         clauses: residClause('1-30'),
+        overlap: 'take',
       });
       expect(again).toMatchObject({ matched: 30, current: 30, incoming: 0, leaving: 0 });
       expect(await shareResidsOf(A.linkId)).toEqual(range(1, 30));
@@ -314,7 +317,7 @@ run('담당 범위 첫 줄기 (real DB)', () => {
           owner.contacts.fieldworkShares.preview({ surveyId, linkId: A.linkId, clauses }),
         ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
         await expect(
-          owner.contacts.fieldworkShares.apply({ surveyId, linkId: A.linkId, clauses }),
+          owner.contacts.fieldworkShares.apply({ surveyId, linkId: A.linkId, clauses, overlap: 'take' }),
         ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
       }
       expect(await shareResidsOf(A.linkId)).toEqual(range(1, 100));
@@ -326,7 +329,7 @@ run('담당 범위 첫 줄기 (real DB)', () => {
       await owner.workspace.accessLinks.close({ surveyId, linkId: closed.linkId });
       for (const linkId of [client.id, closed.linkId, crypto.randomUUID()]) {
         await expect(
-          owner.contacts.fieldworkShares.apply({ surveyId, linkId, clauses: residClause('1-10') }),
+          owner.contacts.fieldworkShares.apply({ surveyId, linkId, clauses: residClause('1-10'), overlap: 'take' }),
         ).rejects.toMatchObject({ code: 'NOT_FOUND' });
         await expect(
           owner.contacts.fieldworkShares.clear({ surveyId, linkId }),
@@ -343,7 +346,7 @@ run('담당 범위 첫 줄기 (real DB)', () => {
 
     it('범위 목록이 링크별 이름·인원·나눔 여부를 보인다', async () => {
       await splitAB();
-      await owner.contacts.fieldworkShares.apply({ surveyId, linkId: B.linkId, clauses: residClause('101-120') });
+      await owner.contacts.fieldworkShares.apply({ surveyId, linkId: B.linkId, clauses: residClause('101-120'), overlap: 'take' });
       const { links } = await owner.contacts.fieldworkShares.list({ surveyId });
       expect(links.map((l) => [l.name, l.divided, l.count])).toEqual([
         ['프롬', true, 100],
@@ -403,7 +406,7 @@ run('담당 범위 첫 줄기 (real DB)', () => {
 
     it('범위를 바꾸면 같은 링크 세션의 다음 요청에 반영된다 — 다시 접속하지 않는다', async () => {
       expect((await residsOf(A)).total).toBe(200);
-      await owner.contacts.fieldworkShares.apply({ surveyId, linkId: A.linkId, clauses: residClause('1-10') });
+      await owner.contacts.fieldworkShares.apply({ surveyId, linkId: A.linkId, clauses: residClause('1-10'), overlap: 'take' });
       expect((await residsOf(A)).resids).toEqual(range(1, 10));
       expect((await linkClient(A).contacts.attrValues.list({ surveyId, attrsKey: '지역' })).values).toEqual([
         '서울',
@@ -413,7 +416,7 @@ run('담당 범위 첫 줄기 (real DB)', () => {
 
     it('범위를 모두 빼앗긴 링크는 0명을 보고, 범위 없애기 뒤에는 다시 전체를 본다', async () => {
       await splitAB();
-      await owner.contacts.fieldworkShares.apply({ surveyId, linkId: B.linkId, clauses: residClause('1-200') });
+      await owner.contacts.fieldworkShares.apply({ surveyId, linkId: B.linkId, clauses: residClause('1-200'), overlap: 'take' });
       expect(await shareResidsOf(A.linkId)).toEqual([]);
       const robbed = await residsOf(A);
       expect(robbed.total).toBe(0);
@@ -432,6 +435,7 @@ run('담당 범위 첫 줄기 (real DB)', () => {
         surveyId,
         linkId: A.linkId,
         clauses: residClause('9000'),
+        overlap: 'take',
       });
       expect(summary.matched).toBe(0);
       expect((await residsOf(A)).total).toBe(0);
@@ -470,7 +474,7 @@ run('담당 범위 첫 줄기 (real DB)', () => {
         () =>
           participant.contacts.fieldworkShares.preview({ surveyId, linkId: A.linkId, clauses: residClause('1') }),
         () =>
-          participant.contacts.fieldworkShares.apply({ surveyId, linkId: A.linkId, clauses: residClause('1') }),
+          participant.contacts.fieldworkShares.apply({ surveyId, linkId: A.linkId, clauses: residClause('1'), overlap: 'take' }),
         () => participant.contacts.fieldworkShares.clear({ surveyId, linkId: A.linkId }),
         () =>
           participant.contacts.fieldworkShares.matches({
@@ -488,7 +492,7 @@ run('담당 범위 첫 줄기 (real DB)', () => {
     it('링크 주체는 베이스에서 거부된다 — 자기 링크의 범위도 못 넓힌다', async () => {
       await splitAB();
       await expect(
-        linkClient(A).contacts.fieldworkShares.apply({ surveyId, linkId: A.linkId, clauses: residClause('1-200') }),
+        linkClient(A).contacts.fieldworkShares.apply({ surveyId, linkId: A.linkId, clauses: residClause('1-200'), overlap: 'take' }),
       ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
       await expect(
         linkClient(A).contacts.fieldworkShares.clear({ surveyId, linkId: A.linkId }),
@@ -499,7 +503,7 @@ run('담당 범위 첫 줄기 (real DB)', () => {
 
   describe('대상 쪽 무결성', () => {
     it('대상이 지워지면 범위 행도 사라진다 — 나눈 링크는 0명으로 남는다', async () => {
-      await owner.contacts.fieldworkShares.apply({ surveyId, linkId: A.linkId, clauses: residClause('200') });
+      await owner.contacts.fieldworkShares.apply({ surveyId, linkId: A.linkId, clauses: residClause('200'), overlap: 'take' });
       const id = targetIdByResid.get(200)!;
       await db.delete(contactTargets).where(eq(contactTargets.id, id));
       expect(await shareResidsOf(A.linkId)).toEqual([]);

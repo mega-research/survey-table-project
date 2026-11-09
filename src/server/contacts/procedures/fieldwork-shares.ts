@@ -6,6 +6,8 @@ import type { FieldworkShareMatchesResult } from '@/shared/contracts/contacts-io
 
 import { AssignmentFacetsOutput } from '../domain/contact-assignment';
 import {
+  FieldworkShareApplyInput,
+  FieldworkShareApplyOutput,
   FieldworkShareChangeSummarySchema,
   FieldworkShareClausesInput,
   FieldworkShareClearOutput,
@@ -15,8 +17,8 @@ import {
   FieldworkShareMatchesInput,
   FieldworkShareTargetInput,
 } from '../domain/fieldwork-share';
-import { ForbiddenAttrColumnError } from '../services/contact-attr-values';
 import { listAssignmentFacets } from '../services/contact-assignment-facets';
+import { ForbiddenAttrColumnError } from '../services/contact-attr-values';
 import * as svc from '../services/fieldwork-shares';
 
 /**
@@ -47,10 +49,13 @@ const preview = authed
     return svc.previewFieldworkShare(input);
   });
 
-/** 적용 — 이 링크의 범위를 조건 결과와 같게. 조건은 적용 시점에 다시 계산한다. */
+/**
+ * 적용 — 이 링크의 범위를 조건 결과와 같게, 겹치는 대상은 고른 처리(`overlap`, 필수)대로. 조건은 적용
+ * 시점에 다시 계산한다.
+ */
 const apply = authed
-  .input(FieldworkShareClausesInput)
-  .output(FieldworkShareChangeSummarySchema)
+  .input(FieldworkShareApplyInput)
+  .output(FieldworkShareApplyOutput)
   .handler(async ({ context, input }) => {
     await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.manageAccess');
     return svc.applyFieldworkShare(input);
