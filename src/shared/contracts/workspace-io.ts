@@ -1272,7 +1272,14 @@ export type ClientResponseColumnsOutput = z.infer<typeof ClientResponseColumnsOu
  * 목록의 링크 한 줄 — 발급 순번이 붙는다. 이름표가 없는 링크도 「링크 2」로 구별되게 하는 재료다
  * (`fieldworkLinkName`). 순번은 종료된 링크까지 센 값이라 목록에서 빈 번호가 보일 수 있다.
  */
-export const AccessLinkListItem = AccessLinkView.extend({ ordinal: z.number().int().min(1) });
+export const AccessLinkListItem = AccessLinkView.extend({
+  ordinal: z.number().int().min(1),
+  /**
+   * 외주 링크의 담당 범위 요약 — 나눈 적 있음과 지금 인원(ADR-0035, fieldwork-multi-company 티켓 03).
+   * 나누지 않았으면 그 링크는 설문 전체를 본다. 클라이언트 링크에는 담당 범위 축이 없어 null 이다.
+   */
+  share: z.object({ divided: z.boolean(), count: z.number().int().min(0) }).nullable(),
+});
 export type AccessLinkListItem = z.infer<typeof AccessLinkListItem>;
 
 /**

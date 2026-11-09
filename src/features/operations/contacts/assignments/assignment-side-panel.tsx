@@ -23,7 +23,7 @@ const PAGE_SIZE = 10;
 const fmt = (n: number) => n.toLocaleString('ko-KR');
 
 /** 값 목록을 고정 선택지로 그리는 열 — 조사 대상 열 머리 필터가 체크박스로 그리는 열과 같다. */
-const FIXED_CHECKBOX_SOURCES: ReadonlySet<string> = new Set([
+export const FIXED_CHECKBOX_SOURCES: ReadonlySet<string> = new Set([
   FILTER_SOURCE.CONTACT_RESULT,
   FILTER_SOURCE.WEB,
   FILTER_SOURCE.EMAIL,
@@ -82,7 +82,7 @@ export function AssignmentSidePanel(props: Props) {
   return <MatchesPanel {...props} />;
 }
 
-function PanelShell({
+export function PanelShell({
   title,
   subtitle,
   children,
@@ -100,7 +100,7 @@ function PanelShell({
   );
 }
 
-function ValuesPanel({
+export function ValuesPanel({
   label,
   values,
   total,
@@ -338,7 +338,10 @@ function MatchesPanel({
 }
 
 /** 대상 목록 칸 값 — 개인정보 열은 목록 화면과 같은 마스킹 힌트만 (평문은 오지 않는다). */
-function cellValue(row: ContactAssignmentMatchRow, source: string): string {
+export function cellValue(
+  row: Pick<ContactAssignmentMatchRow, 'attrs' | 'piiMaskHints'>,
+  source: string,
+): string {
   const ak = attrsKeyOf(source);
   if (ak) return row.attrs[ak] || '—';
   const pk = piiKeyOf(source);
@@ -346,7 +349,7 @@ function cellValue(row: ContactAssignmentMatchRow, source: string): string {
   return '—';
 }
 
-function Pager({
+export function Pager({
   summary,
   page,
   pageCount,

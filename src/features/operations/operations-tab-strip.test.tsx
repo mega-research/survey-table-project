@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/navigation', () => ({
@@ -117,5 +118,38 @@ describe('OperationsTabStrip — capability 가 탭을 정한다', () => {
   it('현황을 볼 수 없으면 실사 현황 탭도 서지 않는다', () => {
     renderStrip(['survey.view']);
     expect(visibleTabs()).toEqual([]);
+  });
+
+  /**
+   * 「외주 담당 범위」(ADR-0035) — 링크를 발급하는 사람(`survey.manageAccess`)의 메뉴다. 컨택원을 나눌 수 있는
+   * 사내 실사원은 `contacts.manage` 가 있어도 보지 않는다(외부인이 볼 연락처를 정하는 일이라서다).
+   */
+  async function contactsMenuLinks(): Promise<string[]> {
+    await userEvent.click(screen.getByRole('button', { name: '조사 대상' }));
+    await screen.findByRole('link', { name: '조사 대상 목록' });
+    return screen.getAllByRole('link').map((a) => a.textContent?.trim() ?? '');
+  }
+
+  it('링크 발급 권한자는 조사 대상 메뉴에서 외주 담당 범위로 간다', async () => {
+    renderStrip(ALL);
+    expect(await contactsMenuLinks()).toContain('외주 담당 범위');
+    expect(screen.getByRole('link', { name: '외주 담당 범위' })).toHaveAttribute(
+      'href',
+      '/surveys/sv-1/operations/contacts/shares',
+    );
+  });
+
+  it('사내 실사원은 컨택원 관리는 보고 외주 담당 범위는 보지 않는다', async () => {
+    renderStrip(FULL_PARTICIPANT_CAPABILITIES);
+    const links = await contactsMenuLinks();
+    expect(links).toContain('컨택원 관리');
+    expect(links).not.toContain('외주 담당 범위');
+  });
+
+  it('외주 링크 셸에는 외주 담당 범위도 컨택원 관리도 없다', async () => {
+    renderStrip(LINK_CAPABILITIES, { internalShell: false });
+    const links = await contactsMenuLinks();
+    expect(links).not.toContain('외주 담당 범위');
+    expect(links).not.toContain('컨택원 관리');
   });
 });

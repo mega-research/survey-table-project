@@ -476,7 +476,47 @@ function AccessLinkCard({
       className="flex flex-col gap-2 rounded-[10px] border border-[#E5E5EA] p-2.5"
     >
       <LinkLabelHeader surveyId={surveyId} link={link} canManage={canManage} name={name} />
+      <ShareSummaryRow surveyId={surveyId} linkId={link.id} share={link.share} />
       {body}
+    </div>
+  );
+}
+
+/**
+ * 외주 담당 범위 내부 주소 — survey-builder 는 operations 를 import 하지 못해(ESLint 경계) 같은 꼬리를
+ * 여기 적는다. `operationsPaths(base).contactsShare` 와 같은지는 `tests/repo/fieldwork-share-href.test.ts` 가 본다.
+ */
+export function fieldworkShareEditHref(surveyId: string, linkId: string): string {
+  return `/surveys/${surveyId}/operations/contacts/shares/${linkId}`;
+}
+
+/**
+ * 링크 카드의 담당 범위 요약 — 건네기 전에 나눴는지 한눈에 보이게(ADR-0035). 나누지 않은 링크는 설문
+ * 전체를 보므로 그 사실을 그대로 적고, 나눈 링크는 지금 인원을 적는다(0명이어도 0명). 이름표처럼
+ * 연구원 화면에만 있다.
+ */
+function ShareSummaryRow({
+  surveyId,
+  linkId,
+  share,
+}: {
+  surveyId: string;
+  linkId: string;
+  share: AccessLinkListItem['share'];
+}) {
+  if (!share) return null;
+  return (
+    <div className="flex items-center gap-1.5 text-[12px]">
+      <span className="w-[76px] shrink-0 text-[#6E6E73]">담당 범위</span>
+      <span className="flex-1 text-[#374151]">
+        {share.divided ? `나눔 · ${share.count.toLocaleString('ko-KR')}명` : '설문 전체'}
+      </span>
+      <a
+        href={fieldworkShareEditHref(surveyId, linkId)}
+        className="text-[#2743AE] transition-colors hover:underline"
+      >
+        담당 범위 나누기
+      </a>
     </div>
   );
 }

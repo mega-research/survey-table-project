@@ -201,19 +201,37 @@ export async function listFieldworkShares(surveyId: string): Promise<FieldworkSh
   };
 }
 
-/** 수정 화면이 다시 열 때 채울 마지막 조건 — 나눈 적 없으면 null. 링크가 없으면 null 이 아니라 undefined. */
+/** 수정 화면의 재료 — 이름·나눈 적 있음·지금 인원·마지막 조건. 이 설문의 열린 외주 링크가 아니면 null. */
 export async function getFieldworkShareForEdit(
   surveyId: string,
   linkId: string,
-): Promise<{ linkId: string; name: string; lastClauses: ContactAssignmentClause[] | null } | null> {
+): Promise<{
+  linkId: string;
+  name: string;
+  divided: boolean;
+  count: number;
+  lastClauses: ContactAssignmentClause[] | null;
+} | null> {
   const [row] = await db
-    .select({ clauses: surveyAccessLinks.shareClauses })
+    .select({
+      appliedAt: surveyAccessLinks.shareAppliedAt,
+      clauses: surveyAccessLinks.shareClauses,
+      count: sql<number>`(
+        SELECT count(*)::int FROM fieldwork_link_shares s WHERE s.link_id = ${surveyAccessLinks.id}
+      )`,
+    })
     .from(surveyAccessLinks)
     .where(openFieldworkLink(surveyId, linkId))
     .limit(1);
   if (!row) return null;
   const names = await loadFieldworkLinkNames(surveyId);
-  return { linkId, name: names.get(linkId) ?? '', lastClauses: row.clauses ?? null };
+  return {
+    linkId,
+    name: names.get(linkId) ?? '',
+    divided: row.appliedAt !== null,
+    count: Number(row.count),
+    lastClauses: row.clauses ?? null,
+  };
 }
 
 /** 미리보기 — 조건에 맞는 인원과 적용하면 바뀌는 인원. 아무것도 쓰지 않는다. */

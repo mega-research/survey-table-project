@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyAccessLinks } from '@/db/schema';
@@ -141,12 +141,32 @@ export async function listAccessLinks(
   kind: AccessLinkKind,
 ): Promise<AccessLinkListItem[]> {
   const rows = await db
-    .select({ ...VIEW_COLUMNS, closedAt: surveyAccessLinks.closedAt })
+    .select({
+      ...VIEW_COLUMNS,
+      closedAt: surveyAccessLinks.closedAt,
+      shareAppliedAt: surveyAccessLinks.shareAppliedAt,
+      // 담당 범위 인원 — 담당 범위 표는 contacts 의 쓰기지만 읽기는 「타 도메인 테이블 직접 쿼리」로 둔다.
+      shareCount: sql<number>`(
+        SELECT count(*)::int FROM fieldwork_link_shares s WHERE s.link_id = ${surveyAccessLinks.id}
+      )`,
+    })
     .from(surveyAccessLinks)
     .where(and(eq(surveyAccessLinks.surveyId, surveyId), eq(surveyAccessLinks.kind, kind)))
     .orderBy(asc(surveyAccessLinks.createdAt), asc(surveyAccessLinks.id));
-  return rows.flatMap(({ closedAt, ...row }, index) =>
-    closedAt === null ? [{ ...toView(row), ordinal: index + 1 }] : [],
+  return rows.flatMap(({ closedAt, shareAppliedAt, shareCount, ...row }, index) =>
+    closedAt === null
+      ? [
+          {
+            ...toView(row),
+            ordinal: index + 1,
+            // 카드의 범위 요약(「설문 전체」 / 「나눔 · N명」) — 외주 링크만 이 축이 있다(티켓 03).
+            share:
+              row.kind === 'fieldwork'
+                ? { divided: shareAppliedAt !== null, count: Number(shareCount) }
+                : null,
+          },
+        ]
+      : [],
   );
 }
 

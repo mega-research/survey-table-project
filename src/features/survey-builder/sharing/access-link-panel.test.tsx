@@ -55,6 +55,7 @@ function linkOf(kind: AccessLinkKind, over: Partial<AccessLinkListItem> = {}): A
     clientTabs: kind === 'client' ? TABS : null,
     label: null,
     ordinal: 1,
+    share: kind === 'fieldwork' ? { divided: false, count: 0 } : null,
     passwordUpdatedAt: new Date('2026-10-12T00:00:00.000Z'),
     createdAt: new Date('2026-10-12T00:00:00.000Z'),
     ...over,
@@ -312,6 +313,41 @@ describe('AccessLinkPanel', () => {
     expect(screen.getByRole('group', { name: '프롬' })).toBeInTheDocument();
     expect(screen.getByRole('group', { name: '링크 2' })).toBeInTheDocument();
     expect(screen.getByText('이름표 없음')).toBeInTheDocument();
+  });
+
+  it('외주 링크 카드마다 담당 범위 요약과 그 링크의 나누기 화면 바로가기가 선다', () => {
+    state.data = {
+      links: [
+        linkOf('fieldwork', { label: '프롬', share: { divided: true, count: 1234 } }),
+        linkOf('fieldwork', {
+          id: SECOND_LINK_ID,
+          token: 'Bq7nW3xY9kLm2pRt',
+          ordinal: 2,
+          share: { divided: false, count: 0 },
+        }),
+      ],
+      canManage: true,
+    };
+    render(<AccessLinkPanel surveyId="s-1" kind="fieldwork" />);
+
+    const from = within(screen.getByRole('group', { name: '프롬' }));
+    expect(from.getByText('나눔 · 1,234명')).toBeInTheDocument();
+    expect(from.getByRole('link', { name: '담당 범위 나누기' })).toHaveAttribute(
+      'href',
+      `/surveys/s-1/operations/contacts/shares/${LINK_ID}`,
+    );
+    const second = within(screen.getByRole('group', { name: '링크 2' }));
+    expect(second.getByText('설문 전체')).toBeInTheDocument();
+    expect(second.getByRole('link', { name: '담당 범위 나누기' })).toHaveAttribute(
+      'href',
+      `/surveys/s-1/operations/contacts/shares/${SECOND_LINK_ID}`,
+    );
+  });
+
+  it('클라이언트 링크에는 담당 범위 줄이 없다', () => {
+    state.data = linkState('client');
+    render(<AccessLinkPanel surveyId="s-1" kind="client" />);
+    expect(screen.queryByText('담당 범위')).not.toBeInTheDocument();
   });
 
   it('외주 링크가 있어도 발급 칸이 남고, 발급은 적은 이름표와 함께 외주 종류로 나간다', async () => {

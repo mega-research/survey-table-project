@@ -82,6 +82,9 @@ export function OperationsTabStrip({
   const canProfiles = can('responses.view');
   const canContacts = can('contacts.view');
   const canManageContacts = can('contacts.manage');
+  // 외주 담당 범위 — 링크를 발급하는 사람의 일이다(ADR-0035). 컨택원을 나눌 수 있는 사내 실사원은
+  // contacts.manage 는 있어도 survey.manageAccess 가 없어 이 탭을 보지 않는다. 링크 주체에게는 없는 칸이다.
+  const canManageShares = can('survey.manageAccess');
   const canMail = can('mail.view');
   const overviewHref = paths.overview;
   const profilesHref = paths.profiles;
@@ -96,23 +99,27 @@ export function OperationsTabStrip({
   const contactsColumnsHref = paths.contactsColumns;
   const contactsResultCodesHref = paths.contactsResultCodes;
   const contactsAssignmentsHref = paths.contactsAssignments;
+  const contactsSharesHref = paths.contactsShares;
   const isContactsRootActive =
     pathname === contactsHref ||
     (pathname.startsWith(`${contactsHref}/`) &&
      !pathname.startsWith(contactsUploadHref) &&
      !pathname.startsWith(contactsColumnsHref) &&
      !pathname.startsWith(contactsResultCodesHref) &&
-     !pathname.startsWith(contactsAssignmentsHref));
+     !pathname.startsWith(contactsAssignmentsHref) &&
+     !pathname.startsWith(contactsSharesHref));
   const isContactsUploadActive = pathname.startsWith(contactsUploadHref);
   const isContactsColumnsActive = pathname.startsWith(contactsColumnsHref);
   const isContactsResultCodesActive = pathname.startsWith(contactsResultCodesHref);
   const isContactsAssignmentsActive = pathname.startsWith(contactsAssignmentsHref);
+  const isContactsSharesActive = pathname.startsWith(contactsSharesHref);
   const isContactsActive =
     isContactsRootActive ||
     isContactsUploadActive ||
     isContactsColumnsActive ||
     isContactsResultCodesActive ||
-    isContactsAssignmentsActive;
+    isContactsAssignmentsActive ||
+    isContactsSharesActive;
 
   const mailCampaignsHref = paths.mailCampaigns;
   const mailTemplatesHref = paths.mailTemplates;
@@ -222,6 +229,11 @@ export function OperationsTabStrip({
                     컨택원 관리
                   </SubLink>
                 </>
+              )}
+              {canManageShares && (
+                <SubLink href={contactsSharesHref} active={isContactsSharesActive}>
+                  외주 담당 범위
+                </SubLink>
               )}
             </NavigationMenuContent>
           </NavigationMenuItem>

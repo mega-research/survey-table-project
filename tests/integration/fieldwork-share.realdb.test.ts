@@ -350,6 +350,15 @@ run('담당 범위 첫 줄기 (real DB)', () => {
         ['프라임', true, 20],
         ['세번째', false, 0],
       ]);
+      // 공유 설정 링크 카드의 요약도 같은 값이다(「나눔 · N명」 / 「설문 전체」).
+      const cards = await owner.workspace.accessLinks.list({ surveyId, kind: 'fieldwork' });
+      expect(cards.links.map((l) => l.share)).toEqual([
+        { divided: true, count: 100 },
+        { divided: true, count: 20 },
+        { divided: false, count: 0 },
+      ]);
+      const clients = await owner.workspace.accessLinks.list({ surveyId, kind: 'client' });
+      expect(clients.links.every((l) => l.share === null)).toBe(true);
     });
   });
 

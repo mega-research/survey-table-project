@@ -24,6 +24,8 @@ export interface OperationsPaths {
   readonly contactsUpload: string;
   readonly contactsUploadNew: string;
   readonly contactsAssignments: string;
+  /** 외주 담당 범위 — 내부 콘솔 전용(링크 발급 권한자). 링크 셸 접두로 만들어도 그 트리에 페이지가 없다. */
+  readonly contactsShares: string;
   readonly mailTemplates: string;
   readonly mailTemplateNew: string;
   readonly mailCampaigns: string;
@@ -33,6 +35,7 @@ export interface OperationsPaths {
   readonly demand: string;
   contact(contactId: string): string;
   contactsAssignment(assignmentId: string): string;
+  contactsShare(linkId: string): string;
   profileEdit(responseId: string): string;
   mailTemplateEdit(templateId: string): string;
   mailCampaign(campaignId: string): string;
@@ -62,6 +65,7 @@ export function operationsPaths(base: string): OperationsPaths {
     contactsUpload: `${contacts}/upload`,
     contactsUploadNew: `${contacts}/upload/new`,
     contactsAssignments: `${contacts}/assignments`,
+    contactsShares: `${contacts}/shares`,
     mailTemplates: `${mail}/templates`,
     mailTemplateNew: `${mail}/templates/new`,
     mailCampaigns: `${mail}/campaigns`,
@@ -71,6 +75,7 @@ export function operationsPaths(base: string): OperationsPaths {
     demand: `${root}/demand`,
     contact: (contactId) => `${contacts}/${contactId}`,
     contactsAssignment: (assignmentId) => `${contacts}/assignments/${assignmentId}`,
+    contactsShare: (linkId) => `${contacts}/shares/${linkId}`,
     profileEdit: (responseId) => `${profiles}/${responseId}/edit`,
     mailTemplateEdit: (templateId) => `${mail}/templates/${templateId}/edit`,
     mailCampaign: (campaignId) => `${mail}/campaigns/${campaignId}`,
