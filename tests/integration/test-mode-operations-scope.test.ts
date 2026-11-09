@@ -121,7 +121,7 @@ describe('운영 응답 범위', () => {
   it.each(SCOPE_CASES)('contact 상세는 %s scope 밖의 대상을 조회하지 않는다', async (scope, isTest) => {
     const { getContactDetailById } = await import('@/server/read-models/contacts');
 
-    const result = await getContactDetailById(`contact-${scope}`, 'survey-1', scope);
+    const result = await getContactDetailById(`contact-${scope}`, 'survey-1', scope, { kind: 'all' });
 
     expect(result).toBeNull();
     const query = whereQuery();

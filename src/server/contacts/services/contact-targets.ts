@@ -12,6 +12,11 @@ import {
   hardDeleteMailForTargets,
 } from '@/server/workflows/test-mail-archive';
 import { lockWriteScope } from '@/server/data-scope';
+import {
+  FIELDWORK_SHARE_ALL,
+  type FieldworkShare,
+  shareTargetCondition,
+} from '@/server/fieldwork-share';
 import { generateInviteCode } from '@/lib/survey-url';
 
 import {
@@ -55,11 +60,16 @@ function assertStorablePiiUpdates(piiUpdates: UpdateContactTargetInput['piiUpdat
  *
  * 목록을 연 뒤 테스트 모드가 전환된 경우에도 이전 탭이 반대 스코프 행을 수정·삭제하지
  * 못하도록, 설문 행과 대상 행을 같은 트랜잭션에서 순서대로 잠근다.
+ *
+ * 담당 범위(`share`)도 같은 잠금 조회의 조건이다 — 범위 밖 대상은 없는 대상과 같은 `NOT_FOUND`
+ * (fieldwork-multi-company 티켓 05). 외주 링크에 열린 쓰기는 메모(`setContactTargetMemo`)뿐이고, 명단
+ * 수정·삭제는 `contacts.manage` 라 링크에 닫혀 있어 `FIELDWORK_SHARE_ALL` 을 넘긴다.
  */
 async function lockTargetAndReadCurrent(
   tx: DbTransaction,
   input: { id: string; surveyId: string },
   isExternal: boolean,
+  share: FieldworkShare,
 ): Promise<{
   isTest: boolean;
   scheme: NormalizedContactColumnScheme | null;
@@ -81,6 +91,7 @@ async function lockTargetAndReadCurrent(
         eq(contactTargets.id, input.id),
         eq(contactTargets.surveyId, input.surveyId),
         eq(contactTargets.isTest, scope.isTest),
+        shareTargetCondition(share),
       ),
     )
     .for('update');
@@ -184,6 +195,8 @@ export async function setContactTargetMemo(
   input: SetContactTargetMemoInput,
   isExternal: boolean,
   editor: ContactEditor,
+  /** 주체의 담당 범위(`resolveFieldworkShare`) — 외주 링크에 열린 유일한 대상 쓰기라 필수다. */
+  share: FieldworkShare,
 ): Promise<void> {
   const { id, surveyId, memo, contactMethod } = input;
 
@@ -192,6 +205,7 @@ export async function setContactTargetMemo(
       tx,
       { id, surveyId },
       isExternal,
+      share,
     );
 
     const updated = await tx
@@ -240,6 +254,8 @@ export async function updateContactTarget(
       tx,
       { id, surveyId },
       isExternal,
+      // 명단 수정은 `contacts.manage` 라 외주 링크에 닫혀 있다 — 계정 주체의 범위는 언제나 설문 전체다.
+      FIELDWORK_SHARE_ALL,
     );
     // 모드·대상 소속과 같은 잠금 스냅샷에서 확정한 스킴으로 PII 평문을 제거한다.
     const attrs = sanitizeAttrsAgainstPiiScheme(rawAttrs, scheme);

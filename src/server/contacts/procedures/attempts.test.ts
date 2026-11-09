@@ -21,7 +21,7 @@ vi.mock('@/server/access-link', () => ({
   resolveLinkActorForSurvey: vi.fn(
     async (sessions: readonly { claim: { linkId: string } }[] | undefined, surveyId: string) =>
       sessions?.length
-        ? { kind: 'ok' as const, actor: { kind: 'link' as const, linkId: LINK_ID, surveyId, linkKind: 'fieldwork' as const } }
+        ? { kind: 'ok' as const, actor: { kind: 'link' as const, linkId: LINK_ID, surveyId, linkKind: 'fieldwork' as const, shareDivided: true } }
         : { kind: 'no_session' as const },
   ),
 }));
@@ -63,6 +63,8 @@ describe('attempts procedures', () => {
       false,
       { accountUserId: 'admin-1', fieldworkLinkId: null },
       { id: 'admin-1', email: 'a@b.com' },
+      // 계정 주체의 담당 범위는 언제나 설문 전체다(티켓 05).
+      { kind: 'all' },
     );
     expect(res).toEqual({ id: 'att-1', attemptNo: 1 });
   });
@@ -78,10 +80,12 @@ describe('attempts procedures', () => {
       's-1',
       'contacts.writeAttempts',
     );
-    expect(svc.updateAttempt).toHaveBeenCalledWith(input, false, {
-      id: 'admin-1',
-      email: 'a@b.com',
-    });
+    expect(svc.updateAttempt).toHaveBeenCalledWith(
+      input,
+      false,
+      { id: 'admin-1', email: 'a@b.com' },
+      { kind: 'all' },
+    );
     expect(res).toEqual({ ok: true });
   });
 
@@ -96,10 +100,12 @@ describe('attempts procedures', () => {
       's-1',
       'contacts.writeAttempts',
     );
-    expect(svc.deleteAttempt).toHaveBeenCalledWith(input, false, {
-      id: 'admin-1',
-      email: 'a@b.com',
-    });
+    expect(svc.deleteAttempt).toHaveBeenCalledWith(
+      input,
+      false,
+      { id: 'admin-1', email: 'a@b.com' },
+      { kind: 'all' },
+    );
     expect(res).toEqual({ ok: true });
   });
 
@@ -169,6 +175,7 @@ describe('attempts procedures', () => {
       true,
       { accountUserId: 'external-1', fieldworkLinkId: null },
       { id: 'external-1', email: 'g@b.com' },
+      { kind: 'all' },
     );
     expect(res).toEqual({ id: 'att-1', attemptNo: 1 });
   });
@@ -198,11 +205,13 @@ describe('attempts procedures', () => {
     };
     await client.contacts.attempts.add(input);
     // 링크는 언제나 실 파티션이다(스펙 §11-3) — 두 번째 인자 true. 기록자 글자는 「외주」다.
+    // 나눈 적 있는 링크라 담당 범위는 그 링크의 대상이다(티켓 05) — 서비스의 잠금 조회가 건다.
     expect(svc.addAttempt).toHaveBeenCalledWith(
       input,
       true,
       { accountUserId: null, fieldworkLinkId: LINK_ID },
       { id: `link:${LINK_ID}`, email: '외주' },
+      { kind: 'targets', linkId: LINK_ID },
     );
   });
 });

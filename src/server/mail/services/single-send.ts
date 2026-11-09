@@ -3,6 +3,7 @@ import 'server-only';
 
 import { db } from '@/db';
 import { contactTargets } from '@/db/schema/contacts';
+import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share';
 import { latestResultUnsubscribedSql } from '@/lib/operations/contacts-filter-sql.server';
 import { loadMailEmailOrder, resolveSendAddresses } from '@/server/read-models/send-address';
 import {
@@ -20,11 +21,17 @@ import { getMailTemplate } from './templates';
  *
  * 가드는 createCampaign 내부(수신거부/이메일/부정 결과코드 제외)에도 있지만,
  * 단건은 "왜 안 되는지"를 사용자에게 정확히 알려야 하므로 여기서 선검증한다 (fail-closed).
+ *
+ * **담당 범위 밖 대상은 없는 대상과 같은 문구로 거부한다** (fieldwork-multi-company 티켓 05) — 첫 조회의
+ * 조건이라 수신거부·연락금지·주소 같은 다음 사유는 범위 밖 대상에 대해 묻지도 않는다(그 사유가 대상의
+ * 상태를 드러내므로).
  */
 export async function sendSingleCampaign(
   input: SendSingleCampaignInput,
   creator: ActorAttribution,
   isExternal: boolean,
+  /** 주체의 담당 범위(`resolveFieldworkShare`) — 외주 링크에 열린 표면이라 필수다. */
+  share: FieldworkShare,
 ): Promise<CreateCampaignResult> {
   const [contact] = await db
     .select({
@@ -38,6 +45,7 @@ export async function sendSingleCampaign(
       and(
         eq(contactTargets.id, input.contactTargetId),
         eq(contactTargets.surveyId, input.surveyId),
+        shareTargetCondition(share),
       ),
     )
     .limit(1);

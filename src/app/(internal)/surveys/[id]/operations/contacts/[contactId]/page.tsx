@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 
 import { internalOperationsBase } from '@/features/operations/operations-paths';
 import { getOperationsDataScope } from '@/server/data-scope';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
 
 import { ContactDetailScreen } from '@/app/_operations/contact-detail-screen';
@@ -34,6 +35,8 @@ export default async function ContactDetailPage({ params }: PageProps) {
       basePath={internalOperationsBase(surveyId)}
       capabilities={capabilities}
       scope={scope}
+      // 계정 주체는 담당 범위와 무관하게 설문 전체를 본다.
+      share={FIELDWORK_SHARE_ALL}
       // 연구원은 종전대로 초대 링크를 본다 — 발송 문의·수동 안내에 쓰는 값이다.
       canProxyRespond
       includeContactOwner

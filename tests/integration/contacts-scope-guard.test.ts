@@ -117,6 +117,7 @@ vi.mock('@/db', () => {
 
 import { deleteContactTarget, updateContactTarget } from '@/server/contacts/services/contact-targets';
 import { deleteAttempt, updateAttempt } from '@/server/contacts/services/contact-attempts';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 
 // 이 브라우저가 「테스트 모드로 보기」를 켠 상태 — 전역 테스트 모드가 켜지면 콘솔이 테스트 파티션을 본다.
 // (쿠키가 없으면 전역 플래그가 켜져 있어도 실데이터다 — server/data-scope)
@@ -279,6 +280,7 @@ describe('updateAttempt 소속 스코프', () => {
         },
         false,
         editor,
+        FIELDWORK_SHARE_ALL,
       ),
     ).rejects.toThrow('NOT_FOUND');
   });
@@ -295,6 +297,7 @@ describe('updateAttempt 소속 스코프', () => {
         },
         false,
         editor,
+        FIELDWORK_SHARE_ALL,
       ),
     ).rejects.toThrow('NOT_FOUND');
   });
@@ -312,6 +315,7 @@ describe('updateAttempt 소속 스코프', () => {
         },
         false,
         editor,
+        FIELDWORK_SHARE_ALL,
       ),
     ).rejects.toThrow('NOT_FOUND');
   });
@@ -329,6 +333,7 @@ describe('updateAttempt 소속 스코프', () => {
         },
         false,
         editor,
+        FIELDWORK_SHARE_ALL,
       ),
     ).resolves.toBeUndefined();
   });
@@ -338,7 +343,7 @@ describe('deleteAttempt 소속 스코프', () => {
   it('contactTarget 이 설문에 없으면 NOT_FOUND throw', async () => {
     selectResultQueue.push([{ enabled: false }], []); // current scope 대상자 0행
     await expect(
-      deleteAttempt({ id: 'att-1', contactTargetId: 'ct-1', surveyId: 'other-survey' }, false, editor),
+      deleteAttempt({ id: 'att-1', contactTargetId: 'ct-1', surveyId: 'other-survey' }, false, editor, FIELDWORK_SHARE_ALL),
     ).rejects.toThrow('NOT_FOUND');
   });
 
@@ -346,7 +351,7 @@ describe('deleteAttempt 소속 스코프', () => {
     selectResultQueue.push([{ enabled: false }], [{ id: 'ct-1' }]);
     deleteReturningQueue.push([]); // attempt 영향 0행
     await expect(
-      deleteAttempt({ id: 'att-1', contactTargetId: 'ct-1', surveyId: 'sv-1' }, false, editor),
+      deleteAttempt({ id: 'att-1', contactTargetId: 'ct-1', surveyId: 'sv-1' }, false, editor, FIELDWORK_SHARE_ALL),
     ).rejects.toThrow('NOT_FOUND');
   });
 
@@ -354,7 +359,7 @@ describe('deleteAttempt 소속 스코프', () => {
     selectResultQueue.push([{ enabled: false }], [{ id: 'ct-1' }]);
     deleteReturningQueue.push([attemptRow]);
     await expect(
-      deleteAttempt({ id: 'att-1', contactTargetId: 'ct-1', surveyId: 'sv-1' }, false, editor),
+      deleteAttempt({ id: 'att-1', contactTargetId: 'ct-1', surveyId: 'sv-1' }, false, editor, FIELDWORK_SHARE_ALL),
     ).resolves.toBeUndefined();
   });
 });

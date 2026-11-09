@@ -69,6 +69,7 @@ import type {
 } from '@/shared/contracts/contacts-io';
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
 
+import { type FieldworkShare, shareTargetCondition } from '../fieldwork-share';
 import { type ResolvedContactFilter, resolvedContactFilterSql } from './contact-filter-resolution';
 import type { FieldworkLinkNames } from './fieldwork-link-names';
 
@@ -456,6 +457,12 @@ export async function getContactDetailById(
   surveyId: string,
   scope: OperationsDataScope,
   /**
+   * 주체의 담당 범위 — 설문처럼 **조회 조건이다** (fieldwork-multi-company 티켓 05). 범위 밖 대상은 없는
+   * 대상과 같은 null 이라 화면이 notFound 로 접고, PII 복호화·회차 조회까지 가지 않는다. 내부 콘솔은
+   * `FIELDWORK_SHARE_ALL`, `/fw` 는 `resolveFieldworkShare(actor, surveyId)`.
+   */
+  share: FieldworkShare,
+  /**
    * 내부 콘솔만 넘긴다 — 외주 링크가 남긴 회차의 기록자를 「외주 · <링크 이름>」으로 읽는다
    * (fieldwork-multi-company 티켓 02). 없으면 저장된 글자(「외주」) 그대로다.
    */
@@ -485,6 +492,7 @@ export async function getContactDetailById(
         eq(contactTargets.id, id),
         eq(contactTargets.surveyId, surveyId),
         targetScopeCondition(scope),
+        shareTargetCondition(share),
       ),
     )
     .limit(1);

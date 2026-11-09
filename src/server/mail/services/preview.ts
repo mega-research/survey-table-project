@@ -16,6 +16,7 @@ import { MailWrapper } from './template-wrapper';
 import { buildInviteUrl } from '@/lib/survey-url';
 import { getContactSampleById, getFirstContactSample } from '@/server/read-models/contact-sample';
 import { loadOperationsDataScope } from '@/server/data-scope';
+import { FIELDWORK_SHARE_ALL, resolveFieldworkShare } from '@/server/fieldwork-share';
 import type { Actor } from '@/server/survey-access';
 
 import type {
@@ -37,8 +38,11 @@ export async function getMailPreviewSample(
 ): Promise<GetMailPreviewSampleOutput> {
   // 주체를 받으면 그것으로 파티션을 정한다 — 외주 실사 링크에는 세션 계정이 없다(ADR-0027).
   const scope = await loadOperationsDataScope(input.surveyId, actor);
+  // 담당 범위도 같은 주체에서 — 범위 밖 대상은 없는 대상과 같은 null(티켓 05). 주체 없이 부르는 표면
+  // (`mail.preview.sample`, `mail.view` 라 외주 링크에 닫혀 있다)은 설문 전체다.
+  const share = actor ? resolveFieldworkShare(actor, input.surveyId) : FIELDWORK_SHARE_ALL;
   const sample = input.contactTargetId
-    ? await getContactSampleById(input.surveyId, input.contactTargetId, scope)
+    ? await getContactSampleById(input.surveyId, input.contactTargetId, scope, share)
     : await getFirstContactSample(input.surveyId, scope);
   if (!sample) return null;
 

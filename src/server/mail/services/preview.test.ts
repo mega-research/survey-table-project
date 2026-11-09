@@ -87,7 +87,12 @@ describe('getMailPreviewSample', () => {
     });
     vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://survey.example.com');
     const res = await getMailPreviewSample({ surveyId: SURVEY_ID, contactTargetId: CONTACT_ID });
-    expect(getContactSampleById).toHaveBeenCalledWith(SURVEY_ID, CONTACT_ID, expect.anything());
+    expect(getContactSampleById).toHaveBeenCalledWith(
+      SURVEY_ID,
+      CONTACT_ID,
+      expect.anything(),
+      { kind: 'all' },
+    );
     expect(getFirstContactSample).not.toHaveBeenCalled();
     expect(res?.resid).toBe(4);
     expect(res?.inviteUrl).toContain('/i/DktK3edZjq');

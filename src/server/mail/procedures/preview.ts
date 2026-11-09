@@ -1,3 +1,5 @@
+import { ORPCError } from '@orpc/server';
+
 import { scoped } from '@/server/orpc';
 import { assertScopedSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 
@@ -25,13 +27,19 @@ const sample = scoped
  * `sample` 과 가른 이유는 요구 칸이 달라서다. 외주 실사 링크는 메일 탭(`mail.view`)이 없고
  * 단건 발송(`mail.sendSingle`)만 갖는다. 대상 지목이 필수라 「첫 컨택」 폴백이 없고, 대상은
  * 그 링크가 이미 원본으로 보는 조사 대상(`contacts.view`)이라 새로 열리는 정보가 없다.
+ *
+ * **지목한 대상이 없으면 NOT_FOUND 다** (fieldwork-multi-company 티켓 05). 단건 발송 창은 대상 상세에서만
+ * 열리므로 「대상이 없다」는 정상 응답이 아니다 — 없는 대상·남의 설문 대상·담당 범위 밖 대상을 같은
+ * 답(단건 발송의 첫 거부와 같은 문구)으로 접어 존재를 드러내지 않는다.
  */
 const contactSample = scoped
   .input(GetContactMailPreviewSampleInput)
   .output(GetMailPreviewSampleOutput)
   .handler(async ({ context, input }) => {
     await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'mail.sendSingle');
-    return svc.getMailPreviewSample(input, context.actor);
+    const sample = await svc.getMailPreviewSample(input, context.actor);
+    if (!sample) throw new ORPCError('NOT_FOUND', { message: '조사 대상을 찾을 수 없습니다.' });
+    return sample;
   });
 
 /**

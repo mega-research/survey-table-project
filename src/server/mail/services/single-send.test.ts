@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { SendAddressResolution } from '@/lib/mail/send-address';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 import { resolveSendAddresses } from '@/server/read-models/send-address';
 import { getResultCodeStatuses } from '@/server/read-models/result-code-statuses';
 
@@ -55,7 +56,7 @@ describe('sendSingleCampaign 가드', () => {
 
   it('컨택이 없으면 에러', async () => {
     selectResultQueue.push([]); // contact 조회 empty
-    await expect(sendSingleCampaign(INPUT, { accountUserId: 'admin-1', fieldworkLinkId: null }, false)).rejects.toThrow(
+    await expect(sendSingleCampaign(INPUT, { accountUserId: 'admin-1', fieldworkLinkId: null }, false, FIELDWORK_SHARE_ALL)).rejects.toThrow(
       '조사 대상을 찾을 수 없습니다.',
     );
     expect(createCampaign).not.toHaveBeenCalled();
@@ -63,7 +64,7 @@ describe('sendSingleCampaign 가드', () => {
 
   it('수신거부 컨택이면 에러', async () => {
     selectResultQueue.push([{ id: 'ct-1', surveyId: 'sv-1', unsubscribedAt: new Date() }]);
-    await expect(sendSingleCampaign(INPUT, { accountUserId: 'admin-1', fieldworkLinkId: null }, false)).rejects.toThrow(
+    await expect(sendSingleCampaign(INPUT, { accountUserId: 'admin-1', fieldworkLinkId: null }, false, FIELDWORK_SHARE_ALL)).rejects.toThrow(
       '수신거부된 조사 대상',
     );
     expect(createCampaign).not.toHaveBeenCalled();
@@ -72,7 +73,7 @@ describe('sendSingleCampaign 가드', () => {
   it('최근 결과코드가 수신거부면 에러', async () => {
     selectResultQueue.push([{ id: 'ct-1', surveyId: 'sv-1', unsubscribedAt: null }]);
     selectResultQueue.push([{ id: 'ct-1' }]); // 최근 결과코드 수신거부
-    await expect(sendSingleCampaign(INPUT, { accountUserId: 'admin-1', fieldworkLinkId: null }, false)).rejects.toThrow(
+    await expect(sendSingleCampaign(INPUT, { accountUserId: 'admin-1', fieldworkLinkId: null }, false, FIELDWORK_SHARE_ALL)).rejects.toThrow(
       '수신거부 결과코드가 기록된',
     );
     expect(createCampaign).not.toHaveBeenCalled();
@@ -83,7 +84,7 @@ describe('sendSingleCampaign 가드', () => {
     selectResultQueue.push([]); // 결과코드 수신거부 없음
     vi.mocked(getResultCodeStatuses).mockResolvedValueOnce({ positive: [], negative: ['DNC'] });
     selectResultQueue.push([{ id: 'ct-1' }]); // 부정 결과코드 존재
-    await expect(sendSingleCampaign(INPUT, { accountUserId: 'admin-1', fieldworkLinkId: null }, false)).rejects.toThrow(
+    await expect(sendSingleCampaign(INPUT, { accountUserId: 'admin-1', fieldworkLinkId: null }, false, FIELDWORK_SHARE_ALL)).rejects.toThrow(
       '연락금지 결과코드가 기록된',
     );
     expect(createCampaign).not.toHaveBeenCalled();
@@ -94,7 +95,7 @@ describe('sendSingleCampaign 가드', () => {
     selectResultQueue.push([]); // 결과코드 수신거부 없음
     selectResultQueue.push([]); // 부정 결과코드 없음
     vi.mocked(resolveSendAddresses).mockResolvedValueOnce(addressOf({ kind: 'missing' }));
-    await expect(sendSingleCampaign(INPUT, { accountUserId: 'admin-1', fieldworkLinkId: null }, false)).rejects.toThrow('이메일 정보가 없는');
+    await expect(sendSingleCampaign(INPUT, { accountUserId: 'admin-1', fieldworkLinkId: null }, false, FIELDWORK_SHARE_ALL)).rejects.toThrow('이메일 정보가 없는');
     expect(createCampaign).not.toHaveBeenCalled();
   });
 
@@ -103,7 +104,7 @@ describe('sendSingleCampaign 가드', () => {
     selectResultQueue.push([]); // 결과코드 수신거부 없음
     selectResultQueue.push([]); // 부정 결과코드 없음
     vi.mocked(resolveSendAddresses).mockResolvedValueOnce(SENDABLE);
-    await sendSingleCampaign(INPUT, { accountUserId: 'admin-1', fieldworkLinkId: null }, false);
+    await sendSingleCampaign(INPUT, { accountUserId: 'admin-1', fieldworkLinkId: null }, false, FIELDWORK_SHARE_ALL);
     expect(vi.mocked(resolveSendAddresses).mock.calls[0]).toHaveLength(3);
     expect(createCampaign).toHaveBeenCalled();
   });
@@ -114,7 +115,7 @@ describe('sendSingleCampaign 가드', () => {
     selectResultQueue.push([]); // 부정 결과코드 없음
     vi.mocked(resolveSendAddresses).mockResolvedValueOnce(SENDABLE);
     vi.mocked(getMailTemplate).mockResolvedValueOnce(null);
-    await expect(sendSingleCampaign(INPUT, { accountUserId: 'admin-1', fieldworkLinkId: null }, false)).rejects.toThrow(
+    await expect(sendSingleCampaign(INPUT, { accountUserId: 'admin-1', fieldworkLinkId: null }, false, FIELDWORK_SHARE_ALL)).rejects.toThrow(
       '메일 템플릿을 찾을 수 없습니다.',
     );
     expect(createCampaign).not.toHaveBeenCalled();
@@ -125,7 +126,7 @@ describe('sendSingleCampaign 가드', () => {
     selectResultQueue.push([]); // 결과코드 수신거부 없음
     selectResultQueue.push([]); // 부정 결과코드 없음
     vi.mocked(resolveSendAddresses).mockResolvedValueOnce(SENDABLE);
-    const res = await sendSingleCampaign(INPUT, { accountUserId: 'admin-1', fieldworkLinkId: null }, false);
+    const res = await sendSingleCampaign(INPUT, { accountUserId: 'admin-1', fieldworkLinkId: null }, false, FIELDWORK_SHARE_ALL);
     expect(createCampaign).toHaveBeenCalledWith(
       {
         surveyId: 'sv-1',
