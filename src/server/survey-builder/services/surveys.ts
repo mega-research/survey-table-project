@@ -191,6 +191,53 @@ function remapQuestionIdRefs<T>(value: T, idMap: Map<string, string>): T {
   return remapUnknownRefs(value, idMap) as T;
 }
 
+/**
+ * 설문 복제가 옮기지 않는 설문 칸 — 사유별로. 나머지 칸은 전부 옮겨야 한다(아래 `CompleteSurveyCopy`).
+ * surveys 에 새 칸이 생기면 복제의 values 가 컴파일 에러가 되어, 옮길지 여기 적을지 고르게 한다
+ * (화면 너비 `forceWideLayout` 이 조용히 빠졌던 2026-11-09 사고).
+ */
+const _SURVEY_FIELDS_NOT_COPIED = [
+  // 행 정체성·수명 — 복제본이 새로 갖는다
+  'id',
+  'slug',
+  'privateToken',
+  'previewToken',
+  'testToken',
+  'status',
+  'currentVersionId',
+  'testVersionId',
+  'deletedAt',
+  'createdAt',
+  'updatedAt',
+  // 운영 — 조사 대상 명단·실사 진행에 딸린 설정. 복제본은 명단 없이 새로 시작한다
+  'contactColumns',
+  'testContactColumns',
+  'contactResultCodes',
+  'progressColumns',
+  'profileColumns',
+  'requireInviteToken',
+  'contactEmail',
+  'quotaConfig',
+  'isPaused',
+  'pausedMessage',
+  'testModeEnabled',
+  // 추적조사 — 이월 응답 임포트에 딸린 설정
+  'priorWaveLabel',
+  'changeConfirmEnabled',
+  'priorAnswerImportConfig',
+] as const satisfies readonly (keyof NewSurvey)[];
+
+type CompleteSurveyCopy = Record<
+  Exclude<keyof NewSurvey, (typeof _SURVEY_FIELDS_NOT_COPIED)[number]>,
+  unknown
+>;
+
+/** 그룹 행은 칸을 전부 옮긴다(id·설문·부모·조건은 바꿔서) — 「그룹 이름 숨기기」가 빠졌던 2026-11-09 사고 */
+type CompleteGroupCopy = Record<
+  Exclude<keyof NewQuestionGroup, 'createdAt' | 'updatedAt'>,
+  unknown
+>;
+
 // 설문 복제
 export async function duplicateSurvey(
   input: SurveyIdInput,
@@ -231,7 +278,8 @@ export async function duplicateSurvey(
         responseHeader: original.responseHeader ?? null,
         // LUT 사본은 질문(옵션 소스·조건)이 id 로 참조하므로 함께 복사해야 복제본이 깨지지 않는다.
         lookups: original.lookups ?? [],
-      })
+        forceWideLayout: original.forceWideLayout,
+      } satisfies CompleteSurveyCopy)
       .returning();
     const newSurvey = newSurveyRows[0];
     if (!newSurvey) throw new Error('copySurvey: 새 설문 생성 실패');
@@ -283,12 +331,13 @@ export async function duplicateSurvey(
         parentGroupId: group.parentGroupId ? groupIdMap.get(group.parentGroupId) : null,
         color: group.color,
         collapsed: group.collapsed,
+        hideName: group.hideName,
         nameDesign: group.nameDesign as NewQuestionGroup['nameDesign'],
         displayCondition: remapQuestionIdRefs(
           group.displayCondition as NewQuestionGroup['displayCondition'],
           questionIdMap,
         ),
-      };
+      } satisfies CompleteGroupCopy;
     });
 
     if (newGroupsData.length > 0) {
