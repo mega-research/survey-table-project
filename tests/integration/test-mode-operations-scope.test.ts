@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PgDialect } from 'drizzle-orm/pg-core';
 
 import { resolvedFilterForTest } from '../helpers/resolved-contact-filter';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 
 const { mockExecute, mockInnerJoin, mockWhere } = vi.hoisted(() => ({
   mockExecute: vi.fn(),
@@ -81,25 +82,33 @@ describe('운영 응답 범위', () => {
   it('aggregateStatus는 전달된 test scope의 응답만 집계한다', async () => {
     const { aggregateStatus } = await import('@/server/operations/services/aggregate-status');
 
-    await aggregateStatus('survey-1', 'test');
+    await aggregateStatus('survey-1', 'test', FIELDWORK_SHARE_ALL);
 
     const query = whereQuery();
     expect(query.sql).toContain('is_test');
     expect(query.params).toContain(true);
     const { getFieldworkCompletedCounts } = await import('@/server/read-models/fieldwork-completions');
-    expect(getFieldworkCompletedCounts).toHaveBeenLastCalledWith(['survey-1'], true);
+    expect(getFieldworkCompletedCounts).toHaveBeenLastCalledWith(
+      ['survey-1'],
+      true,
+      FIELDWORK_SHARE_ALL,
+    );
   });
 
   it('aggregateStatus는 전달된 real scope의 응답만 집계한다', async () => {
     const { aggregateStatus } = await import('@/server/operations/services/aggregate-status');
 
-    await aggregateStatus('survey-1', 'real');
+    await aggregateStatus('survey-1', 'real', FIELDWORK_SHARE_ALL);
 
     const query = whereQuery();
     expect(query.sql).toContain('is_test');
     expect(query.params).toContain(false);
     const { getFieldworkCompletedCounts } = await import('@/server/read-models/fieldwork-completions');
-    expect(getFieldworkCompletedCounts).toHaveBeenLastCalledWith(['survey-1'], false);
+    expect(getFieldworkCompletedCounts).toHaveBeenLastCalledWith(
+      ['survey-1'],
+      false,
+      FIELDWORK_SHARE_ALL,
+    );
   });
 
   it.each(SCOPE_CASES)('contacts는 %s scope의 조사대상만 조회한다', async (scope, isTest) => {
@@ -148,6 +157,7 @@ describe('운영 응답 범위', () => {
     await getProgressRows({
       surveyId: `report-${scope}`,
       scope,
+      share: FIELDWORK_SHARE_ALL,
       condition: null,
       page: 1,
       size: 20,

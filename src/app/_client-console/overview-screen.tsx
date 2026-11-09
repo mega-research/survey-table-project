@@ -17,6 +17,10 @@ import { getQuotaStatus } from '@/server/quota/services/quota-status';
 import { getResponseTime } from '@/server/operations/services/response-time';
 
 import { EXTERNAL_VIEWER_DATA_SCOPE } from '@/server/data-scope';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
+
+/** 클라이언트 링크에는 담당 범위 축이 없다(ADR-0029·0035) — 설문 전체를 센다. */
+const SHARE = FIELDWORK_SHARE_ALL;
 
 export interface ClientOverviewSearchParams {
   mode?: 'day' | 'hour';
@@ -86,25 +90,30 @@ export async function ClientOverviewScreen({
   const weekOffset = Math.max(0, parseInt(weekOffsetStr ?? '0', 10) || 0);
   const dwellOffset = Math.max(0, parseInt(dwellOffsetStr ?? '0', 10) || 0);
 
-  const availableDates = await aggregateDailyAvailableDates(surveyId, EXTERNAL_VIEWER_DATA_SCOPE);
+  const availableDates = await aggregateDailyAvailableDates(
+    surveyId,
+    EXTERNAL_VIEWER_DATA_SCOPE,
+    SHARE,
+  );
   const latestAvailable =
     availableDates.length > 0 ? availableDates[availableDates.length - 1] : undefined;
   const effectiveDate = mode === 'hour' ? (date ?? latestAvailable ?? kstTodayIsoDate()) : undefined;
 
   const [statusCounts, dailyBuckets, dailyStats, responseTime, dropFunnel, pageDwell, quotaStatus] =
     await Promise.all([
-      aggregateStatus(surveyId, EXTERNAL_VIEWER_DATA_SCOPE),
+      aggregateStatus(surveyId, EXTERNAL_VIEWER_DATA_SCOPE, SHARE),
       aggregateDaily({
         surveyId,
         scope: EXTERNAL_VIEWER_DATA_SCOPE,
+        share: SHARE,
         mode,
         ...(effectiveDate !== undefined ? { hourModeDate: effectiveDate } : {}),
       }),
       // 상세 통계 칩이 꺼져 있으면 넷 다 읽지 않는다.
-      showDetail ? getDailyStats(surveyId, EXTERNAL_VIEWER_DATA_SCOPE) : null,
-      showDetail ? getResponseTime(surveyId, EXTERNAL_VIEWER_DATA_SCOPE) : null,
-      showDetail ? getDropFunnel(surveyId, EXTERNAL_VIEWER_DATA_SCOPE) : null,
-      showDetail ? getPageDwell(surveyId, EXTERNAL_VIEWER_DATA_SCOPE) : null,
+      showDetail ? getDailyStats(surveyId, EXTERNAL_VIEWER_DATA_SCOPE, SHARE) : null,
+      showDetail ? getResponseTime(surveyId, EXTERNAL_VIEWER_DATA_SCOPE, SHARE) : null,
+      showDetail ? getDropFunnel(surveyId, EXTERNAL_VIEWER_DATA_SCOPE, SHARE) : null,
+      showDetail ? getPageDwell(surveyId, EXTERNAL_VIEWER_DATA_SCOPE, SHARE) : null,
       // 쿼터 탭이 꺼져 있으면 조회 자체를 하지 않는다 — 쓰지 않을 값을 읽지 않는다.
       showQuota ? getQuotaStatus(surveyId, EXTERNAL_VIEWER_DATA_SCOPE) : null,
     ]);

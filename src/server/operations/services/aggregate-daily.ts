@@ -3,6 +3,7 @@ import 'server-only';
 import { and, eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
+import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share';
 import { surveyResponses } from '@/db/schema';
 import { notDeletedResponse } from '@/server/response-filters';
 
@@ -31,11 +32,14 @@ import {
 export async function aggregateDaily(input: {
   surveyId: string;
   scope: OperationsDataScope;
+  /** 담당 범위 — 나눈 외주 링크면 그 범위 대상의 응답만 센다(`server/fieldwork-share`). */
+  share: FieldworkShare;
   mode: DailyMode;
   /** mode === 'hour' 일 때 필수. 'YYYY-MM-DD' (KST). */
   hourModeDate?: string;
 }): Promise<DailyBucket[]> {
-  const { surveyId, scope, mode, hourModeDate } = input;
+  const { surveyId, scope, share, mode, hourModeDate } = input;
+  const shareCondition = shareTargetCondition(share, surveyResponses.contactTargetId) ?? sql`TRUE`;
   const isTest = testFlagForScope(scope);
 
   let rows: DailyRow[];
@@ -52,6 +56,7 @@ export async function aggregateDaily(input: {
           eq(surveyResponses.surveyId, surveyId),
           notDeletedResponse,
           responseScopeCondition(scope),
+          shareCondition,
         ),
       )
       .groupBy(sql`1`)
@@ -67,7 +72,7 @@ export async function aggregateDaily(input: {
       })
       .from(surveyResponses)
       .where(
-        sql`${surveyResponses.surveyId} = ${surveyId} AND (${surveyResponses.startedAt} AT TIME ZONE 'Asia/Seoul')::date = ${hourModeDate}::date AND ${surveyResponses.deletedAt} IS NULL AND ${surveyResponses.isTest} = ${isTest}`,
+        sql`${surveyResponses.surveyId} = ${surveyId} AND (${surveyResponses.startedAt} AT TIME ZONE 'Asia/Seoul')::date = ${hourModeDate}::date AND ${surveyResponses.deletedAt} IS NULL AND ${surveyResponses.isTest} = ${isTest} AND ${shareCondition}`,
       )
       .groupBy(sql`1`)
       .orderBy(sql`1`);
@@ -83,6 +88,7 @@ export async function aggregateDaily(input: {
 export async function aggregateDailyAvailableDates(
   surveyId: string,
   scope: OperationsDataScope,
+  share: FieldworkShare,
 ): Promise<string[]> {
   const rows = await db
     .select({
@@ -94,6 +100,7 @@ export async function aggregateDailyAvailableDates(
         eq(surveyResponses.surveyId, surveyId),
         notDeletedResponse,
         responseScopeCondition(scope),
+        shareTargetCondition(share, surveyResponses.contactTargetId),
       ),
     )
     .groupBy(sql`1`)

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 
 import { getOperationsDataScope } from '@/server/data-scope';
+import { resolveFieldworkShare } from '@/server/fieldwork-share';
 import { assertFieldworkLinkPageAccess } from '@/server/page-fieldwork-link-access';
 
 import {
@@ -18,11 +19,14 @@ interface PageProps {
 }
 
 /**
- * 외주가 보는 응답 현황 — 내부 콘솔과 **같은 위젯·같은 숫자**다 (ADR-0026, 티켓 07, 스토리 34).
+ * 외주가 보는 응답 현황 — 내부 콘솔과 **같은 위젯**이다 (ADR-0026, 티켓 07, 스토리 34).
  *
- * 축약본을 따로 만들지 않는 것이 요점이다. 연구원과 외주가 다른 숫자를 보면 진척 보고가
- * 어느 쪽이 맞는지 알 수 없어진다. 빠지는 것은 **내보내기 모달 하나**이고 그것도 화면이
+ * 축약본을 따로 만들지 않는 것이 요점이다. 빠지는 것은 **내보내기 모달 하나**이고 그것도 화면이
  * 아니라 판정(`export.download` 미보유)이 정한다.
+ *
+ * 숫자는 담당 범위를 따른다(ADR-0035) — 한 번도 나누지 않은 링크는 내부 콘솔과 같은 설문 전체를,
+ * 나눈 링크는 자기 범위 대상의 응답만 본다. 범위는 매 요청 링크 행에서 읽으므로 연구원이 범위를
+ * 바꾸면 다음 화면부터 반영된다.
  */
 export default async function FieldworkLinkOverviewPage({ params, searchParams }: PageProps) {
   const { token } = await params;
@@ -37,6 +41,7 @@ export default async function FieldworkLinkOverviewPage({ params, searchParams }
       surveyId={surveyId}
       capabilities={capabilities}
       scope={scope}
+      share={resolveFieldworkShare(actor, surveyId)}
       searchParams={await searchParams}
     />
   );

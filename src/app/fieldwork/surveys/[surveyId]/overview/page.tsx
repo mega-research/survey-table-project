@@ -17,6 +17,10 @@ import { getPageDwell } from '@/server/operations/services/page-dwell';
 import { getResponseTime } from '@/server/operations/services/response-time';
 
 import { EXTERNAL_VIEWER_DATA_SCOPE } from '@/server/data-scope';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
+
+/** 옛 게스트 계정 화면 — 계정 주체라 담당 범위 축이 없다(설문 전체). */
+const SHARE = FIELDWORK_SHARE_ALL;
 
 interface Props {
   params: Promise<{ surveyId: string }>;
@@ -59,24 +63,29 @@ export default async function FieldworkOverviewPage({ params, searchParams }: Pr
   const weekOffset = Math.max(0, parseInt(weekOffsetStr ?? '0', 10) || 0);
   const dwellOffset = Math.max(0, parseInt(dwellOffsetStr ?? '0', 10) || 0);
 
-  const availableDates = await aggregateDailyAvailableDates(surveyId, EXTERNAL_VIEWER_DATA_SCOPE);
+  const availableDates = await aggregateDailyAvailableDates(
+    surveyId,
+    EXTERNAL_VIEWER_DATA_SCOPE,
+    SHARE,
+  );
   const latestAvailable =
     availableDates.length > 0 ? availableDates[availableDates.length - 1] : undefined;
   const effectiveDate = mode === 'hour' ? (date ?? latestAvailable ?? kstTodayIsoDate()) : undefined;
 
   const [statusCounts, dailyBuckets, dailyStats, responseTime, dropFunnel, pageDwell] =
     await Promise.all([
-      aggregateStatus(surveyId, EXTERNAL_VIEWER_DATA_SCOPE),
+      aggregateStatus(surveyId, EXTERNAL_VIEWER_DATA_SCOPE, SHARE),
       aggregateDaily({
         surveyId,
         scope: EXTERNAL_VIEWER_DATA_SCOPE,
+        share: SHARE,
         mode,
         ...(effectiveDate !== undefined ? { hourModeDate: effectiveDate } : {}),
       }),
-      getDailyStats(surveyId, EXTERNAL_VIEWER_DATA_SCOPE),
-      getResponseTime(surveyId, EXTERNAL_VIEWER_DATA_SCOPE),
-      getDropFunnel(surveyId, EXTERNAL_VIEWER_DATA_SCOPE),
-      getPageDwell(surveyId, EXTERNAL_VIEWER_DATA_SCOPE),
+      getDailyStats(surveyId, EXTERNAL_VIEWER_DATA_SCOPE, SHARE),
+      getResponseTime(surveyId, EXTERNAL_VIEWER_DATA_SCOPE, SHARE),
+      getDropFunnel(surveyId, EXTERNAL_VIEWER_DATA_SCOPE, SHARE),
+      getPageDwell(surveyId, EXTERNAL_VIEWER_DATA_SCOPE, SHARE),
     ]);
 
   return (

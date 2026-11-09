@@ -18,6 +18,7 @@ import type { StatusCounts } from '@/lib/operations/aggregate-status-format';
 import * as aggregateStatusServer from '@/server/operations/services/aggregate-status';
 import * as profilesServer from '@/server/operations/services/profiles';
 import type { ListProfilesResult } from '@/server/operations/services/profiles';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 
 // ========================
 // 모듈 모킹
@@ -561,12 +562,12 @@ describe('profiles-row-actions', () => {
 
       vi.spyOn(aggregateStatusServer, 'aggregateStatus').mockImplementation(stubAggregateStatus);
 
-      const before = await aggregateStatusServer.aggregateStatus(surveyId, 'real');
+      const before = await aggregateStatusServer.aggregateStatus(surveyId, 'real', FIELDWORK_SHARE_ALL);
       expect(before.completed).toBeGreaterThanOrEqual(1);
 
       await softDeleteResponse({ surveyId, responseId });
 
-      const after = await aggregateStatusServer.aggregateStatus(surveyId, 'real');
+      const after = await aggregateStatusServer.aggregateStatus(surveyId, 'real', FIELDWORK_SHARE_ALL);
       expect(after.completed).toBe(before.completed - 1);
 
       vi.restoreAllMocks();
@@ -604,7 +605,7 @@ describe('profiles-row-actions', () => {
         ...normalizedArgs,
         view: 'deleted',
       });
-      const midCounts = await aggregateStatusServer.aggregateStatus(surveyId, 'real');
+      const midCounts = await aggregateStatusServer.aggregateStatus(surveyId, 'real', FIELDWORK_SHARE_ALL);
       expect(midActive.total).toBe(0);
       expect(midDeleted.total).toBe(1);
       expect(midCounts.completed).toBe(0);
@@ -620,7 +621,7 @@ describe('profiles-row-actions', () => {
         ...normalizedArgs,
         view: 'deleted',
       });
-      const afterCounts = await aggregateStatusServer.aggregateStatus(surveyId, 'real');
+      const afterCounts = await aggregateStatusServer.aggregateStatus(surveyId, 'real', FIELDWORK_SHARE_ALL);
       expect(afterActive.total).toBe(1);
       expect(afterDeleted.total).toBe(0);
       expect(afterCounts.completed).toBe(1);

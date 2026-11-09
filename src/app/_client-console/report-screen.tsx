@@ -23,6 +23,10 @@ import {
 } from '@/server/operations/services/report-progress';
 
 import { EXTERNAL_VIEWER_DATA_SCOPE } from '@/server/data-scope';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
+
+/** 클라이언트 링크에는 담당 범위 축이 없다(ADR-0029·0035) — 설문 전체를 센다. */
+const SHARE = FIELDWORK_SHARE_ALL;
 
 export interface ClientReportSearchParams {
   page?: string;
@@ -96,13 +100,14 @@ export async function ClientReportScreen({ surveyId, searchParams: sp }: Props) 
     contactScheme?.columns.find((c) => c.source === FILTER_SOURCE.RESID)?.label?.trim() ||
     RESID_DEFAULT_LABEL;
 
-  const isEmpty = (await countContactTargets(surveyId, EXTERNAL_VIEWER_DATA_SCOPE)) === 0;
+  const isEmpty = (await countContactTargets(surveyId, EXTERNAL_VIEWER_DATA_SCOPE, SHARE)) === 0;
   const { rows, totals } = isEmpty
     ? { rows: [], totals: EMPTY_PROGRESS_TOTALS }
     : await Promise.all([
         getProgressRows({
           surveyId,
           scope: EXTERNAL_VIEWER_DATA_SCOPE,
+          share: SHARE,
           condition: null,
           page,
           size: PAGE_SIZE,
@@ -111,7 +116,7 @@ export async function ClientReportScreen({ surveyId, searchParams: sp }: Props) 
           metaKeys,
           groupByKeys: activeGroupKeys,
         }),
-        getProgressTotals(surveyId, EXTERNAL_VIEWER_DATA_SCOPE, null, activeGroupKeys),
+        getProgressTotals(surveyId, EXTERNAL_VIEWER_DATA_SCOPE, SHARE, null, activeGroupKeys),
       ]).then(([r, t]) => ({ rows: r, totals: t }));
 
   return (

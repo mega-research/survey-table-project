@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { PgDialect } from 'drizzle-orm/pg-core';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 
 // aggregateStatus 는 db.select({...}).from(surveyResponses).where(...).groupBy(...) 체인을 쓴다.
 // 실 PG 없는 vitest 환경이라 where 절 자체를 캡처해 SQL 을 검증한다 (T3 duplicate-detection
@@ -37,7 +38,7 @@ describe('aggregateStatus', () => {
 
   it('real scope 응답만 상태 집계 모수에 포함한다 (where 절에 is_test=false 조건 포함)', async () => {
     const { aggregateStatus } = await import('./aggregate-status');
-    await aggregateStatus('survey-1', 'real');
+    await aggregateStatus('survey-1', 'real', FIELDWORK_SHARE_ALL);
 
     expect(mockWhere).toHaveBeenCalledTimes(1);
     // noUncheckedIndexedAccess 대응 — 직전 toHaveBeenCalledTimes(1) 단언이 존재를 보장한다.
@@ -49,7 +50,7 @@ describe('aggregateStatus', () => {
 
   it('실사 완료 처리 수를 전체에 더한다', async () => {
     const { aggregateStatus } = await import('./aggregate-status');
-    const counts = await aggregateStatus('survey-1', 'real');
+    const counts = await aggregateStatus('survey-1', 'real', FIELDWORK_SHARE_ALL);
 
     expect(counts.fieldworkCompleted).toBe(7);
     expect(counts.total).toBe(7);

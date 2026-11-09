@@ -76,8 +76,8 @@ export const FW_PAGE_SHARE_SURFACES: Record<string, ShareSurfaceStatus> = {
   'fw/[token]/operations/profiles/[responseId]/edit/page.tsx': pending('06'),
 
   // 07 — 응답 현황(응답 수)·진척 보고
-  'fw/[token]/operations/overview/page.tsx#응답 수': pending('07'),
-  'fw/[token]/operations/report/page.tsx': pending('07'),
+  'fw/[token]/operations/overview/page.tsx#응답 수': FILTERED,
+  'fw/[token]/operations/report/page.tsx': FILTERED,
 
   // 08 — 쿼터 현황(응답 현황 화면의 쿼터 조각 포함 — 오케스트레이터 결정)
   'fw/[token]/operations/overview/page.tsx#쿼터': pending('08'),

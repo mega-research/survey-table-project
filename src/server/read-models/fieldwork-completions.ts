@@ -5,6 +5,11 @@ import { inArray, sql, type SQL } from 'drizzle-orm';
 import { db } from '@/db';
 import { surveys } from '@/db/schema';
 import { extractResultCodeStatuses } from '@/lib/contacts/result-code-statuses-normalize';
+import {
+  FIELDWORK_SHARE_ALL,
+  type FieldworkShare,
+  shareTargetCondition,
+} from '@/server/fieldwork-share';
 import type { ContactResultCode } from '@/shared/contracts/contacts';
 
 /**
@@ -17,10 +22,15 @@ import type { ContactResultCode } from '@/shared/contracts/contacts';
  * 기록했으면 센다(any-time).
  *
  * 파티션은 조사 대상과 응답이 같은 `is_test` 다. 반환은 surveyId → 수, 0건인 설문은 키가 없다.
+ *
+ * `share` 는 담당 범위(`server/fieldwork-share`) — 나눈 외주 링크의 응답 현황이 자기 범위 대상만 센다.
+ * 범위는 한 설문의 링크 것이라 설문 하나를 물을 때만 의미가 있다. 여러 설문을 한꺼번에 세는 내부
+ * 목록은 기본값(설문 전체)을 쓴다.
  */
 export async function getFieldworkCompletedCounts(
   surveyIds: readonly string[],
   isTest: boolean,
+  share: FieldworkShare = FIELDWORK_SHARE_ALL,
 ): Promise<Map<string, number>> {
   const result = new Map<string, number>();
   if (surveyIds.length === 0) return result;
@@ -44,6 +54,7 @@ export async function getFieldworkCompletedCounts(
     SELECT ct.survey_id, count(*)::int AS count
       FROM contact_targets ct
      WHERE ct.is_test = ${isTest}
+       AND ${shareTargetCondition(share, sql`ct.id`) ?? sql`TRUE`}
        AND EXISTS (SELECT 1
                      FROM contact_attempts ca
                      JOIN positive_codes pc

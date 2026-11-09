@@ -3,6 +3,7 @@ import 'server-only';
 import { and, eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
+import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share';
 import { surveyResponses } from '@/db/schema';
 import { notDeletedResponse } from '@/server/response-filters';
 
@@ -26,6 +27,7 @@ import { responseScopeCondition, type OperationsDataScope } from '@/server/data-
 export async function getDailyStats(
   surveyId: string,
   scope: OperationsDataScope,
+  share: FieldworkShare,
 ): Promise<DailyStatsRow[]> {
   const rows = await db
     .select({
@@ -40,6 +42,7 @@ export async function getDailyStats(
         eq(surveyResponses.surveyId, surveyId),
         notDeletedResponse,
         responseScopeCondition(scope),
+        shareTargetCondition(share, surveyResponses.contactTargetId),
       ),
     )
     .groupBy(sql`1`)

@@ -137,6 +137,7 @@ import {
   getProgressRows,
   getProgressTotals,
 } from '@/server/operations/services/report-progress';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 
 const SURVEY_ID = '00000000-0000-4000-8000-000000000010';
 
@@ -181,7 +182,7 @@ describe('getProgressTotals — negative exclusion', () => {
       { groupValue: 'A' },                                    // 분모만
       { groupValue: 'A', attempts: ['수신거부'] },            // 제외
     ]);
-    const totals = await getProgressTotals(SURVEY_ID, 'real', null);
+    const totals = await getProgressTotals(SURVEY_ID, 'real', FIELDWORK_SHARE_ALL, null);
     expect(totals.listTotal).toBe(3);
     expect(totals.completedTotal).toBe(2);
     expect(totals.excludedTotal).toBe(1);
@@ -192,7 +193,7 @@ describe('getProgressTotals — negative exclusion', () => {
       { groupValue: 'A', responded: true },
       { groupValue: 'A', unsubscribed: true },                // 제외
     ]);
-    const totals = await getProgressTotals(SURVEY_ID, 'real', null);
+    const totals = await getProgressTotals(SURVEY_ID, 'real', FIELDWORK_SHARE_ALL, null);
     expect(totals.listTotal).toBe(1);
     expect(totals.completedTotal).toBe(1);
     expect(totals.excludedTotal).toBe(1);
@@ -203,7 +204,7 @@ describe('getProgressTotals — negative exclusion', () => {
       { groupValue: 'A', responded: true, attempts: ['수신거부'] },  // 제외
       { groupValue: 'A', responded: true },                          // 분자+분모
     ]);
-    const totals = await getProgressTotals(SURVEY_ID, 'real', null);
+    const totals = await getProgressTotals(SURVEY_ID, 'real', FIELDWORK_SHARE_ALL, null);
     expect(totals.listTotal).toBe(1);
     expect(totals.completedTotal).toBe(1);
     expect(totals.excludedTotal).toBe(1);
@@ -219,7 +220,7 @@ describe('getProgressTotals — negative exclusion', () => {
         { groupValue: 'A' },                                    // 분모만
       ],
     );
-    const totals = await getProgressTotals(SURVEY_ID, 'real', null);
+    const totals = await getProgressTotals(SURVEY_ID, 'real', FIELDWORK_SHARE_ALL, null);
     expect(totals.listTotal).toBe(3);
     expect(totals.completedTotal).toBe(2);
     expect(totals.excludedTotal).toBe(0);
@@ -235,7 +236,7 @@ describe('getProgressTotals — negative exclusion', () => {
         { groupValue: 'A', attempts: ['2.재통화예약'] },       // 분모만
       ],
     );
-    const totals = await getProgressTotals(SURVEY_ID, 'real', null);
+    const totals = await getProgressTotals(SURVEY_ID, 'real', FIELDWORK_SHARE_ALL, null);
     expect(totals.listTotal).toBe(2);
     expect(totals.completedTotal).toBe(1);
     expect(totals.excludedTotal).toBe(0);
@@ -250,10 +251,11 @@ describe('getProgressTotals — negative exclusion', () => {
       { groupValue: null },          // NULL 그룹
       { groupValue: '(미분류)' },     // 리터럴 (미분류) 그룹 — NULL 과 별개
     ]);
-    const totals = await getProgressTotals(SURVEY_ID, 'real', null);
+    const totals = await getProgressTotals(SURVEY_ID, 'real', FIELDWORK_SHARE_ALL, null);
     const rows = await getProgressRows({
       surveyId: SURVEY_ID,
       scope: 'real',
+      share: FIELDWORK_SHARE_ALL,
       condition: null,
       page: 1,
       size: 100,
@@ -272,7 +274,7 @@ describe('getProgressTotals — negative exclusion', () => {
       { groupValue: 'A' },                          // 분모만
       { groupValue: 'A', screenedOut: true },       // 부적격 — 제외
     ]);
-    const totals = await getProgressTotals(SURVEY_ID, 'real', null);
+    const totals = await getProgressTotals(SURVEY_ID, 'real', FIELDWORK_SHARE_ALL, null);
     expect(totals.listTotal).toBe(2);
     expect(totals.completedTotal).toBe(1);
     expect(totals.excludedTotal).toBe(1);
@@ -283,7 +285,7 @@ describe('getProgressTotals — negative exclusion', () => {
       { groupValue: 'A', responded: true },
       { groupValue: 'A', screenedOut: true },
     ]);
-    const totals = await getProgressTotals(SURVEY_ID, 'real', null);
+    const totals = await getProgressTotals(SURVEY_ID, 'real', FIELDWORK_SHARE_ALL, null);
     expect(totals.listTotal).toBe(1);
     expect(totals.completedTotal).toBe(1);
     expect(totals.excludedTotal).toBe(1);
@@ -308,6 +310,7 @@ describe('getProgressRows — 그룹별 excludedCount', () => {
     const rows = await getProgressRows({
       surveyId: SURVEY_ID,
       scope: 'real',
+      share: FIELDWORK_SHARE_ALL,
       condition: null,
       page: 1,
       size: 100,

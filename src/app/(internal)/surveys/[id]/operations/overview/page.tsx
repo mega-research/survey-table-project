@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 
 import { getOperationsDataScope } from '@/server/data-scope';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
 
 import {
@@ -48,6 +49,7 @@ export default async function OperationsOverviewPage({ params, searchParams }: P
       surveyId={surveyId}
       capabilities={capabilities}
       scope={scope}
+      share={FIELDWORK_SHARE_ALL}
       searchParams={await searchParams}
     />
   );

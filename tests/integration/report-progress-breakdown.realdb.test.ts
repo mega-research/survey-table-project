@@ -15,6 +15,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { db } from '@/db';
 import { surveys, surveyResponses, contactTargets, contactAttempts } from '@/db/schema';
 import { getProgressTotals } from '@/server/operations/services/report-progress';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 
 const isLocalDb =
   (process.env['DATABASE_URL'] ?? '').includes('127.0.0.1') ||
@@ -95,7 +96,7 @@ describe.skipIf(!isLocalDb)('getProgressTotals — 제외 사유 내역', () => 
       { resid: 4, unsubscribed: true },
     ]);
 
-    const totals = await getProgressTotals(surveyId, 'real', null);
+    const totals = await getProgressTotals(surveyId, 'real', FIELDWORK_SHARE_ALL, null);
 
     // 수신거부는 모집단 제외 사유가 아니다 (2026-08-27 결정) — resid 4 는 분모에 남는다.
     expect(totals.excludedTotal).toBe(2);
@@ -111,7 +112,7 @@ describe.skipIf(!isLocalDb)('getProgressTotals — 제외 사유 내역', () => 
       { resid: 2, screenedOut: true, negativeCode: true, unsubscribed: true },
     ]);
 
-    const totals = await getProgressTotals(surveyId, 'real', null);
+    const totals = await getProgressTotals(surveyId, 'real', FIELDWORK_SHARE_ALL, null);
 
     expect(totals.excludedTotal).toBe(1);
     // 우선순위: 자격 미달 > 결과코드 부적격
@@ -125,7 +126,7 @@ describe.skipIf(!isLocalDb)('getProgressTotals — 제외 사유 내역', () => 
     const surveyId = await seedSurvey();
     await seedContacts(surveyId, [{ resid: 1, unsubscribed: true }]);
 
-    const totals = await getProgressTotals(surveyId, 'real', null);
+    const totals = await getProgressTotals(surveyId, 'real', FIELDWORK_SHARE_ALL, null);
 
     expect(totals.excludedTotal).toBe(0);
     expect(totals.listTotal).toBe(1);
@@ -161,7 +162,7 @@ describe.skipIf(!isLocalDb)('getProgressTotals — 제외 사유 내역', () => 
       .insert(contactAttempts)
       .values({ contactTargetId: ct.id, attemptNo: 1, resultCode: '13.수신거부' });
 
-    const totals = await getProgressTotals(surveyId, 'real', null);
+    const totals = await getProgressTotals(surveyId, 'real', FIELDWORK_SHARE_ALL, null);
 
     expect(totals.excludedTotal).toBe(0);
     expect(totals.excludedNegativeCode).toBe(0);
@@ -185,7 +186,7 @@ describe.skipIf(!isLocalDb)('getProgressTotals — 제외 사유 내역', () => 
       isTest: true,
     });
 
-    const totals = await getProgressTotals(surveyId, 'real', null);
+    const totals = await getProgressTotals(surveyId, 'real', FIELDWORK_SHARE_ALL, null);
 
     expect(totals.excludedTotal).toBe(0);
     expect(totals.excludedScreenedOut).toBe(0);

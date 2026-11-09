@@ -4,6 +4,7 @@ import { and, eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyResponses } from '@/db/schema';
+import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share';
 import { notDeletedResponse } from '@/server/response-filters';
 
 import {
@@ -27,10 +28,14 @@ import { getResultCodeStatuses } from '@/server/read-models/result-code-statuses
  *
  * 실사 완료 처리(조사 대상 수)를 함께 세어 전체에 더한다. 그 사람들의 쿼터마감·불량·이탈 행은
  * `fieldworkCompleted` 표식을 달아 돌려주고 `mapRowsToCounts` 가 자기 버킷에서 뺀다.
+ *
+ * `share` 는 담당 범위 — 나눈 외주 링크면 응답 행도 실사 완료 처리 수도 그 범위 대상의 것만 센다.
+ * 조사 대상에 묶이지 않은 공개 링크 응답은 그때 빠진다(`shareTargetCondition`).
  */
 export async function aggregateStatus(
   surveyId: string,
   scope: OperationsDataScope,
+  share: FieldworkShare,
 ): Promise<StatusCounts> {
   const isTest = testFlagForScope(scope);
   const { positive } = await getResultCodeStatuses(surveyId);
@@ -57,11 +62,12 @@ export async function aggregateStatus(
           eq(surveyResponses.surveyId, surveyId),
           notDeletedResponse,
           responseScopeCondition(scope),
+          shareTargetCondition(share, surveyResponses.contactTargetId),
         ),
       )
       // 표식 식은 바인딩 파라미터를 품어 SELECT·GROUP BY 에 따로 바인딩되면 PG 가 같은 식으로 보지 못한다 — 열 번호로 묶는다
       .groupBy(sql.raw('1'), sql.raw('2')),
-    getFieldworkCompletedCounts([surveyId], isTest),
+    getFieldworkCompletedCounts([surveyId], isTest, share),
   ]);
 
   return mapRowsToCounts(rows, fieldworkCounts.get(surveyId) ?? 0);
