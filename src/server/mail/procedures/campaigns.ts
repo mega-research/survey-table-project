@@ -2,6 +2,7 @@ import { ORPCError } from '@orpc/server';
 import * as z from 'zod';
 
 import { isExternalActor } from '@/server/data-scope';
+import { resolveFieldworkShare } from '@/server/fieldwork-share';
 import { requireScopedAccount, scoped } from '@/server/orpc';
 import { accountAttribution, attributionOf } from '@/server/survey-access';
 import { assertScopedSurveyCapabilityRpc } from '@/server/rpc-survey-access';
@@ -133,6 +134,8 @@ const sendSingle = scoped
       input,
       attributionOf(context.actor),
       isExternalActor(context.actor),
+      // 범위 밖 대상은 「조사 대상을 찾을 수 없습니다.」 — 없는 대상과 같은 NOT_FOUND(티켓 05).
+      resolveFieldworkShare(context.actor, input.surveyId),
     ).catch(rethrowCampaignRefusal);
   });
 

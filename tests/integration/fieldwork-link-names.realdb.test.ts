@@ -22,6 +22,7 @@ import { db } from '@/db';
 import { contactTargets, responseEditLogs, surveys, users } from '@/db/schema';
 import { linkContactEditor } from '@/server/contacts/domain/contact-target-edit';
 import { addAttempt, updateAttempt } from '@/server/contacts/services/contact-attempts';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 import { issueAccessLink, setAccessLinkLabel } from '@/server/workspace/services/access-links';
 import type { SurveyCapability } from '@/shared/contracts/workspace';
 
@@ -98,24 +99,28 @@ run('내부 기록의 외주 이름표 (real DB)', () => {
       true,
       { accountUserId: null, fieldworkLinkId: linkA },
       linkContactEditor(linkA),
+      FIELDWORK_SHARE_ALL,
     );
     await addAttempt(
       { contactTargetId: targetId, surveyId, resultCode: '14. 부재' },
       true,
       { accountUserId: null, fieldworkLinkId: linkB },
       linkContactEditor(linkB),
+      FIELDWORK_SHARE_ALL,
     );
     await addAttempt(
       { contactTargetId: targetId, surveyId, resultCode: '15. 거절' },
       false,
       { accountUserId: OWNER_ID, fieldworkLinkId: null },
       { id: OWNER_ID, email: OWNER_EMAIL },
+      FIELDWORK_SHARE_ALL,
     );
     // 대상 정보 수정 현황: A 가 자기 회차를 고친 줄.
     await updateAttempt(
       { id: added.id, contactTargetId: targetId, surveyId, resultCode: '16. 재통화', note: '오후' },
       true,
       linkContactEditor(linkA),
+      FIELDWORK_SHARE_ALL,
     );
     // 응답 수정 이력: B 가 고친 줄 — 링크가 고친 행은 계정 칸·이메일이 빈다.
     await db.insert(responseEditLogs).values({
@@ -141,6 +146,7 @@ run('내부 기록의 외주 이름표 (real DB)', () => {
       basePath: '/x',
       capabilities: CAPABILITIES,
       scope: 'real',
+      share: FIELDWORK_SHARE_ALL,
       canProxyRespond: false,
       hideStaffEmails: console === 'link',
     })) as { props: { children: unknown } };

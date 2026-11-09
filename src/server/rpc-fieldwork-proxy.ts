@@ -22,6 +22,10 @@ export async function resolveProxyForResponseRpc(
 ): Promise<FieldworkProxy> {
   const proxy = await resolveFieldworkProxy(subject, surveyId, inviteToken);
   if (proxy.kind === 'blocked') {
+    // 담당 범위 밖은 「없음」이다 — 권한 없음과 없음을 가르지 않는다(fieldwork-multi-company 티켓 05).
+    if (proxy.reason === 'out_of_share') {
+      throw new ORPCError('NOT_FOUND', { message: '조사 대상을 찾을 수 없습니다.' });
+    }
     throw new ORPCError('FORBIDDEN', { message: '이미 응답이 완료된 대상입니다.' });
   }
   return proxy;

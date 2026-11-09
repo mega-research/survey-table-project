@@ -8,6 +8,7 @@ import { ContactDetailForm } from '@/features/operations/contacts/contact-detail
 import { attrsKeyOf } from '@/lib/operations/contacts-format';
 import { extractSystemFieldKeys } from '@/lib/operations/contacts-shared';
 import type { OperationsDataScope } from '@/server/data-scope';
+import type { FieldworkShare } from '@/server/fieldwork-share';
 import { getMailTemplatesBySurvey } from '@/server/mail/services/templates';
 import {
   getContactColumnScheme,
@@ -52,6 +53,13 @@ interface Props {
   capabilities: ReadonlySet<SurveyCapability>;
   scope: OperationsDataScope;
   /**
+   * 주체의 담당 범위 (fieldwork-multi-company 티켓 05) — 범위 밖 대상은 없는 대상과 같은 notFound 다.
+   * 내부 콘솔은 `FIELDWORK_SHARE_ALL`, 외주 링크 트리는 page 가 `resolveFieldworkShare` 로 정해 넘긴다
+   * (등재표 메타테스트가 page 파일 안의 해석 호출을 본다). 범위 안 대상의 회차·수정 현황은 다른 외주가
+   * 남긴 줄도 그대로 싣는다 — 대상의 기록은 대상의 것이고 기록자는 「외주」로만 보인다.
+   */
+  share: FieldworkShare;
+  /**
    * 이 주체가 이 대상을 **대신 입력해도 되는가**.
    *
    * capability 로 물을 수 없다 — 상세를 볼 수 있다는 것(`contacts.view`)과 남의 응답 화면을
@@ -86,6 +94,7 @@ export async function ContactDetailScreen({
   basePath,
   capabilities,
   scope,
+  share,
   canProxyRespond,
   hideStaffEmails = false,
   includeContactOwner = false,
@@ -94,7 +103,7 @@ export async function ContactDetailScreen({
   // 이미 복호화된 뒤에 접히게 된다(티켓 15).
   // 내부 콘솔만 링크 이름을 읽는다 — 외주 콘솔에는 이름표가 어떤 모양으로도 실리지 않는다.
   const linkNames = hideStaffEmails ? undefined : await loadFieldworkLinkNames(surveyId);
-  const detail = await getContactDetailById(contactId, surveyId, scope, linkNames);
+  const detail = await getContactDetailById(contactId, surveyId, scope, share, linkNames);
   if (!detail) notFound();
 
   const permissions = contactDetailPermissions(capabilities, { proxyRespond: canProxyRespond });

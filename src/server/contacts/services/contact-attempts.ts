@@ -6,6 +6,7 @@ import { contactAttempts, contactTargets } from '@/db/schema';
 import { logger } from '@/lib/logger';
 import { isUniqueViolation } from '@/lib/pg-error';
 import { lockWriteScope } from '@/server/data-scope';
+import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share';
 import type { ActorAttribution } from '@/server/survey-access';
 import type { ContactTargetEditAttemptSnapshot } from '@/shared/contracts/contacts';
 
@@ -21,12 +22,17 @@ import { recordContactTargetEdit } from './contact-target-edit-log';
 /**
  * 현재 DB 모드에 속한 대상자를 잠근다. 목록을 본 뒤 모드가 바뀌어도 회차 변경은
  * 현재 스코프 대상자에게만 허용된다.
+ *
+ * **담당 범위도 같은 잠금 조회의 조건이다** (fieldwork-multi-company 티켓 05) — 범위 밖 대상은 없는 대상과
+ * 똑같이 `NOT_FOUND` 다(권한 없음과 없음을 가르지 않는다). 회차를 바꾸는 세 경로(추가·수정·삭제)가 모두
+ * 이 잠금을 먼저 지나므로, 범위 밖이면 그 대상의 회차·수정 기록에 아무것도 쓰이지 않는다.
  */
 async function lockTargetInCurrentScope(
   tx: DbTransaction,
   contactTargetId: string,
   surveyId: string,
   isExternal: boolean,
+  share: FieldworkShare,
 ): Promise<void> {
   const locked = await lockWriteScope(tx, surveyId, isExternal, { lock: 'update' });
   if (!locked) throw new Error('NOT_FOUND');
@@ -40,6 +46,7 @@ async function lockTargetInCurrentScope(
         eq(contactTargets.id, contactTargetId),
         eq(contactTargets.surveyId, surveyId),
         eq(contactTargets.isTest, isTest),
+        shareTargetCondition(share),
       ),
     )
     .for('update');
@@ -76,6 +83,8 @@ export async function addAttempt(
   author: ActorAttribution,
   /** 기록자 글자 — 계정이면 이메일, 외주 링크면 「외주」(`contactEditorOfActor`). */
   editor: ContactEditor,
+  /** 주체의 담당 범위(`resolveFieldworkShare`) — 범위 밖 대상은 `NOT_FOUND`. 계정 주체는 `all`. */
+  share: FieldworkShare,
 ): Promise<{ id: string; attemptNo: number }> {
   const { contactTargetId, resultCode, note } = input;
 
@@ -86,7 +95,7 @@ export async function addAttempt(
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
       result = await db.transaction(async (tx) => {
-        await lockTargetInCurrentScope(tx, input.contactTargetId, input.surveyId, isExternal);
+        await lockTargetInCurrentScope(tx, input.contactTargetId, input.surveyId, isExternal, share);
         const [maxRow] = await tx
           .select({ maxNo: sql<number | null>`MAX(${contactAttempts.attemptNo})` })
           .from(contactAttempts)
@@ -138,11 +147,12 @@ export async function updateAttempt(
   input: UpdateContactAttemptInput,
   isExternal: boolean,
   editor: ContactEditor,
+  share: FieldworkShare,
 ): Promise<void> {
   const { id, contactTargetId, surveyId, resultCode } = input;
   const note = input.note ?? null;
   await db.transaction(async (tx) => {
-    await lockTargetInCurrentScope(tx, contactTargetId, surveyId, isExternal);
+    await lockTargetInCurrentScope(tx, contactTargetId, surveyId, isExternal, share);
     const scope = and(
       eq(contactAttempts.id, id),
       eq(contactAttempts.contactTargetId, contactTargetId),
@@ -176,10 +186,11 @@ export async function deleteAttempt(
   input: DeleteContactAttemptInput,
   isExternal: boolean,
   editor: ContactEditor,
+  share: FieldworkShare,
 ): Promise<void> {
   const { id, contactTargetId, surveyId } = input;
   await db.transaction(async (tx) => {
-    await lockTargetInCurrentScope(tx, contactTargetId, surveyId, isExternal);
+    await lockTargetInCurrentScope(tx, contactTargetId, surveyId, isExternal, share);
     const [deleted] = await tx
       .delete(contactAttempts)
       .where(and(eq(contactAttempts.id, id), eq(contactAttempts.contactTargetId, contactTargetId)))

@@ -31,7 +31,7 @@ vi.mock('@/server/access-link', () => ({
   resolveLinkActorForSurvey: vi.fn(
     async (sessions: readonly { claim: { linkId: string } }[] | undefined, surveyId: string) =>
       sessions?.length
-        ? { kind: 'ok' as const, actor: { kind: 'link' as const, linkId: LINK_ID, surveyId, linkKind: 'fieldwork' as const } }
+        ? { kind: 'ok' as const, actor: { kind: 'link' as const, linkId: LINK_ID, surveyId, linkKind: 'fieldwork' as const, shareDivided: true } }
         : { kind: 'no_session' as const },
   ),
 }));
@@ -172,7 +172,12 @@ describe('mail.campaigns procedures', () => {
       SURVEY_ID,
       'mail.sendSingle',
     );
-    expect(singleSvc.sendSingleCampaign).toHaveBeenCalledWith(input, { accountUserId: 'admin-1', fieldworkLinkId: null }, false);
+    expect(singleSvc.sendSingleCampaign).toHaveBeenCalledWith(
+      input,
+      { accountUserId: 'admin-1', fieldworkLinkId: null },
+      false,
+      { kind: 'all' },
+    );
     expect(res).toEqual({ campaignId: CAMPAIGN_ID, queuedCount: 1, skippedCount: 0 });
   });
 
@@ -208,7 +213,12 @@ describe('mail.campaigns procedures', () => {
       mailTemplateId: TEMPLATE_ID,
     };
     const res = await client.campaigns.sendSingle(input);
-    expect(singleSvc.sendSingleCampaign).toHaveBeenCalledWith(input, { accountUserId: 'guest-1', fieldworkLinkId: null }, true);
+    expect(singleSvc.sendSingleCampaign).toHaveBeenCalledWith(
+      input,
+      { accountUserId: 'guest-1', fieldworkLinkId: null },
+      true,
+      { kind: 'all' },
+    );
     expect(res).toEqual({ campaignId: CAMPAIGN_ID, queuedCount: 1, skippedCount: 0 });
   });
 
@@ -296,14 +306,16 @@ describe('mail.campaigns — 외주 실사 링크 (ADR-0027)', () => {
     const input = { surveyId: SURVEY_ID, contactTargetId: CONTACT_ID, mailTemplateId: TEMPLATE_ID };
     await client.campaigns.sendSingle(input);
     expect(assertScopedSurveyCapabilityRpc).toHaveBeenCalledWith(
-      { kind: 'link', linkId: LINK_ID, surveyId: SURVEY_ID, linkKind: 'fieldwork' },
+      { kind: 'link', linkId: LINK_ID, surveyId: SURVEY_ID, linkKind: 'fieldwork', shareDivided: true },
       SURVEY_ID,
       'mail.sendSingle',
     );
+    // 나눈 적 있는 링크 — 범위 밖 대상은 서비스의 첫 조회에서 「없음」이 된다(티켓 05).
     expect(singleSvc.sendSingleCampaign).toHaveBeenCalledWith(
       input,
       { accountUserId: null, fieldworkLinkId: LINK_ID },
       true,
+      { kind: 'targets', linkId: LINK_ID },
     );
   });
 });

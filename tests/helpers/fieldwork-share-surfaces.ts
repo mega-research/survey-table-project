@@ -42,12 +42,12 @@ export const SCOPED_SHARE_SURFACES: Record<LinkOpenScopedPath, ShareSurfaceStatu
   'contacts.idLists.create': exempt('번호 목록을 저장할 뿐 대상을 읽지 않는다 — 읽는 쪽(목록 해석)이 범위를 건다'),
 
   // 05 — 단건 표면
-  'contacts.attempts.add': pending('05'),
-  'contacts.attempts.update': pending('05'),
-  'contacts.attempts.remove': pending('05'),
-  'contacts.targets.setMemo': pending('05'),
-  'mail.campaigns.sendSingle': pending('05'),
-  'mail.preview.contactSample': pending('05'),
+  'contacts.attempts.add': FILTERED,
+  'contacts.attempts.update': FILTERED,
+  'contacts.attempts.remove': FILTERED,
+  'contacts.targets.setMemo': FILTERED,
+  'mail.campaigns.sendSingle': FILTERED,
+  'mail.preview.contactSample': FILTERED,
 
   // 06 — 응답 수정
   'surveyResponse.edit.saveAdminEdit': pending('06'),
@@ -69,7 +69,7 @@ export const FW_PAGE_SHARE_SURFACES: Record<string, ShareSurfaceStatus> = {
   'fw/[token]/operations/contacts/page.tsx': FILTERED,
 
   // 05 — 단건 상세
-  'fw/[token]/operations/contacts/[contactId]/page.tsx': pending('05'),
+  'fw/[token]/operations/contacts/[contactId]/page.tsx': FILTERED,
 
   // 06 — 응답 내역·상세 수정
   'fw/[token]/operations/profiles/page.tsx': pending('06'),

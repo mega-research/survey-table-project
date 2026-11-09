@@ -62,7 +62,12 @@ describe('mail.preview procedures', () => {
   });
 
   it('contactSample 은 mail.sendSingle 을 묻고 주체와 함께 서비스에 위임한다 (ADR-0027)', async () => {
-    vi.mocked(svc.getMailPreviewSample).mockResolvedValue(null as never);
+    vi.mocked(svc.getMailPreviewSample).mockResolvedValue({
+      attrs: {},
+      inviteUrl: 'http://localhost/i/abc',
+      email: 'a@example.com',
+      resid: 1,
+    } as never);
     const context = authedContext();
     const client = createRouterClient({ preview }, { context });
     const input = { surveyId: 'sv-1', contactTargetId: '33333333-3333-4333-8333-333333333333' };
@@ -74,6 +79,17 @@ describe('mail.preview procedures', () => {
       'mail.sendSingle',
     );
     expect(svc.getMailPreviewSample).toHaveBeenCalledWith(input, context.user);
+  });
+
+  it('contactSample 은 지목한 대상을 못 찾으면 null 이 아니라 NOT_FOUND 다 — 범위 밖과 없음을 가르지 않는다', async () => {
+    vi.mocked(svc.getMailPreviewSample).mockResolvedValue(null as never);
+    const client = createRouterClient({ preview }, { context: authedContext() });
+    await expect(
+      client.preview.contactSample({
+        surveyId: 'sv-1',
+        contactTargetId: '33333333-3333-4333-8333-333333333333',
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it('contactSample 은 대상 지목이 필수다 — 「첫 컨택」 폴백이 없다', async () => {

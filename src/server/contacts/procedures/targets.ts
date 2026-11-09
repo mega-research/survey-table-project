@@ -3,6 +3,7 @@ import * as z from 'zod';
 
 import { isExternalAccount } from '@/shared/contracts/auth';
 import { isExternalActor } from '@/server/data-scope';
+import { resolveFieldworkShare } from '@/server/fieldwork-share';
 import { authed, scoped } from '@/server/orpc';
 import {
   assertScopedSurveyCapabilityRpc,
@@ -71,7 +72,13 @@ const setMemo = scoped
   .handler(async ({ context, input }) => {
     await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'contacts.writeAttempts');
     await svc
-      .setContactTargetMemo(input, isExternalActor(context.actor), contactEditorOfContext(context))
+      .setContactTargetMemo(
+        input,
+        isExternalActor(context.actor),
+        contactEditorOfContext(context),
+        // 범위 밖 대상의 메모는 없는 대상과 같은 NOT_FOUND 다(티켓 05).
+        resolveFieldworkShare(context.actor, input.surveyId),
+      )
       .catch(rethrowContactNotFound);
     return { ok: true as const };
   });

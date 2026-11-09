@@ -2,6 +2,7 @@ import { ORPCError } from '@orpc/server';
 import * as z from 'zod';
 
 import { isExternalActor } from '@/server/data-scope';
+import { resolveFieldworkShare } from '@/server/fieldwork-share';
 import { scoped } from '@/server/orpc';
 import { assertScopedSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 import { attributionOf } from '@/server/survey-access';
@@ -44,6 +45,8 @@ const add = scoped
         isExternalActor(context.actor),
         attributionOf(context.actor),
         contactEditorOfContext(context),
+        // 관문 뒤에 담당 범위를 **추가로** 건다 — 범위 밖 대상은 없는 대상과 같은 NOT_FOUND(티켓 05).
+        resolveFieldworkShare(context.actor, input.surveyId),
       )
       .catch(rethrowAttemptNotFound);
   });
@@ -54,7 +57,12 @@ const update = scoped
   .handler(async ({ context, input }) => {
     await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'contacts.writeAttempts');
     await svc
-      .updateAttempt(input, isExternalActor(context.actor), contactEditorOfContext(context))
+      .updateAttempt(
+        input,
+        isExternalActor(context.actor),
+        contactEditorOfContext(context),
+        resolveFieldworkShare(context.actor, input.surveyId),
+      )
       .catch(rethrowAttemptNotFound);
     return { ok: true as const };
   });
@@ -65,7 +73,12 @@ const remove = scoped
   .handler(async ({ context, input }) => {
     await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'contacts.writeAttempts');
     await svc
-      .deleteAttempt(input, isExternalActor(context.actor), contactEditorOfContext(context))
+      .deleteAttempt(
+        input,
+        isExternalActor(context.actor),
+        contactEditorOfContext(context),
+        resolveFieldworkShare(context.actor, input.surveyId),
+      )
       .catch(rethrowAttemptNotFound);
     return { ok: true as const };
   });

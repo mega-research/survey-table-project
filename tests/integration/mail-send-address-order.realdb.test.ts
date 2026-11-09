@@ -8,6 +8,7 @@ import { buildPiiRows, type PiiInput } from '@/lib/crypto/contact-pii-repo';
 import { createCampaign } from '@/server/mail/services/campaigns';
 import { preflightRecipients } from '@/server/mail/services/campaigns-read';
 import { lookupContactByToken } from '@/server/mail/services/unsubscribe';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 import { getContactSampleById } from '@/server/read-models/contact-sample';
 import { loadBouncedAddresses } from '@/server/read-models/send-address';
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
@@ -135,7 +136,7 @@ run('메일 발송 주소 순서 — 컬럼 설정이 실제 발송 주소를 �
     expect(sent.get(ceoOnly)).toBe('ceo-c@example.com');
 
     // 미리보기와 수신거부 화면도 같은 주소를 본다.
-    expect((await getContactSampleById(surveyId, both, 'real'))?.email).toBe('staff-a@example.com');
+    expect((await getContactSampleById(surveyId, both, 'real', FIELDWORK_SHARE_ALL))?.email).toBe('staff-a@example.com');
     const [target] = await db
       .select({ token: contactTargets.unsubscribeToken })
       .from(contactTargets)

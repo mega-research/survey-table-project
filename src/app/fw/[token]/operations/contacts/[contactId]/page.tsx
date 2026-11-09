@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 
 import { fieldworkLinkOperationsBase } from '@/features/operations/operations-paths';
 import { getOperationsDataScope } from '@/server/data-scope';
+import { resolveFieldworkShare } from '@/server/fieldwork-share';
 import { assertFieldworkLinkPageAccess } from '@/server/page-fieldwork-link-access';
 
 import { ContactDetailScreen } from '@/app/_operations/contact-detail-screen';
@@ -28,6 +29,10 @@ interface PageProps {
  *
  * **대행 진입점은 열린다.** 링크는 그 설문의 대리 응답 자격을 갖는 주체이고(ADR-0026),
  * 초대 코드의 노출은 화면이 아니라 이 인자가 정한다 — 귀속과 완료 대상 거부는 티켓 09 다.
+ *
+ * **담당 범위 밖 대상은 없는 대상과 같은 notFound 다** (fieldwork-multi-company 티켓 05) — 범위는 조회
+ * 조건이라 PII 를 복호화하기 전에 접힌다. 범위 안 대상의 대행 진입도 응답 procedure 가 같은 범위로 다시
+ * 묻는다(`server/fieldwork-proxy`) — 초대 코드가 이 화면 밖에서 새어도 범위 밖이면 대행이 서지 않는다.
  */
 export default async function FieldworkLinkContactDetailPage({ params }: PageProps) {
   const { token, contactId } = await params;
@@ -36,6 +41,7 @@ export default async function FieldworkLinkContactDetailPage({ params }: PagePro
     'contacts.view',
   );
   const scope = await getOperationsDataScope(surveyId, actor);
+  const share = resolveFieldworkShare(actor, surveyId);
 
   return (
     <ContactDetailScreen
@@ -44,6 +50,7 @@ export default async function FieldworkLinkContactDetailPage({ params }: PagePro
       basePath={fieldworkLinkOperationsBase(token)}
       capabilities={capabilities}
       scope={scope}
+      share={share}
       canProxyRespond
       hideStaffEmails
     />

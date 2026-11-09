@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, isNull } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import 'server-only';
 
 import { db } from '@/db';
@@ -7,6 +7,12 @@ import type { AccessLinkSession } from '@/lib/auth/access-link-session';
 import type { AuthUser } from '@/shared/contracts/auth';
 
 import { resolveLinkActorForSurvey } from './access-link';
+import {
+  FIELDWORK_SHARE_ALL,
+  type FieldworkShare,
+  resolveFieldworkShare,
+  shareTargetCondition,
+} from './fieldwork-share';
 import {
   accountAttribution,
   type ActorAttribution,
@@ -54,7 +60,16 @@ export type FieldworkProxy =
    * 응답자 본인에게는 재응답 설정이 열려 있을 수 있으므로 `blocked` 는 **대행 세션에만**
    * 적용된다 — 같은 링크를 응답자가 열면 종전 정책 그대로다.
    */
-  | { kind: 'blocked'; reason: 'completed' };
+  | { kind: 'blocked'; reason: 'completed' }
+  /**
+   * 대행 자격은 있지만 그 대상이 **이 링크의 담당 범위 밖**이다 (fieldwork-multi-company 티켓 05, ADR-0035).
+   *
+   * `none` 으로 접으면 안 된다 — `none` 은 「응답자 본인의 진입」이라 링크 쿠키를 든 외주가 범위 밖 대상의
+   * 응답 화면을 그대로 열고 답을 넣게 된다. 거부는 존재 은닉으로 「없음」이고(어댑터가 NOT_FOUND), 완료
+   * 여부보다 먼저 판정한다(범위 밖 대상의 상태를 드러내지 않게). 응답자 본인(링크 쿠키 없음)에게는
+   * 적용되지 않는다 — 대행 자격이 없으면 이 판정까지 오지 않는다.
+   */
+  | { kind: 'blocked'; reason: 'out_of_share' };
 
 /**
  * 판정이 보는 요청의 임자 — 계정 세션과 링크 쿠키 둘 다 없을 수 있다.
@@ -76,13 +91,16 @@ export async function resolveFieldworkProxy(
   // 대행은 **컨택을 지목해야** 성립한다. 익명 링크로 들어왔으면 그냥 응답자다.
   if (inviteToken === null) return { kind: 'none' };
 
-  const attribution = await resolveProxyAttribution(subject, surveyId);
-  if (attribution === null) return { kind: 'none' };
+  const proxyActor = await resolveProxyAttribution(subject, surveyId);
+  if (proxyActor === null) return { kind: 'none' };
+  const { attribution, share } = proxyActor;
 
   const [row] = await db
     .select({
       contactTargetId: contactTargets.id,
       completedResponseId: surveyResponses.id,
+      // 담당 범위는 행을 걸러 없애지 않고 따로 읽는다 — 걸러 버리면 `none`(응답자 진입)으로 떨어진다.
+      inShare: sql<boolean>`${shareTargetCondition(share) ?? sql`TRUE`}`,
     })
     .from(contactTargets)
     .leftJoin(
@@ -109,6 +127,7 @@ export async function resolveFieldworkProxy(
 
   // 토큰이 이 설문의 것이 아니다 — 대행이 아니라고만 답한다(존재를 알려주지 않는다).
   if (!row) return { kind: 'none' };
+  if (!row.inShare) return { kind: 'blocked', reason: 'out_of_share' };
   if (row.completedResponseId !== null) return { kind: 'blocked', reason: 'completed' };
 
   return { kind: 'proxy', contactTargetId: row.contactTargetId, attribution };
@@ -129,12 +148,16 @@ export async function resolveFieldworkProxy(
 async function resolveProxyAttribution(
   subject: FieldworkProxySubject,
   surveyId: string,
-): Promise<ActorAttribution | null> {
+): Promise<{ attribution: ActorAttribution; share: FieldworkShare } | null> {
   const link = await resolveLinkActorForSurvey(subject.linkSessions, surveyId);
   if (link.kind === 'ok') {
     const access = await loadSurveyAccess(link.actor, surveyId).catch(() => null);
     if (access?.capabilities.has('contacts.writeAttempts')) {
-      return linkAttribution(link.actor.linkId);
+      // 링크 주체는 자기 담당 범위의 대상만 대행한다(티켓 05) — 「나눈 적 있음」은 세션 판정이 실었다.
+      return {
+        attribution: linkAttribution(link.actor.linkId),
+        share: resolveFieldworkShare(link.actor, surveyId),
+      };
     }
     return null;
   }
@@ -148,7 +171,8 @@ async function resolveProxyAttribution(
   // 생성 경로의 게이트가 이미 한다.
   const access = await loadSurveyAccess(user, surveyId).catch(() => null);
   if (!access?.capabilities.has('contacts.writeAttempts')) return null;
-  return accountAttribution(user.id);
+  // 옛 실사 계정에는 담당 범위 축이 없다 — 범위는 외주 링크의 것이다(ADR-0035).
+  return { attribution: accountAttribution(user.id), share: FIELDWORK_SHARE_ALL };
 }
 
 /**
