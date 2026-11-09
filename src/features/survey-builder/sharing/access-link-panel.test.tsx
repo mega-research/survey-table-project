@@ -5,11 +5,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AccessLinkKind } from '@/shared/contracts/workspace';
 import type { SurveyAccessLinkOutput } from '@/shared/contracts/workspace-io';
 
-const { state, issue, setTab, close } = vi.hoisted(() => ({
+const { state, issue, setTab, close, reset, reveal } = vi.hoisted(() => ({
   state: { data: null as unknown },
   issue: vi.fn(),
   setTab: vi.fn(),
   close: vi.fn(),
+  reset: vi.fn(),
+  reveal: vi.fn(),
 }));
 
 function mutation(fn: (input: unknown) => unknown) {
@@ -19,8 +21,8 @@ function mutation(fn: (input: unknown) => unknown) {
 vi.mock('../queries/use-survey-access-link', () => ({
   useSurveyAccessLink: () => ({ data: state.data, isPending: false, isError: false }),
   useIssueAccessLink: () => mutation(issue),
-  useResetAccessLinkPassword: () => mutation(vi.fn()),
-  useRevealAccessLinkPassword: () => mutation(vi.fn()),
+  useResetAccessLinkPassword: () => mutation(reset),
+  useRevealAccessLinkPassword: () => mutation(reveal),
   useCloseAccessLink: () => mutation(close),
   useSetClientLinkTab: () => mutation(setTab),
   useClientResponseColumns: () => ({ data: undefined, isPending: true, isError: false }),
@@ -39,10 +41,12 @@ const TABS = {
   responses: false,
 };
 
+const LINK_ID = '11111111-1111-4111-8111-111111111111';
+
 function linkState(kind: AccessLinkKind, over: Partial<SurveyAccessLinkOutput> = {}) {
   return {
     link: {
-      id: '11111111-1111-4111-8111-111111111111',
+      id: LINK_ID,
       kind,
       token: 'Xk9mQ2vR7pLw4nTz',
       clientTabs: kind === 'client' ? TABS : null,
@@ -230,17 +234,48 @@ describe('AccessLinkPanel', () => {
     expect(screen.getByText(/설문을 중단하거나 종료하면 닫힙니다/)).toBeInTheDocument();
   });
 
-  it('종료는 자기 종류의 링크만 닫는다', async () => {
-    state.data = linkState('client');
+  /**
+   * 이미 있는 링크를 움직이는 셋(보기·변경·종료)은 **그 링크의 id** 로 나간다 — 종류가 아니다
+   * (fieldwork-multi-company 티켓 01). 외주 링크가 여럿이 되면 종류는 하나를 가리키지 못한다.
+   * 요청에 종류가 실리지 않는 것까지 본다 — 서버 입력이 종류를 모른다.
+   */
+  it.each(['client', 'fieldwork'] as const)('%s 링크의 종료는 화면이 그린 그 링크의 id 로 나간다', async (kind) => {
+    state.data = linkState(kind);
     close.mockResolvedValue({ success: true });
     const user = userEvent.setup();
-    render(<AccessLinkPanel surveyId="s-1" kind="client" />);
+    render(<AccessLinkPanel surveyId="s-1" kind={kind} />);
 
     await user.click(screen.getByRole('button', { name: '종료' }));
     // 확인 행의 「종료」가 실제로 보낸다.
     const buttons = screen.getAllByRole('button', { name: '종료' });
     await user.click(buttons[0]!);
 
-    await waitFor(() => expect(close).toHaveBeenCalledWith({ surveyId: 's-1', kind: 'client' }));
+    await waitFor(() => expect(close).toHaveBeenCalledWith({ surveyId: 's-1', linkId: LINK_ID }));
+  });
+
+  it('비밀번호 보기는 그 링크의 id 로 나가고 받은 평문을 그린다', async () => {
+    state.data = linkState('fieldwork');
+    reveal.mockResolvedValue({ password: 'Revealed2026' });
+    const user = userEvent.setup();
+    render(<AccessLinkPanel surveyId="s-1" kind="fieldwork" />);
+
+    await user.click(screen.getByRole('button', { name: '보기' }));
+
+    await waitFor(() => expect(screen.getByText('Revealed2026')).toBeInTheDocument());
+    expect(reveal).toHaveBeenCalledWith({ surveyId: 's-1', linkId: LINK_ID });
+  });
+
+  it('비밀번호 변경은 그 링크의 id 와 직접 입력한 값으로 나간다', async () => {
+    state.data = linkState('client');
+    reset.mockResolvedValue({ link: linkState('client').link, password: 'Typed2026x' });
+    const user = userEvent.setup();
+    render(<AccessLinkPanel surveyId="s-1" kind="client" />);
+
+    await user.type(screen.getByPlaceholderText(/비밀번호 직접 입력/), 'Typed2026x');
+    await user.click(screen.getByRole('button', { name: '변경' }));
+
+    await waitFor(() =>
+      expect(reset).toHaveBeenCalledWith({ surveyId: 's-1', linkId: LINK_ID, password: 'Typed2026x' }),
+    );
   });
 });

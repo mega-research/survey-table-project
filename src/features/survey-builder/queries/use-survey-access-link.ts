@@ -61,16 +61,24 @@ export function useIssueAccessLink() {
   );
 }
 
+/**
+ * 이미 있는 링크를 움직이는 셋(재설정·종료·평문 조회)은 **링크 id** 로 지목한다 — 종류가 아니다
+ * (fieldwork-multi-company 티켓 01). 외주 링크가 설문당 여럿이 되면 종류는 하나를 가리키지 못한다.
+ * 화면은 조회 응답에 실려 온 `link.id` 를 그대로 보낸다.
+ */
+interface LinkTarget {
+  surveyId: string;
+  linkId: string;
+}
+
 export function useResetAccessLinkPassword() {
-  return useLinkMutation((input: { surveyId: string; kind: AccessLinkKind; password?: string }) =>
+  return useLinkMutation((input: LinkTarget & { password?: string }) =>
     client.workspace.accessLinks.resetPassword(input),
   );
 }
 
 export function useCloseAccessLink() {
-  return useLinkMutation((input: { surveyId: string; kind: AccessLinkKind }) =>
-    client.workspace.accessLinks.close(input),
-  );
+  return useLinkMutation((input: LinkTarget) => client.workspace.accessLinks.close(input));
 }
 
 /**
@@ -118,7 +126,6 @@ export function useSetClientResponseColumns() {
  */
 export function useRevealAccessLinkPassword() {
   return useMutation({
-    mutationFn: (input: { surveyId: string; kind: AccessLinkKind }) =>
-      client.workspace.accessLinks.revealPassword(input),
+    mutationFn: (input: LinkTarget) => client.workspace.accessLinks.revealPassword(input),
   });
 }

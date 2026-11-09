@@ -40,6 +40,8 @@ import {
  *  ② **토큰은 UPDATE 하지 않는다** — 주소가 영구 고정이라는 약속이 여기서 지켜진다.
  *     비밀번호 재설정도 `token` 을 set 하지 않는다.
  *  ③ **비밀번호는 가역 암호화** — 연구원이 다시 읽어 업체에 답해 준다(해시가 아니다).
+ *  ④ **이미 있는 링크는 id 로 집는다** — 비밀번호 열람·변경·종료(`activeLinkById`). 「설문 +
+ *     종류」로 찾는 것은 아직 링크를 모르는 조회·발급과, 종류가 축인 클라이언트 탭·열 설정뿐이다.
  *
  * 중단 연동은 이 계층의 일이 아니다 — 판정 코어(server/survey-access)가 `surveys.is_paused` 로
  * 한다. 링크 행에 만료 축을 두지 않은 이유가 그것이고, 여기서 중단을 함께 보면 판정이 두 벌이 된다.
@@ -91,6 +93,28 @@ function activeLink(surveyId: string, kind: AccessLinkKind) {
   return and(
     eq(surveyAccessLinks.surveyId, surveyId),
     eq(surveyAccessLinks.kind, kind),
+    isNull(surveyAccessLinks.closedAt),
+  );
+}
+
+/**
+ * 지목한 링크 하나 — **이 설문의 열린** 그 id (fieldwork-multi-company 티켓 01).
+ *
+ * 이미 있는 링크를 움직이는 표면(비밀번호 열람·변경·종료)은 종류가 아니라 이 조건으로 집는다.
+ * 외주 링크가 설문당 여럿이 되면 「설문 + 종류」는 하나를 가리키지 못한다.
+ *
+ * 세 조건이 하나도 빠지면 안 된다.
+ *  - `surveyId` — 관문은 경로의 설문만 본다. 빠지면 내 설문 관문을 지난 뒤 남의 설문 링크 id 로
+ *    그 비밀번호를 읽고 바꾸고 닫는다(「내 설문 + 남의 하위 행」, 링크 id 는 전역 PK 다).
+ *  - `closedAt IS NULL` — 종료된 행은 계보다. 빠지면 닫힌 링크의 비밀번호를 바꿔 그 행의
+ *    `password_updated_at` 이 움직이고, 다시 「종료」하면 `closed_at` 이 덮인다.
+ *  - 종류는 걸지 않는다 — id 가 이미 종류를 정한다.
+ * 셋 중 무엇에 걸렸는지 가르지 않는다 — 전부 NotFound 다(존재 은닉).
+ */
+function activeLinkById(surveyId: string, linkId: string) {
+  return and(
+    eq(surveyAccessLinks.id, linkId),
+    eq(surveyAccessLinks.surveyId, surveyId),
     isNull(surveyAccessLinks.closedAt),
   );
 }
@@ -152,7 +176,7 @@ export async function issueAccessLink(input: {
  */
 export async function resetAccessLinkPassword(input: {
   surveyId: string;
-  kind: AccessLinkKind;
+  linkId: string;
   password?: string | undefined;
   actorId: string;
 }): Promise<{ link: AccessLinkView; password: string }> {
@@ -166,7 +190,7 @@ export async function resetAccessLinkPassword(input: {
       passwordUpdatedBy: input.actorId,
       updatedAt: now,
     })
-    .where(activeLink(input.surveyId, input.kind))
+    .where(activeLinkById(input.surveyId, input.linkId))
     .returning(VIEW_COLUMNS);
   if (!row) throw new AccessLinkNotFoundError();
   return { link: toView(row), password };
@@ -323,14 +347,14 @@ export async function setClientResponseColumns(input: {
  * 목록 응답에 평문을 실으면 그 값이 캐시·로그·RSC payload 로 번지고, 「누가 언제 읽었는가」도
  * 남지 않는다. 따로 두면 rpc-logging 이 호출 한 줄을 기록한다.
  */
-export async function revealAccessLinkPassword(
-  surveyId: string,
-  kind: AccessLinkKind,
-): Promise<string> {
+export async function revealAccessLinkPassword(input: {
+  surveyId: string;
+  linkId: string;
+}): Promise<string> {
   const [row] = await db
     .select({ passwordCipher: surveyAccessLinks.passwordCipher })
     .from(surveyAccessLinks)
-    .where(activeLink(surveyId, kind))
+    .where(activeLinkById(input.surveyId, input.linkId))
     .limit(1);
   if (!row) throw new AccessLinkNotFoundError();
   return decryptSharedSecret(row.passwordCipher);
@@ -346,14 +370,14 @@ export async function revealAccessLinkPassword(
  */
 export async function closeAccessLink(input: {
   surveyId: string;
-  kind: AccessLinkKind;
+  linkId: string;
   actorId: string;
 }): Promise<void> {
   const now = new Date();
   const [row] = await db
     .update(surveyAccessLinks)
     .set({ closedAt: now, closedBy: input.actorId, updatedAt: now })
-    .where(activeLink(input.surveyId, input.kind))
+    .where(activeLinkById(input.surveyId, input.linkId))
     .returning({ id: surveyAccessLinks.id });
   if (!row) throw new AccessLinkNotFoundError();
 }

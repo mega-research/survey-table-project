@@ -176,10 +176,10 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
   });
 
   it('저장한 비밀번호를 그대로 다시 읽는다 — 해시가 아니라 가역 암호화다', async () => {
-    const { password } = await client.accessLinks.issue({ surveyId, kind: 'fieldwork', password: 'Hanbit2026!' });
+    const { link, password } = await client.accessLinks.issue({ surveyId, kind: 'fieldwork', password: 'Hanbit2026!' });
     expect(password).toBe('Hanbit2026!');
     // 연구원이 업체에 답해 줘야 하므로 되읽기가 기능이다. 해시였다면 이 단언이 불가능하다.
-    expect(await client.accessLinks.revealPassword({ surveyId, kind: 'fieldwork' })).toEqual({
+    expect(await client.accessLinks.revealPassword({ surveyId, linkId: link.id })).toEqual({
       password: 'Hanbit2026!',
     });
     // 저장된 것은 평문이 아니다 — 컬럼을 직접 본다.
@@ -346,27 +346,35 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
 
     it('한 종류의 비밀번호 변경이 다른 종류의 세션을 끊지 않는다', async () => {
       const fieldwork = await issueAndSignIn();
-      await client.accessLinks.issue({ surveyId, kind: 'client', password: 'ClientPw2026' });
+      const clientLink = await client.accessLinks.issue({
+        surveyId,
+        kind: 'client',
+        password: 'ClientPw2026',
+      });
 
-      await client.accessLinks.resetPassword({ surveyId, kind: 'client', password: 'ClientPw2027' });
+      await client.accessLinks.resetPassword({
+        surveyId,
+        linkId: clientLink.link.id,
+        password: 'ClientPw2027',
+      });
 
       // 외주 세션은 그대로 선다 — 비밀번호 표식이 종류별 행에 따로 있다.
       expect(await resolveLinkActor(fieldwork.token, cookieHeaders(fieldwork.cookie))).toMatchObject({
         ok: true,
       });
-      expect(await client.accessLinks.revealPassword({ surveyId, kind: 'fieldwork' })).toEqual({
+      expect(await client.accessLinks.revealPassword({ surveyId, linkId: fieldwork.linkId })).toEqual({
         password: fieldwork.password,
       });
-      expect(await client.accessLinks.revealPassword({ surveyId, kind: 'client' })).toEqual({
+      expect(await client.accessLinks.revealPassword({ surveyId, linkId: clientLink.link.id })).toEqual({
         password: 'ClientPw2027',
       });
     });
 
     it('한 종류를 종료해도 다른 종류는 살아 있고, 종료한 종류만 다시 발급된다', async () => {
       const fieldwork = await issueAndSignIn();
-      await client.accessLinks.issue({ surveyId, kind: 'client' });
+      const clientLink = await client.accessLinks.issue({ surveyId, kind: 'client' });
 
-      await client.accessLinks.close({ surveyId, kind: 'client' });
+      await client.accessLinks.close({ surveyId, linkId: clientLink.link.id });
 
       expect((await client.accessLinks.get({ surveyId, kind: 'client' })).link).toBeNull();
       expect((await client.accessLinks.get({ surveyId, kind: 'fieldwork' })).link?.token).toBe(
@@ -646,7 +654,7 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
 
   it('종료는 행 삭제가 아니라 closedAt 이고, 그 뒤 재발급이 된다', async () => {
     const first = await issueAndSignIn();
-    await client.accessLinks.close({ surveyId, kind: 'fieldwork' });
+    await client.accessLinks.close({ surveyId, linkId: first.linkId });
 
     // 옛 토큰은 「없는 토큰」이 아니라 「닫힘」이다 — 외주가 비밀번호를 다시 넣어 보지 않는다.
     expect(await resolveLinkActor(first.token, cookieHeaders(first.cookie))).toEqual({
@@ -667,14 +675,130 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
     expect(rows.filter((r) => r.closedAt === null)).toHaveLength(1);
   });
 
-  it('링크가 없는 설문에서 종료·재설정·평문 조회는 NOT_FOUND 다', async () => {
-    for (const call of [
-      () => client.accessLinks.close({ surveyId, kind: 'fieldwork' }),
-      () => client.accessLinks.resetPassword({ surveyId, kind: 'fieldwork' }),
-      () => client.accessLinks.revealPassword({ surveyId, kind: 'fieldwork' }),
-    ]) {
-      await expect(call()).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  // ───────────────────────────────────────────────────────────────────────────
+  // ④-2 관리 표면은 링크 id 로 대상을 집는다 (fieldwork-multi-company 티켓 01)
+  // ───────────────────────────────────────────────────────────────────────────
+  //
+  // 외주 링크가 설문당 여럿이 되면 「설문 + 종류의 그 활성 링크」는 하나를 가리키지 못한다.
+  // 그래서 비밀번호 열람·변경·종료가 링크 id 를 받는다. 관문은 경로의 설문만 보므로 **설문
+  // 일치는 서비스 WHERE 가 함께 건다** — 빠지면 내 설문 관문을 지난 뒤 남의 설문 링크 id 를
+  // 넣어 그 비밀번호를 읽고 바꾸고 닫는다(「내 설문 + 남의 하위 행」 축). 목은 WHERE 를 모르니
+  // 실 행으로 본다.
+
+  describe('링크 id 로 지목', () => {
+    /** 남의 행 세 칸 — 거부된 요청이 그 행을 건드리지 않았는지 본다. */
+    async function linkRow(id: string) {
+      const [row] = await db
+        .select({
+          closedAt: linksTable.closedAt,
+          passwordUpdatedAt: linksTable.passwordUpdatedAt,
+          passwordCipher: linksTable.passwordCipher,
+        })
+        .from(linksTable)
+        .where(eq(linksTable.id, id));
+      return row;
     }
+
+    function callsFor(target: { surveyId: string; linkId: string }) {
+      return [
+        () => client.accessLinks.revealPassword(target),
+        () => client.accessLinks.resetPassword({ ...target, password: 'Hijack2026' }),
+        () => client.accessLinks.close(target),
+      ];
+    }
+
+    it('없는 링크 id 는 종료·재설정·평문 조회 전부 NOT_FOUND 다', async () => {
+      for (const call of callsFor({ surveyId, linkId: crypto.randomUUID() })) {
+        await expect(call()).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      }
+    });
+
+    it.each(['fieldwork', 'client'] as const)(
+      '다른 설문의 %s 링크 id 는 없는 링크와 같은 NOT_FOUND 이고 그 행은 그대로다',
+      async (kind) => {
+        // 내 설문에도 같은 종류의 링크가 있다 — 「설문 + 종류」로 접히면 이쪽이 대신 움직인다.
+        const mine = await client.accessLinks.issue({ surveyId, kind, password: 'MinePw2026' });
+        const foreign = await client.accessLinks.issue({
+          surveyId: neighbourSurveyId,
+          kind,
+          password: 'NeighbourPw',
+        });
+        const before = await linkRow(foreign.link.id);
+
+        for (const call of callsFor({ surveyId, linkId: foreign.link.id })) {
+          await expect(call()).rejects.toMatchObject({ code: 'NOT_FOUND' });
+        }
+
+        expect(await linkRow(foreign.link.id)).toEqual(before);
+        // 내 링크도 대신 움직이지 않았다.
+        expect(await client.accessLinks.revealPassword({ surveyId, linkId: mine.link.id })).toEqual({
+          password: 'MinePw2026',
+        });
+        expect((await linkRow(mine.link.id))?.closedAt).toBeNull();
+      },
+    );
+
+    it('종료된 링크 id 는 종료·재설정·평문 조회 전부 NOT_FOUND 다 — 계보 행은 움직이지 않는다', async () => {
+      const first = await issueAndSignIn();
+      await client.accessLinks.close({ surveyId, linkId: first.linkId });
+      // 재발급된 활성 링크가 있어도 옛 id 가 그쪽으로 접히지 않는다.
+      const second = await client.accessLinks.issue({ surveyId, kind: 'fieldwork', password: 'SecondPw26' });
+      const before = await linkRow(first.linkId);
+
+      for (const call of callsFor({ surveyId, linkId: first.linkId })) {
+        await expect(call()).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      }
+
+      expect(await linkRow(first.linkId)).toEqual(before);
+      expect(await client.accessLinks.revealPassword({ surveyId, linkId: second.link.id })).toEqual({
+        password: 'SecondPw26',
+      });
+    });
+
+    it('클라이언트 링크도 id 로 열람·변경·종료되고 외주 링크는 그대로다', async () => {
+      const fieldwork = await issueAndSignIn();
+      const clientLink = await client.accessLinks.issue({ surveyId, kind: 'client', password: 'ClientPw2026' });
+
+      expect(await client.accessLinks.revealPassword({ surveyId, linkId: clientLink.link.id })).toEqual({
+        password: 'ClientPw2026',
+      });
+      const reset = await client.accessLinks.resetPassword({
+        surveyId,
+        linkId: clientLink.link.id,
+        password: 'ClientPw2027',
+      });
+      // 응답이 지목한 그 링크다 — 종류도 주소도 그대로다.
+      expect(reset.link).toMatchObject({ id: clientLink.link.id, kind: 'client', token: clientLink.link.token });
+      await client.accessLinks.close({ surveyId, linkId: clientLink.link.id });
+
+      expect((await client.accessLinks.get({ surveyId, kind: 'client' })).link).toBeNull();
+      expect(await resolveLinkActor(fieldwork.token, cookieHeaders(fieldwork.cookie))).toMatchObject({
+        ok: true,
+      });
+      expect(await client.accessLinks.revealPassword({ surveyId, linkId: fieldwork.linkId })).toEqual({
+        password: fieldwork.password,
+      });
+    });
+
+    it('탭 저장은 링크 id 를 받지 않는다 — 외주 링크 id 를 실어 보내도 그 링크에 닿지 않는다', async () => {
+      // 탭은 클라이언트 링크의 축이라 표면이 종류로 못 박혀 있다. 외주 링크가 여럿이 되어도
+      // 탭 저장이 id 지목으로 옮겨 가지 않는 것이 계약이다 — 입력이 id 를 모르므로 실어 보낸
+      // 값은 경계에서 버려지고, 클라이언트 링크가 없으니 NOT_FOUND 다.
+      const fieldwork = await client.accessLinks.issue({ surveyId, kind: 'fieldwork' });
+      await expect(
+        client.accessLinks.setClientTab({
+          surveyId,
+          tab: 'overview',
+          enabled: true,
+          linkId: fieldwork.link.id,
+        } as never),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      const [row] = await db
+        .select({ clientTabs: linksTable.clientTabs })
+        .from(linksTable)
+        .where(eq(linksTable.id, fieldwork.link.id));
+      expect(row?.clientTabs).toBeNull();
+    });
   });
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -682,11 +806,11 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
   // ───────────────────────────────────────────────────────────────────────────
 
   it('비밀번호를 바꾸면 이미 들어와 있던 세션이 그 순간 끊긴다', async () => {
-    const { token, cookie } = await issueAndSignIn();
+    const { token, cookie, linkId } = await issueAndSignIn();
     const headers = cookieHeaders(cookie);
     expect(await resolveLinkActor(token, headers)).toMatchObject({ ok: true });
 
-    const reset = await client.accessLinks.resetPassword({ surveyId, kind: 'fieldwork', password: 'NewPass2026' });
+    const reset = await client.accessLinks.resetPassword({ surveyId, linkId, password: 'NewPass2026' });
     // 변경 전 쿠키로 다시 오면 거부다 — 판정은 시각의 대소가 아니라 표식 값의 일치다.
     expect(await resolveLinkActor(token, headers)).toEqual({
       ok: false,
@@ -700,8 +824,8 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
   });
 
   it('주소는 바뀌지 않는다 — 비밀번호 변경은 토큰을 건드리지 않는다', async () => {
-    const { token, password } = await issueAndSignIn();
-    const reset = await client.accessLinks.resetPassword({ surveyId, kind: 'fieldwork', password: 'NewPass2026' });
+    const { token, password, linkId } = await issueAndSignIn();
+    const reset = await client.accessLinks.resetPassword({ surveyId, linkId, password: 'NewPass2026' });
     expect(reset.link.token).toBe(token);
 
     // 새 비밀번호로는 같은 주소에서 다시 들어간다. 옛 비밀번호는 더 이상 통하지 않는다.
@@ -1042,7 +1166,7 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
         resultCode: '1.조사완료',
       });
 
-      await client.accessLinks.close({ surveyId, kind: 'fieldwork' });
+      await client.accessLinks.close({ surveyId, linkId });
 
       const [link] = await db
         .select({ closedAt: linksTable.closedAt })

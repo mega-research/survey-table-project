@@ -30,6 +30,7 @@ import {
 import {
   AccessLinkAlreadyIssuedError,
   AccessLinkNotFoundError,
+  AccessLinkTargetInput,
   ClientResponseColumnNotAllowedError,
   ClientResponseColumnsConflictError,
   ClientResponseColumnsInput,
@@ -107,7 +108,7 @@ const resetPassword = authed
     return svc
       .resetAccessLinkPassword({
         surveyId: input.surveyId,
-        kind: input.kind,
+        linkId: input.linkId,
         password: input.password,
         actorId: context.user.id,
       })
@@ -116,12 +117,12 @@ const resetPassword = authed
 
 /** 평문 조회 — 업체가 잊었을 때 연구원이 바로 답해 준다. 호출이 구조화 로그에 남는다. */
 const revealPassword = authed
-  .input(SurveyAccessLinkInput)
+  .input(AccessLinkTargetInput)
   .output(RevealedAccessLinkPasswordOutput)
   .handler(async ({ input, context }) => {
     await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.manageAccess');
     const password = await svc
-      .revealAccessLinkPassword(input.surveyId, input.kind)
+      .revealAccessLinkPassword({ surveyId: input.surveyId, linkId: input.linkId })
       .catch(rethrowLinkError);
     return { password };
   });
@@ -168,12 +169,12 @@ const setClientResponseColumns = authed
 
 /** 종료 — 행 삭제가 아니라 상태 전환이다. 종료 뒤 재발급이 된다. */
 const close = authed
-  .input(SurveyAccessLinkInput)
+  .input(AccessLinkTargetInput)
   .output(WorkspaceActionOutput)
   .handler(async ({ input, context }) => {
     await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.manageAccess');
     await svc
-      .closeAccessLink({ surveyId: input.surveyId, kind: input.kind, actorId: context.user.id })
+      .closeAccessLink({ surveyId: input.surveyId, linkId: input.linkId, actorId: context.user.id })
       .catch(rethrowLinkError);
     return { success: true } as const;
   });

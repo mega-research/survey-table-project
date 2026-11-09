@@ -171,6 +171,9 @@ export function AccessLinkPanel({ surveyId, kind }: AccessLinkPanelProps) {
   // baseUrl 을 넘기지 않는다 — 기본값이 브라우저 origin 이고, 이 컴포넌트는 클라이언트 전용이다.
   const url = copy.buildUrl(data.link.token);
   const tabs = data.link.clientTabs;
+  // 보기·변경·종료는 화면이 그린 **이 링크**를 id 로 지목한다(종류가 아니다 — 외주 링크가 여럿이
+  // 되면 종류는 하나를 가리키지 못한다). 탭 저장만 종류 축이라 id 를 보내지 않는다.
+  const target = { surveyId, linkId: data.link.id };
 
   return (
     <div className="flex flex-col gap-2 py-1">
@@ -208,7 +211,7 @@ export function AccessLinkPanel({ surveyId, kind }: AccessLinkPanelProps) {
           onClick={() =>
             password
               ? setPassword(null)
-              : run(async () => (await reveal.mutateAsync({ surveyId, kind })).password)
+              : run(async () => (await reveal.mutateAsync(target)).password)
           }
           className="flex h-9 items-center gap-1 rounded-[8px] border border-[#D1D5DB] px-2.5 text-[12px] text-[#374151] transition-colors hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:text-[#9CA3AF]"
         >
@@ -220,7 +223,7 @@ export function AccessLinkPanel({ surveyId, kind }: AccessLinkPanelProps) {
           disabled={busy || !data.canManage}
           onClick={() =>
             run(
-              async () => (await reset.mutateAsync({ surveyId, kind, ...passwordArg() })).password,
+              async () => (await reset.mutateAsync({ ...target, ...passwordArg() })).password,
             )
           }
           className="flex h-9 items-center gap-1 rounded-[8px] border border-[#D1D5DB] px-2.5 text-[12px] text-[#374151] transition-colors hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:text-[#9CA3AF]"
@@ -285,7 +288,7 @@ export function AccessLinkPanel({ surveyId, kind }: AccessLinkPanelProps) {
             onClick={async () => {
               setError(null);
               try {
-                await close.mutateAsync({ surveyId, kind });
+                await close.mutateAsync(target);
                 setPassword(null);
                 setConfirmingClose(false);
               } catch (err) {

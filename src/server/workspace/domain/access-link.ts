@@ -102,6 +102,11 @@ const PasswordField = z
  */
 const KindField = z.enum(accessLinkKindValues);
 
+/**
+ * 이 설문의 그 종류 링크 조회 — 링크가 아직 무엇인지 모르는 화면이 묻는 자리라 종류로 찾는다.
+ * 발급(`IssueAccessLinkInput`)도 종류를 받는다. 이미 있는 링크를 움직이는 표면은 아래
+ * `AccessLinkTargetInput` 으로 **링크 id** 를 받는다.
+ */
 export const SurveyAccessLinkInput = z.object({ surveyId: z.uuid(), kind: KindField });
 export type SurveyAccessLinkInput = z.infer<typeof SurveyAccessLinkInput>;
 
@@ -113,8 +118,23 @@ export const IssueAccessLinkInput = z.object({
 });
 export type IssueAccessLinkInput = z.infer<typeof IssueAccessLinkInput>;
 
-/** 비밀번호 재설정 — 토큰은 건드리지 않는다(주소는 영구 고정이다). */
-export const ResetAccessLinkPasswordInput = IssueAccessLinkInput;
+/**
+ * 이미 있는 링크 하나를 지목한다 — 비밀번호 열람·종료 (fieldwork-multi-company 티켓 01).
+ *
+ * **종류가 아니라 링크 id 로 집는다.** 한 설문에 외주 링크가 업체 수만큼 서면 「설문 + 종류의
+ * 그 활성 링크」는 하나를 가리키지 못한다. 종류는 받지 않는다 — id 가 이미 종류를 정하고, 두
+ * 값을 함께 받으면 어긋난 조합을 어떻게 읽을지가 또 하나의 규칙이 된다.
+ *
+ * `surveyId` 는 관문이 보는 값이고, **서비스가 WHERE 에 함께 건다** — 관문은 경로의 설문만
+ * 묻는다. 남의 설문 링크 id 와 종료된 링크 id 는 없는 링크와 같은 NotFound 다(존재 은닉).
+ */
+export const AccessLinkTargetInput = z.object({ surveyId: z.uuid(), linkId: z.uuid() });
+export type AccessLinkTargetInput = z.infer<typeof AccessLinkTargetInput>;
+
+/** 비밀번호 재설정 — 지목한 링크 하나. 토큰은 건드리지 않는다(주소는 영구 고정이다). */
+export const ResetAccessLinkPasswordInput = AccessLinkTargetInput.extend({
+  password: PasswordField.optional(),
+});
 export type ResetAccessLinkPasswordInput = z.infer<typeof ResetAccessLinkPasswordInput>;
 
 /**

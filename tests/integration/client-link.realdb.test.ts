@@ -383,10 +383,10 @@ describe.skipIf(!isLocalDb)('클라이언트 링크 세션 (real local DB)', () 
   });
 
   it('링크를 종료하면 닫히고, 같은 설문의 외주 링크는 살아 있다', async () => {
-    const { token, cookie } = await issueAndSignIn();
+    const { token, cookie, linkId } = await issueAndSignIn();
     const fieldwork = await admin.accessLinks.issue({ surveyId, kind: 'fieldwork' });
 
-    await admin.accessLinks.close({ surveyId, kind: 'client' });
+    await admin.accessLinks.close({ surveyId, linkId });
     expect(await resolveClientLinkActor(token, cookieHeaders(cookie))).toEqual({
       ok: false,
       reason: 'closed',
@@ -399,11 +399,11 @@ describe.skipIf(!isLocalDb)('클라이언트 링크 세션 (real local DB)', () 
   // ───────────────────────────────────────────────────────────────────────────
 
   it('비밀번호를 바꾸면 이미 들어와 있던 세션이 그 순간 끊긴다', async () => {
-    const { token, cookie } = await issueAndSignIn();
+    const { token, cookie, linkId } = await issueAndSignIn();
     const headers = cookieHeaders(cookie);
     expect(await resolveClientLinkActor(token, headers)).toMatchObject({ ok: true });
 
-    await admin.accessLinks.resetPassword({ surveyId, kind: 'client', password: 'NextPw2026' });
+    await admin.accessLinks.resetPassword({ surveyId, linkId, password: 'NextPw2026' });
     expect(await resolveClientLinkActor(token, headers)).toEqual({
       ok: false,
       reason: 'unauthenticated',

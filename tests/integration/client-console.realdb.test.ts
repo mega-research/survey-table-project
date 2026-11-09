@@ -146,7 +146,7 @@ async function issueAndEnter(target = surveyId) {
   const auth = await authenticateClientLink(link.token, PASSWORD);
   if (!auth.ok) throw new Error(`접속 실패: ${auth.reason}`);
   signInAs(auth.cookie);
-  return { token: link.token, cookie: auth.cookie };
+  return { token: link.token, linkId: link.id, cookie: auth.cookie };
 }
 
 describe.skipIf(!isLocalDb)('클라이언트 링크 콘솔 (real local DB)', () => {
@@ -273,16 +273,16 @@ describe.skipIf(!isLocalDb)('클라이언트 링크 콘솔 (real local DB)', () 
     });
 
     it('비밀번호가 바뀌면 선 세션이 입구로 돌아간다', async () => {
-      const { token } = await issueAndEnter();
-      await admin.accessLinks.resetPassword({ surveyId, kind: 'client', password: 'NextPw2026' });
+      const { token, linkId } = await issueAndEnter();
+      await admin.accessLinks.resetPassword({ surveyId, linkId, password: 'NextPw2026' });
       await expect(assertClientLinkPageAccess(token, 'overview')).rejects.toThrow(
         `REDIRECT:/client/${token}`,
       );
     });
 
     it('링크를 종료하면 입구로 돌아간다', async () => {
-      const { token } = await issueAndEnter();
-      await admin.accessLinks.close({ surveyId, kind: 'client' });
+      const { token, linkId } = await issueAndEnter();
+      await admin.accessLinks.close({ surveyId, linkId });
       await expect(assertClientLinkPageAccess(token)).rejects.toThrow(`REDIRECT:/client/${token}`);
     });
   });
