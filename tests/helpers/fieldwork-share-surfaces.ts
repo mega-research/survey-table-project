@@ -80,6 +80,6 @@ export const FW_PAGE_SHARE_SURFACES: Record<string, ShareSurfaceStatus> = {
   'fw/[token]/operations/report/page.tsx': FILTERED,
 
   // 08 — 쿼터 현황(응답 현황 화면의 쿼터 조각 포함 — 오케스트레이터 결정)
-  'fw/[token]/operations/overview/page.tsx#쿼터': pending('08'),
-  'fw/[token]/operations/quota/page.tsx': pending('08'),
+  'fw/[token]/operations/overview/page.tsx#쿼터': FILTERED,
+  'fw/[token]/operations/quota/page.tsx': FILTERED,
 };

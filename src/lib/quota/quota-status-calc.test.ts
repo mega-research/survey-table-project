@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildQuotaStatus, quotaTone } from '@/lib/quota/quota-status-calc';
+import {
+  buildQuotaStatus,
+  buildShareQuotaStatus,
+  quotaTone,
+  summarizeShareQuota,
+} from '@/lib/quota/quota-status-calc';
 import { normalizeQuotaConfig } from '@/lib/quota/normalize';
 
 // 프로덕션과 같은 입구를 거친다 — 정규화가 쿼터 플랜의 유일한 생산자다.
@@ -74,5 +79,43 @@ describe('buildQuotaStatus', () => {
     const sparse = { answers: { 'q-g': 'female', 'q-a': '25' }, attrs: null }; // 분류는 되나 목표 없는 셀
     const { summary } = buildQuotaStatus(config, [...answersList, sparse]);
     expect(summary.unclassified).toBe(1);
+  });
+});
+
+describe('buildShareQuotaStatus — 외주 링크의 쿼터 투영', () => {
+  const male25 = { answers: { 'q-g': 'male', 'q-a': '25' }, attrs: null };
+  const female63 = { answers: { 'q-g': 'female', 'q-a': '63' }, attrs: null };
+  // 설문 전체: 남성·20대 2(목표 2 — 마감), 여성·60대 1(목표 4)
+  const all = [male25, male25, female63];
+
+  it('셀마다 내 달성 수와 마감 여부만 담고 목표·전체 달성 수 키가 없다', () => {
+    const status = buildShareQuotaStatus(config, all, [male25]);
+    expect(status.cells).toEqual([
+      { categoryIds: ['c-m', 'c-20'], labels: ['남성', '20대'], mine: 1, closed: true },
+      { categoryIds: ['c-f', 'c-60'], labels: ['여성', '60대 이상'], mine: 0, closed: false },
+    ]);
+    expect(Object.keys(status).sort()).toEqual(['cells', 'dimensions', 'enabled']);
+  });
+
+  it('마감은 설문 전체 기준 — 내 달성 수가 0 이어도 전체가 찼으면 마감이다', () => {
+    const status = buildShareQuotaStatus(config, all, []);
+    expect(status.cells.map((c) => [c.mine, c.closed])).toEqual([
+      [0, true],
+      [0, false],
+    ]);
+  });
+
+  it('목표 0 인 셀은 응답이 없어도 마감이다 — 집행과 같은 술어', () => {
+    const zero = normalizeQuotaConfig({
+      ...config,
+      cells: [{ categoryIds: ['c-m', 'c-20'], target: 0 }],
+    })!;
+    expect(buildShareQuotaStatus(zero, [], []).cells[0]!.closed).toBe(true);
+  });
+
+  it('요약은 내 달성 수 합(분류된 것만)과 마감 셀 수·셀 수다', () => {
+    const unclassified = { answers: { 'q-g': 'other', 'q-a': '25' }, attrs: null };
+    const status = buildShareQuotaStatus(config, all, [male25, female63, unclassified]);
+    expect(summarizeShareQuota(status)).toEqual({ mineTotal: 2, closedCells: 1, totalCells: 2 });
   });
 });

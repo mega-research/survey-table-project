@@ -1,4 +1,4 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, type SQL, sql } from 'drizzle-orm';
 import 'server-only';
 
 import { completedResponse, notDeletedResponse } from '@/server/response-filters';
@@ -35,11 +35,46 @@ export async function loadCompletedQuotaSubjects(
   scope: OperationsDataScope,
   options: { withAttrs: boolean; executor?: DbOrTx },
 ): Promise<QuotaSubject[]> {
+  const rows = await loadCompletedRows(surveyId, scope, options, undefined);
+  return rows.map((r) => r.subject);
+}
+
+/**
+ * 같은 모수를 한 번 읽어 **전체**와 **담당 범위 몫**으로 가른다 — 외주 링크의 쿼터 투영
+ * (fieldwork-multi-company 티켓 08)이 마감은 전체로, 내 달성 수는 몫으로 세야 해서다.
+ *
+ * `shareCondition` 은 응답 행에 거는 담당 범위 술어다 — 호출자가 `server/fieldwork-share` 의
+ * `shareTargetCondition(share, surveyResponses.contactTargetId)` 로 만들어 넘긴다(같이 맡은 대상은 맡은 링크마다
+ * 몫이고, 대상 없는 공개 응답은 나눈 링크의 몫이 아니다). `undefined`(= `all`)면 몫 = 전체다. 해석 모듈을 여기서
+ * import 하지 않는 것은 이 로더가 응답 제출 경로(쿼터 집행)에도 실려 있어 주체 판정 사슬을 끌어오지 않게 하려는 것이다.
+ * 따로 두 번 읽지 않는 것은 두 모수가 한 시점의 같은 행이어야 「몫 ⊂ 전체」가 성립하기 때문이다.
+ */
+export async function loadCompletedQuotaSubjectsWithShare(
+  surveyId: string,
+  scope: OperationsDataScope,
+  options: { withAttrs: boolean; shareCondition: SQL | undefined },
+): Promise<{ all: QuotaSubject[]; mine: QuotaSubject[] }> {
+  const rows = await loadCompletedRows(surveyId, scope, options, options.shareCondition);
+  return {
+    all: rows.map((r) => r.subject),
+    mine: rows.filter((r) => r.inShare).map((r) => r.subject),
+  };
+}
+
+async function loadCompletedRows(
+  surveyId: string,
+  scope: OperationsDataScope,
+  options: { withAttrs: boolean; executor?: DbOrTx },
+  shareCondition: SQL | undefined,
+): Promise<{ subject: QuotaSubject; inShare: boolean }[]> {
   const dbc = options.executor ?? db;
   const rows = await dbc
     .select({
       questionResponses: surveyResponses.questionResponses,
       contactTargetId: surveyResponses.contactTargetId,
+      inShare: shareCondition
+        ? sql<boolean>`${shareCondition}`.mapWith(Boolean)
+        : sql<boolean>`TRUE`.mapWith(Boolean),
     })
     .from(surveyResponses)
     .where(
@@ -64,8 +99,11 @@ export async function loadCompletedQuotaSubjects(
   }
 
   return rows.map((r) => ({
-    answers: decryptQuestionResponses((r.questionResponses ?? {}) as Record<string, unknown>),
-    attrs: (r.contactTargetId != null ? attrsById.get(r.contactTargetId) : undefined) ?? null,
+    subject: {
+      answers: decryptQuestionResponses((r.questionResponses ?? {}) as Record<string, unknown>),
+      attrs: (r.contactTargetId != null ? attrsById.get(r.contactTargetId) : undefined) ?? null,
+    },
+    inShare: r.inShare,
   }));
 }
 

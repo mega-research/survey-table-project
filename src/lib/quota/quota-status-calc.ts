@@ -112,3 +112,76 @@ export function buildQuotaStatus(
     },
   };
 }
+
+/**
+ * 외주 링크가 보는 쿼터 셀 — **내 달성 수와 마감 여부뿐이다** (fieldwork-multi-company 티켓 08, PRD 스토리 40·41).
+ *
+ * 목표(`target`)·전체 달성 수(`current`)·달성률(`pct`)·톤(`tone` — 달성률을 되짚을 수 있다)은 일부러
+ * 없다. 연구원 결정으로 외주는 남의 몫을 짐작할 재료를 화면에도 RSC payload 에도 받지 않는다 —
+ * 키를 빼는 것이 요점이라 `QuotaCellStatus` 를 좁혀 쓰지 않고 따로 둔다(구조적 타입이라 넓은 값이
+ * 그대로 실려 직렬화된다).
+ */
+export interface ShareQuotaCellStatus {
+  categoryIds: string[];
+  /** 차원 순서대로 카테고리 라벨 */
+  labels: string[];
+  /** 지금 담당 범위에 든 조사 대상의 완료 수 — 같이 맡은 대상은 맡은 링크마다 센다 */
+  mine: number;
+  /** 셀 마감 여부 — 설문 전체 완료 기준, 집행(`checkQuota`)과 같은 술어 `current >= target` */
+  closed: boolean;
+}
+
+export interface ShareQuotaStatus {
+  enabled: boolean;
+  dimensions: QuotaStatusDimension[];
+  cells: ShareQuotaCellStatus[];
+}
+
+/** 응답 현황 KPI 카드의 쿼터 칸 — 외주 투영판. 비율(목표 대비)은 목표를 되짚게 하므로 없다. */
+export interface ShareQuotaSummary {
+  /** 목표 셀에 분류된 내 완료 수 합 */
+  mineTotal: number;
+  /** 마감된 셀 수 — 목표 0 셀도 마감이면 센다(셀 단위 표시와 같은 술어) */
+  closedCells: number;
+  totalCells: number;
+}
+
+/**
+ * 외주 링크 투영 — 마감은 `all`(설문 전체 완료)로, 내 달성 수는 `mine`(담당 범위 대상의 완료)으로 센다.
+ *
+ * 두 모수는 같은 로더(`loadCompletedQuotaSubjects`)의 같은 정의에서 나와야 한다 — `mine` 은 `all` 의
+ * 부분 집합이다. 마감 판정을 내 수로 하면 다른 업체가 채운 셀을 외주가 계속 걸게 된다.
+ */
+export function buildShareQuotaStatus(
+  config: NormalizedQuotaConfig,
+  all: QuotaSubject[],
+  mine: QuotaSubject[],
+): ShareQuotaStatus {
+  const allCounts = tallyAll(config, all);
+  const mineCounts = tallyAll(config, mine);
+  return {
+    enabled: config.enabled,
+    dimensions: config.dimensions.map((d) => ({
+      id: d.id,
+      label: d.label,
+      categories: d.categories.map((c) => ({ id: c.id, label: c.label })),
+    })),
+    cells: config.cells.map((cell) => {
+      const key = cellKeyOf(cell.categoryIds);
+      return {
+        categoryIds: cell.categoryIds,
+        labels: cell.categoryIds.map((cid, i) => labelForCategory(config, i, cid)),
+        mine: mineCounts.get(key) ?? 0,
+        closed: (allCounts.get(key) ?? 0) >= cell.target,
+      };
+    }),
+  };
+}
+
+export function summarizeShareQuota(status: ShareQuotaStatus): ShareQuotaSummary {
+  return {
+    mineTotal: status.cells.reduce((s, c) => s + c.mine, 0),
+    closedCells: status.cells.filter((c) => c.closed).length,
+    totalCells: status.cells.length,
+  };
+}
