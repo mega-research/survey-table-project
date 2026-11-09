@@ -69,8 +69,12 @@ export function shareTargetCondition(
 ): SQL | undefined {
   if (share.kind === 'all') return undefined;
   if (share.kind === 'none') return sql`FALSE`;
+  // 서브쿼리의 표는 별칭을 박아 쓴다 — drizzle 관계 쿼리(`db.query.<표>.findFirst`)는 where 의 sql 조각에
+  // 든 **다른 표의 칸까지** 바깥 표 별칭으로 고쳐 써서(`"surveyResponses"."link_id"`) 칸 객체를 넣으면
+  // 깨진다(티켓 06 에서 응답 단건 조회가 밟았다). 표·칸 이름은 schema 객체에서 읽어 개명이 따라오게 한다.
   return sql`COALESCE(${column} IN (
-    SELECT ${fieldworkLinkShares.contactTargetId} FROM ${fieldworkLinkShares}
-    WHERE ${fieldworkLinkShares.linkId} = ${share.linkId}
+    SELECT fls.${sql.identifier(fieldworkLinkShares.contactTargetId.name)}
+    FROM ${fieldworkLinkShares} fls
+    WHERE fls.${sql.identifier(fieldworkLinkShares.linkId.name)} = ${share.linkId}
   ), FALSE)`;
 }
