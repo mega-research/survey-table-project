@@ -1,12 +1,13 @@
 import 'server-only';
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyAccessLinks, surveys } from '@/db/schema';
 import { decryptSharedSecret } from '@/lib/crypto/aes';
 import { constantTimeEquals } from '@/lib/crypto/constant-time';
 import { logger } from '@/lib/logger';
+import { isLegacyBridgeSurvey } from '@/lib/auth/legacy-guest-link';
 import {
   ACCESS_LINK_SESSION_MAX_AGE_SECONDS,
   accessLinkCookieName,
@@ -94,6 +95,29 @@ interface LinkRow {
 }
 
 /**
+ * 링크 행의 칸 — 토큰으로 읽는 자리와 설문으로 읽는 자리(옛 주소 다리)가 같은 모양을 본다.
+ *
+ * 상수가 아니라 함수인 것은 **모듈 평가 시점에 스키마 객체를 읽지 않기** 위해서다. 이 파일은
+ * `server/orpc` 가 import 해 거의 모든 procedure 테스트의 import 사슬에 들어가는데, `@/db/schema` 를
+ * 통째로 목으로 세운 테스트에서 최상위 상수가 없는 테이블의 칸을 읽으면 import 만으로 깨진다.
+ */
+const linkRowColumns = () => ({
+  linkId: surveyAccessLinks.id,
+  kind: surveyAccessLinks.kind,
+  surveyId: surveyAccessLinks.surveyId,
+  surveyTitle: surveys.title,
+  passwordCipher: surveyAccessLinks.passwordCipher,
+  passwordUpdatedAt: surveyAccessLinks.passwordUpdatedAt,
+  clientTabs: surveyAccessLinks.clientTabs,
+  closedAt: surveyAccessLinks.closedAt,
+  isPaused: surveys.isPaused,
+  surveyClosed: surveyClosedColumn,
+  assignmentStatus: surveys.assignmentStatus,
+  deletedAt: surveys.deletedAt,
+  shareAppliedAt: surveyAccessLinks.shareAppliedAt,
+});
+
+/**
  * 토큰으로 링크 행을 읽는다 — **종료된 행도 읽는다.**
  *
  * `closedAt IS NULL` 을 WHERE 에 걸면 종료된 링크가 「없는 토큰」이 되어 비밀번호 화면이 뜬다.
@@ -109,21 +133,7 @@ async function loadLinkRow(kind: AccessLinkKind, token: string): Promise<LinkRow
   // 세 진입점이 같은 가드를 각자 쓰지 않게 하려는 것이기도 하다.
   if (!isAccessLinkToken(token)) return null;
   const [row] = await db
-    .select({
-      linkId: surveyAccessLinks.id,
-      kind: surveyAccessLinks.kind,
-      surveyId: surveyAccessLinks.surveyId,
-      surveyTitle: surveys.title,
-      passwordCipher: surveyAccessLinks.passwordCipher,
-      passwordUpdatedAt: surveyAccessLinks.passwordUpdatedAt,
-      clientTabs: surveyAccessLinks.clientTabs,
-      closedAt: surveyAccessLinks.closedAt,
-      isPaused: surveys.isPaused,
-      surveyClosed: surveyClosedColumn,
-      assignmentStatus: surveys.assignmentStatus,
-      deletedAt: surveys.deletedAt,
-      shareAppliedAt: surveyAccessLinks.shareAppliedAt,
-    })
+    .select(linkRowColumns())
     .from(surveyAccessLinks)
     .innerJoin(surveys, eq(surveys.id, surveyAccessLinks.surveyId))
     .where(and(eq(surveyAccessLinks.token, token), eq(surveyAccessLinks.kind, kind)))
@@ -429,6 +439,11 @@ async function authenticateFor(
   if (!constantTimeEquals(decryptSharedSecret(row.passwordCipher), password.trim())) {
     return { ok: false, reason: 'denied' };
   }
+  return signedIn(row, token);
+}
+
+/** 접속 성공 — 그 링크의 세션 쿠키를 서명해 싣는다. 심는 것은 procedure 의 일이다. */
+function signedIn(row: LinkRow, token: string): AccessLinkAuthResult {
   return {
     ok: true,
     surveyId: row.surveyId,
@@ -443,4 +458,81 @@ async function authenticateFor(
       maxAgeSeconds: ACCESS_LINK_SESSION_MAX_AGE_SECONDS,
     },
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 옛 주소 다리 (fieldwork-multi-company 티켓 10)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 옛 주소 다리의 비밀번호 한 칸 — **토큰 없이 설문 id 와 비밀번호로** 외주 링크 하나를 고른다.
+ *
+ * 옛 게스트 주소는 설문 id 만 담고 있어, 외주 링크가 업체 수만큼 선 설문에서는 주소로 링크를
+ * 정할 수 없다. 그래서 그 설문의 **열린 외주 링크 비밀번호 전부**와 대조해 정확히 하나가 맞을 때만
+ * 그 링크로 들어온다 — 이 경로에서는 비밀번호만이 업체 사이 칸막이다(모든 업체가 설문 id 를 안다).
+ *
+ * - **허용 목록 밖 설문은 DB 를 묻지 않는다**(`isLegacyBridgeSurvey`). 이 표면이 아무 설문에나
+ *   열리면 모든 설문의 외주 링크가 토큰 없이 비밀번호 하나로 두드려진다.
+ * - 0개도 2개 이상도 같은 `denied` 다. 「둘 다 맞았다」를 가르면 그 응답이 곧 「다른 업체가 같은
+ *   비밀번호를 쓴다」의 확인이 되고, 어느 쪽으로 보내도 엉뚱한 업체 콘솔이 열릴 수 있다.
+ * - 대조는 **링크 전부를 끝까지** 돈다 — 맞는 것을 찾자마자 멈추면 응답 시간이 「몇 번째 링크가
+ *   맞았나」를 흘린다. 각 대조는 `constantTimeEquals` 다.
+ * - 닫힘(중단·설문 종료·삭제·배치 대기)은 맞는 비밀번호에만 말해 준다 — `/fw` 의 접속과 같은 결이다.
+ *   종료된 링크(`closedAt`)는 후보에서 뺀다: 닫힌 링크의 옛 비밀번호로 남은 링크가 열리지 않는다.
+ * - 반환 모양은 `/fw` 접속과 같다. 이름표·조사 이름·링크 목록은 싣지 않는다(코어는 고르지도 않는다).
+ */
+export async function authenticateLegacyBridge(
+  surveyId: string,
+  password: string,
+): Promise<AccessLinkAuthResult> {
+  const normalizedId = surveyId.toLowerCase();
+  if (!isLegacyBridgeSurvey(normalizedId)) return { ok: false, reason: 'denied' };
+
+  const rows = await loadOpenFieldworkRows(normalizedId);
+  const given = password.trim();
+  const matches = rows.filter((row) =>
+    constantTimeEquals(decryptSharedSecret(row.passwordCipher), given),
+  );
+  if (matches.length !== 1) return { ok: false, reason: 'denied' };
+  const match = matches[0]!;
+  if (isClosed(match)) return { ok: false, reason: 'closed' };
+  return signedIn(match, match.token);
+}
+
+/**
+ * 다리 비밀번호 화면을 열었을 때 무엇을 그릴지 — 비밀번호 칸이거나 닫힘 안내.
+ *
+ * **조사 이름이 이 모양에 없다.** `/fw` 입구는 토큰을 쥔 사람에게만 이름을 보이지만, 이 화면은
+ * 설문 id 만 아는 사람 누구나 연다. 업체 목록·이름표·링크 수도 없다.
+ *
+ * 닫힘은 설문 단위의 닫힘(중단·설문 종료·삭제·배치 대기)이다 — 그것은 어느 링크에나 같으므로
+ * 링크를 고르기 전에도 말할 수 있다. 접속 표면이 맞는 비밀번호에 `closed` 를 돌려주면 화면이
+ * 새로 고쳐 이 판정으로 닫힘 안내를 그린다(`/fw` 입구와 같은 동선). 열린 외주 링크가 없으면
+ * 비밀번호 칸을 그린다 — 무엇을 넣어도 `denied` 이고, 「링크가 없다」를 말하지 않는다.
+ * 허용 목록 밖이면 `null` 이다(DB 를 묻지 않는다 — 화면이 다리가 꺼진 자리로 보낸다).
+ */
+export type LegacyBridgeEntry = { kind: 'password' } | { kind: 'closed' };
+
+export async function resolveLegacyBridgeEntry(
+  surveyId: string,
+): Promise<LegacyBridgeEntry | null> {
+  const normalizedId = surveyId.toLowerCase();
+  if (!isLegacyBridgeSurvey(normalizedId)) return null;
+  const [row] = await loadOpenFieldworkRows(normalizedId);
+  return row && isClosed(row) ? { kind: 'closed' } : { kind: 'password' };
+}
+
+/** 그 설문의 열린(종료되지 않은) 외주 링크 행 전부 — 설문 상태 조인까지. 다리 두 함수가 같이 쓴다. */
+async function loadOpenFieldworkRows(surveyId: string) {
+  return db
+    .select({ ...linkRowColumns(), token: surveyAccessLinks.token })
+    .from(surveyAccessLinks)
+    .innerJoin(surveys, eq(surveys.id, surveyAccessLinks.surveyId))
+    .where(
+      and(
+        eq(surveyAccessLinks.surveyId, surveyId),
+        eq(surveyAccessLinks.kind, 'fieldwork'),
+        isNull(surveyAccessLinks.closedAt),
+      ),
+    );
 }

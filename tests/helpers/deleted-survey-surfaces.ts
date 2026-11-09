@@ -37,7 +37,12 @@ export type DeletedSurveyExpectation =
   /** 조회 표면 — 없는 설문과 같은 답(null·undefined·빈 결과). */
   | 'empty'
   /** 쓰기·게이트 표면 — 거부를 던진다. */
-  | 'rejects';
+  | 'rejects'
+  /**
+   * 링크 세션을 세우는 표면 — 세션(쿠키) 없이 닫힘을 말한다. 링크 입구(`resolveAccessLinkEntry`)가
+   * 삭제를 닫힘으로 접는 것과 같은 답이다.
+   */
+  | 'closed';
 
 export interface PubSurveySurfaceSpec {
   expectation: DeletedSurveyExpectation;
@@ -79,6 +84,10 @@ export const PUB_SURVEY_SURFACES: Record<string, PubSurveySurfaceSpec> = {
   'surveyResponse.lifecycle.resume': {
     expectation: 'empty',
     note: '이어가기 — 삭제된 설문의 응답 행은 재개 대상이 아니다',
+  },
+  'workspace.accessLinkSession.authenticateLegacyBridge': {
+    expectation: 'closed',
+    note: '옛 주소 다리 비밀번호 — 링크 행이 설문 상태를 조인해 삭제를 닫힘으로 접는다. 맞는 비밀번호에도 쿠키 없이 closed (legacy-guest-bridge.realdb)',
   },
   'surveyResponse.duplicate.checkOnEntry': {
     expectation: 'empty',

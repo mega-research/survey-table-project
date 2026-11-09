@@ -30,8 +30,10 @@ import { cookies } from 'next/headers';
 import {
   authenticateAccessLink,
   authenticateClientLink,
+  authenticateLegacyBridge,
   type AccessLinkSessionCookie,
 } from '@/server/access-link';
+import type { ORPCContext } from '@/server/context';
 import { pub, withRateLimit } from '@/server/orpc';
 import {
   AccessLinkAuthOutput,
@@ -47,6 +49,7 @@ import type { AccessLinkKind } from '@/shared/contracts/workspace';
 import {
   AccessLinkAuthInput,
   AccessLinkSignOutInput,
+  LegacyBridgeAuthInput,
 } from '../domain/access-link';
 
 /**
@@ -106,16 +109,54 @@ const authenticate = pub
   .handler(async ({ input, context }) => {
     const result = await authenticateAccessLink(input.token, input.password);
     if (!result.ok) return { ok: false as const, reason: result.reason };
-    // **한 브라우저에서 한 설문의 외주 세션은 하나다** (fieldwork-multi-company 티켓 02). 외주 링크가
-    // 업체 수만큼 서면 같은 설문의 다른 링크 쿠키가 남아 있을 수 있는데, RPC 는 주체를 설문 id 로
-    // 고르므로 둘이 함께 살아 있으면 어느 쪽도 세우지 못한다(`resolveLinkActorForSurvey`). 그래서
-    // 새 링크로 들어오는 순간 같은 설문의 옛 쿠키를 지운다 — 다른 설문의 쿠키는 그대로다.
-    for (const session of context.linkSessions ?? []) {
-      if (session.token === input.token) continue;
-      if (session.claim.surveyId !== result.surveyId) continue;
-      await clearSessionCookie('fieldwork', session.token);
-    }
-    await setSessionCookie(result.cookie);
+    await replaceFieldworkSession(context, result.surveyId, result.cookie);
+    return { ok: true as const };
+  });
+
+/**
+ * 외주 세션 하나를 심는다 — **한 브라우저에서 한 설문의 외주 세션은 하나다** (fieldwork-multi-company
+ * 티켓 02).
+ *
+ * 외주 링크가 업체 수만큼 서면 같은 설문의 다른 링크 쿠키가 남아 있을 수 있는데, RPC 는 주체를 설문
+ * id 로 고르므로 둘이 함께 살아 있으면 어느 쪽도 세우지 못한다(`resolveLinkActorForSurvey`). 그래서
+ * 새 링크로 들어오는 순간 같은 설문의 옛 쿠키를 지운다 — 다른 설문의 쿠키와 자기 쿠키는 그대로다.
+ * **외주 세션을 심는 표면은 전부 이 함수를 지난다**(`/fw` 접속 · 옛 주소 다리).
+ */
+async function replaceFieldworkSession(
+  context: ORPCContext,
+  surveyId: string,
+  cookie: AccessLinkSessionCookie,
+): Promise<void> {
+  for (const session of context.linkSessions ?? []) {
+    if (accessLinkCookieName('fieldwork', session.token) === cookie.name) continue;
+    if (session.claim.surveyId !== surveyId) continue;
+    await clearSessionCookie('fieldwork', session.token);
+  }
+  await setSessionCookie(cookie);
+}
+
+/**
+ * 옛 주소 다리의 비밀번호 화면 (fieldwork-multi-company 티켓 10) — 토큰 없이 설문 id 와 비밀번호로
+ * 외주 링크 하나에 들어온다.
+ *
+ * 판정은 코어(`authenticateLegacyBridge`)가 한다: 허용 목록 밖이면 DB 를 묻지 않고, 그 설문의 열린
+ * 외주 링크 중 **정확히 하나**가 맞을 때만 그 링크의 세션이 선다. 0개·2개 이상은 같은 `denied` 다.
+ *
+ * 응답에 **토큰도 싣지 않는다** — 화면은 성공하면 다리 라우트를 다시 지나고, 라우트가 방금 심은
+ * 쿠키 하나로 그 링크를 고른다. 그래서 출력 모양이 `/fw` 접속과 같다(이름표·조사 이름·목록 없음).
+ *
+ * 레이트리밋의 클라이언트 축은 **설문**이다(토큰 축이 아니다). 링크 N개 중 하나만 맞히면 열리는
+ * 표면이라 토큰마다 버킷을 주면 시도 예산이 N배가 된다. 그룹은 `/fw` 접속과 같은 것을 쓴다 —
+ * 버킷 키가 값(설문 id ↔ 토큰)으로 갈리고, IP 전체 가드는 두 입구를 합쳐 세는 것이 맞다.
+ */
+const authenticateLegacyBridgeProcedure = pub
+  .use(withRateLimit('access-link-auth', { clientIdKeys: ['surveyId'] }))
+  .input(LegacyBridgeAuthInput)
+  .output(AccessLinkAuthOutput)
+  .handler(async ({ input, context }) => {
+    const result = await authenticateLegacyBridge(input.surveyId, input.password);
+    if (!result.ok) return { ok: false as const, reason: result.reason };
+    await replaceFieldworkSession(context, result.surveyId, result.cookie);
     return { ok: true as const };
   });
 
@@ -169,4 +210,10 @@ const signOutClient = pub
     return { success: true } as const;
   });
 
-export const accessLinkSession = { authenticate, signOut, authenticateClient, signOutClient };
+export const accessLinkSession = {
+  authenticate,
+  signOut,
+  authenticateClient,
+  signOutClient,
+  authenticateLegacyBridge: authenticateLegacyBridgeProcedure,
+};

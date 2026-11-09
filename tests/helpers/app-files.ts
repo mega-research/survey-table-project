@@ -52,6 +52,8 @@ export const PUBLIC_PAGES: Record<string, string> = {
   'survey/[id]/page.tsx': '공개 응답 페이지 — 설문 자체가 공개 표면이다',
   'fw/[token]/page.tsx':
     '외주 실사 링크의 비밀번호 화면 — 세션을 **만드는** 자리라 가드를 붙이면 아무도 들어올 수 없다',
+  'fw/legacy/[surveyId]/page.tsx':
+    '옛 주소 다리의 비밀번호 화면 — `/fw/[token]` 입구와 같은 이유다. 허용 목록 밖 설문은 DB 를 묻지 않고 다리가 꺼진 자리로 보낸다',
   'client/[token]/page.tsx':
     '클라이언트 링크의 비밀번호 화면 — 위와 같은 이유다. 조사 이름조차 받지 않는다(ADR-0029)',
 };

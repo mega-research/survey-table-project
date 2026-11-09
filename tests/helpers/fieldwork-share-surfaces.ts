@@ -63,6 +63,7 @@ export const FW_PAGE_SHARE_SURFACES: Record<string, ShareSurfaceStatus> = {
   'fw/[token]/preview/page.tsx': exempt('설문지 미리보기 — 설문 구조만 읽는다'),
   'fw/[token]/operations/layout.tsx': exempt('셸 — 설문 행과 쿼터 계획 유무만 읽는다'),
   'fw/[token]/operations/page.tsx': exempt('조사 대상 목록으로 보내는 redirect 뿐이다'),
+  'fw/legacy/[surveyId]/page.tsx': exempt('옛 주소 다리 비밀번호 화면 — 열린 외주 링크 유무만 보고 링크 콘솔로 보낸다'),
 
   // 03 — 조사 대상 목록·필터 후보·검색
   'fw/[token]/operations/contacts/page.tsx': FILTERED,

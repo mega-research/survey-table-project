@@ -147,18 +147,21 @@ describe('계정 축 표면은 외주 실사 링크에게 닫혀 있다', () => 
     await expect(callerFor(path)({})).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });
 
-  it('링크 세션 표면 넷만 pub 이다 — 링크로 들어온 사람이 실제로 부를 수 있는 것의 전부', () => {
+  it('링크 세션 표면 다섯만 pub 이다 — 링크로 들어온 사람이 실제로 부를 수 있는 것의 전부', () => {
     const linkSurfaces = procedures
       .filter((p) => p.path.startsWith('workspace.accessLink'))
       .map((p) => `${p.path}:${p.base}`)
       .sort();
     // 관리 다섯이 pub 으로 내려가면 외주가 자기 비밀번호를 읽거나 바꾼다 — 그 순간 담당
-    // 연구원이 통제권을 잃는다. 세션 둘이 authed 로 올라가면 접속할 방법이 사라진다.
+    // 연구원이 통제권을 잃는다. 세션 표면이 authed 로 올라가면 접속할 방법이 사라진다.
     expect(linkSurfaces).toEqual([
       'workspace.accessLinkSession.authenticate:pub',
       // 클라이언트 링크의 세션 표면 둘(ADR-0029) — 외주 쪽과 표면이 따로다. 로그가 적는 것이
       // RPC 이름이라 입구의 종류가 거기서 읽힌다.
       'workspace.accessLinkSession.authenticateClient:pub',
+      // 옛 주소 다리의 비밀번호 한 칸(fieldwork-multi-company 티켓 10) — 토큰 대신 설문 id 를 받는다.
+      // 허용 목록 밖 설문에는 DB 를 묻지 않고, 시도 제한은 설문 축이다.
+      'workspace.accessLinkSession.authenticateLegacyBridge:pub',
       'workspace.accessLinkSession.signOut:pub',
       'workspace.accessLinkSession.signOutClient:pub',
       // 클라이언트 링크 응답 내역의 열 설정(티켓 04) — 열리면 클라이언트가 자기에게 보이는 열을

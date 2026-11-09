@@ -35,10 +35,15 @@ export const pub = base;
  * 그룹(IP_WIDE_GROUPS 등재분) 중 `token` 입력을 받는 것은 링크 검증뿐이고, 나머지는 앞의 두
  * 키에서 이미 값을 얻는다. 미등재 그룹(lookup·public-read)은 클라이언트 축 자체를 무시한다.
  */
-function extractRateLimitClientId(input: unknown): string | null {
+const DEFAULT_CLIENT_ID_KEYS = ['sessionId', 'responseId', 'token'] as const;
+
+function extractRateLimitClientId(
+  input: unknown,
+  keys: readonly string[] = DEFAULT_CLIENT_ID_KEYS,
+): string | null {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) return null;
   const record = input as Record<string, unknown>;
-  for (const key of ['sessionId', 'responseId', 'token'] as const) {
+  for (const key of keys) {
     const value = record[key];
     if (typeof value === 'string' && value.length > 0 && value.length <= 128) {
       return value;
@@ -60,7 +65,19 @@ function extractRateLimitClientId(input: unknown): string | null {
  * 단일 'unknown' 버킷을 공유하면 상호 한도 잠식/약 DoS 가 되므로, 공유 버킷 대신
  * 차단한다(Vercel 표준 배포는 항상 신뢰 헤더가 채워져 이 경로에 도달하지 않음).
  */
-export function withRateLimit(group: RateLimitGroup) {
+export function withRateLimit(
+  group: RateLimitGroup,
+  options: {
+    /**
+     * 클라이언트 축으로 읽을 입력 키 — 기본은 `sessionId → responseId → token`.
+     *
+     * 기본 목록에 키를 더하지 않고 표면이 고르게 한 것은 **기존 버킷을 건드리지 않기** 위해서다.
+     * 기본 목록에 `surveyId` 를 넣으면 응답 계열 표면 중 앞의 두 키가 없는 것의 버킷 키가 조용히
+     * 바뀐다. 옛 주소 다리(티켓 10)가 `['surveyId']` 를 쓴다 — 토큰이 없고 설문이 곧 축이다.
+     */
+    clientIdKeys?: readonly string[];
+  } = {},
+) {
   // base 는 로깅 미들웨어가 붙은 빌더라 .middleware() 가 없다 — 원시 root 로 만든다.
   return root.middleware(async ({ context, next }, input: unknown) => {
     const ip = getTrustedClientIpOrNull(context.headers ?? new Headers());
@@ -69,7 +86,9 @@ export function withRateLimit(group: RateLimitGroup) {
         message: '요청을 식별할 수 없습니다. 잠시 후 다시 시도해 주세요.',
       });
     }
-    if (await isRateLimitedTwoTier(group, ip, extractRateLimitClientId(input))) {
+    if (
+      await isRateLimitedTwoTier(group, ip, extractRateLimitClientId(input, options.clientIdKeys))
+    ) {
       throw new ORPCError('TOO_MANY_REQUESTS', {
         message: '요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.',
       });
