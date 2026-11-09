@@ -14,6 +14,7 @@ import {
   targetScopeCondition,
   testFlagForScope,
 } from '@/server/data-scope';
+import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share';
 import { type FilterCondition, buildFilterSql } from './progress-filters';
 import {
   formatProgressGroupKey,
@@ -27,6 +28,14 @@ import {
 import { buildNegativeCodeExists, getResultCodeStatuses } from '@/server/read-models/result-code-statuses';
 
 const EMPTY_SCHEME: ProgressColumnScheme = { version: 1, columns: [] };
+
+/**
+ * 담당 범위 술어 — 진척 보고는 조사 대상(`ct`) 단위라 범위 밖 대상이 행·합계·분모에서 함께 빠진다.
+ * 완료 판정(`buildClosingFilter`)은 대상에 매달려 있으므로 범위를 옮기면 끝난 응답도 따라 옮겨 간다.
+ */
+function shareSql(share: FieldworkShare): SQL {
+  return shareTargetCondition(share, sql`ct.id`) ?? sql`TRUE`;
+}
 
 /**
  * 클로징 정의 W∪A — 두 EXISTS 의 OR.
@@ -155,6 +164,9 @@ export const getProgressColumnScheme = cache(
  * 못 찾으면 '그룹' fallback. 컨택 0건 / group_value NULL only 케이스도 동일.
  *
  * `cache()` 로 RSC pass dedupe — header / 표 등 다중 RSC 동시 호출 가능성 대비.
+ *
+ * 담당 범위로 거르지 않는다 — 대상 한 행으로 키를 역추론할 뿐 돌려주는 것은 컬럼 설정의 라벨이라
+ * 조사 대상 값이 화면에 실리지 않는다(외주 콘솔도 같은 제목을 본다).
  */
 export const getProgressGroupLabel = cache(
   async (surveyId: string, scope: OperationsDataScope): Promise<string> => {
@@ -205,6 +217,8 @@ export const getProgressGroupLabel = cache(
 export interface GetProgressRowsArgs {
   surveyId: string;
   scope: OperationsDataScope;
+  /** 담당 범위 — 나눈 외주 링크면 그 범위 대상만 센다(`server/fieldwork-share`). */
+  share: FieldworkShare;
   condition: FilterCondition | null;
   page: number;
   size: number;
@@ -334,7 +348,7 @@ const SORT_COL_MAP: Record<
  * 참조 (meta_0..meta_N) 만 raw 임베드 — 사용자 입력이 SQL 에 직접 박히지 않음.
  */
 export async function getProgressRows(args: GetProgressRowsArgs): Promise<ProgressRow[]> {
-  const { surveyId, scope, condition, page, size, sort, dir, metaKeys, groupByKeys } = args;
+  const { surveyId, scope, share, condition, page, size, sort, dir, metaKeys, groupByKeys } = args;
   const offset = Math.max(0, (page - 1) * size);
   const isTest = testFlagForScope(scope);
   const keyCount = groupKeyCount(groupByKeys);
@@ -398,6 +412,7 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
       FROM ${buildGroupedBase(keySqls)}
       WHERE ct.survey_id = ${surveyId}
         AND ct.is_test = ${isTest}
+        AND ${shareSql(share)}
         AND ${filterSql}
         GROUP BY ${buildGroupByClause(keyCount)}
     ) sub
@@ -450,6 +465,7 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
 export async function getProgressTotals(
   surveyId: string,
   scope: OperationsDataScope,
+  share: FieldworkShare,
   condition: FilterCondition | null,
   groupByKeys?: ProgressGroupKey[],
 ): Promise<ProgressTotals> {
@@ -466,6 +482,7 @@ export async function getProgressTotals(
         SELECT 1 FROM ${buildGroupedBase(groupKeySqls(groupByKeys))}
         WHERE ct.survey_id = ${surveyId}
           AND ct.is_test = ${isTest}
+          AND ${shareSql(share)}
           AND ${filterSql}
         GROUP BY ${buildGroupByClause(keyCount)}
       ) grouped) AS group_count,
@@ -476,6 +493,7 @@ export async function getProgressTotals(
     FROM contact_targets ct
     WHERE ct.survey_id = ${surveyId}
       AND ct.is_test = ${isTest}
+      AND ${shareSql(share)}
       AND ${filterSql}
   `);
   const r = (result as unknown as Array<Record<string, unknown>>)[0] ?? {};
@@ -493,10 +511,15 @@ export async function getProgressTotals(
 export async function countContactTargets(
   surveyId: string,
   scope: OperationsDataScope,
+  share: FieldworkShare,
 ): Promise<number> {
   const rows = await db
     .select({ ct: sql<number>`count(*)::int` })
     .from(contactTargets)
-    .where(sql`${contactTargets.surveyId} = ${surveyId} AND ${targetScopeCondition(scope)}`);
+    .where(
+      sql`${contactTargets.surveyId} = ${surveyId} AND ${targetScopeCondition(scope)} AND ${
+        shareTargetCondition(share) ?? sql`TRUE`
+      }`,
+    );
   return Number(rows[0]?.ct ?? 0);
 }

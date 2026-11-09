@@ -62,6 +62,7 @@ import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 
 import { backendPid, waitForLockWaitersBehind } from '../helpers/lock-waiters';
 import { resolvedFilterForTest } from '../helpers/resolved-contact-filter';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 
 // 이 브라우저의 「테스트 데이터 보기」 쿠키 — 켜고 끄며 파티션을 오간다 (server/data-scope).
 const cookieState = vi.hoisted(() => ({ testView: false }));
@@ -837,6 +838,7 @@ run('컨택원 배정 (real local DB)', () => {
       const base = {
         surveyId,
         scope: 'real' as const,
+        share: FIELDWORK_SHARE_ALL,
         condition: null,
         page: 1,
         size: 20,
@@ -856,7 +858,7 @@ run('컨택원 배정 (real local DB)', () => {
         ['(배정 없음)', [null], 2, 0],
       ]);
 
-      const totals = await getProgressTotals(surveyId, 'real', null, [OWNER]);
+      const totals = await getProgressTotals(surveyId, 'real', FIELDWORK_SHARE_ALL, null, [OWNER]);
       expect(totals).toMatchObject({ groupCount: 3, listTotal: 5, completedTotal: 1 });
 
       const mixed = await getProgressRows({
@@ -872,8 +874,12 @@ run('컨택원 배정 (real local DB)', () => {
       expect(combo.get('기업3 / 11차')).toBe(1);
       expect(combo.get('기업5 / (배정 없음)')).toBe(1);
       expect(
-        (await getProgressTotals(surveyId, 'real', null, [{ kind: 'attrs', key: '기업명' }, OWNER]))
-          .groupCount,
+        (
+          await getProgressTotals(surveyId, 'real', FIELDWORK_SHARE_ALL, null, [
+            { kind: 'attrs', key: '기업명' },
+            OWNER,
+          ])
+        ).groupCount,
       ).toBe(5);
     });
   });

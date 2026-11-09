@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 
 import { internalOperationsBase } from '@/features/operations/operations-paths';
 import { getOperationsDataScope } from '@/server/data-scope';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
 
 import { ReportProgressScreen, type ReportProgressSearchParams } from '@/app/_operations/report-screen';
@@ -37,6 +38,7 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
       basePath={internalOperationsBase(surveyId)}
       capabilities={capabilities}
       scope={scope}
+      share={FIELDWORK_SHARE_ALL}
       includeContactOwner
       searchParams={await searchParams}
     />

@@ -3,6 +3,7 @@ import 'server-only';
 import { and, eq, isNotNull } from 'drizzle-orm';
 
 import { db } from '@/db';
+import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share';
 import { surveyResponses } from '@/db/schema';
 import { notDeletedResponse } from '@/server/response-filters';
 
@@ -24,6 +25,7 @@ import { responseScopeCondition, type OperationsDataScope } from '@/server/data-
 export async function getResponseTime(
   surveyId: string,
   scope: OperationsDataScope,
+  share: FieldworkShare,
 ): Promise<ResponseTimeRow[]> {
   const rows = await db
     .select({
@@ -37,6 +39,7 @@ export async function getResponseTime(
         isNotNull(surveyResponses.totalSeconds),
         notDeletedResponse,
         responseScopeCondition(scope),
+        shareTargetCondition(share, surveyResponses.contactTargetId),
       ),
     );
 

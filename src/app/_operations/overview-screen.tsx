@@ -9,6 +9,7 @@ import { QuotaStatusPanel } from '@/features/operations/quota/quota-status-panel
 import { ResponseTimeStats } from '@/features/operations/response-time-stats';
 import { kstTodayIsoDate } from '@/lib/date-formatters';
 import type { OperationsDataScope } from '@/server/data-scope';
+import type { FieldworkShare } from '@/server/fieldwork-share';
 import {
   aggregateDaily,
   aggregateDailyAvailableDates,
@@ -45,6 +46,9 @@ import type { SurveyCapability } from '@/shared/contracts/workspace';
  *    `isExternalViewer()`(계정 유형)로 물었는데, 그 문은 계정을 요구하므로 링크 세션에서
  *    던진다. 판정 결과로 물으면 주체 종류가 늘어도 이 줄은 그대로다.
  *  - `scope` — 링크는 언제나 real 파티션이다(스펙 §11-3).
+ *  - `share` — 담당 범위(ADR-0035). 나눈 외주 링크는 응답 수·추이·응답시간·이탈·체류를 **자기 범위
+ *    대상의 응답만으로** 센다(같이 맡은 대상 포함, 조사 대상에 묶이지 않은 공개 응답 제외). 내부 콘솔은
+ *    `FIELDWORK_SHARE_ALL` — 숫자가 지금 그대로다.
  *
  * 쿼터 현황판은 **감추지 않는다.** 외주가 보는 숫자는 연구원이 보는 것과 같아야 하고
  * (스토리 34), 남은 목표치는 실사 배분에 직접 쓰이는 값이다. 쿼터 **탭**(플랜 편집)이
@@ -61,6 +65,8 @@ interface Props {
   surveyId: string;
   capabilities: ReadonlySet<SurveyCapability>;
   scope: OperationsDataScope;
+  /** 담당 범위 — 내부 콘솔은 `FIELDWORK_SHARE_ALL`, `/fw` 는 `resolveFieldworkShare(actor, surveyId)`. */
+  share: FieldworkShare;
   searchParams: OperationsOverviewSearchParams;
 }
 
@@ -68,6 +74,7 @@ export async function OperationsOverviewScreen({
   surveyId,
   capabilities,
   scope,
+  share,
   searchParams,
 }: Props) {
   const { mode = 'day', date, weekOffset: weekOffsetStr, dwellOffset: dwellOffsetStr } = searchParams;
@@ -76,7 +83,7 @@ export async function OperationsOverviewScreen({
 
   // hour 모드 진입 시 date 미지정이면 응답이 있는 가장 최근 일자, 응답 자체가 없으면 KST 오늘로
   // fallback. 어댑터가 effectiveDate 없는 hour 모드에서 throw 하지 않도록 보장.
-  const availableDates = await aggregateDailyAvailableDates(surveyId, scope);
+  const availableDates = await aggregateDailyAvailableDates(surveyId, scope, share);
   const latestAvailable =
     availableDates.length > 0 ? availableDates[availableDates.length - 1] : undefined;
   const effectiveDate = mode === 'hour' ? (date ?? latestAvailable ?? kstTodayIsoDate()) : undefined;
@@ -93,17 +100,18 @@ export async function OperationsOverviewScreen({
     quotaStatus,
     survey,
   ] = await Promise.all([
-    aggregateStatus(surveyId, scope),
+    aggregateStatus(surveyId, scope, share),
     aggregateDaily({
       surveyId,
       scope,
+      share,
       mode,
       ...(effectiveDate !== undefined ? { hourModeDate: effectiveDate } : {}),
     }),
-    getDailyStats(surveyId, scope),
-    getResponseTime(surveyId, scope),
-    getDropFunnel(surveyId, scope),
-    getPageDwell(surveyId, scope),
+    getDailyStats(surveyId, scope, share),
+    getResponseTime(surveyId, scope, share),
+    getDropFunnel(surveyId, scope, share),
+    getPageDwell(surveyId, scope, share),
     // 테스트 모드에서도 테스트 응답 기준으로 집계해 보여준다(표시 전용 — 집행은 실응답만).
     getQuotaStatus(surveyId, scope),
     // 내보내기 모달의 제목 말고는 쓰지 않는다 — 그릴 일이 없으면 읽지도 않는다.

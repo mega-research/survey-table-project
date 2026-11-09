@@ -10,6 +10,7 @@ import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts-format';
 import { listAssignmentOptions } from '@/server/read-models/contact-assignment-options';
 import { type ColumnCandidateWithPii, FILTER_SOURCE } from '@/lib/operations/filter-shared';
 import type { OperationsDataScope } from '@/server/data-scope';
+import type { FieldworkShare } from '@/server/fieldwork-share';
 import { parseConditionFromUrl } from '@/server/operations/services/progress-filters';
 import {
   EMPTY_PROGRESS_TOTALS,
@@ -47,6 +48,9 @@ const CONTACT_OWNER_GROUP_KEY: ProgressGroupKey = { kind: 'system', key: 'contac
  *  - `capabilities` — 명단이 비었을 때의 안내가 갈린다. 「업로드하세요」는 `contacts.manage`
  *    를 가진 사람에게만 할 수 있는 말이고, 그 링크가 여는 화면도 admin 트리에만 있다.
  *  - `includeContactOwner` — 「컨택원」 분류 칩. 컨택원은 내부 실사 운영 정보라 내부 콘솔만 켠다.
+ *  - `share` — 담당 범위(ADR-0035). 나눈 외주 링크는 행·합계·분모·완료를 자기 범위 대상만으로 센다.
+ *    완료 판정이 대상에 매달려 있어 범위를 옮기면 끝난 응답도 따라 옮겨 간다. 그룹 행의 값(필터 후보)도
+ *    범위 대상의 값만 나온다. 내부 콘솔은 `FIELDWORK_SHARE_ALL`.
  */
 export interface ReportProgressSearchParams {
   col?: string;
@@ -64,6 +68,8 @@ interface Props {
   basePath: string;
   capabilities: ReadonlySet<SurveyCapability>;
   scope: OperationsDataScope;
+  /** 담당 범위 — 내부 콘솔은 `FIELDWORK_SHARE_ALL`, `/fw` 는 `resolveFieldworkShare(actor, surveyId)`. */
+  share: FieldworkShare;
   /** 「컨택원」 분류 칩을 낼 수 있는가 — 내부 콘솔만 참. 외주 실사 링크에는 컨택원을 보이지 않는다. */
   includeContactOwner: boolean;
   searchParams: ReportProgressSearchParams;
@@ -74,6 +80,7 @@ export async function ReportProgressScreen({
   basePath,
   capabilities,
   scope,
+  share,
   includeContactOwner,
   searchParams: sp,
 }: Props) {
@@ -164,7 +171,7 @@ export async function ReportProgressScreen({
     RESID_DEFAULT_LABEL;
 
   // 조사 대상 0건 빠른 검출 — getProgressTotals 보다 훨씬 가벼움.
-  const isEmpty = (await countContactTargets(surveyId, scope)) === 0;
+  const isEmpty = (await countContactTargets(surveyId, scope, share)) === 0;
 
   const { rows, totals } = isEmpty
     ? { rows: [], totals: EMPTY_PROGRESS_TOTALS }
@@ -172,6 +179,7 @@ export async function ReportProgressScreen({
         getProgressRows({
           surveyId,
           scope,
+          share,
           condition,
           page,
           size,
@@ -180,7 +188,7 @@ export async function ReportProgressScreen({
           metaKeys,
           groupByKeys: activeGroupKeys,
         }),
-        getProgressTotals(surveyId, scope, condition, activeGroupKeys),
+        getProgressTotals(surveyId, scope, share, condition, activeGroupKeys),
       ]).then(([r, t]) => ({ rows: r, totals: t }));
 
   return (

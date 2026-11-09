@@ -3,6 +3,7 @@ import 'server-only';
 import { sql } from 'drizzle-orm';
 
 import { db } from '@/db';
+import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share';
 import { loadPinnedVersionSnapshot } from '@/server/read-models/version-snapshot';
 
 import {
@@ -37,6 +38,7 @@ const EMPTY_OUTPUT: DropFunnelOutput = { bars: [], totalDrops: 0 };
 export async function getDropFunnel(
   surveyId: string,
   scope: OperationsDataScope,
+  share: FieldworkShare,
 ): Promise<DropFunnelOutput> {
   const isTest = testFlagForScope(scope);
   // ── A) 이 파티션이 보는 snapshot 로드 + 캐노니컬 step ────────────────────────
@@ -56,6 +58,7 @@ export async function getDropFunnel(
     sr.survey_id = ${surveyId}::uuid
     AND sr.is_test = ${isTest}
     AND sr.deleted_at IS NULL
+    AND ${shareTargetCondition(share, sql`sr.contact_target_id`) ?? sql`TRUE`}
   `;
   const aggregateRows = await db.execute(sql`
     SELECT

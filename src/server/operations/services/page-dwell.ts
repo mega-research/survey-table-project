@@ -3,6 +3,7 @@ import 'server-only';
 import { sql } from 'drizzle-orm';
 
 import { db } from '@/db';
+import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share';
 import { loadPinnedVersionSnapshot } from '@/server/read-models/version-snapshot';
 
 import {
@@ -42,6 +43,7 @@ const TRIM = 0.025;
 export async function getPageDwell(
   surveyId: string,
   scope: OperationsDataScope,
+  share: FieldworkShare,
 ): Promise<DwellOutput> {
   const isTest = testFlagForScope(scope);
   // ── A) snapshot 로드 + 캐노니컬 step ─────────────────────────────────────
@@ -56,6 +58,7 @@ export async function getPageDwell(
     sr.survey_id = ${surveyId}::uuid
     AND sr.is_test = ${isTest}
     AND sr.deleted_at IS NULL
+    AND ${shareTargetCondition(share, sql`sr.contact_target_id`) ?? sql`TRUE`}
   `;
   const rows = await db.execute(sql`
     WITH dwell AS (
