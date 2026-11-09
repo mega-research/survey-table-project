@@ -16,6 +16,8 @@ import type { NumberFormat, NumberUnit } from '@/types/survey';
 import { UNIT_LABELS } from '@/utils/number-format';
 import { isPartialNumericInput, parseNumericInput } from '@/utils/numeric-input';
 
+import { formatAllowedValuesText, parseAllowedValuesText } from './utils/allowed-values-text';
+
 const UNIT_OPTIONS: Array<{ value: NumberUnit | ''; label: string }> = [
   { value: '', label: '기본' },
   ...(Object.entries(UNIT_LABELS) as Array<[NumberUnit, string]>).map(([value, label]) => ({
@@ -53,8 +55,8 @@ function normalize(nf: NumberFormat): NumberFormat | undefined {
 export function NumberFormatFields({ value, onChange, idPrefix }: Props) {
   const nf: NumberFormat = value ?? {};
   const emit = (next: NumberFormat) => onChange(normalize(next));
-  const [allowedValuesDraft, setAllowedValuesDraft] = useState(
-    () => nf.allowedValues?.join(', ') ?? '',
+  const [allowedValuesDraft, setAllowedValuesDraft] = useState(() =>
+    formatAllowedValuesText(nf.allowedValues),
   );
   const [editingAllowedValues, setEditingAllowedValues] = useState(false);
 
@@ -107,14 +109,7 @@ export function NumberFormatFields({ value, onChange, idPrefix }: Props) {
   const handleAllowedValuesChange = (e: ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
     setAllowedValuesDraft(raw);
-    const allowedValues = [
-      ...new Set(
-        raw
-          .split(',')
-          .map((part) => parseNumericInput(part.trim()))
-          .filter((item): item is number => item !== null),
-      ),
-    ];
+    const allowedValues = parseAllowedValuesText(raw);
     if (allowedValues.length === 0) {
       const { allowedValues: _allowedValues, ...rest } = nf;
       emit(rest);
@@ -225,24 +220,24 @@ export function NumberFormatFields({ value, onChange, idPrefix }: Props) {
           <span className="text-xs text-gray-600">허용값</span>
           <Input
             type="text"
-            inputMode="decimal"
             value={
-              editingAllowedValues ? allowedValuesDraft : (nf.allowedValues?.join(', ') ?? '')
+              editingAllowedValues ? allowedValuesDraft : formatAllowedValuesText(nf.allowedValues)
             }
             onFocus={() => {
-              setAllowedValuesDraft(nf.allowedValues?.join(', ') ?? '');
+              setAllowedValuesDraft(formatAllowedValuesText(nf.allowedValues));
               setEditingAllowedValues(true);
             }}
             onChange={handleAllowedValuesChange}
             onBlur={() => setEditingAllowedValues(false)}
-            placeholder="예: 2, 8 (쉼표로 구분)"
+            placeholder="예: 2, 8 또는 1900-2026, 9999 (쉼표로 구분)"
             className="h-8"
             aria-label="허용값"
           />
         </label>
       </div>
       <p className="text-xs text-gray-400">
-        입력한 값 외의 숫자는 입력 단계에서 차단합니다. 비워두면 최소·최대 범위만 적용됩니다.
+        입력한 값 외의 숫자는 입력 단계에서 차단합니다. 「시작-끝」으로 범위를 쓸 수 있습니다.
+        비워두면 최소·최대 범위만 적용됩니다.
       </p>
     </div>
   );
