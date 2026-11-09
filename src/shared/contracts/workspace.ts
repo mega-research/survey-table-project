@@ -579,13 +579,31 @@ export const ACCESS_LINK_TOKEN_MAX_LENGTH = 64;
  *  - `client` — 클라이언트 링크(ADR-0029). 그 설문의 현황 열람 화면(`/client/<token>`)을 연다.
  *
  * 종류가 정하는 것은 셋이다: **주소**, **capability 열**, **닫히는 조건**(외주는 설문 중단에
- * 닫히고 클라이언트는 닫히지 않는다). 활성 링크는 설문당 종류별 하나라 한 설문에 둘이 함께 선다.
+ * 닫히고 클라이언트는 닫히지 않는다). 한 설문에 두 종류가 함께 서고, 활성 클라이언트 링크는
+ * 설문당 하나, 외주 링크는 업체 수만큼 선다(0159, ADR-0035).
  *
  * 값을 늘릴 때는 이 배열·0134 의 CHECK·판정 코어(`server/survey-access` 의 링크 분기)를 함께
  * 볼 것 — Drizzle 의 `$type<>` 은 CHECK 를 만들지 않는다.
  */
 export const accessLinkKindValues = ['fieldwork', 'client'] as const;
 export type AccessLinkKind = (typeof accessLinkKindValues)[number];
+
+/** 외주 링크 이름표의 최대 글자 수 — 경계 스키마와 0159 의 CHECK 가 같은 값을 본다. */
+export const ACCESS_LINK_LABEL_MAX_LENGTH = 40;
+
+/**
+ * 외주 링크를 부르는 이름 — 이름표가 있으면 이름표, 없으면 **발급 순번**(「링크 2」).
+ *
+ * 순번은 그 설문의 외주 링크를 발급 순서(`created_at`, `id`)로 센 것이고 **종료된 링크도 센다** —
+ * 하나를 종료해도 남은 링크의 이름이 바뀌지 않아야 지난 기록의 「외주 · 링크 2」가 같은 링크를
+ * 가리킨다. 순번을 세는 자리는 둘이다(공유 설정 목록 `listAccessLinks` · 내부 기록의 이름
+ * `loadFieldworkLinkNames`) — 둘 다 같은 정렬을 쓴다.
+ *
+ * **내부 화면 전용이다.** 외주 콘솔·비밀번호 화면에는 이름표도 순번도 싣지 않는다.
+ */
+export function fieldworkLinkName(link: { label: string | null; ordinal: number }): string {
+  return link.label ?? `링크 ${link.ordinal}`;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 내 태그 (personal_survey_tags, 0150 — 설문 즐겨찾기·태그 티켓 07)

@@ -10,7 +10,7 @@
  * 비밀번호 변경뿐이고, **읽는 것 자체가 곧 접근 수단을 얻는 것**이다. 열람 권한만 있는 팀원에게
  * 그 값을 열면 외부로 나가는 열쇠가 그 손에서 만들어진다.
  *
- * `get` 과 `revealPassword` 를 가른 것도 같은 축이다. 목록 응답에 평문을 실으면 캐시·로그·RSC
+ * `list` 와 `revealPassword` 를 가른 것도 같은 축이다. 목록 응답에 평문을 실으면 캐시·로그·RSC
  * payload 로 번지고 「누가 언제 읽었는가」가 남지 않는다 — 따로 두면 rpc-logging 이 호출 한 줄을
  * 기록한다(별도 감사 테이블은 만들지 않는다. 게스트 부여도 감사 테이블이 없다).
  */
@@ -23,7 +23,7 @@ import {
   ClientResponseColumnsOutput,
   IssuedAccessLinkOutput,
   RevealedAccessLinkPasswordOutput,
-  SurveyAccessLinkOutput,
+  SurveyAccessLinksOutput,
   WorkspaceActionOutput,
 } from '@/shared/contracts/workspace-io';
 
@@ -36,6 +36,7 @@ import {
   ClientResponseColumnsInput,
   IssueAccessLinkInput,
   ResetAccessLinkPasswordInput,
+  SetAccessLinkLabelInput,
   SetClientLinkTabInput,
   SetClientResponseColumnsInput,
   SurveyAccessLinkInput,
@@ -66,15 +67,18 @@ function rethrowLinkError(err: unknown): never {
   throw err;
 }
 
-/** 이 설문의 링크 상태 — 없으면 null. 평문 비밀번호는 실리지 않는다. */
-const get = authed
+/**
+ * 이 설문의 그 종류 열린 링크 목록 — 발급 순, 순번 포함. 평문 비밀번호는 실리지 않는다.
+ * 외주 링크는 업체 수만큼, 클라이언트 링크는 0~1개다(fieldwork-multi-company 티켓 02).
+ */
+const list = authed
   .input(SurveyAccessLinkInput)
-  .output(SurveyAccessLinkOutput)
+  .output(SurveyAccessLinksOutput)
   .handler(async ({ input, context }) => {
     await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.manageAccess');
-    const link = await svc.getAccessLink(input.surveyId, input.kind);
+    const links = await svc.listAccessLinks(input.surveyId, input.kind);
     // 이 표면 자체가 manageAccess 를 요구하므로 여기까지 온 주체는 언제나 관리자다.
-    return { link, canManage: true };
+    return { links, canManage: true };
   });
 
 /** 발급 — 자동 생성 비밀번호를 **이때 한 번** 평문으로 함께 돌려준다. */
@@ -88,6 +92,7 @@ const issue = authed
         surveyId: input.surveyId,
         kind: input.kind,
         password: input.password,
+        label: input.label,
         actorId: context.user.id,
       })
       .catch(rethrowLinkError);
@@ -125,6 +130,23 @@ const revealPassword = authed
       .revealAccessLinkPassword({ surveyId: input.surveyId, linkId: input.linkId })
       .catch(rethrowLinkError);
     return { password };
+  });
+
+/**
+ * 외주 링크의 이름표 저장 — 빈 값은 지운다 (fieldwork-multi-company 티켓 02).
+ *
+ * 이름표는 연구원의 메모라 외부로 나가지 않는다. 그래도 관문을 발급과 같은 `survey.manageAccess`
+ * 로 두는 것은 이름표가 **링크 카드의 일부**이기 때문이다 — 링크를 볼 수 없는 사람이 이름을 고칠
+ * 자리가 없다. 응답에 평문 비밀번호는 없다.
+ */
+const setLabel = authed
+  .input(SetAccessLinkLabelInput)
+  .output(AccessLinkView)
+  .handler(async ({ input, context }) => {
+    await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.manageAccess');
+    return svc
+      .setAccessLinkLabel({ surveyId: input.surveyId, linkId: input.linkId, label: input.label })
+      .catch(rethrowLinkError);
   });
 
 /**
@@ -180,10 +202,11 @@ const close = authed
   });
 
 export const accessLinks = {
-  get,
+  list,
   issue,
   resetPassword,
   revealPassword,
+  setLabel,
   setClientTab,
   clientResponseColumns,
   setClientResponseColumns,

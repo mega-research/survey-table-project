@@ -2,6 +2,7 @@ import { nanoid } from 'nanoid';
 import { z } from 'zod';
 
 import {
+  ACCESS_LINK_LABEL_MAX_LENGTH,
   ACCESS_LINK_TOKEN_MAX_LENGTH,
   ACCESS_LINK_TOKEN_MIN_LENGTH,
   accessLinkKindValues,
@@ -103,19 +104,46 @@ const PasswordField = z
 const KindField = z.enum(accessLinkKindValues);
 
 /**
- * 이 설문의 그 종류 링크 조회 — 링크가 아직 무엇인지 모르는 화면이 묻는 자리라 종류로 찾는다.
+ * 이 설문의 그 종류 **열린 링크 목록** — 링크가 아직 무엇인지 모르는 화면이 묻는 자리라 종류로 찾는다.
  * 발급(`IssueAccessLinkInput`)도 종류를 받는다. 이미 있는 링크를 움직이는 표면은 아래
  * `AccessLinkTargetInput` 으로 **링크 id** 를 받는다.
  */
 export const SurveyAccessLinkInput = z.object({ surveyId: z.uuid(), kind: KindField });
 export type SurveyAccessLinkInput = z.infer<typeof SurveyAccessLinkInput>;
 
-/** 발급. 비밀번호를 생략하면 읽어 주기 쉬운 값을 서버가 만든다. */
-export const IssueAccessLinkInput = z.object({
-  surveyId: z.uuid(),
-  kind: KindField,
-  password: PasswordField.optional(),
-});
+/** 사람이 고르면 안 되는 글자 — 줄바꿈·탭 같은 제어 문자. 이름표는 한 줄 메모다. */
+const CONTROL_CHARS = /\p{Cc}/u;
+
+/**
+ * 외주 링크의 이름표 칸 (fieldwork-multi-company 티켓 02) — 앞뒤 공백을 버리고, **비면 null**
+ * (이름표 없음)로 접는다. 저장되는 값은 null 또는 1~40자라 0159 의 CHECK 와 같다.
+ *
+ * 중복을 막지 않는다 — 연구원의 메모이고 업체를 가르는 식별자가 아니다(PRD 체크리스트 「중복 방지」).
+ */
+const LabelField = z
+  .string()
+  .trim()
+  .max(ACCESS_LINK_LABEL_MAX_LENGTH, `이름표는 ${ACCESS_LINK_LABEL_MAX_LENGTH}자까지 가능합니다.`)
+  .refine((value) => !CONTROL_CHARS.test(value), '이름표에는 줄바꿈을 넣을 수 없습니다.')
+  .transform((value) => (value.length > 0 ? value : null));
+
+/**
+ * 발급. 비밀번호를 생략하면 읽어 주기 쉬운 값을 서버가 만든다.
+ *
+ * 이름표는 **외주 링크에만** 받는다. 클라이언트 링크에 실려 오면 버리지 않고 거부한다 — 조용히
+ * 버리면 연구원이 적은 메모가 사라지고, 그대로 넘기면 0159 의 CHECK 에 걸려 500 이 된다.
+ */
+export const IssueAccessLinkInput = z
+  .object({
+    surveyId: z.uuid(),
+    kind: KindField,
+    password: PasswordField.optional(),
+    label: LabelField.optional(),
+  })
+  .refine((input) => input.kind === 'fieldwork' || input.label == null, {
+    message: '클라이언트 링크에는 이름표를 달 수 없습니다.',
+    path: ['label'],
+  });
 export type IssueAccessLinkInput = z.infer<typeof IssueAccessLinkInput>;
 
 /**
@@ -136,6 +164,15 @@ export const ResetAccessLinkPasswordInput = AccessLinkTargetInput.extend({
   password: PasswordField.optional(),
 });
 export type ResetAccessLinkPasswordInput = z.infer<typeof ResetAccessLinkPasswordInput>;
+
+/**
+ * 이름표 저장 — 지목한 외주 링크 하나. 빈 값은 이름표를 지운다(null). 클라이언트 링크 id 는 서비스가
+ * 없는 링크로 접는다(종류 축은 WHERE 가 지킨다).
+ */
+export const SetAccessLinkLabelInput = AccessLinkTargetInput.extend({
+  label: LabelField.nullable(),
+});
+export type SetAccessLinkLabelInput = z.infer<typeof SetAccessLinkLabelInput>;
 
 /**
  * 클라이언트 링크의 현황 탭 저장 — **종류를 받지 않는다.**
@@ -220,16 +257,21 @@ export type AccessLinkAuthInput = z.infer<typeof AccessLinkAuthInput>;
 export const AccessLinkSignOutInput = z.object({ token: TokenField });
 export type AccessLinkSignOutInput = z.infer<typeof AccessLinkSignOutInput>;
 
+/**
+ * 지목한 링크가 없다 — 없는 id · 남의 설문 링크 · 이미 종료된 링크를 가르지 않는다(존재 은닉).
+ * 링크가 여럿인 화면에서는 대개 「다른 사람이 방금 종료했다」이므로 다시 불러오라고 말한다.
+ */
 export class AccessLinkNotFoundError extends Error {
   constructor() {
-    super('이 설문에는 발급된 링크가 없습니다.');
+    super('링크를 찾을 수 없습니다. 이미 종료된 링크일 수 있으니 목록을 다시 확인해 주세요.');
     this.name = 'AccessLinkNotFoundError';
   }
 }
 
+/** 활성 클라이언트 링크는 설문당 하나다(0159) — 외주 링크는 여럿이 서므로 이 에러가 나지 않는다. */
 export class AccessLinkAlreadyIssuedError extends Error {
   constructor() {
-    super('이 설문에는 이미 발급된 링크가 있습니다.');
+    super('이 설문에는 이미 클라이언트 링크가 있습니다.');
     this.name = 'AccessLinkAlreadyIssuedError';
   }
 }

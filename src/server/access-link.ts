@@ -6,6 +6,7 @@ import { db } from '@/db';
 import { surveyAccessLinks, surveys } from '@/db/schema';
 import { decryptSharedSecret } from '@/lib/crypto/aes';
 import { constantTimeEquals } from '@/lib/crypto/constant-time';
+import { logger } from '@/lib/logger';
 import {
   ACCESS_LINK_SESSION_MAX_AGE_SECONDS,
   accessLinkCookieName,
@@ -240,20 +241,43 @@ export async function resolveLinkActorForSurvey(
   sessions: readonly AccessLinkSession[] | undefined,
   surveyId: string,
 ): Promise<LinkActorForSurvey> {
-  const candidate = sessions?.find((session) => session.claim.surveyId === surveyId);
-  if (!candidate) return { kind: 'no_session' };
+  const candidates = sessions?.filter((session) => session.claim.surveyId === surveyId) ?? [];
+  if (candidates.length === 0) return { kind: 'no_session' };
+  // **같은 설문의 쿠키가 여럿일 수 있다** — 외주 링크가 업체 수만큼 서므로(fieldwork-multi-company
+  // 티켓 02) 한 브라우저가 같은 설문의 두 링크 세션을 들 수 있다. RPC 에는 토큰이 없어 어느 쪽이
+  // 이 요청을 냈는지 알 수 없으므로 **살아 있는 세션이 정확히 하나일 때만** 주체를 세운다. 쿠키
+  // 순서로 고르면 B 콘솔에서 누른 저장이 A 로 귀속되고, 담당 범위가 서면 A 의 범위로 읽힌다.
+  // 둘 다 살아 있으면 무효다 — 접속 표면이 다른 링크로 들어올 때 같은 설문의 옛 쿠키를 지워
+  // (`accessLinkSession.authenticate`) 정상 동선에서는 이 상태가 생기지 않는다.
+  const live: LinkActor[] = [];
+  for (const candidate of candidates) {
+    const actor = await liveActorFor(candidate, surveyId);
+    if (actor) live.push(actor);
+  }
+  if (live.length !== 1) {
+    if (live.length > 1) {
+      logger.warn({ surveyId, sessions: live.length }, 'link session ambiguous — no actor chosen');
+    }
+    return { kind: 'invalid' };
+  }
+  return { kind: 'ok', actor: live[0]! };
+}
+
+/** 후보 세션 하나가 이 설문에 대해 지금도 서는가 — 판정은 전부 행이 한다. */
+async function liveActorFor(
+  candidate: AccessLinkSession,
+  surveyId: string,
+): Promise<LinkActor | null> {
   // 이 경로가 받는 것은 외주 세션뿐이다 — 목록(`readFieldworkLinkSessions`)에 클라이언트
   // 쿠키가 서지 않고, 누가 클라이언트 쿠키의 값을 외주 이름으로 바꿔 보내도 그 토큰의 행은
   // 외주 종류가 아니라 여기서 없는 링크가 된다.
   const row = await loadLinkRow('fieldwork', candidate.token);
-  if (!row) return { kind: 'invalid' };
-  if (isClosed(row)) return { kind: 'invalid' };
-  if (row.surveyId !== surveyId) return { kind: 'invalid' };
-  if (candidate.claim.linkId !== row.linkId) return { kind: 'invalid' };
-  if (candidate.claim.passwordUpdatedAt !== row.passwordUpdatedAt.toISOString()) {
-    return { kind: 'invalid' };
-  }
-  return { kind: 'ok', actor: toLinkActor(row) };
+  if (!row) return null;
+  if (isClosed(row)) return null;
+  if (row.surveyId !== surveyId) return null;
+  if (candidate.claim.linkId !== row.linkId) return null;
+  if (candidate.claim.passwordUpdatedAt !== row.passwordUpdatedAt.toISOString()) return null;
+  return toLinkActor(row);
 }
 
 /**
@@ -353,7 +377,11 @@ export interface AccessLinkSessionCookie {
 }
 
 export type AccessLinkAuthResult =
-  | { ok: true; cookie: AccessLinkSessionCookie }
+  /**
+   * `surveyId` 는 접속 표면이 **같은 설문의 다른 링크 쿠키**를 지우는 데 쓴다(외주 링크가 설문당
+   * 여럿이 된 뒤의 칸막이 — `resolveLinkActorForSurvey`). 응답 모양에는 싣지 않는다.
+   */
+  | { ok: true; surveyId: string; cookie: AccessLinkSessionCookie }
   | { ok: false; reason: 'denied' | 'closed' };
 
 /**
@@ -396,6 +424,7 @@ async function authenticateFor(
   }
   return {
     ok: true,
+    surveyId: row.surveyId,
     cookie: {
       name: accessLinkCookieName(row.kind, token),
       path: accessLinkCookiePath(row.kind, token),

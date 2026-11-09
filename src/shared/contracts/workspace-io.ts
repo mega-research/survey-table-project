@@ -1233,6 +1233,11 @@ export const AccessLinkView = z.object({
    * 화면이기 때문이다.
    */
   clientTabs: ClientLinkTabsSchema.nullable(),
+  /**
+   * 외주 링크의 연구원용 이름표 — 없으면 null(클라이언트 링크는 언제나 null). 관리 표면(연구원)만
+   * 받는 모양이다 — 링크 세션이 여는 표면에는 이 모양이 나가지 않는다.
+   */
+  label: z.string().nullable(),
   /** 마지막으로 비밀번호를 바꾼 시각 — 「언제 바꿨는지」를 화면이 보여 준다. */
   passwordUpdatedAt: z.date(),
   createdAt: z.date(),
@@ -1264,18 +1269,26 @@ export const ClientResponseColumnsOutput = z.object({
 export type ClientResponseColumnsOutput = z.infer<typeof ClientResponseColumnsOutput>;
 
 /**
- * 링크 블록의 상태 — 링크가 없을 수도 있다.
+ * 목록의 링크 한 줄 — 발급 순번이 붙는다. 이름표가 없는 링크도 「링크 2」로 구별되게 하는 재료다
+ * (`fieldworkLinkName`). 순번은 종료된 링크까지 센 값이라 목록에서 빈 번호가 보일 수 있다.
+ */
+export const AccessLinkListItem = AccessLinkView.extend({ ordinal: z.number().int().min(1) });
+export type AccessLinkListItem = z.infer<typeof AccessLinkListItem>;
+
+/**
+ * 링크 블록의 상태 — 그 종류의 **열린** 링크 목록(발급 순). 클라이언트 링크는 0~1개, 외주 링크는
+ * 업체 수만큼이다(fieldwork-multi-company 티켓 02).
  *
  * `canManage` 를 함께 싣는 이유는 화면이 판정을 다시 하지 않기 위해서다. 다만 이 블록의 읽기
  * 자체가 이미 `survey.manageAccess` 를 요구하므로 여기서 false 가 오는 일은 없다 —
  * 그럼에도 싣는 것은 참여자·게스트 블록과 모양을 맞춰 두려는 것이고, 요구가 나중에 느슨해지면
  * 화면이 저절로 따라오게 하려는 것이다.
  */
-export const SurveyAccessLinkOutput = z.object({
-  link: AccessLinkView.nullable(),
+export const SurveyAccessLinksOutput = z.object({
+  links: z.array(AccessLinkListItem),
   canManage: z.boolean(),
 });
-export type SurveyAccessLinkOutput = z.infer<typeof SurveyAccessLinkOutput>;
+export type SurveyAccessLinksOutput = z.infer<typeof SurveyAccessLinksOutput>;
 
 /**
  * 발급·재설정 직후 응답 — **이때만** 평문 비밀번호가 함께 나온다.

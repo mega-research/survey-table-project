@@ -73,6 +73,49 @@ describe('접속', () => {
     });
   });
 
+  /**
+   * 한 브라우저에서 **한 설문의 외주 세션은 하나다** (fieldwork-multi-company 티켓 02).
+   *
+   * 외주 링크가 설문당 여럿이 되면 같은 설문의 쿠키 둘을 한 브라우저가 들 수 있다. RPC 에는 토큰이
+   * 실리지 않아 주체를 설문 id 로 고르므로, 둘이 함께 살아 있으면 고를 수 없다(코어는 둘이면 거부).
+   * 그래서 다른 링크로 들어오는 순간 같은 설문의 옛 쿠키를 지운다 — 다른 설문의 쿠키는 그대로다.
+   */
+  it('같은 설문의 다른 외주 링크 쿠키는 지우고, 다른 설문의 쿠키와 자기 쿠키는 두고 새 쿠키를 심는다', async () => {
+    const SURVEY = '11111111-1111-4111-8111-111111111111';
+    const OTHER_SURVEY = '22222222-2222-4222-8222-222222222222';
+    const SIBLING = 'sibLingTokn_0000';
+    const NEIGHBOUR = 'neighbourTkn_000';
+    core.authenticate.mockResolvedValue({
+      ok: true,
+      surveyId: SURVEY,
+      cookie: { name: `fw_${TOKEN}`, value: 'signed.value', path: '/', maxAgeSeconds: 43200 },
+    });
+    const claim = (surveyId: string) => ({ linkId: crypto.randomUUID(), surveyId, passwordUpdatedAt: 'x' });
+    const withSessions = createRouterClient(
+      { accessLinkSession },
+      {
+        context: {
+          db: {} as never,
+          user: null,
+          headers: new Headers({ 'x-real-ip': '203.0.113.7' }),
+          linkSessions: [
+            { token: SIBLING, claim: claim(SURVEY) },
+            { token: NEIGHBOUR, claim: claim(OTHER_SURVEY) },
+            { token: TOKEN, claim: claim(SURVEY) },
+          ],
+        } satisfies ORPCContext,
+      },
+    );
+
+    await expect(
+      withSessions.accessLinkSession.authenticate({ token: TOKEN, password: 'Probe2026pw' }),
+    ).resolves.toEqual({ ok: true });
+
+    expect(cookieStore.delete).toHaveBeenCalledTimes(1);
+    expect(cookieStore.delete).toHaveBeenCalledWith({ name: `fw_${SIBLING}`, path: '/' });
+    expect(cookieStore.set).toHaveBeenCalledWith(expect.objectContaining({ name: `fw_${TOKEN}` }));
+  });
+
   it('거부되면 쿠키를 심지 않고 사유를 그대로 돌려준다', async () => {
     core.authenticate.mockResolvedValue({ ok: false, reason: 'denied' });
     await expect(

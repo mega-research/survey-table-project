@@ -200,7 +200,7 @@ export const surveyParticipants = pgTable(
  * 단위를 사람에서 링크로 내렸다(ADR-0019 를 대체).
  *
  * **`kind` 가 종류를 가른다** — 외주 실사 링크(`fieldwork`)와 클라이언트 링크(`client`).
- * 활성 링크는 설문당 종류별 하나다. 테이블 이름이 종류 중립인 것은 0134 가 옛 이름
+ * 활성 클라이언트 링크는 설문당 하나, 외주 링크는 업체 수만큼 선다(0159, ADR-0035). 테이블 이름이 종류 중립인 것은 0134 가 옛 이름
  * (`survey_fieldwork_links`)에서 옮겼기 때문이다. 귀속 칸(`fieldwork_link_id`)은 외주 링크만
  * 채우므로 이름을 그대로 뒀다.
  *
@@ -261,6 +261,13 @@ export const surveyAccessLinks = pgTable(
      * 열 키의 허용 판정은 쓰기·읽기 모두 `isClientResponseColumnAllowed` 하나를 부른다.
      */
     clientResponseColumns: jsonb('client_response_columns').$type<ClientResponseColumns>(),
+    /**
+     * 외주 링크의 **연구원용 이름표**(「프롬」·「프라임」) — `kind='fieldwork'` 전용, 1~40자(0159 CHECK).
+     * 업체를 개체로 등록하지 않으므로(ADR-0026·0035) 링크가 여럿일 때 내부 화면이 이것으로 구별한다.
+     * NULL 이면 발급 순번(`fieldworkLinkName`)으로 부른다. **외주 콘솔·비밀번호 화면·링크 세션이 여는
+     * 어떤 응답 모양에도 싣지 않는다** — 링크 세션 쪽 조회(`server/access-link`)는 이 칸을 고르지 않는다.
+     */
+    label: text('label'),
     createdBy: uuid('created_by')
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),
@@ -269,9 +276,13 @@ export const surveyAccessLinks = pgTable(
   },
   (t) => [
     uniqueIndex('survey_access_links_token_uq').on(t.token),
-    // 활성 링크는 설문당 **종류별** 하나 — 한 설문에 외주 링크와 클라이언트 링크가 함께 선다.
+    // 활성 **클라이언트** 링크는 설문당 하나 — 외주 링크는 업체 수만큼 선다(0159).
     // 부분 인덱스라 종료된 행은 감사로 남고 재발급이 된다.
-    uniqueIndex('survey_access_links_active_survey_kind_uq')
+    uniqueIndex('survey_access_links_active_client_uq')
+      .on(t.surveyId)
+      .where(sql`kind = 'client' AND closed_at IS NULL`),
+    // 목록 조회(설문 + 종류의 열린 링크)의 자리 — 0134 의 유일 인덱스가 하던 일을 잇는다.
+    index('survey_access_links_active_survey_kind_idx')
       .on(t.surveyId, t.kind)
       .where(sql`closed_at IS NULL`),
   ],

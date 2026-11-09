@@ -103,9 +103,18 @@ const authenticate = pub
   .use(withRateLimit('access-link-auth'))
   .input(AccessLinkAuthInput)
   .output(AccessLinkAuthOutput)
-  .handler(async ({ input }) => {
+  .handler(async ({ input, context }) => {
     const result = await authenticateAccessLink(input.token, input.password);
     if (!result.ok) return { ok: false as const, reason: result.reason };
+    // **한 브라우저에서 한 설문의 외주 세션은 하나다** (fieldwork-multi-company 티켓 02). 외주 링크가
+    // 업체 수만큼 서면 같은 설문의 다른 링크 쿠키가 남아 있을 수 있는데, RPC 는 주체를 설문 id 로
+    // 고르므로 둘이 함께 살아 있으면 어느 쪽도 세우지 못한다(`resolveLinkActorForSurvey`). 그래서
+    // 새 링크로 들어오는 순간 같은 설문의 옛 쿠키를 지운다 — 다른 설문의 쿠키는 그대로다.
+    for (const session of context.linkSessions ?? []) {
+      if (session.token === input.token) continue;
+      if (session.claim.surveyId !== result.surveyId) continue;
+      await clearSessionCookie('fieldwork', session.token);
+    }
     await setSessionCookie(result.cookie);
     return { ok: true as const };
   });

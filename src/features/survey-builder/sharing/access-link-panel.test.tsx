@@ -1,17 +1,18 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AccessLinkKind } from '@/shared/contracts/workspace';
-import type { SurveyAccessLinkOutput } from '@/shared/contracts/workspace-io';
+import type { AccessLinkListItem, SurveyAccessLinksOutput } from '@/shared/contracts/workspace-io';
 
-const { state, issue, setTab, close, reset, reveal } = vi.hoisted(() => ({
+const { state, issue, setTab, close, reset, reveal, setLabel } = vi.hoisted(() => ({
   state: { data: null as unknown },
   issue: vi.fn(),
   setTab: vi.fn(),
   close: vi.fn(),
   reset: vi.fn(),
   reveal: vi.fn(),
+  setLabel: vi.fn(),
 }));
 
 function mutation(fn: (input: unknown) => unknown) {
@@ -19,7 +20,8 @@ function mutation(fn: (input: unknown) => unknown) {
 }
 
 vi.mock('../queries/use-survey-access-link', () => ({
-  useSurveyAccessLink: () => ({ data: state.data, isPending: false, isError: false }),
+  useSurveyAccessLinks: () => ({ data: state.data, isPending: false, isError: false }),
+  useSetAccessLinkLabel: () => mutation(setLabel),
   useIssueAccessLink: () => mutation(issue),
   useResetAccessLinkPassword: () => mutation(reset),
   useRevealAccessLinkPassword: () => mutation(reveal),
@@ -43,19 +45,37 @@ const TABS = {
 
 const LINK_ID = '11111111-1111-4111-8111-111111111111';
 
-function linkState(kind: AccessLinkKind, over: Partial<SurveyAccessLinkOutput> = {}) {
+const SECOND_LINK_ID = '22222222-2222-4222-8222-222222222222';
+
+function linkOf(kind: AccessLinkKind, over: Partial<AccessLinkListItem> = {}): AccessLinkListItem {
   return {
-    link: {
-      id: LINK_ID,
-      kind,
-      token: 'Xk9mQ2vR7pLw4nTz',
-      clientTabs: kind === 'client' ? TABS : null,
-      passwordUpdatedAt: new Date('2026-10-12T00:00:00.000Z'),
-      createdAt: new Date('2026-10-12T00:00:00.000Z'),
-    },
-    canManage: true,
+    id: LINK_ID,
+    kind,
+    token: 'Xk9mQ2vR7pLw4nTz',
+    clientTabs: kind === 'client' ? TABS : null,
+    label: null,
+    ordinal: 1,
+    passwordUpdatedAt: new Date('2026-10-12T00:00:00.000Z'),
+    createdAt: new Date('2026-10-12T00:00:00.000Z'),
     ...over,
-  } satisfies SurveyAccessLinkOutput;
+  };
+}
+
+/** 링크 하나가 열린 상태. `link` 로 그 링크를 바로 집는다(옛 단건 모양의 테스트가 쓴다). */
+function linkState(kind: AccessLinkKind, over: Partial<SurveyAccessLinksOutput> = {}) {
+  const state = { links: [linkOf(kind)], canManage: true, ...over } satisfies SurveyAccessLinksOutput;
+  return { ...state, link: state.links[0]! };
+}
+
+/** 외주 링크 둘 — 「프롬」 이름표와 이름표 없는 순번 2. */
+function twoFieldworkLinks(): SurveyAccessLinksOutput {
+  return {
+    links: [
+      linkOf('fieldwork', { label: '프롬' }),
+      linkOf('fieldwork', { id: SECOND_LINK_ID, token: 'Bq7nW3xY9kLm2pRt', ordinal: 2 }),
+    ],
+    canManage: true,
+  };
 }
 
 /**
@@ -68,12 +88,13 @@ describe('AccessLinkPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     state.data = null;
-    issue.mockResolvedValue({ link: linkState('client').link, password: 'GeneratedPw1' });
+    issue.mockResolvedValue({ link: linkOf('client'), password: 'GeneratedPw1' });
+    setLabel.mockResolvedValue(linkOf('fieldwork'));
     setTab.mockResolvedValue(linkState('client').link);
   });
 
   it('발급은 자기 종류로 보낸다 — 다른 종류의 링크를 만들지 않는다', async () => {
-    state.data = { link: null, canManage: true };
+    state.data = { links: [], canManage: true };
     const user = userEvent.setup();
     render(<AccessLinkPanel surveyId="s-1" kind="client" />);
 
@@ -172,7 +193,7 @@ describe('AccessLinkPanel', () => {
    */
   it('응답 현황이 꺼져 있으면 상세 통계 칩이 잠기고 값은 그대로 보인다', () => {
     const base = linkState('client');
-    state.data = { ...base, link: { ...base.link, clientTabs: { ...TABS, overview: false } } };
+    state.data = { ...base, links: [{ ...base.link, clientTabs: { ...TABS, overview: false } }] };
     render(<AccessLinkPanel surveyId="s-1" kind="client" />);
 
     const chip = screen.getByRole('checkbox', { name: '상세 통계' });
@@ -196,7 +217,7 @@ describe('AccessLinkPanel', () => {
   });
 
   it('발급 전에는 탭 칩이 없다 — 저장할 링크가 없다', () => {
-    state.data = { link: null, canManage: true };
+    state.data = { links: [], canManage: true };
     render(<AccessLinkPanel surveyId="s-1" kind="client" />);
     expect(screen.queryByRole('checkbox')).toBeNull();
   });
@@ -267,7 +288,7 @@ describe('AccessLinkPanel', () => {
 
   it('비밀번호 변경은 그 링크의 id 와 직접 입력한 값으로 나간다', async () => {
     state.data = linkState('client');
-    reset.mockResolvedValue({ link: linkState('client').link, password: 'Typed2026x' });
+    reset.mockResolvedValue({ link: linkOf('client'), password: 'Typed2026x' });
     const user = userEvent.setup();
     render(<AccessLinkPanel surveyId="s-1" kind="client" />);
 
@@ -277,5 +298,102 @@ describe('AccessLinkPanel', () => {
     await waitFor(() =>
       expect(reset).toHaveBeenCalledWith({ surveyId: 's-1', linkId: LINK_ID, password: 'Typed2026x' }),
     );
+  });
+  // ───────────────────────────────────────────────────────────────────────────
+  // 외주 링크 여럿 · 이름표 (fieldwork-multi-company 티켓 02)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  it('외주 링크 둘이 각각 자기 주소로 서고, 이름표 없는 링크는 순번으로 구별된다', () => {
+    state.data = twoFieldworkLinks();
+    render(<AccessLinkPanel surveyId="s-1" kind="fieldwork" />);
+
+    expect(screen.getByText(/\/fw\/Xk9mQ2vR7pLw4nTz$/)).toBeInTheDocument();
+    expect(screen.getByText(/\/fw\/Bq7nW3xY9kLm2pRt$/)).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '프롬' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '링크 2' })).toBeInTheDocument();
+    expect(screen.getByText('이름표 없음')).toBeInTheDocument();
+  });
+
+  it('외주 링크가 있어도 발급 칸이 남고, 발급은 적은 이름표와 함께 외주 종류로 나간다', async () => {
+    state.data = twoFieldworkLinks();
+    const user = userEvent.setup();
+    render(<AccessLinkPanel surveyId="s-1" kind="fieldwork" />);
+
+    await user.click(screen.getByRole('button', { name: '외주 링크 추가' }));
+    await user.type(screen.getByPlaceholderText(/이름표 \(예: 업체명\)/), '프라임');
+    await user.click(screen.getByRole('button', { name: '링크 발급' }));
+
+    await waitFor(() =>
+      expect(issue).toHaveBeenCalledWith({ surveyId: 's-1', kind: 'fieldwork', label: '프라임' }),
+    );
+  });
+
+  it('외주 링크가 없으면 발급 칸이 바로 보이고, 이름표를 비우면 이름표 없이 발급한다', async () => {
+    state.data = { links: [], canManage: true };
+    const user = userEvent.setup();
+    render(<AccessLinkPanel surveyId="s-1" kind="fieldwork" />);
+
+    await user.click(screen.getByRole('button', { name: '링크 발급' }));
+
+    expect(issue).toHaveBeenCalledWith({ surveyId: 's-1', kind: 'fieldwork' });
+  });
+
+  it('두 번째 카드의 종료·보기는 그 카드의 링크 id 로 나간다 — 다른 링크에 닿지 않는다', async () => {
+    state.data = twoFieldworkLinks();
+    close.mockResolvedValue({ success: true });
+    reveal.mockResolvedValue({ password: 'SecondPw2026' });
+    const user = userEvent.setup();
+    render(<AccessLinkPanel surveyId="s-1" kind="fieldwork" />);
+
+    const second = within(screen.getByRole('group', { name: '링크 2' }));
+    await user.click(second.getByRole('button', { name: '보기' }));
+    await waitFor(() => expect(second.getByText('SecondPw2026')).toBeInTheDocument());
+    expect(reveal).toHaveBeenCalledWith({ surveyId: 's-1', linkId: SECOND_LINK_ID });
+
+    await user.click(second.getByRole('button', { name: '종료' }));
+    await user.click(second.getAllByRole('button', { name: '종료' })[0]!);
+    await waitFor(() => expect(close).toHaveBeenCalledWith({ surveyId: 's-1', linkId: SECOND_LINK_ID }));
+    // 첫 카드의 비밀번호는 여전히 가려져 있다 — 카드마다 상태가 따로다.
+    expect(within(screen.getByRole('group', { name: '프롬' })).queryByText('SecondPw2026')).toBeNull();
+  });
+
+  it('외주 링크의 종료 확인은 다른 외주 링크가 그대로라고 말한다', async () => {
+    state.data = twoFieldworkLinks();
+    const user = userEvent.setup();
+    render(<AccessLinkPanel surveyId="s-1" kind="fieldwork" />);
+
+    await user.click(within(screen.getByRole('group', { name: '프롬' })).getByRole('button', { name: '종료' }));
+    expect(screen.getByText(/다른 외주 링크는 그대로입니다/)).toBeInTheDocument();
+  });
+
+  it('이름표를 고치면 그 링크 id 와 정돈한 값으로 저장하고, 비우면 이름표를 지운다', async () => {
+    state.data = twoFieldworkLinks();
+    const user = userEvent.setup();
+    render(<AccessLinkPanel surveyId="s-1" kind="fieldwork" />);
+
+    const second = within(screen.getByRole('group', { name: '링크 2' }));
+    await user.click(second.getByRole('button', { name: '이름표 고치기' }));
+    await user.type(second.getByRole('textbox', { name: '이름표' }), '  프라임 ');
+    await user.click(second.getByRole('button', { name: '저장' }));
+    await waitFor(() =>
+      expect(setLabel).toHaveBeenCalledWith({ surveyId: 's-1', linkId: SECOND_LINK_ID, label: '프라임' }),
+    );
+
+    const first = within(screen.getByRole('group', { name: '프롬' }));
+    await user.click(first.getByRole('button', { name: '이름표 고치기' }));
+    await user.clear(first.getByRole('textbox', { name: '이름표' }));
+    await user.click(first.getByRole('button', { name: '저장' }));
+    await waitFor(() =>
+      expect(setLabel).toHaveBeenCalledWith({ surveyId: 's-1', linkId: LINK_ID, label: null }),
+    );
+  });
+
+  it('클라이언트 링크는 하나라 발급 뒤에는 발급 칸도 이름표도 없다', () => {
+    state.data = linkState('client');
+    render(<AccessLinkPanel surveyId="s-1" kind="client" />);
+
+    expect(screen.queryByRole('button', { name: '링크 발급' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '외주 링크 추가' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '이름표 고치기' })).toBeNull();
   });
 });

@@ -8,7 +8,7 @@ import {
   parseLegacyGuestSurveyIds,
 } from '@/lib/auth/legacy-guest-link';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
-import { getAccessLink } from '@/server/workspace/services/access-links';
+import { listAccessLinks } from '@/server/workspace/services/access-links';
 
 /**
  * 옛 게스트 주소의 다리 — `/admin/surveys/<id>/operations[/…]` 로 온 요청을 받는다.
@@ -50,10 +50,14 @@ async function handleLegacyGuestLink(
   const normalizedId = surveyId.toLowerCase();
   if (!granted.has(normalizedId)) return redirectTo(ctx, staffUrl, 'not_granted');
 
-  const link = await getAccessLink(normalizedId, 'fieldwork');
-  if (!link) return redirectTo(ctx, staffUrl, 'no_link');
+  const links = await listAccessLinks(normalizedId, 'fieldwork');
+  if (links.length === 0) return redirectTo(ctx, staffUrl, 'no_link');
+  // 외주 링크가 여럿이면 어느 업체의 링크로 보낼지 정할 수 없다(fieldwork-multi-company 티켓 02).
+  // 아무 링크로나 보내면 남의 업체 주소를 내주게 되므로 링크로 보내지 않는다 — 쿠키·비밀번호로
+  // 고르는 다리는 티켓 10 이 세운다.
+  if (links.length > 1) return redirectTo(ctx, staffUrl, 'multiple_links');
 
-  return redirectTo(ctx, new URL(`/fw/${link.token}`, request.nextUrl.origin), 'link');
+  return redirectTo(ctx, new URL(`/fw/${links[0]!.token}`, request.nextUrl.origin), 'link');
 }
 
 /**

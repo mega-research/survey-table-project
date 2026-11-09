@@ -818,7 +818,7 @@ const SURFACES: Record<string, SurfaceSpec> = {
     input: { surveyId: S, userId: C },
   },
 
-  // ── 외주 실사 링크 (ADR-0026) — 다섯 표면 전부 manageAccess ──────────────────
+  // ── 외주 실사 링크 (ADR-0026) — 관리 표면 전부 manageAccess ──────────────────
   //
   // 참여자·게스트 블록처럼 두 축으로 갈리지 **않는다.** 비밀번호를 읽는 것이 곧 접근 수단을
   // 얻는 것이라, 조회조차 열람 권한만 있는 팀원에게 열면 외부로 나가는 열쇠가 그 손에서
@@ -829,7 +829,7 @@ const SURFACES: Record<string, SurfaceSpec> = {
   // 남의 하위 행 id(`C`)를 함께 넣는다: 관문은 설문만 보므로, 여기서 확인되는 것은 「남의 설문
   // id 면 링크 id 가 무엇이든 서비스에 닿지 않는다」이고, 「내 설문 + 남의 설문 링크 id」는
   // 관문을 통과한 뒤의 축이라 `fieldwork-link.realdb` 의 「링크 id 로 지목」이 실 행으로 본다.
-  'workspace.accessLinks.get': {
+  'workspace.accessLinks.list': {
     gate: 'rpc',
     capability: 'survey.manageAccess',
     input: { surveyId: S, kind: 'fieldwork' },
@@ -853,6 +853,12 @@ const SURFACES: Record<string, SurfaceSpec> = {
     gate: 'rpc',
     capability: 'survey.manageAccess',
     input: { surveyId: S, linkId: C },
+  },
+  // 이름표 저장(fieldwork-multi-company 티켓 02) — 링크 카드의 일부라 발급과 같은 관문, id 로 지목.
+  'workspace.accessLinks.setLabel': {
+    gate: 'rpc',
+    capability: 'survey.manageAccess',
+    input: { surveyId: S, linkId: C, label: '프롬' },
   },
   // 종류를 바꿔 넣어도 같은 관문이다 — 클라이언트 링크의 관리도 타 팀 설문에서는 NOT_FOUND.
   'workspace.accessLinks.setClientTab': {

@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, isNull } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyAccessLinks } from '@/db/schema';
@@ -21,7 +21,11 @@ import {
   normalizeClientLinkTabs,
   normalizeClientResponseColumns,
 } from '@/shared/contracts/workspace';
-import type { AccessLinkView, ClientResponseColumnsOutput } from '@/shared/contracts/workspace-io';
+import type {
+  AccessLinkListItem,
+  AccessLinkView,
+  ClientResponseColumnsOutput,
+} from '@/shared/contracts/workspace-io';
 
 import {
   AccessLinkAlreadyIssuedError,
@@ -35,8 +39,9 @@ import {
 /**
  * 외주 실사 링크의 저장소 계층 (ADR-0026).
  *
- * 이 파일이 지는 계약 셋.
- *  ① **활성 링크는 설문당 하나** — 부분 UNIQUE 가 강제하고, 부딪히면 CONFLICT 로 옮긴다.
+ * 이 파일이 지는 계약 넷.
+ *  ① **활성 클라이언트 링크는 설문당 하나** — 부분 UNIQUE 가 강제하고, 부딪히면 CONFLICT 로 옮긴다.
+ *     외주 링크는 업체 수만큼 선다(0159, ADR-0035) — 발급이 부딪히지 않는다.
  *  ② **토큰은 UPDATE 하지 않는다** — 주소가 영구 고정이라는 약속이 여기서 지켜진다.
  *     비밀번호 재설정도 `token` 을 set 하지 않는다.
  *  ③ **비밀번호는 가역 암호화** — 연구원이 다시 읽어 업체에 답해 준다(해시가 아니다).
@@ -53,6 +58,7 @@ const VIEW_COLUMNS = {
   kind: surveyAccessLinks.kind,
   token: surveyAccessLinks.token,
   clientTabs: surveyAccessLinks.clientTabs,
+  label: surveyAccessLinks.label,
   passwordUpdatedAt: surveyAccessLinks.passwordUpdatedAt,
   createdAt: surveyAccessLinks.createdAt,
 } as const;
@@ -69,6 +75,7 @@ function toView(row: {
   kind: AccessLinkKind;
   token: string;
   clientTabs: ClientLinkTabs | null;
+  label: string | null;
   passwordUpdatedAt: Date;
   createdAt: Date;
 }): AccessLinkView {
@@ -77,6 +84,7 @@ function toView(row: {
     kind: row.kind,
     token: row.token,
     clientTabs: row.kind === 'client' ? normalizeClientLinkTabs(row.clientTabs) : null,
+    label: row.label,
     passwordUpdatedAt: row.passwordUpdatedAt,
     createdAt: row.createdAt,
   };
@@ -119,16 +127,27 @@ function activeLinkById(surveyId: string, linkId: string) {
   );
 }
 
-export async function getAccessLink(
+/**
+ * 이 설문의 그 종류 **열린** 링크 목록 — 발급 순(`created_at`, `id`) (fieldwork-multi-company 티켓 02).
+ *
+ * 클라이언트 링크는 0~1개, 외주 링크는 업체 수만큼이다. 각 줄에 **발급 순번**을 싣는다 — 이름표 없는
+ * 링크도 「링크 2」로 구별되게 하려는 것이고(`fieldworkLinkName`), 순번은 **종료된 링크까지 센다**:
+ * 하나를 종료해도 남은 링크의 이름이 바뀌지 않아야 지난 기록의 「외주 · 링크 2」가 같은 링크를
+ * 가리킨다. 그래서 종료된 행까지 읽어 센 뒤 열린 것만 돌려준다(설문당 링크 수는 업체 수 정도다).
+ * 내부 기록의 이름(`read-models/fieldwork-link-names`)도 같은 정렬로 센다.
+ */
+export async function listAccessLinks(
   surveyId: string,
   kind: AccessLinkKind,
-): Promise<AccessLinkView | null> {
-  const [row] = await db
-    .select(VIEW_COLUMNS)
+): Promise<AccessLinkListItem[]> {
+  const rows = await db
+    .select({ ...VIEW_COLUMNS, closedAt: surveyAccessLinks.closedAt })
     .from(surveyAccessLinks)
-    .where(activeLink(surveyId, kind))
-    .limit(1);
-  return row ? toView(row) : null;
+    .where(and(eq(surveyAccessLinks.surveyId, surveyId), eq(surveyAccessLinks.kind, kind)))
+    .orderBy(asc(surveyAccessLinks.createdAt), asc(surveyAccessLinks.id));
+  return rows.flatMap(({ closedAt, ...row }, index) =>
+    closedAt === null ? [{ ...toView(row), ordinal: index + 1 }] : [],
+  );
 }
 
 /**
@@ -144,6 +163,8 @@ export async function issueAccessLink(input: {
   surveyId: string;
   kind: AccessLinkKind;
   password?: string | undefined;
+  /** 외주 링크의 이름표 — 클라이언트 링크에는 경계 스키마가 받지 않는다(0159 CHECK 도 막는다). */
+  label?: string | null | undefined;
   actorId: string;
 }): Promise<{ link: AccessLinkView; password: string }> {
   const password = input.password ?? generateAccessLinkPassword();
@@ -153,6 +174,7 @@ export async function issueAccessLink(input: {
       .values({
         surveyId: input.surveyId,
         kind: input.kind,
+        label: input.label ?? null,
         token: generateAccessLinkToken(),
         passwordCipher: encryptSharedSecret(password),
         passwordUpdatedBy: input.actorId,
@@ -194,6 +216,32 @@ export async function resetAccessLinkPassword(input: {
     .returning(VIEW_COLUMNS);
   if (!row) throw new AccessLinkNotFoundError();
   return { link: toView(row), password };
+}
+
+/**
+ * 외주 링크의 이름표를 저장한다 — null 이면 지운다 (fieldwork-multi-company 티켓 02).
+ *
+ * **외주 종류로 못 박는다.** 이름표는 외주 링크의 축이라 클라이언트 링크 id 는 없는 링크와 같은
+ * NotFound 다(그대로 쓰면 0159 의 CHECK 에 걸려 500). 지목은 다른 관리 표면과 같은 `activeLinkById`
+ * — 남의 설문 링크·종료된 링크는 NotFound 다.
+ *
+ * `passwordUpdatedAt` 은 건드리지 않는다 — 이름표를 고친다고 선 세션이 끊기면 안 된다. 업체가
+ * 바뀌어 이름표를 고칠 때 세션을 끊는 일은 비밀번호 변경이 따로 진다.
+ */
+export async function setAccessLinkLabel(input: {
+  surveyId: string;
+  linkId: string;
+  label: string | null;
+}): Promise<AccessLinkView> {
+  const [row] = await db
+    .update(surveyAccessLinks)
+    .set({ label: input.label, updatedAt: new Date() })
+    .where(
+      and(activeLinkById(input.surveyId, input.linkId), eq(surveyAccessLinks.kind, 'fieldwork')),
+    )
+    .returning(VIEW_COLUMNS);
+  if (!row) throw new AccessLinkNotFoundError();
+  return toView(row);
 }
 
 /**

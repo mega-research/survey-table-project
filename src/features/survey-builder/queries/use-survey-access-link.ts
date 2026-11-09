@@ -20,17 +20,21 @@ export const surveyAccessLinkKeys = {
   all: [...surveyKeys.all, 'access-link'] as const,
   // 종류가 키에 들어간다 — 한 설문에 외주 링크와 클라이언트 링크가 함께 서므로, 빠지면 두
   // 패널이 서로의 캐시를 덮어 「클라이언트 블록에 외주 링크의 주소가 뜬다」.
-  detail: (surveyId: string, kind: AccessLinkKind) =>
+  list: (surveyId: string, kind: AccessLinkKind) =>
     [...surveyAccessLinkKeys.all, surveyId, kind] as const,
   // 링크 변경 훅들이 `all` 을 접으므로, 링크를 종료·재발급하면 열 설정도 함께 다시 읽힌다.
   clientResponseColumns: (surveyId: string) =>
     [...surveyAccessLinkKeys.all, surveyId, 'client', 'response-columns'] as const,
 };
 
-export function useSurveyAccessLink(surveyId: string, kind: AccessLinkKind) {
+/**
+ * 그 종류의 열린 링크 목록 — 발급 순, 순번 포함 (fieldwork-multi-company 티켓 02). 외주 링크는 업체
+ * 수만큼, 클라이언트 링크는 0~1개다.
+ */
+export function useSurveyAccessLinks(surveyId: string, kind: AccessLinkKind) {
   return useQuery({
-    queryKey: surveyAccessLinkKeys.detail(surveyId, kind),
-    queryFn: () => orpc.workspace.accessLinks.get.call({ surveyId, kind }),
+    queryKey: surveyAccessLinkKeys.list(surveyId, kind),
+    queryFn: () => orpc.workspace.accessLinks.list.call({ surveyId, kind }),
     staleTime: 10_000,
     refetchOnWindowFocus: false,
   });
@@ -56,8 +60,9 @@ function useLinkMutation<TInput, TOutput>(fn: (input: TInput) => Promise<TOutput
 }
 
 export function useIssueAccessLink() {
-  return useLinkMutation((input: { surveyId: string; kind: AccessLinkKind; password?: string }) =>
-    client.workspace.accessLinks.issue(input),
+  return useLinkMutation(
+    (input: { surveyId: string; kind: AccessLinkKind; password?: string; label?: string }) =>
+      client.workspace.accessLinks.issue(input),
   );
 }
 
@@ -79,6 +84,13 @@ export function useResetAccessLinkPassword() {
 
 export function useCloseAccessLink() {
   return useLinkMutation((input: LinkTarget) => client.workspace.accessLinks.close(input));
+}
+
+/** 외주 링크의 이름표 저장 — null 이면 지운다. 링크 id 로 지목한다(티켓 02). */
+export function useSetAccessLinkLabel() {
+  return useLinkMutation((input: LinkTarget & { label: string | null }) =>
+    client.workspace.accessLinks.setLabel(input),
+  );
 }
 
 /**
