@@ -230,7 +230,9 @@ function close(f: Fixture, link: SignedLink) {
   return owner.workspace.accessLinks.close({ surveyId: f.surveyId, linkId: link.linkId });
 }
 
-run('담당 범위가 풀리는 경우 (real DB)', () => {
+// 시험마다 대상 200명·링크 셋을 새로 세우고 동시성 시험은 그것을 세 번 한다 — 형제 워크트리가 같은
+// 컨테이너를 두드리는 동안 기본 5초를 넘길 수 있다.
+run('담당 범위가 풀리는 경우 (real DB)', { timeout: 60_000 }, () => {
   beforeAll(async () => {
     await db.insert(users).values({ ...ownerUser, emailVerified: true });
     await db.insert(teams).values({ id: TEAM_ID, name: `해제팀-${TEAM_ID.slice(0, 8)}` });
