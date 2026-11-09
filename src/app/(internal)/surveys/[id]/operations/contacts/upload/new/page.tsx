@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { getExistingContactsCount } from '@/server/contacts/services/contact-columns';
 import { countPriorAnswerTargets } from '@/server/contacts/services/prior-answer-import';
 import { countAssignedTargets } from '@/server/contacts/services/contact-assignments';
+import { countFieldworkSharesToRelease } from '@/server/contacts/services/fieldwork-share-release';
 import { getContactColumnScheme } from '@/server/read-models/contacts';
 import { getOperationsDataScope } from '@/server/data-scope';
 import { requireAdminPage } from '@/lib/auth/require-admin-page';
@@ -48,6 +49,9 @@ export default async function ContactsUploadNewPage({ params }: PageProps) {
   const existingScheme = await getContactColumnScheme(surveyId, scope);
   // 교체 업로드는 조사 대상을 새로 만들어 컨택원 배정이 전부 풀린다(컨택원은 남는다).
   const existingAssignedCount = await countAssignedTargets(surveyId, scope);
+  // 교체 업로드는 외주 담당 범위도 전부 푼다(대상 FK CASCADE) — 나눈 링크는 다시 나눌 때까지 0명을 본다.
+  // 범위는 실데이터에만 서고, 위 테스트 스코프 차단 뒤라 여기는 언제나 실데이터다.
+  const existingShareRelease = await countFieldworkSharesToRelease(surveyId);
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-8">
@@ -59,6 +63,7 @@ export default async function ContactsUploadNewPage({ params }: PageProps) {
         surveyId={surveyId}
         existingPriorAnswerCount={existingPriorAnswerCount}
         existingAssignedCount={existingAssignedCount}
+        existingShareRelease={existingShareRelease}
         existingContactsCount={existingContactsCount}
         existingScheme={existingScheme}
       />

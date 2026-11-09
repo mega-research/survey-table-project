@@ -525,3 +525,13 @@ export interface ContactsListPageData {
   /** 테스트 파티션을 보고 있는가 — 업로드가 막히는 유일한 사유다. */
   isTestScope: boolean;
 }
+
+/**
+ * 명단 교체 업로드가 풀 담당 범위 한 줄 — 「풀릴 담당 범위: 프롬 N명 · 프라임 M명」(fieldwork-multi-company
+ * 티켓 09). 열린 외주 링크 중 범위가 1명 이상인 것만, 발급 순. 이름은 내부 화면 이름이다.
+ */
+export interface FieldworkShareReleaseRow {
+  linkId: string;
+  name: string;
+  count: number;
+}

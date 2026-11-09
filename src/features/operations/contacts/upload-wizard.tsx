@@ -47,11 +47,13 @@ import type {
   ContactUploadMode,
 } from '@/shared/contracts/contacts';
 import type {
+  FieldworkShareReleaseRow,
   IngestContactUploadResult,
   MatchContactUploadResult,
   ParseExcelPreviewResult,
 } from '@/shared/contracts/contacts-io';
 
+import { ShareReleaseWarning } from './share-release-warning';
 import { UploadMatchStep } from './upload-match-step';
 import { internalOperationsPaths } from '../operations-paths';
 
@@ -71,6 +73,11 @@ interface UploadWizardProps {
    * (컨택원은 남는다). 병합·추가 업로드는 배정을 그대로 둔다.
    */
   existingAssignedCount?: number;
+  /**
+   * 링크별 풀릴 외주 담당 범위 — replace 는 조사 대상을 새로 만들어 담당 범위가 전부 풀리고, 나눈 링크는
+   * 다시 나눌 때까지 0명을 본다(티켓 09). 열린 외주 링크 중 범위가 있는 것만. 병합·추가 업로드는 그대로 둔다.
+   */
+  existingShareRelease?: readonly FieldworkShareReleaseRow[];
   /** 기존 컬럼 스킴 — 병합/추가 모드의 컬럼 잠금·라우팅 표시 기준 */
   existingScheme: ContactColumnScheme | null;
 }
@@ -207,6 +214,9 @@ function HiddenChoice({
 }
 
 /** 시트가 아직 선택되지 않았을 때만 첫 시트명을 돌려준다(선택돼 있으면 null). */
+/** 기본값을 렌더마다 새 배열로 만들지 않는다. */
+const NO_SHARE_RELEASE: readonly FieldworkShareReleaseRow[] = [];
+
 function pickInitialSheetName(current: string, sheetNames: string[]): string | null {
   if (current) return null;
   return sheetNames[0] ?? null;
@@ -217,6 +227,7 @@ export function UploadWizard({
   existingContactsCount,
   existingPriorAnswerCount,
   existingAssignedCount = 0,
+  existingShareRelease = NO_SHARE_RELEASE,
   existingScheme,
 }: UploadWizardProps) {
   const router = useRouter();
@@ -1009,6 +1020,7 @@ export function UploadWizard({
                       </li>
                     </>
                   )}
+                  <ShareReleaseWarning rows={existingShareRelease} />
                   <li>응답 본체는 보존되지만 조사 대상 매칭이 끊겨 익명 응답으로 표시됨</li>
                 </ul>
                 <label className="mt-3 flex items-center gap-2 text-red-800">

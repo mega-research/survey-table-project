@@ -3,11 +3,11 @@ import 'server-only';
 import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { surveyAccessLinks } from '@/db/schema';
+import { fieldworkLinkShares, surveyAccessLinks, surveys } from '@/db/schema';
 import { decryptSharedSecret, encryptSharedSecret } from '@/lib/crypto/aes';
 import { logger } from '@/lib/logger';
 import { resolveClientResponseColumnKeys } from '@/lib/operations/client-response-columns-format';
-import { isUniqueViolation } from '@/lib/pg-error';
+import { isUniqueViolation, retryOnTxConflict } from '@/lib/pg-error';
 import {
   type ClientResponseColumnMaterial,
   loadClientResponseColumnMaterial,
@@ -429,23 +429,83 @@ export async function revealAccessLinkPassword(input: {
 }
 
 /**
- * 링크 종료 — 행을 지우지 않고 `closedAt` 을 찍는다.
+ * 링크 종료 — 행을 지우지 않고 `closedAt` 을 찍고, **같은 트랜잭션에서 그 링크의 담당 범위를 푼다**
+ * (fieldwork-multi-company 티켓 09, ADR-0035).
  *
  * 종료된 행이 「그 링크가 무엇을 넣었는가」의 계보이기 때문이다. 활성 UNIQUE 가 부분 인덱스라
- * 종료 뒤 재발급이 된다. 귀속 칸(결과코드 회차·대리 응답)이 붙으면 RESTRICT FK 가 하드 삭제를
- * DB 에서도 막지만 **그 칸은 아직 없다** — 지금 하드 삭제를 막는 것은 이 함수가 그것을 하지
- * 않는다는 사실뿐이다.
+ * 종료 뒤 재발급이 된다. 귀속 칸(회차 `fieldwork_link_id` · 대리 응답 · 응답 수정 이력 · 대상 수정 기록의
+ * `link:<id>`)은 범위와 무관하게 남는다 — 이 함수는 범위 행만 지운다.
+ *
+ * - **범위를 푼다**: 종료된 링크는 몫이 없다. 풀린 대상은 어느 링크에도 속하지 않게 되고, 다른 링크에
+ *   적용할 때 겹침으로 묻지 않는다(나누기 서비스의 겹침 집계가 열린 링크만 세는 것과 같은 결).
+ *   「나눈 적 있음」(`share_applied_at`·`share_clauses`)은 지우지 않는다 — 종료된 링크에는 세션이
+ *   서지 않아 읽는 쪽이 없고, 마지막 조건은 같은 업체에 새 링크를 줄 때 참고가 된다.
+ * - **잠금 순서는 나누기 적용과 같다**: 설문 행 FOR SHARE → 링크 FOR UPDATE → 그 링크 범위의 대상
+ *   id 오름차순 FOR UPDATE. 다른 링크의 적용이 이 링크의 대상을 가져가는 중이면 대상 잠금에서 줄을
+ *   서고, 교체 업로드(설문 행 FOR UPDATE)와는 첫 잠금에서 줄을 선다. 그래도 교착·직렬화 실패가 나면
+ *   처음부터 다시 실행한다(`retryOnTxConflict`, 3회).
+ * - 클라이언트 링크는 범위가 없어 지울 행이 없다 — 같은 경로를 지나도 무해하다.
+ *
+ * 돌려주는 `released` 는 풀린 인원이다(로그 재료 — 대상 id 는 싣지 않는다).
  */
 export async function closeAccessLink(input: {
   surveyId: string;
   linkId: string;
   actorId: string;
-}): Promise<void> {
-  const now = new Date();
-  const [row] = await db
-    .update(surveyAccessLinks)
-    .set({ closedAt: now, closedBy: input.actorId, updatedAt: now })
-    .where(activeLinkById(input.surveyId, input.linkId))
-    .returning({ id: surveyAccessLinks.id });
-  if (!row) throw new AccessLinkNotFoundError();
+}): Promise<{ released: number }> {
+  const result = await retryOnTxConflict(
+    () =>
+      db.transaction(async (tx) => {
+        const [survey] = await tx
+          .select({ id: surveys.id })
+          .from(surveys)
+          .where(eq(surveys.id, input.surveyId))
+          .for('share');
+        if (!survey) throw new AccessLinkNotFoundError();
+        const [link] = await tx
+          .select({ id: surveyAccessLinks.id })
+          .from(surveyAccessLinks)
+          .where(activeLinkById(input.surveyId, input.linkId))
+          .for('update');
+        if (!link) throw new AccessLinkNotFoundError();
+
+        await tx.execute(sql`
+          SELECT t.id FROM contact_targets t
+          JOIN fieldwork_link_shares s ON s.contact_target_id = t.id
+          WHERE s.link_id = ${input.linkId}
+          ORDER BY t.id
+          FOR UPDATE OF t
+        `);
+        const released = await tx
+          .delete(fieldworkLinkShares)
+          .where(eq(fieldworkLinkShares.linkId, input.linkId))
+          .returning({ id: fieldworkLinkShares.contactTargetId });
+
+        const now = new Date();
+        await tx
+          .update(surveyAccessLinks)
+          .set({ closedAt: now, closedBy: input.actorId, updatedAt: now })
+          .where(eq(surveyAccessLinks.id, input.linkId));
+        return { released: released.length };
+      }),
+    {
+      onRetry: (attempt, error) =>
+        logger.warn(
+          {
+            surveyId: input.surveyId,
+            targetLinkId: input.linkId,
+            attempt,
+            err: error instanceof Error ? error.message : String(error),
+          },
+          '[access-link] 링크 종료 트랜잭션 충돌 — 다시 실행',
+        ),
+    },
+  );
+  if (result.released > 0) {
+    logger.info(
+      { surveyId: input.surveyId, targetLinkId: input.linkId, released: result.released },
+      '[access-link] 링크 종료로 담당 범위를 풀었다',
+    );
+  }
+  return result;
 }

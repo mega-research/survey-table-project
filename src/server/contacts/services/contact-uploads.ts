@@ -215,6 +215,9 @@ export async function ingestContactUpload(
     if (mode === 'replace') {
       // 시나리오 B: 기존 컨택 통째 DELETE.
       // FK 동작: survey_responses 는 SET NULL (응답 보존), contact_attempts/contact_pii 는 CASCADE.
+      // 외주 담당 범위(fieldwork_link_shares)도 CASCADE 로 풀린다 — 「나눈 적 있음」은 링크 칸이라 남아
+      // 나눈 링크는 다시 나눌 때까지 0명을 본다(티켓 09). 위 설문 행 FOR UPDATE 가 나누기 적용·링크
+      // 종료(둘 다 설문 행 FOR SHARE 가 첫 잠금)와 이 DELETE 를 직렬화한다.
       await tx
         .delete(contactTargets)
         .where(and(eq(contactTargets.surveyId, surveyId), eq(contactTargets.isTest, false)));

@@ -425,7 +425,17 @@ function AccessLinkCard({
 
       {confirmingClose ? (
         <div className="flex items-center gap-1.5">
-          <span className="flex-1 text-[12px] text-[#374151]">{copy.closeConfirm}</span>
+          <span className="flex flex-1 flex-col gap-0.5 text-[12px] text-[#374151]">
+            <span>{copy.closeConfirm}</span>
+            {/* 종료가 같은 트랜잭션에서 이 링크의 담당 범위를 푼다(티켓 09) — 그 대상들이 어느 업체에도
+                속하지 않게 됨을 알고 종료하게 한다. 인원은 링크 목록이 실어 온 지금 범위다. */}
+            {link.share?.divided && link.share.count > 0 && (
+              <span className="font-medium text-[#B45309]">
+                이 링크의 담당 범위 {link.share.count.toLocaleString('ko-KR')}명이 풀립니다 — 그 대상은
+                어느 링크에도 속하지 않게 됩니다. 이 링크가 남긴 회차·수정 기록은 남습니다.
+              </span>
+            )}
+          </span>
           <button
             type="button"
             disabled={busy}

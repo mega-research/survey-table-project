@@ -402,6 +402,43 @@ describe('AccessLinkPanel', () => {
     expect(screen.getByText(/다른 외주 링크는 그대로입니다/)).toBeInTheDocument();
   });
 
+  it('담당 범위를 나눈 외주 링크의 종료 확인은 풀릴 인원을 말한다 — 기록은 남는다고 함께 적는다', async () => {
+    state.data = {
+      links: [
+        linkOf('fieldwork', { label: '프롬', share: { divided: true, count: 1234 } }),
+        linkOf('fieldwork', {
+          id: SECOND_LINK_ID,
+          token: 'Bq7nW3xY9kLm2pRt',
+          ordinal: 2,
+          share: { divided: true, count: 0 },
+        }),
+      ],
+      canManage: true,
+    } satisfies SurveyAccessLinksOutput;
+    const user = userEvent.setup();
+    render(<AccessLinkPanel surveyId="s-1" kind="fieldwork" />);
+
+    const first = within(screen.getByRole('group', { name: '프롬' }));
+    await user.click(first.getByRole('button', { name: '종료' }));
+    expect(first.getByText(/이 링크의 담당 범위 1,234명이 풀립니다/)).toBeInTheDocument();
+    expect(first.getByText(/어느 링크에도 속하지 않게 됩니다/)).toBeInTheDocument();
+    expect(first.getByText(/회차·수정 기록은 남습니다/)).toBeInTheDocument();
+
+    // 풀릴 대상이 없는 링크(0명으로 나눔)는 그 줄이 없다.
+    const second = within(screen.getByRole('group', { name: '링크 2' }));
+    await user.click(second.getByRole('button', { name: '종료' }));
+    expect(second.queryByText(/담당 범위 .*명이 풀립니다/)).toBeNull();
+  });
+
+  it('나누지 않은 외주 링크의 종료 확인에는 풀릴 담당 범위 줄이 없다', async () => {
+    state.data = twoFieldworkLinks();
+    const user = userEvent.setup();
+    render(<AccessLinkPanel surveyId="s-1" kind="fieldwork" />);
+
+    await user.click(within(screen.getByRole('group', { name: '프롬' })).getByRole('button', { name: '종료' }));
+    expect(screen.queryByText(/담당 범위 .*명이 풀립니다/)).toBeNull();
+  });
+
   it('이름표를 고치면 그 링크 id 와 정돈한 값으로 저장하고, 비우면 이름표를 지운다', async () => {
     state.data = twoFieldworkLinks();
     const user = userEvent.setup();
