@@ -19,7 +19,6 @@ import type { StatusCounts } from '@/lib/operations/aggregate-status-format';
 import * as aggregateStatusServer from '@/server/operations/services/aggregate-status';
 import * as profilesServer from '@/server/operations/services/profiles';
 import type { ListProfilesResult } from '@/server/operations/services/profiles';
-import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 
 // ========================
 // 모듈 모킹

@@ -217,12 +217,12 @@ async function splitAB(f: Fixture) {
   await owner.contacts.fieldworkShares.apply({
     surveyId: f.surveyId,
     linkId: f.A.linkId,
-    clauses: residClause('1-100'),
+    clauses: residClause('1-100'), overlap: 'take',
   });
   await owner.contacts.fieldworkShares.apply({
     surveyId: f.surveyId,
     linkId: f.B.linkId,
-    clauses: residClause('101-200'),
+    clauses: residClause('101-200'), overlap: 'take',
   });
 }
 
@@ -314,7 +314,7 @@ run('담당 범위가 풀리는 경우 (real DB)', { timeout: 60_000 }, () => {
       await owner.contacts.fieldworkShares.apply({
         surveyId: f.surveyId,
         linkId: f.B.linkId,
-        clauses: residClause('1-150'),
+        clauses: residClause('1-150'), overlap: 'take',
       });
       expect(await shareResidsOf(f.B.linkId)).toEqual(range(1, 150));
     });
@@ -373,7 +373,7 @@ run('담당 범위가 풀리는 경우 (real DB)', { timeout: 60_000 }, () => {
       await owner.contacts.fieldworkShares.apply({
         surveyId: f.surveyId,
         linkId: f.A.linkId,
-        clauses: residClause('1-10'),
+        clauses: residClause('1-10'), overlap: 'take',
       });
       expect((await fwContacts(f, f.A)).total).toBe(10);
     });
@@ -405,7 +405,7 @@ run('담당 범위가 풀리는 경우 (real DB)', { timeout: 60_000 }, () => {
           owner.contacts.fieldworkShares.apply({
             surveyId: f.surveyId,
             linkId: f.B.linkId,
-            clauses: residClause('1-200'),
+            clauses: residClause('1-200'), overlap: 'take',
           }),
         ]);
         expect(closed).toEqual({ success: true });
@@ -423,7 +423,7 @@ run('담당 범위가 풀리는 경우 (real DB)', { timeout: 60_000 }, () => {
         owner.contacts.fieldworkShares.apply({
           surveyId: f.surveyId,
           linkId: f.A.linkId,
-          clauses: residClause('1-50'),
+          clauses: residClause('1-50'), overlap: 'take',
         }),
       ]);
       expect(closed.status).toBe('fulfilled');

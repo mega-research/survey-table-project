@@ -156,8 +156,8 @@ async function issueAndSignIn(label: string): Promise<SignedLink> {
 
 /** 기본 나누기 — A 1–10, B 11–20. C 는 나누지 않는다. */
 async function splitAB() {
-  await owner.contacts.fieldworkShares.apply({ surveyId, linkId: A.linkId, clauses: residClause('1-10') });
-  await owner.contacts.fieldworkShares.apply({ surveyId, linkId: B.linkId, clauses: residClause('11-20') });
+  await owner.contacts.fieldworkShares.apply({ surveyId, linkId: A.linkId, clauses: residClause('1-10'), overlap: 'take' });
+  await owner.contacts.fieldworkShares.apply({ surveyId, linkId: B.linkId, clauses: residClause('11-20'), overlap: 'take' });
 }
 
 async function answerOf(responseId: string): Promise<unknown> {
@@ -318,8 +318,8 @@ run('응답 내역·상세·수정의 담당 범위 (real DB)', () => {
     });
 
     it('범위를 모두 빼앗긴 링크는 응답 0건을 본다', async () => {
-      await owner.contacts.fieldworkShares.apply({ surveyId, linkId: A.linkId, clauses: residClause('1-10') });
-      await owner.contacts.fieldworkShares.apply({ surveyId, linkId: B.linkId, clauses: residClause('1-20') });
+      await owner.contacts.fieldworkShares.apply({ surveyId, linkId: A.linkId, clauses: residClause('1-10'), overlap: 'take' });
+      await owner.contacts.fieldworkShares.apply({ surveyId, linkId: B.linkId, clauses: residClause('1-20'), overlap: 'take' });
       const page = await fwProfiles(A);
       expect(page.total).toBe(0);
     });
@@ -382,8 +382,8 @@ run('응답 내역·상세·수정의 담당 범위 (real DB)', () => {
     it('범위를 옮기면 이미 끝난 응답도 새 범위를 따라간다', async () => {
       await splitAB();
       // 6–10 을 B 로 옮긴다(가져오기) — A 는 1–5, B 는 6–20.
-      await owner.contacts.fieldworkShares.apply({ surveyId, linkId: A.linkId, clauses: residClause('1-5') });
-      await owner.contacts.fieldworkShares.apply({ surveyId, linkId: B.linkId, clauses: residClause('6-20') });
+      await owner.contacts.fieldworkShares.apply({ surveyId, linkId: A.linkId, clauses: residClause('1-5'), overlap: 'take' });
+      await owner.contacts.fieldworkShares.apply({ surveyId, linkId: B.linkId, clauses: residClause('6-20'), overlap: 'take' });
 
       expect((await fwProfiles(A)).rows.map((r) => r.resid)).toEqual(range(1, 5));
       expect((await fwProfiles(B)).rows.map((r) => r.resid)).toEqual(range(6, 20));

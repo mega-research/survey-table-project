@@ -30,6 +30,7 @@ import {
   teams,
   users,
 } from '@/db/schema';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 import type { ORPCContext } from '@/server/context';
 import type { QuotaConfig } from '@/shared/contracts/quota';
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
@@ -260,8 +261,8 @@ run('쿼터 현황 — 외주 링크 투영 (real DB)', () => {
     C = await issueAndSignIn('세번째');
 
     const resid = (value: string) => [{ source: 'system.resid' as const, value, op: '' as const }];
-    await owner.contacts.fieldworkShares.apply({ surveyId, linkId: A.linkId, clauses: resid('1-5') });
-    await owner.contacts.fieldworkShares.apply({ surveyId, linkId: B.linkId, clauses: resid('6-10') });
+    await owner.contacts.fieldworkShares.apply({ surveyId, linkId: A.linkId, clauses: resid('1-5'), overlap: 'take' });
+    await owner.contacts.fieldworkShares.apply({ surveyId, linkId: B.linkId, clauses: resid('6-10'), overlap: 'take' });
     // 5번은 같이 맡는다 — 겹침 「같이 맡기기」(티켓 04)가 남기는 상태와 같다.
     await db.insert(fieldworkLinkShares).values({ linkId: B.linkId, contactTargetId: targetIdByResid.get(5)! });
 
@@ -348,6 +349,7 @@ run('쿼터 현황 — 외주 링크 투영 (real DB)', () => {
         surveyId,
         capabilities: new Set(['operations.view']),
         scope: 'real',
+        share: FIELDWORK_SHARE_ALL,
         searchParams: {},
       });
       const [kpi] = findElements(tree, KpiRow);
