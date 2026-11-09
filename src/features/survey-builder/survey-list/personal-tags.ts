@@ -77,6 +77,22 @@ export function resolveTagFilterList(
   );
 }
 
+/** 툴바 「자주 쓰는 태그」 줄에 세울 수 있는 최대 개수 — 폭이 모자라면 그보다 적게 보인다. */
+export const QUICK_TAG_LIMIT = 10;
+
+/**
+ * 툴바 「자주 쓰는 태그」 줄 — 설문에 하나 이상 붙은 내 태그를 많이 쓴 순(동점은 가나다순)으로 최대
+ * `QUICK_TAG_LIMIT` 개. 붙은 설문이 없는 태그는 눌러도 빈 목록이라 빼고, 걸린 검색 칩이어도 자리를
+ * 옮기지 않는다(누를 때마다 줄이 뒤섞이면 다음 칩을 다시 찾아야 한다).
+ */
+export function resolveQuickTags(tags: readonly PersonalTagItem[]): PersonalTagItem[] {
+  return resolveTagFilterList(
+    tags.filter((t) => t.linkCount > 0),
+    '',
+    'usage',
+  ).slice(0, QUICK_TAG_LIMIT);
+}
+
 /**
  * 검색 칩 중 내 태그 목록에 있는 것만 — 다른 탭에서 지운 태그 칩을 풀 때 쓴다(서버는 없는 태그 id 를
  * 거부한다). 순서는 그대로.

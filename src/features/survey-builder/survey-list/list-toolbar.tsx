@@ -19,6 +19,8 @@ import type {
 } from '@/shared/contracts/survey-builder-io';
 
 import { LifecycleSegment } from './lifecycle-segment';
+import { resolveQuickTags } from './personal-tags';
+import { QuickTagRow } from './quick-tag-row';
 import { type SearchChips, SearchCombobox, type TagSuggestions } from './search-combobox';
 import { TagFilterMenu } from './tag-filter-menu';
 
@@ -91,7 +93,7 @@ interface ListToolbarProps {
  *
  * 첫 줄 — 검색창(넓게, 자동완성 F8-b · 검색 칩 F8-c) · 즐겨찾기 · 「# 태그 ▾」(F8-d) · 상세 검색(툴바가
  * 좁으면 검색창 아래 줄로 내려간다). 둘째 줄 —
- * 왼쪽 목록 상태 세그먼트(+ 휴지통), 오른쪽 「N개 · 정렬 ▾」.
+ * 왼쪽 목록 상태 세그먼트(+ 휴지통) · 자주 쓰는 태그 한 줄, 오른쪽 「N개 · 정렬 ▾」.
  */
 export function ListToolbar({
   counts,
@@ -207,7 +209,20 @@ export function ListToolbar({
           </>
         )}
 
-        <div className="flex-1" />
+        {/* 자주 쓰는 태그 — 세그먼트와 개수 사이 빈자리를 쓴다(줄을 늘리지 않는다). 휴지통에는 태그 조건이
+            없어 tagFilter 가 null 이고 줄도 없다. 태그가 없으면 빈칸이 그 자리를 채운다. */}
+        {tagFilter && resolveQuickTags(tagFilter.tags).length > 0 ? (
+          <>
+            <span className="h-4 w-px bg-[#E5E5EA]" aria-hidden />
+            <QuickTagRow
+              tags={tagFilter.tags}
+              selectedIds={tagFilter.selectedIds}
+              onToggle={tagFilter.onToggle}
+            />
+          </>
+        ) : (
+          <div className="flex-1" />
+        )}
 
         <div className="flex items-center gap-1 text-[13px] text-[#6E6E73]">
           <span className="tabular-nums">{resultCount}개</span>

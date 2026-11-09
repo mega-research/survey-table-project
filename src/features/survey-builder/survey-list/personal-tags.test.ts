@@ -3,8 +3,10 @@ import { describe, expect, it } from 'vitest';
 import type { PersonalTagItem } from '@/shared/contracts/workspace-io';
 
 import {
+  QUICK_TAG_LIMIT,
   keepKnownTagIds,
   resolveCardTags,
+  resolveQuickTags,
   resolveTagFilterList,
   resolveTagPicker,
   resolveTagRename,
@@ -154,5 +156,28 @@ describe('편집 패널 이름 칸 (티켓 08)', () => {
     expect(resolveTagRename('  ', MINE[1]!, MINE)).toMatchObject({ reason: 'empty' });
     expect(resolveTagRename('가'.repeat(21), MINE[1]!, MINE)).toMatchObject({ reason: 'too_long' });
     expect(resolveTagRename(' C기관 ', MINE[1]!, MINE)).toEqual({ kind: 'save', name: 'C기관' });
+  });
+});
+
+describe('resolveQuickTags — 툴바 자주 쓰는 태그 줄', () => {
+  const used = (id: string, name: string, linkCount: number): PersonalTagItem => ({
+    ...tag(id, name),
+    linkCount,
+  });
+
+  it('많이 쓴 순, 동점은 가나다순이다', () => {
+    const tags = [used('a', '나', 1), used('b', '가', 3), used('c', '다', 3)];
+    expect(resolveQuickTags(tags).map((t) => t.id)).toEqual(['b', 'c', 'a']);
+  });
+
+  it('붙은 설문이 없는 태그는 뺀다 — 눌러도 빈 목록이다', () => {
+    expect(resolveQuickTags([used('a', '가', 0), used('b', '나', 2)]).map((t) => t.id)).toEqual([
+      'b',
+    ]);
+  });
+
+  it(`최대 ${QUICK_TAG_LIMIT}개다`, () => {
+    const many = Array.from({ length: 14 }, (_, i) => used(`t${i}`, `태그${i}`, 20 - i));
+    expect(resolveQuickTags(many)).toHaveLength(QUICK_TAG_LIMIT);
   });
 });
