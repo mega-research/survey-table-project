@@ -88,18 +88,33 @@ describe('GET /api/legacy-guest-link/[surveyId]', () => {
   });
 
   /**
-   * 열린 외주 링크가 둘 이상이면 어느 업체의 링크로 보낼지 정할 수 없다(fieldwork-multi-company
-   * 티켓 02). 아무 링크로나 보내면 엉뚱한 업체의 주소(토큰)를 내주게 되므로 링크로 보내지 않는다 —
-   * 쿠키·비밀번호로 고르는 다리는 티켓 10 이 세운다.
+   * 열린 외주 링크가 둘 이상이면 주소만으로는 어느 업체의 링크인지 정할 수 없다(fieldwork-multi-company
+   * 티켓 10). 쿠키가 없는 브라우저는 다리 전용 비밀번호 화면으로 간다 — 어느 링크의 주소(토큰)도
+   * 내주지 않는다. 쿠키로 고르는 갈래는 실 DB 스위트(`legacy-guest-bridge.realdb`)가 본다 — 「유효한
+   * 세션」이 링크 행과의 대조라 목으로는 증명되지 않는다.
    */
-  it('열린 외주 링크가 둘 이상이면 어느 링크로도 보내지 않고 내부 콘솔 주소로 보낸다', async () => {
-    listAccessLinksMock.mockResolvedValue([{ token: TOKEN }, { token: 'sEcondTokenAbcd0' }]);
+  it('열린 외주 링크가 둘 이상이고 쿠키가 없으면 다리 비밀번호 화면으로 보낸다 — 어느 링크 주소도 내주지 않는다', async () => {
+    listAccessLinksMock.mockResolvedValue([
+      { id: crypto.randomUUID(), token: TOKEN },
+      { id: crypto.randomUUID(), token: 'sEcondTokenAbcd0' },
+    ]);
 
-    const res = await call(GRANTED);
+    const res = await call(GRANTED, { rest: ['contacts'], search: '?page=2' });
 
     expect(res.status).toBe(307);
-    expect(locationOf(res)).toBe(`${ORIGIN}/surveys/${GRANTED}/operations`);
-    expect(locationOf(res)).not.toContain('/fw/');
+    expect(locationOf(res)).toBe(`${ORIGIN}/fw/legacy/${GRANTED}`);
+    expect(res.headers.get('cache-control')).toBe('no-store');
+  });
+
+  it('허용 목록의 설문 id 가 대문자로 와도 다리 비밀번호 화면 주소는 소문자 id 다', async () => {
+    listAccessLinksMock.mockResolvedValue([
+      { id: crypto.randomUUID(), token: TOKEN },
+      { id: crypto.randomUUID(), token: 'sEcondTokenAbcd0' },
+    ]);
+
+    const res = await call(GRANTED.toUpperCase());
+
+    expect(locationOf(res)).toBe(`${ORIGIN}/fw/legacy/${GRANTED}`);
   });
 
   it('grant 목록을 비우면 다리가 꺼진다', async () => {

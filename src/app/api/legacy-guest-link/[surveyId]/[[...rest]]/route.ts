@@ -2,12 +2,14 @@ import { type NextRequest, NextResponse } from 'next/server';
 
 import { getSessionCookie } from 'better-auth/cookies';
 
+import { readFieldworkLinkSessions } from '@/lib/auth/access-link-session';
 import {
-  LEGACY_GUEST_GRANTS_ENV,
+  isLegacyBridgeSurvey,
+  legacyBridgePasswordPath,
   legacyConsoleStaffPath,
-  parseLegacyGuestSurveyIds,
 } from '@/lib/auth/legacy-guest-link';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
+import { resolveLinkActorForSurvey } from '@/server/access-link';
 import { listAccessLinks } from '@/server/workspace/services/access-links';
 
 /**
@@ -46,18 +48,33 @@ async function handleLegacyGuestLink(
 
   if (getSessionCookie(request)) return redirectTo(ctx, staffUrl, 'staff');
 
-  const granted = parseLegacyGuestSurveyIds(process.env[LEGACY_GUEST_GRANTS_ENV]);
   const normalizedId = surveyId.toLowerCase();
-  if (!granted.has(normalizedId)) return redirectTo(ctx, staffUrl, 'not_granted');
+  if (!isLegacyBridgeSurvey(normalizedId)) return redirectTo(ctx, staffUrl, 'not_granted');
 
   const links = await listAccessLinks(normalizedId, 'fieldwork');
   if (links.length === 0) return redirectTo(ctx, staffUrl, 'no_link');
-  // 외주 링크가 여럿이면 어느 업체의 링크로 보낼지 정할 수 없다(fieldwork-multi-company 티켓 02).
-  // 아무 링크로나 보내면 남의 업체 주소를 내주게 되므로 링크로 보내지 않는다 — 쿠키·비밀번호로
-  // 고르는 다리는 티켓 10 이 세운다.
-  if (links.length > 1) return redirectTo(ctx, staffUrl, 'multiple_links');
+  const linkEntry = (token: string) => new URL(`/fw/${token}`, request.nextUrl.origin);
+  if (links.length === 1) return redirectTo(ctx, linkEntry(links[0]!.token), 'link');
 
-  return redirectTo(ctx, new URL(`/fw/${links[0]!.token}`, request.nextUrl.origin), 'link');
+  // 외주 링크가 여럿이면 주소만으로는 어느 업체의 링크인지 정할 수 없다(fieldwork-multi-company
+  // 티켓 10). 아무 링크로나 보내면 남의 업체 주소를 내주므로 **이 브라우저가 든 세션**으로 고른다 —
+  // RPC 의 주체 판정(`resolveLinkActorForSurvey`)과 같은 함수라 「유효한 세션이 정확히 하나」의
+  // 뜻(서명 + 비밀번호 변경 시각 대조 + 닫힘)이 두 자리에서 갈리지 않는다.
+  const chosen = await resolveLinkActorForSurvey(
+    readFieldworkLinkSessions(request.headers),
+    normalizedId,
+  );
+  const chosenLink =
+    chosen.kind === 'ok' ? links.find((link) => link.id === chosen.actor.linkId) : undefined;
+  if (chosenLink) return redirectTo(ctx, linkEntry(chosenLink.token), 'link_by_session');
+
+  // 세션이 없거나 둘 이상 살아 있거나 끊겼으면 비밀번호로 고른다 — 다리 전용 화면이고, 업체
+  // 목록·이름표·조사 이름을 그리지 않는다(`app/fw/legacy/[surveyId]`).
+  return redirectTo(
+    ctx,
+    new URL(legacyBridgePasswordPath(normalizedId), request.nextUrl.origin),
+    'password',
+  );
 }
 
 /**

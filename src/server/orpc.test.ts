@@ -44,6 +44,9 @@ beforeEach(() => {
 const testRouter = {
   ping: base.use(withRateLimit('lookup')).handler(() => 'ok'),
   echo: base.use(withRateLimit('response-mutation')).handler(() => 'ok'),
+  bySurvey: base
+    .use(withRateLimit('access-link-auth', { clientIdKeys: ['surveyId'] }))
+    .handler(() => 'ok'),
 };
 
 function ctx(headers: Headers): ORPCContext {
@@ -109,5 +112,19 @@ describe('withRateLimit', () => {
     await client.echo({ sessionId: 'x'.repeat(129) });
     await client.echo(undefined);
     expect(state.calls.map((call) => call.clientId)).toEqual([null, null, null, null]);
+  });
+
+  it('표면이 고른 키로만 클라이언트 축을 읽는다 — 옛 주소 다리는 설문 id 가 축이다', async () => {
+    // 기본 목록에 surveyId 를 더하지 않은 것이 계약이다 — 위 케이스처럼 기본 표면에서는
+    // surveyId 가 여전히 축이 아니다(기존 버킷 키가 바뀌지 않는다).
+    const client = createRouterClient(testRouter, { context: ctx(TRUSTED()) });
+    await client.bySurvey({ surveyId: '9f550d8b-24d2-4b19-b5d7-00684e0d8644', token: 'uNk2IUsrRx_Zk-R0' });
+    expect(state.calls).toEqual([
+      {
+        group: 'access-link-auth',
+        ip: '203.0.113.7',
+        clientId: '9f550d8b-24d2-4b19-b5d7-00684e0d8644',
+      },
+    ]);
   });
 });

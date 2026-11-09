@@ -1006,6 +1006,9 @@ const RESPONDENT_SURFACES = new Set([
   'quota.check',
   // 이월 응답 프리필 — 초대 토큰이 자격이다. 토큰·설문이 함께 맞아야 값을 주고 삭제된 설문은 null.
   'contacts.priorAnswers.lookup',
+  // 옛 주소 다리의 비밀번호 한 칸(fieldwork-multi-company 티켓 10) — 팀 경계가 아니라 허용 목록과
+  // 비밀번호가 자격이다. 허용 목록 밖 설문은 DB 를 묻지 않는다(legacy-guest-bridge.realdb).
+  'workspace.accessLinkSession.authenticateLegacyBridge',
 ]);
 
 /** 슈퍼어드민 전용 표면 — 팀 경계가 아니라 전역 권한 축이라 이 스위트의 대상이 아니다. */

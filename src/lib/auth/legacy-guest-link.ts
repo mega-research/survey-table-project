@@ -44,6 +44,39 @@ export function parseLegacyGuestSurveyIds(raw: string | undefined): ReadonlySet<
 }
 
 /**
+ * 이 설문이 다리에 오른 설문인가 — 요청마다 env 를 읽는다(걷을 때 env 만 비우면 바로 꺼진다).
+ *
+ * **DB 를 묻기 전에 부른다.** 목록 밖의 설문은 링크 조회도 비밀번호 대조도 하지 않는다 — 다리가
+ * 설문 id 하나로 링크를 찾아 주는 창구라, 대상을 좁히지 않으면 모든 설문이 그 창구가 된다.
+ */
+export function isLegacyBridgeSurvey(surveyId: string): boolean {
+  return parseLegacyGuestSurveyIds(process.env[LEGACY_GUEST_GRANTS_ENV]).has(
+    surveyId.toLowerCase(),
+  );
+}
+
+/**
+ * 다리 전용 비밀번호 화면의 주소 — 외주 링크가 여럿인 설문에서 쿠키로 링크를 고르지 못했을 때.
+ *
+ * `/fw` 아래에 둔 것은 그 구역이 1차 게이트(proxy) 밖이기 때문이다(계정 세션 없이 열린다).
+ * `legacy` 는 링크 토큰이 될 수 없다 — 토큰은 16자 이상이라 `/fw/[token]` 과 겹치지 않는다.
+ */
+export function legacyBridgePasswordPath(surveyId: string): string {
+  return `/fw/legacy/${encodeURIComponent(surveyId)}`;
+}
+
+/**
+ * 다리 라우트 자체의 주소 — 다리 비밀번호 화면이 접속에 성공한 뒤 돌아가는 자리.
+ *
+ * 접속 표면은 토큰을 돌려주지 않는다(화면은 링크 주소를 모른다). 대신 방금 심은 쿠키를 들고 이
+ * 주소를 다시 지나면 라우트가 「유효한 세션이 정확히 하나」로 그 링크를 고른다 — 고르는 판정이
+ * 라우트 한 곳에만 있다.
+ */
+export function legacyBridgeRoutePath(surveyId: string): string {
+  return `/api/legacy-guest-link/${encodeURIComponent(surveyId)}`;
+}
+
+/**
  * 옛 운영 콘솔 주소에서 `/admin` 접두만 걷은 주소 — 다리가 발화하지 않을 때의 목적지.
  *
  * 일반 규칙(`/admin/:path*` → `/:path*`)이 냈을 답과 같아야 한다: 직원의 옛 북마크는 다리를

@@ -253,6 +253,20 @@ export const AccessLinkAuthInput = z.object({
 });
 export type AccessLinkAuthInput = z.infer<typeof AccessLinkAuthInput>;
 
+/**
+ * 옛 주소 다리의 비밀번호 한 칸 (fieldwork-multi-company 티켓 10) — 토큰 대신 **설문 id** 를 받는다.
+ *
+ * 옛 게스트 주소가 담은 것이 설문 id 하나뿐이라서다. 설문 id 를 `z.uuid()` 로 좁히지 않는 것은
+ * 비밀번호 칸에 하한을 걸지 않는 것과 같은 이유다 — 모양이 어긋난 값만 BAD_REQUEST 로 갈리면 응답이
+ * 두 갈래가 된다. 코어가 허용 목록(UUID 모양만 담긴다)으로 먼저 거르므로 아무 값도 DB 에 닿지 않는다.
+ * 상한은 레이트리밋 키·로그로 흘러가는 길이를 막는다.
+ */
+export const LegacyBridgeAuthInput = z.object({
+  surveyId: z.string().min(1).max(64),
+  password: z.string().min(1).max(200),
+});
+export type LegacyBridgeAuthInput = z.infer<typeof LegacyBridgeAuthInput>;
+
 /** 나가기 — 그 링크의 쿠키 하나만 지운다(다른 설문 링크는 살아 있다). */
 export const AccessLinkSignOutInput = z.object({ token: TokenField });
 export type AccessLinkSignOutInput = z.infer<typeof AccessLinkSignOutInput>;
