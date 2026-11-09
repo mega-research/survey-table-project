@@ -179,8 +179,9 @@ export function countDistinctIds(ranges: readonly NumRange[]): number {
  * 번호를 구간 하나로 접는다(컨택원 수정 화면).
  *
  * 고르는 번호 집합은 그대로다: 서버는 낱개를 IN, 구간을 BETWEEN 으로 걸어 같은 정수를 고르고,
- * 단일 숫자의 텍스트 폴백은 입력이 원래 단일 숫자일 때만 붙는데 이 함수는 단일 숫자를 새로 만들지
- * 않는다. 토큰 수도 늘지 않아 인라인 상한(2,000) 판정이 나빠지지 않는다.
+ * 번호 하나로 접히는 입력은 손대지 않아 단일 숫자의 텍스트 폴백(원문 value 의 ILIKE)도 그대로다
+ * (`server/read-models/contacts-filter-parse-compact.test.ts` 가 전후 해석을 대조한다). 토큰 수도
+ * 늘지 않아 인라인 상한(2,000) 판정이 나빠지지 않는다.
  *
  * 손대지 않는 입력(그대로 돌려준다): 빈 값 · 숫자/범위가 아닌 토큰이 섞인 값(`짝수`·`list:` 토큰
  * 포함 — 위젯이 경고하는 값을 고쳐 쓰지 않는다) · 앞자리 0 토큰(`0001` 을 1 로 접으면 원 값이 사라진다).
@@ -189,7 +190,9 @@ export function compactIdList(input: string): string {
   if (hasLeadingZeroToken(input)) return input;
   const r = parseIdListDetailed(input, { maxTokens: Number.POSITIVE_INFINITY });
   if (r.count === 0 || r.invalid.length > 0) return input;
-  return mergeIdRanges(r.ranges)
-    .map((x) => (x.from === x.to ? String(x.from) : `${x.from}-${x.to}`))
-    .join(', ');
+  const merged = mergeIdRanges(r.ranges);
+  // 번호 하나로 접히는 입력("5 5", "5-5", "5,")은 그대로 — attrs 의 단일 숫자는 원문 value 로
+  // 텍스트 폴백(ILIKE)을 함께 걸어, "5 5" 를 "5" 로 바꾸면 "A5" 같은 값까지 고른다.
+  if (merged.length === 1 && merged[0]!.from === merged[0]!.to) return input;
+  return merged.map((x) => (x.from === x.to ? String(x.from) : `${x.from}-${x.to}`)).join(', ');
 }

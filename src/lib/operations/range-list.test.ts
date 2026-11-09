@@ -167,6 +167,12 @@ describe('compactIdList — 연속 번호를 구간으로 합치기', () => {
     expect(expand(compactIdList(input))).toEqual(expand(input));
   });
 
+  it('번호 하나로 접히는 입력은 그대로 — attrs 텍스트 폴백이 원문 value 를 쓴다', () => {
+    expect(compactIdList('5 5')).toBe('5 5');
+    expect(compactIdList('5-5')).toBe('5-5');
+    expect(compactIdList('5,')).toBe('5,');
+  });
+
   it('토큰 수를 늘리지 않는다 — 인라인 상한 판정이 나빠지지 않는다', () => {
     expect(compactIdList('1 3 5')).toBe('1, 3, 5');
   });
