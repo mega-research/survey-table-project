@@ -53,12 +53,13 @@ function group(
   return { id, name, order: 0, parentGroupId, surveyCount: 0, foreignTeamName: null, ...over };
 }
 
+// 건수는 서버가 준 값 그대로다 — 내 팀 그룹은 하위 그룹까지 합친 수(이정운 34 = 직접 4 + 2026 18 + 2025 12).
 const NESTED: SurveyGroupListItem[] = [
-  group(G_LEE, '이정운', null, { surveyCount: 3 }),
+  group(G_LEE, '이정운', null, { surveyCount: 34 }),
   group(G_2026, '2026', G_LEE, { surveyCount: 18 }),
   group(G_2025, '2025', G_LEE, { surveyCount: 12 }),
   group(G_H1, '상반기', G_2026, { surveyCount: 7 }),
-  group(G_FOREIGN, 'A고객사 2026', null, { foreignTeamName: '연구1본부 1팀' }),
+  group(G_FOREIGN, 'A고객사 2026', null, { surveyCount: 2, foreignTeamName: '연구1본부 1팀' }),
 ];
 
 /** 설문이 없는 그룹 한 쪽 — 뼈대만 보므로 카드는 필요 없다. */
@@ -138,6 +139,21 @@ describe('그룹 화면 — 1단계 그룹', () => {
     expect(folders.getAllByRole('listitem')[0]).toHaveTextContent('설문 18 · 하위 그룹 1');
   });
 
+  it('제목 옆 건수와 폴더 줄 건수는 하위 그룹까지 합친 수다 — 본문 카드 수와 다를 수 있다', async () => {
+    renderGroupScreen(G_LEE);
+
+    // 제목 옆 — 이 그룹 아래 전체.
+    expect(await screen.findByText('설문 34')).toBeInTheDocument();
+    // 폴더 줄 — 그 하위 그룹 아래 전체, 「하위 그룹 M」은 내게 보이는 하위 그룹 수.
+    const rows = within(screen.getByRole('region', { name: /하위 그룹/ })).getAllByRole('listitem');
+    expect(rows.map((li) => li.textContent)).toEqual([
+      expect.stringContaining('설문 18 · 하위 그룹 1'),
+      expect.stringContaining('설문 12'),
+    ]);
+    // 본문은 직접 담긴 설문만이다(이 쪽은 0건) — 두 숫자가 다른 것은 의도다.
+    expect(screen.getByText(/이 그룹에 직접 담긴 설문이 없습니다/)).toBeInTheDocument();
+  });
+
   it('하위 그룹은 있고 직접 담긴 설문이 없으면 큰 빈 화면 대신 한 줄로 알린다', async () => {
     renderGroupScreen(G_LEE);
 
@@ -189,6 +205,13 @@ describe('그룹 화면 — 2·3단계 그룹', () => {
     ).toBeInTheDocument();
   });
 
+  it('2단계 — 제목 옆 건수는 그 그룹의 것이다', async () => {
+    renderGroupScreen(G_2026);
+
+    expect(await screen.findByText('설문 18')).toBeInTheDocument();
+    expect(screen.queryByText('설문 34')).toBeNull();
+  });
+
   it('3단계 — 「새 하위 그룹」이 보이지 않는다', async () => {
     renderGroupScreen(G_H1);
 
@@ -216,6 +239,12 @@ describe('그룹 화면 — 협업 그룹(타 팀 폴더)', () => {
     expect(await breadcrumb()).toEqual(['설문 목록', 'A고객사 2026 · 연구1본부 1팀']);
     expect(screen.queryByRole('button', { name: '새 하위 그룹' })).toBeNull();
     expect(screen.queryByRole('region', { name: /하위 그룹/ })).toBeNull();
+  });
+
+  it('제목 옆 건수는 서버가 준 수 그대로다 — 내가 볼 수 있는, 직접 담긴 설문', async () => {
+    renderGroupScreen(G_FOREIGN);
+
+    expect(await screen.findByText('설문 2')).toBeInTheDocument();
   });
 });
 
