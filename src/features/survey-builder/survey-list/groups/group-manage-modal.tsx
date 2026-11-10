@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import {
   type Announcements,
@@ -48,7 +48,11 @@ import { getErrorMessage } from '@/lib/get-error-message';
 import { cn } from '@/lib/utils';
 import { CreateSurveyGroupInput, SURVEY_GROUP_MAX_DEPTH } from '@/shared/contracts/workspace-io';
 import type { SurveyGroupListItem } from '@/shared/contracts/workspace-io';
-import { type SurveyGroupTreeNode, buildSurveyGroupTree } from '@/utils/survey-group-tree';
+import {
+  type SurveyGroupTreeNode,
+  buildSurveyGroupTree,
+  listSurveyGroupPathLabels,
+} from '@/utils/survey-group-tree';
 
 import { useCreateSurveyGroup, useReorderSurveyGroups } from '../../queries/use-survey-groups';
 import { GroupDeleteDialog } from './group-delete-dialog';
@@ -115,6 +119,11 @@ export function GroupManageModal({ teamId, groups, onClose }: GroupManageModalPr
     'id' | 'name' | 'parentGroupId'
   > | null>(null);
 
+  // 이 창이 Esc 를 양보해야 하는 두 경우 — 줄을 끄는 중(그 Esc 는 끌기 취소다)과 위에 다른 창이 떠 있는
+  // 동안(그 Esc 는 위의 창을 닫는다). 아래 Dialog 의 onOpenChange 가 읽는다.
+  const dragEscape = useEscapeHold();
+  const overlayEscape = useEscapeHold();
+
   const createGroup = useCreateSurveyGroup();
   const reorderGroups = useReorderSurveyGroups();
 
@@ -130,6 +139,8 @@ export function GroupManageModal({ teamId, groups, onClose }: GroupManageModalPr
   }
   const tree = buildSurveyGroupTree(shownGroups);
   const namesById = new Map(ownGroups.map((group) => [group.id, group.name]));
+  // 줄의 단추들이 읽어 주는 이름 — 같은 이름의 하위 그룹(「2026」)이 여러 상위 그룹 밑에 선다.
+  const pathLabels = listSurveyGroupPathLabels(ownGroups);
 
   async function handleCreate(event: React.FormEvent) {
     event.preventDefault();
@@ -186,9 +197,12 @@ export function GroupManageModal({ teamId, groups, onClose }: GroupManageModalPr
 
   const rowActions: GroupRowActions = {
     onToggle: toggleBranch,
-    onRename: (group) =>
-      setNameTarget({ kind: 'rename', group: { id: group.id, name: group.name } }),
+    onRename: (group) => {
+      overlayEscape.hold();
+      setNameTarget({ kind: 'rename', group: { id: group.id, name: group.name } });
+    },
     onCreateSubgroup: (group) => {
+      overlayEscape.hold();
       // 새 그룹이 설 자리가 보이도록 그 가지를 편다.
       setCollapsed((prev) => {
         if (!prev.has(group.id)) return prev;
@@ -202,14 +216,33 @@ export function GroupManageModal({ teamId, groups, onClose }: GroupManageModalPr
         parent: { id: group.id, name: group.name },
       });
     },
-    onRelocate: (group) => setRelocateTarget({ id: group.id, name: group.name }),
-    onDelete: (group) =>
-      setDeleteTarget({ id: group.id, name: group.name, parentGroupId: group.parentGroupId }),
+    onRelocate: (group) => {
+      overlayEscape.hold();
+      setRelocateTarget({ id: group.id, name: group.name });
+    },
+    onDelete: (group) => {
+      overlayEscape.hold();
+      setDeleteTarget({ id: group.id, name: group.name, parentGroupId: group.parentGroupId });
+    },
   };
 
   return (
     <>
-      <Dialog open onOpenChange={(next) => (next ? undefined : onClose())}>
+      <Dialog
+        open
+        onOpenChange={(next, details) => {
+          if (next) return;
+          // **Esc 가 이 창의 것이 아닐 때는 닫지 않고 흘려보낸다.** 이 창은 포커스가 안에 있으면 Esc 를
+          // 먼저 받아 닫히고 그 키를 삼킨다 — 그러면 끄는 도중의 Esc 가 끌기를 취소하지 못한 채 창이
+          // 닫히고(끌기 안내문은 「Esc 키로 취소합니다」라고 읽어 준다), 위에 뜬 창 대신 밑의 이 창이 닫힌다.
+          if (details.reason === 'escape-key' && (dragEscape.held() || overlayEscape.held())) {
+            details.cancel();
+            details.allowPropagation();
+            return;
+          }
+          onClose();
+        }}
+      >
         <DialogContent className="gap-0 rounded-2xl p-[22px] sm:max-w-[540px]">
           <DialogTitle className="text-[17px] font-semibold text-[#1C1C1E]">그룹 관리</DialogTitle>
           <DialogDescription className="mt-1 text-[12.5px] text-[#6E6E73]">
@@ -224,7 +257,9 @@ export function GroupManageModal({ teamId, groups, onClose }: GroupManageModalPr
                 collapsed={collapsed}
                 actions={rowActions}
                 nameOf={(id) => namesById.get(String(id)) ?? ''}
+                spokenNameOf={(group) => pathLabels.get(group.id) ?? group.name}
                 onDragEnd={handleDragEnd}
+                onDragActiveChange={(active) => (active ? dragEscape.hold() : dragEscape.release())}
               />
             </div>
           ) : (
@@ -303,23 +338,67 @@ export function GroupManageModal({ teamId, groups, onClose }: GroupManageModalPr
         </DialogContent>
       </Dialog>
 
-      {nameTarget && <GroupNameDialog target={nameTarget} onClose={() => setNameTarget(null)} />}
+      {nameTarget && (
+        <GroupNameDialog
+          target={nameTarget}
+          onClose={() => {
+            overlayEscape.release();
+            setNameTarget(null);
+          }}
+        />
+      )}
       {relocateTarget && (
         <GroupRelocateDialog
           group={relocateTarget}
           groups={ownGroups}
-          onClose={() => setRelocateTarget(null)}
+          onClose={() => {
+            overlayEscape.release();
+            setRelocateTarget(null);
+          }}
         />
       )}
       {deleteTarget && (
         <GroupDeleteDialog
           group={deleteTarget}
           teamId={teamId}
-          onClose={() => setDeleteTarget(null)}
+          onClose={() => {
+            overlayEscape.release();
+            setDeleteTarget(null);
+          }}
         />
       )}
     </>
   );
+}
+
+/**
+ * 「지금의 Esc 는 이 창의 것이 아니다」 표시 — 끌기나 위에 뜬 창이 쥐었다 놓는다.
+ *
+ * **놓는 것은 한 박자 뒤다.** Esc 한 번을 끌기 영역 · 위의 창 · 이 창이 각자 듣는데 듣는 순서는 보장되지
+ * 않는다. 끌기를 취소한(위의 창을 닫은) 바로 그 키 입력이 뒤이어 이 창에 닿아도 닫히지 않게, 그 입력이
+ * 다 지나간 뒤에 푼다. 상태가 아니라 ref 인 이유도 같다 — 한 입력이 도는 동안의 값이 필요하다.
+ */
+function useEscapeHold() {
+  const heldRef = useRef(false);
+  const releaseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function cancelRelease() {
+    if (releaseTimer.current !== null) clearTimeout(releaseTimer.current);
+    releaseTimer.current = null;
+  }
+  return {
+    held: () => heldRef.current,
+    hold: () => {
+      cancelRelease();
+      heldRef.current = true;
+    },
+    release: () => {
+      cancelRelease();
+      releaseTimer.current = setTimeout(() => {
+        heldRef.current = false;
+      }, 0);
+    },
+  };
 }
 
 interface GroupRowActions {
@@ -335,7 +414,14 @@ interface GroupTreeProps {
   actions: GroupRowActions;
   /** 끌기 안내가 읽어 줄 그룹 이름. */
   nameOf: (id: UniqueIdentifier) => string;
+  /**
+   * 줄의 단추(끌기 손잡이 · 펼침 · ⋯)가 읽어 줄 이름 — 뿌리부터의 경로(「이정운 › 2026」). 들여쓰기는
+   * 눈에만 보여서, 이름만 읽으면 같은 이름의 하위 그룹 둘이 구별되지 않는다. 최상위 그룹은 이름 그대로다.
+   */
+  spokenNameOf: (group: SurveyGroupListItem) => string;
   onDragEnd: (event: DragEndEvent) => void;
+  /** 끌기를 시작했다(true) · 놓았거나 취소했다(false) — 창이 그동안의 Esc 를 끌기 취소로 읽는다. */
+  onDragActiveChange: (active: boolean) => void;
 }
 
 /**
@@ -363,7 +449,12 @@ function GroupSiblingList({
     <DndContext
       sensors={sensors}
       collisionDetection={closestCenter}
-      onDragEnd={tree.onDragEnd}
+      onDragStart={() => tree.onDragActiveChange(true)}
+      onDragEnd={(event) => {
+        tree.onDragActiveChange(false);
+        tree.onDragEnd(event);
+      }}
+      onDragCancel={() => tree.onDragActiveChange(false)}
       accessibility={{
         screenReaderInstructions: { draggable: DRAG_INSTRUCTIONS },
         announcements: dragAnnouncements(tree.nameOf),
@@ -409,6 +500,7 @@ function dragAnnouncements(nameOf: (id: UniqueIdentifier) => string): Announceme
 function GroupTreeRow({ node, ...tree }: GroupTreeProps & { node: GroupNode }) {
   const { group, depth, children } = node;
   const { collapsed, actions } = tree;
+  const spokenName = tree.spokenNameOf(group);
   const {
     attributes,
     listeners,
@@ -444,7 +536,7 @@ function GroupTreeRow({ node, ...tree }: GroupTreeProps & { node: GroupNode }) {
         <button
           ref={setActivatorNodeRef}
           type="button"
-          aria-label={`${group.name} 순서 바꾸기`}
+          aria-label={`${spokenName} 순서 바꾸기`}
           className="flex h-7 w-6 shrink-0 cursor-grab touch-none items-center justify-center rounded-md text-[#8E8E93] hover:text-[#374151] focus-visible:ring-2 focus-visible:ring-[#2E4FCE]/40 focus-visible:outline-none active:cursor-grabbing"
           {...attributes}
           {...listeners}
@@ -455,7 +547,7 @@ function GroupTreeRow({ node, ...tree }: GroupTreeProps & { node: GroupNode }) {
         {hasChildren ? (
           <button
             type="button"
-            aria-label={`${group.name} ${open ? '접기' : '펼치기'}`}
+            aria-label={`${spokenName} ${open ? '접기' : '펼치기'}`}
             aria-expanded={open}
             onClick={() => actions.onToggle(group.id)}
             className="flex h-7 w-6 shrink-0 items-center justify-center rounded-md text-[#6E6E73] hover:bg-[#E9EAEE] hover:text-[#1C1C1E] focus-visible:ring-2 focus-visible:ring-[#2E4FCE]/40 focus-visible:outline-none"
@@ -490,7 +582,7 @@ function GroupTreeRow({ node, ...tree }: GroupTreeProps & { node: GroupNode }) {
             render={
               <button
                 type="button"
-                aria-label={`${group.name} 더보기`}
+                aria-label={`${spokenName} 더보기`}
                 className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[#6E6E73] hover:bg-[#E9EAEE] hover:text-[#1C1C1E] focus-visible:ring-2 focus-visible:ring-[#2E4FCE]/40 focus-visible:outline-none data-[popup-open]:bg-[#E9EAEE] data-[popup-open]:text-[#1C1C1E]"
               />
             }

@@ -98,8 +98,9 @@ BEGIN
 END $$;
 
 -- 이름 유일: 팀 전체 → 같은 상위 그룹 안.
-DROP INDEX IF EXISTS survey_groups_team_name_uq;
-
+-- **새 인덱스 둘을 먼저 만들고 옛 인덱스를 지운다.** 거꾸로 두면 그 사이에 이름 유일을 막는 인덱스가
+-- 하나도 없다 — 문장을 하나씩 적용하는 도구에서는 그 구간이 실제로 열리고, 새 인덱스 생성이 실패하면
+-- 옛 인덱스만 사라진 채 남는다. 이 순서에서는 실패해도 옛 인덱스가 그대로다.
 CREATE UNIQUE INDEX IF NOT EXISTS survey_groups_root_name_uq
   ON survey_groups (team_id, name)
   WHERE parent_group_id IS NULL;
@@ -107,6 +108,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS survey_groups_root_name_uq
 CREATE UNIQUE INDEX IF NOT EXISTS survey_groups_parent_name_uq
   ON survey_groups (parent_group_id, name)
   WHERE parent_group_id IS NOT NULL;
+
+DROP INDEX IF EXISTS survey_groups_team_name_uq;
 
 -- 한 부모의 하위 그룹을 순서대로 읽는 조회와, 부모 행이 바뀌거나 지워질 때 FK 가 자식을 찾는 조회가 탄다.
 CREATE INDEX IF NOT EXISTS survey_groups_parent_order_idx

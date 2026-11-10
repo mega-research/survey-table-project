@@ -197,6 +197,23 @@ describe('일반 팀 사이드바의 그룹 트리', () => {
     groupsCall.mockResolvedValue(NESTED);
   });
 
+  it('같은 이름의 하위 그룹은 펼침 단추의 읽어 주는 이름이 경로로 갈린다', async () => {
+    groupsCall.mockResolvedValue([
+      ...NESTED,
+      g('g-kim-2026', '2026', 'g-kim', 4),
+      g('g-kim-2026-h1', '상반기', 'g-kim-2026', 2),
+    ]);
+    searchParams = new URLSearchParams({ group: 'g-lee-2026-h1' });
+    renderSidebar('standard');
+
+    expect(await screen.findByRole('button', { name: '이정운 › 2026 접기' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '김서연 펼치기' }));
+    expect(screen.getByRole('button', { name: '김서연 › 2026 펼치기' })).toBeInTheDocument();
+    // 최상위 그룹의 이름은 그대로이고, 줄에 보이는 글자도 바뀌지 않는다.
+    expect(screen.getByRole('button', { name: '이정운 접기' })).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: /^2026/ })).toHaveLength(2);
+  });
+
   it('3단계 그룹 화면이면 그 위 두 단계가 펼쳐져 있고 다른 가지는 접혀 있다', async () => {
     searchParams = new URLSearchParams({ group: 'g-lee-2026-h1' });
     renderSidebar('standard');
@@ -209,7 +226,7 @@ describe('일반 팀 사이드바의 그룹 트리', () => {
       'aria-expanded',
       'true',
     );
-    expect(screen.getByRole('button', { name: '2026 접기' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: '이정운 › 2026 접기' })).toHaveAttribute(
       'aria-expanded',
       'true',
     );

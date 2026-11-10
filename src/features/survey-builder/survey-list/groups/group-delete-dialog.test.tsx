@@ -22,6 +22,9 @@ vi.mock('@/shared/lib/rpc', () => ({
 }));
 
 const TEAM = '22222222-2222-4222-8222-222222222222';
+/** 서버의 겹침 거부 문구 — 이름이 없다(이름은 값으로만 온다). 화면은 값으로 문구를 짓는다. */
+const CONFLICT_MESSAGE =
+  '한 단계 위에 이름이 같은 그룹이 있어 하위 그룹을 올릴 수 없습니다. 한쪽 이름을 바꾼 뒤 다시 삭제하세요.';
 
 function group(
   id: string,
@@ -108,8 +111,8 @@ describe('GroupDeleteDialog — 이름이 겹쳐 막혔을 때', () => {
     const user = userEvent.setup();
     removeCall.mockRejectedValue(
       new ORPCError('CONFLICT', {
-        message: '한 단계 위에 이미 「상반기」 그룹이 있어 하위 그룹을 올릴 수 없습니다.',
-        data: { conflictingNames: ['상반기'] },
+        message: CONFLICT_MESSAGE,
+        data: { conflictingNames: ['상반기'], hasHiddenConflicts: false },
       }),
     );
     const { onClose, invalidate } = renderDialog(Y2026);
@@ -129,6 +132,47 @@ describe('GroupDeleteDialog — 이름이 겹쳐 막혔을 때', () => {
 
     await user.click(screen.getByRole('button', { name: '확인' }));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('겹치는 그룹이 내게 하나도 안 보이면 이름 없는 문구로 알린다', async () => {
+    const user = userEvent.setup();
+    removeCall.mockRejectedValue(
+      new ORPCError('CONFLICT', {
+        message: CONFLICT_MESSAGE,
+        data: { conflictingNames: [], hasHiddenConflicts: true },
+      }),
+    );
+    const { onClose } = renderDialog(Y2026);
+
+    await user.click(screen.getByRole('button', { name: '삭제' }));
+
+    const dialog = await screen.findByRole('alertdialog', {
+      name: '「2026」 그룹을 삭제할 수 없습니다',
+    });
+    expect(dialog).toHaveTextContent(
+      '보이지 않는 그룹과 이름이 겹쳐 지울 수 없습니다. 내게 보이지 않는 그룹은 팀장이 볼 수 있으니, 팀장에게 이름을 바꿔 달라고 요청하세요.',
+    );
+    expect(screen.queryByRole('button', { name: '삭제' })).not.toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('일부만 보이면 보이는 이름을 적고 보이지 않는 그룹도 겹친다고 덧붙인다', async () => {
+    const user = userEvent.setup();
+    removeCall.mockRejectedValue(
+      new ORPCError('CONFLICT', {
+        message: CONFLICT_MESSAGE,
+        data: { conflictingNames: ['상반기'], hasHiddenConflicts: true },
+      }),
+    );
+    renderDialog(Y2026);
+
+    await user.click(screen.getByRole('button', { name: '삭제' }));
+
+    expect(
+      await screen.findByRole('alertdialog', { name: '「2026」 그룹을 삭제할 수 없습니다' }),
+    ).toHaveTextContent(
+      '「이정운」에 이미 「상반기」 그룹이 있어 하위 그룹을 올릴 수 없습니다. 이 외에 보이지 않는 그룹도 겹칩니다. 보이는 이름을 바꾼 뒤에도 막히면 팀장에게 요청하세요.',
+    );
   });
 
   it('다른 거부는 그 문구를 보이고 창을 닫지 않는다 — 다시 누를 수 있다', async () => {

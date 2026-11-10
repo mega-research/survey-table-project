@@ -316,11 +316,18 @@ export type SurveyGroupIdInput = z.infer<typeof SurveyGroupIdInput>;
  * 그룹 삭제가 이름 겹침으로 막혔을 때 CONFLICT 에 함께 실리는 것 (`ORPCError.data`).
  *
  * 그룹을 지우면 그 하위 그룹이 한 단계 위로 올라가는데, 올라갈 자리에 같은 이름의 그룹이 있으면
- * 아무것도 바꾸지 않고 거부한다. 무엇을 고치면 되는지 알려면 **겹치는 이름**이 필요해서 문구만이
- * 아니라 값으로 준다. 화면은 이 모양으로 읽어 보고(`safeParse`) 아니면 일반 오류로 다룬다.
+ * 아무것도 바꾸지 않고 거부한다. 무엇을 고치면 되는지 알려면 **겹치는 이름**이 필요해서 값으로 준다
+ * (에러 메시지에는 이름이 없다 — 메시지는 실패 로그에 통째로 남는다). 화면은 이 모양으로 읽어 보고
+ * (`safeParse`) 아니면 일반 오류로 다룬다.
+ *
+ * **이름은 요청자에게 보이는 것만 실린다.** 겹치는 두 그룹(올라갈 하위 그룹 · 그 자리에 이미 있는
+ * 그룹)이 다 요청자의 그룹 목록에 없으면 그 이름은 빠지고 `hasHiddenConflicts` 가 참이 된다 — 그래서
+ * `conflictingNames` 는 빌 수 있다.
  */
 export const SurveyGroupRemoveConflict = z.object({
-  conflictingNames: z.array(z.string()).min(1),
+  conflictingNames: z.array(z.string()),
+  /** 이름을 싣지 않은 겹침이 더 있다 — 요청자에게 보이지 않는 그룹끼리 겹친다. */
+  hasHiddenConflicts: z.boolean(),
 });
 export type SurveyGroupRemoveConflict = z.infer<typeof SurveyGroupRemoveConflict>;
 

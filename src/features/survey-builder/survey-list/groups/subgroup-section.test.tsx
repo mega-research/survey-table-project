@@ -11,8 +11,8 @@ function group(id: string, name: string, surveyCount: number): SurveyGroupListIt
 }
 
 const SUBGROUPS = [
-  { group: group('g-2026', '2026', 18), subgroupCount: 2 },
-  { group: group('g-2025', '2025', 12), subgroupCount: 0 },
+  { group: group('g-2026', '2026', 18), subgroupCount: 2, pathLabel: '이정운 › 2026' },
+  { group: group('g-2025', '2025', 12), subgroupCount: 0, pathLabel: '이정운 › 2025' },
 ];
 
 describe('SubgroupSection — 하위 그룹 폴더 줄', () => {
@@ -46,12 +46,20 @@ describe('SubgroupSection — 하위 그룹 폴더 줄', () => {
     expect(second).not.toHaveTextContent('하위 그룹');
   });
 
+  it('⋯ 단추의 읽어 주는 이름은 경로다 — 다른 그룹 밑의 같은 이름과 갈린다. 보이는 이름은 그대로다', () => {
+    render(<SubgroupSection subgroups={SUBGROUPS} onRename={vi.fn()} onRelocate={vi.fn()} onDelete={vi.fn()} />);
+
+    expect(screen.getByRole('button', { name: '이정운 › 2026 더보기' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '2026 더보기' })).toBeNull();
+    expect(screen.getByRole('link', { name: '2026' })).toHaveTextContent(/^2026$/);
+  });
+
   it('⋯ 메뉴의 「이름 바꾸기」를 누르면 그 그룹을 넘긴다', async () => {
     const user = userEvent.setup();
     const onRename = vi.fn();
     render(<SubgroupSection subgroups={SUBGROUPS} onRename={onRename} onRelocate={vi.fn()} onDelete={vi.fn()} />);
 
-    await user.click(screen.getByRole('button', { name: '2025 더보기' }));
+    await user.click(screen.getByRole('button', { name: '이정운 › 2025 더보기' }));
     await user.click(await screen.findByRole('menuitem', { name: '이름 바꾸기' }));
 
     expect(onRename).toHaveBeenCalledWith({ id: 'g-2025', name: '2025' });
@@ -63,7 +71,7 @@ describe('SubgroupSection — 하위 그룹 폴더 줄', () => {
     const onRelocate = vi.fn();
     render(<SubgroupSection subgroups={SUBGROUPS} onRename={onRename} onRelocate={onRelocate} onDelete={vi.fn()} />);
 
-    await user.click(screen.getByRole('button', { name: '2026 더보기' }));
+    await user.click(screen.getByRole('button', { name: '이정운 › 2026 더보기' }));
     await user.click(await screen.findByRole('menuitem', { name: '옮기기' }));
 
     expect(onRelocate).toHaveBeenCalledWith({ id: 'g-2026', name: '2026' });
@@ -75,7 +83,7 @@ describe('SubgroupSection — 하위 그룹 폴더 줄', () => {
     const onDelete = vi.fn();
     render(<SubgroupSection subgroups={SUBGROUPS} onRename={vi.fn()} onRelocate={vi.fn()} onDelete={onDelete} />);
 
-    await user.click(screen.getByRole('button', { name: '2026 더보기' }));
+    await user.click(screen.getByRole('button', { name: '이정운 › 2026 더보기' }));
     await user.click(await screen.findByRole('menuitem', { name: '삭제' }));
 
     expect(onDelete).toHaveBeenCalledWith({ id: 'g-2026', name: '2026', parentGroupId: 'g-lee' });

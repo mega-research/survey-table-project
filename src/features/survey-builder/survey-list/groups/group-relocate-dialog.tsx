@@ -21,6 +21,7 @@ import type { SurveyGroupListItem } from '@/shared/contracts/workspace-io';
 import {
   type SurveyGroupRelocationBlock,
   findSurveyGroupPath,
+  listSurveyGroupPathLabels,
   listSurveyGroupRelocationTargets,
 } from '@/utils/survey-group-tree';
 
@@ -69,6 +70,8 @@ export function GroupRelocateDialog({
     () => listSurveyGroupRelocationTargets(mine, group.id, SURVEY_GROUP_MAX_DEPTH),
     [mine, group.id],
   );
+  // 라디오의 읽어 주는 이름 — 같은 이름의 하위 그룹(「2025」)이 여러 상위 그룹 밑에 설 수 있다.
+  const pathLabels = useMemo(() => listSurveyGroupPathLabels(mine), [mine]);
   const isGone = root.blocked === 'missing';
   const path = findSurveyGroupPath(mine, group.id);
 
@@ -133,6 +136,7 @@ export function GroupRelocateDialog({
                 fieldName={fieldName}
                 value={ROOT_KEY}
                 label="최상위로 옮기기"
+                spokenLabel="최상위로 옮기기"
                 depth={1}
                 icon="root"
                 reason={blockedReason(root.blocked)}
@@ -146,6 +150,7 @@ export function GroupRelocateDialog({
                   fieldName={fieldName}
                   value={target.group.id}
                   label={target.group.name}
+                  spokenLabel={pathLabels.get(target.group.id) ?? target.group.name}
                   depth={target.depth}
                   icon="folder"
                   reason={blockedReason(target.blocked)}
@@ -199,11 +204,14 @@ export function GroupRelocateDialog({
  *
  * 꺼진 줄의 이유는 오른쪽에 글자로 적고 라디오의 설명(`aria-describedby`)으로 잇는다. 이름은
  * `aria-label` 로 따로 준다 — 라벨 안의 글자를 그대로 이름으로 쓰면 이유까지 이름에 섞인다.
+ * 그 이름(`spokenLabel`)은 **경로**다(「이정운 › 2025」): 들여쓰기는 눈에만 보여서, 이름만 읽으면
+ * 같은 이름의 하위 그룹 둘이 구별되지 않는다. 줄에 보이는 글자(`label`)는 이름 그대로다.
  */
 function DestinationRow({
   fieldName,
   value,
   label,
+  spokenLabel,
   depth,
   icon,
   reason,
@@ -214,6 +222,7 @@ function DestinationRow({
   fieldName: string;
   value: string;
   label: string;
+  spokenLabel: string;
   /** 들여쓰기 단계 — 뿌리가 1. */
   depth: number;
   icon: 'root' | 'folder';
@@ -242,7 +251,7 @@ function DestinationRow({
         type="radio"
         name={fieldName}
         value={value}
-        aria-label={label}
+        aria-label={spokenLabel}
         aria-describedby={reason ? reasonId : undefined}
         checked={checked}
         disabled={disabled}

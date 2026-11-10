@@ -91,6 +91,36 @@ export function findSurveyGroupPath<T extends SurveyGroupTreeRow>(
   return path;
 }
 
+/** 경로 문구의 이음 — 「이정운 › 2026 › 상반기」. 브레드크럼과 같은 화살표다. */
+const PATH_SEPARATOR = ' › ';
+
+/**
+ * 그룹마다의 **읽어 주는 이름** — 뿌리부터 자기까지의 경로(「이정운 › 2025」). 최상위 그룹은 이름 그대로다.
+ *
+ * 이름은 같은 상위 그룹 안에서만 유일해서 「2025」가 여러 상위 그룹 밑에 설 수 있다. 화면에서는
+ * 들여쓰기가 둘을 가르지만 스크린리더는 단추의 이름만 읽는다 — 「2025 더보기」가 둘이면 어느 것인지
+ * 알 수 없다. 그래서 단추·라디오의 이름(`aria-label`)에는 이 문구를 쓰고 **보이는 글자는 이름 그대로**
+ * 둔다. 카드의 「그룹 이동」 메뉴 · 옮기기 창 · 그룹 관리 창 · 사이드바 · 폴더 줄이 같은 문구를 쓴다.
+ *
+ * 경로는 **이 목록 안에서** 센다(`buildSurveyGroupTree` 와 같은 규칙) — 상위 그룹이 목록에 없는 줄은
+ * 뿌리라 이름 그대로다.
+ */
+export function listSurveyGroupPathLabels<T extends SurveyGroupTreeRow & { name: string }>(
+  groups: readonly T[],
+): Map<string, string> {
+  const labels = new Map<string, string>();
+  function visit(nodes: readonly SurveyGroupTreeNode<T>[], parentLabel: string | null): void {
+    for (const node of nodes) {
+      const label =
+        parentLabel === null ? node.group.name : `${parentLabel}${PATH_SEPARATOR}${node.group.name}`;
+      labels.set(node.group.id, label);
+      visit(node.children, label);
+    }
+  }
+  visit(buildSurveyGroupTree(groups), null);
+  return labels;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 옮길 수 있는 자리 (설문 그룹 중첩 티켓 05)
 // ─────────────────────────────────────────────────────────────────────────────

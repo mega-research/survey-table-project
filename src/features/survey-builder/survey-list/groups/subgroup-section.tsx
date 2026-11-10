@@ -46,7 +46,7 @@ export function SubgroupSection({
       </GroupScreenSectionTitle>
       {/* 아래 설문 카드와 같은 격자 — 폴더 줄과 카드의 세로 줄이 맞는다. */}
       <ul className="grid grid-cols-1 gap-x-6 gap-y-3 md:grid-cols-2 xl:grid-cols-3">
-        {subgroups.map(({ group, subgroupCount }) => (
+        {subgroups.map(({ group, subgroupCount, pathLabel }) => (
           <li
             key={group.id}
             className="relative flex items-center gap-3 rounded-[14px] border border-[#E5E5EA] bg-white py-3.5 pr-3 pl-5 transition-colors hover:border-[#B9C4F0] hover:bg-[#FAFBFF] has-[a:focus-visible]:border-[#2E4FCE] has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-[#2E4FCE]/25"
@@ -71,7 +71,8 @@ export function SubgroupSection({
                 render={
                   <button
                     type="button"
-                    aria-label={`${group.name} 더보기`}
+                    // 읽어 주는 이름은 경로다 — 같은 이름의 폴더가 다른 그룹 밑에도 있을 수 있다.
+                    aria-label={`${pathLabel} 더보기`}
                     className="relative z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[#9CA3AF] hover:bg-[#EEF0F4] hover:text-[#1C1C1E] focus-visible:ring-2 focus-visible:ring-[#2E4FCE]/40 focus-visible:outline-none"
                   />
                 }
@@ -111,20 +112,27 @@ export function SubgroupSection({
   );
 }
 
-/** 그룹 화면의 구역 제목 — 「하위 그룹 3」「이 그룹에 직접 담긴 설문 3」. */
+/**
+ * 그룹 화면의 구역 제목 — 「하위 그룹 3」「이 그룹에 직접 담긴 설문 3」.
+ *
+ * `count` 가 null 이면 숫자 없이 제목만 선다 — 그 구역의 수를 화면이 모를 때다(「내 설문」으로 볼 때의
+ * 「직접 담긴 설문」: 가진 숫자가 내 것만 센 수다).
+ */
 export function GroupScreenSectionTitle({
   id,
   count,
   children,
 }: {
   id?: string;
-  count: number;
+  count: number | null;
   children: React.ReactNode;
 }) {
   return (
     <h2 id={id} className="text-[13.5px] font-semibold text-[#1C1C1E]">
       {children}
-      <span className="pl-1.5 font-normal text-[#6E6E73] tabular-nums">{count}</span>
+      {count !== null && (
+        <span className="pl-1.5 font-normal text-[#6E6E73] tabular-nums">{count}</span>
+      )}
     </h2>
   );
 }

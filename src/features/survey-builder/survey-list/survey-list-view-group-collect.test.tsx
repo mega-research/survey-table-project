@@ -17,6 +17,7 @@ import type {
   SurveyListPageResult,
 } from '@/shared/contracts/survey-builder-io';
 import type { SurveyGroupListItem } from '@/shared/contracts/workspace-io';
+import { surveyGroupKeys } from '@/shared/lib/survey-group-queries';
 import { WorkScopeContext } from '@/shared/lib/work-scope-context';
 
 import { SurveyListView } from './survey-list-view';
@@ -136,7 +137,8 @@ function page(items: SurveyListPageItem[]): SurveyListPageResult {
 function renderList(groupId: string | null) {
   searchParams = new URLSearchParams(groupId ? { group: groupId } : {});
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  // 다시 그릴 때마다 새 요소여야 한다 — 같은 요소를 넘기면 React 가 그리기를 건너뛴다.
+  const tree = () => (
     <QueryClientProvider client={queryClient}>
       <WorkScopeContext.Provider
         value={{
@@ -151,8 +153,15 @@ function renderList(groupId: string | null) {
       >
         <SurveyListView />
       </WorkScopeContext.Provider>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+  const view = render(tree());
+  /** 주소가 다른 그룹 화면으로 바뀐 것처럼 다시 그린다 — 화면은 그대로 살아 있다(상태가 남는다). */
+  const goToGroup = (nextGroupId: string) => {
+    searchParams = new URLSearchParams({ group: nextGroupId });
+    view.rerender(tree());
+  };
+  return Object.assign(view, { queryClient, goToGroup });
 }
 
 beforeEach(() => {
@@ -232,6 +241,58 @@ describe('그룹 화면 머리의 「설문 담기」', () => {
       expect(groupsCall.mock.calls.length).toBeGreaterThan(groupReads);
       expect(listPageCall.mock.calls.length).toBeGreaterThan(listReads);
     });
+  });
+});
+
+/**
+ * 담기 창의 열림은 **연 순간의 그룹**에 묶인다 (티켓 10). 열림 표시가 그룹과 따로면, 연 사이 그
+ * 그룹이 지워졌을 때 화면이 위 그룹으로 옮겨 가면서 창이 위 그룹을 대상으로 다시 뜬다 — 사용자는
+ * 「2026」에 담는 줄 알고 「이정운」에 담는다.
+ */
+describe('「설문 담기」 창은 연 그룹에 묶인다', () => {
+  it('연 사이 그 그룹이 지워지면 창이 닫힌다 — 위 그룹을 대상으로 다시 뜨지 않는다', async () => {
+    const user = userEvent.setup();
+    const { queryClient, goToGroup } = renderList(G_2026);
+    await user.click(await screen.findByRole('button', { name: '설문 담기' }));
+    expect(
+      await screen.findByRole('heading', { name: '「2026」에 설문 담기' }),
+    ).toBeInTheDocument();
+
+    // 다른 팀원이 2026 을 지웠다 — 상반기가 이정운 밑으로 올라온 목록이 온다.
+    groupsCall.mockResolvedValue(
+      GROUPS.filter((g) => g.id !== G_2026).map((g) =>
+        g.id === G_H1 ? { ...g, parentGroupId: G_LEE } : g,
+      ),
+    );
+    await queryClient.invalidateQueries({ queryKey: surveyGroupKeys.all });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    // 화면이 위 그룹(이정운)으로 옮겨 간 뒤에도 창은 뜨지 않는다.
+    goToGroup(G_LEE);
+    await screen.findByRole('heading', { level: 1, name: /이정운/ });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(collectCall).not.toHaveBeenCalled();
+  });
+
+  it('창을 연 채 다른 그룹 화면으로 갔다 돌아와도 저절로 다시 뜨지 않는다', async () => {
+    const user = userEvent.setup();
+    const { goToGroup } = renderList(G_2026);
+    await user.click(await screen.findByRole('button', { name: '설문 담기' }));
+    await screen.findByRole('heading', { name: '「2026」에 설문 담기' });
+
+    // 뒤로 가기로 다른 그룹 화면이 됐다 — 그 그룹을 대상으로 뜨지 않는다.
+    goToGroup(G_LEE);
+    await screen.findByRole('heading', { level: 1, name: /이정운/ });
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    // 원래 그룹으로 돌아와도 닫힌 채다 — 다시 누르면 열린다.
+    goToGroup(G_2026);
+    await screen.findByRole('heading', { level: 1, name: /2026/ });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await user.click(screen.getByRole('button', { name: '설문 담기' }));
+    expect(
+      await screen.findByRole('heading', { name: '「2026」에 설문 담기' }),
+    ).toBeInTheDocument();
   });
 });
 

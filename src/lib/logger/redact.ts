@@ -75,6 +75,11 @@ export const REDACT_PATHS: string[] = [
   'newPassword',
   '*.newPassword',
 
+  // 설문 그룹 삭제의 이름 겹침 거부(CONFLICT)가 응답 값으로 싣는 그룹 이름 — 직원 이름이 들어갈 수
+  // 있다. RPC 실패 로그는 에러를 통째로 싣고 표준 직렬화가 에러의 `data` 까지 옮기므로, 응답으로만
+  // 가야 할 이름이 여기서 새지 않게 막는다(성공 로그가 그룹 이름을 싣지 않는 것과 같은 기준).
+  'err.data.conflictingNames',
+
   // HTTP 표준
   'req.headers.cookie',
   'req.headers.authorization',

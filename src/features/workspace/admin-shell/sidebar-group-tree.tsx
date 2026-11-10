@@ -15,6 +15,7 @@ import {
   type SurveyGroupTreeNode,
   buildSurveyGroupTree,
   findSurveyGroupPath,
+  listSurveyGroupPathLabels,
 } from '@/utils/survey-group-tree';
 
 /** 맨 위 줄의 왼쪽 여백 — 화살표 자리(20px)를 더하면 폴더가 종전과 같은 24px 에 선다. */
@@ -83,6 +84,8 @@ export function SidebarGroupTree({ teamId }: { teamId: string | null }) {
   if (!teamId || groups.length === 0) return null;
 
   const isOpen = (groupId: string) => toggled[groupId] ?? activePathIds.includes(groupId);
+  // 펼침 단추가 읽어 주는 이름 — 같은 이름의 하위 그룹(「2026」)이 여러 상위 그룹 밑에 선다.
+  const pathLabels = listSurveyGroupPathLabels(ownGroups);
   const toggle = (groupId: string) =>
     setToggled((prev) => ({
       ...prev,
@@ -98,6 +101,7 @@ export function SidebarGroupTree({ teamId }: { teamId: string | null }) {
           activeGroupId={activeGroupId}
           isOpen={isOpen}
           onToggle={toggle}
+          spokenNameOf={(group) => pathLabels.get(group.id) ?? group.name}
         />
       )}
       {collabGroups.length > 0 && (
@@ -120,6 +124,7 @@ function GroupBranch({
   activeGroupId,
   isOpen,
   onToggle,
+  spokenNameOf,
 }: {
   nodes: GroupNode[];
   /** 맨 위 목록에만 붙는 이름 — 안쪽 목록은 자기를 여닫는 화살표가 이름을 대신한다. */
@@ -127,6 +132,11 @@ function GroupBranch({
   activeGroupId: string | null;
   isOpen: (groupId: string) => boolean;
   onToggle: (groupId: string) => void;
+  /**
+   * 펼침 단추가 읽어 줄 이름 — 뿌리부터의 경로(「이정운 › 2026」). 들여쓰기는 눈에만 보여서, 이름만
+   * 읽으면 같은 이름의 하위 그룹 둘이 구별되지 않는다. 줄에 보이는 글자와 링크의 이름은 그대로다.
+   */
+  spokenNameOf: (group: SurveyGroupListItem) => string;
 }) {
   return (
     <ul aria-label={label} className="flex flex-col gap-[1px]">
@@ -149,7 +159,7 @@ function GroupBranch({
               {hasChildren ? (
                 <button
                   type="button"
-                  aria-label={`${group.name} ${open ? '접기' : '펼치기'}`}
+                  aria-label={`${spokenNameOf(group)} ${open ? '접기' : '펼치기'}`}
                   aria-expanded={open}
                   onClick={() => onToggle(group.id)}
                   className="flex w-5 shrink-0 items-center justify-center self-stretch rounded-[5px] text-white/55 hover:text-white"
@@ -183,6 +193,7 @@ function GroupBranch({
                 activeGroupId={activeGroupId}
                 isOpen={isOpen}
                 onToggle={onToggle}
+                spokenNameOf={spokenNameOf}
               />
             )}
           </li>

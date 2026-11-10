@@ -95,7 +95,30 @@ describe('GroupRelocateDialog — 그룹을 옮길 자리 고르기', () => {
     renderDialog({ id: 'g-2026', name: '2026' });
 
     const names = screen.getAllByRole('radio').map((el) => el.getAttribute('aria-label'));
-    expect(names).toEqual(['최상위로 옮기기', '이정운', '2025', '2024', '김서연']);
+    expect(names).toEqual([
+      '최상위로 옮기기',
+      '이정운',
+      '이정운 › 2025',
+      '이정운 › 2024',
+      '김서연',
+    ]);
+  });
+
+  it('같은 이름의 하위 그룹은 읽어 주는 이름이 경로로 갈린다 — 보이는 글자는 이름 그대로다', () => {
+    renderDialog({ id: 'g-etc', name: '기타' }, [
+      ...GROUPS,
+      group('g-kim-2025', '2025', 'g-kim'),
+      group('g-etc', '기타'),
+    ]);
+
+    const lee2025 = radio('이정운 › 2025');
+    const kim2025 = radio('김서연 › 2025');
+    expect(lee2025).not.toBe(kim2025);
+    // 최상위 그룹의 이름은 그대로다.
+    expect(radio('이정운')).toBeInTheDocument();
+    // 줄에 보이는 글자는 바뀌지 않는다.
+    expect(lee2025.closest('label')).toHaveTextContent(/^2025$/);
+    expect(kim2025.closest('label')).toHaveTextContent(/^2025$/);
   });
 
   it('지금 부모는 「지금 여기」, 깊이가 넘는 자리는 「3단계를 넘습니다」로 꺼져 있고 이유가 글자로 보인다', () => {
@@ -103,14 +126,14 @@ describe('GroupRelocateDialog — 그룹을 옮길 자리 고르기', () => {
 
     expect(radio('이정운')).toBeDisabled();
     expect(radio('이정운')).toHaveAccessibleDescription('지금 여기');
-    for (const name of ['상반기', '하반기']) {
+    for (const name of ['이정운 › 2026 › 상반기', '이정운 › 2026 › 하반기']) {
       expect(radio(name)).toBeDisabled();
       expect(radio(name)).toHaveAccessibleDescription('3단계를 넘습니다');
     }
     expect(screen.getByText('지금 여기')).toBeVisible();
     expect(screen.getAllByText('3단계를 넘습니다')).toHaveLength(2);
     // 갈 수 있는 자리는 켜져 있다.
-    for (const name of ['최상위로 옮기기', '2026', '2024', '김서연']) {
+    for (const name of ['최상위로 옮기기', '이정운 › 2026', '이정운 › 2024', '김서연']) {
       expect(radio(name)).toBeEnabled();
     }
   });
@@ -187,7 +210,7 @@ describe('GroupRelocateDialog — 그룹을 옮길 자리 고르기', () => {
     relocateCall.mockRejectedValue(new Error('이 자리로 옮기면 그룹이 3단계를 넘습니다.'));
     const { onClose, invalidate, rerenderWith } = renderDialog();
 
-    await user.click(radio('2026'));
+    await user.click(radio('이정운 › 2026'));
     await user.click(screen.getByRole('button', { name: '옮기기' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
@@ -205,8 +228,8 @@ describe('GroupRelocateDialog — 그룹을 옮길 자리 고르기', () => {
       group('g-x', '부서 공통', 'g-kim'),
       group('g-2026', '2026', 'g-x'),
     ]);
-    expect(radio('2026')).toBeDisabled();
-    expect(radio('2026')).toHaveAccessibleDescription('3단계를 넘습니다');
+    expect(radio('김서연 › 부서 공통 › 2026')).toBeDisabled();
+    expect(radio('김서연 › 부서 공통 › 2026')).toHaveAccessibleDescription('3단계를 넘습니다');
     expect(screen.getByRole('button', { name: '옮기기' })).toBeDisabled();
   });
 

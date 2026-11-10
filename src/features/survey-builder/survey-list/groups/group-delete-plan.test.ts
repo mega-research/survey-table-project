@@ -92,14 +92,46 @@ describe('describeGroupDelete — 삭제 확인 문구', () => {
 
 describe('describeGroupDeleteBlocked — 이름이 겹쳐 막혔을 때', () => {
   it('겹치는 이름과 어디에서 겹치는지, 고칠 방법을 적는다', () => {
-    expect(describeGroupDeleteBlocked(planGroupDelete(GROUPS, Y2026), ['상반기'])).toBe(
+    expect(
+      describeGroupDeleteBlocked(planGroupDelete(GROUPS, Y2026), {
+        conflictingNames: ['상반기'],
+        hasHiddenConflicts: false,
+      }),
+    ).toBe(
       '「이정운」에 이미 「상반기」 그룹이 있어 하위 그룹을 올릴 수 없습니다. 둘 중 하나의 이름을 바꾼 뒤 다시 삭제하세요.',
     );
   });
 
   it('최상위 그룹이면 최상위에서 겹친다고 적는다', () => {
-    expect(describeGroupDeleteBlocked(planGroupDelete(GROUPS, LEE), ['2026', '2025'])).toBe(
+    expect(
+      describeGroupDeleteBlocked(planGroupDelete(GROUPS, LEE), {
+        conflictingNames: ['2026', '2025'],
+        hasHiddenConflicts: false,
+      }),
+    ).toBe(
       '최상위에 이미 「2026」 · 「2025」 그룹이 있어 하위 그룹을 올릴 수 없습니다. 겹치는 이름을 바꾼 뒤 다시 삭제하세요.',
+    );
+  });
+
+  it('겹치는 그룹이 내게 하나도 안 보이면 이름 없이 알린다', () => {
+    expect(
+      describeGroupDeleteBlocked(planGroupDelete(GROUPS, Y2026), {
+        conflictingNames: [],
+        hasHiddenConflicts: true,
+      }),
+    ).toBe(
+      '보이지 않는 그룹과 이름이 겹쳐 지울 수 없습니다. 내게 보이지 않는 그룹은 팀장이 볼 수 있으니, 팀장에게 이름을 바꿔 달라고 요청하세요.',
+    );
+  });
+
+  it('일부만 보이면 보이는 이름을 적고 보이지 않는 그룹도 겹친다고 덧붙인다', () => {
+    expect(
+      describeGroupDeleteBlocked(planGroupDelete(GROUPS, Y2026), {
+        conflictingNames: ['상반기'],
+        hasHiddenConflicts: true,
+      }),
+    ).toBe(
+      '「이정운」에 이미 「상반기」 그룹이 있어 하위 그룹을 올릴 수 없습니다. 이 외에 보이지 않는 그룹도 겹칩니다. 보이는 이름을 바꾼 뒤에도 막히면 팀장에게 요청하세요.',
     );
   });
 });

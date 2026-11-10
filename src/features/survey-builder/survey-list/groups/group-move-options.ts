@@ -4,7 +4,11 @@
 // (`@/utils/survey-group-tree`)이고, 여기는 이 메뉴의 규칙만 둔다 — 옮길 자리는 내 팀 그룹뿐이고,
 // 메뉴는 펼침 없이 한 줄씩 늘어놓으므로 트리를 위에서 아래로 편 목록이 필요하다.
 import type { SurveyGroupListItem } from '@/shared/contracts/workspace-io';
-import { type SurveyGroupTreeNode, buildSurveyGroupTree } from '@/utils/survey-group-tree';
+import {
+  type SurveyGroupTreeNode,
+  buildSurveyGroupTree,
+  listSurveyGroupPathLabels,
+} from '@/utils/survey-group-tree';
 
 export interface GroupMoveOption {
   group: SurveyGroupListItem;
@@ -25,14 +29,16 @@ export interface GroupMoveOption {
 export function listGroupMoveOptions(groups: readonly SurveyGroupListItem[]): GroupMoveOption[] {
   const mine = groups.filter((group) => group.foreignTeamName === null);
   const options: GroupMoveOption[] = [];
+  // 경로 문구는 공용 한 벌이다 — 옮기기 창 · 그룹 관리 창 · 사이드바 · 폴더 줄이 같은 말로 읽는다.
+  const pathLabels = listSurveyGroupPathLabels(mine);
 
-  function walk(nodes: readonly SurveyGroupTreeNode<SurveyGroupListItem>[], parentPath: string) {
+  function walk(nodes: readonly SurveyGroupTreeNode<SurveyGroupListItem>[]) {
     for (const node of nodes) {
-      const pathLabel = parentPath ? `${parentPath} › ${node.group.name}` : node.group.name;
+      const pathLabel = pathLabels.get(node.group.id) ?? node.group.name;
       options.push({ group: node.group, depth: node.depth, pathLabel });
-      walk(node.children, pathLabel);
+      walk(node.children);
     }
   }
-  walk(buildSurveyGroupTree(mine), '');
+  walk(buildSurveyGroupTree(mine));
   return options;
 }

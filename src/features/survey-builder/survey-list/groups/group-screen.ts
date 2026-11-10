@@ -5,12 +5,17 @@
 // (`@/utils/survey-group-tree`)이고 여기는 그 화면의 규칙만 둔다.
 import { SURVEY_GROUP_MAX_DEPTH } from '@/shared/contracts/workspace-io';
 import type { SurveyGroupListItem } from '@/shared/contracts/workspace-io';
-import { findSurveyGroupPath } from '@/utils/survey-group-tree';
+import { findSurveyGroupPath, listSurveyGroupPathLabels } from '@/utils/survey-group-tree';
 
 export interface GroupScreenSubgroup {
   group: SurveyGroupListItem;
   /** 이 하위 그룹 바로 밑의, **내게 보이는** 그룹 수 — 폴더 줄의 「하위 그룹 M」. */
   subgroupCount: number;
+  /**
+   * 읽어 주는 이름 — 뿌리부터의 경로(「이정운 › 2026」). ⋯ 단추의 이름에 쓴다: 같은 이름이 다른 그룹
+   * 밑에도 있을 수 있어 이름만으로는 어느 폴더의 단추인지 알 수 없다. 보이는 글자는 이름 그대로다.
+   */
+  pathLabel: string;
 }
 
 export interface GroupScreen {
@@ -41,12 +46,14 @@ export function resolveGroupScreen(
 
   const isMine = current.foreignTeamName === null;
   const mine = groups.filter((group) => group.foreignTeamName === null);
-  const subgroups = isMine
+  const pathLabels = isMine ? listSurveyGroupPathLabels(mine) : null;
+  const subgroups = pathLabels
     ? mine
         .filter((group) => group.parentGroupId === current.id)
         .map((group) => ({
           group,
           subgroupCount: mine.filter((child) => child.parentGroupId === group.id).length,
+          pathLabel: pathLabels.get(group.id) ?? group.name,
         }))
     : [];
 

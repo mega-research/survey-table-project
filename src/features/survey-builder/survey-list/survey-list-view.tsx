@@ -184,8 +184,10 @@ export function SurveyListView() {
   const [groupManagerOpen, setGroupManagerOpen] = useState(false);
   // 그룹 화면의 이름 창 — 「새 하위 그룹」과 폴더 줄의 「이름 바꾸기」가 함께 쓴다.
   const [groupNameTarget, setGroupNameTarget] = useState<GroupNameDialogTarget | null>(null);
-  // 그룹 화면 머리의 「설문 담기」 — 지금 보고 있는 그룹에 미분류 설문을 넣는 창.
-  const [groupCollectOpen, setGroupCollectOpen] = useState(false);
+  // 그룹 화면 머리의 「설문 담기」 — 지금 보고 있는 그룹에 미분류 설문을 넣는 창. **여는 순간의 그룹
+  // id 를 든다**: 열림 표시만 따로 두면, 연 사이 그 그룹이 지워져 화면이 위 그룹으로 옮겨 갔을 때 창이
+  // 위 그룹을 대상으로 다시 뜬다(「2026」에 담는 줄 알고 「이정운」에 담는다).
+  const [collectGroupId, setCollectGroupId] = useState<string | null>(null);
   // 폴더 줄의 「옮기기」가 여는 창 — 그 그룹을 통째로 옮길 자리를 고른다.
   const [relocateTarget, setRelocateTarget] = useState<{ id: string; name: string } | null>(null);
   // 폴더 줄 ⋯ 메뉴의 「삭제」가 연다 — 지우면 그 안의 것들이 지금 보고 있는 이 그룹으로 올라온다.
@@ -244,6 +246,14 @@ export function SurveyListView() {
     activeGroup && activeGroup.foreignTeamName === null && teamScopeId !== null
       ? activeGroup
       : null;
+  // 담기 창은 **연 그룹을 보고 있는 동안만** 열려 있다. 그 그룹이 목록에서 사라졌거나(다른 팀원이
+  // 지웠다) 화면이 다른 그룹으로 옮겨 갔으면 닫는다 — 닫아 두지 않으면 나중에 같은 주소로 돌아왔을 때
+  // 누르지도 않은 창이 저절로 뜬다.
+  const collectingInto =
+    collectGroupId !== null && collectTargetGroup?.id === collectGroupId
+      ? collectTargetGroup
+      : null;
+  if (collectGroupId !== null && collectingInto === null) setCollectGroupId(null);
   // 그룹 화면의 검색은 그 그룹 아래 전체에서 찾는다(티켓 08) — 넓혔는지는 서버가 답한다(내 팀 그룹 +
   // 검색어). 주소의 검색어가 아니라 **그려진 결과**의 값을 본다: 조건을 바꾸는 동안 흐리게 남긴 이전
   // 결과에는 이전 범위의 숫자와 카드가 있다.
@@ -451,7 +461,7 @@ export function SurveyListView() {
           {collectTargetGroup && (
             <button
               type="button"
-              onClick={() => setGroupCollectOpen(true)}
+              onClick={() => setCollectGroupId(collectTargetGroup.id)}
               className="flex h-[42px] items-center gap-1.5 rounded-[9px] border border-[#E5E5EA] bg-white px-[18px] text-[14px] font-medium text-[#374151] hover:bg-[#F5F5F7]"
             >
               <ListPlus className="h-4 w-4" />
@@ -609,7 +619,9 @@ export function SurveyListView() {
               그 아래는 이 그룹에 **직접** 담긴 설문뿐이라, 둘이 함께 있을 때만 구역 제목을 단다.
               폴더 줄은 검색 중에도 그대로다(구조이지 검색 결과가 아니다). 검색이 아래 전체에서 찾았으면
               카드가 하위 그룹의 설문까지라 제목이 그 범위와 결과 수를 말한다 — 그때 「전체」 숫자는
-              아래 전체의 설문 수이지 직접 담긴 수가 아니다. */}
+              아래 전체의 설문 수이지 직접 담긴 수가 아니다.
+              **「직접 담긴 설문」의 숫자는 「팀 전체」로 볼 때만 적는다** — 「내 설문」의 「전체」 숫자는
+              내 것만 센 수라 「이 그룹에 직접 담긴 설문 수」가 아니다. */}
           <SubgroupSection
             subgroups={subgroups}
             onRename={(group) => setGroupNameTarget({ kind: 'rename', group })}
@@ -622,7 +634,7 @@ export function SurveyListView() {
                 이 그룹과 하위 그룹에서 찾은 설문
               </GroupScreenSectionTitle>
             ) : (
-              <GroupScreenSectionTitle count={counts.all}>
+              <GroupScreenSectionTitle count={whose === 'team' ? counts.all : null}>
                 이 그룹에 직접 담긴 설문
               </GroupScreenSectionTitle>
             ))}
@@ -746,11 +758,11 @@ export function SurveyListView() {
         <GroupNameDialog target={groupNameTarget} onClose={() => setGroupNameTarget(null)} />
       )}
 
-      {groupCollectOpen && collectTargetGroup && teamScopeId && (
+      {collectingInto && teamScopeId && (
         <GroupCollectModal
           teamId={teamScopeId}
-          group={collectTargetGroup}
-          onClose={() => setGroupCollectOpen(false)}
+          group={collectingInto}
+          onClose={() => setCollectGroupId(null)}
         />
       )}
 

@@ -302,15 +302,19 @@ export function SurveyCard({
       </div>
 
       {/* 하위 그룹 경로 줄 — 그룹 화면의 검색이 아래 전체에서 찾은 설문에만 선다. 어느 하위 그룹의
-          설문인지 적지 않으면 찾은 설문이 어디 있는지 알 수 없다. 긴 이름은 한 줄에서 자른다. */}
+          설문인지 적지 않으면 찾은 설문이 어디 있는지 알 수 없다. 긴 이름은 한 줄에서 자른다.
+          무슨 줄인지는 폴더 그림이 말하는데 그림은 읽히지 않는다 — 문단에 붙인 aria-label 도 읽히지
+          않으므로(이름을 갖는 역할이 아니다) **보이지 않는 글자**로 앞에 붙인다. */}
       {groupPathText && (
         <p
-          aria-label="담긴 하위 그룹"
           title={groupPathText}
           className="-mt-1 flex min-w-0 items-center gap-1.5 text-[13px] text-[#6E6E73]"
         >
           <Folder aria-hidden className="h-3.5 w-3.5 shrink-0 text-[#9CA3AF]" />
-          <span className="truncate">{groupPathText}</span>
+          <span className="truncate">
+            <span className="sr-only">담긴 하위 그룹: </span>
+            {groupPathText}
+          </span>
         </p>
       )}
 

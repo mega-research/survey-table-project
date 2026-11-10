@@ -4,6 +4,7 @@ import {
   buildSurveyGroupTree,
   findSurveyGroupPath,
   judgeSurveyGroupRelocation,
+  listSurveyGroupPathLabels,
   listSurveyGroupRelocationTargets,
 } from './survey-group-tree';
 
@@ -216,5 +217,43 @@ describe('listSurveyGroupRelocationTargets — 옮기기 창이 그릴 자리', 
 
     expect(listed.targets).toEqual([]);
     expect(listed.root.blocked).toBe('missing');
+  });
+});
+
+describe('listSurveyGroupPathLabels — 읽어 주는 이름을 경로로', () => {
+  const named = (id: string, name: string, parentGroupId: string | null = null): Row => ({
+    id,
+    name,
+    parentGroupId,
+  });
+
+  it('최상위 그룹은 이름 그대로, 하위 그룹은 뿌리부터의 경로다', () => {
+    const labels = listSurveyGroupPathLabels([
+      named('lee', '이정운'),
+      named('lee-2026', '2026', 'lee'),
+      named('lee-2026-h1', '상반기', 'lee-2026'),
+    ]);
+
+    expect(labels.get('lee')).toBe('이정운');
+    expect(labels.get('lee-2026')).toBe('이정운 › 2026');
+    expect(labels.get('lee-2026-h1')).toBe('이정운 › 2026 › 상반기');
+  });
+
+  it('서로 다른 상위 그룹 밑의 같은 이름이 갈린다', () => {
+    const labels = listSurveyGroupPathLabels([
+      named('lee', '이정운'),
+      named('kim', '김서연'),
+      named('lee-2025', '2025', 'lee'),
+      named('kim-2025', '2025', 'kim'),
+    ]);
+
+    expect(labels.get('lee-2025')).toBe('이정운 › 2025');
+    expect(labels.get('kim-2025')).toBe('김서연 › 2025');
+  });
+
+  it('상위 그룹이 목록에 없는 줄은 이름 그대로다 — 트리가 뿌리로 두는 줄이다', () => {
+    const labels = listSurveyGroupPathLabels([named('orphan', '2025', 'hidden')]);
+
+    expect(labels.get('orphan')).toBe('2025');
   });
 });

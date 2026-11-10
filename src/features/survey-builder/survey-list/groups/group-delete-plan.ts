@@ -4,7 +4,10 @@
 // 「무엇이 어디로 가는가」를 미리 말하고, 이름이 겹쳐 막혔을 때 무엇을 고치면 되는지 말하고,
 // 보고 있던 그룹이 사라졌을 때 갈 화면을 정하는 데 쓴다. 올리기와 겹침 판정 자체는 서버가 한다 —
 // 여기는 평평한 그룹 목록에서 문구의 재료만 뽑는다.
-import type { SurveyGroupListItem } from '@/shared/contracts/workspace-io';
+import type {
+  SurveyGroupListItem,
+  SurveyGroupRemoveConflict,
+} from '@/shared/contracts/workspace-io';
 
 import { groupHref } from './group-view-header';
 
@@ -73,11 +76,20 @@ function describeSubgroups(names: readonly string[]): string | null {
 
 /**
  * 이름이 겹쳐 삭제가 막혔을 때의 문구 — 겹치는 이름(서버가 준 값), 겹치는 자리, 고칠 방법.
+ *
+ * 서버는 **내게 보이는 그룹의 이름만** 준다. 겹치는 두 그룹이 다 내게 안 보이면 이름이 오지 않고
+ * `hasHiddenConflicts` 만 참이다 — 그때는 이름 없이 알리고, 내가 고칠 수 없으니 볼 수 있는 사람
+ * (팀장은 팀의 그룹을 전부 본다)에게 넘긴다.
  */
 export function describeGroupDeleteBlocked(
   plan: GroupDeletePlan,
-  conflictingNames: readonly string[],
+  conflict: SurveyGroupRemoveConflict,
 ): string {
+  const { conflictingNames, hasHiddenConflicts } = conflict;
+  if (conflictingNames.length === 0) {
+    return '보이지 않는 그룹과 이름이 겹쳐 지울 수 없습니다. 내게 보이지 않는 그룹은 팀장이 볼 수 있으니, 팀장에게 이름을 바꿔 달라고 요청하세요.';
+  }
+
   const where =
     plan.destination.kind === 'root'
       ? '최상위에'
@@ -85,11 +97,15 @@ export function describeGroupDeleteBlocked(
         ? '한 단계 위에'
         : `「${plan.destination.name}」에`;
   const names = conflictingNames.map((name) => `「${name}」`).join(' · ');
+  const blocked = `${where} 이미 ${names} 그룹이 있어 하위 그룹을 올릴 수 없습니다.`;
+  if (hasHiddenConflicts) {
+    return `${blocked} 이 외에 보이지 않는 그룹도 겹칩니다. 보이는 이름을 바꾼 뒤에도 막히면 팀장에게 요청하세요.`;
+  }
   const fix =
     conflictingNames.length > 1
       ? '겹치는 이름을 바꾼 뒤 다시 삭제하세요.'
       : '둘 중 하나의 이름을 바꾼 뒤 다시 삭제하세요.';
-  return `${where} 이미 ${names} 그룹이 있어 하위 그룹을 올릴 수 없습니다. ${fix}`;
+  return `${blocked} ${fix}`;
 }
 
 /**

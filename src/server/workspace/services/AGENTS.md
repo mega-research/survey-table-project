@@ -59,14 +59,28 @@
    설문을 부모 그룹에 다시 매달면 FK 가 그 부모 행을 잠그는데, 설문 행을 쥔 뒤에 그 잠금을 기다리면
    순서가 「설문 행 → 그룹 행」으로 뒤집혀 담기·이동과 교착한다. 그래서 설문 행보다 먼저 잡는다.
 2. 하위 그룹 올리기(`liftSubgroups`). 올라갈 자리에 같은 이름의 그룹이 있으면 **아무것도 쓰기 전에**
-   `SurveyGroupLiftNameConflictError` → CONFLICT + `data.conflictingNames`(모양은 `SurveyGroupRemoveConflict`).
-   지우는 그룹과 이름이 같은 하위 그룹(「2026 › 2026」)은 겹침이 아니라 그 자리를 물려받는다.
+   거부한다(아래 「이름 겹침을 알리는 법」). 지우는 그룹과 이름이 같은 하위 그룹(「2026 › 2026」)은 겹침이
+   아니라 그 자리를 물려받는다.
 3. 설문 올리기(`liftDirectSurveys` — id 오름차순 `FOR NO KEY UPDATE`). 휴지통의 설문도 함께 올린다.
 4. 그룹 삭제.
 
 2 를 건너뛰고 지우면 FK(`ON DELETE NO ACTION`)가 막고, 3 을 건너뛰면 `surveys.survey_group_id` 의
 `ON DELETE SET NULL` 이 설문을 부모가 아니라 미분류로 떨어뜨린다. 요청자가 편집할 수 없는 설문이 담겨
 있어도 지운다. 같은 삭제를 두 번 보내면 두 번째는 「없는 그룹」이다.
+
+**이름 겹침을 알리는 법** — `removeSurveyGroup(user, groupId)` 가 요청자를 받는 이유가 이것 하나다.
+
+- 트랜잭션 안에서는 겹침 전부(겹치는 두 그룹의 id 와 이름)를 파일 안 전용 `LiftNameCollision` 으로 던지고,
+  **되돌아간 뒤 트랜잭션 밖에서** `describeLiftNameCollision` 이 요청자에게 알릴 모양으로 바꾼다 →
+  `SurveyGroupLiftNameConflictError` → CONFLICT + `data`(`SurveyGroupRemoveConflict`).
+- **이름은 요청자에게 보이는 것만 싣는다.** 겹치는 두 그룹(올라갈 하위 그룹 · 그 자리에 이미 있는 그룹) 중
+  하나라도 요청자의 그룹 목록(`listSurveyGroups` 그대로 — 가시성 규칙의 사본을 두지 않는다)에 있으면
+  `conflictingNames` 에 싣고, 둘 다 없으면 빼고 `hasHiddenConflicts` 를 참으로 둔다. 그래서 이름 목록은
+  빌 수 있다 — 화면이 「보이지 않는 그룹과 이름이 겹쳐 지울 수 없습니다」로 알린다.
+- **에러 메시지에는 이름이 없다.** RPC 실패 로그가 메시지를 통째로 남기고 그룹 이름에는 직원 이름이
+  들어갈 수 있다. 실패 로그는 에러의 `data` 도 옮기므로 `lib/logger/redact` 가 `err.data.conflictingNames`
+  를 가린다 — 이름은 응답으로만 간다. 화면은 메시지가 아니라 값으로 문구를 짓는다.
+- 목록 조회를 트랜잭션 안에서 부르지 말 것 — 공용 연결을 쓰는 조회라 연결을 쥔 채 하나를 더 기다린다.
 
 ### 순서 바꾸기 — 한 부모의 형제만
 
@@ -98,6 +112,8 @@
 - 담기 후보(`listUngroupedSurveys`)의 `canMove` 는 근사가 아니라 서버 판정 그대로다(주체 한 번 +
   `resolveSurveyCapabilities` 를 행마다). 볼 수 없는 설문은 후보에 나오지 않는다.
 - 옮기기와 지우기는 커밋 뒤에 로그 한 줄을 남긴다(그룹 id · 함께 움직인 하위 그룹 수 · 올린 설문 수).
-  그룹 이름은 싣지 않는다.
+  **그룹 이름은 성공 로그에도 실패 로그에도 싣지 않는다**(지우기의 이름 겹침 거부 포함 — 위).
+- `lockGroupStructureByGroup` 은 팀 키를 잡기 전에 그룹의 팀을 한 번 읽는다 — **READ COMMITTED 를 전제한다.**
+  격리 수준을 올리면 그 읽기가 스냅샷을 고정해 잠금 뒤의 판정이 기다리는 사이 커밋된 구조를 못 본다.
 - 음성 검증은 실DB 다 — `tests/integration/survey-groups.realdb.test.ts`(중첩·가시성·지우기·동시성)와
   `survey-groups-relocate.realdb.test.ts`(옮기기). 조인·잠금·제약은 목으로는 무엇이든 통과한다.

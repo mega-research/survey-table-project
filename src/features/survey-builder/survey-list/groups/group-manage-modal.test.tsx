@@ -126,9 +126,16 @@ function branchOf(handleName: string): HTMLElement {
 
 /** 창에 보이는 줄의 이름 — 위에서 아래로. 끌기 손잡이가 줄마다 하나씩 있다. */
 function shownOrder(): string[] {
-  return screen
-    .getAllByRole('button', { name: / 순서 바꾸기$/, hidden: true })
-    .map((handle) => (handle.getAttribute('aria-label') ?? '').replace(/ 순서 바꾸기$/, ''));
+  return (
+    screen
+      .getAllByRole('button', { name: / 순서 바꾸기$/, hidden: true })
+      // 손잡이의 읽어 주는 이름은 경로다(「이정운 › 2026 순서 바꾸기」) — 줄의 이름은 그 마지막 칸이다.
+      .map((handle) =>
+        (handle.getAttribute('aria-label') ?? '')
+          .replace(/ 순서 바꾸기$/, '')
+          .replace(/^.* › /, ''),
+      )
+  );
 }
 
 async function drop(activeId: string, overId: string | null) {
@@ -221,6 +228,22 @@ describe('GroupManageModal — 그룹 전체를 트리로 보인다', () => {
     expect(screen.queryByRole('button', { name: /설문 담기/ })).toBeNull();
   });
 
+  it('같은 이름의 하위 그룹은 ⋯ · 끌기 손잡이 · 펼침 단추의 읽어 주는 이름이 경로로 갈린다', () => {
+    // 「2026」은 이정운 밑에도 김서연 밑에도 있다. 김서연 쪽에 하위 그룹을 달아 펼침 단추까지 본다.
+    renderModal([...NESTED, group('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa11', '1분기', G_KIM_2026)]);
+
+    for (const suffix of ['더보기', '순서 바꾸기', '접기']) {
+      expect(screen.getByRole('button', { name: `이정운 › 2026 ${suffix}` })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: `김서연 › 2026 ${suffix}` })).toBeInTheDocument();
+    }
+    expect(
+      screen.getByRole('button', { name: '이정운 › 2026 › 상반기 더보기' }),
+    ).toBeInTheDocument();
+    // 최상위 그룹의 이름은 그대로이고, 줄에 보이는 글자도 바뀌지 않는다.
+    expect(screen.getByRole('button', { name: '이정운 더보기' })).toBeInTheDocument();
+    expect(branchOf('김서연 › 2026 순서 바꾸기')).toHaveTextContent(/^2026설문 21/);
+  });
+
   it('이름이 겹칠 수 없는 범위를 같은 상위 그룹 기준으로 말한다', () => {
     const { dialog } = renderModal();
 
@@ -251,7 +274,7 @@ describe('GroupManageModal — ⋯ 메뉴', () => {
     const user = userEvent.setup();
     renderModal();
 
-    const menu = await openMenu(user, '상반기 더보기');
+    const menu = await openMenu(user, '이정운 › 2026 › 상반기 더보기');
 
     expect(within(menu).getByRole('menuitem', { name: '하위 그룹 만들기' })).toHaveAttribute(
       'aria-disabled',
@@ -269,7 +292,7 @@ describe('GroupManageModal — ⋯ 메뉴', () => {
     renameCall.mockResolvedValue({ success: true });
     renderModal();
 
-    await openMenu(user, '2025 더보기');
+    await openMenu(user, '이정운 › 2025 더보기');
     await user.click(screen.getByRole('menuitem', { name: '이름 바꾸기' }));
 
     const nameDialog = await screen.findByRole('dialog', { name: '그룹 이름 바꾸기' });
@@ -326,9 +349,7 @@ describe('GroupManageModal — ⋯ 메뉴', () => {
     renderModal();
 
     // 「2026」은 이정운 밑에도 김서연 밑에도 있다 — 이정운 가지의 것을 지운다.
-    await user.click(
-      within(branchOf('이정운 순서 바꾸기')).getByRole('button', { name: '2026 더보기' }),
-    );
+    await user.click(screen.getByRole('button', { name: '이정운 › 2026 더보기' }));
     await user.click(await screen.findByRole('menuitem', { name: '삭제' }));
 
     const confirm = await screen.findByRole('alertdialog', { name: '「2026」 그룹을 삭제할까요?' });
@@ -457,5 +478,79 @@ describe('GroupManageModal — 닫기', () => {
     await user.click(screen.getByRole('button', { name: '닫기' }));
 
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('아무것도 하지 않을 때의 Esc 는 창을 닫는다', async () => {
+    const user = userEvent.setup();
+    const { onClose } = renderModal();
+
+    screen.getByRole('button', { name: '이정운 순서 바꾸기' }).focus();
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
+
+  // 안내문이 「Esc 키로 취소합니다」라고 읽어 준다 — 그 Esc 가 창까지 닫으면 끌기를 물리려다 창을 잃는다.
+  it('자판으로 끄는 도중의 Esc 는 끌기만 취소한다 — 창은 닫히지 않는다', async () => {
+    const user = userEvent.setup();
+    const { onClose } = renderModal();
+
+    screen.getByRole('button', { name: '이정운 순서 바꾸기' }).focus();
+    await user.keyboard(' ');
+    // 집힌 줄은 손잡이가 눌린 상태로 읽힌다.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '이정운 순서 바꾸기' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      ),
+    );
+
+    await user.keyboard('{Escape}');
+
+    expect(
+      await screen.findByText('옮기기를 취소했습니다. 「이정운」 그룹은 제자리에 있습니다.'),
+    ).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(reorderCall).not.toHaveBeenCalled();
+
+    // 끌기가 끝난 뒤의 Esc 는 다시 창을 닫는다.
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
+
+  it('창 위에 뜬 삭제 확인에서 Esc 는 확인 창만 닫는다', async () => {
+    const user = userEvent.setup();
+    const { onClose } = renderModal();
+
+    await user.click(screen.getByRole('button', { name: '기타 더보기' }));
+    await user.click(await screen.findByRole('menuitem', { name: '삭제' }));
+    await screen.findByRole('alertdialog', { name: '「기타」 그룹을 삭제할까요?' });
+
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog', { name: '그룹 관리', hidden: true })).toBeInTheDocument();
+  });
+
+  it('창 위에 뜬 이름 창 · 옮기기 창에서도 Esc 는 위의 창만 닫는다', async () => {
+    const user = userEvent.setup();
+    const { onClose } = renderModal();
+
+    await user.click(screen.getByRole('button', { name: '기타 더보기' }));
+    await user.click(await screen.findByRole('menuitem', { name: '이름 바꾸기' }));
+    await screen.findByRole('dialog', { name: /이름 바꾸기/ });
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /이름 바꾸기/ })).toBeNull());
+
+    await user.click(screen.getByRole('button', { name: '기타 더보기' }));
+    await user.click(await screen.findByRole('menuitem', { name: '옮기기' }));
+    await screen.findByRole('dialog', { name: '「기타」 옮기기' });
+    await user.keyboard('{Escape}');
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: '「기타」 옮기기' })).toBeNull(),
+    );
+
+    expect(onClose).not.toHaveBeenCalled();
   });
 });

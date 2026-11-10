@@ -536,8 +536,14 @@ export async function reorderSurveyGroups(
  *
  * 요청자가 편집할 수 없는 설문이 담겨 있어도 지운다 — 구조는 팀 공용이다(관문은 그룹의 팀만 묻는다).
  * 같은 삭제를 두 번 보내면 두 번째는 첫 줄에서 「없는 그룹」이다.
+ *
+ * 요청자(`user`)는 지우는 데 쓰지 않는다 — 이름 겹침으로 막혔을 때 **그 사람에게 보이는 이름만**
+ * 알리는 데 쓴다(`describeLiftNameCollision`).
  */
-export async function removeSurveyGroup(groupId: string): Promise<WorkspaceActionOutput> {
+export async function removeSurveyGroup(
+  user: SurveyAccessUser,
+  groupId: string,
+): Promise<WorkspaceActionOutput> {
   const lifted = await inGroupStructureTx(async (tx) => {
     // 팀 키 → 팀 행 → 그룹 행(지우는 그룹 · 올라갈 자리) → 설문 행. 해산은 팀 → 설문만 잡으므로
     // 사이클이 없다.
@@ -555,6 +561,10 @@ export async function removeSurveyGroup(groupId: string): Promise<WorkspaceActio
       .returning({ id: surveyGroups.id });
     if (!row) throw new SurveyGroupNotFoundError();
     return { teamId: group.teamId, subgroups, surveys: surveyCount };
+  }).catch(async (err: unknown) => {
+    // 트랜잭션은 이미 되돌아갔다 — 무엇을 알릴지는 그 밖에서 정한다(아래 주석).
+    if (err instanceof LiftNameCollision) throw await describeLiftNameCollision(user, err);
+    throw err;
   });
 
   // 커밋된 뒤에 한 번 — 재시도된 시도는 적지 않는다. 이름은 싣지 않는다(식별자와 수만).
@@ -568,6 +578,47 @@ export async function removeSurveyGroup(groupId: string): Promise<WorkspaceActio
     '[survey-group] 그룹을 지우고 내용물을 한 단계 위로 올렸다',
   );
   return OK;
+}
+
+/**
+ * 지우기를 막은 이름 겹침 전부 — 트랜잭션 안에서 본 그대로(겹치는 두 그룹의 id 와 그 이름).
+ *
+ * 파일 밖으로 나가지 않는다. 요청자에게 알릴 모양(`SurveyGroupLiftNameConflictError`)으로 바꾸는
+ * 것은 `describeLiftNameCollision` 이다 — 여기 든 이름에는 요청자가 볼 수 없는 그룹의 것이 섞여 있다.
+ */
+class LiftNameCollision extends Error {
+  constructor(
+    readonly teamId: string,
+    /** 올라갈 하위 그룹의 표시 순서대로. */
+    readonly pairs: readonly { name: string; liftedGroupId: string; occupantGroupId: string }[],
+  ) {
+    super('그룹 삭제 — 올라갈 자리에 같은 이름의 그룹이 있다');
+    this.name = 'LiftNameCollision';
+  }
+}
+
+/**
+ * 이름 겹침을 **요청자에게 보이는 만큼만** 알린다.
+ *
+ * 겹치는 두 그룹(올라갈 하위 그룹 · 그 자리에 이미 있는 그룹) 중 하나라도 요청자의 그룹 목록에
+ * 있으면 그 이름을 싣는다. 둘 다 없으면 싣지 않는다 — 요청자가 볼 수 없는 설문만 든 폴더의 이름이고,
+ * 그룹 목록이 그 이름을 감추는 것과 같은 이유다. 한쪽만 보이는 겹침은 싣는다: 「그 자리에 같은
+ * 이름이 있다」는 그 이름으로 그룹을 만들어 봐도 드러나는, 받아들인 틈이다(ADR-0038).
+ *
+ * 보이는 그룹은 **그룹 목록 조회 그대로** 묻는다(`listSurveyGroups`) — 가시성 규칙의 사본을 두지
+ * 않는다. 트랜잭션 **밖**에서 부른다: 그 조회는 공용 연결을 쓰므로 안에서 부르면 연결을 쥔 채
+ * 하나를 더 기다린다. 잠금이 풀린 뒤라 그 사이 구조가 바뀌었을 수 있지만 거르는 것은 알림의
+ * 이름뿐이고(거부는 이미 정해졌다), 어긋나도 그 순간 요청자에게 보이는 그룹의 이름만 나간다.
+ */
+async function describeLiftNameCollision(
+  user: SurveyAccessUser,
+  collision: LiftNameCollision,
+): Promise<SurveyGroupLiftNameConflictError> {
+  const visible = new Set((await listSurveyGroups(user, collision.teamId)).map((row) => row.id));
+  const names = collision.pairs
+    .filter((pair) => visible.has(pair.liftedGroupId) || visible.has(pair.occupantGroupId))
+    .map((pair) => pair.name);
+  return new SurveyGroupLiftNameConflictError(names, names.length < collision.pairs.length);
 }
 
 /**
@@ -593,9 +644,9 @@ async function lockLiftDestination(tx: DbTransaction, group: LockedGroup): Promi
 /**
  * 지우는 그룹 바로 밑의 하위 그룹을 그 부모 밑으로 올린다. 올린 수를 돌려준다.
  *
- * **올라갈 자리에 같은 이름의 그룹이 있으면 아무것도 쓰기 전에 거부한다** — 팀 키 아래라 읽은
- * 이름이 낡지 않는다(이름을 바꾸는 쓰기는 전부 같은 키를 잡는다). 그 판정을 빠져나간 겹침은
- * 유일 인덱스가 막고, 그때는 트랜잭션이 통째로 되돌아간다.
+ * **올라갈 자리에 같은 이름의 그룹이 있으면 아무것도 쓰기 전에 거부한다**(`LiftNameCollision`) —
+ * 팀 키 아래라 읽은 이름이 낡지 않는다(이름을 바꾸는 쓰기는 전부 같은 키를 잡는다). 그 판정을
+ * 빠져나간 겹침은 유일 인덱스가 막고, 그때는 트랜잭션이 통째로 되돌아간다.
  *
  * 쓰는 것은 하위 그룹 **한 행씩의** 상위 칸 둘과 순서뿐이다. 손자 그룹은 건드리지 않는다 —
  * 부모에 매달린 채 깊이만 FK 의 `ON UPDATE CASCADE` 로 따라온다. 올라가는 방향이라 깊이 제약에
@@ -619,12 +670,21 @@ async function liftSubgroups(
 
   // 지우는 그룹 자신은 뺀다 — 사라질 행이라 겹침이 아니다.
   const taken = await tx
-    .select({ name: surveyGroups.name })
+    .select({ id: surveyGroups.id, name: surveyGroups.name })
     .from(surveyGroups)
     .where(and(destination, ne(surveyGroups.id, groupId), inArray(surveyGroups.name, names)));
   if (taken.length > 0) {
-    const takenNames = new Set(taken.map((row) => row.name));
-    throw new SurveyGroupLiftNameConflictError(names.filter((name) => takenNames.has(name)));
+    // 이름은 한 자리 안에서 유일하다 — 겹치는 이름마다 「올라갈 그룹」과 「이미 있는 그룹」이 하나씩이다.
+    const occupantByName = new Map(taken.map((row) => [row.name, row.id]));
+    throw new LiftNameCollision(
+      group.teamId,
+      children.flatMap((child) => {
+        const occupantGroupId = occupantByName.get(child.name);
+        return occupantGroupId
+          ? [{ name: child.name, liftedGroupId: child.id, occupantGroupId }]
+          : [];
+      }),
+    );
   }
 
   const [tail] = await tx
@@ -856,6 +916,9 @@ async function lockTeamGroupStructure(tx: DbTransaction, teamId: string): Promis
  * 팀 키를 고르려면 그룹의 팀을 먼저 알아야 해서 **잠금 없이** 한 번 읽는다. 그룹의 팀은 바뀌지
  * 않으므로 그 값으로 고른 키는 틀리지 않는다. 기다리는 사이 그룹이 지워졌으면 뒤의 행 잠금이
  * 「없는 그룹」으로 답한다.
+ *
+ * **READ COMMITTED 를 전제한다** — 팀 키를 잡기 전에 한 번 읽으므로, 격리 수준을 올리면 그 읽기가
+ * 스냅샷을 고정해 잠금 뒤의 판정(깊이·이름 겹침·옮길 자리)이 기다리는 사이 커밋된 구조를 못 본다.
  */
 async function lockGroupStructureByGroup(tx: DbTransaction, groupId: string): Promise<LockedGroup> {
   const [found] = await tx

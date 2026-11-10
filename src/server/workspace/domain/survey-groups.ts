@@ -53,17 +53,24 @@ export class SurveyGroupDepthExceededError extends Error {
  *
  * 아무것도 바꾸지 않고 거부한다 — 한쪽만 올리면 정리해 둔 가지가 반쯤 풀린다. 무엇을 고치면
  * 되는지 알려 주려고 겹치는 이름을 싣는다(올라갈 하위 그룹의 표시 순서대로).
+ *
+ * - **메시지에는 이름을 넣지 않는다.** RPC 실패 로그가 에러 메시지를 통째로 남기는데, 그룹 이름에는
+ *   직원 이름이 들어갈 수 있다. 성공 로그가 이름을 일부러 뺀 것과 같은 기준이다 — 이름은 응답의
+ *   값(`conflictingNames`)으로만 간다.
+ * - **싣는 이름은 요청자에게 보이는 것만이다.** 겹치는 두 그룹이 다 요청자의 그룹 목록에 없으면
+ *   (요청자가 볼 수 없는 설문만 든 폴더끼리 겹친다) 그 이름은 빼고 `hasHiddenConflicts` 로만 알린다.
  */
 export class SurveyGroupLiftNameConflictError extends Error {
   readonly conflictingNames: readonly string[];
+  readonly hasHiddenConflicts: boolean;
 
-  constructor(conflictingNames: readonly string[]) {
-    const quoted = conflictingNames.map((name) => `「${name}」`).join(' · ');
+  constructor(conflictingNames: readonly string[], hasHiddenConflicts: boolean) {
     super(
-      `한 단계 위에 이미 ${quoted} 그룹이 있어 하위 그룹을 올릴 수 없습니다. 한쪽 이름을 바꾼 뒤 다시 삭제하세요.`,
+      '한 단계 위에 이름이 같은 그룹이 있어 하위 그룹을 올릴 수 없습니다. 한쪽 이름을 바꾼 뒤 다시 삭제하세요.',
     );
     this.name = 'SurveyGroupLiftNameConflictError';
     this.conflictingNames = conflictingNames;
+    this.hasHiddenConflicts = hasHiddenConflicts;
   }
 }
 

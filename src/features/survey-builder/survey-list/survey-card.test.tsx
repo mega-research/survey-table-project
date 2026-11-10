@@ -262,21 +262,23 @@ describe('SurveyCard — 내 태그 줄', () => {
  * 찾은 설문이 어디 있는지 알 수 없다. 그 그룹에 직접 담긴 설문과 그 밖의 목록에는 줄이 없다.
  */
 describe('SurveyCard — 하위 그룹 경로 줄', () => {
-  it('경로가 있으면 한 줄로 적는다', () => {
+  it('경로가 있으면 한 줄로 적는다 — 무슨 줄인지는 보이지 않는 글자로 앞에 붙는다', () => {
     renderCard(item(), undefined, undefined, ['2026', '상반기']);
-    const line = screen.getByLabelText('담긴 하위 그룹');
-    expect(line).toHaveTextContent('2026 › 상반기');
     // 긴 이름은 한 줄에서 잘리므로 전체 경로를 툴팁으로 남긴다.
-    expect(line).toHaveAttribute('title', '2026 › 상반기');
+    const line = screen.getByTitle('2026 › 상반기');
+    expect(line).toHaveTextContent(/^담긴 하위 그룹: 2026 › 상반기$/);
+    // 문단에 붙인 aria-label 은 읽히지 않는다 — 맥락은 글자여야 한다(화면에는 보이지 않는다).
+    expect(line).not.toHaveAttribute('aria-label');
+    expect(screen.getByText('담긴 하위 그룹:')).toHaveClass('sr-only');
   });
 
   it('한 단계 아래면 그 그룹 이름만 적는다', () => {
     renderCard(item(), undefined, undefined, ['2025']);
-    expect(screen.getByLabelText('담긴 하위 그룹')).toHaveTextContent(/^2025$/);
+    expect(screen.getByTitle('2025')).toHaveTextContent(/^담긴 하위 그룹: 2025$/);
   });
 
   it('경로가 비었으면 줄이 없다 — 직접 담긴 설문과 그 밖의 목록', () => {
     renderCard(item(), undefined, undefined, []);
-    expect(screen.queryByLabelText('담긴 하위 그룹')).toBeNull();
+    expect(screen.queryByText(/담긴 하위 그룹/)).toBeNull();
   });
 });

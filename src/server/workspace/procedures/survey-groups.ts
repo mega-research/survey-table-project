@@ -138,9 +138,13 @@ function rethrowSurveyGroupError(err: unknown): never {
   ) {
     throw new ORPCError('CONFLICT', { message: err.message });
   }
-  // 지우기의 이름 겹침 — 무엇을 고치면 되는지 화면이 말할 수 있게 겹치는 이름을 값으로 싣는다.
+  // 지우기의 이름 겹침 — 무엇을 고치면 되는지 화면이 말할 수 있게 겹치는 이름을 **값으로만** 싣는다.
+  // 메시지에는 이름이 없다(실패 로그가 메시지를 남긴다). 값의 이름도 요청자에게 보이는 것뿐이다.
   if (err instanceof SurveyGroupLiftNameConflictError) {
-    const data: SurveyGroupRemoveConflict = { conflictingNames: [...err.conflictingNames] };
+    const data: SurveyGroupRemoveConflict = {
+      conflictingNames: [...err.conflictingNames],
+      hasHiddenConflicts: err.hasHiddenConflicts,
+    };
     throw new ORPCError('CONFLICT', { message: err.message, data });
   }
   throw toWorkspaceRpcError(err) ?? err;
@@ -198,7 +202,7 @@ const remove = authed
   .output(WorkspaceActionOutput)
   .handler(async ({ input, context }) => {
     await assertSurveyGroupManageByGroupId(context.user, input.groupId);
-    return svc.removeSurveyGroup(input.groupId).catch(rethrowSurveyGroupError);
+    return svc.removeSurveyGroup(context.user, input.groupId).catch(rethrowSurveyGroupError);
   });
 
 /**

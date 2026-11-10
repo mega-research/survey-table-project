@@ -48,6 +48,8 @@ const A_OWNER_ID = crypto.randomUUID();
 const A_LEADER_ID = crypto.randomUUID();
 const TEAM_A = crypto.randomUUID();
 const TEAM_B = crypto.randomUUID();
+/** 관문을 건너뛰고 서비스를 바로 부를 때의 요청자 — 지우기는 겹치는 이름을 요청자에게 보이는 것만 알린다. */
+const MEMBER_USER = { id: MEMBER_ID, isSuperadmin: false, userType: 'internal' } as const;
 
 function contextFor(userId: string): ORPCContext {
   return {
@@ -466,7 +468,7 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
     it('삭제 — 감사 계보로 남겨야 할 행이 사라지지 않는다', async () => {
       const { groupId } = await seedArchivedTeamGroup();
 
-      await expect(svc.removeSurveyGroup(groupId)).rejects.toBeInstanceOf(TeamNotFoundError);
+      await expect(svc.removeSurveyGroup(MEMBER_USER, groupId)).rejects.toBeInstanceOf(TeamNotFoundError);
 
       const [row] = await db
         .select({ id: surveyGroupsTable.id })
@@ -489,7 +491,7 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
         .set({ status: 'archived', archivedAt: new Date() })
         .where(eq(teamsTable.id, teamId));
 
-      await expect(svc.removeSurveyGroup(top)).rejects.toBeInstanceOf(TeamNotFoundError);
+      await expect(svc.removeSurveyGroup(MEMBER_USER, top)).rejects.toBeInstanceOf(TeamNotFoundError);
 
       expect(await groupRow(top)).toMatchObject({ parentGroupId: null, depth: 1 });
       expect(await groupRow(child)).toMatchObject({ parentGroupId: top, depth: 2 });
@@ -1655,6 +1657,102 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
         expect(await groupRow(clashing)).toMatchObject({ parentGroupId: doomed, depth: 2 });
       });
 
+      /**
+       * 겹치는 이름은 **요청자에게 보이는 것만** 알린다 (티켓 10). 겹치는 두 그룹(올라갈 하위 그룹 ·
+       * 그 자리에 이미 있는 그룹) 중 하나라도 요청자의 그룹 목록에 있으면 그 이름을 싣고, 둘 다 안
+       * 보이면 싣지 않는다 — 그 이름은 요청자가 볼 수 없는 설문만 든 폴더의 이름이다.
+       */
+      describe('이름 겹침으로 막힐 때 알리는 이름', () => {
+        /** 그 그룹을 MEMBER 에게 숨긴다 — 팀원에게 숨긴 설문만 담는다(담는 것은 소유자다). */
+        async function hideFromMember(groupId: string, title: string) {
+          const hidden = await seedSurvey(TEAM_A, title, A_OWNER_ID);
+          await db
+            .update(surveysTable)
+            .set({ visibility: 'invite_only' })
+            .where(eq(surveysTable.id, hidden));
+          await clientFor(A_OWNER_ID).surveyGroups.collect({ groupId, surveyIds: [hidden] });
+        }
+
+        /** 「이정운 › 2026」 — 2026 을 지우면 그 하위 그룹이 이정운 밑으로 올라간다. 둘 다 MEMBER 에게 보인다. */
+        async function seedVisibleBranch() {
+          const top = await seedGroup(member, TEAM_A, '이정운');
+          const doomed = await seedGroup(member, TEAM_A, '2026', top);
+          const visible = await seedSurvey(TEAM_A, '2026 에 직접 담긴 설문', MEMBER_ID);
+          await member.surveyGroups.collect({ groupId: doomed, surveyIds: [visible] });
+          return { top, doomed };
+        }
+
+        async function visibleNames(client: ReturnType<typeof clientFor>): Promise<string[]> {
+          return (await client.surveyGroups.list({ teamId: TEAM_A })).map((g) => g.name).sort();
+        }
+
+        it('겹치는 두 그룹이 다 안 보이면 이름 없이 거부한다 — 메시지에도 이름이 없다', async () => {
+          const { top, doomed } = await seedVisibleBranch();
+          const occupant = await seedGroup(member, TEAM_A, '임원 조사', top);
+          const lifted = await seedGroup(member, TEAM_A, '임원 조사', doomed);
+          await hideFromMember(occupant, '임원 만족도 1차');
+          await hideFromMember(lifted, '임원 만족도 2차');
+          expect(await visibleNames(member)).toEqual(['2026', '이정운']);
+          const before = await Promise.all([occupant, doomed, lifted].map(groupRow));
+
+          const rejection = await member.surveyGroups.remove({ groupId: doomed }).catch((e) => e);
+
+          expect(rejection).toBeInstanceOf(ORPCError);
+          expect(rejection.code).toBe('CONFLICT');
+          expect(rejection.data).toEqual({ conflictingNames: [], hasHiddenConflicts: true });
+          expect(rejection.message).not.toContain('임원');
+          // 거부할 때 아무것도 바뀌지 않는 것은 그대로다.
+          expect(await Promise.all([occupant, doomed, lifted].map(groupRow))).toEqual(before);
+
+          // 같은 삭제를 팀장이 하면(둘 다 보인다) 이름이 실린다 — 메시지에는 여전히 없다.
+          const forLeader = await clientFor(A_LEADER_ID)
+            .surveyGroups.remove({ groupId: doomed })
+            .catch((e) => e);
+          expect(forLeader.data).toEqual({
+            conflictingNames: ['임원 조사'],
+            hasHiddenConflicts: false,
+          });
+          expect(forLeader.message).not.toContain('임원');
+        });
+
+        it('둘 중 하나라도 보이면 그 이름을 싣는다', async () => {
+          const { top, doomed } = await seedVisibleBranch();
+          const occupant = await seedGroup(member, TEAM_A, '상반기', top);
+          // 올라갈 하위 그룹은 빈 그룹이라 보인다. 그 자리에 이미 있는 그룹만 숨는다.
+          await seedGroup(member, TEAM_A, '상반기', doomed);
+          await hideFromMember(occupant, '임원 만족도');
+          expect(await visibleNames(member)).toEqual(['2026', '상반기', '이정운']);
+
+          const rejection = await member.surveyGroups.remove({ groupId: doomed }).catch((e) => e);
+
+          expect(rejection.code).toBe('CONFLICT');
+          expect(rejection.data).toEqual({
+            conflictingNames: ['상반기'],
+            hasHiddenConflicts: false,
+          });
+          expect(rejection.message).not.toContain('상반기');
+        });
+
+        it('일부만 보이면 보이는 이름만 싣고, 보이지 않는 겹침이 더 있다고 알린다', async () => {
+          const { top, doomed } = await seedVisibleBranch();
+          await seedGroup(member, TEAM_A, '상반기', top);
+          await seedGroup(member, TEAM_A, '상반기', doomed);
+          const occupant = await seedGroup(member, TEAM_A, '임원 조사', top);
+          const lifted = await seedGroup(member, TEAM_A, '임원 조사', doomed);
+          await hideFromMember(occupant, '임원 만족도 1차');
+          await hideFromMember(lifted, '임원 만족도 2차');
+
+          const rejection = await member.surveyGroups.remove({ groupId: doomed }).catch((e) => e);
+
+          expect(rejection.code).toBe('CONFLICT');
+          expect(rejection.data).toEqual({
+            conflictingNames: ['상반기'],
+            hasHiddenConflicts: true,
+          });
+          expect(rejection.message).not.toMatch(/상반기|임원/);
+        });
+      });
+
       it('지우는 그룹과 이름이 같은 하위 그룹은 겹침이 아니다 — 그 자리를 물려받는다', async () => {
         const top = await seedGroup(member, TEAM_A, '이정운');
         const doomed = await seedGroup(member, TEAM_A, '2026', top);
@@ -1700,7 +1798,7 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
           code: 'NOT_FOUND',
         });
         // 관문을 건너뛰고 서비스에 바로 닿아도 같은 답이다.
-        await expect(svc.removeSurveyGroup(doomed)).rejects.toBeInstanceOf(
+        await expect(svc.removeSurveyGroup(MEMBER_USER, doomed)).rejects.toBeInstanceOf(
           SurveyGroupNotFoundError,
         );
         expect(await groupRow(child)).toMatchObject({ parentGroupId: top, depth: 2 });

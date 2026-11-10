@@ -43,12 +43,14 @@ interface GroupDeleteDialogProps {
  * **설문 건수는 적지 않는다** — 내가 볼 수 없는 설문이 담겨 있을 수 있다.
  *
  * 올라갈 자리에 같은 이름의 그룹이 있으면 서버가 아무것도 바꾸지 않고 거부하며 겹치는 이름을
- * 준다. 그때는 같은 창이 「삭제할 수 없습니다」로 바뀌어 무엇을 고치면 되는지 말한다. 겹침을
- * 화면이 미리 판정하지 않는 것은 목록이 낡았을 수 있어서다 — 판정은 서버 하나다.
+ * 준다(내게 보이는 그룹의 것만 — 하나도 안 보이면 이름 없이 온다). 그때는 같은 창이 「삭제할 수
+ * 없습니다」로 바뀌어 무엇을 고치면 되는지 말한다. 문구는 서버의 메시지가 아니라 **값**으로 짓는다
+ * (메시지에는 이름이 없다). 겹침을 화면이 미리 판정하지 않는 것은 목록이 낡았을 수 있어서다 —
+ * 판정은 서버 하나다.
  */
 export function GroupDeleteDialog({ group, teamId, onClose }: GroupDeleteDialogProps) {
   const [error, setError] = useState<string | null>(null);
-  const [conflictingNames, setConflictingNames] = useState<readonly string[] | null>(null);
+  const [conflict, setConflict] = useState<SurveyGroupRemoveConflict | null>(null);
   const { data: groups } = useSurveyGroups(teamId);
   const removeGroup = useRemoveSurveyGroup();
   const plan = planGroupDelete(groups ?? [], group);
@@ -59,8 +61,8 @@ export function GroupDeleteDialog({ group, teamId, onClose }: GroupDeleteDialogP
       await removeGroup.mutateAsync(group.id);
       onClose();
     } catch (err) {
-      const conflict = readRemoveConflict(err);
-      if (conflict) setConflictingNames(conflict);
+      const blocked = readRemoveConflict(err);
+      if (blocked) setConflict(blocked);
       else setError(getErrorMessage(err, '그룹을 삭제하지 못했습니다.'));
     }
   }
@@ -68,14 +70,14 @@ export function GroupDeleteDialog({ group, teamId, onClose }: GroupDeleteDialogP
   return (
     <AlertDialog open onOpenChange={(next) => (next ? undefined : onClose())}>
       <AlertDialogContent className="max-w-[460px]">
-        {conflictingNames ? (
+        {conflict ? (
           <>
             <AlertDialogHeader>
               <AlertDialogTitle className="break-words">
                 「{group.name}」 그룹을 삭제할 수 없습니다
               </AlertDialogTitle>
               <AlertDialogDescription className="break-words">
-                {describeGroupDeleteBlocked(plan, conflictingNames)}
+                {describeGroupDeleteBlocked(plan, conflict)}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -120,9 +122,9 @@ export function GroupDeleteDialog({ group, teamId, onClose }: GroupDeleteDialogP
   );
 }
 
-/** 삭제가 이름 겹침으로 막힌 것이면 겹치는 이름을, 아니면 null 을 돌려준다. */
-function readRemoveConflict(err: unknown): readonly string[] | null {
+/** 삭제가 이름 겹침으로 막힌 것이면 서버가 실어 준 값을, 아니면 null 을 돌려준다. */
+function readRemoveConflict(err: unknown): SurveyGroupRemoveConflict | null {
   if (!(err instanceof ORPCError) || err.code !== 'CONFLICT') return null;
   const parsed = SurveyGroupRemoveConflict.safeParse(err.data);
-  return parsed.success ? parsed.data.conflictingNames : null;
+  return parsed.success ? parsed.data : null;
 }

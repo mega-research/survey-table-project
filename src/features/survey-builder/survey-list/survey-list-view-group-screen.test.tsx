@@ -237,14 +237,14 @@ describe('그룹 화면 — 1단계 그룹', () => {
     const user = userEvent.setup();
     renderGroupScreen(G_LEE);
 
-    await user.click(await screen.findByRole('button', { name: '2025 더보기' }));
+    await user.click(await screen.findByRole('button', { name: '이정운 › 2025 더보기' }));
     await user.click(await screen.findByRole('menuitem', { name: '옮기기' }));
 
     expect(screen.getByRole('heading', { name: '「2025」 옮기기' })).toBeInTheDocument();
     const places = within(screen.getByRole('radiogroup', { name: '옮길 자리' }));
     // 지금 부모는 꺼져 있고, 다른 팀의 폴더(협업 그룹)는 옮길 자리가 아니다.
     expect(places.getByRole('radio', { name: '이정운' })).toBeDisabled();
-    expect(places.getByRole('radio', { name: '2026' })).toBeEnabled();
+    expect(places.getByRole('radio', { name: '이정운 › 2026' })).toBeEnabled();
     expect(places.queryByRole('radio', { name: 'A고객사 2026' })).toBeNull();
   });
 });
@@ -325,9 +325,9 @@ describe('그룹 화면 — 검색은 아래 전체에서 찾는다', () => {
     renderGroupScreen(G_LEE, NESTED, '조사');
 
     await screen.findByText('손자 조사');
-    const lines = screen.getAllByLabelText('담긴 하위 그룹');
+    const lines = screen.getAllByText('담긴 하위 그룹:');
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toHaveTextContent('2026 › 상반기');
+    expect(lines[0]?.parentElement).toHaveTextContent('담긴 하위 그룹: 2026 › 상반기');
   });
 
   it('구역 제목이 찾은 범위와 결과 수를 말한다 — 「직접 담긴 설문」이라 하지 않는다', async () => {
@@ -355,7 +355,30 @@ describe('그룹 화면 — 검색은 아래 전체에서 찾는다', () => {
 
     const title = await screen.findByRole('heading', { name: /이 그룹에 직접 담긴 설문/ });
     expect(title).toHaveTextContent(/직접 담긴 설문\s*1$/);
-    expect(screen.queryByLabelText('담긴 하위 그룹')).toBeNull();
+    expect(screen.queryByText(/담긴 하위 그룹/)).toBeNull();
+  });
+
+  // 「내 설문」의 숫자는 내 것만 센 수다 — 「이 그룹에 직접 담긴 설문 수」가 아니라 적으면 틀린 말이 된다.
+  it('「내 설문」으로 볼 때는 구역 제목에 숫자를 적지 않는다', async () => {
+    listPageCall.mockResolvedValue(page([card('s-direct', '직접 담긴 조사')], { whose: 'mine' }));
+    renderGroupScreen(G_LEE);
+
+    const title = await screen.findByRole('heading', { name: /이 그룹에 직접 담긴 설문/ });
+    expect(title).toHaveTextContent(/^이 그룹에 직접 담긴 설문$/);
+    await screen.findByText('직접 담긴 조사');
+  });
+
+  it('「내 설문」이어도 아래 전체에서 찾은 검색 결과의 제목은 전과 같다 — 찾은 수를 적는다', async () => {
+    listPageCall.mockResolvedValue(
+      page([card('s-deep', '손자 조사', ['2026', '상반기'])], {
+        whose: 'mine',
+        groupSubtree: true,
+      }),
+    );
+    renderGroupScreen(G_LEE, NESTED, '조사');
+
+    const title = await screen.findByRole('heading', { name: /이 그룹과 하위 그룹에서 찾은 설문/ });
+    expect(title).toHaveTextContent(/찾은 설문\s*1$/);
   });
 
   it('아래 전체에 설문이 하나도 없는 그룹을 검색하면 빈 그룹 안내가 아니라 결과 없음이다', async () => {
@@ -411,7 +434,7 @@ describe('그룹 삭제 — 내용물이 한 단계 위로 올라간다 (티켓 
     removeGroupCall.mockResolvedValue({ success: true });
     renderGroupScreen(G_LEE);
 
-    await user.click(await screen.findByRole('button', { name: '2026 더보기' }));
+    await user.click(await screen.findByRole('button', { name: '이정운 › 2026 더보기' }));
     await user.click(await screen.findByRole('menuitem', { name: '삭제' }));
 
     const dialog = await screen.findByRole('alertdialog', { name: '「2026」 그룹을 삭제할까요?' });

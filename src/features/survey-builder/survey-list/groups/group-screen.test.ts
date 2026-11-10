@@ -45,6 +45,22 @@ describe('resolveGroupScreen — 그룹 화면이 그릴 것', () => {
     expect(screen?.canCreateSubgroup).toBe(true);
   });
 
+  it('폴더 줄의 읽어 주는 이름은 뿌리부터의 경로다 — 다른 그룹 밑의 같은 이름과 갈린다', () => {
+    const twins = [...GROUPS, group('kim-2026', '김서연', { name: '2026' })];
+
+    expect(resolveGroupScreen(twins, '이정운')?.subgroups.map((s) => s.pathLabel)).toEqual([
+      '이정운 › 2026',
+      '이정운 › 2025',
+    ]);
+    expect(resolveGroupScreen(twins, '김서연')?.subgroups.map((s) => s.pathLabel)).toEqual([
+      '김서연 › 2026',
+    ]);
+    expect(resolveGroupScreen(twins, '2026')?.subgroups.map((s) => s.pathLabel)).toEqual([
+      '이정운 › 2026 › 상반기',
+      '이정운 › 2026 › 하반기',
+    ]);
+  });
+
   it('3단계 그룹 — 「새 하위 그룹」이 보이지 않고 폴더 줄도 없다', () => {
     const screen = resolveGroupScreen(GROUPS, '상반기');
 
