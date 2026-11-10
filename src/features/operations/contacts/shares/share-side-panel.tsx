@@ -1,23 +1,22 @@
 'use client';
 
-import { useState } from 'react';
-
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 
-import { type ColumnCandidate, FILTER_SOURCE } from '@/lib/operations/filter-shared';
+import { type ColumnCandidate } from '@/lib/operations/filter-shared';
 import { cn } from '@/lib/utils';
 import type { ContactAssignmentClause } from '@/shared/contracts/contacts';
 import { client } from '@/shared/lib/rpc';
 
 import {
-  FIXED_CHECKBOX_SOURCES,
-  PanelShell,
+  ClauseSidePanel,
   Pager,
-  ValuesPanel,
+  PanelShell,
   cellValue,
-} from '../assignments/assignment-side-panel';
-
-const fmt = (n: number) => n.toLocaleString('ko-KR');
+  formatCount as fmt,
+  isFacetableSource,
+  matchesFocusColumn,
+  useClauseMatchesPage,
+} from '../clause-editor-parts';
 
 interface Props {
   surveyId: string;
@@ -38,41 +37,35 @@ interface Props {
 export function ShareSidePanel(props: Props) {
   const { surveyId, focused } = props;
   const source = focused?.source ?? '';
-  const facetable =
-    FIXED_CHECKBOX_SOURCES.has(source) || source.startsWith(FILTER_SOURCE.ATTRS_PREFIX);
+  const facetable = isFacetableSource(source);
   const facetsQuery = useQuery({
     queryKey: ['fieldwork-share-facets', surveyId, source],
     queryFn: () => client.contacts.fieldworkShares.facets({ surveyId, source }),
     enabled: facetable,
     staleTime: 60_000,
   });
-
-  if (facetable && facetsQuery.data?.kind === 'values') {
-    return (
-      <ValuesPanel
-        key={source}
-        label={props.columnCandidates.find((c) => c.source === source)?.label ?? source}
-        values={facetsQuery.data.values}
-        total={facetsQuery.data.total}
-        value={focused?.value ?? ''}
-        onChange={props.onFocusedValueChange}
-      />
-    );
-  }
-  if (facetable && facetsQuery.isPending) {
-    return <PanelShell title="값 목록" subtitle="불러오는 중…" />;
-  }
-  return <MatchesPanel {...props} />;
+  return (
+    <ClauseSidePanel
+      source={source}
+      facetable={facetable}
+      facetsQuery={facetsQuery}
+      columnCandidates={props.columnCandidates}
+      value={focused?.value ?? ''}
+      onChange={props.onFocusedValueChange}
+      matches={<MatchesPanel {...props} />}
+    />
+  );
 }
 
-function MatchesPanel({ surveyId, link, focused, clauses, columnCandidates, displayColumn }: Props) {
-  const [page, setPage] = useState(1);
-  const clausesKey = JSON.stringify(clauses);
-  const [prevKey, setPrevKey] = useState(clausesKey);
-  if (prevKey !== clausesKey) {
-    setPrevKey(clausesKey);
-    setPage(1);
-  }
+function MatchesPanel({
+  surveyId,
+  link,
+  focused,
+  clauses,
+  columnCandidates,
+  displayColumn,
+}: Props) {
+  const [page, setPage] = useClauseMatchesPage(clauses);
 
   const query = useQuery({
     queryKey: ['fieldwork-share-matches', surveyId, link.id, clauses, page],
@@ -87,17 +80,7 @@ function MatchesPanel({ surveyId, link, focused, clauses, columnCandidates, disp
     placeholderData: keepPreviousData,
   });
 
-  const focusColumn =
-    focused &&
-    focused.source !== FILTER_SOURCE.RESID &&
-    focused.source !== displayColumn?.source &&
-    (focused.source.startsWith(FILTER_SOURCE.ATTRS_PREFIX) ||
-      focused.source.startsWith(FILTER_SOURCE.PII_PREFIX))
-      ? {
-          source: focused.source,
-          label: columnCandidates.find((c) => c.source === focused.source)?.label ?? focused.source,
-        }
-      : null;
+  const focusColumn = matchesFocusColumn(focused, displayColumn, columnCandidates);
 
   const data = clauses && clauses.length > 0 ? query.data : undefined;
   const pageCount = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
@@ -126,7 +109,9 @@ function MatchesPanel({ surveyId, link, focused, clauses, columnCandidates, disp
             {!data && (
               <tr>
                 <td colSpan={4} className="px-2 py-4 text-center text-slate-400">
-                  {clauses == null || clauses.length === 0 ? '조건을 넣으면 보입니다' : '불러오는 중…'}
+                  {clauses == null || clauses.length === 0
+                    ? '조건을 넣으면 보입니다'
+                    : '불러오는 중…'}
                 </td>
               </tr>
             )}

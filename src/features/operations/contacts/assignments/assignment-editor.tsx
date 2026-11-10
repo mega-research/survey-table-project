@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useTransition } from 'react';
+import { useState, useTransition } from 'react';
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -20,17 +20,15 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { prepareContactClauseValue } from '@/features/operations/contacts/contacts-filter-bar';
-import { ValueWidget } from '@/features/operations/contacts/value-widget';
 import {
-  FilterBarCore,
-  type FilterDraftRow,
-  draftRowsToClauses,
-  newDraftRowId,
-} from '@/features/operations/filters/filter-bar-core';
+  ClauseMatchedCount,
+  formatCount,
+} from '@/features/operations/contacts/clause-editor-parts';
+import { useClauseDraft } from '@/features/operations/contacts/use-clause-draft';
+import { ValueWidget } from '@/features/operations/contacts/value-widget';
+import { FilterBarCore } from '@/features/operations/filters/filter-bar-core';
 import { getErrorMessage } from '@/lib/get-error-message';
 import { type ColumnCandidate, FILTER_SOURCE } from '@/lib/operations/filter-shared';
-import { compactIdListValue } from '@/lib/operations/id-list-paste';
 import type { ContactAssignmentClause, ContactResultCode } from '@/shared/contracts/contacts';
 import type { ContactAssignmentOption } from '@/shared/contracts/contacts-io';
 import { client } from '@/shared/lib/rpc';
@@ -50,26 +48,7 @@ interface Props {
 
 type Summary = Awaited<ReturnType<typeof client.contacts.assignments.preview>>;
 
-const fmt = (n: number) => n.toLocaleString('ko-KR');
-const PREVIEW_DEBOUNCE_MS = 400;
-
-function initialRows(
-  lastClauses: ContactAssignmentClause[] | null,
-  candidates: ColumnCandidate[],
-): FilterDraftRow[] {
-  if (lastClauses && lastClauses.length > 0) {
-    return lastClauses.map((c, i) => ({
-      id: `init-${i}`,
-      op: c.op === 'OR' ? 'OR' : 'AND',
-      source: c.source,
-      // 낱개로 저장된 옛 조건도 열면 정리돼 보인다.
-      value: compactIdListValue(c.source, c.value),
-    }));
-  }
-  const source =
-    candidates.find((c) => c.source === FILTER_SOURCE.RESID)?.source ?? candidates[0]?.source ?? '';
-  return [{ id: newDraftRowId(), op: 'AND', source, value: '' }];
-}
+const fmt = formatCount;
 
 /**
  * 컨택원 수정 화면 왼쪽 (시안 C) — 이름과 「배정할 대상」 조건, 교체 적용.
@@ -90,67 +69,23 @@ export function AssignmentEditor({
   const queryClient = useQueryClient();
   const [name, setName] = useState(assignment.name);
   const [savedName, setSavedName] = useState(assignment.name);
-  const [rows, setRows] = useState<FilterDraftRow[]>(() =>
-    initialRows(assignment.lastClauses, columnCandidates),
-  );
-  const [focusedRowId, setFocusedRowId] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [removeOpen, setRemoveOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
-  // 값 변환(저장 목록 토큰)은 같은 값이면 한 번만 — 디바운스마다 목록을 새로 저장하지 않는다.
-  const prepareCache = useRef(new Map<string, Promise<string>>());
-  const prepareCached = (source: string, value: string): Promise<string> => {
-    const key = `${source}\u0000${value}`;
-    let hit = prepareCache.current.get(key);
-    if (!hit) {
-      // 합친 뒤에 준비한다 — 낱개 2,000개를 넘던 연속 번호도 구간 하나로 접혀 저장 목록을 만들지
-      // 않고, 적용 때 보내는 값이 적용 뒤 칸에 남는 합친 값과 같다.
-      hit = prepareContactClauseValue(surveyId, source, compactIdListValue(source, value));
-      prepareCache.current.set(key, hit);
-      // 실패한 변환은 다시 시도할 수 있게 캐시에서 뺀다.
-      hit.catch(() => prepareCache.current.delete(key));
-    }
-    return hit;
-  };
-
-  const draft = draftRowsToClauses(rows);
-  const draftKey = JSON.stringify(draft);
-  const [prepared, setPrepared] = useState<
-    { key: string; clauses: ContactAssignmentClause[] } | { key: string; error: string } | null
-  >(null);
-
-  useEffect(() => {
-    const pending: ContactAssignmentClause[] = JSON.parse(draftKey);
-    if (pending.length === 0) return;
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      Promise.all(
-        pending.map(async (c) => ({ ...c, value: await prepareCached(c.source, c.value) })),
-      )
-        .then((clauses) => {
-          if (!cancelled) setPrepared({ key: draftKey, clauses });
-        })
-        .catch((err: unknown) => {
-          if (!cancelled) {
-            setPrepared({
-              key: draftKey,
-              error: getErrorMessage(err, '조건을 해석할 수 없습니다.'),
-            });
-          }
-        });
-    }, PREVIEW_DEBOUNCE_MS);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-    // prepareCached 는 ref 만 읽는다 — 조건 문자열이 바뀔 때만 다시 준비한다.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftKey]);
-
-  const current = prepared && prepared.key === draftKey ? prepared : null;
-  const readyClauses = current && 'clauses' in current ? current.clauses : null;
-  const prepareError = current && 'error' in current ? current.error : null;
+  const {
+    rows,
+    setRows,
+    setFocusedRowId,
+    focusedRow,
+    setFocusedValue,
+    draft,
+    readyClauses,
+    prepareError,
+    preparing,
+    snapshotRowValues,
+    compactSentRows,
+  } = useClauseDraft({ surveyId, lastClauses: assignment.lastClauses, columnCandidates });
 
   const previewQuery = useQuery({
     queryKey: ['contact-assignment-preview', surveyId, assignment.id, readyClauses],
@@ -167,7 +102,7 @@ export function AssignmentEditor({
     draft.length > 0 && readyClauses ? previewQuery.data : undefined;
   const previewError =
     prepareError ?? (previewQuery.isError ? getErrorMessage(previewQuery.error, '') : null);
-  const settling = draft.length > 0 && (current == null || previewQuery.isFetching);
+  const settling = preparing || (draft.length > 0 && previewQuery.isFetching);
 
   const saveName = () => {
     const next = name.trim();
@@ -192,9 +127,8 @@ export function AssignmentEditor({
 
   const runApply = () => {
     if (!readyClauses) return;
-    // readyClauses 는 합친 값으로 준비됐다(prepareCached). 적용 뒤 칸도 그 모양으로 바꾸되,
-    // 요청이 도는 사이 사람이 고친 줄은 건드리지 않는다.
-    const sentValues = new Map(rows.map((r) => [r.id, r.value]));
+    // readyClauses 는 합친 값으로 준비됐다. 적용 뒤 칸도 그 모양으로 바꾼다(useClauseDraft).
+    const sentValues = snapshotRowValues();
     startTransition(async () => {
       try {
         const result = await client.contacts.assignments.apply({
@@ -203,13 +137,7 @@ export function AssignmentEditor({
           clauses: readyClauses,
         });
         setConfirmOpen(false);
-        setRows((prev) =>
-          prev.map((r) =>
-            sentValues.get(r.id) === r.value
-              ? { ...r, value: compactIdListValue(r.source, r.value) }
-              : r,
-          ),
-        );
+        compactSentRows(sentValues);
         toast.success(
           `배정 적용했습니다 — ${savedName} ${fmt(result.matched)}명 (새로 ${fmt(result.incoming)} · 다른 컨택원에서 ${fmt(sumOthers(result))} · 빠짐 ${fmt(result.leaving)})`,
         );
@@ -241,13 +169,6 @@ export function AssignmentEditor({
         toast.error(getErrorMessage(err, '컨택원을 지우지 못했습니다.'));
       }
     });
-  };
-
-  // 오른쪽 패널이 따라가는 줄 — 고른 줄이 지워졌으면 첫 줄.
-  const focusedRow = rows.find((r) => r.id === focusedRowId) ?? rows[0] ?? null;
-  const setFocusedValue = (value: string) => {
-    if (!focusedRow) return;
-    setRows(rows.map((r) => (r.id === focusedRow.id ? { ...r, value } : r)));
   };
 
   const canApply =
@@ -309,7 +230,7 @@ export function AssignmentEditor({
                 </div>
               )}
               stackFooter={
-                <MatchedCount
+                <ClauseMatchedCount
                   empty={draft.length === 0}
                   settling={settling}
                   error={previewError}
@@ -397,39 +318,6 @@ export function AssignmentEditor({
 
 function sumOthers(summary: Summary): number {
   return summary.fromOthers.reduce((n, o) => n + o.count, 0);
-}
-
-function MatchedCount({
-  empty,
-  settling,
-  error,
-  matched,
-}: {
-  empty: boolean;
-  settling: boolean;
-  error: string | null;
-  matched: number | undefined;
-}) {
-  if (empty) {
-    return (
-      <span className="text-sm text-slate-500">조건을 하나 이상 넣어야 적용할 수 있습니다</span>
-    );
-  }
-  if (error) {
-    return (
-      <span role="alert" className="text-sm text-red-600">
-        {error}
-      </span>
-    );
-  }
-  return (
-    <span className="text-sm text-slate-600" aria-live="polite">
-      조건에 맞는 대상{' '}
-      <strong className={`text-base text-blue-600 ${settling ? 'opacity-50' : ''}`}>
-        {matched === undefined ? '…' : `${fmt(matched)}명`}
-      </strong>
-    </span>
-  );
 }
 
 function ApplySummary({ name, summary }: { name: string; summary: Summary }) {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useTransition } from 'react';
+import { useState, useTransition } from 'react';
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -19,18 +19,15 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { prepareContactClauseValue } from '@/features/operations/contacts/contacts-filter-bar';
-import { ValueWidget } from '@/features/operations/contacts/value-widget';
 import {
-  FilterBarCore,
-  type FilterDraftRow,
-  draftRowsToClauses,
-  newDraftRowId,
-} from '@/features/operations/filters/filter-bar-core';
+  ClauseMatchedCount,
+  formatCount,
+} from '@/features/operations/contacts/clause-editor-parts';
+import { useClauseDraft } from '@/features/operations/contacts/use-clause-draft';
+import { ValueWidget } from '@/features/operations/contacts/value-widget';
+import { FilterBarCore } from '@/features/operations/filters/filter-bar-core';
 import { getErrorMessage } from '@/lib/get-error-message';
-import { shareCountAfter } from './share-overlap';
 import { type ColumnCandidate, FILTER_SOURCE } from '@/lib/operations/filter-shared';
-import { compactIdListValue } from '@/lib/operations/id-list-paste';
 import type { ContactAssignmentClause, ContactResultCode } from '@/shared/contracts/contacts';
 import type {
   FieldworkShareChangeSummary,
@@ -39,6 +36,7 @@ import type {
 import { client } from '@/shared/lib/rpc';
 
 import { sharesHref } from './share-hrefs';
+import { shareCountAfter } from './share-overlap';
 import { ShareSidePanel } from './share-side-panel';
 
 interface Props {
@@ -55,25 +53,7 @@ interface Props {
   displayColumn: { source: string; label: string } | null;
 }
 
-const fmt = (n: number) => n.toLocaleString('ko-KR');
-const PREVIEW_DEBOUNCE_MS = 400;
-
-function initialRows(
-  lastClauses: ContactAssignmentClause[] | null,
-  candidates: ColumnCandidate[],
-): FilterDraftRow[] {
-  if (lastClauses && lastClauses.length > 0) {
-    return lastClauses.map((c, i) => ({
-      id: `init-${i}`,
-      op: c.op === 'OR' ? 'OR' : 'AND',
-      source: c.source,
-      value: compactIdListValue(c.source, c.value),
-    }));
-  }
-  const source =
-    candidates.find((c) => c.source === FILTER_SOURCE.RESID)?.source ?? candidates[0]?.source ?? '';
-  return [{ id: newDraftRowId(), op: 'AND', source, value: '' }];
-}
+const fmt = formatCount;
 
 /**
  * 외주 담당 범위 수정 화면 왼쪽 — 컨택원 수정 화면과 같은 손 모양이다(ADR-0035): 조건 줄(FilterBarCore
@@ -97,65 +77,24 @@ export function ShareEditor({
 }: Props) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [rows, setRows] = useState<FilterDraftRow[]>(() =>
-    initialRows(link.lastClauses, columnCandidates),
-  );
-  const [focusedRowId, setFocusedRowId] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [clearOpen, setClearOpen] = useState(false);
   const [overlapChoice, setOverlapChoice] = useState<FieldworkShareOverlap | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  // 값 변환(저장 목록 토큰)은 같은 값이면 한 번만 — 디바운스마다 목록을 새로 저장하지 않는다.
-  const prepareCache = useRef(new Map<string, Promise<string>>());
-  const prepareCached = (source: string, value: string): Promise<string> => {
-    const key = `${source}\u0000${value}`;
-    let hit = prepareCache.current.get(key);
-    if (!hit) {
-      hit = prepareContactClauseValue(surveyId, source, compactIdListValue(source, value));
-      prepareCache.current.set(key, hit);
-      hit.catch(() => prepareCache.current.delete(key));
-    }
-    return hit;
-  };
-
-  const draft = draftRowsToClauses(rows);
-  const draftKey = JSON.stringify(draft);
-  const [prepared, setPrepared] = useState<
-    { key: string; clauses: ContactAssignmentClause[] } | { key: string; error: string } | null
-  >(null);
-
-  useEffect(() => {
-    const pending: ContactAssignmentClause[] = JSON.parse(draftKey);
-    if (pending.length === 0) return;
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      Promise.all(
-        pending.map(async (c) => ({ ...c, value: await prepareCached(c.source, c.value) })),
-      )
-        .then((clauses) => {
-          if (!cancelled) setPrepared({ key: draftKey, clauses });
-        })
-        .catch((err: unknown) => {
-          if (!cancelled) {
-            setPrepared({
-              key: draftKey,
-              error: getErrorMessage(err, '조건을 해석할 수 없습니다.'),
-            });
-          }
-        });
-    }, PREVIEW_DEBOUNCE_MS);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-    // prepareCached 는 ref 만 읽는다 — 조건 문자열이 바뀔 때만 다시 준비한다.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftKey]);
-
-  const current = prepared && prepared.key === draftKey ? prepared : null;
-  const readyClauses = current && 'clauses' in current ? current.clauses : null;
-  const prepareError = current && 'error' in current ? current.error : null;
+  const {
+    rows,
+    setRows,
+    setFocusedRowId,
+    focusedRow,
+    setFocusedValue,
+    draft,
+    readyClauses,
+    prepareError,
+    preparing,
+    snapshotRowValues,
+    compactSentRows,
+  } = useClauseDraft({ surveyId, lastClauses: link.lastClauses, columnCandidates });
 
   const previewQuery = useQuery({
     queryKey: ['fieldwork-share-preview', surveyId, link.id, readyClauses],
@@ -172,7 +111,7 @@ export function ShareEditor({
     draft.length > 0 && readyClauses ? previewQuery.data : undefined;
   const previewError =
     prepareError ?? (previewQuery.isError ? getErrorMessage(previewQuery.error, '') : null);
-  const settling = draft.length > 0 && (current == null || previewQuery.isFetching);
+  const settling = preparing || (draft.length > 0 && previewQuery.isFetching);
   const hasOverlap = summary != null && summary.overlap > 0;
   // 겹침이 없으면 묻지 않는다 — 머리 주석의 「남겨 두기로 보낸다」.
   const effectiveOverlap: FieldworkShareOverlap | null = hasOverlap ? overlapChoice : 'keep';
@@ -190,7 +129,7 @@ export function ShareEditor({
   const runApply = () => {
     if (!readyClauses || !effectiveOverlap) return;
     const overlap = effectiveOverlap;
-    const sentValues = new Map(rows.map((r) => [r.id, r.value]));
+    const sentValues = snapshotRowValues();
     startTransition(async () => {
       try {
         const result = await client.contacts.fieldworkShares.apply({
@@ -200,13 +139,7 @@ export function ShareEditor({
           overlap,
         });
         setConfirmOpen(false);
-        setRows((prev) =>
-          prev.map((r) =>
-            sentValues.get(r.id) === r.value
-              ? { ...r, value: compactIdListValue(r.source, r.value) }
-              : r,
-          ),
-        );
+        compactSentRows(sentValues);
         toast.success(
           `담당 범위를 적용했습니다 — ${link.name} ${fmt(result.after)}명 (새로 ${fmt(result.incoming)}${result.overlap > 0 ? ` · ${OVERLAP_LABEL[result.overlapChoice]} ${fmt(result.overlap)}` : ''} · 빠짐 ${fmt(result.leaving)})`,
         );
@@ -233,12 +166,6 @@ export function ShareEditor({
         toast.error(getErrorMessage(err, '담당 범위를 없애지 못했습니다.'));
       }
     });
-  };
-
-  const focusedRow = rows.find((r) => r.id === focusedRowId) ?? rows[0] ?? null;
-  const setFocusedValue = (value: string) => {
-    if (!focusedRow) return;
-    setRows(rows.map((r) => (r.id === focusedRow.id ? { ...r, value } : r)));
   };
 
   const canApply =
@@ -297,11 +224,20 @@ export function ShareEditor({
                 </div>
               )}
               stackFooter={
-                <MatchedCount
+                <ClauseMatchedCount
                   empty={draft.length === 0}
                   settling={settling}
                   error={previewError}
-                  summary={summary}
+                  matched={summary?.matched}
+                  extra={
+                    summary && summary.fromOthers.length > 0 ? (
+                      <span className="ml-2 text-orange-600">
+                        {summary.fromOthers
+                          .map((o) => `${o.name} 링크에 이미 ${fmt(o.count)}명`)
+                          .join(' · ')}
+                      </span>
+                    ) : null
+                  }
                 />
               }
             />
@@ -456,44 +392,6 @@ function OverlapChoice({
         )}
       </fieldset>
     </div>
-  );
-}
-
-function MatchedCount({
-  empty,
-  settling,
-  error,
-  summary,
-}: {
-  empty: boolean;
-  settling: boolean;
-  error: string | null;
-  summary: FieldworkShareChangeSummary | undefined;
-}) {
-  if (empty) {
-    return (
-      <span className="text-sm text-slate-500">조건을 하나 이상 넣어야 적용할 수 있습니다</span>
-    );
-  }
-  if (error) {
-    return (
-      <span role="alert" className="text-sm text-red-600">
-        {error}
-      </span>
-    );
-  }
-  return (
-    <span className="text-sm text-slate-600" aria-live="polite">
-      조건에 맞는 대상{' '}
-      <strong className={`text-base text-blue-600 ${settling ? 'opacity-50' : ''}`}>
-        {summary === undefined ? '…' : `${fmt(summary.matched)}명`}
-      </strong>
-      {summary && summary.fromOthers.length > 0 && (
-        <span className="ml-2 text-orange-600">
-          {summary.fromOthers.map((o) => `${o.name} 링크에 이미 ${fmt(o.count)}명`).join(' · ')}
-        </span>
-      )}
-    </span>
   );
 }
 

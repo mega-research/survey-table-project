@@ -1,34 +1,22 @@
 'use client';
 
-import { useState } from 'react';
-
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { Search } from 'lucide-react';
 
-import { Checkbox } from '@/components/ui/checkbox';
-import { Input } from '@/components/ui/input';
-import { attrsKeyOf, piiKeyOf } from '@/lib/operations/contacts-format';
-import {
-  type ColumnCandidate,
-  FILTER_SOURCE,
-  decodeMultiClauseValue,
-  encodeMultiClauseValue,
-} from '@/lib/operations/filter-shared';
+import { type ColumnCandidate } from '@/lib/operations/filter-shared';
 import { cn } from '@/lib/utils';
 import type { ContactAssignmentClause } from '@/shared/contracts/contacts';
-import type { ContactAssignmentMatchRow } from '@/shared/contracts/contacts-io';
 import { client } from '@/shared/lib/rpc';
 
-const PAGE_SIZE = 10;
-const fmt = (n: number) => n.toLocaleString('ko-KR');
-
-/** 값 목록을 고정 선택지로 그리는 열 — 조사 대상 열 머리 필터가 체크박스로 그리는 열과 같다. */
-export const FIXED_CHECKBOX_SOURCES: ReadonlySet<string> = new Set([
-  FILTER_SOURCE.CONTACT_RESULT,
-  FILTER_SOURCE.WEB,
-  FILTER_SOURCE.EMAIL,
-  FILTER_SOURCE.CONTACT_OWNER,
-]);
+import {
+  ClauseSidePanel,
+  Pager,
+  PanelShell,
+  cellValue,
+  formatCount as fmt,
+  isFacetableSource,
+  matchesFocusColumn,
+  useClauseMatchesPage,
+} from '../clause-editor-parts';
 
 interface Props {
   surveyId: string;
@@ -55,159 +43,23 @@ interface Props {
 export function AssignmentSidePanel(props: Props) {
   const { surveyId, focused } = props;
   const source = focused?.source ?? '';
-  const facetable =
-    FIXED_CHECKBOX_SOURCES.has(source) || source.startsWith(FILTER_SOURCE.ATTRS_PREFIX);
+  const facetable = isFacetableSource(source);
   const facetsQuery = useQuery({
     queryKey: ['contact-assignment-facets', surveyId, source],
     queryFn: () => client.contacts.assignments.facets({ surveyId, source }),
     enabled: facetable,
     staleTime: 60_000,
   });
-
-  if (facetable && facetsQuery.data?.kind === 'values') {
-    return (
-      <ValuesPanel
-        key={source}
-        label={props.columnCandidates.find((c) => c.source === source)?.label ?? source}
-        values={facetsQuery.data.values}
-        total={facetsQuery.data.total}
-        value={focused?.value ?? ''}
-        onChange={props.onFocusedValueChange}
-      />
-    );
-  }
-  if (facetable && facetsQuery.isPending) {
-    return <PanelShell title="값 목록" subtitle="불러오는 중…" />;
-  }
-  return <MatchesPanel {...props} />;
-}
-
-export function PanelShell({
-  title,
-  subtitle,
-  children,
-}: {
-  title: string;
-  subtitle: string;
-  children?: React.ReactNode;
-}) {
   return (
-    <aside className="rounded-lg border bg-white p-4" aria-label={title}>
-      <h3 className="text-base font-semibold text-slate-900">{title}</h3>
-      <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>
-      {children}
-    </aside>
-  );
-}
-
-export function ValuesPanel({
-  label,
-  values,
-  total,
-  value,
-  onChange,
-}: {
-  label: string;
-  values: Array<{ value: string; label: string; count: number }>;
-  total: number;
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-
-  // 조건 줄 값 ↔ 체크 — 여러 값 형식이면 그 값들, 단일 값이면 그 값 하나가 목록에 있을 때만.
-  const decoded = decodeMultiClauseValue(value);
-  const selected = new Set(
-    decoded ?? (values.some((v) => v.value === value.trim()) ? [value.trim()] : []),
-  );
-  const write = (next: Set<string>) =>
-    // 목록 순서로 정렬해 같은 선택이면 같은 값이 되게 한다.
-    onChange(encodeMultiClauseValue(values.map((v) => v.value).filter((v) => next.has(v))));
-
-  const term = search.trim().toLowerCase();
-  const filtered = term ? values.filter((v) => v.label.toLowerCase().includes(term)) : values;
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const safePage = Math.min(page, pageCount);
-  const shown = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
-  const selectedCount = values.filter((v) => selected.has(v.value)).length;
-  const selectedPeople = values
-    .filter((v) => selected.has(v.value))
-    .reduce((n, v) => n + v.count, 0);
-
-  return (
-    <PanelShell title={label} subtitle="선택한 조건 줄의 열에 들어 있는 값 · 명단 전체 기준 인원">
-      <div className="relative mt-3">
-        <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-slate-400" />
-        <Input
-          aria-label="값 검색"
-          placeholder="값 검색"
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setPage(1);
-          }}
-          className="h-9 pl-8"
-        />
-      </div>
-      <div className="mt-2 flex items-center justify-between text-xs">
-        <span className="space-x-1 text-blue-600">
-          <button
-            type="button"
-            className="hover:underline"
-            onClick={() => write(new Set([...selected, ...filtered.map((v) => v.value)]))}
-          >
-            전체 선택
-          </button>
-          <span className="text-slate-300">·</span>
-          <button
-            type="button"
-            className="hover:underline"
-            onClick={() => {
-              const next = new Set(selected);
-              for (const v of filtered) next.delete(v.value);
-              write(next);
-            }}
-          >
-            선택 해제
-          </button>
-        </span>
-        <span className="font-medium text-blue-700">
-          {fmt(selectedCount)}개 선택 · 명단 {fmt(selectedPeople)}명
-        </span>
-      </div>
-      <ul className="mt-2 divide-y rounded border">
-        {shown.length === 0 && (
-          <li className="px-3 py-4 text-center text-xs text-slate-400">맞는 값이 없습니다</li>
-        )}
-        {shown.map((v) => {
-          const checked = selected.has(v.value);
-          return (
-            <li key={v.value} className={cn(checked && 'bg-blue-50/60')}>
-              <label className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm">
-                <Checkbox
-                  checked={checked}
-                  onCheckedChange={(c) => {
-                    const next = new Set(selected);
-                    if (c === true) next.add(v.value);
-                    else next.delete(v.value);
-                    write(next);
-                  }}
-                />
-                <span className="flex-1 truncate">{v.label}</span>
-                <span className="text-xs text-slate-400 tabular-nums">{fmt(v.count)}</span>
-              </label>
-            </li>
-          );
-        })}
-      </ul>
-      <Pager
-        summary={`값 ${fmt(shown.length)} / ${fmt(filtered.length)}개 · 명단 ${fmt(total)}명`}
-        page={safePage}
-        pageCount={pageCount}
-        onPage={setPage}
-      />
-    </PanelShell>
+    <ClauseSidePanel
+      source={source}
+      facetable={facetable}
+      facetsQuery={facetsQuery}
+      columnCandidates={props.columnCandidates}
+      value={focused?.value ?? ''}
+      onChange={props.onFocusedValueChange}
+      matches={<MatchesPanel {...props} />}
+    />
   );
 }
 
@@ -220,13 +72,7 @@ function MatchesPanel({
   displayColumn,
   otherOwnerNames,
 }: Props) {
-  const [page, setPage] = useState(1);
-  const clausesKey = JSON.stringify(clauses);
-  const [prevKey, setPrevKey] = useState(clausesKey);
-  if (prevKey !== clausesKey) {
-    setPrevKey(clausesKey);
-    setPage(1);
-  }
+  const [page, setPage] = useClauseMatchesPage(clauses);
 
   const query = useQuery({
     queryKey: ['contact-assignment-matches', surveyId, clauses, page],
@@ -235,18 +81,7 @@ function MatchesPanel({
     placeholderData: keepPreviousData,
   });
 
-  // 포커스 열이 시스템ID·표시 첫 열과 겹치지 않을 때만 한 열 더 보인다.
-  const focusColumn =
-    focused &&
-    focused.source !== FILTER_SOURCE.RESID &&
-    focused.source !== displayColumn?.source &&
-    (focused.source.startsWith(FILTER_SOURCE.ATTRS_PREFIX) ||
-      focused.source.startsWith(FILTER_SOURCE.PII_PREFIX))
-      ? {
-          source: focused.source,
-          label: columnCandidates.find((c) => c.source === focused.source)?.label ?? focused.source,
-        }
-      : null;
+  const focusColumn = matchesFocusColumn(focused, displayColumn, columnCandidates);
 
   const data = clauses && clauses.length > 0 ? query.data : undefined;
   const pageCount = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
@@ -334,60 +169,5 @@ function MatchesPanel({
         </p>
       )}
     </PanelShell>
-  );
-}
-
-/** 대상 목록 칸 값 — 개인정보 열은 목록 화면과 같은 마스킹 힌트만 (평문은 오지 않는다). */
-export function cellValue(
-  row: Pick<ContactAssignmentMatchRow, 'attrs' | 'piiMaskHints'>,
-  source: string,
-): string {
-  const ak = attrsKeyOf(source);
-  if (ak) return row.attrs[ak] || '—';
-  const pk = piiKeyOf(source);
-  if (pk) return row.piiMaskHints[pk]?.maskHint ?? '—';
-  return '—';
-}
-
-export function Pager({
-  summary,
-  page,
-  pageCount,
-  onPage,
-}: {
-  summary: string;
-  page: number;
-  pageCount: number;
-  onPage: (page: number) => void;
-}) {
-  return (
-    <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
-      <span>{summary}</span>
-      {pageCount > 1 && (
-        <span className="flex items-center gap-1">
-          <button
-            type="button"
-            className="px-1 disabled:opacity-30"
-            disabled={page <= 1}
-            onClick={() => onPage(page - 1)}
-            aria-label="이전 쪽"
-          >
-            ‹
-          </button>
-          <span className="tabular-nums">
-            {page} / {pageCount}
-          </span>
-          <button
-            type="button"
-            className="px-1 disabled:opacity-30"
-            disabled={page >= pageCount}
-            onClick={() => onPage(page + 1)}
-            aria-label="다음 쪽"
-          >
-            ›
-          </button>
-        </span>
-      )}
-    </div>
   );
 }
