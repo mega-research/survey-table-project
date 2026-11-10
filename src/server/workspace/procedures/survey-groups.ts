@@ -18,9 +18,10 @@ import {
   ReorderSurveyGroupsInput,
   SurveyAlreadyGroupedError,
   SurveyGroupDepthExceededError,
-  SurveyGroupHasChildrenError,
   SurveyGroupIdInput,
+  SurveyGroupLiftNameConflictError,
   SurveyGroupNotFoundError,
+  type SurveyGroupRemoveConflict,
   SurveyGroupTargetNotFoundError,
   SurveyTeamMismatchError,
 } from '../domain/survey-groups';
@@ -108,8 +109,8 @@ async function assertParentGroupInTeam(parentGroupId: string, teamId: string): P
  * 그룹 도메인 에러 → RPC 코드.
  *
  * 팀 불일치·이미 담긴 설문은 CONFLICT 다 — 입력은 문법적으로 옳고 지금 상태와 충돌할 뿐이라,
- * 화면은 문구를 띄우고 목록을 다시 읽으면 된다. 3단계 초과와 「하위 그룹이 있어 못 지운다」도
- * 같은 결이다(그 사이 다른 팀원이 구조를 바꿨을 수 있다).
+ * 화면은 문구를 띄우고 목록을 다시 읽으면 된다. 3단계 초과와 지우기의 이름 겹침(하위 그룹이
+ * 올라갈 자리에 같은 이름이 있다)도 같은 결이다(그 사이 다른 팀원이 구조를 바꿨을 수 있다).
  */
 function rethrowSurveyGroupError(err: unknown): never {
   if (err instanceof SurveyGroupNotFoundError || err instanceof SurveyGroupTargetNotFoundError) {
@@ -121,8 +122,13 @@ function rethrowSurveyGroupError(err: unknown): never {
   if (err instanceof SurveyTeamMismatchError || err instanceof SurveyAlreadyGroupedError) {
     throw new ORPCError('CONFLICT', { message: err.message });
   }
-  if (err instanceof SurveyGroupDepthExceededError || err instanceof SurveyGroupHasChildrenError) {
+  if (err instanceof SurveyGroupDepthExceededError) {
     throw new ORPCError('CONFLICT', { message: err.message });
+  }
+  // 지우기의 이름 겹침 — 무엇을 고치면 되는지 화면이 말할 수 있게 겹치는 이름을 값으로 싣는다.
+  if (err instanceof SurveyGroupLiftNameConflictError) {
+    const data: SurveyGroupRemoveConflict = { conflictingNames: [...err.conflictingNames] };
+    throw new ORPCError('CONFLICT', { message: err.message, data });
   }
   throw toWorkspaceRpcError(err) ?? err;
 }

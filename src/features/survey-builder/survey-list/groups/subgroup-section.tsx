@@ -2,12 +2,13 @@
 
 import Link from 'next/link';
 
-import { Ellipsis, Folder, Pencil } from 'lucide-react';
+import { Ellipsis, Folder, Pencil, Trash2 } from 'lucide-react';
 
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
@@ -26,9 +27,12 @@ import { groupHref } from './group-view-header';
 export function SubgroupSection({
   subgroups,
   onRename,
+  onDelete,
 }: {
   subgroups: readonly GroupScreenSubgroup[];
   onRename: (group: { id: string; name: string }) => void;
+  /** 「삭제」 — 확인 창이 올라갈 자리를 말할 수 있게 상위 그룹 id 까지 넘긴다. */
+  onDelete: (group: { id: string; name: string; parentGroupId: string | null }) => void;
 }) {
   if (subgroups.length === 0) return null;
 
@@ -75,6 +79,21 @@ export function SubgroupSection({
                 <DropdownMenuItem onClick={() => onRename({ id: group.id, name: group.name })}>
                   <Pencil className="h-3.5 w-3.5" />
                   이름 바꾸기
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {/* 설문 카드 케밥의 「삭제」와 같은 얼굴이다. */}
+                <DropdownMenuItem
+                  className="text-red-600 data-[highlighted]:text-red-600"
+                  onClick={() =>
+                    onDelete({
+                      id: group.id,
+                      name: group.name,
+                      parentGroupId: group.parentGroupId,
+                    })
+                  }
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  삭제
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

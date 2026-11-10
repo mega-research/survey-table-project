@@ -6,12 +6,13 @@
  * 화면이 전과 같다는 것(폴더 줄 영역이 없다).
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { SurveyListPageResult } from '@/shared/contracts/survey-builder-io';
 import type { SurveyGroupListItem } from '@/shared/contracts/workspace-io';
+import { surveyGroupKeys } from '@/shared/lib/survey-group-queries';
 import { WorkScopeContext } from '@/shared/lib/work-scope-context';
 
 import { SurveyListView } from './survey-list-view';
@@ -33,8 +34,11 @@ vi.mock('next/navigation', () => ({
 
 const listPageCall = vi.fn();
 const groupsCall = vi.fn();
+const removeGroupCall = vi.fn();
 vi.mock('@/shared/lib/rpc', () => ({
-  client: {},
+  client: {
+    workspace: { surveyGroups: { remove: (...a: unknown[]) => removeGroupCall(...a) } },
+  },
   orpc: {
     surveyBuilder: { read: { listPage: { call: (...a: unknown[]) => listPageCall(...a) } } },
     workspace: {
@@ -83,7 +87,7 @@ function renderGroupScreen(groupId: string, groups: SurveyGroupListItem[] = NEST
   searchParams = new URLSearchParams({ group: groupId });
   groupsCall.mockResolvedValue(groups);
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  const view = render(
     <QueryClientProvider client={queryClient}>
       <WorkScopeContext.Provider
         value={{
@@ -100,6 +104,7 @@ function renderGroupScreen(groupId: string, groups: SurveyGroupListItem[] = NEST
       </WorkScopeContext.Provider>
     </QueryClientProvider>,
   );
+  return Object.assign(view, { queryClient });
 }
 
 /** 브레드크럼의 칸들 — 글자만. */
@@ -115,6 +120,7 @@ beforeEach(() => {
   listPageCall.mockReset();
   listPageCall.mockResolvedValue(EMPTY_PAGE);
   groupsCall.mockReset();
+  removeGroupCall.mockReset();
 });
 
 describe('그룹 화면 — 1단계 그룹', () => {
@@ -217,5 +223,65 @@ describe('그룹 관리 창 — 아직 최상위 그룹만 다룬다', () => {
     expect(dialog.queryByText('상반기')).toBeNull();
     // 타 팀 폴더는 전에도 관리 대상이 아니었다.
     expect(dialog.queryByText('A고객사 2026')).toBeNull();
+  });
+});
+
+describe('그룹 삭제 — 내용물이 한 단계 위로 올라간다 (티켓 06)', () => {
+  it('폴더 줄 ⋯ 「삭제」가 올라갈 자리를 말하는 확인 창을 열고, 「삭제」로 그 그룹을 지운다', async () => {
+    const user = userEvent.setup();
+    removeGroupCall.mockResolvedValue({ success: true });
+    renderGroupScreen(G_LEE);
+
+    await user.click(await screen.findByRole('button', { name: '2026 더보기' }));
+    await user.click(await screen.findByRole('menuitem', { name: '삭제' }));
+
+    const dialog = await screen.findByRole('alertdialog', { name: '「2026」 그룹을 삭제할까요?' });
+    expect(dialog).toHaveTextContent(
+      '하위 그룹 1개(상반기)와 여기에 직접 담긴 설문이 한 단계 위 「이정운」 그룹으로 올라갑니다.',
+    );
+    // 폴더 줄에는 「설문 18」이 있어도 확인 창에는 건수가 없다.
+    expect(dialog).not.toHaveTextContent('18');
+
+    await user.click(within(dialog).getByRole('button', { name: '삭제' }));
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    expect(removeGroupCall).toHaveBeenCalledWith({ groupId: G_2026 });
+    // 지운 것은 지금 보고 있는 그룹이 아니다 — 화면은 그대로다.
+    expect(routerReplace).not.toHaveBeenCalled();
+  });
+
+  it('보고 있던 그룹이 지워지면 그 위 그룹 화면으로 간다', async () => {
+    const { queryClient } = renderGroupScreen(G_2026);
+    expect(await breadcrumb()).toEqual(['설문 목록', '이정운', '2026']);
+
+    // 2026 이 지워져 상반기가 이정운 밑으로 올라온 뒤의 목록.
+    groupsCall.mockResolvedValue(
+      NESTED.filter((g) => g.id !== G_2026).map((g) =>
+        g.id === G_H1 ? { ...g, parentGroupId: G_LEE } : g,
+      ),
+    );
+    await queryClient.invalidateQueries({ queryKey: surveyGroupKeys.all });
+
+    await waitFor(() => expect(routerReplace).toHaveBeenCalledWith(`/surveys?group=${G_LEE}`));
+  });
+
+  it('보고 있던 최상위 그룹이 지워지면 설문 목록으로 간다', async () => {
+    const { queryClient } = renderGroupScreen(G_LEE);
+    expect(await breadcrumb()).toEqual(['설문 목록', '이정운']);
+
+    groupsCall.mockResolvedValue(
+      NESTED.filter((g) => g.id !== G_LEE).map((g) =>
+        g.parentGroupId === G_LEE ? { ...g, parentGroupId: null } : g,
+      ),
+    );
+    await queryClient.invalidateQueries({ queryKey: surveyGroupKeys.all });
+
+    await waitFor(() => expect(routerReplace).toHaveBeenCalledWith('/surveys'));
+  });
+
+  it('처음부터 없는 그룹 주소는 전처럼 설문 목록으로 정리한다', async () => {
+    renderGroupScreen('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
+
+    await waitFor(() => expect(routerReplace).toHaveBeenCalledWith('/surveys'));
   });
 });

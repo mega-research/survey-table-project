@@ -247,7 +247,7 @@ export const SurveyGroupListItem = z.object({
    * 보이지 않으면 이 id 가 목록에 없을 수 있다 — 그 줄은 뿌리로 그린다.
    */
   parentGroupId: z.uuid().nullable(),
-  /** 소속 설문 수 — 삭제되지 않은 설문만 센다(삭제 확인 모달의 「설문 N개가 미분류로」). */
+  /** 소속 설문 수 — 삭제되지 않은 설문만 센다. */
   surveyCount: z.number().int(),
   /**
    * 이 그룹이 **다른 팀의 것**일 때 그 팀 이름. 내 팀 그룹이면 null.
@@ -306,6 +306,18 @@ export type ReorderSurveyGroupsInput = z.infer<typeof ReorderSurveyGroupsInput>;
 
 export const SurveyGroupIdInput = z.object({ groupId: z.uuid() });
 export type SurveyGroupIdInput = z.infer<typeof SurveyGroupIdInput>;
+
+/**
+ * 그룹 삭제가 이름 겹침으로 막혔을 때 CONFLICT 에 함께 실리는 것 (`ORPCError.data`).
+ *
+ * 그룹을 지우면 그 하위 그룹이 한 단계 위로 올라가는데, 올라갈 자리에 같은 이름의 그룹이 있으면
+ * 아무것도 바꾸지 않고 거부한다. 무엇을 고치면 되는지 알려면 **겹치는 이름**이 필요해서 문구만이
+ * 아니라 값으로 준다. 화면은 이 모양으로 읽어 보고(`safeParse`) 아니면 일반 오류로 다룬다.
+ */
+export const SurveyGroupRemoveConflict = z.object({
+  conflictingNames: z.array(z.string()).min(1),
+});
+export type SurveyGroupRemoveConflict = z.infer<typeof SurveyGroupRemoveConflict>;
 
 /**
  * 「설문 담기」 후보 — **미분류 설문만** 나온다 (.pen FLOW 2-2).

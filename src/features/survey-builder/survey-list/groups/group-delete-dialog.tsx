@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 
-import { FolderOpen, Loader2, ShieldCheck, TriangleAlert } from 'lucide-react';
+import { ORPCError } from '@orpc/client';
+import { Loader2 } from 'lucide-react';
 
 import {
   AlertDialog,
@@ -15,25 +16,42 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { getErrorMessage } from '@/lib/get-error-message';
+import { SurveyGroupRemoveConflict } from '@/shared/contracts/workspace-io';
 import type { SurveyGroupListItem } from '@/shared/contracts/workspace-io';
 
-import { useRemoveSurveyGroup } from '../../queries/use-survey-groups';
+import { useRemoveSurveyGroup, useSurveyGroups } from '../../queries/use-survey-groups';
+import {
+  describeGroupDelete,
+  describeGroupDeleteBlocked,
+  planGroupDelete,
+} from './group-delete-plan';
 
 interface GroupDeleteDialogProps {
-  group: SurveyGroupListItem;
+  group: Pick<SurveyGroupListItem, 'id' | 'name' | 'parentGroupId'>;
+  /** 그 그룹의 팀 — 올라갈 자리와 하위 그룹의 이름을 그룹 목록(같은 캐시)에서 읽는다. */
+  teamId: string;
   onClose: () => void;
 }
 
 /**
- * 그룹 삭제 확인 (.pen FLOW 2-3).
+ * 그룹 삭제 확인 (.pen FLOW 2-3 · 3단계 시안 G4).
  *
- * 팀 해산과 달리 이름 재입력 확인란이 없다 — 되돌릴 수 없는 일이 아니기 때문이다. 그룹만
- * 사라지고 설문은 전부 미분류로 돌아가며(FK ON DELETE SET NULL) 응답·공유·부여는 그대로다.
- * 영향 요약 두 줄이 그 사실을 미리 말해준다.
+ * 그룹만 사라지고 **내용물은 한 단계 위로 올라간다** — 하위 그룹은 지운 그룹의 부모 밑으로,
+ * 직접 담긴 설문은 그 부모 그룹으로(최상위였으면 미분류). 문구가 올라갈 자리의 이름을 말한다.
+ * 팀 해산과 달리 이름 재입력 확인란이 없다: 설문·응답·공유 설정은 그대로라 잃는 것이 없다.
+ *
+ * **설문 건수는 적지 않는다** — 내가 볼 수 없는 설문이 담겨 있을 수 있다.
+ *
+ * 올라갈 자리에 같은 이름의 그룹이 있으면 서버가 아무것도 바꾸지 않고 거부하며 겹치는 이름을
+ * 준다. 그때는 같은 창이 「삭제할 수 없습니다」로 바뀌어 무엇을 고치면 되는지 말한다. 겹침을
+ * 화면이 미리 판정하지 않는 것은 목록이 낡았을 수 있어서다 — 판정은 서버 하나다.
  */
-export function GroupDeleteDialog({ group, onClose }: GroupDeleteDialogProps) {
+export function GroupDeleteDialog({ group, teamId, onClose }: GroupDeleteDialogProps) {
   const [error, setError] = useState<string | null>(null);
+  const [conflictingNames, setConflictingNames] = useState<readonly string[] | null>(null);
+  const { data: groups } = useSurveyGroups(teamId);
   const removeGroup = useRemoveSurveyGroup();
+  const plan = planGroupDelete(groups ?? [], group);
 
   async function handleDelete() {
     setError(null);
@@ -41,47 +59,70 @@ export function GroupDeleteDialog({ group, onClose }: GroupDeleteDialogProps) {
       await removeGroup.mutateAsync(group.id);
       onClose();
     } catch (err) {
-      setError(getErrorMessage(err, '그룹을 삭제하지 못했습니다.'));
+      const conflict = readRemoveConflict(err);
+      if (conflict) setConflictingNames(conflict);
+      else setError(getErrorMessage(err, '그룹을 삭제하지 못했습니다.'));
     }
   }
 
   return (
     <AlertDialog open onOpenChange={(next) => (next ? undefined : onClose())}>
       <AlertDialogContent className="max-w-[460px]">
-        <AlertDialogHeader>
-          <AlertDialogTitle className="flex items-center gap-2">
-            <TriangleAlert className="h-[18px] w-[18px] text-[#EF4444]" />「{group.name}」 그룹을
-            삭제할까요?
-          </AlertDialogTitle>
-          <AlertDialogDescription>그룹만 삭제되고 설문은 삭제되지 않습니다.</AlertDialogDescription>
-        </AlertDialogHeader>
+        {conflictingNames ? (
+          <>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="break-words">
+                「{group.name}」 그룹을 삭제할 수 없습니다
+              </AlertDialogTitle>
+              <AlertDialogDescription className="break-words">
+                {describeGroupDeleteBlocked(plan, conflictingNames)}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <Button type="button" onClick={onClose}>
+                확인
+              </Button>
+            </AlertDialogFooter>
+          </>
+        ) : (
+          <>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="break-words">
+                「{group.name}」 그룹을 삭제할까요?
+              </AlertDialogTitle>
+              <AlertDialogDescription className="break-words">
+                {describeGroupDelete(plan)}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
 
-        <div className="flex flex-col gap-2 rounded-[9px] bg-[#F5F5F7] px-3.5 py-3">
-          <span className="flex items-center gap-2 text-[12.5px] text-[#374151]">
-            <FolderOpen className="h-3.5 w-3.5 shrink-0 text-[#6E6E73]" />
-            설문 {group.surveyCount}개가 미분류로 이동합니다
-          </span>
-          <span className="flex items-center gap-2 text-[12.5px] text-[#374151]">
-            <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-[#6E6E73]" />
-            응답 데이터·공유 설정·게스트·실사 부여는 변하지 않습니다
-          </span>
-        </div>
+            {error && (
+              <p role="alert" className="text-[12.5px] text-red-600">
+                {error}
+              </p>
+            )}
 
-        {error && <p className="text-[12.5px] text-red-600">{error}</p>}
-
-        <AlertDialogFooter>
-          <AlertDialogCancel>취소</AlertDialogCancel>
-          <Button
-            type="button"
-            variant="destructive"
-            disabled={removeGroup.isPending}
-            onClick={handleDelete}
-          >
-            {removeGroup.isPending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-            그룹 삭제
-          </Button>
-        </AlertDialogFooter>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={removeGroup.isPending}>취소</AlertDialogCancel>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={removeGroup.isPending}
+                onClick={handleDelete}
+              >
+                {removeGroup.isPending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                삭제
+              </Button>
+            </AlertDialogFooter>
+          </>
+        )}
       </AlertDialogContent>
     </AlertDialog>
   );
+}
+
+/** 삭제가 이름 겹침으로 막힌 것이면 겹치는 이름을, 아니면 null 을 돌려준다. */
+function readRemoveConflict(err: unknown): readonly string[] | null {
+  if (!(err instanceof ORPCError) || err.code !== 'CONFLICT') return null;
+  const parsed = SurveyGroupRemoveConflict.safeParse(err.data);
+  return parsed.success ? parsed.data.conflictingNames : null;
 }

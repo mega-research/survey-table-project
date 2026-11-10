@@ -8,6 +8,7 @@
  * ② 팀 안에서 그룹 이름이 유일하고 다른 팀은 같은 이름을 쓸 수 있다 (부분 UNIQUE)
  * ③ 담기·이동이 팀 경계를 잠긴 값으로 재검증한다 (FOR UPDATE)
  * ④ 3단계 중첩의 깊이·같은 팀 부모·순환·이름 유일을 DB 가 막는다 (0166 — 복합 FK + CHECK)
+ * ⑤ 그룹을 지우면 하위 그룹과 직접 담긴 설문이 한 단계 위로 올라간다 (한 트랜잭션, 팀 키 아래)
  */
 import { createRouterClient, ORPCError } from '@orpc/server';
 import { eq, inArray } from 'drizzle-orm';
@@ -31,6 +32,8 @@ import {
   SurveyGroupNotFoundError,
 } from '@/server/workspace/domain/survey-groups';
 import { TeamNotFoundError } from '@/server/workspace/domain/teams';
+
+import { backendPid, waitForLockWaitersBehind } from '../helpers/lock-waiters';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
@@ -468,6 +471,26 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
         .from(surveyGroupsTable)
         .where(eq(surveyGroupsTable.id, groupId));
       expect(row).toBeDefined();
+    });
+
+    it('삭제 — 하위 그룹이 있어도 올리지 않고 막는다', async () => {
+      const teamId = crypto.randomUUID();
+      await db
+        .insert(teamsTable)
+        .values({ id: teamId, name: `해산예정팀-${teamId.slice(0, 8)}` });
+      createdTeamIds.push(teamId);
+      await db.insert(teamMembersTable).values({ teamId, userId: MEMBER_ID, role: 'leader' });
+      const top = await seedGroup(clientFor(MEMBER_ID), teamId, '해산 전 상위 그룹');
+      const child = await seedGroup(clientFor(MEMBER_ID), teamId, '해산 전 하위 그룹', top);
+      await db
+        .update(teamsTable)
+        .set({ status: 'archived', archivedAt: new Date() })
+        .where(eq(teamsTable.id, teamId));
+
+      await expect(svc.removeSurveyGroup(top)).rejects.toBeInstanceOf(TeamNotFoundError);
+
+      expect(await groupRow(top)).toMatchObject({ parentGroupId: null, depth: 1 });
+      expect(await groupRow(child)).toMatchObject({ parentGroupId: top, depth: 2 });
     });
 
     it('이름 변경 — 해산 시점 이름이 보존된다', async () => {
@@ -1020,29 +1043,324 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
       });
     });
 
-    it('하위 그룹이 있는 그룹의 삭제는 아무것도 바꾸지 않고 거부된다', async () => {
-      const top = await seedGroup(member, TEAM_A, '이정운');
-      const child = await seedGroup(member, TEAM_A, '2026', top);
-      const surveyId = await seedSurvey(TEAM_A, '상위에 직접 담긴 설문', MEMBER_ID);
-      await member.surveyGroups.collect({ groupId: top, surveyIds: [surveyId] });
+    /**
+     * 지우기는 그룹만 없앤다 — 안에 있던 하위 그룹과 직접 담긴 설문은 **한 단계 위로** 올라간다.
+     * 클릭 한 번에 정리해 둔 가지가 통째로 풀리지 않게 하려는 것이다.
+     */
+    describe('그룹을 지우면 내용물이 한 단계 위로 올라간다', () => {
+      /** 설문 행에서 「폴더 정리」가 건드리면 안 되는 칸까지 함께 읽는다. */
+      async function surveyRow(surveyId: string) {
+        const [row] = await db
+          .select({
+            surveyGroupId: surveysTable.surveyGroupId,
+            teamId: surveysTable.teamId,
+            ownerUserId: surveysTable.ownerUserId,
+            visibility: surveysTable.visibility,
+            assignmentStatus: surveysTable.assignmentStatus,
+            updatedAt: surveysTable.updatedAt,
+            deletedAt: surveysTable.deletedAt,
+          })
+          .from(surveysTable)
+          .where(eq(surveysTable.id, surveyId));
+        return row ?? null;
+      }
 
-      await expect(member.surveyGroups.remove({ groupId: top })).rejects.toMatchObject({
-        code: 'CONFLICT',
-        message: '하위 그룹이 있어 지울 수 없습니다.',
+      /**
+       * 잠금 하나를 쥔 트랜잭션을 열어 둔다 — 경쟁자들이 그 뒤에 줄 선 것을 확인한 뒤 놓는다.
+       * `pid` 는 줄 선 요청을 세는 데 쓴다(`waitForLockWaitersBehind`).
+       */
+      async function holdLock(
+        acquire: (tx: Parameters<Parameters<typeof db.transaction>[0]>[0]) => Promise<unknown>,
+      ) {
+        let release!: () => void;
+        const released = new Promise<void>((resolve) => (release = resolve));
+        let holderReady!: (pid: number) => void;
+        const ready = new Promise<number>((resolve) => (holderReady = resolve));
+        const holder = db.transaction(async (tx) => {
+          await acquire(tx);
+          holderReady(await backendPid(tx));
+          await released;
+        });
+        return {
+          pid: await ready,
+          release: async () => {
+            release();
+            await holder;
+          },
+        };
+      }
+
+      /** 내 팀 목록에서 그 부모 바로 밑의 그룹 이름 — 화면이 그리는 순서 그대로. */
+      async function childNames(parentGroupId: string | null): Promise<string[]> {
+        const listed = await member.surveyGroups.list({ teamId: TEAM_A });
+        return listed.filter((g) => g.parentGroupId === parentGroupId).map((g) => g.name);
+      }
+
+      it('2단계 그룹을 지우면 하위 그룹과 직접 담긴 설문이 1단계 그룹 밑으로 올라간다', async () => {
+        const top = await seedGroup(member, TEAM_A, '이정운');
+        const second = await seedGroup(member, TEAM_A, '2026', top);
+        const third = await seedGroup(member, TEAM_A, '상반기', second);
+        const direct = await seedSurvey(TEAM_A, '2026 에 직접 담긴 설문', MEMBER_ID);
+        const deeper = await seedSurvey(TEAM_A, '상반기에 담긴 설문', MEMBER_ID);
+        await member.surveyGroups.collect({ groupId: second, surveyIds: [direct] });
+        await member.surveyGroups.collect({ groupId: third, surveyIds: [deeper] });
+
+        await expect(member.surveyGroups.remove({ groupId: second })).resolves.toEqual({
+          success: true,
+        });
+
+        expect(await groupRow(second)).toBeNull();
+        expect(await groupRow(top)).toMatchObject({ parentGroupId: null, depth: 1 });
+        expect(await groupRow(third)).toMatchObject({ parentGroupId: top, depth: 2 });
+        expect((await surveyRow(direct))?.surveyGroupId).toBe(top);
+        // 하위 그룹 안의 설문은 그 그룹에 담긴 채 함께 올라간다.
+        expect((await surveyRow(deeper))?.surveyGroupId).toBe(third);
       });
 
-      expect(await groupRow(top)).toMatchObject({ parentGroupId: null, depth: 1 });
-      expect(await groupRow(child)).toMatchObject({ parentGroupId: top, depth: 2 });
-      const [survey] = await db
-        .select({ surveyGroupId: surveysTable.surveyGroupId })
-        .from(surveysTable)
-        .where(eq(surveysTable.id, surveyId));
-      expect(survey?.surveyGroupId).toBe(top);
+      it('최상위 그룹을 지우면 하위 그룹은 최상위가 되고 직접 담긴 설문은 미분류가 된다', async () => {
+        const top = await seedGroup(member, TEAM_A, '이정운');
+        const second = await seedGroup(member, TEAM_A, '2026', top);
+        const direct = await seedSurvey(TEAM_A, '이정운에 직접 담긴 설문', MEMBER_ID);
+        const deeper = await seedSurvey(TEAM_A, '2026 에 담긴 설문', MEMBER_ID);
+        await member.surveyGroups.collect({ groupId: top, surveyIds: [direct] });
+        await member.surveyGroups.collect({ groupId: second, surveyIds: [deeper] });
 
-      // 하위 그룹부터 지우면 지워진다.
-      await member.surveyGroups.remove({ groupId: child });
-      await member.surveyGroups.remove({ groupId: top });
-      expect(await groupRow(top)).toBeNull();
+        await member.surveyGroups.remove({ groupId: top });
+
+        expect(await groupRow(top)).toBeNull();
+        expect(await groupRow(second)).toMatchObject({ parentGroupId: null, depth: 1 });
+        expect((await surveyRow(direct))?.surveyGroupId).toBeNull();
+        expect((await surveyRow(deeper))?.surveyGroupId).toBe(second);
+        expect(
+          (await member.surveyGroups.listUngrouped({ teamId: TEAM_A, query: '' })).map((c) => c.id),
+        ).toEqual([direct]);
+      });
+
+      it('올라간 하위 그룹은 그 자리의 맨 뒤에 붙고, 손자 그룹은 부모를 따라간다', async () => {
+        const doomed = await seedGroup(member, TEAM_A, '지울 그룹');
+        const stays = await seedGroup(member, TEAM_A, '김서연');
+        // 하위 그룹은 자기들끼리의 순서를 지킨 채 올라간다 — 이름순이 아니라 표시 순서다.
+        const later = await seedGroup(member, TEAM_A, '2026', doomed);
+        const earlier = await seedGroup(member, TEAM_A, '2025', doomed);
+        const grandchild = await seedGroup(member, TEAM_A, '상반기', later);
+        expect(await groupRow(grandchild)).toMatchObject({ depth: 3 });
+
+        await member.surveyGroups.remove({ groupId: doomed });
+
+        expect(await childNames(null)).toEqual(['김서연', '2026', '2025']);
+        expect((await groupRow(stays))?.order).toBeLessThan((await groupRow(later))?.order ?? -1);
+        expect(await groupRow(later)).toMatchObject({ parentGroupId: null, depth: 1 });
+        expect(await groupRow(earlier)).toMatchObject({ parentGroupId: null, depth: 1 });
+        // 손자는 옮기지 않는다 — 부모에 매달린 채 깊이만 따라 바뀐다.
+        expect(await groupRow(grandchild)).toMatchObject({ parentGroupId: later, depth: 2 });
+      });
+
+      it('올라갈 자리에 같은 이름의 그룹이 있으면 아무것도 바뀌지 않고 겹치는 이름이 응답에 담긴다', async () => {
+        const top = await seedGroup(member, TEAM_A, '이정운');
+        const taken = await seedGroup(member, TEAM_A, '상반기', top);
+        const doomed = await seedGroup(member, TEAM_A, '2026', top);
+        const clashing = await seedGroup(member, TEAM_A, '상반기', doomed);
+        const free = await seedGroup(member, TEAM_A, '하반기', doomed);
+        const direct = await seedSurvey(TEAM_A, '2026 에 직접 담긴 설문', MEMBER_ID);
+        await member.surveyGroups.collect({ groupId: doomed, surveyIds: [direct] });
+        const before = await Promise.all([taken, doomed, clashing, free].map(groupRow));
+
+        const rejection = await member.surveyGroups.remove({ groupId: doomed }).catch((e) => e);
+
+        expect(rejection).toBeInstanceOf(ORPCError);
+        expect(rejection).toMatchObject({
+          code: 'CONFLICT',
+          data: { conflictingNames: ['상반기'] },
+        });
+        // 겹치지 않는 하위 그룹(하반기)도, 설문도 움직이지 않았다.
+        expect(await Promise.all([taken, doomed, clashing, free].map(groupRow))).toEqual(before);
+        expect((await surveyRow(direct))?.surveyGroupId).toBe(doomed);
+
+        // 한쪽 이름을 바꾸면 지워진다.
+        await member.surveyGroups.rename({ groupId: clashing, name: '2026 상반기' });
+        await member.surveyGroups.remove({ groupId: doomed });
+        expect(await childNames(top)).toEqual(['상반기', '2026 상반기', '하반기']);
+      });
+
+      it('최상위 그룹의 하위 그룹이 다른 최상위 그룹과 이름이 같아도 막힌다', async () => {
+        await seedGroup(member, TEAM_A, '2026');
+        const doomed = await seedGroup(member, TEAM_A, '이정운');
+        const clashing = await seedGroup(member, TEAM_A, '2026', doomed);
+
+        await expect(member.surveyGroups.remove({ groupId: doomed })).rejects.toMatchObject({
+          code: 'CONFLICT',
+          data: { conflictingNames: ['2026'] },
+        });
+        expect(await groupRow(clashing)).toMatchObject({ parentGroupId: doomed, depth: 2 });
+      });
+
+      it('지우는 그룹과 이름이 같은 하위 그룹은 겹침이 아니다 — 그 자리를 물려받는다', async () => {
+        const top = await seedGroup(member, TEAM_A, '이정운');
+        const doomed = await seedGroup(member, TEAM_A, '2026', top);
+        const sameName = await seedGroup(member, TEAM_A, '2026', doomed);
+
+        await member.surveyGroups.remove({ groupId: doomed });
+
+        expect(await groupRow(doomed)).toBeNull();
+        expect(await groupRow(sameName)).toMatchObject({ parentGroupId: top, depth: 2 });
+        expect(await childNames(top)).toEqual(['2026']);
+      });
+
+      it('설문과 공유 설정은 그대로이고, 편집 권한이 없는 설문이 담긴 그룹도 지워진다', async () => {
+        const top = await seedGroup(member, TEAM_A, '이정운');
+        const doomed = await seedGroup(member, TEAM_A, '임원 조사', top);
+        // 팀원에게 숨긴 설문 — MEMBER 는 볼 수도 옮길 수도 없다. 담은 것은 소유자다.
+        const hidden = await seedSurvey(TEAM_A, '임원 만족도', A_OWNER_ID);
+        await db
+          .update(surveysTable)
+          .set({ visibility: 'invite_only' })
+          .where(eq(surveysTable.id, hidden));
+        await clientFor(A_OWNER_ID).surveyGroups.collect({ groupId: doomed, surveyIds: [hidden] });
+        await expect(
+          member.surveyGroups.move({ surveyId: hidden, groupId: null }),
+        ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+        const before = await surveyRow(hidden);
+
+        // 구조는 팀 공용이다 — 내가 못 고치는 설문이 담겨 있어도 그룹은 지운다.
+        await member.surveyGroups.remove({ groupId: doomed });
+
+        expect(await groupRow(doomed)).toBeNull();
+        expect(await surveyRow(hidden)).toEqual({ ...before, surveyGroupId: top });
+      });
+
+      it('두 번째 삭제는 「없는 그룹」이다', async () => {
+        const top = await seedGroup(member, TEAM_A, '이정운');
+        const doomed = await seedGroup(member, TEAM_A, '2026', top);
+        const child = await seedGroup(member, TEAM_A, '상반기', doomed);
+
+        await member.surveyGroups.remove({ groupId: doomed });
+
+        await expect(member.surveyGroups.remove({ groupId: doomed })).rejects.toMatchObject({
+          code: 'NOT_FOUND',
+        });
+        // 관문을 건너뛰고 서비스에 바로 닿아도 같은 답이다.
+        await expect(svc.removeSurveyGroup(doomed)).rejects.toBeInstanceOf(
+          SurveyGroupNotFoundError,
+        );
+        expect(await groupRow(child)).toMatchObject({ parentGroupId: top, depth: 2 });
+      });
+
+      /**
+       * 지우기와 「그 밑에 만들기」는 같은 팀 키 뒤에 한 줄로 선다. 줄을 세우지 않으면 만들기가
+       * 읽은 부모가 그 사이 지워져 FK 오류(500)가 나거나, 지우기가 못 본 하위 그룹 때문에 삭제가
+       * FK 로 깨진다.
+       *
+       * 팀 행을 먼저 쥐고 두 요청이 **정한 순서로** 줄 선 것을 확인한 뒤 놓는다 — 구조 쓰기는
+       * 팀 키를 잡은 다음 팀 행을 읽으므로 먼저 보낸 쪽이 팀 키를 쥐고 팀 행에서, 나중 쪽이
+       * 팀 키에서 기다린다.
+       */
+      describe('지우기와 그 밑에 하위 그룹 만들기가 겹쳐도 고아 그룹이 생기지 않는다', () => {
+        const holdTeamRow = (teamId: string) =>
+          holdLock((tx) =>
+            tx
+              .select({ id: teamsTable.id })
+              .from(teamsTable)
+              .where(eq(teamsTable.id, teamId))
+              .for('update'),
+          );
+
+        /** 부모가 없는 그룹(가리키는 상위 그룹 행이 없는 줄)의 수 — 0 이어야 한다. */
+        async function orphanCount(): Promise<number> {
+          const rows = await db
+            .select({
+              id: surveyGroupsTable.id,
+              parentGroupId: surveyGroupsTable.parentGroupId,
+            })
+            .from(surveyGroupsTable)
+            .where(eq(surveyGroupsTable.teamId, TEAM_A));
+          const ids = new Set(rows.map((r) => r.id));
+          return rows.filter((r) => r.parentGroupId !== null && !ids.has(r.parentGroupId)).length;
+        }
+
+        it('지우기가 먼저면 만들기는 「없는 그룹」으로 끝난다', async () => {
+          const top = await seedGroup(member, TEAM_A, '이정운');
+          const doomed = await seedGroup(member, TEAM_A, '2026', top);
+
+          const lock = await holdTeamRow(TEAM_A);
+          const removing = member.surveyGroups.remove({ groupId: doomed });
+          await waitForLockWaitersBehind(lock.pid, 1, '지우기가 팀 잠금 뒤에 줄 서지 않았습니다');
+          const creating = member.surveyGroups.create({
+            teamId: TEAM_A,
+            name: '상반기',
+            parentGroupId: doomed,
+          });
+          await waitForLockWaitersBehind(lock.pid, 2, '만들기가 지우기 뒤에 줄 서지 않았습니다');
+          await lock.release();
+
+          await expect(removing).resolves.toEqual({ success: true });
+          await expect(creating).rejects.toMatchObject({ code: 'NOT_FOUND' });
+          expect(await groupRow(doomed)).toBeNull();
+          expect(await childNames(top)).toEqual([]);
+          expect(await orphanCount()).toBe(0);
+        });
+
+        it('만들기가 먼저면 방금 만든 하위 그룹까지 함께 올라간다', async () => {
+          const top = await seedGroup(member, TEAM_A, '이정운');
+          const doomed = await seedGroup(member, TEAM_A, '2026', top);
+
+          const lock = await holdTeamRow(TEAM_A);
+          const creating = member.surveyGroups.create({
+            teamId: TEAM_A,
+            name: '상반기',
+            parentGroupId: doomed,
+          });
+          await waitForLockWaitersBehind(lock.pid, 1, '만들기가 팀 잠금 뒤에 줄 서지 않았습니다');
+          const removing = member.surveyGroups.remove({ groupId: doomed });
+          await waitForLockWaitersBehind(lock.pid, 2, '지우기가 만들기 뒤에 줄 서지 않았습니다');
+          await lock.release();
+
+          const created = await creating;
+          createdGroupIds.push(created.id);
+          await expect(removing).resolves.toEqual({ success: true });
+          expect(await groupRow(doomed)).toBeNull();
+          expect(await groupRow(created.id)).toMatchObject({ parentGroupId: top, depth: 2 });
+          expect(await orphanCount()).toBe(0);
+        });
+      });
+
+      /**
+       * 잠금 순서는 「그룹 행 → 설문 행」 하나다. 지우기는 설문을 **위 그룹**에 다시 매달므로 그 위
+       * 그룹 행에도 닿는다(FK 가 키 공유 잠금을 건다) — 설문 행을 쥔 뒤에 닿으면, 같은 설문을 그 위
+       * 그룹으로 옮기는 요청(위 그룹 행 → 설문 행)과 서로를 기다린다.
+       *
+       * 그 엇갈림을 그대로 만든다: 뒤 설문 행을 먼저 쥐어 지우기를 「앞 설문은 잠갔고 뒤 설문을
+       * 기다리는」 자리에 세우고, 그 사이 앞 설문을 위 그룹으로 옮기는 요청을 보낸 뒤 놓는다.
+       * 순서가 어긋나 있으면 옮기기가 교착(40P01)으로 끝난다 — 옮기기는 재시도하지 않아 오류 화면이다.
+       */
+      it('지우기와 그 설문을 위 그룹으로 옮기기가 겹쳐도 서로를 기다리다 멈추지 않는다', async () => {
+        const top = await seedGroup(member, TEAM_A, '이정운');
+        const doomed = await seedGroup(member, TEAM_A, '2026', top);
+        const [first, second] = [
+          await seedSurvey(TEAM_A, '2026 에 직접 담긴 설문 가', MEMBER_ID),
+          await seedSurvey(TEAM_A, '2026 에 직접 담긴 설문 나', MEMBER_ID),
+        ].sort() as [string, string];
+        await member.surveyGroups.collect({ groupId: doomed, surveyIds: [first, second] });
+
+        // 지우기는 설문을 id 오름차순으로 잠근다 — 뒤 설문을 쥐고 있으면 앞 설문만 잠근 채 기다린다.
+        const lock = await holdLock((tx) =>
+          tx
+            .select({ id: surveysTable.id })
+            .from(surveysTable)
+            .where(eq(surveysTable.id, second))
+            .for('update'),
+        );
+        const removing = member.surveyGroups.remove({ groupId: doomed });
+        await waitForLockWaitersBehind(lock.pid, 1, '지우기가 설문 행 뒤에 줄 서지 않았습니다');
+        const moving = member.surveyGroups.move({ surveyId: first, groupId: top });
+        await waitForLockWaitersBehind(lock.pid, 2, '옮기기가 지우기 뒤에 줄 서지 않았습니다');
+        await lock.release();
+
+        await expect(removing).resolves.toEqual({ success: true });
+        await expect(moving).resolves.toEqual({ success: true });
+        expect(await groupRow(doomed)).toBeNull();
+        expect((await surveyRow(first))?.surveyGroupId).toBe(top);
+        expect((await surveyRow(second))?.surveyGroupId).toBe(top);
+      });
     });
 
     describe('서비스를 거치지 않고 직접 써도 DB 가 막는다', () => {

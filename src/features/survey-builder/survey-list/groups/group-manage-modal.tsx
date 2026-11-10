@@ -208,7 +208,11 @@ export function GroupManageModal({ teamId, groups, onClose }: GroupManageModalPr
         />
       )}
       {deleteTarget && (
-        <GroupDeleteDialog group={deleteTarget} onClose={() => setDeleteTarget(null)} />
+        <GroupDeleteDialog
+          group={deleteTarget}
+          teamId={teamId}
+          onClose={() => setDeleteTarget(null)}
+        />
       )}
     </>
   );
