@@ -6,32 +6,98 @@
 // 레포만으로는 프로덕션을 재구성할 수 없는 상태가 몇 달간 방치됐다(2026-08-19 발견).
 // 이 스크립트는 반대 방향 검사다 — 실 DB 에 있는데 레포에 없는 것을 찾는다.
 //
-// 사용: pnpm db:drift [prod|staging]   (기본 prod)
+// 사용: pnpm db:drift [prod|staging] [--local-db <이름>]   (기본 prod)
 // 허용 목록의 기준선은 prod 다. staging 은 백업 복원 과정에서 ACL 이 초기화되는 등
 // 고유 격차가 있어 별도로 보고되며, 그것들은 허용이 아니라 수리 대상이다.
-// 전제: 로컬 테스트 DB 가 최신 상태여야 한다. 먼저 pnpm db:setup-test 를 돌릴 것.
+// 전제: 기준이 되는 로컬 DB 가 이 레포 상태로 재생돼 있어야 한다 (지문으로 확인한다).
+//   - 기본은 공유 테스트 DB(postgres) — 먼저 pnpm db:setup-test. 형제 워크트리의 DB 를 덮는다.
+//   - --local-db <이름> 은 pnpm db:isolated <이름> 으로 만든 내 전용 DB — 형제를 건드리지 않는다.
 //
 // 모든 조회는 READ ONLY 트랜잭션에서 수행한다. 실 DB 를 건드리지 않는다.
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import postgres from 'postgres';
 
-const LOCAL_URL = 'postgresql://postgres:postgres@127.0.0.1:54322/postgres';
 const ALLOWLIST_PATH = 'supabase/drift-allowlist.json';
 
-const target = process.argv[2] ?? 'prod';
-if (!['prod', 'staging'].includes(target)) {
-  console.error('사용법: pnpm db:drift [prod|staging]');
+const USAGE = '사용법: pnpm db:drift [prod|staging] [--local-db <이름>]';
+const args = process.argv.slice(2);
+const flagAt = args.indexOf('--local-db');
+const localDb = flagAt === -1 ? 'postgres' : args[flagAt + 1];
+const positional = args.filter((_, i) => flagAt === -1 || (i !== flagAt && i !== flagAt + 1));
+const target = positional[0] ?? 'prod';
+if (
+  positional.length > 1 ||
+  !['prod', 'staging'].includes(target) ||
+  !/^[a-z][a-z0-9_]{0,62}$/.test(localDb ?? '')
+) {
+  console.error(USAGE);
   process.exit(2);
 }
+const LOCAL_URL = `postgresql://postgres:postgres@127.0.0.1:54322/${localDb}`;
+const LOCAL_SETUP =
+  localDb === 'postgres' ? 'pnpm db:setup-test' : `pnpm db:isolated ${localDb}`;
 
-function liveUrl() {
-  const file = target === 'prod' ? '.env.production' : '.env.local';
-  const line = readFileSync(file, 'utf8')
+const unquote = (v) => v.trim().replace(/^["']|["']$/g, '');
+const hostOf = (url) => {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return '';
+  }
+};
+const isLocalHost = (host) => host === '' || host === '127.0.0.1' || host === 'localhost';
+
+/** env 파일의 `KEY=` 줄 값들. commented 가 참이면 `# KEY=` 줄만 모은다. */
+function envValues(file, key, { commented = false } = {}) {
+  const re = new RegExp(`^${commented ? '\\s*#\\s*' : ''}${key}=(.*)$`);
+  return readFileSync(file, 'utf8')
     .split('\n')
-    .find((l) => l.startsWith('DATABASE_URL='));
-  if (!line) throw new Error(`${file} 에 DATABASE_URL 이 없습니다.`);
-  return line.slice('DATABASE_URL='.length).trim().replace(/^["']|["']$/g, '');
+    .map((l) => re.exec(l)?.[1])
+    .filter((v) => v !== undefined)
+    .map(unquote);
+}
+
+/**
+ * 대조할 실 DB 주소.
+ *
+ * prod 는 `.env.production` 의 DATABASE_URL 이다.
+ *
+ * staging 은 주소가 한 줄로 정해져 있지 않다 — `.env.local` 의 활성 DATABASE_URL 은 로컬
+ * supabase(54322)이고 스테이징 주소는 그 파일의 주석 줄에 있다. 예전 구현은 활성 줄을 그대로
+ * 읽어 **로컬 DB 를 로컬 DB 와 대조하고 차이 0건을 보고했다**. 그래서 순서대로 찾는다:
+ *   1. 환경 변수 STAGING_DATABASE_URL
+ *   2. `.env.local` 의 STAGING_DATABASE_URL= 줄
+ *   3. `.env.local` 의 DATABASE_URL= 줄(활성·주석) 중 로컬도 prod 호스트도 아닌 첫 줄
+ * 어느 쪽이든 호스트가 로컬이면 멈춘다.
+ */
+function liveUrl() {
+  let url;
+  if (target === 'prod') {
+    [url] = envValues('.env.production', 'DATABASE_URL');
+    if (!url) throw new Error('.env.production 에 DATABASE_URL 이 없습니다.');
+  } else {
+    const prodHost = hostOf(envValues('.env.production', 'DATABASE_URL')[0] ?? '');
+    const candidates = [
+      process.env.STAGING_DATABASE_URL,
+      ...envValues('.env.local', 'STAGING_DATABASE_URL'),
+      ...[
+        ...envValues('.env.local', 'DATABASE_URL'),
+        ...envValues('.env.local', 'DATABASE_URL', { commented: true }),
+      ].filter((u) => !isLocalHost(hostOf(u)) && hostOf(u) !== prodHost),
+    ].filter(Boolean);
+    [url] = candidates;
+    if (!url) {
+      console.error('ERROR: 스테이징 DB 주소를 찾지 못했습니다.');
+      console.error('  STAGING_DATABASE_URL 을 환경 변수나 .env.local 에 두십시오.');
+      process.exit(2);
+    }
+  }
+  if (isLocalHost(hostOf(url))) {
+    console.error(`ERROR: ${target} 주소의 호스트가 로컬입니다 — 로컬 DB 끼리 대조하게 됩니다.`);
+    process.exit(2);
+  }
+  return url;
 }
 
 /**
@@ -69,7 +135,7 @@ async function assertLocalDbMatchesRepo() {
   if (!stamp) {
     console.error('ERROR: 로컬 테스트 DB 에 재생 지문이 없습니다.');
     console.error('  이 DB 가 어느 브랜치의 마이그레이션으로 만들어졌는지 알 수 없어 대조할 수 없습니다.');
-    console.error('  pnpm db:setup-test 를 먼저 실행하십시오.');
+    console.error(`  ${LOCAL_SETUP} 를 먼저 실행하십시오.`);
     process.exit(2);
   }
   if (stamp.order_hash !== expected) {
@@ -77,7 +143,7 @@ async function assertLocalDbMatchesRepo() {
     console.error(`  DB 지문   : ${stamp.order_hash} (${stamp.tag_count}건, ${stamp.stamped_at.toISOString()})`);
     console.error(`  레포 지문 : ${expected}`);
     console.error('  로컬 supabase 도커는 워크트리 공용이라 다른 브랜치가 재생하면 통째로 바뀝니다.');
-    console.error('  pnpm db:setup-test 를 다시 실행한 뒤 대조하십시오.');
+    console.error(`  ${LOCAL_SETUP} 를 다시 실행한 뒤 대조하십시오.`);
     process.exit(2);
   }
 }
@@ -201,8 +267,9 @@ try {
 
 await assertLocalDbMatchesRepo();
 
-console.log(`대조: ${target} ↔ 로컬 테스트 DB\n`);
-const [live, repo] = await Promise.all([inventory(liveUrl()), inventory(LOCAL_URL)]);
+const LIVE_URL = liveUrl();
+console.log(`대조: ${target} (${hostOf(LIVE_URL)}) ↔ 로컬 DB ${localDb}\n`);
+const [live, repo] = await Promise.all([inventory(LIVE_URL), inventory(LOCAL_URL)]);
 
 const findings = [];   // 조치가 필요한 차이
 const known = [];      // 허용 목록에 사유가 적힌 차이

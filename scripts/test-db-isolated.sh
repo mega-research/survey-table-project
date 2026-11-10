@@ -10,6 +10,7 @@
 #   pnpm db:isolated <이름>          # 만들기(있으면 지우고 다시). 마지막 줄에 DATABASE_URL
 #   pnpm db:isolated <이름> --drop   # 지우기
 #   RUN_REALDB=1 DATABASE_URL=<출력된 URL> pnpm exec vitest run <realdb 파일…>
+#   pnpm db:drift staging --local-db <이름>   # 공유 DB 를 리셋하지 않고 실 DB 와 대조
 #
 # 이름은 소문자·숫자·밑줄(예: ceh_t01). postgres 는 공유 DB 라 받지 않는다.
 #
@@ -54,5 +55,6 @@ replay_migrations "$CONTAINER" "$DB" 1
 
 echo "[3/3] 검증"
 verify_test_db "$CONTAINER" "$DB"
+stamp_test_db "$CONTAINER" "$DB"
 
 echo "DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/${DB}"
