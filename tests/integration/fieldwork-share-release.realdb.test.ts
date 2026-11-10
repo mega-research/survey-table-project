@@ -11,7 +11,7 @@
  */
 import { createRouterClient } from '@orpc/server';
 import ExcelJS from 'exceljs';
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { db } from '@/db';
@@ -21,6 +21,7 @@ import {
   contactTargets,
   fieldworkLinkShares,
   surveyAccessLinks,
+  surveyResponses,
   surveys,
   teamMembers,
   teams,
@@ -37,6 +38,8 @@ import { resolveFieldworkShare } from '@/server/fieldwork-share';
 import { loadContactsListPage } from '@/server/read-models/contacts-list-page';
 import { router } from '@/server/router';
 import type { ContactColumnScheme, ContactUploadMapping } from '@/shared/contracts/contacts';
+
+import { backendPid, waitForLockWaitersBehind } from '../helpers/lock-waiters';
 
 // 요청 밖이라 「테스트 데이터 보기」 쿠키가 없다 — 연구원 화면은 실데이터를 본다(server/data-scope).
 vi.mock('next/headers', async (importOriginal) => ({
@@ -226,6 +229,39 @@ async function splitAB(f: Fixture) {
   });
 }
 
+/** 다른 트랜잭션이 잠금을 쥔 채 기다리게 한다 — 놓을 때까지 그 트랜잭션은 열려 있다. */
+function holdInTransaction(
+  lock: (tx: Parameters<Parameters<typeof db.transaction>[0]>[0]) => Promise<void>,
+) {
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let ready!: (pid: number) => void;
+  const pid = new Promise<number>((resolve) => {
+    ready = resolve;
+  });
+  const done = db.transaction(async (tx) => {
+    await lock(tx);
+    ready(await backendPid(tx));
+    await released;
+  });
+  return { pid, release, done };
+}
+
+/** 정해진 시간 안에 끝나는가 — 끝나지 않으면 'timeout'. */
+async function within<T>(ms: number, p: Promise<T>): Promise<T | 'timeout'> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<'timeout'>((resolve) => {
+    timer = setTimeout(() => resolve('timeout'), ms);
+  });
+  try {
+    return await Promise.race([p, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function close(f: Fixture, link: SignedLink) {
   return owner.workspace.accessLinks.close({ surveyId: f.surveyId, linkId: link.linkId });
 }
@@ -413,6 +449,48 @@ run('담당 범위가 풀리는 경우 (real DB)', { timeout: 60_000 }, () => {
         expect(await shareResidsOf(f.A.linkId)).toEqual([]);
         expect(await shareResidsOf(f.B.linkId)).toEqual(range(1, 200));
       }
+    });
+
+    it('종료가 대상 잠금을 쥔 동안에도 그 대상의 응답 행은 만들어진다 — 대상 잠금 세기가 적용과 같다', async () => {
+      // 나누기 적용은 대상을 FOR NO KEY UPDATE 로 잡는다(티켓 04 — FK 검사의 키 공유 잠금과 부딪히지 않게).
+      // 종료가 FOR UPDATE 로 잡으면 종료 한 번 동안 그 링크 대상들에게 초대 링크로 들어온 응답자의 응답
+      // 행 생성이 줄을 선다.
+      const f = await setup();
+      await splitAB(f);
+      const x = f.targetIdByResid.get(5)!;
+      // A 의 범위 줄 하나를 쥐어 둔다 — 종료는 대상을 잠근 뒤 범위 줄 DELETE 에서 이 뒤에 선다.
+      const blocker = holdInTransaction(async (tx) => {
+        await tx.execute(sql`
+          SELECT 1 FROM fieldwork_link_shares
+          WHERE link_id = ${f.A.linkId} AND contact_target_id = ${x} FOR UPDATE
+        `);
+      });
+      const holder = await blocker.pid;
+      const closing = close(f, f.A);
+      await waitForLockWaitersBehind(holder, 1, 'A 종료가 범위 줄 뒤에 서지 않았습니다');
+
+      // drizzle 빌더는 await 할 때마다 다시 실행되므로 한 번만 실행되는 Promise 로 접는다.
+      const inserting = db
+        .insert(surveyResponses)
+        .values({
+          surveyId: f.surveyId,
+          contactTargetId: x,
+          sessionId: crypto.randomUUID(),
+          status: 'in_progress',
+          questionResponses: {},
+        })
+        .returning({ id: surveyResponses.id })
+        .then(([row]) => row!.id);
+      const entered = await within(3_000, inserting);
+      const stillClosing = await within(50, closing);
+      blocker.release();
+      await blocker.done;
+      await closing;
+      await db.delete(surveyResponses).where(eq(surveyResponses.id, await inserting));
+
+      expect(entered).not.toBe('timeout');
+      expect(stillClosing).toBe('timeout');
+      expect(await shareResidsOf(f.A.linkId)).toEqual([]);
     });
 
     it('종료된 링크에 뒤늦게 닿은 적용은 NOT_FOUND 이고 범위를 다시 만들지 않는다', async () => {

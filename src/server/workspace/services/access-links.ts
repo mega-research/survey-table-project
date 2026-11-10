@@ -440,10 +440,12 @@ export async function revealAccessLinkPassword(input: {
  *   적용할 때 겹침으로 묻지 않는다(나누기 서비스의 겹침 집계가 열린 링크만 세는 것과 같은 결).
  *   「나눈 적 있음」(`share_applied_at`·`share_clauses`)은 지우지 않는다 — 종료된 링크에는 세션이
  *   서지 않아 읽는 쪽이 없고, 마지막 조건은 같은 업체에 새 링크를 줄 때 참고가 된다.
- * - **잠금 순서는 나누기 적용과 같다**: 설문 행 FOR SHARE → 링크 FOR UPDATE → 그 링크 범위의 대상
- *   id 오름차순 FOR UPDATE. 다른 링크의 적용이 이 링크의 대상을 가져가는 중이면 대상 잠금에서 줄을
- *   서고, 교체 업로드(설문 행 FOR UPDATE)와는 첫 잠금에서 줄을 선다. 그래도 교착·직렬화 실패가 나면
- *   처음부터 다시 실행한다(`retryOnTxConflict`, 3회).
+ * - **잠금 순서와 세기는 나누기 적용과 같다**: 설문 행 FOR SHARE → 링크 FOR UPDATE → 그 링크 범위의
+ *   대상 id 오름차순 FOR NO KEY UPDATE. 다른 링크의 적용이 이 링크의 대상을 가져가는 중이면 대상 잠금에서
+ *   줄을 서고, 교체 업로드(설문 행 FOR UPDATE)와는 첫 잠금에서 줄을 선다. 대상 잠금이 `FOR UPDATE` 가
+ *   아닌 것은 적용과 같은 이유다 — FK 검사의 키 공유 잠금과 부딪히지 않아, 종료 중에도 그 대상의 응답
+ *   행·회차 행이 만들어진다(`fieldwork-share-release.realdb`). 그래도 교착·직렬화 실패가 나면 처음부터
+ *   다시 실행한다(`retryOnTxConflict`, 3회).
  * - 클라이언트 링크는 범위가 없어 지울 행이 없다 — 같은 경로를 지나도 무해하다.
  *
  * 돌려주는 `released` 는 풀린 인원이다(로그 재료 — 대상 id 는 싣지 않는다).
@@ -474,7 +476,7 @@ export async function closeAccessLink(input: {
           JOIN fieldwork_link_shares s ON s.contact_target_id = t.id
           WHERE s.link_id = ${input.linkId}
           ORDER BY t.id
-          FOR UPDATE OF t
+          FOR NO KEY UPDATE OF t
         `);
         const released = await tx
           .delete(fieldworkLinkShares)
