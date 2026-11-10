@@ -313,6 +313,18 @@ export const SurveyGroupIdInput = z.object({ groupId: z.uuid() });
 export type SurveyGroupIdInput = z.infer<typeof SurveyGroupIdInput>;
 
 /**
+ * 그룹 삭제가 이름 겹침으로 막혔을 때 CONFLICT 에 함께 실리는 것 (`ORPCError.data`).
+ *
+ * 그룹을 지우면 그 하위 그룹이 한 단계 위로 올라가는데, 올라갈 자리에 같은 이름의 그룹이 있으면
+ * 아무것도 바꾸지 않고 거부한다. 무엇을 고치면 되는지 알려면 **겹치는 이름**이 필요해서 문구만이
+ * 아니라 값으로 준다. 화면은 이 모양으로 읽어 보고(`safeParse`) 아니면 일반 오류로 다룬다.
+ */
+export const SurveyGroupRemoveConflict = z.object({
+  conflictingNames: z.array(z.string()).min(1),
+});
+export type SurveyGroupRemoveConflict = z.infer<typeof SurveyGroupRemoveConflict>;
+
+/**
  * 「설문 담기」 후보 — **미분류 설문만** 나온다 (.pen FLOW 2-2).
  *
  * 다른 그룹에 있는 설문을 여기서 빼오는 암묵 이동을 원천 차단하려는 것이다. 그룹 간 이동은

@@ -48,7 +48,7 @@ import {
   SURVEY_GROUP_MAX_DEPTH,
   SurveyAlreadyGroupedError,
   SurveyGroupDepthExceededError,
-  SurveyGroupHasChildrenError,
+  SurveyGroupLiftNameConflictError,
   SurveyGroupNotFoundError,
   SurveyGroupRelocationCycleError,
   SurveyGroupRelocationTooDeepError,
@@ -523,35 +523,173 @@ export async function reorderSurveyGroups(
 }
 
 /**
- * 그룹 삭제 — 소속 설문은 미분류로 돌아간다 (FK ON DELETE SET NULL).
+ * 그룹 삭제 — 그룹만 사라지고 **내용물은 한 단계 위로 올라간다.**
  *
- * 설문·응답·공유 설정은 손대지 않는다(.pen FLOW 2-3 의 「그룹만 삭제되고 설문은 삭제되지
- * 않습니다」). 그래서 여기서 설문을 따로 UPDATE 하지 않는다 — DB 가 원자적으로 처리한다.
+ * 하위 그룹은 지운 그룹의 부모 밑으로(최상위였으면 최상위로, 순서는 그 자리의 맨 뒤), 직접 담긴
+ * 설문은 그 부모 그룹으로(최상위였으면 미분류) 간다. 따라 지우거나 전부 미분류로 흩으면 클릭 한
+ * 번에 정리해 둔 가지가 통째로 풀린다. 설문·응답·공유 설정은 손대지 않는다 — 바뀌는 것은 설문의
+ * 소속 그룹 칸 하나이고 `updatedAt` 도 그대로다(폴더 정리는 내용 수정이 아니다).
  *
- * **하위 그룹이 있는 그룹은 지우지 않는다.** 따라 지우면 클릭 한 번에 정리해 둔 가지가 통째로
- * 사라진다. DB 도 같은 것을 막는다(0166 의 `survey_groups_parent_fk` — 하위가 남아 있으면 거부).
+ * **세 단계(하위 그룹 올리기 → 설문 올리기 → 그룹 삭제)가 한 트랜잭션이고 순서가 계약이다.**
+ * 하위 그룹이 하나라도 남아 있으면 삭제가 FK(0166 `survey_groups_parent_fk`)에 막히고, 설문을
+ * 먼저 옮기지 않으면 FK `ON DELETE SET NULL` 이 부모가 아니라 미분류로 떨어뜨린다.
+ *
+ * 요청자가 편집할 수 없는 설문이 담겨 있어도 지운다 — 구조는 팀 공용이다(관문은 그룹의 팀만 묻는다).
+ * 같은 삭제를 두 번 보내면 두 번째는 첫 줄에서 「없는 그룹」이다.
  */
 export async function removeSurveyGroup(groupId: string): Promise<WorkspaceActionOutput> {
-  return inGroupStructureTx(async (tx) => {
-    // 팀 키 → 팀 행 → 그룹 행 → (FK 가 건드리는) 설문 행. 해산은 팀 → 설문만 잡으므로 사이클이 없다.
+  const lifted = await inGroupStructureTx(async (tx) => {
+    // 팀 키 → 팀 행 → 그룹 행(지우는 그룹 · 올라갈 자리) → 설문 행. 해산은 팀 → 설문만 잡으므로
+    // 사이클이 없다.
     // **삭제야말로 되돌릴 수 없다.** 관문 확인 뒤 해산이 커밋된 사이에 이 삭제가 실행되면
     // 티켓 13 이 감사 계보로 남기기로 한 archived 팀의 그룹 행이 영구히 사라진다.
-    await lockGroupStructureByGroup(tx, groupId);
+    const group = await lockGroupStructureByGroup(tx, groupId);
+    await lockLiftDestination(tx, group);
 
-    const [child] = await tx
-      .select({ id: surveyGroups.id })
-      .from(surveyGroups)
-      .where(eq(surveyGroups.parentGroupId, groupId))
-      .limit(1);
-    if (child) throw new SurveyGroupHasChildrenError();
+    const subgroups = await liftSubgroups(tx, groupId, group);
+    const surveyCount = await liftDirectSurveys(tx, groupId, group);
 
     const [row] = await tx
       .delete(surveyGroups)
       .where(eq(surveyGroups.id, groupId))
       .returning({ id: surveyGroups.id });
     if (!row) throw new SurveyGroupNotFoundError();
-    return OK;
+    return { teamId: group.teamId, subgroups, surveys: surveyCount };
   });
+
+  // 커밋된 뒤에 한 번 — 재시도된 시도는 적지 않는다. 이름은 싣지 않는다(식별자와 수만).
+  logger.info(
+    {
+      groupId,
+      teamId: lifted.teamId,
+      liftedSubgroups: lifted.subgroups,
+      liftedSurveys: lifted.surveys,
+    },
+    '[survey-group] 그룹을 지우고 내용물을 한 단계 위로 올렸다',
+  );
+  return OK;
+}
+
+/**
+ * 내용물이 올라갈 자리(지우는 그룹의 부모) 행을 **설문 행보다 먼저** 잠근다. 최상위면 할 일이 없다.
+ *
+ * 설문을 부모 그룹에 다시 매달면 FK 가 그 부모 행에 키 공유 잠금을 건다 — 설문 행을 쥔 **뒤에**
+ * 그 잠금을 기다리게 두면 순서가 「설문 행 → 그룹 행」으로 뒤집혀, 같은 설문을 그 부모 그룹으로
+ * 옮기거나 담는 요청(그룹 행 → 설문 행)과 교착한다. 그쪽은 재시도하지 않아 오류 화면으로 끝난다.
+ * 같은 잠금을 여기서 미리 잡아 「그룹 행 전부 → 설문 행」 순서를 지킨다.
+ *
+ * 키 공유면 충분하다 — 담기·이동이 그룹 행에 거는 `FOR UPDATE` 와 부딪혀 한 줄로 서고, 부모 행을
+ * 고치지는 않는다. 팀 키 아래라 부모가 그 사이 지워질 수는 없다.
+ */
+async function lockLiftDestination(tx: DbTransaction, group: LockedGroup): Promise<void> {
+  if (group.parentGroupId === null) return;
+  await tx
+    .select({ id: surveyGroups.id })
+    .from(surveyGroups)
+    .where(eq(surveyGroups.id, group.parentGroupId))
+    .for('key share');
+}
+
+/**
+ * 지우는 그룹 바로 밑의 하위 그룹을 그 부모 밑으로 올린다. 올린 수를 돌려준다.
+ *
+ * **올라갈 자리에 같은 이름의 그룹이 있으면 아무것도 쓰기 전에 거부한다** — 팀 키 아래라 읽은
+ * 이름이 낡지 않는다(이름을 바꾸는 쓰기는 전부 같은 키를 잡는다). 그 판정을 빠져나간 겹침은
+ * 유일 인덱스가 막고, 그때는 트랜잭션이 통째로 되돌아간다.
+ *
+ * 쓰는 것은 하위 그룹 **한 행씩의** 상위 칸 둘과 순서뿐이다. 손자 그룹은 건드리지 않는다 —
+ * 부모에 매달린 채 깊이만 FK 의 `ON UPDATE CASCADE` 로 따라온다. 올라가는 방향이라 깊이 제약에
+ * 걸릴 일이 없다.
+ */
+async function liftSubgroups(
+  tx: DbTransaction,
+  groupId: string,
+  group: LockedGroup,
+): Promise<number> {
+  const children = await tx
+    .select({ id: surveyGroups.id, name: surveyGroups.name })
+    .from(surveyGroups)
+    .where(eq(surveyGroups.parentGroupId, groupId))
+    // 자기들끼리의 표시 순서를 지킨 채 올라간다(목록 조회와 같은 정렬).
+    .orderBy(asc(surveyGroups.order), asc(surveyGroups.name), asc(surveyGroups.id));
+  if (children.length === 0) return 0;
+
+  const names = children.map((child) => child.name);
+  const destination = and(eq(surveyGroups.teamId, group.teamId), isChildOf(group.parentGroupId));
+
+  // 지우는 그룹 자신은 뺀다 — 사라질 행이라 겹침이 아니다.
+  const taken = await tx
+    .select({ name: surveyGroups.name })
+    .from(surveyGroups)
+    .where(and(destination, ne(surveyGroups.id, groupId), inArray(surveyGroups.name, names)));
+  if (taken.length > 0) {
+    const takenNames = new Set(taken.map((row) => row.name));
+    throw new SurveyGroupLiftNameConflictError(names.filter((name) => takenNames.has(name)));
+  }
+
+  const [tail] = await tx
+    .select({ maxOrder: sql<number | null>`max(${surveyGroups.order})` })
+    .from(surveyGroups)
+    .where(destination);
+  const firstOrder = (tail?.maxOrder ?? -1) + 1;
+
+  try {
+    // 지우는 그룹과 이름이 같은 하위 그룹은 그 자리를 물려받는다(「2026 › 2026」). 삭제는 하위
+    // 그룹을 다 올린 **뒤**라 그 순간에는 두 이름이 한 자리에 선다 — 유일 인덱스는 문장마다 바로
+    // 검사하므로, 곧 사라질 행의 이름을 먼저 비켜 둔다. 같은 트랜잭션이라 밖에서는 보이지 않는다.
+    await tx
+      .update(surveyGroups)
+      .set({ name: `removing:${groupId}` })
+      .where(and(eq(surveyGroups.id, groupId), inArray(surveyGroups.name, names)));
+
+    for (const [index, child] of children.entries()) {
+      await tx
+        .update(surveyGroups)
+        .set({
+          parentGroupId: group.parentGroupId,
+          // 상위 그룹과 짝으로 쓴다(0166) — 지우는 그룹의 부모는 그보다 한 단계 얕다.
+          parentDepth: group.parentGroupId === null ? null : group.depth - 1,
+          order: firstOrder + index,
+          updatedAt: new Date(),
+        })
+        .where(eq(surveyGroups.id, child.id));
+    }
+  } catch (err) {
+    if (isUniqueViolation(err)) throw new DuplicateSurveyGroupNameError();
+    throw err;
+  }
+  return children.length;
+}
+
+/**
+ * 지우는 그룹에 **직접** 담긴 설문을 그 부모 그룹으로 옮긴다(최상위였으면 미분류). 옮긴 수를 돌려준다.
+ *
+ * 그냥 지우면 FK `ON DELETE SET NULL`(0117)이 전부 미분류로 떨어뜨리므로 지우기 전에 직접 고친다.
+ * 설문 행은 그룹 행 **뒤에**, id 오름차순으로 잠근다 — 담기(`collectSurveysIntoGroup`)와 같은 순서라
+ * 겹치는 설문을 두고 서로를 기다리지 않는다. 이 그룹에 새로 담기는 설문은 없다: 담기·이동은 이
+ * 그룹 행을 잠가야 하는데 그 잠금을 우리가 쥐고 있다.
+ *
+ * 휴지통의 설문도 함께 옮긴다(복구하면 한 단계 위에서 다시 보인다). 팀이 어긋난 채 남은 행은
+ * 옮기지 않는다 — 이미 깨진 상태라 부모 그룹에 다시 매달지 않고, 삭제의 SET NULL 이 미분류로 내린다.
+ * `updatedAt` 은 손대지 않는다(담기·이동과 같은 계약).
+ */
+async function liftDirectSurveys(
+  tx: DbTransaction,
+  groupId: string,
+  group: LockedGroup,
+): Promise<number> {
+  const directlyHeld = and(eq(surveys.surveyGroupId, groupId), eq(surveys.teamId, group.teamId));
+  const held = await tx
+    .select({ id: surveys.id })
+    .from(surveys)
+    .where(directlyHeld)
+    .orderBy(asc(surveys.id))
+    // 소속 그룹 칸만 고친다 — 응답 저장이 설문 행에 거는 키 공유 잠금까지 막을 이유가 없다.
+    .for('no key update');
+  if (held.length === 0) return 0;
+
+  await tx.update(surveys).set({ surveyGroupId: group.parentGroupId }).where(directlyHeld);
+  return held.length;
 }
 
 /**

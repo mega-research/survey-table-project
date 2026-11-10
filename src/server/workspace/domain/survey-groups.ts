@@ -16,6 +16,7 @@ export {
   SURVEY_GROUP_MAX_DEPTH,
   SurveyGroupIdInput,
   SurveyGroupListItem,
+  SurveyGroupRemoveConflict,
   UngroupedSurveyItem,
 } from '@/shared/contracts/workspace-io';
 
@@ -47,11 +48,22 @@ export class SurveyGroupDepthExceededError extends Error {
   }
 }
 
-/** 하위 그룹이 있는 그룹은 지울 수 없다. */
-export class SurveyGroupHasChildrenError extends Error {
-  constructor() {
-    super('하위 그룹이 있어 지울 수 없습니다.');
-    this.name = 'SurveyGroupHasChildrenError';
+/**
+ * 그룹을 지우면 하위 그룹이 한 단계 위로 올라가는데, 그 자리에 같은 이름의 그룹이 이미 있다.
+ *
+ * 아무것도 바꾸지 않고 거부한다 — 한쪽만 올리면 정리해 둔 가지가 반쯤 풀린다. 무엇을 고치면
+ * 되는지 알려 주려고 겹치는 이름을 싣는다(올라갈 하위 그룹의 표시 순서대로).
+ */
+export class SurveyGroupLiftNameConflictError extends Error {
+  readonly conflictingNames: readonly string[];
+
+  constructor(conflictingNames: readonly string[]) {
+    const quoted = conflictingNames.map((name) => `「${name}」`).join(' · ');
+    super(
+      `한 단계 위에 이미 ${quoted} 그룹이 있어 하위 그룹을 올릴 수 없습니다. 한쪽 이름을 바꾼 뒤 다시 삭제하세요.`,
+    );
+    this.name = 'SurveyGroupLiftNameConflictError';
+    this.conflictingNames = conflictingNames;
   }
 }
 

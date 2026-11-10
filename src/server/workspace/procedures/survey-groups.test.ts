@@ -23,7 +23,7 @@ import {
   DuplicateSurveyGroupNameError,
   SurveyAlreadyGroupedError,
   SurveyGroupDepthExceededError,
-  SurveyGroupHasChildrenError,
+  SurveyGroupLiftNameConflictError,
   SurveyGroupTargetNotFoundError,
   SurveyTeamMismatchError,
 } from '../domain/survey-groups';
@@ -359,19 +359,30 @@ describe('도메인 에러 → RPC 코드', () => {
     ).rejects.toMatchObject({ code: 'NOT_FOUND', message: '설문을 찾을 수 없습니다.' });
   });
 
-  it('3단계 초과와 하위 그룹이 있는 그룹의 삭제는 CONFLICT — 문구가 그대로 나간다', async () => {
+  it('3단계 초과는 CONFLICT — 문구가 그대로 나간다', async () => {
     const client = clientWith();
 
     vi.mocked(svc.createSurveyGroup).mockRejectedValue(new SurveyGroupDepthExceededError());
     await expect(
       client.surveyGroups.create({ teamId: TEAM_A, name: '1분기', parentGroupId: GROUP_A }),
     ).rejects.toMatchObject({ code: 'CONFLICT', message: '그룹은 3단계까지만 만들 수 있습니다.' });
+  });
 
-    vi.mocked(svc.removeSurveyGroup).mockRejectedValue(new SurveyGroupHasChildrenError());
-    await expect(client.surveyGroups.remove({ groupId: GROUP_A })).rejects.toMatchObject({
+  it('삭제가 이름 겹침으로 막히면 CONFLICT 에 겹치는 이름이 값으로 실린다', async () => {
+    const client = clientWith();
+
+    vi.mocked(svc.removeSurveyGroup).mockRejectedValue(
+      new SurveyGroupLiftNameConflictError(['상반기', '하반기']),
+    );
+    const rejection = await client.surveyGroups.remove({ groupId: GROUP_A }).catch((e) => e);
+
+    expect(rejection).toBeInstanceOf(ORPCError);
+    expect(rejection).toMatchObject({
       code: 'CONFLICT',
-      message: '하위 그룹이 있어 지울 수 없습니다.',
+      data: { conflictingNames: ['상반기', '하반기'] },
     });
+    // 값을 읽지 않는 화면도 무엇을 고칠지 알 수 있게 문구에도 이름이 있다.
+    expect(rejection.message).toContain('「상반기」 · 「하반기」');
   });
 });
 
