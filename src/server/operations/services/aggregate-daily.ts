@@ -3,7 +3,7 @@ import 'server-only';
 import { and, eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share';
+import { type FieldworkShare, shareTargetCondition, shareTargetSql } from '@/server/fieldwork-share';
 import { surveyResponses } from '@/db/schema';
 import { notDeletedResponse } from '@/server/response-filters';
 
@@ -39,7 +39,7 @@ export async function aggregateDaily(input: {
   hourModeDate?: string;
 }): Promise<DailyBucket[]> {
   const { surveyId, scope, share, mode, hourModeDate } = input;
-  const shareCondition = shareTargetCondition(share, surveyResponses.contactTargetId) ?? sql`TRUE`;
+  const shareCondition = shareTargetSql(share, surveyResponses.contactTargetId);
   const isTest = testFlagForScope(scope);
 
   let rows: DailyRow[];

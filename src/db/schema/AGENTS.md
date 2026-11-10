@@ -113,7 +113,7 @@ fieldwork_link_shares      # 담당 범위 = 「이 조사 대상은 지금 이 
 ├── linkId (FK no action — 링크 행은 지우지 않는다), contactTargetId (FK **cascade** — 명단 교체 업로드가 범위를 푼다)
 ├── createdAt
 └── PK(linkId, contactTargetId) · INDEX(contactTargetId)  # 같이 맡기기가 있어 다대다. 외주 링크만·같은 설문·실데이터 대상만은
-                           # 교차 테이블 조건이라 DB 로 걸지 않고 유일한 쓰기 자리(contacts/services/fieldwork-shares)가 잠근 행에서 본다
+                           # 교차 테이블 조건이라 DB 로 걸지 않고 행을 넣는 유일한 자리(contacts/services/fieldwork-shares 적용)가 잠근 행에서 본다
 
 survey_ownership_events    # 설문 소유 팀·소유자 이동 감사 (0118, 티켓 14 — append-only)
 ├── id, surveyId (FK **cascade**)

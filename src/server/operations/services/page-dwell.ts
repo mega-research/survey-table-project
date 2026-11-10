@@ -3,7 +3,7 @@ import 'server-only';
 import { sql } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share';
+import { type FieldworkShare, shareTargetSql } from '@/server/fieldwork-share';
 import { loadPinnedVersionSnapshot } from '@/server/read-models/version-snapshot';
 
 import {
@@ -58,7 +58,7 @@ export async function getPageDwell(
     sr.survey_id = ${surveyId}::uuid
     AND sr.is_test = ${isTest}
     AND sr.deleted_at IS NULL
-    AND ${shareTargetCondition(share, sql`sr.contact_target_id`) ?? sql`TRUE`}
+    AND ${shareTargetSql(share, sql`sr.contact_target_id`)}
   `;
   const rows = await db.execute(sql`
     WITH dwell AS (

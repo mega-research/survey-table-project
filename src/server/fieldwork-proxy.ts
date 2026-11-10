@@ -7,12 +7,7 @@ import type { AccessLinkSession } from '@/lib/auth/access-link-session';
 import type { AuthUser } from '@/shared/contracts/auth';
 
 import { resolveLinkActorForSurvey } from './access-link';
-import {
-  FIELDWORK_SHARE_ALL,
-  type FieldworkShare,
-  resolveFieldworkShare,
-  shareTargetCondition,
-} from './fieldwork-share';
+import { FIELDWORK_SHARE_ALL, type FieldworkShare, resolveFieldworkShare, shareTargetSql } from './fieldwork-share';
 import {
   accountAttribution,
   type ActorAttribution,
@@ -100,7 +95,7 @@ export async function resolveFieldworkProxy(
       contactTargetId: contactTargets.id,
       completedResponseId: surveyResponses.id,
       // 담당 범위는 행을 걸러 없애지 않고 따로 읽는다 — 걸러 버리면 `none`(응답자 진입)으로 떨어진다.
-      inShare: sql<boolean>`${shareTargetCondition(share) ?? sql`TRUE`}`,
+      inShare: sql<boolean>`${shareTargetSql(share)}`,
     })
     .from(contactTargets)
     .leftJoin(

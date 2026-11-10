@@ -1,13 +1,19 @@
 import 'server-only';
 
-import { and, asc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, isNull } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { fieldworkLinkShares, surveyAccessLinks, surveys } from '@/db/schema';
+import { surveyAccessLinks } from '@/db/schema';
 import { decryptSharedSecret, encryptSharedSecret } from '@/lib/crypto/aes';
 import { logger } from '@/lib/logger';
 import { resolveClientResponseColumnKeys } from '@/lib/operations/client-response-columns-format';
-import { isUniqueViolation, retryOnTxConflict } from '@/lib/pg-error';
+import { isUniqueViolation } from '@/lib/pg-error';
+import { linkShareCount } from '@/server/fieldwork-share';
+import {
+  lockShareWriteScope,
+  releaseLinkShares,
+  retryShareWrite,
+} from '@/server/fieldwork-share-write';
 import {
   type ClientResponseColumnMaterial,
   loadClientResponseColumnMaterial,
@@ -145,10 +151,8 @@ export async function listAccessLinks(
       ...VIEW_COLUMNS,
       closedAt: surveyAccessLinks.closedAt,
       shareAppliedAt: surveyAccessLinks.shareAppliedAt,
-      // 담당 범위 인원 — 담당 범위 표는 contacts 의 쓰기지만 읽기는 「타 도메인 테이블 직접 쿼리」로 둔다.
-      shareCount: sql<number>`(
-        SELECT count(*)::int FROM fieldwork_link_shares s WHERE s.link_id = ${surveyAccessLinks.id}
-      )`,
+      // 담당 범위 인원 — 나누기 화면과 같은 조각(`linkShareCount`)으로 센다.
+      shareCount: linkShareCount(),
     })
     .from(surveyAccessLinks)
     .where(and(eq(surveyAccessLinks.surveyId, surveyId), eq(surveyAccessLinks.kind, kind)))
@@ -440,12 +444,11 @@ export async function revealAccessLinkPassword(input: {
  *   적용할 때 겹침으로 묻지 않는다(나누기 서비스의 겹침 집계가 열린 링크만 세는 것과 같은 결).
  *   「나눈 적 있음」(`share_applied_at`·`share_clauses`)은 지우지 않는다 — 종료된 링크에는 세션이
  *   서지 않아 읽는 쪽이 없고, 마지막 조건은 같은 업체에 새 링크를 줄 때 참고가 된다.
- * - **잠금 순서와 세기는 나누기 적용과 같다**: 설문 행 FOR SHARE → 링크 FOR UPDATE → 그 링크 범위의
- *   대상 id 오름차순 FOR NO KEY UPDATE. 다른 링크의 적용이 이 링크의 대상을 가져가는 중이면 대상 잠금에서
- *   줄을 서고, 교체 업로드(설문 행 FOR UPDATE)와는 첫 잠금에서 줄을 선다. 대상 잠금이 `FOR UPDATE` 가
- *   아닌 것은 적용과 같은 이유다 — FK 검사의 키 공유 잠금과 부딪히지 않아, 종료 중에도 그 대상의 응답
- *   행·회차 행이 만들어진다(`fieldwork-share-release.realdb`). 그래도 교착·직렬화 실패가 나면 처음부터
- *   다시 실행한다(`retryOnTxConflict`, 3회).
+ * - **잠금 순서·세기·해제·재시도는 나누기 적용과 한 벌이다**(코어 `server/fieldwork-share-write` 의
+ *   `lockShareWriteScope` → `releaseLinkShares`, `retryShareWrite`): 설문 행 FOR SHARE → 링크 FOR UPDATE → 그
+ *   링크 범위의 대상 id 오름차순 FOR NO KEY UPDATE. 다른 링크의 적용이 이 링크의 대상을 가져가는 중이면 대상
+ *   잠금에서 줄을 서고, 교체 업로드(설문 행 FOR UPDATE)와는 첫 잠금에서 줄을 선다. 종료 중에도 그 대상의
+ *   응답 행·회차 행은 만들어진다(`fieldwork-share-release.realdb`).
  * - 클라이언트 링크는 범위가 없어 지울 행이 없다 — 같은 경로를 지나도 무해하다.
  *
  * 돌려주는 `released` 는 풀린 인원이다(로그 재료 — 대상 id 는 싣지 않는다).
@@ -455,53 +458,25 @@ export async function closeAccessLink(input: {
   linkId: string;
   actorId: string;
 }): Promise<{ released: number }> {
-  const result = await retryOnTxConflict(
+  const result = await retryShareWrite(
+    { rpc: 'workspace.accessLinks.close', surveyId: input.surveyId, linkId: input.linkId },
     () =>
       db.transaction(async (tx) => {
-        const [survey] = await tx
-          .select({ id: surveys.id })
-          .from(surveys)
-          .where(eq(surveys.id, input.surveyId))
-          .for('share');
-        if (!survey) throw new AccessLinkNotFoundError();
-        const [link] = await tx
-          .select({ id: surveyAccessLinks.id })
-          .from(surveyAccessLinks)
-          .where(activeLinkById(input.surveyId, input.linkId))
-          .for('update');
-        if (!link) throw new AccessLinkNotFoundError();
-
-        await tx.execute(sql`
-          SELECT t.id FROM contact_targets t
-          JOIN fieldwork_link_shares s ON s.contact_target_id = t.id
-          WHERE s.link_id = ${input.linkId}
-          ORDER BY t.id
-          FOR NO KEY UPDATE OF t
-        `);
-        const released = await tx
-          .delete(fieldworkLinkShares)
-          .where(eq(fieldworkLinkShares.linkId, input.linkId))
-          .returning({ id: fieldworkLinkShares.contactTargetId });
+        const locked = await lockShareWriteScope(
+          tx,
+          input.surveyId,
+          activeLinkById(input.surveyId, input.linkId)!,
+        );
+        if (locked !== 'locked') throw new AccessLinkNotFoundError();
+        const released = await releaseLinkShares(tx, input.linkId);
 
         const now = new Date();
         await tx
           .update(surveyAccessLinks)
           .set({ closedAt: now, closedBy: input.actorId, updatedAt: now })
           .where(eq(surveyAccessLinks.id, input.linkId));
-        return { released: released.length };
+        return { released };
       }),
-    {
-      onRetry: (attempt, error) =>
-        logger.warn(
-          {
-            surveyId: input.surveyId,
-            targetLinkId: input.linkId,
-            attempt,
-            err: error instanceof Error ? error.message : String(error),
-          },
-          '[access-link] 링크 종료 트랜잭션 충돌 — 다시 실행',
-        ),
-    },
   );
   if (result.released > 0) {
     logger.info(

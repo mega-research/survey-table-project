@@ -5,9 +5,20 @@ import 'server-only';
 import { type DbOrTx, db } from '@/db';
 import { fieldworkLinkShares, surveyAccessLinks } from '@/db/schema';
 import { logger } from '@/lib/logger';
-import { retryOnTxConflict } from '@/lib/pg-error';
-import { EXTERNAL_VIEWER_DATA_SCOPE, lockWriteScope } from '@/server/data-scope';
-import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
+import { EXTERNAL_VIEWER_DATA_SCOPE } from '@/server/data-scope';
+import {
+  FIELDWORK_SHARE_ALL,
+  linkShareCount,
+  otherOpenLinkIds,
+  targetInLinkShare,
+  targetInOtherOpenLinkShare,
+} from '@/server/fieldwork-share';
+import {
+  lockShareTargets,
+  lockShareWriteScope,
+  releaseLinkShares,
+  retryShareWrite,
+} from '@/server/fieldwork-share-write';
 import {
   type ResolvedContactFilter,
   loadContactFilterContext,
@@ -52,7 +63,9 @@ import type {
  *   넓어져 연락처가 엉뚱한 업체로 간다).
  *
  * 무결성 중 DB 가 못 거는 교차 테이블 조건(외주 링크만 · 같은 설문 · 실데이터 대상만)은 이 파일이
- * 잠근 행에서 다시 본다 — 담당 범위 표에 쓰는 자리는 여기 하나뿐이다.
+ * 잠근 행에서 다시 본다 — 범위 표에 **행을 넣는** 자리는 여기 적용 하나뿐이다. 행을 **지우는** 자리는 이 파일의
+ * 적용(조건 밖·가져오기)과, 링크 하나를 통째로 푸는 `releaseLinkShares`(코어 `server/fieldwork-share-write` —
+ * 「담당 범위 없애기」와 링크 종료가 함께 부른다) 둘이다. 잠금 순서·세기·재시도도 그 코어 한 벌이다.
  */
 
 const SHARE_SCOPE = EXTERNAL_VIEWER_DATA_SCOPE;
@@ -74,18 +87,23 @@ function linkNotFound(): ORPCError<'NOT_FOUND', unknown> {
   });
 }
 
-async function assertOpenFieldworkLink(
-  executor: DbOrTx,
-  surveyId: string,
-  linkId: string,
-  lock: boolean,
-): Promise<void> {
-  const query = executor
+/** 잠그지 않는 조회(미리보기·대상 목록)의 입구 — 열린 외주 링크가 아니면 NOT_FOUND. */
+async function assertOpenFieldworkLink(surveyId: string, linkId: string): Promise<void> {
+  const rows = await db
     .select({ id: surveyAccessLinks.id })
     .from(surveyAccessLinks)
-    .where(openFieldworkLink(surveyId, linkId));
-  const rows = lock ? await query.for('update') : await query.limit(1);
+    .where(openFieldworkLink(surveyId, linkId))
+    .limit(1);
   if (rows.length === 0) throw linkNotFound();
+}
+
+/** 쓰기의 입구 — 잠금 순서 앞 둘(설문 → 링크)을 잡고, 없으면 NOT_FOUND. */
+async function lockOpenFieldworkLink(tx: DbOrTx, surveyId: string, linkId: string): Promise<void> {
+  const locked = await lockShareWriteScope(tx, surveyId, openFieldworkLink(surveyId, linkId));
+  if (locked === 'survey_not_found') {
+    throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
+  }
+  if (locked === 'link_not_found') throw linkNotFound();
 }
 
 /** 조건 줄 → 쓰기 해석. 컨택원 축은 싣지 않는다(위 머리 주석). */
@@ -121,21 +139,11 @@ function matchOf(filter: ResolvedContactFilter<'write'>): SQL {
 const targetsInScope = (surveyId: string): SQL =>
   sql`"contact_targets".survey_id = ${surveyId} AND "contact_targets".is_test = FALSE`;
 
-/** 이 대상이 이 링크의 범위에 있는가. */
-const inLink = (linkId: string): SQL => sql`EXISTS (
-  SELECT 1 FROM fieldwork_link_shares s
-  WHERE s.link_id = ${linkId} AND s.contact_target_id = "contact_targets".id
-)`;
-
-/** 이 대상이 이 설문의 **다른 열린** 외주 링크 범위에 있는가 — 종료된 링크는 몫이 없다. */
-const inOtherOpenLink = (surveyId: string, linkId: string): SQL => sql`EXISTS (
-  SELECT 1 FROM fieldwork_link_shares s
-  JOIN survey_access_links l ON l.id = s.link_id
-  WHERE s.contact_target_id = "contact_targets".id
-    AND s.link_id <> ${linkId}
-    AND l.survey_id = ${surveyId}
-    AND l.closed_at IS NULL
-)`;
+/** 날 SQL 문장의 대상 칸 — 아래 문장은 전부 `contact_targets` 를 별칭 없이 읽는다. */
+const TARGET_ID = sql`"contact_targets".id`;
+const inLink = (linkId: string): SQL => targetInLinkShare(linkId, TARGET_ID);
+const inOtherOpenLink = (surveyId: string, linkId: string): SQL =>
+  targetInOtherOpenLinkShare(surveyId, linkId, TARGET_ID);
 
 async function summarize(
   executor: DbOrTx,
@@ -161,26 +169,26 @@ async function summarize(
     executor.execute(sql`
       SELECT s.link_id, count(*)::int AS n
       FROM contact_targets
-      JOIN fieldwork_link_shares s ON s.contact_target_id = "contact_targets".id
-      JOIN survey_access_links l ON l.id = s.link_id
+      JOIN fieldwork_link_shares s ON s.contact_target_id = ${TARGET_ID}
       WHERE ${targetsInScope(surveyId)} AND ${match} AND NOT ${inLink(linkId)}
-        AND s.link_id <> ${linkId} AND l.survey_id = ${surveyId} AND l.closed_at IS NULL
-      GROUP BY s.link_id, l.created_at
-      ORDER BY l.created_at, s.link_id
+        AND s.link_id IN ${otherOpenLinkIds(surveyId, linkId)}
+      GROUP BY s.link_id
     `),
     loadFieldworkLinkNames(surveyId),
   ]);
   const t = (totals as unknown as Array<Record<string, unknown>>)[0] ?? {};
+  // 링크별 인원은 발급 순 — 이름 맵이 같은 정렬(`created_at`, `id`)로 서 있다.
+  const order = [...names.keys()];
+  const otherRows = (others as unknown as Array<Record<string, unknown>>)
+    .map((r) => ({ linkId: String(r['link_id']), count: Number(r['n']) }))
+    .sort((a, b) => order.indexOf(a.linkId) - order.indexOf(b.linkId));
   return {
     matched: Number(t['matched'] ?? 0),
     current: Number(t['current'] ?? 0),
     incoming: Number(t['incoming'] ?? 0),
     overlap: Number(t['overlap'] ?? 0),
     leaving: Number(t['leaving'] ?? 0),
-    fromOthers: (others as unknown as Array<Record<string, unknown>>).map((r) => {
-      const id = String(r['link_id']);
-      return { linkId: id, name: names.get(id) ?? '', count: Number(r['n']) };
-    }),
+    fromOthers: otherRows.map((r) => ({ ...r, name: names.get(r.linkId) ?? '' })),
   };
 }
 
@@ -191,9 +199,7 @@ export async function listFieldworkShares(surveyId: string): Promise<FieldworkSh
       .select({
         linkId: surveyAccessLinks.id,
         appliedAt: surveyAccessLinks.shareAppliedAt,
-        count: sql<number>`(
-          SELECT count(*)::int FROM fieldwork_link_shares s WHERE s.link_id = ${surveyAccessLinks.id}
-        )`,
+        count: linkShareCount(),
       })
       .from(surveyAccessLinks)
       .where(
@@ -232,9 +238,7 @@ export async function getFieldworkShareForEdit(
     .select({
       appliedAt: surveyAccessLinks.shareAppliedAt,
       clauses: surveyAccessLinks.shareClauses,
-      count: sql<number>`(
-        SELECT count(*)::int FROM fieldwork_link_shares s WHERE s.link_id = ${surveyAccessLinks.id}
-      )`,
+      count: linkShareCount(),
     })
     .from(surveyAccessLinks)
     .where(openFieldworkLink(surveyId, linkId))
@@ -254,26 +258,9 @@ export async function getFieldworkShareForEdit(
 export async function previewFieldworkShare(
   input: FieldworkShareClausesInput,
 ): Promise<FieldworkShareChangeSummary> {
-  await assertOpenFieldworkLink(db, input.surveyId, input.linkId, false);
+  await assertOpenFieldworkLink(input.surveyId, input.linkId);
   const filter = await resolveShareFilter(input.surveyId, input.clauses);
   return summarize(db, input.surveyId, input.linkId, matchOf(filter));
-}
-
-/** 다시 돈 일은 경고 로그로 남긴다 — 대상 id·조건 값은 싣지 않는다. */
-function retryShareWrite<T>(rpc: string, input: FieldworkShareTargetInput, run: () => Promise<T>) {
-  return retryOnTxConflict(run, {
-    onRetry: (attempt, error) =>
-      logger.warn(
-        {
-          rpc,
-          surveyId: input.surveyId,
-          targetLinkId: input.linkId,
-          attempt,
-          err: error instanceof Error ? error.message : String(error),
-        },
-        '[fieldwork-share] 트랜잭션 충돌 — 다시 실행',
-      ),
-  });
 }
 
 /**
@@ -293,12 +280,10 @@ function retryShareWrite<T>(rpc: string, input: FieldworkShareTargetInput, run: 
 export async function applyFieldworkShare(
   input: FieldworkShareApplyInput,
 ): Promise<FieldworkShareApplyResult> {
-  const result = await retryShareWrite('contacts.fieldworkShares.apply', input, () =>
+  const write = { rpc: 'contacts.fieldworkShares.apply', ...input };
+  const result = await retryShareWrite(write, () =>
     db.transaction(async (tx) => {
-      // 외부 주체 판정을 true 로 넘기는 것은 「실데이터로 고정」의 뜻이다 — 브라우저 쿠키와 무관.
-      const locked = await lockWriteScope(tx, input.surveyId, true, { lock: 'share' });
-      if (!locked) throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
-      await assertOpenFieldworkLink(tx, input.surveyId, input.linkId, true);
+      await lockOpenFieldworkLink(tx, input.surveyId, input.linkId);
 
       const filter = await resolveShareFilter(input.surveyId, input.clauses, tx);
       const match = matchOf(filter);
@@ -308,12 +293,7 @@ export async function applyFieldworkShare(
 
       // 이번에 범위가 움직일 수 있는 대상 — 조건 결과와 지금 이 링크의 범위. id 순으로 잠가 두 적용이
       // 같은 대상을 다른 순서로 잡지 않게 한다.
-      await tx.execute(sql`
-        SELECT "contact_targets".id FROM contact_targets
-        WHERE ${scope} AND (${match} OR ${inLink(linkId)})
-        ORDER BY "contact_targets".id
-        FOR NO KEY UPDATE
-      `);
+      await lockShareTargets(tx, sql`${scope} AND (${match} OR ${inLink(linkId)})`);
 
       const summary = await summarize(tx, input.surveyId, linkId, match);
 
@@ -324,19 +304,16 @@ export async function applyFieldworkShare(
         DELETE FROM fieldwork_link_shares s
         USING contact_targets
         WHERE s.link_id = ${linkId}
-          AND s.contact_target_id = "contact_targets".id
+          AND s.contact_target_id = ${TARGET_ID}
           AND NOT ${match}
       `);
       // ② 가져오기 — 겹치는 대상을 다른 열린 링크에서 뺀다. 이미 같이 맡은 대상(이 링크에도 있음)은 둔다.
       if (input.overlap === 'take') {
         await tx.execute(sql`
           DELETE FROM fieldwork_link_shares s
-          USING contact_targets, survey_access_links l
-          WHERE s.contact_target_id = "contact_targets".id
-            AND l.id = s.link_id
-            AND l.survey_id = ${input.surveyId}
-            AND l.closed_at IS NULL
-            AND s.link_id <> ${linkId}
+          USING contact_targets
+          WHERE s.contact_target_id = ${TARGET_ID}
+            AND s.link_id IN ${otherOpenLinkIds(input.surveyId, linkId)}
             AND ${scope}
             AND ${match}
             AND NOT ${inLink(linkId)}
@@ -345,7 +322,7 @@ export async function applyFieldworkShare(
       // ③ 조건 결과를 이 링크로 — 남겨 두기면 겹치는 대상은 넣지 않는다. 이미 있는 줄은 그대로.
       await tx.execute(sql`
         INSERT INTO fieldwork_link_shares (link_id, contact_target_id)
-        SELECT ${linkId}::uuid, "contact_targets".id FROM contact_targets
+        SELECT ${linkId}::uuid, ${TARGET_ID} FROM contact_targets
         WHERE ${scope} AND ${match}
           ${input.overlap === 'keep' ? sql`AND (${inLink(linkId)} OR NOT ${others})` : sql``}
         ON CONFLICT DO NOTHING
@@ -386,21 +363,16 @@ export async function applyFieldworkShare(
 export async function clearFieldworkShare(
   input: FieldworkShareTargetInput,
 ): Promise<{ released: number }> {
-  return retryShareWrite('contacts.fieldworkShares.clear', input, () =>
+  return retryShareWrite({ rpc: 'contacts.fieldworkShares.clear', ...input }, () =>
     db.transaction(async (tx) => {
-      const locked = await lockWriteScope(tx, input.surveyId, true, { lock: 'share' });
-      if (!locked) throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
-      await assertOpenFieldworkLink(tx, input.surveyId, input.linkId, true);
-      const released = await tx
-        .delete(fieldworkLinkShares)
-        .where(eq(fieldworkLinkShares.linkId, input.linkId))
-        .returning({ id: fieldworkLinkShares.contactTargetId });
+      await lockOpenFieldworkLink(tx, input.surveyId, input.linkId);
+      const released = await releaseLinkShares(tx, input.linkId);
       const now = new Date();
       await tx
         .update(surveyAccessLinks)
         .set({ shareAppliedAt: null, shareClauses: null, updatedAt: now })
         .where(eq(surveyAccessLinks.id, input.linkId));
-      return { released: released.length };
+      return { released };
     }),
   );
 }
@@ -415,7 +387,7 @@ export const FIELDWORK_SHARE_MATCHES_PAGE_SIZE = 10;
 export async function listFieldworkShareMatches(
   input: FieldworkShareMatchesInput,
 ): Promise<FieldworkShareMatchesResult> {
-  await assertOpenFieldworkLink(db, input.surveyId, input.linkId, false);
+  await assertOpenFieldworkLink(input.surveyId, input.linkId);
   const filter = await resolveShareFilter(input.surveyId, input.clauses);
   const { rows, total, page } = await listContactsForSurvey({
     surveyId: input.surveyId,

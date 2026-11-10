@@ -13,7 +13,7 @@ import { SurveyAccessError, type ActorAttribution } from '@/server/survey-access
 import { decryptQuestionResponses, withoutEncryptedAnswers } from '@/lib/crypto/response-pii';
 import { logger } from '@/lib/logger';
 import { readBrowserTestView, resolveWriteScopeIsTest } from '@/server/data-scope';
-import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share';
+import { type FieldworkShare, shareTargetCondition, shareTargetSql } from '@/server/fieldwork-share';
 import { buildChangedQuestions, diffQuestionResponses } from '@/lib/operations/response-edit-diff';
 import { pinnedVersionId } from '@/shared/contracts/survey';
 import { calculateProgressPct, getProgressSnapshot } from './response-progress';
@@ -345,7 +345,7 @@ export async function saveAdminEdit(
       const [current] = await tx
         .select({
           deletedAt: surveyResponses.deletedAt,
-          inShare: sql<boolean>`${shareCondition ?? sql`TRUE`}`,
+          inShare: sql<boolean>`${shareTargetSql(share, surveyResponses.contactTargetId)}`,
         })
         .from(surveyResponses)
         .where(and(eq(surveyResponses.id, responseId), eq(surveyResponses.surveyId, surveyId)));

@@ -14,7 +14,7 @@ import {
   targetScopeCondition,
   testFlagForScope,
 } from '@/server/data-scope';
-import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share';
+import { type FieldworkShare, shareTargetSql } from '@/server/fieldwork-share';
 import { type FilterCondition, buildFilterSql } from './progress-filters';
 import {
   formatProgressGroupKey,
@@ -29,13 +29,9 @@ import { buildNegativeCodeExists, getResultCodeStatuses } from '@/server/read-mo
 
 const EMPTY_SCHEME: ProgressColumnScheme = { version: 1, columns: [] };
 
-/**
- * 담당 범위 술어 — 진척 보고는 조사 대상(`ct`) 단위라 범위 밖 대상이 행·합계·분모에서 함께 빠진다.
- * 완료 판정(`buildClosingFilter`)은 대상에 매달려 있으므로 범위를 옮기면 끝난 응답도 따라 옮겨 간다.
- */
-function shareSql(share: FieldworkShare): SQL {
-  return shareTargetCondition(share, sql`ct.id`) ?? sql`TRUE`;
-}
+// 담당 범위(`shareTargetSql(share, sql\`ct.id\`)`) — 진척 보고는 조사 대상(`ct`) 단위라 범위 밖 대상이
+// 행·합계·분모에서 함께 빠진다. 완료 판정(`buildClosingFilter`)은 대상에 매달려 있으므로 범위를 옮기면 끝난
+// 응답도 따라 옮겨 간다.
 
 /**
  * 클로징 정의 W∪A — 두 EXISTS 의 OR.
@@ -412,7 +408,7 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
       FROM ${buildGroupedBase(keySqls)}
       WHERE ct.survey_id = ${surveyId}
         AND ct.is_test = ${isTest}
-        AND ${shareSql(share)}
+        AND ${shareTargetSql(share, sql`ct.id`)}
         AND ${filterSql}
         GROUP BY ${buildGroupByClause(keyCount)}
     ) sub
@@ -482,7 +478,7 @@ export async function getProgressTotals(
         SELECT 1 FROM ${buildGroupedBase(groupKeySqls(groupByKeys))}
         WHERE ct.survey_id = ${surveyId}
           AND ct.is_test = ${isTest}
-          AND ${shareSql(share)}
+          AND ${shareTargetSql(share, sql`ct.id`)}
           AND ${filterSql}
         GROUP BY ${buildGroupByClause(keyCount)}
       ) grouped) AS group_count,
@@ -493,7 +489,7 @@ export async function getProgressTotals(
     FROM contact_targets ct
     WHERE ct.survey_id = ${surveyId}
       AND ct.is_test = ${isTest}
-      AND ${shareSql(share)}
+      AND ${shareTargetSql(share, sql`ct.id`)}
       AND ${filterSql}
   `);
   const r = (result as unknown as Array<Record<string, unknown>>)[0] ?? {};
@@ -517,9 +513,7 @@ export async function countContactTargets(
     .select({ ct: sql<number>`count(*)::int` })
     .from(contactTargets)
     .where(
-      sql`${contactTargets.surveyId} = ${surveyId} AND ${targetScopeCondition(scope)} AND ${
-        shareTargetCondition(share) ?? sql`TRUE`
-      }`,
+      sql`${contactTargets.surveyId} = ${surveyId} AND ${targetScopeCondition(scope)} AND ${shareTargetSql(share)}`,
     );
   return Number(rows[0]?.ct ?? 0);
 }

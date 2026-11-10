@@ -2,7 +2,7 @@ import { type SQL, sql } from 'drizzle-orm';
 import type { PgColumn } from 'drizzle-orm/pg-core';
 import 'server-only';
 
-import { contactTargets, fieldworkLinkShares } from '@/db/schema';
+import { contactTargets, fieldworkLinkShares, surveyAccessLinks } from '@/db/schema';
 
 import { type Actor, isLinkActor } from './survey-access';
 
@@ -31,9 +31,7 @@ import { type Actor, isLinkActor } from './survey-access';
  * 여기 헬퍼를 쓸 것(사본이 생기면 한쪽만 고쳐진다).
  */
 export type FieldworkShare =
-  | { kind: 'all' }
-  | { kind: 'targets'; linkId: string }
-  | { kind: 'none' };
+  { kind: 'all' } | { kind: 'targets'; linkId: string } | { kind: 'none' };
 
 export const FIELDWORK_SHARE_ALL: FieldworkShare = { kind: 'all' };
 
@@ -69,12 +67,71 @@ export function shareTargetCondition(
 ): SQL | undefined {
   if (share.kind === 'all') return undefined;
   if (share.kind === 'none') return sql`FALSE`;
-  // 서브쿼리의 표는 별칭을 박아 쓴다 — drizzle 관계 쿼리(`db.query.<표>.findFirst`)는 where 의 sql 조각에
-  // 든 **다른 표의 칸까지** 바깥 표 별칭으로 고쳐 써서(`"surveyResponses"."link_id"`) 칸 객체를 넣으면
-  // 깨진다(티켓 06 에서 응답 단건 조회가 밟았다). 표·칸 이름은 schema 객체에서 읽어 개명이 따라오게 한다.
+  return targetInLinkShare(share.linkId, column);
+}
+
+/**
+ * 위 술어를 **언제나 SQL 로** — `all` 이면 `TRUE`. 날 SQL 문장 안(`AND ${…}`)이나 `sql<boolean>` 칸처럼
+ * `undefined` 를 받을 수 없는 자리에 쓴다(호출부마다 `TRUE` 폴백을 적지 않게).
+ */
+export function shareTargetSql(
+  share: FieldworkShare,
+  column: PgColumn | SQL = contactTargets.id,
+): SQL {
+  return shareTargetCondition(share, column) ?? sql`TRUE`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 링크 하나의 범위 — 나누기 서비스·링크 목록이 함께 쓰는 조각
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 서브쿼리의 표는 별칭을 박아 쓴다 — drizzle 관계 쿼리(`db.query.<표>.findFirst`)는 where 의 sql 조각에
+// 든 **다른 표의 칸까지** 바깥 표 별칭으로 고쳐 써서(`"surveyResponses"."link_id"`) 칸 객체를 넣으면
+// 깨진다(티켓 06 에서 응답 단건 조회가 밟았다). 표·칸 이름은 schema 객체에서 읽어 개명이 따라오게 한다.
+
+const fls = {
+  link: sql.identifier(fieldworkLinkShares.linkId.name),
+  target: sql.identifier(fieldworkLinkShares.contactTargetId.name),
+};
+const sal = {
+  id: sql.identifier(surveyAccessLinks.id.name),
+  surveyId: sql.identifier(surveyAccessLinks.surveyId.name),
+  closedAt: sql.identifier(surveyAccessLinks.closedAt.name),
+};
+
+/** 이 대상(`column`)이 이 링크의 범위에 있는가 — NULL 없는 불리언. */
+export function targetInLinkShare(linkId: string, column: PgColumn | SQL = contactTargets.id): SQL {
   return sql`COALESCE(${column} IN (
-    SELECT fls.${sql.identifier(fieldworkLinkShares.contactTargetId.name)}
-    FROM ${fieldworkLinkShares} fls
-    WHERE fls.${sql.identifier(fieldworkLinkShares.linkId.name)} = ${share.linkId}
+    SELECT fls.${fls.target} FROM ${fieldworkLinkShares} fls WHERE fls.${fls.link} = ${linkId}
   ), FALSE)`;
+}
+
+/**
+ * 이 설문의 **다른 열린** 외주 링크 id 들(서브쿼리) — 종료된 링크는 몫이 없다. 겹침·가져오기·링크별 겹침 인원이
+ * 모두 이 정의 하나를 쓴다. 범위 표에는 외주 링크만 서므로 종류는 묻지 않는다.
+ */
+export function otherOpenLinkIds(surveyId: string, linkId: string): SQL {
+  return sql`(
+    SELECT sal.${sal.id} FROM ${surveyAccessLinks} sal
+    WHERE sal.${sal.surveyId} = ${surveyId} AND sal.${sal.closedAt} IS NULL AND sal.${sal.id} <> ${linkId}
+  )`;
+}
+
+/** 이 대상이 이 설문의 다른 열린 외주 링크 범위에 있는가 — 겹침의 재료. */
+export function targetInOtherOpenLinkShare(
+  surveyId: string,
+  linkId: string,
+  column: PgColumn | SQL = contactTargets.id,
+): SQL {
+  return sql`EXISTS (
+    SELECT 1 FROM ${fieldworkLinkShares} fls
+    WHERE fls.${fls.target} = ${column} AND fls.${fls.link} IN ${otherOpenLinkIds(surveyId, linkId)}
+  )`;
+}
+
+/** 링크(`linkIdColumn` — 보통 `survey_access_links.id`)의 범위 인원 — 링크 목록·수정 화면의 「나눔 · N명」. */
+export function linkShareCount(linkIdColumn: PgColumn | SQL = surveyAccessLinks.id): SQL<number> {
+  return sql<number>`(
+    SELECT count(*)::int FROM ${fieldworkLinkShares} fls WHERE fls.${fls.link} = ${linkIdColumn}
+  )`;
 }

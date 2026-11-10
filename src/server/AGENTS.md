@@ -32,6 +32,7 @@ src/
 │   ├── rpc-fieldwork-proxy.ts  # 위의 RPC 어댑터 — 담당 범위 밖 대상 → NOT_FOUND, 완료 대상 대행 진입 → FORBIDDEN
 │   ├── fieldwork-share.ts      # 담당 범위 해석 (ADR-0035) — resolveFieldworkShare(all|targets|none) + 술어 shareTargetCondition.
 │   │                           # 파티션 옆 두 번째 축, 관문 뒤에 추가로 건다 — 상세는 src/server/contacts/AGENTS.md 「외주 담당 범위」
+│   ├── fieldwork-share-write.ts # 범위 표 쓰기의 잠금 순서·해제·재시도 한 벌 — 나누기(contacts)와 링크 종료(workspace)가 부른다
 │   ├── page-fieldwork-link-access.ts # 외주 링크 콘솔 RSC 관문 — 접속 전·닫힘은 입구 화면으로 redirect, capability 부족만 notFound
 │   ├── page-client-link-access.ts # 클라이언트 링크 콘솔 RSC 관문 (ADR-0029) — assertClientLinkPageAccess(token, tab?).
 │   │                           # 토큰으로 세션을 세우고 operations.view 뒤에 **탭 화이트리스트**를 다시 묻는다. 설문 id 를

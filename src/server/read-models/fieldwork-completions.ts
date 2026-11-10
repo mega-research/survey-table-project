@@ -5,7 +5,7 @@ import { inArray, sql, type SQL } from 'drizzle-orm';
 import { db } from '@/db';
 import { surveys } from '@/db/schema';
 import { extractResultCodeStatuses } from '@/lib/contacts/result-code-statuses-normalize';
-import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share';
+import { type FieldworkShare, shareTargetSql } from '@/server/fieldwork-share';
 import type { ContactResultCode } from '@/shared/contracts/contacts';
 
 /**
@@ -50,7 +50,7 @@ export async function getFieldworkCompletedCounts(
     SELECT ct.survey_id, count(*)::int AS count
       FROM contact_targets ct
      WHERE ct.is_test = ${isTest}
-       AND ${shareTargetCondition(share, sql`ct.id`) ?? sql`TRUE`}
+       AND ${shareTargetSql(share, sql`ct.id`)}
        AND EXISTS (SELECT 1
                      FROM contact_attempts ca
                      JOIN positive_codes pc
