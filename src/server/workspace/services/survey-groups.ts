@@ -1,5 +1,6 @@
 import {
   type SQL,
+  type SQLWrapper,
   and,
   asc,
   eq,
@@ -8,10 +9,11 @@ import {
   inArray,
   isNull,
   ne,
+  notExists,
   or,
   sql,
 } from 'drizzle-orm';
-import { alias } from 'drizzle-orm/pg-core';
+import { type AnyPgColumn, alias } from 'drizzle-orm/pg-core';
 import 'server-only';
 
 import { type DbTransaction, db } from '@/db';
@@ -53,29 +55,12 @@ import { TeamNotFoundError, type WorkspaceActionOutput } from '../domain/teams';
 const OK: WorkspaceActionOutput = { success: true };
 
 /**
- * 팀의 그룹 목록 + 소속 설문 수 (.pen FLOW 2-1).
+ * 팀의 그룹 목록 + 설문 수 (.pen FLOW 2-1 · 3단계 중첩).
  *
- * 세는 것은 **요청자가 볼 수 있는 설문**이다. `invite_only` 는 소유 팀 팀원에게만 숨기는데
- * (스펙 §3) 카운트가 그것까지 세면 사이드바는 「임원 조사 3」이라 하고 그룹 화면에는 카드가
- * 1장만 나온다 — 뺄셈 한 번으로 "내게 숨겨진 설문이 2건 있다" 가 드러난다. 그래서 조인 조건이
- * 목록 조회(`buildSurveyScopeFilter` 의 seesInviteOnly)와 같은 술어를 쓴다.
- *
- * **카운트를 0 으로 만드는 것으로는 부족하다** — 폴더가 목록에 서 있으면 이름 자체가 정보이고
- * (「임원 조사」), 「0건인데 왜 있지」로 숨겨진 설문의 존재가 드러난다. 그래서 담긴 설문을
- * 하나도 볼 수 없는 그룹은 **행이 나오지 않는다**(having). 협업 그룹이 inner join 으로 같은
- * 규칙을 얻는 것과 짝이다.
- *
- * **빈 그룹은 예외다.** 감출 설문이 없고, 「그룹 관리」에서 폴더를 먼저 만들고 나중에 담는
- * 동선이라 안 보이면 방금 만든 폴더가 즉시 사라진다. 그래서 조건이 「보이는 설문이 있거나,
- * 담긴 설문이 아예 없다」 둘이다.
- *
- * 조인에 `surveys.teamId = surveyGroups.teamId` 도 함께 건다. 그룹은 팀 소유물이라 팀이 다른
- * 설문이 그룹에 남아 있으면 그건 이미 깨진 상태고(팀을 옮기는 흐름이 surveyGroupId 를 안 내린
- * 경우), 그 행을 세어 보여주면 깨진 상태를 정상처럼 보이게 한다.
- *
- * **내 팀 그룹은 상위 그룹 id 를 함께 낸다**(3단계 중첩, 0166) — 목록은 평평하고 트리는 화면이
- * 묶는다. 가시성과 건수는 아직 **직접 담긴 설문** 기준이라, 상위 그룹이 내게 안 보이면 그 id 가
- * 목록에 없을 수 있다(화면은 그 줄을 뿌리로 그린다).
+ * 내 팀 그룹과 협업 그룹(타 팀)을 이어 붙인 **평평한 목록**이다 — 트리는 화면이 묶는다.
+ * 내 팀 그룹의 가시성·건수는 `listOwnTeamGroups`, 협업 그룹은 `listCollaboratingGroups` 가 정한다.
+ * 두 쪽 모두 보이는 조건이 설문 목록 조회(`buildSurveyScopeFilter`)와 **같은 술어 조각**이다 —
+ * 사본을 두면 「그룹은 보이는데 안이 비었거나, 설문은 보이는데 폴더가 없는」 상태가 된다.
  */
 export async function listSurveyGroups(
   user: SurveyAccessUser,
@@ -105,59 +90,134 @@ export async function listSurveyGroups(
         leaderTeamIds.length > 0 ? leadsParticipantTeam(leaderTeamIds) : undefined,
       );
 
-  const own = isTeamMember
-    ? await db
-        .select({
-          id: surveyGroups.id,
-          name: surveyGroups.name,
-          order: surveyGroups.order,
-          parentGroupId: surveyGroups.parentGroupId,
-          surveyCount: sql<number>`count(${surveys.id})::int`,
-          foreignTeamName: sql<string | null>`null`,
-        })
-        .from(surveyGroups)
-        // **해산된 팀의 그룹은 없는 것으로 본다**(티켓 13). 관문이 목록에서 빠졌으므로
-        // (조회 조건이 좁힌다) 이 조인이 그 계약을 대신 진다 — 없으면 슈퍼어드민이 archived
-        // 팀 그룹을 계속 본다(멤버십 축과 달리 슈퍼어드민은 소속 검사를 지나지 않는다).
-        .innerJoin(teams, and(eq(teams.id, surveyGroups.teamId), eq(teams.status, 'active')))
-        .leftJoin(
-          surveys,
-          and(
-            eq(surveys.surveyGroupId, surveyGroups.id),
-            eq(surveys.teamId, surveyGroups.teamId),
-            isNull(surveys.deletedAt),
-            visibleHere,
-          ),
-        )
-        .where(eq(surveyGroups.teamId, teamId))
-        .groupBy(surveyGroups.id)
-        .having(or(sql`count(${surveys.id}) > 0`, sql`not ${groupHoldsAnySurvey()}`))
-        .orderBy(asc(surveyGroups.order), asc(surveyGroups.name))
-    : [];
+  const own = isTeamMember ? await listOwnTeamGroups(teamId, visibleHere) : [];
 
   return [...own, ...(await listCollaboratingGroups(subject.userId, leaderTeamIds, teamId))];
 }
 
 /**
- * 이 그룹에 (내가 볼 수 있는지와 무관하게) 설문이 담겨 있는가 — 빈 그룹만 가려내는 술어.
+ * 내 팀 그룹 — 가시성과 건수가 **하위 그룹까지** 본다(3단계 중첩 티켓 02).
  *
- * 가시성 조건을 **일부러 걸지 않는다**. 이 값이 묻는 것은 「감출 것이 있는가」이고, 조건을
- * 걸면 바깥 카운트와 같아져 빈 그룹과 「전부 숨은 그룹」을 구별하지 못한다.
+ * 그룹마다 「그 그룹과 그 아래 전체」에 담긴 설문을 두 번 센다 — 요청자가 **볼 수 있는** 수와
+ * 가시성과 무관한 **담긴** 수. 규칙은 이 둘에서 나온다.
+ *
+ * - **건수**는 볼 수 있는 수다. `invite_only` 는 소유 팀 팀원에게만 숨기는데(스펙 §3) 그것까지
+ *   세면 사이드바는 「임원 조사 3」이라 하고 그룹 화면에는 카드가 1장만 나온다 — 뺄셈 한 번으로
+ *   "내게 숨겨진 설문이 2건 있다" 가 드러난다.
+ * - **담긴 설문이 있는데 볼 수 있는 것이 하나도 없으면 「숨는 그룹」이다.** 건수를 0 으로 만드는
+ *   것으로는 부족하다 — 폴더가 목록에 서 있으면 이름 자체가 정보이고(「임원 조사」), 「0건인데
+ *   왜 있지」로 숨겨진 설문의 존재가 드러난다. 그래서 **행이 나오지 않는다**. 협업 그룹이 inner
+ *   join 으로 같은 규칙을 얻는 것과 짝이다.
+ * - **아래 전체가 빈 그룹은 보인다.** 감출 설문이 없고, 폴더를 먼저 만들고 나중에 담는 동선이라
+ *   안 보이면 방금 만든 폴더가 즉시 사라진다. 담긴 수에 가시성 조건을 **일부러 걸지 않는** 이유가
+ *   이것이다 — 걸면 볼 수 있는 수와 같아져 빈 그룹과 「전부 숨은 그룹」을 구별하지 못한다.
+ * - **위쪽 그룹 중 하나라도 숨으면 함께 숨는다.** 하위 어디든 볼 수 있는 설문이 있으면 위쪽은
+ *   전부 보이므로, 이 규칙이 더 숨기는 것은 숨는 그룹 밑의 **빈 가지**뿐이다. 그 줄이 남으면
+ *   위가 없는 줄이 뿌리처럼 떠오르고, 「이 위에 내가 못 보는 그룹이 있다」가 상위 그룹 id 로
+ *   드러난다. 그래서 내 팀 줄의 상위 그룹 id 는 언제나 목록 안의 줄을 가리키고, 목록 안에서 센
+ *   깊이가 실제 깊이와 같다.
+ *
+ * 깊이가 3으로 묶여 있어(0166) 재귀 조회 없이 **자기 조인**으로 「아래 전체」를 편다
+ * (`isWithinGroupSubtree`). 팀당 그룹은 수십 건이다.
+ *
+ * 설문 조인에 `surveys.teamId = surveyGroups.teamId` 도 함께 건다. 그룹은 팀 소유물이라 팀이 다른
+ * 설문이 그룹에 남아 있으면 그건 이미 깨진 상태고(팀을 옮기는 흐름이 surveyGroupId 를 안 내린
+ * 경우), 그 행을 세어 보여주면 깨진 상태를 정상처럼 보이게 한다.
  */
-function groupHoldsAnySurvey(): SQL<boolean> {
-  const held = alias(surveys, 'group_survey');
-  return sql<boolean>`${exists(
+async function listOwnTeamGroups(
+  teamId: string,
+  visibleHere: SQL | undefined,
+): Promise<ListSurveyGroupsOutput> {
+  // 설문을 직접 담은 그룹 — 바깥 그룹의 「아래 전체」에 드는 줄마다 한 번씩 붙는다.
+  const holder = alias(surveyGroups, 'holder_group');
+  const heldCount = sql<number>`count(${surveys.id})`;
+  const visibleCount = visibleHere
+    ? sql<number>`count(${surveys.id}) filter (where ${visibleHere})`
+    : heldCount;
+
+  const stats = db.$with('group_stats').as(
     db
-      .select({ one: sql`1` })
-      .from(held)
+      .select({
+        groupId: surveyGroups.id,
+        visibleCount: sql<number>`(${visibleCount})::int`.as('visible_count'),
+        hidesSurveys: sql<boolean>`(${heldCount} > 0 and ${visibleCount} = 0)`.as('hides_surveys'),
+      })
+      .from(surveyGroups)
+      .innerJoin(
+        holder,
+        and(eq(holder.teamId, surveyGroups.teamId), isWithinGroupSubtree(holder, surveyGroups.id)),
+      )
+      .leftJoin(
+        surveys,
+        and(
+          eq(surveys.surveyGroupId, holder.id),
+          eq(surveys.teamId, surveyGroups.teamId),
+          isNull(surveys.deletedAt),
+        ),
+      )
+      .where(eq(surveyGroups.teamId, teamId))
+      .groupBy(surveyGroups.id),
+  );
+  // 같은 집계를 「숨는 그룹」 판정용으로 한 번 더 읽는다 — 이름을 달리 붙여야 바깥 줄과 견준다.
+  const hiding = db
+    .select({ groupId: stats.groupId, hidesSurveys: stats.hidesSurveys })
+    .from(stats)
+    .as('hiding_group');
+
+  return (
+    db
+      .with(stats)
+      .select({
+        id: surveyGroups.id,
+        name: surveyGroups.name,
+        order: surveyGroups.order,
+        parentGroupId: surveyGroups.parentGroupId,
+        surveyCount: stats.visibleCount,
+        foreignTeamName: sql<string | null>`null`,
+      })
+      .from(surveyGroups)
+      // **해산된 팀의 그룹은 없는 것으로 본다**(티켓 13). 관문이 목록에서 빠졌으므로
+      // (조회 조건이 좁힌다) 이 조인이 그 계약을 대신 진다 — 없으면 슈퍼어드민이 archived
+      // 팀 그룹을 계속 본다(멤버십 축과 달리 슈퍼어드민은 소속 검사를 지나지 않는다).
+      .innerJoin(teams, and(eq(teams.id, surveyGroups.teamId), eq(teams.status, 'active')))
+      .innerJoin(stats, eq(stats.groupId, surveyGroups.id))
       .where(
         and(
-          eq(held.surveyGroupId, surveyGroups.id),
-          eq(held.teamId, surveyGroups.teamId),
-          isNull(held.deletedAt),
+          eq(surveyGroups.teamId, teamId),
+          // 자기 자신이든 위쪽 그룹이든, 숨는 그룹의 「아래 전체」에 들면 나오지 않는다.
+          notExists(
+            db
+              .select({ one: sql`1` })
+              .from(hiding)
+              .where(and(hiding.hidesSurveys, isWithinGroupSubtree(surveyGroups, hiding.groupId))),
+          ),
         ),
-      ),
-  )}`;
+      )
+      .orderBy(asc(surveyGroups.order), asc(surveyGroups.name))
+  );
+}
+
+/**
+ * `node` 그룹이 `rootId` 그룹 자신이거나 그 아래에 있는가.
+ *
+ * 깊이가 3이라 「아래」는 두 단계뿐이다 — 자기 · 바로 밑 · 그 밑. 마지막 한 칸만 가운데 그룹을
+ * 한 번 더 읽는다. 깊이 상한(`SURVEY_GROUP_MAX_DEPTH`)이 늘면 이 술어가 한 단계를 놓친다.
+ */
+function isWithinGroupSubtree(
+  node: { id: AnyPgColumn; parentGroupId: AnyPgColumn },
+  rootId: SQLWrapper,
+): SQL {
+  const middle = alias(surveyGroups, 'middle_group');
+  return or(
+    eq(node.id, rootId),
+    eq(node.parentGroupId, rootId),
+    exists(
+      db
+        .select({ one: sql`1` })
+        .from(middle)
+        .where(and(eq(middle.id, node.parentGroupId), eq(middle.parentGroupId, rootId))),
+    ),
+  )!;
 }
 
 /**

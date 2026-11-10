@@ -379,7 +379,11 @@ export function SurveyListView() {
     <div className="mx-auto flex w-full max-w-[1360px] flex-col gap-[18px] px-9 py-[30px]">
       <div className="flex items-center justify-between gap-6">
         {activeGroup && groupScreen ? (
-          <GroupViewHeader path={groupScreen.path} foreignTeamName={activeGroup.foreignTeamName} />
+          <GroupViewHeader
+            path={groupScreen.path}
+            foreignTeamName={activeGroup.foreignTeamName}
+            surveyCount={activeGroup.surveyCount}
+          />
         ) : activeTeam ? (
           <h1 className="text-2xl font-semibold text-[#1C1C1E]">
             {activeTeam.name}
