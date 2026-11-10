@@ -83,7 +83,14 @@ beforeEach(() => {
     s(TEAM_1, '연구1본부 1팀', null),
   ]);
   groupsCall.mockResolvedValue([
-    { id: 'g-2026', name: '2026', order: 0, surveyCount: 2, foreignTeamName: '연구3본부 5팀' },
+    {
+      id: 'g-2026',
+      name: '2026',
+      order: 0,
+      parentGroupId: null,
+      surveyCount: 2,
+      foreignTeamName: '연구3본부 5팀',
+    },
   ]);
 });
 
@@ -139,5 +146,62 @@ describe('실사팀 사이드바', () => {
     renderSidebar('standard');
     expect(screen.getByRole('link', { name: '설문 목록' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /참여 중/ })).toBeNull();
+  });
+});
+
+/**
+ * 일반 팀의 그룹 줄 (3단계 중첩 티켓 01) — 사이드바는 아직 맨 위 그룹만 그린다. 하위 그룹은
+ * 본문의 폴더 줄로 들어가고, 하위 그룹 화면에 있으면 그 가지의 맨 위 줄이 켜진다.
+ */
+describe('일반 팀 사이드바의 그룹 줄', () => {
+  function g(id: string, name: string, parentGroupId: string | null) {
+    return { id, name, order: 0, parentGroupId, surveyCount: 1, foreignTeamName: null };
+  }
+
+  beforeEach(() => {
+    groupsCall.mockResolvedValue([
+      g('g-lee', '이정운', null),
+      g('g-kim', '김서연', null),
+      g('g-lee-2026', '2026', 'g-lee'),
+      g('g-lee-2026-h1', '상반기', 'g-lee-2026'),
+    ]);
+  });
+
+  it('맨 위 그룹만 줄로 서고 하위 그룹은 줄이 없다', async () => {
+    renderSidebar('standard');
+
+    expect(await screen.findByRole('link', { name: /이정운/ })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /김서연/ })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /2026/ })).toBeNull();
+    expect(screen.queryByRole('link', { name: /상반기/ })).toBeNull();
+  });
+
+  it('하위 그룹 화면에 있으면 그 가지의 맨 위 그룹 줄이 켜진다', async () => {
+    searchParams = new URLSearchParams({ group: 'g-lee-2026-h1' });
+    renderSidebar('standard');
+
+    expect(await screen.findByRole('link', { name: /이정운/ })).toHaveAttribute(
+      'aria-current',
+      'true',
+    );
+    expect(screen.getByRole('link', { name: /김서연/ })).not.toHaveAttribute('aria-current');
+  });
+
+  it('맨 위 그룹 화면에 있으면 그 줄이 지금 화면이다', async () => {
+    searchParams = new URLSearchParams({ group: 'g-kim' });
+    renderSidebar('standard');
+
+    expect(await screen.findByRole('link', { name: /김서연/ })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    expect(screen.getByRole('link', { name: /이정운/ })).not.toHaveAttribute('aria-current');
+  });
+
+  it('상위 그룹이 목록에 없는 그룹도 한 줄로 선다', async () => {
+    groupsCall.mockResolvedValue([g('g-orphan', '2025', 'g-hidden')]);
+    renderSidebar('standard');
+
+    expect(await screen.findByRole('link', { name: /2025/ })).toBeInTheDocument();
   });
 });

@@ -8,6 +8,7 @@ import { Folder } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { surveyGroupListQueryOptions } from '@/shared/lib/survey-group-queries';
+import { buildSurveyGroupTree, findSurveyGroupPath } from '@/utils/survey-group-tree';
 
 /**
  * 사이드바 「설문 목록」 하위의 그룹 트리 (.pen FLOW 1-4·2 배경).
@@ -26,6 +27,10 @@ import { surveyGroupListQueryOptions } from '@/shared/lib/survey-group-queries';
  * 팀원이 초대된 설문이 그 안에 있어서 보인다. 소유 팀을 함께 적는 것이 이 표시의 계약이다:
  * 밝히지 않으면 내 팀 폴더와 구별되지 않아, 이름을 고칠 수 없는 폴더가 내 것처럼 보인다
  * (설문 카드가 「… 소유」를 적는 것과 같은 이유).
+ *
+ * **지금은 맨 위 줄만 그린다**(3단계 중첩 티켓 01). 하위 그룹은 본문의 폴더 줄로 들어가고,
+ * 하위 그룹 화면에 있으면 그 가지의 맨 위 줄이 켜진다 — 어느 가지 안에 있는지는 보인다.
+ * 「맨 위」는 이 목록 안에서의 뿌리다: 상위 그룹이 내게 보이지 않는 그룹도 한 줄로 선다.
  */
 export function SidebarGroupTree({ teamId }: { teamId: string | null }) {
   const pathname = usePathname();
@@ -37,16 +42,20 @@ export function SidebarGroupTree({ teamId }: { teamId: string | null }) {
 
   const onListPage = pathname === '/surveys';
   const activeGroupId = onListPage ? searchParams.get('group') : null;
+  // 지금 그룹이 속한 가지의 뿌리 — 하위 그룹 화면에서도 그 가지의 줄이 켜진다.
+  const activeRootId = activeGroupId ? findSurveyGroupPath(groups, activeGroupId)[0]?.id : null;
 
   return (
     <div className="flex flex-col gap-[1px] pt-0.5">
-      {groups.map((group) => {
-        const active = group.id === activeGroupId;
+      {buildSurveyGroupTree(groups).map(({ group }) => {
+        const active = group.id === activeRootId;
         return (
           <Link
             key={group.id}
             href={`/surveys?group=${group.id}`}
             title={group.foreignTeamName ? `${group.name} · ${group.foreignTeamName}` : group.name}
+            // 그 그룹 화면이면 page, 그 아래 하위 그룹 화면이면 「이 가지 안」이다.
+            aria-current={active ? (group.id === activeGroupId ? 'page' : 'true') : undefined}
             className={cn(
               'flex items-center gap-[7px] rounded-[7px] py-[7px] pr-2.5 pl-6 text-[12.5px] transition-colors',
               active
