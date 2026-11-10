@@ -136,6 +136,7 @@
     "0157_personal_tag_filter_score",
     "0158_users_survey_list_whose",
     "0159_fieldwork_links_multi_and_label",
-    "0160_fieldwork_link_shares"
+    "0160_fieldwork_link_shares",
+    "0161_revoke_survey_access_links_grants"
   ]
 }
