@@ -17,7 +17,7 @@ import 'server-only';
 import { type DbTransaction, db } from '@/db';
 import { surveyGroups, surveys, teams } from '@/db/schema';
 import { escapeLikePattern } from '@/lib/operations/filter-shared';
-import { isUniqueViolation } from '@/lib/pg-error';
+import { isUniqueViolation, retryOnTxConflict } from '@/lib/pg-error';
 import {
   leadsParticipantTeam,
   participatesInSurvey,
@@ -40,7 +40,10 @@ import {
   type MoveSurveyToGroupInput,
   type RenameSurveyGroupInput,
   type ReorderSurveyGroupsInput,
+  SURVEY_GROUP_MAX_DEPTH,
   SurveyAlreadyGroupedError,
+  SurveyGroupDepthExceededError,
+  SurveyGroupHasChildrenError,
   SurveyGroupNotFoundError,
   SurveyGroupTargetNotFoundError,
   SurveyTeamMismatchError,
@@ -69,6 +72,10 @@ const OK: WorkspaceActionOutput = { success: true };
  * 조인에 `surveys.teamId = surveyGroups.teamId` 도 함께 건다. 그룹은 팀 소유물이라 팀이 다른
  * 설문이 그룹에 남아 있으면 그건 이미 깨진 상태고(팀을 옮기는 흐름이 surveyGroupId 를 안 내린
  * 경우), 그 행을 세어 보여주면 깨진 상태를 정상처럼 보이게 한다.
+ *
+ * **내 팀 그룹은 상위 그룹 id 를 함께 낸다**(3단계 중첩, 0166) — 목록은 평평하고 트리는 화면이
+ * 묶는다. 가시성과 건수는 아직 **직접 담긴 설문** 기준이라, 상위 그룹이 내게 안 보이면 그 id 가
+ * 목록에 없을 수 있다(화면은 그 줄을 뿌리로 그린다).
  */
 export async function listSurveyGroups(
   user: SurveyAccessUser,
@@ -104,6 +111,7 @@ export async function listSurveyGroups(
           id: surveyGroups.id,
           name: surveyGroups.name,
           order: surveyGroups.order,
+          parentGroupId: surveyGroups.parentGroupId,
           surveyCount: sql<number>`count(${surveys.id})::int`,
           foreignTeamName: sql<string | null>`null`,
         })
@@ -168,6 +176,9 @@ function groupHoldsAnySurvey(): SQL<boolean> {
  * `leadsParticipantTeam`). 사본을 두면 그룹 트리와 설문 목록이 갈려 「그룹은 보이는데 안이
  * 비었거나, 설문은 보이는데 폴더가 없는」 상태가 된다.
  *
+ * **상위 그룹은 내지 않는다**(`parentGroupId` 는 언제나 null) — 설문 하나에 초대했을 뿐인 타 팀
+ * 사람에게 그 팀의 정리 구조가 드러나면 안 된다. 그래서 협업 그룹은 몇 단계에 있든 한 줄이다.
+ *
  * 내 범위 팀은 제외한다 — 그 팀 그룹은 위에서 이미 전부 나왔고(멤버라면), 멤버가 아니라면
  * 협업 조건으로 여기서 잡힌다. 그래서 `ne` 가 아니라 **멤버 여부에 따라** 갈라야 할 것 같지만,
  * 멤버가 아닌 팀의 teamId 가 범위로 들어오는 경로가 없다(work-scope 가 내 팀으로 접는다).
@@ -187,6 +198,7 @@ async function listCollaboratingGroups(
       id: surveyGroups.id,
       name: surveyGroups.name,
       order: surveyGroups.order,
+      parentGroupId: sql<string | null>`null`,
       surveyCount: sql<number>`count(${surveys.id})::int`,
       foreignTeamName: teams.name,
     })
@@ -235,23 +247,27 @@ export async function getSurveyGroupTeamId(groupId: string): Promise<string | nu
 }
 
 /**
- * 그룹 생성 — 새 그룹은 목록 맨 뒤에 붙는다.
+ * 그룹 생성 — 새 그룹은 **그 부모의** 맨 뒤에 붙는다(상위 그룹이 없으면 최상위의 맨 뒤).
  *
- * order 를 0 으로 두면 이름순으로 아무 데나 끼어들어 보인다. 기존 최대값 +1 은 동시 생성에서
- * 같은 값이 날 수 있지만 정렬 순서는 불변식이 아니라 표시 순서라 그걸로 깨지는 것이 없다
- * (이름 2차 정렬이 받아준다).
+ * order 를 0 으로 두면 이름순으로 아무 데나 끼어들어 보인다. 기존 최대값 +1 은 팀 키 아래서
+ * 읽으므로 같은 값이 나지 않는다.
+ *
+ * 상위 그룹은 **잠금 아래서 다시** 본다(관문이 본 것은 별도 왕복이다) — 없는 그룹·다른 팀의
+ * 그룹은 같은 사유로 접고, 3단계 그룹 밑이면 거부한다. 두 판정 모두 DB 가 한 번 더 막는다
+ * (0166 의 복합 FK·CHECK): 서비스가 틀려도 4단계나 타 팀 부모는 생기지 않는다.
  */
 export async function createSurveyGroup(
   actorUserId: string,
   input: CreateSurveyGroupInput,
 ): Promise<CreateSurveyGroupOutput> {
-  return db.transaction(async (tx) => {
-    await requireActiveTeamLocked(tx, input.teamId);
+  return inGroupStructureTx(async (tx) => {
+    await lockTeamGroupStructure(tx, input.teamId);
+    const parent = await loadParentForNewGroup(tx, input.teamId, input.parentGroupId ?? null);
 
     const [tail] = await tx
       .select({ maxOrder: sql<number | null>`max(${surveyGroups.order})` })
       .from(surveyGroups)
-      .where(eq(surveyGroups.teamId, input.teamId));
+      .where(and(eq(surveyGroups.teamId, input.teamId), isChildOf(parent?.id ?? null)));
 
     try {
       const [group] = await tx
@@ -261,6 +277,8 @@ export async function createSurveyGroup(
           name: input.name,
           createdBy: actorUserId,
           order: (tail?.maxOrder ?? -1) + 1,
+          parentGroupId: parent?.id ?? null,
+          parentDepth: parent?.depth ?? null,
         })
         .returning({ id: surveyGroups.id });
       if (!group) throw new SurveyGroupNotFoundError();
@@ -273,17 +291,18 @@ export async function createSurveyGroup(
 }
 
 /**
- * 이름 변경 — 그룹 행을 잠그고 그 팀이 아직 살아 있는지 다시 본다.
+ * 이름 변경 — 팀 키를 잡고 그 팀이 아직 살아 있는지 다시 본다.
  *
  * 관문(procedure)이 이미 확인했지만 별도 왕복이라, 그 사이 해산이 커밋되면 archived 팀의
  * 그룹 이름이 바뀐다. 그 행은 감사 계보로 남기기로 한 것이다(티켓 13).
+ *
+ * 이름이 겹치는지는 **같은 상위 그룹 안에서만** 본다 — 판정은 DB 유일 인덱스가 한다.
  */
 export async function renameSurveyGroup(
   input: RenameSurveyGroupInput,
 ): Promise<WorkspaceActionOutput> {
-  return db.transaction(async (tx) => {
-    const { teamId } = await lockGroup(tx, input.groupId);
-    await requireActiveTeamLocked(tx, teamId);
+  return inGroupStructureTx(async (tx) => {
+    await lockGroupStructureByGroup(tx, input.groupId);
     try {
       const [row] = await tx
         .update(surveyGroups)
@@ -300,10 +319,12 @@ export async function renameSurveyGroup(
 }
 
 /**
- * 정렬 — 화면이 준 순서대로 order 를 0..n-1 로 다시 매긴다.
+ * 정렬 — **한 부모의 형제만**, 화면이 준 순서대로 order 를 다시 매긴다.
  *
- * UPDATE 를 teamId 로도 좁히는 것이 팀 경계다: 배열에 타 팀 groupId 가 섞여 들어와도
- * 그 행에는 닿지 않는다(관문이 이미 요청자의 팀을 확인했으므로 조용히 무시해도 안전하다).
+ * UPDATE 를 teamId 와 상위 그룹으로 함께 좁히는 것이 경계다: 배열에 타 팀 groupId 나 다른 부모
+ * 밑의 groupId 가 섞여 들어와도 그 행에는 닿지 않는다(관문이 이미 요청자의 팀을 확인했으므로
+ * 조용히 무시해도 안전하다). 순서 값은 「같은 부모 안에서의 표시 순서」라, 다른 부모의 형제까지
+ * 한 배열로 매기면 그쪽 순서가 조용히 뒤섞인다.
  *
  * 팀 키 advisory lock 을 잡는 이유는 lost update 때문이 아니다(순서 값은 표시용이라 덮여도
  * 불변식이 안 깨진다) — **행 잠금 순서가 요청자마다 다르기 때문**이다. 그룹이 팀 공용이라
@@ -315,17 +336,17 @@ export async function renameSurveyGroup(
 export async function reorderSurveyGroups(
   input: ReorderSurveyGroupsInput,
 ): Promise<WorkspaceActionOutput> {
-  await db.transaction(async (tx) => {
-    await tx.execute(
-      sql`SELECT pg_advisory_xact_lock(hashtext('survey-groups-' || ${input.teamId}))`,
-    );
+  await inGroupStructureTx(async (tx) => {
     // 관문과 이 쓰기 사이에 해산이 커밋될 수 있다 — 잠긴 값으로 다시 본다.
-    await requireActiveTeamLocked(tx, input.teamId);
+    await lockTeamGroupStructure(tx, input.teamId);
+    const siblingsOnly = isChildOf(input.parentGroupId ?? null);
     for (const [index, groupId] of input.orderedGroupIds.entries()) {
       await tx
         .update(surveyGroups)
         .set({ order: index, updatedAt: new Date() })
-        .where(and(eq(surveyGroups.id, groupId), eq(surveyGroups.teamId, input.teamId)));
+        .where(
+          and(eq(surveyGroups.id, groupId), eq(surveyGroups.teamId, input.teamId), siblingsOnly),
+        );
     }
   });
   return OK;
@@ -336,14 +357,23 @@ export async function reorderSurveyGroups(
  *
  * 설문·응답·공유 설정은 손대지 않는다(.pen FLOW 2-3 의 「그룹만 삭제되고 설문은 삭제되지
  * 않습니다」). 그래서 여기서 설문을 따로 UPDATE 하지 않는다 — DB 가 원자적으로 처리한다.
+ *
+ * **하위 그룹이 있는 그룹은 지우지 않는다.** 따라 지우면 클릭 한 번에 정리해 둔 가지가 통째로
+ * 사라진다. DB 도 같은 것을 막는다(0166 의 `survey_groups_parent_fk` — 하위가 남아 있으면 거부).
  */
 export async function removeSurveyGroup(groupId: string): Promise<WorkspaceActionOutput> {
-  return db.transaction(async (tx) => {
-    // 그룹 행 → 팀 행 순으로 잠근다(담기와 같은 방향). 해산은 팀 → 설문만 잡으므로 사이클이 없다.
-    const { teamId } = await lockGroup(tx, groupId);
+  return inGroupStructureTx(async (tx) => {
+    // 팀 키 → 팀 행 → 그룹 행 → (FK 가 건드리는) 설문 행. 해산은 팀 → 설문만 잡으므로 사이클이 없다.
     // **삭제야말로 되돌릴 수 없다.** 관문 확인 뒤 해산이 커밋된 사이에 이 삭제가 실행되면
     // 티켓 13 이 감사 계보로 남기기로 한 archived 팀의 그룹 행이 영구히 사라진다.
-    await requireActiveTeamLocked(tx, teamId);
+    await lockGroupStructureByGroup(tx, groupId);
+
+    const [child] = await tx
+      .select({ id: surveyGroups.id })
+      .from(surveyGroups)
+      .where(eq(surveyGroups.parentGroupId, groupId))
+      .limit(1);
+    if (child) throw new SurveyGroupHasChildrenError();
 
     const [row] = await tx
       .delete(surveyGroups)
@@ -485,7 +515,78 @@ export async function moveSurveyToGroup(
   });
 }
 
-/** 그룹 행을 잠그고 소유 팀을 돌려준다 — 담기·이동이 공유하는 첫 단계(잠금 순서 고정). */
+// ─────────────────────────────────────────────────────────────────────────────
+// 구조 쓰기의 한 줄 세우기 (3단계 중첩, 0166)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 그룹 구조를 바꾸는 쓰기(만들기·이름 바꾸기·순서 바꾸기·지우기 — 뒤 티켓의 옮기기)는 전부
+// **한 트랜잭션에서 팀 키 advisory lock 을 먼저 잡는다.** 깊이·이름 겹침·「하위 그룹이 있는가」의
+// 판정이 모두 「읽고 나서 쓰기」라, 같은 팀의 구조 쓰기가 겹치면 서로가 읽은 것이 낡는다.
+//
+// 잠금 순서는 하나다 — **팀 키 → 팀 행(FOR SHARE) → 그룹 행 → 설문 행.** 설문 행을 잠그는
+// 담기·이동은 팀 키를 잡지 않고 그룹 행 → 설문 행으로 가므로 방향이 같다. 팀 키를 그룹 행이나
+// 설문 행 **뒤에** 잡는 경로를 만들지 말 것.
+
+/** 구조 쓰기 트랜잭션 — 교착(40P01)·직렬화 실패(40001)면 처음부터 다시 돈다. */
+function inGroupStructureTx<T>(run: (tx: DbTransaction) => Promise<T>): Promise<T> {
+  return retryOnTxConflict(() => db.transaction(run));
+}
+
+/**
+ * 그 팀의 그룹 구조를 잠근다 — 팀 키 advisory lock + 팀이 아직 살아 있는지.
+ *
+ * 구조 쓰기의 **첫 줄**이어야 한다. 트랜잭션 잠금이라 커밋·롤백에서 풀린다.
+ */
+async function lockTeamGroupStructure(tx: DbTransaction, teamId: string): Promise<void> {
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('survey-groups-' || ${teamId}))`);
+  await requireActiveTeamLocked(tx, teamId);
+}
+
+/**
+ * `groupId` 만 받는 구조 쓰기의 첫 줄 — 그룹의 팀으로 구조를 잠그고 그 그룹 행을 잠가 돌려준다.
+ *
+ * 팀 키를 고르려면 그룹의 팀을 먼저 알아야 해서 **잠금 없이** 한 번 읽는다. 그룹의 팀은 바뀌지
+ * 않으므로 그 값으로 고른 키는 틀리지 않는다. 기다리는 사이 그룹이 지워졌으면 뒤의 행 잠금이
+ * 「없는 그룹」으로 답한다.
+ */
+async function lockGroupStructureByGroup(tx: DbTransaction, groupId: string): Promise<LockedGroup> {
+  const [found] = await tx
+    .select({ teamId: surveyGroups.teamId })
+    .from(surveyGroups)
+    .where(eq(surveyGroups.id, groupId));
+  if (!found) throw new SurveyGroupNotFoundError();
+  await lockTeamGroupStructure(tx, found.teamId);
+  return lockGroup(tx, groupId);
+}
+
+/** 「이 부모의 하위 그룹인가」 — 부모가 null 이면 최상위끼리. */
+function isChildOf(parentGroupId: string | null): SQL {
+  return parentGroupId === null
+    ? isNull(surveyGroups.parentGroupId)
+    : eq(surveyGroups.parentGroupId, parentGroupId);
+}
+
+/**
+ * 새 그룹의 상위 그룹을 읽어 「그 밑에 만들 수 있는가」를 본다. 최상위면 null.
+ *
+ * 팀 키 아래서 부르므로 읽은 깊이가 낡지 않는다(깊이를 바꾸는 쓰기는 전부 같은 키를 잡는다).
+ * 다른 팀의 그룹은 없는 그룹과 같은 사유로 접는다 — 갈리면 id 로 타 팀 그룹의 존재가 확인된다.
+ */
+async function loadParentForNewGroup(
+  tx: DbTransaction,
+  teamId: string,
+  parentGroupId: string | null,
+): Promise<{ id: string; depth: number } | null> {
+  if (parentGroupId === null) return null;
+  const [parent] = await tx
+    .select({ id: surveyGroups.id, teamId: surveyGroups.teamId, depth: surveyGroups.depth })
+    .from(surveyGroups)
+    .where(eq(surveyGroups.id, parentGroupId));
+  if (!parent || parent.teamId !== teamId) throw new SurveyGroupNotFoundError();
+  if (parent.depth >= SURVEY_GROUP_MAX_DEPTH) throw new SurveyGroupDepthExceededError();
+  return { id: parent.id, depth: parent.depth };
+}
+
 /**
  * 이 팀이 아직 살아 있는지 **잠긴 값으로** 확인한다 (Codex 2차 리뷰).
  *
@@ -507,12 +608,26 @@ async function requireActiveTeamLocked(tx: DbTransaction, teamId: string): Promi
   if (!team) throw new TeamNotFoundError();
 }
 
-async function lockGroup(tx: DbTransaction, groupId: string): Promise<{ teamId: string }> {
+/** 잠근 그룹 행에서 읽은 구조 칸 — 잠금 아래의 값이라 판정에 그대로 쓴다. */
+interface LockedGroup {
+  teamId: string;
+  /** 상위 그룹 (최상위면 null). */
+  parentGroupId: string | null;
+  /** 깊이 (1 = 최상위). */
+  depth: number;
+}
+
+/** 그룹 행을 잠그고 소유 팀·구조 칸을 돌려준다 — 담기·이동이 공유하는 첫 단계(잠금 순서 고정). */
+async function lockGroup(tx: DbTransaction, groupId: string): Promise<LockedGroup> {
   const [group] = await tx
-    .select({ id: surveyGroups.id, teamId: surveyGroups.teamId })
+    .select({
+      teamId: surveyGroups.teamId,
+      parentGroupId: surveyGroups.parentGroupId,
+      depth: surveyGroups.depth,
+    })
     .from(surveyGroups)
     .where(eq(surveyGroups.id, groupId))
     .for('update');
   if (!group) throw new SurveyGroupNotFoundError();
-  return { teamId: group.teamId };
+  return group;
 }

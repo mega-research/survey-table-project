@@ -17,6 +17,8 @@ import {
   RenameSurveyGroupInput,
   ReorderSurveyGroupsInput,
   SurveyAlreadyGroupedError,
+  SurveyGroupDepthExceededError,
+  SurveyGroupHasChildrenError,
   SurveyGroupIdInput,
   SurveyGroupNotFoundError,
   SurveyGroupTargetNotFoundError,
@@ -89,10 +91,25 @@ async function assertSurveyGroupManageByGroupId(
 }
 
 /**
+ * 새 그룹의 상위 그룹 관문 — 상위는 **입력 팀의** 그룹이어야 한다.
+ *
+ * 팀 관문(`assertSurveyGroupManage`)은 「요청자가 teamId 팀 사람인가」만 묻는다. 상위 그룹을
+ * 따로 묻지 않으면 내 팀 id 에 남의 팀 그룹 id 를 짝지은 요청이 서비스까지 간다. 없는 그룹과
+ * 다른 팀의 그룹(해산된 팀의 그룹 포함)은 같은 NOT_FOUND 로 접는다 — 사유가 갈리면 id 를 훑어
+ * 타 팀 그룹의 존재를 확인할 수 있다. 서비스가 잠금 아래서 같은 판정을 다시 한다.
+ */
+async function assertParentGroupInTeam(parentGroupId: string, teamId: string): Promise<void> {
+  if ((await svc.getSurveyGroupTeamId(parentGroupId)) !== teamId) {
+    throw new ORPCError('NOT_FOUND', { message: '그룹을 찾을 수 없습니다.' });
+  }
+}
+
+/**
  * 그룹 도메인 에러 → RPC 코드.
  *
  * 팀 불일치·이미 담긴 설문은 CONFLICT 다 — 입력은 문법적으로 옳고 지금 상태와 충돌할 뿐이라,
- * 화면은 문구를 띄우고 목록을 다시 읽으면 된다.
+ * 화면은 문구를 띄우고 목록을 다시 읽으면 된다. 3단계 초과와 「하위 그룹이 있어 못 지운다」도
+ * 같은 결이다(그 사이 다른 팀원이 구조를 바꿨을 수 있다).
  */
 function rethrowSurveyGroupError(err: unknown): never {
   if (err instanceof SurveyGroupNotFoundError || err instanceof SurveyGroupTargetNotFoundError) {
@@ -102,6 +119,9 @@ function rethrowSurveyGroupError(err: unknown): never {
     throw new ORPCError('CONFLICT', { message: err.message });
   }
   if (err instanceof SurveyTeamMismatchError || err instanceof SurveyAlreadyGroupedError) {
+    throw new ORPCError('CONFLICT', { message: err.message });
+  }
+  if (err instanceof SurveyGroupDepthExceededError || err instanceof SurveyGroupHasChildrenError) {
     throw new ORPCError('CONFLICT', { message: err.message });
   }
   throw toWorkspaceRpcError(err) ?? err;
@@ -134,6 +154,7 @@ const create = authed
   .output(CreateSurveyGroupOutput)
   .handler(async ({ input, context }) => {
     await assertSurveyGroupManage(context.user, input.teamId);
+    if (input.parentGroupId) await assertParentGroupInTeam(input.parentGroupId, input.teamId);
     return svc.createSurveyGroup(context.user.id, input).catch(rethrowSurveyGroupError);
   });
 

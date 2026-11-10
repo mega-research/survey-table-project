@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import {
   check,
   doublePrecision,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -132,17 +133,59 @@ export const surveyGroups = pgTable(
       .notNull()
       .references(() => teams.id, { onDelete: 'restrict' }),
     name: text('name').notNull(),
+    /** 같은 상위 그룹 안에서의 표시 순서. */
     order: integer('order').notNull().default(0),
+    /**
+     * 상위 그룹 (NULL = 최상위) — 3단계 중첩(0166).
+     *
+     * **`parentDepth` 와 짝으로 쓴다**: 상위를 두면 그 그룹의 `depth` 를 함께 적고, 최상위면 둘 다
+     * 비운다. 거짓으로 적을 수 없다 — 아래 복합 FK 가 (팀, 상위 그룹, 그 깊이) 짝이 실제로 있는지
+     * 본다. 그 FK 하나가 깊이 3 초과·다른 팀의 부모·순환을 함께 막고, 부모가 옮겨지면
+     * `ON UPDATE CASCADE` 로 하위 그룹의 깊이가 따라온다(0166 머리 주석).
+     */
+    parentGroupId: uuid('parent_group_id'),
+    /** 상위 그룹의 깊이(1~2). 앱이 쓰는 칸이지만 값의 옳고 그름은 복합 FK 가 본다. */
+    parentDepth: integer('parent_depth'),
+    /** 이 그룹의 깊이(1 = 최상위) — `parentDepth` 에서 계산되는 칸이라 쓸 수 없다. */
+    depth: integer('depth')
+      .notNull()
+      .generatedAlwaysAs(sql`COALESCE(parent_depth, 0) + 1`),
     createdBy: uuid('created_by')
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  // 그룹 이름은 팀 안에서만 유일하다 — 여러 팀이 같은 이름의 그룹을 갖는 것이 정상이다.
+  // 그룹 이름은 **같은 상위 그룹 안에서만** 유일하다(0166) — 사람마다 「2025」 폴더를 둘 수 있다.
+  // NULL 은 유일 인덱스에서 서로 다르다고 보므로 최상위끼리(팀 안)와 같은 부모 안, 인덱스가 둘이다.
   (t) => [
-    uniqueIndex('survey_groups_team_name_uq').on(t.teamId, t.name),
+    uniqueIndex('survey_groups_root_name_uq')
+      .on(t.teamId, t.name)
+      .where(sql`${t.parentGroupId} IS NULL`),
+    uniqueIndex('survey_groups_parent_name_uq')
+      .on(t.parentGroupId, t.name)
+      .where(sql`${t.parentGroupId} IS NOT NULL`),
     index('survey_groups_team_order_idx').on(t.teamId, t.order),
+    index('survey_groups_parent_order_idx').on(t.parentGroupId, t.order),
+    // 복합 FK 가 가리킬 자리.
+    uniqueIndex('survey_groups_team_id_depth_uq').on(t.teamId, t.id, t.depth),
+    foreignKey({
+      name: 'survey_groups_parent_fk',
+      columns: [t.teamId, t.parentGroupId, t.parentDepth],
+      foreignColumns: [t.teamId, t.id, t.depth],
+    }).onUpdate('cascade'),
+    check(
+      'survey_groups_parent_pair_check',
+      sql`(${t.parentGroupId} IS NULL) = (${t.parentDepth} IS NULL)`,
+    ),
+    check(
+      'survey_groups_parent_depth_check',
+      sql`${t.parentDepth} IS NULL OR ${t.parentDepth} BETWEEN 1 AND 2`,
+    ),
+    check(
+      'survey_groups_not_own_parent_check',
+      sql`${t.parentGroupId} IS NULL OR ${t.parentGroupId} <> ${t.id}`,
+    ),
   ],
 );
 

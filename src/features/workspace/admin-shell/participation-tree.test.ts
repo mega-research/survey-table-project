@@ -21,7 +21,7 @@ function survey(
 }
 
 function group(id: string, name: string, order: number): SurveyGroupListItem {
-  return { id, name, order, surveyCount: 0, foreignTeamName: '연구3본부 5팀' };
+  return { id, name, order, parentGroupId: null, surveyCount: 0, foreignTeamName: '연구3본부 5팀' };
 }
 
 describe('buildParticipationTree', () => {

@@ -224,13 +224,29 @@ export type WorkspaceActionOutput = z.infer<typeof WorkspaceActionOutput>;
 // 설문 그룹 (.pen FLOW 2) — 팀 공용 정리용 묶음
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** 그룹 이름 — 팀 안에서 유일하다. 팀 이름보다 짧게 쓰는 폴더 라벨이라 60자. */
+/** 그룹 이름 — 같은 상위 그룹 안에서 유일하다. 팀 이름보다 짧게 쓰는 폴더 라벨이라 60자. */
 const SurveyGroupNameField = z.string().trim().min(1, '그룹 이름을 입력하세요.').max(60);
+
+/**
+ * 그룹을 겹칠 수 있는 최대 단계 — 「부서 › 인원 › 연도」까지.
+ *
+ * 강제하는 것은 DB 다(0166 의 `survey_groups_parent_depth_check`). 이 값은 서버가 알맞은 문구로
+ * 먼저 거부하고 화면이 만들 수 없는 「새 하위 그룹」을 감추는 데 쓴다 — 바꾸려면 마이그레이션이 먼저다.
+ */
+export const SURVEY_GROUP_MAX_DEPTH = 3;
 
 export const SurveyGroupListItem = z.object({
   id: z.uuid(),
   name: z.string(),
   order: z.number().int(),
+  /**
+   * 상위 그룹 id — 최상위면 null. **협업 그룹(타 팀 폴더) 행에는 언제나 null 이다**: 설문 하나에
+   * 초대했을 뿐인 타 팀 사람에게 그 팀의 정리 구조(위쪽 그룹)를 알려 주지 않는다.
+   *
+   * 목록은 평평하게 오고 트리는 화면이 묶는다(`@/utils/survey-group-tree`). 상위 그룹이 내게
+   * 보이지 않으면 이 id 가 목록에 없을 수 있다 — 그 줄은 뿌리로 그린다.
+   */
+  parentGroupId: z.uuid().nullable(),
   /** 소속 설문 수 — 삭제되지 않은 설문만 센다(삭제 확인 모달의 「설문 N개가 미분류로」). */
   surveyCount: z.number().int(),
   /**
@@ -250,7 +266,16 @@ export type ListSurveyGroupsInput = z.infer<typeof ListSurveyGroupsInput>;
 export const ListSurveyGroupsOutput = z.array(SurveyGroupListItem);
 export type ListSurveyGroupsOutput = z.infer<typeof ListSurveyGroupsOutput>;
 
-export const CreateSurveyGroupInput = z.object({ teamId: z.uuid(), name: SurveyGroupNameField });
+/**
+ * 그룹 만들기 — `parentGroupId` 를 주면 그 그룹 밑의 하위 그룹이다(없거나 null 이면 최상위).
+ *
+ * 상위는 `teamId` 팀의 그룹이어야 하고 3단계 그룹 밑에는 만들 수 없다 — 서버가 본다.
+ */
+export const CreateSurveyGroupInput = z.object({
+  teamId: z.uuid(),
+  name: SurveyGroupNameField,
+  parentGroupId: z.uuid().nullable().optional(),
+});
 export type CreateSurveyGroupInput = z.infer<typeof CreateSurveyGroupInput>;
 
 /** 생성 직후 응답 — drizzle raw row(teamId·createdBy 등 내부 컬럼)를 노출하지 않는다. */
@@ -268,9 +293,13 @@ export type RenameSurveyGroupInput = z.infer<typeof RenameSurveyGroupInput>;
  *
  * teamId 를 함께 받는 것은 장식이 아니라 권한 축이다. 서버는 요청자가 그 팀의 팀원인지 묻고,
  * UPDATE 도 그 teamId 로 좁힌다 — 타 팀 groupId 가 배열에 섞여도 아무 행에도 닿지 않는다.
+ *
+ * **한 번에 한 부모의 형제만 다시 매긴다.** `parentGroupId` 가 그 부모다(없거나 null 이면
+ * 최상위끼리). 다른 부모 밑의 그룹 id 가 섞여 와도 같은 방식으로 닿지 않는다.
  */
 export const ReorderSurveyGroupsInput = z.object({
   teamId: z.uuid(),
+  parentGroupId: z.uuid().nullable().optional(),
   orderedGroupIds: z.array(z.uuid()).min(1).max(200),
 });
 export type ReorderSurveyGroupsInput = z.infer<typeof ReorderSurveyGroupsInput>;

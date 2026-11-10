@@ -7,6 +7,7 @@
  * ① 그룹 삭제가 설문을 지우지 않고 미분류로 되돌린다 (ON DELETE SET NULL)
  * ② 팀 안에서 그룹 이름이 유일하고 다른 팀은 같은 이름을 쓸 수 있다 (부분 UNIQUE)
  * ③ 담기·이동이 팀 경계를 잠긴 값으로 재검증한다 (FOR UPDATE)
+ * ④ 3단계 중첩의 깊이·같은 팀 부모·순환·이름 유일을 DB 가 막는다 (0166 — 복합 FK + CHECK)
  */
 import { createRouterClient, ORPCError } from '@orpc/server';
 import { eq, inArray } from 'drizzle-orm';
@@ -21,9 +22,14 @@ import {
   teams as teamsTable,
   users as usersTable,
 } from '@/db/schema';
+import { findPostgresError } from '@/lib/pg-error';
 import type { ORPCContext } from '@/server/context';
 import { surveyGroups } from '@/server/workspace/procedures/survey-groups';
 import * as svc from '@/server/workspace/services/survey-groups';
+import {
+  SurveyGroupDepthExceededError,
+  SurveyGroupNotFoundError,
+} from '@/server/workspace/domain/survey-groups';
 import { TeamNotFoundError } from '@/server/workspace/domain/teams';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
@@ -87,10 +93,47 @@ async function seedSurvey(teamId: string, title: string, ownerUserId: string): P
   return id;
 }
 
-async function seedGroup(client: ReturnType<typeof clientFor>, teamId: string, name: string) {
-  const { id } = await client.surveyGroups.create({ teamId, name });
+async function seedGroup(
+  client: ReturnType<typeof clientFor>,
+  teamId: string,
+  name: string,
+  parentGroupId: string | null = null,
+) {
+  const { id } = await client.surveyGroups.create({ teamId, name, parentGroupId });
   createdGroupIds.push(id);
   return id;
+}
+
+/** 그룹 행의 구조 칸 — 서비스를 거치지 않고 DB 에 남은 값을 그대로 본다. */
+async function groupRow(groupId: string) {
+  const [row] = await db
+    .select({
+      parentGroupId: surveyGroupsTable.parentGroupId,
+      depth: surveyGroupsTable.depth,
+      order: surveyGroupsTable.order,
+    })
+    .from(surveyGroupsTable)
+    .where(eq(surveyGroupsTable.id, groupId));
+  return row ?? null;
+}
+
+/**
+ * 서비스를 거치지 않고 그룹을 직접 넣는다 — DB 제약만 남겨 두고 보려는 것이다.
+ * 성공한 행은 정리 목록에 올린다.
+ */
+async function insertGroupDirectly(values: {
+  teamId: string;
+  name: string;
+  parentGroupId?: string | null;
+  parentDepth?: number | null;
+}): Promise<string> {
+  const [row] = await db
+    .insert(surveyGroupsTable)
+    .values({ ...values, createdBy: MEMBER_ID })
+    .returning({ id: surveyGroupsTable.id });
+  if (!row) throw new Error('그룹이 들어가지 않았다');
+  createdGroupIds.push(row.id);
+  return row.id;
 }
 
 function clientFor(userId: string) {
@@ -449,6 +492,14 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
       ).rejects.toBeInstanceOf(TeamNotFoundError);
     });
 
+    it('하위 그룹 만들기 — 죽은 팀의 그룹 밑에도 붙지 않는다', async () => {
+      const { teamId, groupId } = await seedArchivedTeamGroup();
+
+      await expect(
+        svc.createSurveyGroup(MEMBER_ID, { teamId, name: '사후 하위 그룹', parentGroupId: groupId }),
+      ).rejects.toBeInstanceOf(TeamNotFoundError);
+    });
+
     it('정렬 — 죽은 팀의 순서도 고칠 수 없다', async () => {
       const { teamId, groupId } = await seedArchivedTeamGroup();
 
@@ -788,5 +839,378 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
       .from(surveyGroupsTable)
       .where(eq(surveyGroupsTable.id, theirs));
     expect(row?.order).toBe(0);
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // 3단계 중첩 — 폴더 안의 폴더 (설문 그룹 중첩 티켓 01, 마이그레이션 0166)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /**
+   * 깊이·같은 팀 부모·순환·이름 유일은 **DB 가** 막는다(복합 FK + CHECK). 서비스의 판정은 그 앞에서
+   * 알맞은 문구로 답하는 일이고, 서비스가 틀려도 4단계나 타 팀 부모는 생기지 않는다 — 그래서
+   * 서비스를 거치는 케이스와 직접 쓰는 케이스를 따로 둔다.
+   */
+  describe('3단계 중첩', () => {
+    it('1→2→3단계까지 만들어지고 4단계 만들기는 거부된다', async () => {
+      const top = await seedGroup(member, TEAM_A, '이정운');
+      const second = await seedGroup(member, TEAM_A, '2026', top);
+      const third = await seedGroup(member, TEAM_A, '상반기', second);
+
+      expect(await groupRow(top)).toMatchObject({ parentGroupId: null, depth: 1 });
+      expect(await groupRow(second)).toMatchObject({ parentGroupId: top, depth: 2 });
+      expect(await groupRow(third)).toMatchObject({ parentGroupId: second, depth: 3 });
+
+      await expect(
+        member.surveyGroups.create({ teamId: TEAM_A, name: '1분기', parentGroupId: third }),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+      // 관문을 건너뛰어도 서비스가 같은 답을 한다.
+      await expect(
+        svc.createSurveyGroup(MEMBER_ID, { teamId: TEAM_A, name: '1분기', parentGroupId: third }),
+      ).rejects.toBeInstanceOf(SurveyGroupDepthExceededError);
+    });
+
+    it('내 팀 그룹은 상위 그룹 id 를 함께 낸다', async () => {
+      const top = await seedGroup(member, TEAM_A, '이정운');
+      const second = await seedGroup(member, TEAM_A, '2026', top);
+
+      const listed = await member.surveyGroups.list({ teamId: TEAM_A });
+
+      expect(listed.find((g) => g.id === top)?.parentGroupId).toBeNull();
+      expect(listed.find((g) => g.id === second)?.parentGroupId).toBe(top);
+    });
+
+    it('타 팀 사람에게 보이는 협업 그룹 행에는 상위 그룹 id 가 없다', async () => {
+      const top = await seedGroup(member, TEAM_A, 'A고객사');
+      const second = await seedGroup(member, TEAM_A, '2026', top);
+      const surveyId = await seedSurvey(TEAM_A, '초대 설문', MEMBER_ID);
+      await member.surveyGroups.collect({ groupId: second, surveyIds: [surveyId] });
+      await db
+        .insert(participantsTable)
+        .values({ surveyId, userId: OUTSIDER_ID, kind: 'member', addedBy: MEMBER_ID });
+
+      const listed = await outsider.surveyGroups.list({ teamId: TEAM_B });
+
+      const row = listed.find((g) => g.id === second);
+      expect(row?.foreignTeamName).toBeTruthy();
+      // 위쪽 그룹의 id 도 이름도 나가지 않는다 — 설문 하나에 초대했을 뿐이다.
+      expect(row?.parentGroupId).toBeNull();
+      expect(listed.map((g) => g.id)).not.toContain(top);
+    });
+
+    it('없는 그룹과 다른 팀의 그룹은 상위 그룹이 될 수 없다', async () => {
+      const theirs = await seedGroup(outsider, TEAM_B, '남의 그룹');
+
+      for (const parentGroupId of [theirs, crypto.randomUUID()]) {
+        // 관문 — 둘을 같은 NOT_FOUND 로 접는다(갈리면 id 로 타 팀 그룹의 존재가 확인된다).
+        await expect(
+          member.surveyGroups.create({ teamId: TEAM_A, name: '하위', parentGroupId }),
+        ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+        // 관문을 건너뛴 서비스 — 잠긴 값으로 같은 판정을 다시 한다.
+        await expect(
+          svc.createSurveyGroup(MEMBER_ID, { teamId: TEAM_A, name: '하위', parentGroupId }),
+        ).rejects.toBeInstanceOf(SurveyGroupNotFoundError);
+      }
+
+      const rows = await db
+        .select({ id: surveyGroupsTable.id })
+        .from(surveyGroupsTable)
+        .where(eq(surveyGroupsTable.teamId, TEAM_A));
+      expect(rows).toEqual([]);
+    });
+
+    it('새 하위 그룹은 그 부모의 맨 뒤에 붙는다', async () => {
+      const top = await seedGroup(member, TEAM_A, '이정운');
+      // 최상위가 여럿이어도 하위 그룹의 순서는 그 부모 안에서 0 부터 센다.
+      await seedGroup(member, TEAM_A, '김서연');
+      await seedGroup(member, TEAM_A, '부서 공통');
+      const first = await seedGroup(member, TEAM_A, '2026', top);
+      const second = await seedGroup(member, TEAM_A, '2025', top);
+
+      expect((await groupRow(first))?.order).toBe(0);
+      expect((await groupRow(second))?.order).toBe(1);
+    });
+
+    describe('이름은 같은 상위 그룹 안에서만 유일하다', () => {
+      it('다른 부모 밑의 같은 이름은 만들어진다', async () => {
+        const a = await seedGroup(member, TEAM_A, '이정운');
+        const b = await seedGroup(member, TEAM_A, '김서연');
+
+        const underA = await seedGroup(member, TEAM_A, '2025', a);
+        const underB = await seedGroup(member, TEAM_A, '2025', b);
+        // 최상위와 하위 사이도 서로 다른 자리다.
+        const topLevel = await seedGroup(member, TEAM_A, '2025');
+
+        expect(new Set([underA, underB, topLevel]).size).toBe(3);
+      });
+
+      it('같은 부모 안의 같은 이름은 「이미 있는 이름」으로 거부된다', async () => {
+        const top = await seedGroup(member, TEAM_A, '이정운');
+        await seedGroup(member, TEAM_A, '2025', top);
+
+        await expect(
+          member.surveyGroups.create({ teamId: TEAM_A, name: '2025', parentGroupId: top }),
+        ).rejects.toMatchObject({ code: 'CONFLICT', message: '같은 이름의 그룹이 이미 있습니다.' });
+      });
+
+      it('최상위끼리는 지금처럼 팀 안에서 거부된다', async () => {
+        await seedGroup(member, TEAM_A, '2025');
+
+        await expect(
+          member.surveyGroups.create({ teamId: TEAM_A, name: '2025' }),
+        ).rejects.toMatchObject({ code: 'CONFLICT', message: '같은 이름의 그룹이 이미 있습니다.' });
+      });
+
+      it('이름 바꾸기도 같은 부모 안에서만 겹침을 본다', async () => {
+        const a = await seedGroup(member, TEAM_A, '이정운');
+        const b = await seedGroup(member, TEAM_A, '김서연');
+        await seedGroup(member, TEAM_A, '2025', a);
+        const sibling = await seedGroup(member, TEAM_A, '2024', a);
+        const cousin = await seedGroup(member, TEAM_A, '2024', b);
+
+        await expect(
+          member.surveyGroups.rename({ groupId: sibling, name: '2025' }),
+        ).rejects.toMatchObject({ code: 'CONFLICT' });
+        // 다른 부모 밑이라 같은 이름이 된다.
+        await member.surveyGroups.rename({ groupId: cousin, name: '2025' });
+      });
+    });
+
+    describe('순서 바꾸기는 한 부모의 형제만 다시 매긴다', () => {
+      it('하위 그룹의 순서를 바꾸고 다른 부모의 그룹은 그대로 둔다', async () => {
+        const a = await seedGroup(member, TEAM_A, '이정운');
+        const b = await seedGroup(member, TEAM_A, '김서연');
+        const a1 = await seedGroup(member, TEAM_A, '2026', a);
+        const a2 = await seedGroup(member, TEAM_A, '2025', a);
+        const a3 = await seedGroup(member, TEAM_A, '2024', a);
+        const b1 = await seedGroup(member, TEAM_A, '2026', b);
+        const b2 = await seedGroup(member, TEAM_A, '2025', b);
+
+        // 다른 부모(b)의 그룹과 최상위 그룹 id 가 섞여 와도 닿지 않는다.
+        await member.surveyGroups.reorder({
+          teamId: TEAM_A,
+          parentGroupId: a,
+          orderedGroupIds: [b2, a3, b, a1, a2],
+        });
+
+        expect((await groupRow(a3))?.order).toBe(1);
+        expect((await groupRow(a1))?.order).toBe(3);
+        expect((await groupRow(a2))?.order).toBe(4);
+        // 순서로 읽으면 a3 → a1 → a2.
+        const listed = await member.surveyGroups.list({ teamId: TEAM_A });
+        expect(listed.filter((g) => g.parentGroupId === a).map((g) => g.id)).toEqual([a3, a1, a2]);
+        // 다른 부모의 형제와 최상위는 만든 순서 그대로다.
+        expect((await groupRow(b1))?.order).toBe(0);
+        expect((await groupRow(b2))?.order).toBe(1);
+        expect((await groupRow(a))?.order).toBe(0);
+        expect((await groupRow(b))?.order).toBe(1);
+      });
+
+      it('상위 그룹을 적지 않으면 최상위끼리만 다시 매긴다', async () => {
+        const a = await seedGroup(member, TEAM_A, '이정운');
+        const b = await seedGroup(member, TEAM_A, '김서연');
+        const a1 = await seedGroup(member, TEAM_A, '2026', a);
+        const a2 = await seedGroup(member, TEAM_A, '2025', a);
+
+        await member.surveyGroups.reorder({ teamId: TEAM_A, orderedGroupIds: [a2, b, a1, a] });
+
+        expect((await groupRow(b))?.order).toBe(1);
+        expect((await groupRow(a))?.order).toBe(3);
+        expect((await groupRow(a1))?.order).toBe(0);
+        expect((await groupRow(a2))?.order).toBe(1);
+      });
+    });
+
+    it('하위 그룹이 있는 그룹의 삭제는 아무것도 바꾸지 않고 거부된다', async () => {
+      const top = await seedGroup(member, TEAM_A, '이정운');
+      const child = await seedGroup(member, TEAM_A, '2026', top);
+      const surveyId = await seedSurvey(TEAM_A, '상위에 직접 담긴 설문', MEMBER_ID);
+      await member.surveyGroups.collect({ groupId: top, surveyIds: [surveyId] });
+
+      await expect(member.surveyGroups.remove({ groupId: top })).rejects.toMatchObject({
+        code: 'CONFLICT',
+        message: '하위 그룹이 있어 지울 수 없습니다.',
+      });
+
+      expect(await groupRow(top)).toMatchObject({ parentGroupId: null, depth: 1 });
+      expect(await groupRow(child)).toMatchObject({ parentGroupId: top, depth: 2 });
+      const [survey] = await db
+        .select({ surveyGroupId: surveysTable.surveyGroupId })
+        .from(surveysTable)
+        .where(eq(surveysTable.id, surveyId));
+      expect(survey?.surveyGroupId).toBe(top);
+
+      // 하위 그룹부터 지우면 지워진다.
+      await member.surveyGroups.remove({ groupId: child });
+      await member.surveyGroups.remove({ groupId: top });
+      expect(await groupRow(top)).toBeNull();
+    });
+
+    describe('서비스를 거치지 않고 직접 써도 DB 가 막는다', () => {
+      /** 거부된 문장이 어느 제약에 걸렸는지 — 오류 사슬 어디에든 그 이름이 있으면 된다. */
+      async function violatedConstraint(run: Promise<unknown>): Promise<string> {
+        try {
+          await run;
+        } catch (err) {
+          const pg = findPostgresError(err);
+          return String(pg?.['constraint_name'] ?? pg?.['message'] ?? err);
+        }
+        return '(거부되지 않았다)';
+      }
+
+      async function seedChain() {
+        const top = await seedGroup(member, TEAM_A, '이정운');
+        const second = await seedGroup(member, TEAM_A, '2026', top);
+        const third = await seedGroup(member, TEAM_A, '상반기', second);
+        return { top, second, third };
+      }
+
+      it('4단계 — 부모의 깊이를 바르게 적어도, 속여 적어도 거부된다', async () => {
+        const { third } = await seedChain();
+
+        expect(
+          await violatedConstraint(
+            insertGroupDirectly({ teamId: TEAM_A, name: '1분기', parentGroupId: third, parentDepth: 3 }),
+          ),
+        ).toBe('survey_groups_parent_depth_check');
+        // 3단계 그룹을 「깊이 2」라고 속이면 가리킬 (그룹, 깊이) 짝이 없다.
+        expect(
+          await violatedConstraint(
+            insertGroupDirectly({ teamId: TEAM_A, name: '1분기', parentGroupId: third, parentDepth: 2 }),
+          ),
+        ).toBe('survey_groups_parent_fk');
+        // 깊이 칸을 비워 검사를 건너뛰려 해도 막힌다.
+        expect(
+          await violatedConstraint(
+            insertGroupDirectly({ teamId: TEAM_A, name: '1분기', parentGroupId: third }),
+          ),
+        ).toBe('survey_groups_parent_pair_check');
+      });
+
+      it('다른 팀의 그룹을 부모로 둘 수 없다', async () => {
+        const theirs = await seedGroup(outsider, TEAM_B, '남의 그룹');
+
+        expect(
+          await violatedConstraint(
+            insertGroupDirectly({ teamId: TEAM_A, name: '하위', parentGroupId: theirs, parentDepth: 1 }),
+          ),
+        ).toBe('survey_groups_parent_fk');
+      });
+
+      it('자기 자신을 부모로 둘 수 없다', async () => {
+        const { top } = await seedChain();
+
+        expect(
+          await violatedConstraint(
+            db
+              .update(surveyGroupsTable)
+              .set({ parentGroupId: top, parentDepth: 1 })
+              .where(eq(surveyGroupsTable.id, top)),
+          ),
+        ).toBe('survey_groups_not_own_parent_check');
+      });
+
+      it('자기 하위 그룹 밑으로 들어가는 순환도 깊이 제약이 막는다', async () => {
+        const { top, second, third } = await seedChain();
+
+        // 이정운 → 2026 밑으로: 2026 의 깊이가 4 가 되어야 해서 거부된다.
+        expect(
+          await violatedConstraint(
+            db
+              .update(surveyGroupsTable)
+              .set({ parentGroupId: second, parentDepth: 2 })
+              .where(eq(surveyGroupsTable.id, top)),
+          ),
+        ).toBe('survey_groups_parent_depth_check');
+        expect(await groupRow(top)).toMatchObject({ parentGroupId: null, depth: 1 });
+        expect(await groupRow(second)).toMatchObject({ parentGroupId: top, depth: 2 });
+        expect(await groupRow(third)).toMatchObject({ parentGroupId: second, depth: 3 });
+      });
+
+      it('부모가 옮겨지면 하위 그룹의 깊이가 따라오고, 넘치면 통째로 거부된다', async () => {
+        const { top, second, third } = await seedChain();
+
+        // 2026 을 최상위로 — 상반기는 2026 밑에 남은 채 깊이 2 가 된다.
+        await db
+          .update(surveyGroupsTable)
+          .set({ parentGroupId: null, parentDepth: null })
+          .where(eq(surveyGroupsTable.id, second));
+        expect(await groupRow(second)).toMatchObject({ parentGroupId: null, depth: 1 });
+        expect(await groupRow(third)).toMatchObject({ parentGroupId: second, depth: 2 });
+
+        // 다시 이정운 밑으로 — 상반기가 깊이 3 으로 돌아온다.
+        await db
+          .update(surveyGroupsTable)
+          .set({ parentGroupId: top, parentDepth: 1 })
+          .where(eq(surveyGroupsTable.id, second));
+        expect(await groupRow(third)).toMatchObject({ parentGroupId: second, depth: 3 });
+
+        // 이정운(아래로 두 단)을 다른 최상위 밑으로 — 상반기가 4단계가 되므로 아무것도 바뀌지 않는다.
+        const other = await seedGroup(member, TEAM_A, '김서연');
+        expect(
+          await violatedConstraint(
+            db
+              .update(surveyGroupsTable)
+              .set({ parentGroupId: other, parentDepth: 1 })
+              .where(eq(surveyGroupsTable.id, top)),
+          ),
+        ).toBe('survey_groups_parent_depth_check');
+        expect(await groupRow(top)).toMatchObject({ parentGroupId: null, depth: 1 });
+        expect(await groupRow(third)).toMatchObject({ parentGroupId: second, depth: 3 });
+      });
+
+      it('하위 그룹이 있는 그룹은 지워지지 않는다', async () => {
+        const { top, second } = await seedChain();
+
+        expect(
+          await violatedConstraint(
+            db.delete(surveyGroupsTable).where(eq(surveyGroupsTable.id, top)),
+          ),
+        ).toBe('survey_groups_parent_fk');
+        expect(await groupRow(second)).toMatchObject({ parentGroupId: top });
+      });
+
+      it('같은 부모 안의 같은 이름은 유일 인덱스가 막는다', async () => {
+        const { top } = await seedChain();
+
+        expect(
+          await violatedConstraint(
+            insertGroupDirectly({ teamId: TEAM_A, name: '2026', parentGroupId: top, parentDepth: 1 }),
+          ),
+        ).toBe('survey_groups_parent_name_uq');
+        expect(
+          await violatedConstraint(insertGroupDirectly({ teamId: TEAM_A, name: '이정운' })),
+        ).toBe('survey_groups_root_name_uq');
+      });
+    });
+
+    it('동시에 한 단계씩 늘려도 4단계는 생기지 않는다', async () => {
+      const top = await seedGroup(member, TEAM_A, '이정운');
+      const second = await seedGroup(member, TEAM_A, '2026', top);
+      const third = await seedGroup(member, TEAM_A, '상반기', second);
+
+      const results = await Promise.allSettled(
+        Array.from({ length: 6 }, (_, index) =>
+          member.surveyGroups.create({
+            teamId: TEAM_A,
+            name: `동시-${index}`,
+            parentGroupId: index % 2 === 0 ? second : third,
+          }),
+        ),
+      );
+      for (const result of results) {
+        if (result.status === 'fulfilled') createdGroupIds.push(result.value.id);
+      }
+
+      // 2026 밑(3단계)은 전부 되고 상반기 밑(4단계)은 전부 거부된다 — 오류 화면(500)은 없다.
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(3);
+      for (const result of results) {
+        if (result.status === 'rejected') expect(result.reason).toMatchObject({ code: 'CONFLICT' });
+      }
+      const rows = await db
+        .select({ depth: surveyGroupsTable.depth })
+        .from(surveyGroupsTable)
+        .where(eq(surveyGroupsTable.teamId, TEAM_A));
+      expect(Math.max(...rows.map((r) => r.depth))).toBe(3);
+    });
   });
 });

@@ -22,6 +22,8 @@ import { assertSurveyCapabilityBatchRpc } from '@/server/rpc-survey-access';
 import {
   DuplicateSurveyGroupNameError,
   SurveyAlreadyGroupedError,
+  SurveyGroupDepthExceededError,
+  SurveyGroupHasChildrenError,
   SurveyGroupTargetNotFoundError,
   SurveyTeamMismatchError,
 } from '../domain/survey-groups';
@@ -141,6 +143,46 @@ describe('그룹 구조 표면 — 팀 공용, 입력 teamId 로 판정', () => 
     expect(svc.createSurveyGroup).not.toHaveBeenCalled();
     expect(svc.reorderSurveyGroups).not.toHaveBeenCalled();
     expect(svc.listUngroupedSurveys).not.toHaveBeenCalled();
+  });
+
+  /**
+   * 하위 그룹 만들기 (3단계 중첩 티켓 01) — 팀 관문은 「요청자가 teamId 팀 사람인가」만 묻는다.
+   * 상위 그룹을 따로 묻지 않으면 내 팀 id 에 남의 팀 그룹 id 를 짝지은 요청이 서비스까지 간다.
+   */
+  it('상위 그룹이 입력 팀의 그룹이면 그 밑에 만든다', async () => {
+    const client = clientWith();
+
+    await client.surveyGroups.create({ teamId: TEAM_A, name: '2026', parentGroupId: GROUP_A });
+
+    expect(svc.createSurveyGroup).toHaveBeenCalledWith(MEMBER_ID, {
+      teamId: TEAM_A,
+      name: '2026',
+      parentGroupId: GROUP_A,
+    });
+  });
+
+  it('상위 그룹이 입력 팀의 그룹이 아니면 NOT_FOUND — 서비스에 닿지 않는다', async () => {
+    const client = clientWith();
+    const MISSING_GROUP = '99999999-9999-4999-8999-999999999999';
+
+    // 타 팀 그룹과 없는 그룹이 같은 응답이어야 id 스캔으로 타 팀 그룹의 존재가 확인되지 않는다.
+    for (const parentGroupId of [GROUP_B, MISSING_GROUP]) {
+      await expect(
+        client.surveyGroups.create({ teamId: TEAM_A, name: '2026', parentGroupId }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND', message: '그룹을 찾을 수 없습니다.' });
+    }
+
+    expect(svc.createSurveyGroup).not.toHaveBeenCalled();
+  });
+
+  it('슈퍼어드민도 상위 그룹은 입력 팀의 그룹이어야 한다', async () => {
+    const client = clientWith({ isSuperadmin: true });
+
+    await expect(
+      client.surveyGroups.create({ teamId: TEAM_A, name: '2026', parentGroupId: GROUP_B }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+    expect(svc.createSurveyGroup).not.toHaveBeenCalled();
   });
 
   it('슈퍼어드민은 소속을 묻지 않고 통과한다', async () => {
@@ -315,6 +357,21 @@ describe('도메인 에러 → RPC 코드', () => {
     await expect(
       client.surveyGroups.move({ surveyId: SURVEY_1, groupId: null }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND', message: '설문을 찾을 수 없습니다.' });
+  });
+
+  it('3단계 초과와 하위 그룹이 있는 그룹의 삭제는 CONFLICT — 문구가 그대로 나간다', async () => {
+    const client = clientWith();
+
+    vi.mocked(svc.createSurveyGroup).mockRejectedValue(new SurveyGroupDepthExceededError());
+    await expect(
+      client.surveyGroups.create({ teamId: TEAM_A, name: '1분기', parentGroupId: GROUP_A }),
+    ).rejects.toMatchObject({ code: 'CONFLICT', message: '그룹은 3단계까지만 만들 수 있습니다.' });
+
+    vi.mocked(svc.removeSurveyGroup).mockRejectedValue(new SurveyGroupHasChildrenError());
+    await expect(client.surveyGroups.remove({ groupId: GROUP_A })).rejects.toMatchObject({
+      code: 'CONFLICT',
+      message: '하위 그룹이 있어 지울 수 없습니다.',
+    });
   });
 });
 

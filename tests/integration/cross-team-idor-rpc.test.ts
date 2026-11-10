@@ -1002,7 +1002,10 @@ const ALIASED_SURVEY_SURFACES: Record<string, string> = {
 const OTHER_BOUNDARY_SURFACES: Record<string, string> = {
   'workspace.surveyGroups.rename': '그룹의 소유 팀으로 판정 — 타 팀 그룹은 NOT_FOUND 로 접힌다',
   'workspace.surveyGroups.remove': '위와 같음',
-  'workspace.surveyGroups.reorder': '입력 teamId 로 그룹 구조 관문을 지난다',
+  'workspace.surveyGroups.reorder':
+    '입력 teamId 로 그룹 구조 관문을 지난다 — UPDATE 를 그 팀과 상위 그룹으로 좁혀 타 팀·다른 부모의 그룹에 닿지 않는다',
+  'workspace.surveyGroups.create':
+    '입력 teamId 로 그룹 구조 관문을 지나고, 상위 그룹(parentGroupId)은 그 팀의 그룹이어야 한다 — 타 팀·없는 그룹은 NOT_FOUND 로 접힌다',
   'library.savedQuestions.update': '보관함은 조직 공용이라 설문 경계가 없다',
   'library.savedQuestions.remove': '보관함 — 조직 공용',
   'library.savedQuestions.apply': '보관함 — 조직 공용',

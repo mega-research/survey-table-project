@@ -12,6 +12,7 @@ export {
   MoveSurveyToGroupInput,
   RenameSurveyGroupInput,
   ReorderSurveyGroupsInput,
+  SURVEY_GROUP_MAX_DEPTH,
   SurveyGroupIdInput,
   SurveyGroupListItem,
   UngroupedSurveyItem,
@@ -29,11 +30,27 @@ export class SurveyGroupNotFoundError extends Error {
   }
 }
 
-/** 같은 이름의 그룹이 그 팀에 이미 있다 (survey_groups_team_name_uq). */
+/** 같은 이름의 그룹이 같은 자리(같은 상위 그룹 안, 최상위끼리는 팀 안)에 이미 있다 (0166 의 유일 인덱스 둘). */
 export class DuplicateSurveyGroupNameError extends Error {
   constructor() {
     super('같은 이름의 그룹이 이미 있습니다.');
     this.name = 'DuplicateSurveyGroupNameError';
+  }
+}
+
+/** 3단계 그룹 밑에는 하위 그룹을 둘 수 없다 (0166 의 깊이 제약 — DB 도 같은 것을 막는다). */
+export class SurveyGroupDepthExceededError extends Error {
+  constructor() {
+    super('그룹은 3단계까지만 만들 수 있습니다.');
+    this.name = 'SurveyGroupDepthExceededError';
+  }
+}
+
+/** 하위 그룹이 있는 그룹은 지울 수 없다. */
+export class SurveyGroupHasChildrenError extends Error {
+  constructor() {
+    super('하위 그룹이 있어 지울 수 없습니다.');
+    this.name = 'SurveyGroupHasChildrenError';
   }
 }
 
