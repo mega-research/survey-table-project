@@ -4,6 +4,7 @@ import 'server-only';
 
 import { type DbOrTx, db } from '@/db';
 import { contactAssignments, contactTargets } from '@/db/schema';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 import { type OperationsDataScope, lockWriteScope, testFlagForScope } from '@/server/data-scope';
 import {
   type ResolvedContactFilter,
@@ -45,6 +46,7 @@ async function resolveAssignmentFilter(
   const ctx = await loadContactFilterContext(surveyId, scope, {
     isExternal: false,
     surface: 'contacts',
+    share: FIELDWORK_SHARE_ALL,
     executor,
   });
   return resolveContactFilter(ctx, { clauses }, { mode: 'write' });

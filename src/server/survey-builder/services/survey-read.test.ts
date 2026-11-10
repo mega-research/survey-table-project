@@ -213,7 +213,7 @@ describe('survey-read.service getSurveyListWithCounts', () => {
       leaderTeamIds: [],
     });
     expect(getResponseCountsGroupedBySurvey).toHaveBeenCalledWith(['survey-1']);
-    expect(getFieldworkCompletedCounts).toHaveBeenCalledWith(['survey-1'], false);
+    expect(getFieldworkCompletedCounts).toHaveBeenCalledWith(['survey-1'], false, { kind: 'all' });
     expect(result.scope).toEqual({ kind: 'team', teamId: 'team-1' });
     expect(result.canSeeSystemScope).toBe(false);
     expect(result.surveys).toEqual([

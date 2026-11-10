@@ -14,6 +14,7 @@ import { resolveMailEmailOrder } from '@/lib/contacts/mail-email-order';
 import { inngest } from '@/lib/inngest/client';
 import { resolveSendAddress } from '@/lib/mail/send-address';
 import { withTestPrefix } from './test-campaign';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 import { loadOperationsDataScope, lockWriteScope } from '@/server/data-scope';
 import type { ActorAttribution } from '@/server/survey-access';
 import {
@@ -360,7 +361,12 @@ export async function fetchCandidateIds(
   // 마법사 페이지와 같은 컨텍스트·같은 해석 — 어긋나면 "필터 결과 전체 선택"이 화면에 보이는
   // 명단과 다른 집합을 고른다. 화면을 연 뒤 조건의 컨택원이 지워지는 등으로 해석되지 않는
   // 조건이 생기면 write 해석이 거부한다 — 버리면 화면보다 넓은 명단(빈 조건이면 전체)을 고른다.
-  const filterCtx = await loadContactFilterContext(surveyId, scope, { isExternal, surface: 'mail' });
+  const filterCtx = await loadContactFilterContext(surveyId, scope, {
+    isExternal,
+    surface: 'mail',
+    // 위저드 후보 고르기는 메일 탭(mail.view) 표면이라 외주 링크가 지나지 않는다.
+    share: FIELDWORK_SHARE_ALL,
+  });
   const resolved = await resolveContactFilter(filterCtx, filter, { mode: 'write' });
   const unrespondedOnly = filter.unrespondedOnly ?? false;
 

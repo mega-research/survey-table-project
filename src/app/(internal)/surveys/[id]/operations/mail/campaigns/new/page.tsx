@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 
 import { CampaignWizard } from '@/features/operations/mail-campaign/campaign-wizard';
 import type { CampaignFilterSnapshot } from '@/shared/contracts/mail';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 import { getMailTemplatesBySurvey } from '@/server/mail/services/templates';
 import {
   CAMPAIGN_SORT_KEYS,
@@ -118,7 +119,12 @@ export default async function NewCampaignPage({ params, searchParams }: Props) {
   // 「현재 컨택원」 조건은 내부 실사 운영 정보라 외부 계정 위저드에는 열·후보·선택지를 싣지 않는다.
   // 미리보기 표는 고정 컬럼이라 깔때기 후보에 고정 목록이 붙는다(surface: 'mail').
   const isExternal = await isExternalViewer();
-  const filterCtx = await loadContactFilterContext(surveyId, scope, { isExternal, surface: 'mail' });
+  const filterCtx = await loadContactFilterContext(surveyId, scope, {
+    isExternal,
+    surface: 'mail',
+    // 메일 탭은 계정만 연다(외주 링크에 mail.view 가 없다) — 담당 범위 축이 없다.
+    share: FIELDWORK_SHARE_ALL,
+  });
   const { scheme, resultCodes, assignmentOptions, columnCandidates } = filterCtx;
   const filter = await resolveContactFilter(filterCtx, contactFilterInputFromUrl(sp), {
     mode: 'read',

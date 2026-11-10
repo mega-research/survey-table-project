@@ -7,6 +7,7 @@ import { fieldworkLinkShares, surveyAccessLinks } from '@/db/schema';
 import { logger } from '@/lib/logger';
 import { retryOnTxConflict } from '@/lib/pg-error';
 import { EXTERNAL_VIEWER_DATA_SCOPE, lockWriteScope } from '@/server/data-scope';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 import {
   type ResolvedContactFilter,
   loadContactFilterContext,
@@ -96,6 +97,8 @@ async function resolveShareFilter(
   const ctx = await loadContactFilterContext(surveyId, SHARE_SCOPE, {
     isExternal: true,
     surface: 'contacts',
+    // 연구원 화면이라 담당 범위 축이 없다 — 나누는 대상은 설문 전체다.
+    share: FIELDWORK_SHARE_ALL,
     executor,
   });
   return resolveContactFilter(ctx, { clauses }, { mode: 'write' });
@@ -103,7 +106,11 @@ async function resolveShareFilter(
 
 /** 조건을 이 화면의 조건 편집기에 그릴 재료 — 페이지가 같은 컨텍스트로 열 후보를 그린다. */
 export function loadFieldworkShareFilterContext(surveyId: string) {
-  return loadContactFilterContext(surveyId, SHARE_SCOPE, { isExternal: true, surface: 'contacts' });
+  return loadContactFilterContext(surveyId, SHARE_SCOPE, {
+    isExternal: true,
+    surface: 'contacts',
+    share: FIELDWORK_SHARE_ALL,
+  });
 }
 
 /** NULL 없는 불리언 — 조건 밖을 셀 때·뺄 때 3값 논리로 빠지는 행이 없게. */

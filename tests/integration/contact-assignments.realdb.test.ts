@@ -286,6 +286,7 @@ run('컨택원 배정 (real local DB)', () => {
     const filterCtx = await loadContactFilterContext(surveyId, 'real', {
       isExternal: false,
       surface: 'contacts',
+      share: FIELDWORK_SHARE_ALL,
     });
     const residsOf = async (input: ContactFilterInput) =>
       (
@@ -376,6 +377,7 @@ run('컨택원 배정 (real local DB)', () => {
     const filterCtx = await loadContactFilterContext(surveyId, 'real', {
       isExternal: false,
       surface: 'contacts',
+      share: FIELDWORK_SHARE_ALL,
     });
     const completedOfOwner = await listContactsForSurvey({
       surveyId,

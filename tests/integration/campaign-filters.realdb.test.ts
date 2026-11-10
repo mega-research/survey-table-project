@@ -24,6 +24,7 @@ import {
 } from '@/server/read-models/contact-filter-resolution';
 
 import { resolvedFilterForTest } from '../helpers/resolved-contact-filter';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 
 const run = process.env['RUN_REALDB'] === '1' ? describe : describe.skip;
 
@@ -221,6 +222,7 @@ run('캠페인 필터 실 DB 왕복', () => {
     const filterCtx = await loadContactFilterContext(surveyId, 'real', {
       isExternal: false,
       surface: 'mail',
+      share: FIELDWORK_SHARE_ALL,
     });
     const filter = await resolveContactFilter(
       filterCtx,

@@ -5,11 +5,7 @@ import { inArray, sql, type SQL } from 'drizzle-orm';
 import { db } from '@/db';
 import { surveys } from '@/db/schema';
 import { extractResultCodeStatuses } from '@/lib/contacts/result-code-statuses-normalize';
-import {
-  FIELDWORK_SHARE_ALL,
-  type FieldworkShare,
-  shareTargetCondition,
-} from '@/server/fieldwork-share';
+import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share';
 import type { ContactResultCode } from '@/shared/contracts/contacts';
 
 /**
@@ -25,12 +21,12 @@ import type { ContactResultCode } from '@/shared/contracts/contacts';
  *
  * `share` 는 담당 범위(`server/fieldwork-share`) — 나눈 외주 링크의 응답 현황이 자기 범위 대상만 센다.
  * 범위는 한 설문의 링크 것이라 설문 하나를 물을 때만 의미가 있다. 여러 설문을 한꺼번에 세는 내부
- * 목록은 기본값(설문 전체)을 쓴다.
+ * 목록은 `FIELDWORK_SHARE_ALL` 을 명시한다 — 기본값을 두지 않는다(빠뜨리면 열리는 쪽이라 tsc 가 잡게).
  */
 export async function getFieldworkCompletedCounts(
   surveyIds: readonly string[],
   isTest: boolean,
-  share: FieldworkShare = FIELDWORK_SHARE_ALL,
+  share: FieldworkShare,
 ): Promise<Map<string, number>> {
   const result = new Map<string, number>();
   if (surveyIds.length === 0) return result;

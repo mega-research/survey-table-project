@@ -6,6 +6,7 @@ import { AssignmentEditor } from '@/features/operations/contacts/assignments/ass
 import { assignmentsHref } from '@/features/operations/contacts/assignments/assignment-hrefs';
 import { requireAdminPage } from '@/lib/auth/require-admin-page';
 import { FILTER_SOURCE } from '@/lib/operations/filter-shared';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 import { getAssignmentForEdit } from '@/server/contacts/services/contact-assignments';
 import { getOperationsDataScope } from '@/server/data-scope';
 import { assertSurveyCapabilityPage } from '@/server/page-survey-access';
@@ -34,7 +35,11 @@ export default async function ContactAssignmentEditPage({ params }: PageProps) {
   // 교체 적용이 조건을 해석하는 것과 같은 컨텍스트 — 후보·결과코드·컨택원이 서버 해석과 같다.
   const [assignment, filterCtx] = await Promise.all([
     getAssignmentForEdit(surveyId, scope, assignmentId),
-    loadContactFilterContext(surveyId, scope, { isExternal: false, surface: 'contacts' }),
+    loadContactFilterContext(surveyId, scope, {
+      isExternal: false,
+      surface: 'contacts',
+      share: FIELDWORK_SHARE_ALL,
+    }),
   ]);
   if (!assignment) notFound();
   const { scheme, resultCodes, assignmentOptions } = filterCtx;

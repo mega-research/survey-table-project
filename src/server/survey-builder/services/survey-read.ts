@@ -16,6 +16,7 @@ import { buildQuotaGate } from '@/lib/quota/quota-gate-build';
 import { getR2PublicUrl } from '@/lib/r2-env';
 import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
 import { isValidUUID } from '@/lib/utils';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
 import { toAnchorSnapshot } from '@/server/read-models/anchor-row';
 import { getFieldworkCompletedCounts } from '@/server/read-models/fieldwork-completions';
 import { findContactByInviteToken } from '@/server/read-models/invite-lookup';
@@ -161,7 +162,7 @@ export async function getSurveyListWithCounts(
   // 목록은 실데이터만 센다 — 응답 수(notTestResponse)와 같은 파티션.
   const [responseCounts, fieldworkCounts] = await Promise.all([
     getResponseCountsGroupedBySurvey(surveyIds),
-    getFieldworkCompletedCounts(surveyIds, false),
+    getFieldworkCompletedCounts(surveyIds, false, FIELDWORK_SHARE_ALL),
   ]);
 
   return {
@@ -300,7 +301,7 @@ export async function listSurveyPage(
   // 목록은 실데이터만 센다 — 응답 수(notTestResponse)와 같은 파티션.
   const [responseCounts, fieldworkCounts] = await Promise.all([
     getResponseCountsGroupedBySurvey(pageIds),
-    getFieldworkCompletedCounts(pageIds, false),
+    getFieldworkCompletedCounts(pageIds, false, FIELDWORK_SHARE_ALL),
   ]);
 
   return {

@@ -127,12 +127,15 @@ export async function loadContactFilterContext(
      * 빼 후보·헤더 필터·정렬이 보이지 않는 축을 받지 않는다(외주 실사 링크 목록, ADR-0026).
      */
     canViewMail?: boolean;
-    /** 담당 범위 — 외주 링크가 지나는 표면만 넘긴다. 기본 `all`(계정 주체). */
-    share?: FieldworkShare;
+    /**
+     * 담당 범위 — **필수다**(빠뜨리면 열리는 쪽이라 tsc 가 잡게 한다). 외주 링크가 지나는 표면은
+     * `resolveFieldworkShare(actor, surveyId)`, 계정만 지나는 표면은 `FIELDWORK_SHARE_ALL` 을 명시한다.
+     */
+    share: FieldworkShare;
     executor?: DbOrTx;
   },
 ): Promise<ContactFilterContext> {
-  const { isExternal, surface, canViewMail = true, share = FIELDWORK_SHARE_ALL, executor } = opts;
+  const { isExternal, surface, canViewMail = true, share, executor } = opts;
   const [loadedScheme, resultCodes, assignmentOptions] = await Promise.all([
     getContactColumnScheme(surveyId, scope),
     getContactResultCodes(surveyId),
