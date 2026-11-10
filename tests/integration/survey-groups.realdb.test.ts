@@ -9,14 +9,14 @@
  * ③ 담기·이동이 팀 경계를 잠긴 값으로 재검증한다 (FOR UPDATE)
  * ④ 3단계 중첩의 깊이·같은 팀 부모·순환·이름 유일을 DB 가 막는다 (0166 — 복합 FK + CHECK)
  */
-import { createRouterClient, ORPCError } from '@orpc/server';
+import { ORPCError, createRouterClient } from '@orpc/server';
 import { eq, inArray } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
 import {
-  surveyGroups as surveyGroupsTable,
   surveyParticipants as participantsTable,
+  surveyGroups as surveyGroupsTable,
   surveys as surveysTable,
   teamMembers as teamMembersTable,
   teams as teamsTable,
@@ -24,13 +24,15 @@ import {
 } from '@/db/schema';
 import { findPostgresError } from '@/lib/pg-error';
 import type { ORPCContext } from '@/server/context';
-import { surveyGroups } from '@/server/workspace/procedures/survey-groups';
-import * as svc from '@/server/workspace/services/survey-groups';
 import {
   SurveyGroupDepthExceededError,
   SurveyGroupNotFoundError,
+  SurveyTeamMismatchError,
 } from '@/server/workspace/domain/survey-groups';
 import { TeamNotFoundError } from '@/server/workspace/domain/teams';
+import { ownership as ownershipProcedures } from '@/server/workspace/procedures/ownership';
+import { surveyGroups } from '@/server/workspace/procedures/survey-groups';
+import * as svc from '@/server/workspace/services/survey-groups';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
@@ -201,9 +203,7 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
           ...createdUserIds,
         ]),
       );
-    await db
-      .delete(teamsTable)
-      .where(inArray(teamsTable.id, [TEAM_A, TEAM_B, ...createdTeamIds]));
+    await db.delete(teamsTable).where(inArray(teamsTable.id, [TEAM_A, TEAM_B, ...createdTeamIds]));
     await db
       .delete(usersTable)
       .where(
@@ -287,9 +287,9 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
      */
     await expect(outsider.surveyGroups.list({ teamId: TEAM_A })).resolves.toEqual([]);
     // 그룹 id 를 알아도 존재를 확인할 수 없다 — 사유는 NOT_FOUND 로 접힌다.
-    await expect(
-      outsider.surveyGroups.rename({ groupId, name: '가로채기' }),
-    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(outsider.surveyGroups.rename({ groupId, name: '가로채기' })).rejects.toMatchObject(
+      { code: 'NOT_FOUND' },
+    );
     await expect(outsider.surveyGroups.remove({ groupId })).rejects.toMatchObject({
       code: 'NOT_FOUND',
     });
@@ -420,9 +420,7 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
   describe('해산된 팀의 그룹은 서비스 단계에서도 막힌다', () => {
     async function seedArchivedTeamGroup() {
       const teamId = crypto.randomUUID();
-      await db
-        .insert(teamsTable)
-        .values({ id: teamId, name: `해산예정팀-${teamId.slice(0, 8)}` });
+      await db.insert(teamsTable).values({ id: teamId, name: `해산예정팀-${teamId.slice(0, 8)}` });
       createdTeamIds.push(teamId);
       await db.insert(teamMembersTable).values({ teamId, userId: MEMBER_ID, role: 'leader' });
       const groupId = await seedGroup(clientFor(MEMBER_ID), teamId, '해산 전 그룹');
@@ -473,9 +471,9 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
     it('이름 변경 — 해산 시점 이름이 보존된다', async () => {
       const { groupId } = await seedArchivedTeamGroup();
 
-      await expect(
-        svc.renameSurveyGroup({ groupId, name: '되살리기' }),
-      ).rejects.toBeInstanceOf(TeamNotFoundError);
+      await expect(svc.renameSurveyGroup({ groupId, name: '되살리기' })).rejects.toBeInstanceOf(
+        TeamNotFoundError,
+      );
 
       const [row] = await db
         .select({ name: surveyGroupsTable.name })
@@ -496,7 +494,11 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
       const { teamId, groupId } = await seedArchivedTeamGroup();
 
       await expect(
-        svc.createSurveyGroup(MEMBER_ID, { teamId, name: '사후 하위 그룹', parentGroupId: groupId }),
+        svc.createSurveyGroup(MEMBER_ID, {
+          teamId,
+          name: '사후 하위 그룹',
+          parentGroupId: groupId,
+        }),
       ).rejects.toBeInstanceOf(TeamNotFoundError);
     });
 
@@ -842,6 +844,195 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
   });
 
   // ───────────────────────────────────────────────────────────────────────────
+  // 어느 단계의 그룹에든 설문을 넣고 뺀다 (설문 그룹 중첩 티켓 04)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /**
+   * 담기·이동의 규칙은 중첩 전과 같다 — 새 규칙이 없다는 것을 못 박는 묶음이다. 대상 그룹이
+   * 2·3단계여도 팀 일치·「미분류만 담긴다」·설문별 권한이 그대로 성립하고, 구조가 바뀌어도
+   * (하위 그룹 만들기) 설문의 소속은 따라 움직이지 않는다.
+   */
+  describe('어느 단계의 그룹에든 설문을 넣고 뺀다', () => {
+    async function groupOf(surveyId: string): Promise<string | null | undefined> {
+      const [row] = await db
+        .select({ surveyGroupId: surveysTable.surveyGroupId })
+        .from(surveysTable)
+        .where(eq(surveysTable.id, surveyId));
+      return row?.surveyGroupId;
+    }
+
+    /** 「이정운 › 2026 › 상반기」 — 1·2·3단계 한 가지. */
+    async function seedBranch(client: ReturnType<typeof clientFor>, teamId: string) {
+      const top = await seedGroup(client, teamId, '이정운');
+      const second = await seedGroup(client, teamId, '2026', top);
+      const third = await seedGroup(client, teamId, '상반기', second);
+      return { top, second, third };
+    }
+
+    it('단건 이동과 일괄 담기가 2·3단계 그룹을 대상으로 성공한다', async () => {
+      const { top, second, third } = await seedBranch(member, TEAM_A);
+      const s1 = await seedSurvey(TEAM_A, '고객 만족도 조사', MEMBER_ID);
+      const s2 = await seedSurvey(TEAM_A, '신제품 컨셉 테스트', MEMBER_ID);
+      const s3 = await seedSurvey(TEAM_A, '브랜드 인지도 조사', MEMBER_ID);
+      const s4 = await seedSurvey(TEAM_A, '직원 만족도 조사', MEMBER_ID);
+
+      // 일괄 담기 — 3단계와 2단계.
+      await member.surveyGroups.collect({ groupId: third, surveyIds: [s1, s2] });
+      await member.surveyGroups.collect({ groupId: second, surveyIds: [s3] });
+      expect(await groupOf(s1)).toBe(third);
+      expect(await groupOf(s2)).toBe(third);
+      expect(await groupOf(s3)).toBe(second);
+
+      // 단건 이동 — 미분류에서 3단계로, 3단계에서 2단계로, 2단계에서 1단계로.
+      await member.surveyGroups.move({ surveyId: s4, groupId: third });
+      expect(await groupOf(s4)).toBe(third);
+      await member.surveyGroups.move({ surveyId: s1, groupId: second });
+      expect(await groupOf(s1)).toBe(second);
+      await member.surveyGroups.move({ surveyId: s3, groupId: top });
+      expect(await groupOf(s3)).toBe(top);
+
+      // 어느 단계에 담겼든 담기 후보(미분류)에서는 빠진다.
+      expect(await member.surveyGroups.listUngrouped({ teamId: TEAM_A, query: '' })).toEqual([]);
+
+      // 3단계에서 미분류로 빼기 — 한 단계 위가 아니라 미분류다.
+      await member.surveyGroups.move({ surveyId: s2, groupId: null });
+      expect(await groupOf(s2)).toBeNull();
+      expect(
+        (await member.surveyGroups.listUngrouped({ teamId: TEAM_A, query: '' })).map((c) => c.id),
+      ).toEqual([s2]);
+    });
+
+    it('하위 그룹에 이미 담긴 설문은 다른 단계의 그룹으로도 담기로 빼올 수 없다', async () => {
+      const { top, third } = await seedBranch(member, TEAM_A);
+      const surveyId = await seedSurvey(TEAM_A, '이미 담긴 설문', MEMBER_ID);
+      await member.surveyGroups.collect({ groupId: third, surveyIds: [surveyId] });
+
+      // 「미분류만 담긴다」는 위아래 사이에서도 같다 — 위 그룹으로 끌어올리는 것도 단건 이동이다.
+      await expect(
+        member.surveyGroups.collect({ groupId: top, surveyIds: [surveyId] }),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+      expect(await groupOf(surveyId)).toBe(third);
+    });
+
+    it('설문이 직접 담긴 그룹 밑에 하위 그룹을 만들어도 그 설문의 소속은 그대로다', async () => {
+      const top = await seedGroup(member, TEAM_A, '이정운');
+      const surveyId = await seedSurvey(TEAM_A, '먼저 담긴 설문', MEMBER_ID);
+      await member.surveyGroups.collect({ groupId: top, surveyIds: [surveyId] });
+
+      const second = await seedGroup(member, TEAM_A, '2026', top);
+      await seedGroup(member, TEAM_A, '상반기', second);
+
+      expect(await groupOf(surveyId)).toBe(top);
+      // 하위 그룹이 생긴 뒤에도 상위 그룹에 직접 담긴다.
+      const later = await seedSurvey(TEAM_A, '나중에 담는 설문', MEMBER_ID);
+      await member.surveyGroups.collect({ groupId: top, surveyIds: [later] });
+      expect(await groupOf(later)).toBe(top);
+    });
+
+    it('편집 권한이 없는 설문은 하위 그룹으로도 옮길 수 없다', async () => {
+      const { second, third } = await seedBranch(member, TEAM_A);
+      // 같은 팀의 다른 사람이 소유한 invite_only — 팀원에게는 편집은커녕 존재가 숨는다.
+      const hidden = await seedSurvey(TEAM_A, '남의 초대 전용 설문', A_OWNER_ID);
+      await db
+        .update(surveysTable)
+        .set({ visibility: 'invite_only' })
+        .where(eq(surveysTable.id, hidden));
+      const mine = await seedSurvey(TEAM_A, '내 설문', MEMBER_ID);
+
+      await expect(
+        member.surveyGroups.move({ surveyId: hidden, groupId: third }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      // 일괄 담기는 한 건만 막혀도 전부 거부다 — 옮길 수 있는 설문도 함께 남는다.
+      await expect(
+        member.surveyGroups.collect({ groupId: second, surveyIds: [mine, hidden] }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+      expect(await groupOf(hidden)).toBeNull();
+      expect(await groupOf(mine)).toBeNull();
+    });
+
+    it('편집권만 있는 타 팀 참여자는 하위 그룹에 넣지도 빼지도 못한다', async () => {
+      const { third } = await seedBranch(member, TEAM_A);
+      const theirs = await seedBranch(outsider, TEAM_B);
+      const surveyId = await seedSurvey(TEAM_A, '협업 조사', MEMBER_ID);
+      await member.surveyGroups.collect({ groupId: third, surveyIds: [surveyId] });
+      await db
+        .insert(participantsTable)
+        .values({ surveyId, userId: OUTSIDER_ID, kind: 'member', addedBy: MEMBER_ID });
+
+      // 소유 팀의 다른 하위 그룹으로 — 그 팀 사람이 아니라 그룹부터 없는 것으로 접힌다.
+      await expect(outsider.surveyGroups.move({ surveyId, groupId: third })).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      });
+      // 자기 팀의 하위 그룹으로 끌어오기, 미분류로 빼기 — `surveyGroup.manage` 가 없다.
+      await expect(
+        outsider.surveyGroups.move({ surveyId, groupId: theirs.third }),
+      ).rejects.toBeInstanceOf(ORPCError);
+      await expect(outsider.surveyGroups.move({ surveyId, groupId: null })).rejects.toBeInstanceOf(
+        ORPCError,
+      );
+
+      expect(await groupOf(surveyId)).toBe(third);
+    });
+
+    it('다른 팀의 하위 그룹으로는 거부된다', async () => {
+      const theirs = await seedBranch(outsider, TEAM_B);
+      const surveyId = await seedSurvey(TEAM_A, '팀A 설문', MEMBER_ID);
+
+      for (const groupId of [theirs.second, theirs.third]) {
+        // 관문 — 남의 팀 그룹은 없는 그룹과 같은 NOT_FOUND 다.
+        await expect(member.surveyGroups.move({ surveyId, groupId })).rejects.toMatchObject({
+          code: 'NOT_FOUND',
+        });
+        await expect(
+          member.surveyGroups.collect({ groupId, surveyIds: [surveyId] }),
+        ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+        // 관문을 건너뛴 서비스 — 잠긴 값으로 팀 일치를 다시 본다.
+        await expect(svc.moveSurveyToGroup({ surveyId, groupId })).rejects.toBeInstanceOf(
+          SurveyTeamMismatchError,
+        );
+        await expect(
+          svc.collectSurveysIntoGroup({ groupId, surveyIds: [surveyId] }),
+        ).rejects.toBeInstanceOf(SurveyTeamMismatchError);
+      }
+
+      expect(await groupOf(surveyId)).toBeNull();
+    });
+
+    it('하위 그룹에 담긴 설문이 다른 팀으로 옮겨 가면 미분류가 된다', async () => {
+      const { third } = await seedBranch(member, TEAM_A);
+      const surveyId = await seedSurvey(TEAM_A, '따라가는 설문', MEMBER_ID);
+      await member.surveyGroups.collect({ groupId: third, surveyIds: [surveyId] });
+      await db
+        .insert(participantsTable)
+        .values({ surveyId, userId: OUTSIDER_ID, kind: 'member', addedBy: MEMBER_ID });
+
+      // 타 팀 참여자에게 소유권을 넘기면 설문이 그 사람의 팀으로 따라간다.
+      await createRouterClient(
+        { ownership: ownershipProcedures },
+        { context: contextFor(MEMBER_ID) },
+      ).ownership.transfer({
+        surveyId,
+        newOwnerUserId: OUTSIDER_ID,
+        expectedOwnerUserId: MEMBER_ID,
+      });
+
+      const [row] = await db
+        .select({ teamId: surveysTable.teamId, surveyGroupId: surveysTable.surveyGroupId })
+        .from(surveysTable)
+        .where(eq(surveysTable.id, surveyId));
+      expect(row?.teamId).toBe(TEAM_B);
+      // 한 단계 위(「2026」)가 아니라 새 팀의 미분류다 — 그룹은 팀 소유물이라 함께 가지 못한다.
+      expect(row?.surveyGroupId).toBeNull();
+      expect(
+        (await outsider.surveyGroups.listUngrouped({ teamId: TEAM_B, query: '' })).map((c) => c.id),
+      ).toEqual([surveyId]);
+      // 옛 팀의 가지는 그대로 남는다 — 그룹 구조는 설문이 떠나도 바뀌지 않는다.
+      expect(await groupRow(third)).toMatchObject({ depth: 3 });
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
   // 3단계 중첩 — 폴더 안의 폴더 (설문 그룹 중첩 티켓 01, 마이그레이션 0166)
   // ───────────────────────────────────────────────────────────────────────────
 
@@ -1069,13 +1260,23 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
 
         expect(
           await violatedConstraint(
-            insertGroupDirectly({ teamId: TEAM_A, name: '1분기', parentGroupId: third, parentDepth: 3 }),
+            insertGroupDirectly({
+              teamId: TEAM_A,
+              name: '1분기',
+              parentGroupId: third,
+              parentDepth: 3,
+            }),
           ),
         ).toBe('survey_groups_parent_depth_check');
         // 3단계 그룹을 「깊이 2」라고 속이면 가리킬 (그룹, 깊이) 짝이 없다.
         expect(
           await violatedConstraint(
-            insertGroupDirectly({ teamId: TEAM_A, name: '1분기', parentGroupId: third, parentDepth: 2 }),
+            insertGroupDirectly({
+              teamId: TEAM_A,
+              name: '1분기',
+              parentGroupId: third,
+              parentDepth: 2,
+            }),
           ),
         ).toBe('survey_groups_parent_fk');
         // 깊이 칸을 비워 검사를 건너뛰려 해도 막힌다.
@@ -1091,7 +1292,12 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
 
         expect(
           await violatedConstraint(
-            insertGroupDirectly({ teamId: TEAM_A, name: '하위', parentGroupId: theirs, parentDepth: 1 }),
+            insertGroupDirectly({
+              teamId: TEAM_A,
+              name: '하위',
+              parentGroupId: theirs,
+              parentDepth: 1,
+            }),
           ),
         ).toBe('survey_groups_parent_fk');
       });
@@ -1174,7 +1380,12 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
 
         expect(
           await violatedConstraint(
-            insertGroupDirectly({ teamId: TEAM_A, name: '2026', parentGroupId: top, parentDepth: 1 }),
+            insertGroupDirectly({
+              teamId: TEAM_A,
+              name: '2026',
+              parentGroupId: top,
+              parentDepth: 1,
+            }),
           ),
         ).toBe('survey_groups_parent_name_uq');
         expect(

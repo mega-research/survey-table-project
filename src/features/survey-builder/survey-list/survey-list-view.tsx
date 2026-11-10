@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Folder, FolderPlus, Loader2, Plus } from 'lucide-react';
+import { Folder, FolderPlus, ListPlus, Loader2, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { ListPagination } from '@/components/ui/list-pagination';
@@ -45,6 +45,7 @@ import {
   NoSurveysEmptyState,
   NoTeamEmptyState,
 } from './empty-states';
+import { GroupCollectModal } from './groups/group-collect-modal';
 import { GroupManageModal } from './groups/group-manage-modal';
 import { GroupNameDialog, type GroupNameDialogTarget } from './groups/group-name-dialog';
 import { type GroupScreenSubgroup, resolveGroupScreen } from './groups/group-screen';
@@ -180,6 +181,8 @@ export function SurveyListView() {
   const [groupManagerOpen, setGroupManagerOpen] = useState(false);
   // 그룹 화면의 이름 창 — 「새 하위 그룹」과 폴더 줄의 「이름 바꾸기」가 함께 쓴다.
   const [groupNameTarget, setGroupNameTarget] = useState<GroupNameDialogTarget | null>(null);
+  // 그룹 화면 머리의 「설문 담기」 — 지금 보고 있는 그룹에 미분류 설문을 넣는 창.
+  const [groupCollectOpen, setGroupCollectOpen] = useState(false);
   const [teamPickOpen, setTeamPickOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
@@ -224,6 +227,12 @@ export function SurveyListView() {
     [groupList, activeGroup],
   );
   const subgroups = groupScreen?.subgroups ?? EMPTY_SUBGROUPS;
+  // 「설문 담기」는 **내 팀 그룹 화면이면 어느 단계에서든** 된다 — 설문은 1·2·3단계 어디에든 직접
+  // 담긴다. 협업 그룹(타 팀 폴더)은 그 팀 사람만 채우므로 대상이 아니다. 판정은 서버가 다시 한다.
+  const collectTargetGroup =
+    activeGroup && activeGroup.foreignTeamName === null && teamScopeId !== null
+      ? activeGroup
+      : null;
   // **그룹 관리 창은 아직 최상위 그룹만 다룬다** — 창의 만들기·끌어서 순서 바꾸기가 한 단 목록을
   // 전제한다(하위 그룹을 섞어 넘기면 서로 다른 부모의 줄이 한 목록에서 끌린다).
   const topLevelGroups = useMemo(
@@ -412,6 +421,18 @@ export function SurveyListView() {
               className="flex h-[42px] items-center gap-1.5 rounded-[9px] border border-[#E5E5EA] bg-white px-[18px] text-[14px] font-medium text-[#374151] hover:bg-[#F5F5F7]"
             >
               <FolderPlus className="h-4 w-4" />새 하위 그룹
+            </button>
+          )}
+          {/* 그룹 관리 창을 거치지 않고 이 그룹에 바로 담는다 — 하위 그룹은 그 창의 목록에 서지 않아
+              여기가 유일한 입구다. */}
+          {collectTargetGroup && (
+            <button
+              type="button"
+              onClick={() => setGroupCollectOpen(true)}
+              className="flex h-[42px] items-center gap-1.5 rounded-[9px] border border-[#E5E5EA] bg-white px-[18px] text-[14px] font-medium text-[#374151] hover:bg-[#F5F5F7]"
+            >
+              <ListPlus className="h-4 w-4" />
+              설문 담기
             </button>
           )}
           {canCreate ? (
@@ -681,6 +702,14 @@ export function SurveyListView() {
 
       {groupNameTarget && (
         <GroupNameDialog target={groupNameTarget} onClose={() => setGroupNameTarget(null)} />
+      )}
+
+      {groupCollectOpen && collectTargetGroup && teamScopeId && (
+        <GroupCollectModal
+          teamId={teamScopeId}
+          group={collectTargetGroup}
+          onClose={() => setGroupCollectOpen(false)}
+        />
       )}
     </div>
   );

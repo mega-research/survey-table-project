@@ -117,8 +117,8 @@ export function EmptyGroupState() {
       </span>
       <h3 className="text-[17px] font-semibold text-[#1C1C1E]">이 그룹에 담긴 설문이 없습니다</h3>
       <p className="max-w-[420px] text-[13.5px] leading-relaxed text-[#6E6E73]">
-        「그룹 편집」의 「설문 담기」로 미분류 설문을 넣거나, 설문 카드의 「그룹 이동」으로 단건씩
-        옮길 수 있습니다.
+        위의 「설문 담기」로 미분류 설문을 넣거나, 설문 카드의 「그룹 이동」으로 단건씩 옮길 수
+        있습니다.
       </p>
       <Link
         href="/surveys"
