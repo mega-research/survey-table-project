@@ -10,7 +10,10 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { SurveyListPageResult } from '@/shared/contracts/survey-builder-io';
+import type {
+  SurveyListPageItem,
+  SurveyListPageResult,
+} from '@/shared/contracts/survey-builder-io';
 import type { SurveyGroupListItem } from '@/shared/contracts/workspace-io';
 import { WorkScopeContext } from '@/shared/lib/work-scope-context';
 
@@ -77,10 +80,63 @@ const EMPTY_PAGE: SurveyListPageResult = {
   teamWideTotal: null,
   owners: [],
   activeTeam: null,
+  groupSubtree: false,
 };
 
-function renderGroupScreen(groupId: string, groups: SurveyGroupListItem[] = NESTED) {
-  searchParams = new URLSearchParams({ group: groupId });
+function card(id: string, title: string, groupPath: string[] = []): SurveyListPageItem {
+  return {
+    id,
+    title,
+    cardTitle: null,
+    description: null,
+    slug: null,
+    privateToken: null,
+    responseCount: 0,
+    completedResponseCount: 0,
+    fieldworkCompletedCount: 0,
+    createdAt: new Date('2026-06-01T00:00:00.000Z'),
+    updatedAt: new Date('2026-06-02T00:00:00.000Z'),
+    endDate: null,
+    isPublic: true,
+    status: 'draft',
+    lifecycle: 'draft',
+    teamId: TEAM,
+    teamName: '연구3본부 5팀',
+    visibility: 'team',
+    assignmentStatus: 'assigned',
+    ownerUserId: 'u-1',
+    ownerName: '홍길동',
+    surveyGroupId: null,
+    deletedAt: null,
+    isParticipant: false,
+    isFullParticipant: false,
+    isLedParticipant: false,
+    isFavorite: false,
+    myTagIds: [],
+    groupPath,
+  };
+}
+
+/** 카드가 있는 한 쪽 — 숫자는 서버가 센 대로 준다. */
+function page(
+  items: SurveyListPageItem[],
+  over: Partial<SurveyListPageResult> = {},
+): SurveyListPageResult {
+  return {
+    ...EMPTY_PAGE,
+    items,
+    total: items.length,
+    lifecycleCounts: { all: items.length, draft: items.length, running: 0, closed: 0 },
+    ...over,
+  };
+}
+
+function renderGroupScreen(
+  groupId: string,
+  groups: SurveyGroupListItem[] = NESTED,
+  q: string | null = null,
+) {
+  searchParams = new URLSearchParams({ group: groupId, ...(q ? { q } : {}) });
   groupsCall.mockResolvedValue(groups);
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -201,6 +257,82 @@ describe('그룹 화면 — 협업 그룹(타 팀 폴더)', () => {
     expect(await breadcrumb()).toEqual(['설문 목록', 'A고객사 2026 · 연구1본부 1팀']);
     expect(screen.queryByRole('button', { name: '새 하위 그룹' })).toBeNull();
     expect(screen.queryByRole('region', { name: /하위 그룹/ })).toBeNull();
+  });
+});
+
+/**
+ * 그룹 화면의 검색 (티켓 08) — 서버가 그 그룹 아래 전체에서 찾았다고 답하면(`groupSubtree`) 카드에
+ * 어느 하위 그룹의 설문인지 적고, 구역 제목도 「직접 담긴 설문」이 아니라 찾은 범위를 말한다.
+ */
+describe('그룹 화면 — 검색은 아래 전체에서 찾는다', () => {
+  it('찾은 카드에 하위 그룹 경로가 한 줄로 보이고, 직접 담긴 설문의 카드에는 없다', async () => {
+    listPageCall.mockResolvedValue(
+      page([card('s-direct', '직접 담긴 조사'), card('s-deep', '손자 조사', ['2026', '상반기'])], {
+        groupSubtree: true,
+        lifecycleCounts: { all: 34, draft: 34, running: 0, closed: 0 },
+      }),
+    );
+    renderGroupScreen(G_LEE, NESTED, '조사');
+
+    await screen.findByText('손자 조사');
+    const lines = screen.getAllByLabelText('담긴 하위 그룹');
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toHaveTextContent('2026 › 상반기');
+  });
+
+  it('구역 제목이 찾은 범위와 결과 수를 말한다 — 「직접 담긴 설문」이라 하지 않는다', async () => {
+    listPageCall.mockResolvedValue(
+      page([card('s-direct', '직접 담긴 조사'), card('s-deep', '손자 조사', ['2026', '상반기'])], {
+        groupSubtree: true,
+        lifecycleCounts: { all: 34, draft: 34, running: 0, closed: 0 },
+      }),
+    );
+    renderGroupScreen(G_LEE, NESTED, '조사');
+
+    const title = await screen.findByRole('heading', { name: /이 그룹과 하위 그룹에서 찾은 설문/ });
+    // 숫자는 아래 전체의 설문 수(34)가 아니라 찾은 결과 수다.
+    expect(title).toHaveTextContent(/찾은 설문\s*2$/);
+    expect(screen.queryByRole('heading', { name: /이 그룹에 직접 담긴 설문/ })).toBeNull();
+    // 폴더 줄은 검색 중에도 그대로다 — 구조이지 검색 결과가 아니다.
+    expect(
+      within(screen.getByRole('region', { name: /하위 그룹/ })).getByRole('link', { name: '2026' }),
+    ).toBeInTheDocument();
+  });
+
+  it('검색어가 없으면 전과 같다 — 「이 그룹에 직접 담긴 설문 N」과 경로 없는 카드', async () => {
+    listPageCall.mockResolvedValue(page([card('s-direct', '직접 담긴 조사')]));
+    renderGroupScreen(G_LEE);
+
+    const title = await screen.findByRole('heading', { name: /이 그룹에 직접 담긴 설문/ });
+    expect(title).toHaveTextContent(/직접 담긴 설문\s*1$/);
+    expect(screen.queryByLabelText('담긴 하위 그룹')).toBeNull();
+  });
+
+  it('아래 전체에 설문이 하나도 없는 그룹을 검색하면 빈 그룹 안내가 아니라 결과 없음이다', async () => {
+    listPageCall.mockResolvedValue(page([], { groupSubtree: true }));
+    renderGroupScreen(G_LEE, NESTED, '없는말');
+
+    expect(await screen.findByText(/검색어 「없는말」/)).toBeInTheDocument();
+    expect(screen.queryByText(/이 그룹에 직접 담긴 설문이 없습니다/)).toBeNull();
+  });
+
+  it('하위 그룹이 있는 내 팀 그룹의 검색창은 아래 전체에서 찾는다고 알린다', async () => {
+    renderGroupScreen(G_LEE);
+
+    expect(
+      await screen.findByPlaceholderText(
+        '「이정운」 아래 전체에서 찾기 — 하위 그룹의 설문도 함께 나옵니다',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('하위 그룹이 없는 그룹과 협업 그룹의 검색창 안내는 전과 같다', async () => {
+    const { unmount } = renderGroupScreen(G_H1);
+    expect(await screen.findByPlaceholderText(/^이 그룹 안에서 /)).toBeInTheDocument();
+    unmount();
+
+    renderGroupScreen(G_FOREIGN);
+    expect(await screen.findByPlaceholderText(/^이 그룹 안에서 /)).toBeInTheDocument();
   });
 });
 

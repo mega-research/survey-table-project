@@ -224,6 +224,10 @@ export function SurveyListView() {
     [groupList, activeGroup],
   );
   const subgroups = groupScreen?.subgroups ?? EMPTY_SUBGROUPS;
+  // 그룹 화면의 검색은 그 그룹 아래 전체에서 찾는다(티켓 08) — 넓혔는지는 서버가 답한다(내 팀 그룹 +
+  // 검색어). 주소의 검색어가 아니라 **그려진 결과**의 값을 본다: 조건을 바꾸는 동안 흐리게 남긴 이전
+  // 결과에는 이전 범위의 숫자와 카드가 있다.
+  const searchedSubtree = activeGroup !== null && (data?.groupSubtree ?? false);
   // **그룹 관리 창은 아직 최상위 그룹만 다룬다** — 창의 만들기·끌어서 순서 바꾸기가 한 단 목록을
   // 전제한다(하위 그룹을 섞어 넘기면 서로 다른 부모의 줄이 한 목록에서 끌린다).
   const topLevelGroups = useMemo(
@@ -488,7 +492,13 @@ export function SurveyListView() {
             sortBy={query.sort}
             onSortByChange={(sort) => updateQuery({ sort })}
             searchPlaceholder={
-              activeGroup ? `이 그룹 안에서 ${SEARCH_PLACEHOLDER}` : SEARCH_PLACEHOLDER
+              // 하위 그룹이 있는 내 팀 그룹만 「아래 전체」를 말한다(시안 G1) — 하위 그룹이 없으면 넓어질
+              // 것이 없고, 협업 그룹(타 팀 폴더)의 검색은 직접 담긴 설문에서 멈춘다.
+              activeGroup && subgroups.length > 0
+                ? `「${activeGroup.name}」 아래 전체에서 찾기 — 하위 그룹의 설문도 함께 나옵니다`
+                : activeGroup
+                  ? `이 그룹 안에서 ${SEARCH_PLACEHOLDER}`
+                  : SEARCH_PLACEHOLDER
             }
             advancedOpen={advancedOpen}
             onToggleAdvanced={() => setAdvancedOpen(!advancedOpen)}
@@ -556,16 +566,24 @@ export function SurveyListView() {
           />
 
           {/* 하위 그룹 폴더 줄 — 하위 그룹이 없으면 아무것도 그리지 않아 화면이 전과 같다.
-              그 아래는 이 그룹에 **직접** 담긴 설문뿐이라, 둘이 함께 있을 때만 구역 제목을 단다. */}
+              그 아래는 이 그룹에 **직접** 담긴 설문뿐이라, 둘이 함께 있을 때만 구역 제목을 단다.
+              폴더 줄은 검색 중에도 그대로다(구조이지 검색 결과가 아니다). 검색이 아래 전체에서 찾았으면
+              카드가 하위 그룹의 설문까지라 제목이 그 범위와 결과 수를 말한다 — 그때 「전체」 숫자는
+              아래 전체의 설문 수이지 직접 담긴 수가 아니다. */}
           <SubgroupSection
             subgroups={subgroups}
             onRename={(group) => setGroupNameTarget({ kind: 'rename', group })}
           />
-          {subgroups.length > 0 && (
-            <GroupScreenSectionTitle count={counts.all}>
-              이 그룹에 직접 담긴 설문
-            </GroupScreenSectionTitle>
-          )}
+          {subgroups.length > 0 &&
+            (searchedSubtree ? (
+              <GroupScreenSectionTitle count={total}>
+                이 그룹과 하위 그룹에서 찾은 설문
+              </GroupScreenSectionTitle>
+            ) : (
+              <GroupScreenSectionTitle count={counts.all}>
+                이 그룹에 직접 담긴 설문
+              </GroupScreenSectionTitle>
+            ))}
 
           {scope.kind === 'none' ? (
             // 셸 밖 트리에서 서버가 미배치로 해석한 경우 — FLOW 9-1 문구로 안내한다.
@@ -573,8 +591,10 @@ export function SurveyListView() {
           ) : mineEmpty !== null ? (
             // 「내 설문」은 비었는데 같은 조건으로 팀 전체에는 있다 — 「설문이 없다」로 읽히지 않게 먼저 본다.
             <MineEmptyState teamWideTotal={mineEmpty} onShowTeam={() => changeWhose('team')} />
-          ) : counts.all === 0 ? (
+          ) : counts.all === 0 && !searchedSubtree ? (
             // 「전체」 숫자는 범위·그룹·팀 좁힘까지만 센다 — 0 이면 조건과 무관하게 빈 화면이다.
+            // 아래 전체에서 찾은 검색만은 예외다: 그때의 0 은 「이 그룹이 비었다」가 아니라 「아래 어디에도
+            // 없다」라, 빈 그룹 안내 대신 조건을 푸는 결과 없음 화면으로 간다.
             // 휴지통이 비어 있는 것·그룹이 비어 있는 것·팀에 설문이 없는 것은 다른 화면이다 —
             // 여기서 「새 설문 만들기」를 권하면 방금 무엇을 보러 왔는지와 어긋나고, 그룹 좁힘은
             // 주소가 소유해 「조건 풀기」로는 풀리지 않는다.
@@ -641,6 +661,7 @@ export function SurveyListView() {
                       isDuplicating={isDuplicating}
                       groups={manageableGroups}
                       onMoveToGroup={canManageGroups ? handleMoveToGroup : null}
+                      groupPath={survey.groupPath}
                     />
                   ),
                 )}
