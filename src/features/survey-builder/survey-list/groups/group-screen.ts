@@ -9,7 +9,7 @@ import { findSurveyGroupPath } from '@/utils/survey-group-tree';
 
 export interface GroupScreenSubgroup {
   group: SurveyGroupListItem;
-  /** 이 하위 그룹 바로 밑의 그룹 수 — 폴더 줄의 「하위 그룹 M」. */
+  /** 이 하위 그룹 바로 밑의, **내게 보이는** 그룹 수 — 폴더 줄의 「하위 그룹 M」. */
   subgroupCount: number;
 }
 
@@ -28,8 +28,8 @@ export interface GroupScreen {
  * **협업 그룹(타 팀 폴더)은 한 줄이다** — 서버가 상위 그룹을 내지 않아 경로가 자기 하나이고,
  * 구조를 고칠 수 없으므로 하위 그룹도 만들기도 없다.
  *
- * 깊이는 경로의 길이로 센다. 위쪽 그룹이 내게 보이지 않으면 실제보다 얕게 세어 3단계 그룹에
- * 「새 하위 그룹」이 보일 수 있다 — 그때는 서버가 「3단계까지만」으로 거부한다.
+ * 깊이는 경로의 길이로 센다. 서버가 위쪽 그룹이 전부 보이는 줄만 내므로(내 팀 줄의 상위 그룹
+ * id 는 언제나 목록 안에 있다) 이 길이가 실제 깊이와 같다.
  */
 export function resolveGroupScreen(
   groups: readonly SurveyGroupListItem[],
