@@ -393,14 +393,14 @@ export function ShareEditor({
 const OVERLAP_LABEL: Record<FieldworkShareOverlap, string> = {
   take: '가져옴',
   keep: '남겨 둠',
-  share: '같이 맡김',
+  joint: '같이 맡김',
 };
 
 const OVERLAP_OPTIONS: Array<{ value: FieldworkShareOverlap; title: string; help: string }> = [
   { value: 'take', title: '가져오기', help: '원래 링크에서 빼고 이 링크로 옮깁니다' },
   { value: 'keep', title: '남겨 두기', help: '원래 링크에 두고 이 링크에는 넣지 않습니다' },
   {
-    value: 'share',
+    value: 'joint',
     title: '같이 맡기기',
     help: '두 링크 모두에 둡니다 — 두 업체가 같은 연락처를 봅니다',
   },
@@ -525,7 +525,7 @@ function ApplySummary({
             남겨 둠 {fmt(summary.overlap)}명{others} — 원래 링크에 두고 이쪽에 넣지 않습니다
           </li>
         )}
-        {summary.overlap > 0 && overlap === 'share' && (
+        {summary.overlap > 0 && overlap === 'joint' && (
           <li>
             같이 맡김 {fmt(summary.overlap)}명{others} — 두 링크의 외주 화면에 모두 보입니다
           </li>

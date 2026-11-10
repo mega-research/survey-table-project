@@ -62,7 +62,7 @@ import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 
 import { backendPid, waitForLockWaitersBehind } from '../helpers/lock-waiters';
 import { resolvedFilterForTest } from '../helpers/resolved-contact-filter';
-import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 // 이 브라우저의 「테스트 데이터 보기」 쿠키 — 켜고 끄며 파티션을 오간다 (server/data-scope).
 const cookieState = vi.hoisted(() => ({ testView: false }));

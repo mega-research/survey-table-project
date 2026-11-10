@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 
 import { getOperationsDataScope } from '@/server/data-scope';
-import { resolveFieldworkShare } from '@/server/fieldwork-share';
+import { resolveFieldworkShare } from '@/server/fieldwork-share-scope';
 import { assertFieldworkLinkPageAccess } from '@/server/page-fieldwork-link-access';
 
 import {

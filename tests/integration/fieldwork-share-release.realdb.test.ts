@@ -34,7 +34,7 @@ import { ingestContactUpload } from '@/server/contacts/services/contact-uploads'
 import { countFieldworkSharesToRelease } from '@/server/contacts/services/fieldwork-share-release';
 import type { ORPCContext } from '@/server/context';
 import { loadOperationsDataScope } from '@/server/data-scope';
-import { resolveFieldworkShare } from '@/server/fieldwork-share';
+import { resolveFieldworkShare } from '@/server/fieldwork-share-scope';
 import { loadContactsListPage } from '@/server/read-models/contacts-list-page';
 import { router } from '@/server/router';
 import type { ContactColumnScheme, ContactUploadMapping } from '@/shared/contracts/contacts';

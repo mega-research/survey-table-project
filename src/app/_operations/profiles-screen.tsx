@@ -26,7 +26,7 @@ import {
   normalizeListArgs,
 } from '@/lib/operations/profiles-format';
 import type { OperationsDataScope } from '@/server/data-scope';
-import type { FieldworkShare } from '@/server/fieldwork-share';
+import type { FieldworkShare } from '@/server/fieldwork-share-scope';
 import { getSurveyContactStats } from '@/server/operations/services/contact-stats';
 import { loadProfileAnswerValues } from '@/server/operations/services/profile-answer-values';
 import { listResponsesForProfiles } from '@/server/operations/services/profiles';

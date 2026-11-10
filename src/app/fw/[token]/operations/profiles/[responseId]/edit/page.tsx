@@ -1,6 +1,6 @@
 import { fieldworkLinkOperationsBase } from '@/features/operations/operations-paths';
 import { getOperationsDataScope } from '@/server/data-scope';
-import { resolveFieldworkShare } from '@/server/fieldwork-share';
+import { resolveFieldworkShare } from '@/server/fieldwork-share-scope';
 import { assertFieldworkLinkPageAccess } from '@/server/page-fieldwork-link-access';
 
 import { parseResponseIdx } from '@/app/_operations/response-edit-idx';

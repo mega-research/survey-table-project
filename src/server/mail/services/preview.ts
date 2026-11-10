@@ -16,7 +16,7 @@ import { MailWrapper } from './template-wrapper';
 import { buildInviteUrl } from '@/lib/survey-url';
 import { getContactSampleById, getFirstContactSample } from '@/server/read-models/contact-sample';
 import { loadOperationsDataScope } from '@/server/data-scope';
-import { FIELDWORK_SHARE_ALL, resolveFieldworkShare } from '@/server/fieldwork-share';
+import { FIELDWORK_SHARE_ALL, resolveFieldworkShare } from '@/server/fieldwork-share-scope';
 import type { Actor } from '@/server/survey-access';
 
 import type {

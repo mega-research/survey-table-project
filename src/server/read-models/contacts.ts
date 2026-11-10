@@ -69,7 +69,7 @@ import type {
 } from '@/shared/contracts/contacts-io';
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
 
-import { type FieldworkShare, shareTargetCondition } from '../fieldwork-share';
+import { type FieldworkShare, shareTargetCondition } from '../fieldwork-share-scope';
 import { type ResolvedContactFilter, resolvedContactFilterSql } from './contact-filter-resolution';
 import type { FieldworkLinkNames } from './fieldwork-link-names';
 

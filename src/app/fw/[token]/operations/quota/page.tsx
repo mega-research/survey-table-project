@@ -4,7 +4,7 @@ import { GuestEmptyState } from '@/features/guest-console/guest-empty-state';
 import { QuotaStatusPanel } from '@/features/operations/quota/quota-status-panel';
 import { ShareQuotaStatusPanel } from '@/features/operations/quota/share-quota-status-panel';
 import { EXTERNAL_VIEWER_DATA_SCOPE } from '@/server/data-scope';
-import { resolveFieldworkShare } from '@/server/fieldwork-share';
+import { resolveFieldworkShare } from '@/server/fieldwork-share-scope';
 import { assertFieldworkLinkPageAccess } from '@/server/page-fieldwork-link-access';
 import { getQuotaViewForShare } from '@/server/quota/services/quota-status';
 

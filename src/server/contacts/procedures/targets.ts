@@ -3,7 +3,7 @@ import * as z from 'zod';
 
 import { isExternalAccount } from '@/shared/contracts/auth';
 import { isExternalActor } from '@/server/data-scope';
-import { resolveFieldworkShare } from '@/server/fieldwork-share';
+import { resolveFieldworkShare } from '@/server/fieldwork-share-scope';
 import { authed, scoped } from '@/server/orpc';
 import {
   assertScopedSurveyCapabilityRpc,

@@ -89,20 +89,23 @@ export function shareTargetSql(
 // 든 **다른 표의 칸까지** 바깥 표 별칭으로 고쳐 써서(`"surveyResponses"."link_id"`) 칸 객체를 넣으면
 // 깨진다(티켓 06 에서 응답 단건 조회가 밟았다). 표·칸 이름은 schema 객체에서 읽어 개명이 따라오게 한다.
 
-const fls = {
+// 상수가 아니라 함수인 것은 **모듈 평가 시점에 스키마 객체를 읽지 않기** 위해서다 — 이 파일은 현황·내보내기
+// 경로의 import 사슬에 들어가고, `@/db/schema` 를 통째로 목으로 세운 테스트에서 최상위 상수가 없는 표의 칸을
+// 읽으면 import 만으로 깨진다(`server/access-link` 의 `linkRowColumns` 와 같은 이유).
+const fls = () => ({
   link: sql.identifier(fieldworkLinkShares.linkId.name),
   target: sql.identifier(fieldworkLinkShares.contactTargetId.name),
-};
-const sal = {
+});
+const sal = () => ({
   id: sql.identifier(surveyAccessLinks.id.name),
   surveyId: sql.identifier(surveyAccessLinks.surveyId.name),
   closedAt: sql.identifier(surveyAccessLinks.closedAt.name),
-};
+});
 
 /** 이 대상(`column`)이 이 링크의 범위에 있는가 — NULL 없는 불리언. */
 export function targetInLinkShare(linkId: string, column: PgColumn | SQL = contactTargets.id): SQL {
   return sql`COALESCE(${column} IN (
-    SELECT fls.${fls.target} FROM ${fieldworkLinkShares} fls WHERE fls.${fls.link} = ${linkId}
+    SELECT fls.${fls().target} FROM ${fieldworkLinkShares} fls WHERE fls.${fls().link} = ${linkId}
   ), FALSE)`;
 }
 
@@ -112,8 +115,8 @@ export function targetInLinkShare(linkId: string, column: PgColumn | SQL = conta
  */
 export function otherOpenLinkIds(surveyId: string, linkId: string): SQL {
   return sql`(
-    SELECT sal.${sal.id} FROM ${surveyAccessLinks} sal
-    WHERE sal.${sal.surveyId} = ${surveyId} AND sal.${sal.closedAt} IS NULL AND sal.${sal.id} <> ${linkId}
+    SELECT sal.${sal().id} FROM ${surveyAccessLinks} sal
+    WHERE sal.${sal().surveyId} = ${surveyId} AND sal.${sal().closedAt} IS NULL AND sal.${sal().id} <> ${linkId}
   )`;
 }
 
@@ -125,13 +128,13 @@ export function targetInOtherOpenLinkShare(
 ): SQL {
   return sql`EXISTS (
     SELECT 1 FROM ${fieldworkLinkShares} fls
-    WHERE fls.${fls.target} = ${column} AND fls.${fls.link} IN ${otherOpenLinkIds(surveyId, linkId)}
+    WHERE fls.${fls().target} = ${column} AND fls.${fls().link} IN ${otherOpenLinkIds(surveyId, linkId)}
   )`;
 }
 
 /** 링크(`linkIdColumn` — 보통 `survey_access_links.id`)의 범위 인원 — 링크 목록·수정 화면의 「나눔 · N명」. */
 export function linkShareCount(linkIdColumn: PgColumn | SQL = surveyAccessLinks.id): SQL<number> {
   return sql<number>`(
-    SELECT count(*)::int FROM ${fieldworkLinkShares} fls WHERE fls.${fls.link} = ${linkIdColumn}
+    SELECT count(*)::int FROM ${fieldworkLinkShares} fls WHERE fls.${fls().link} = ${linkIdColumn}
   )`;
 }

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PgDialect } from 'drizzle-orm/pg-core';
 
 import { resolvedFilterForTest } from '../helpers/resolved-contact-filter';
-import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 const { mockExecute, mockInnerJoin, mockWhere } = vi.hoisted(() => ({
   mockExecute: vi.fn(),

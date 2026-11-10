@@ -22,7 +22,7 @@ import { db } from '@/db';
 import { contactTargets, responseEditLogs, surveys, users } from '@/db/schema';
 import { linkContactEditor } from '@/server/contacts/domain/contact-target-edit';
 import { addAttempt, updateAttempt } from '@/server/contacts/services/contact-attempts';
-import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 import { issueAccessLink, setAccessLinkLabel } from '@/server/workspace/services/access-links';
 import type { SurveyCapability } from '@/shared/contracts/workspace';
 

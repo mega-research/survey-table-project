@@ -3,7 +3,7 @@ import 'server-only';
 
 import { db } from '@/db';
 import { contactTargets } from '@/db/schema/contacts';
-import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share';
+import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share-scope';
 import { latestResultUnsubscribedSql } from '@/lib/operations/contacts-filter-sql.server';
 import { loadMailEmailOrder, resolveSendAddresses } from '@/server/read-models/send-address';
 import {

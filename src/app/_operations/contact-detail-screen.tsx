@@ -8,7 +8,7 @@ import { ContactDetailForm } from '@/features/operations/contacts/contact-detail
 import { attrsKeyOf } from '@/lib/operations/contacts-format';
 import { extractSystemFieldKeys } from '@/lib/operations/contacts-shared';
 import type { OperationsDataScope } from '@/server/data-scope';
-import type { FieldworkShare } from '@/server/fieldwork-share';
+import type { FieldworkShare } from '@/server/fieldwork-share-scope';
 import { getMailTemplatesBySurvey } from '@/server/mail/services/templates';
 import {
   getContactColumnScheme,

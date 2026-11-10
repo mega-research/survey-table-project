@@ -24,7 +24,7 @@ import {
 } from '@/server/read-models/contact-filter-resolution';
 
 import { resolvedFilterForTest } from '../helpers/resolved-contact-filter';
-import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 const run = process.env['RUN_REALDB'] === '1' ? describe : describe.skip;
 

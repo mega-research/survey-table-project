@@ -2,7 +2,7 @@ import { ORPCError } from '@orpc/server';
 import * as z from 'zod';
 
 import { isExternalActor } from '@/server/data-scope';
-import { resolveFieldworkShare } from '@/server/fieldwork-share';
+import { resolveFieldworkShare } from '@/server/fieldwork-share-scope';
 import { scoped } from '@/server/orpc';
 import { assertScopedSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 import { attributionOf } from '@/server/survey-access';

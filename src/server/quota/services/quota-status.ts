@@ -9,7 +9,7 @@ import {
 } from '@/server/read-models/completed-answers';
 
 import { EXTERNAL_VIEWER_DATA_SCOPE, type OperationsDataScope } from '@/server/data-scope';
-import { type FieldworkShare, isShareRestricted, shareTargetCondition } from '@/server/fieldwork-share';
+import { type FieldworkShare, isShareRestricted, shareTargetCondition } from '@/server/fieldwork-share-scope';
 import {
   type QuotaStatus,
   type QuotaSummary,

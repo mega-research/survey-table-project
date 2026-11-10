@@ -43,7 +43,7 @@ export function shareTargetOutcome(
       return { inThisLink: true, leavesOtherLinks: true };
     case 'keep':
       return { inThisLink: false, leavesOtherLinks: false };
-    case 'share':
+    case 'joint':
       return { inThisLink: true, leavesOtherLinks: false };
   }
 }

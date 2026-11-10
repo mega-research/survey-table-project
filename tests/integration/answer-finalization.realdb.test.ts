@@ -7,7 +7,7 @@
  *
  * 실행: pnpm test:integration (로컬 supabase 54322 필요)
  */
-import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 import { eq, inArray } from 'drizzle-orm';
 import { afterAll, describe, expect, it } from 'vitest';
 

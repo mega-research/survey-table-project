@@ -14,7 +14,7 @@ import { resolveMailEmailOrder } from '@/lib/contacts/mail-email-order';
 import { inngest } from '@/lib/inngest/client';
 import { resolveSendAddress } from '@/lib/mail/send-address';
 import { withTestPrefix } from './test-campaign';
-import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 import { loadOperationsDataScope, lockWriteScope } from '@/server/data-scope';
 import type { ActorAttribution } from '@/server/survey-access';
 import {

@@ -4,7 +4,7 @@ import 'server-only';
 
 import { type DbOrTx, db } from '@/db';
 import { contactAssignments, contactTargets } from '@/db/schema';
-import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 import { type OperationsDataScope, lockWriteScope, testFlagForScope } from '@/server/data-scope';
 import {
   type ResolvedContactFilter,

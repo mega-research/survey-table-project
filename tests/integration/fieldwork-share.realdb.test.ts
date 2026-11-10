@@ -32,7 +32,7 @@ import { applyAssignment } from '@/server/contacts/services/contact-assignment-a
 import { createAssignment } from '@/server/contacts/services/contact-assignments';
 import type { ORPCContext } from '@/server/context';
 import { loadOperationsDataScope } from '@/server/data-scope';
-import { resolveFieldworkShare } from '@/server/fieldwork-share';
+import { resolveFieldworkShare } from '@/server/fieldwork-share-scope';
 import { loadSurveyAccess } from '@/server/survey-access';
 import { loadContactsListPage } from '@/server/read-models/contacts-list-page';
 import { router } from '@/server/router';

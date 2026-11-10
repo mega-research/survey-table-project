@@ -20,7 +20,7 @@ import {
 } from '@/server/data-scope';
 import type { FilterClause } from '@/lib/operations/filter-shared';
 import { readStoredEntryParams } from '@/lib/survey/end-redirect';
-import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share';
+import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share-scope';
 import {
   buildNegativeCodeExists,
   getResultCodeStatuses,

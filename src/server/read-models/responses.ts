@@ -6,7 +6,7 @@ import { db } from '@/db';
 import { TEST_VERSION_STATUS } from '@/shared/contracts/survey';
 import { surveyResponses, surveyVersions } from '@/db/schema';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
-import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share';
+import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share-scope';
 import { notDeletedResponse, notTestResponse } from '@/server/response-filters';
 import { openResponseStatusValues } from '@/shared/contracts/survey-response';
 

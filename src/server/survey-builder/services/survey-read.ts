@@ -16,7 +16,7 @@ import { buildQuotaGate } from '@/lib/quota/quota-gate-build';
 import { getR2PublicUrl } from '@/lib/r2-env';
 import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
 import { isValidUUID } from '@/lib/utils';
-import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 import { toAnchorSnapshot } from '@/server/read-models/anchor-row';
 import { getFieldworkCompletedCounts } from '@/server/read-models/fieldwork-completions';
 import { findContactByInviteToken } from '@/server/read-models/invite-lookup';

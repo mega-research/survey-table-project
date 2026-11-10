@@ -605,7 +605,7 @@ export type LinkActor = {
  * `shareDivided` 는 외주 링크가 **담당 범위를 나눈 적 있는가**다(0160, fieldwork-multi-company 티켓 03).
  * 세션 판정이 매 요청 링크 행에서 읽어 싣는다 — 쿠키에 싣지 않으므로 연구원이 범위를 나누거나 없애면
  * 같은 세션의 다음 요청부터 반영된다. **필수다**: 선택 필드로 두고 「없으면 안 나눔」으로 접으면 빠뜨린
- * 자리마다 설문 전체가 열린다. 해석은 `server/fieldwork-share` 하나가 한다.
+ * 자리마다 설문 전체가 열린다. 해석은 `server/fieldwork-share-scope` 하나가 한다.
  */
 export type LinkActorFacet =
   | { linkKind: Extract<AccessLinkKind, 'fieldwork'>; shareDivided: boolean }

@@ -10,7 +10,7 @@ import {
   type OperationsDataScope,
 } from '@/server/data-scope';
 import { FILTER_NONE_VALUE, FILTER_SOURCE } from '@/lib/operations/filter-shared';
-import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share';
+import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share-scope';
 import { hydrateProfileColumns } from '@/lib/operations/profile-columns-format';
 import { getProfileColumnScheme } from '@/server/read-models/profile-column-scheme';
 
@@ -33,7 +33,7 @@ export interface ListContactAttrValuesInput {
   attrsKey: string;
   scope: OperationsDataScope;
   /**
-   * 담당 범위(`server/fieldwork-share`) — 값 목록·숫자 아님 수가 범위 밖 대상의 값으로 새지 않게.
+   * 담당 범위(`server/fieldwork-share-scope`) — 값 목록·숫자 아님 수가 범위 밖 대상의 값으로 새지 않게.
    * 필수다: 빠뜨린 호출이 설문 전체의 attrs 값을 외주에게 보내는 일이 타입상 생기지 않게.
    */
   share: FieldworkShare;

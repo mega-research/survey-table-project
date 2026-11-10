@@ -7,7 +7,7 @@ import type { AccessLinkSession } from '@/lib/auth/access-link-session';
 import type { AuthUser } from '@/shared/contracts/auth';
 
 import { resolveLinkActorForSurvey } from './access-link';
-import { FIELDWORK_SHARE_ALL, type FieldworkShare, resolveFieldworkShare, shareTargetSql } from './fieldwork-share';
+import { FIELDWORK_SHARE_ALL, type FieldworkShare, resolveFieldworkShare, shareTargetSql } from './fieldwork-share-scope';
 import {
   accountAttribution,
   type ActorAttribution,

@@ -37,7 +37,7 @@ import { buildCanonicalSteps } from '@/lib/operations/page-dwell-format';
 import { authenticateAccessLink, resolveLinkActor } from '@/server/access-link';
 import type { ORPCContext } from '@/server/context';
 import { type OperationsDataScope, loadOperationsDataScope } from '@/server/data-scope';
-import { FIELDWORK_SHARE_ALL, type FieldworkShare, resolveFieldworkShare } from '@/server/fieldwork-share';
+import { FIELDWORK_SHARE_ALL, type FieldworkShare, resolveFieldworkShare } from '@/server/fieldwork-share-scope';
 import {
   aggregateDaily,
   aggregateDailyAvailableDates,

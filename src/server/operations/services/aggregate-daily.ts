@@ -3,7 +3,7 @@ import 'server-only';
 import { and, eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { type FieldworkShare, shareTargetCondition, shareTargetSql } from '@/server/fieldwork-share';
+import { type FieldworkShare, shareTargetCondition, shareTargetSql } from '@/server/fieldwork-share-scope';
 import { surveyResponses } from '@/db/schema';
 import { notDeletedResponse } from '@/server/response-filters';
 
@@ -32,7 +32,7 @@ import {
 export async function aggregateDaily(input: {
   surveyId: string;
   scope: OperationsDataScope;
-  /** 담당 범위 — 나눈 외주 링크면 그 범위 대상의 응답만 센다(`server/fieldwork-share`). */
+  /** 담당 범위 — 나눈 외주 링크면 그 범위 대상의 응답만 센다(`server/fieldwork-share-scope`). */
   share: FieldworkShare;
   mode: DailyMode;
   /** mode === 'hour' 일 때 필수. 'YYYY-MM-DD' (KST). */

@@ -43,7 +43,7 @@ export async function loadCompletedQuotaSubjects(
  * 같은 모수를 한 번 읽어 **전체**와 **담당 범위 몫**으로 가른다 — 외주 링크의 쿼터 투영
  * (fieldwork-multi-company 티켓 08)이 마감은 전체로, 내 달성 수는 몫으로 세야 해서다.
  *
- * `shareCondition` 은 응답 행에 거는 담당 범위 술어다 — 호출자가 `server/fieldwork-share` 의
+ * `shareCondition` 은 응답 행에 거는 담당 범위 술어다 — 호출자가 `server/fieldwork-share-scope` 의
  * `shareTargetCondition(share, surveyResponses.contactTargetId)` 로 만들어 넘긴다(같이 맡은 대상은 맡은 링크마다
  * 몫이고, 대상 없는 공개 응답은 나눈 링크의 몫이 아니다). `undefined`(= `all`)면 몫 = 전체다. 해석 모듈을 여기서
  * import 하지 않는 것은 이 로더가 응답 제출 경로(쿼터 집행)에도 실려 있어 주체 판정 사슬을 끌어오지 않게 하려는 것이다.

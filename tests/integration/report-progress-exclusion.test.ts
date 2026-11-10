@@ -137,7 +137,7 @@ import {
   getProgressRows,
   getProgressTotals,
 } from '@/server/operations/services/report-progress';
-import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 const SURVEY_ID = '00000000-0000-4000-8000-000000000010';
 

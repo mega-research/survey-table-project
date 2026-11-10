@@ -1,6 +1,6 @@
 import { internalOperationsBase } from '@/features/operations/operations-paths';
 import { getOperationsDataScope } from '@/server/data-scope';
-import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
 
 import { parseResponseIdx } from '@/app/_operations/response-edit-idx';

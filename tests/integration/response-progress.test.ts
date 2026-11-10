@@ -1,4 +1,4 @@
-import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 // ========================

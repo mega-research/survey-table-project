@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 
 import { fieldworkLinkOperationsBase } from '@/features/operations/operations-paths';
 import { getOperationsDataScope } from '@/server/data-scope';
-import { resolveFieldworkShare } from '@/server/fieldwork-share';
+import { resolveFieldworkShare } from '@/server/fieldwork-share-scope';
 import { assertFieldworkLinkPageAccess } from '@/server/page-fieldwork-link-access';
 
 import { ProfilesScreen, type ProfilesSearchParams } from '@/app/_operations/profiles-screen';

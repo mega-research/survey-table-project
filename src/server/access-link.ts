@@ -87,7 +87,7 @@ export interface LinkRow {
   /**
    * 담당 범위를 나눈 적 있는 시각(0160) — 주체의 `shareDivided` 재료. 매 요청 여기서 읽으므로 범위를
    * 나누거나 없애면 같은 세션의 다음 요청에 반영된다. 범위의 **대상**은 읽지 않는다 — 소비자가
-   * 서브쿼리로 건다(`server/fieldwork-share`).
+   * 서브쿼리로 건다(`server/fieldwork-share-scope`).
    */
   shareAppliedAt: Date | null;
 }

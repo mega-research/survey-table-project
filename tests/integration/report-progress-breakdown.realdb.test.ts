@@ -15,7 +15,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { db } from '@/db';
 import { surveys, surveyResponses, contactTargets, contactAttempts } from '@/db/schema';
 import { getProgressTotals } from '@/server/operations/services/report-progress';
-import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 const isLocalDb =
   (process.env['DATABASE_URL'] ?? '').includes('127.0.0.1') ||

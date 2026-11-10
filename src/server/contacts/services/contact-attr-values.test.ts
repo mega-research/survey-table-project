@@ -2,7 +2,7 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 import type { SQL } from 'drizzle-orm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 
 // db.select() 호출 순서대로 결과를 돌려주는 큐 기반 mock.

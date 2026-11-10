@@ -32,7 +32,7 @@ import { normalizeListArgs } from '@/lib/operations/profiles-format';
 import { authenticateAccessLink, resolveLinkActor } from '@/server/access-link';
 import type { ORPCContext } from '@/server/context';
 import { loadOperationsDataScope } from '@/server/data-scope';
-import { FIELDWORK_SHARE_ALL, resolveFieldworkShare } from '@/server/fieldwork-share';
+import { FIELDWORK_SHARE_ALL, resolveFieldworkShare } from '@/server/fieldwork-share-scope';
 import { listResponsesForProfiles } from '@/server/operations/services/profiles';
 import { getResponseEditLogs } from '@/server/read-models/contacts';
 import { loadFieldworkLinkNames } from '@/server/read-models/fieldwork-link-names';

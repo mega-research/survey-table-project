@@ -12,7 +12,7 @@ import {
   otherOpenLinkIds,
   targetInLinkShare,
   targetInOtherOpenLinkShare,
-} from '@/server/fieldwork-share';
+} from '@/server/fieldwork-share-scope';
 import {
   lockShareTargets,
   lockShareWriteScope,

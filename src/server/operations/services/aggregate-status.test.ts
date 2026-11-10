@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { PgDialect } from 'drizzle-orm/pg-core';
-import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 // aggregateStatus 는 db.select({...}).from(surveyResponses).where(...).groupBy(...) 체인을 쓴다.
 // 실 PG 없는 vitest 환경이라 where 절 자체를 캡처해 SQL 을 검증한다 (T3 duplicate-detection

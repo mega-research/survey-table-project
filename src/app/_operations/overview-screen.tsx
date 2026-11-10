@@ -11,7 +11,7 @@ import { ResponseTimeStats } from '@/features/operations/response-time-stats';
 import { kstTodayIsoDate } from '@/lib/date-formatters';
 import { quotaKpiOf } from '@/lib/quota/quota-status-calc';
 import type { OperationsDataScope } from '@/server/data-scope';
-import type { FieldworkShare } from '@/server/fieldwork-share';
+import type { FieldworkShare } from '@/server/fieldwork-share-scope';
 import {
   aggregateDaily,
   aggregateDailyAvailableDates,

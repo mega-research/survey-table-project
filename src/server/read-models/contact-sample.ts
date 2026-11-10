@@ -9,7 +9,7 @@ import {
   testFlagForScope,
   type OperationsDataScope,
 } from '@/server/data-scope';
-import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share';
+import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share-scope';
 
 import { loadSendEmailForTarget } from './send-address';
 

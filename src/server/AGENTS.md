@@ -31,7 +31,7 @@ src/
 │   ├── fieldwork-proxy.ts      # 대리 응답 판정 코어 — 자격은 contacts.writeAttempts 하나이고 두 모델(링크·옛 실사 계정)이 같은 문을 지난다
 │   │                           # 돌려주는 것은 **귀속과 차단뿐** (배너가 사라져 표시용 필드가 없다) + stampFieldworkAttribution
 │   ├── rpc-fieldwork-proxy.ts  # 위의 RPC 어댑터 — 담당 범위 밖 대상 → NOT_FOUND, 완료 대상 대행 진입 → FORBIDDEN
-│   ├── fieldwork-share.ts      # 담당 범위 해석 (ADR-0035) — resolveFieldworkShare(all|targets|none) + 술어 shareTargetCondition.
+│   ├── fieldwork-share-scope.ts # 담당 범위 해석 (ADR-0035) — resolveFieldworkShare(all|targets|none) + 술어 shareTargetCondition.
 │   │                           # 파티션 옆 두 번째 축, 관문 뒤에 추가로 건다 — 상세는 src/server/contacts/AGENTS.md 「외주 담당 범위」
 │   ├── fieldwork-share-write.ts # 범위 표 쓰기의 잠금 순서·해제·재시도 한 벌 — 나누기(contacts)와 링크 종료(workspace)가 부른다
 │   ├── page-fieldwork-link-access.ts # 외주 링크 콘솔 RSC 관문 — 접속 전·닫힘은 입구 화면으로 redirect, capability 부족만 notFound

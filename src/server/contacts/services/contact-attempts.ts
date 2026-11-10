@@ -6,7 +6,7 @@ import { contactAttempts, contactTargets } from '@/db/schema';
 import { logger } from '@/lib/logger';
 import { isUniqueViolation } from '@/lib/pg-error';
 import { lockWriteScope } from '@/server/data-scope';
-import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share';
+import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share-scope';
 import type { ActorAttribution } from '@/server/survey-access';
 import type { ContactTargetEditAttemptSnapshot } from '@/shared/contracts/contacts';
 

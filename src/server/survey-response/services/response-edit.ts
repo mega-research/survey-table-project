@@ -13,7 +13,7 @@ import { SurveyAccessError, type ActorAttribution } from '@/server/survey-access
 import { decryptQuestionResponses, withoutEncryptedAnswers } from '@/lib/crypto/response-pii';
 import { logger } from '@/lib/logger';
 import { readBrowserTestView, resolveWriteScopeIsTest } from '@/server/data-scope';
-import { type FieldworkShare, shareTargetCondition, shareTargetSql } from '@/server/fieldwork-share';
+import { type FieldworkShare, shareTargetCondition, shareTargetSql } from '@/server/fieldwork-share-scope';
 import { buildChangedQuestions, diffQuestionResponses } from '@/lib/operations/response-edit-diff';
 import { pinnedVersionId } from '@/shared/contracts/survey';
 import { calculateProgressPct, getProgressSnapshot } from './response-progress';

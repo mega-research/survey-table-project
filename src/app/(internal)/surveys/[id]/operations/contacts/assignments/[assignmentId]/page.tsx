@@ -6,7 +6,7 @@ import { AssignmentEditor } from '@/features/operations/contacts/assignments/ass
 import { assignmentsHref } from '@/features/operations/contacts/assignments/assignment-hrefs';
 import { requireAdminPage } from '@/lib/auth/require-admin-page';
 import { FILTER_SOURCE } from '@/lib/operations/filter-shared';
-import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 import { getAssignmentForEdit } from '@/server/contacts/services/contact-assignments';
 import { getOperationsDataScope } from '@/server/data-scope';
 import { assertSurveyCapabilityPage } from '@/server/page-survey-access';

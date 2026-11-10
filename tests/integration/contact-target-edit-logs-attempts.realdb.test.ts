@@ -18,7 +18,7 @@ import {
   updateAttempt,
 } from '@/server/contacts/services/contact-attempts';
 import { getContactDetailById } from '@/server/read-models/contacts';
-import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 // 요청 밖이라 쿠키가 없다 — 콘솔은 실데이터 파티션을 본다(server/data-scope).
 vi.mock('next/headers', () => ({

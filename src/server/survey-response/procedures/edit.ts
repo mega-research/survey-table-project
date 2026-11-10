@@ -1,7 +1,7 @@
 import { ORPCError } from '@orpc/server';
 
 import { isExternalActor } from '@/server/data-scope';
-import { resolveFieldworkShare } from '@/server/fieldwork-share';
+import { resolveFieldworkShare } from '@/server/fieldwork-share-scope';
 import { scoped } from '@/server/orpc';
 import {
   assertScopedSurveyCapabilityRpc,

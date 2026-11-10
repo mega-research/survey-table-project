@@ -49,7 +49,7 @@ import {
   resolveLinkActorForSurvey,
 } from '@/server/access-link';
 import { loadOperationsDataScope } from '@/server/data-scope';
-import { FIELDWORK_SHARE_ALL, resolveFieldworkShare } from '@/server/fieldwork-share';
+import { FIELDWORK_SHARE_ALL, resolveFieldworkShare } from '@/server/fieldwork-share-scope';
 import { setClosed } from '@/server/operations/services/control';
 import { loadContactsListPage } from '@/server/read-models/contacts-list-page';
 import { router } from '@/server/router';

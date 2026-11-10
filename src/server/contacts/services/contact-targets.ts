@@ -16,7 +16,7 @@ import {
   FIELDWORK_SHARE_ALL,
   type FieldworkShare,
   shareTargetCondition,
-} from '@/server/fieldwork-share';
+} from '@/server/fieldwork-share-scope';
 import { generateInviteCode } from '@/lib/survey-url';
 
 import {

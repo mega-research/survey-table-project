@@ -17,7 +17,7 @@ import { getQuotaStatus } from '@/server/quota/services/quota-status';
 import { getResponseTime } from '@/server/operations/services/response-time';
 
 import { EXTERNAL_VIEWER_DATA_SCOPE } from '@/server/data-scope';
-import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 /** 클라이언트 링크에는 담당 범위 축이 없다(ADR-0029·0035) — 설문 전체를 센다. */
 const SHARE = FIELDWORK_SHARE_ALL;

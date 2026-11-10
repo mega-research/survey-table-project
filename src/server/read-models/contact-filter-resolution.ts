@@ -20,7 +20,7 @@ import {
   FIELDWORK_SHARE_ALL,
   type FieldworkShare,
   shareTargetCondition,
-} from '@/server/fieldwork-share';
+} from '@/server/fieldwork-share-scope';
 import type { ContactResultCode } from '@/shared/contracts/contacts';
 import type { ContactAssignmentOption } from '@/shared/contracts/contacts-io';
 
@@ -69,7 +69,7 @@ export type ContactFilterContext = Readonly<{
   assignmentOptions: ContactAssignmentOption[];
   isExternal: boolean;
   /**
-   * 담당 범위(`server/fieldwork-share`) — 해석 결과에 **강제 절**로 실린다. 사용자가 고른 조건과 AND 로
+   * 담당 범위(`server/fieldwork-share-scope`) — 해석 결과에 **강제 절**로 실린다. 사용자가 고른 조건과 AND 로
    * 묶이고 입력으로는 지울 수 없다(입력 모양에 이 칸이 없다). 계정 주체·안 나눈 링크는 `all`.
    */
   share: FieldworkShare;

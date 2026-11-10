@@ -1,4 +1,4 @@
-import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 import { describe, expect, it, vi } from 'vitest';
 
 process.env['CONTACT_PII_AES_KEY'] = Buffer.alloc(32, 7).toString('base64');

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
-import { resolveFieldworkShare } from './fieldwork-share';
+import { resolveFieldworkShare } from './fieldwork-share-scope';
 
 const SURVEY = '0b000000-0000-4000-8000-000000000001';
 const OTHER_SURVEY = '0b000000-0000-4000-8000-000000000002';

@@ -10,7 +10,7 @@ import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts-format';
 import { listAssignmentOptions } from '@/server/read-models/contact-assignment-options';
 import { type ColumnCandidateWithPii, FILTER_SOURCE } from '@/lib/operations/filter-shared';
 import type { OperationsDataScope } from '@/server/data-scope';
-import type { FieldworkShare } from '@/server/fieldwork-share';
+import type { FieldworkShare } from '@/server/fieldwork-share-scope';
 import { parseConditionFromUrl } from '@/server/operations/services/progress-filters';
 import {
   EMPTY_PROGRESS_TOTALS,

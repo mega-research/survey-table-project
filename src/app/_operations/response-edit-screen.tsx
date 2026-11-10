@@ -12,7 +12,7 @@ import { getResponseById } from '@/server/read-models/responses';
 import { loadRespondentContactAttrs } from '@/server/read-models/respondent-contact-attrs';
 import { isResponseExcluded } from '@/server/operations/services/profiles';
 import { testFlagForScope, type OperationsDataScope } from '@/server/data-scope';
-import type { FieldworkShare } from '@/server/fieldwork-share';
+import type { FieldworkShare } from '@/server/fieldwork-share-scope';
 import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
 import { normalizeQuestions } from '@/lib/question/normalize';
 import { toFlatQuestion } from '@/lib/question/variants';

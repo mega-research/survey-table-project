@@ -30,7 +30,7 @@ import {
   teams,
   users,
 } from '@/db/schema';
-import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 import type { ORPCContext } from '@/server/context';
 import type { QuotaConfig } from '@/shared/contracts/quota';
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';

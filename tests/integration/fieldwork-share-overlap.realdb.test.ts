@@ -30,7 +30,7 @@ import { FILTER_SOURCE } from '@/lib/operations/filter-shared';
 import { authenticateAccessLink, resolveLinkActor } from '@/server/access-link';
 import type { ORPCContext } from '@/server/context';
 import { loadOperationsDataScope } from '@/server/data-scope';
-import { resolveFieldworkShare } from '@/server/fieldwork-share';
+import { resolveFieldworkShare } from '@/server/fieldwork-share-scope';
 import { loadContactsListPage } from '@/server/read-models/contacts-list-page';
 import { router } from '@/server/router';
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
@@ -260,7 +260,7 @@ run('담당 범위 겹침 선택과 동시 적용 (real DB)', () => {
 
     it('두 링크가 같이 맡은 대상은 링크마다 세되 겹침 인원은 한 번만 센다', async () => {
       await apply(B, '101-150', 'take');
-      await apply(C, '101-150', 'share');
+      await apply(C, '101-150', 'joint');
       const summary = await owner.contacts.fieldworkShares.preview({
         surveyId,
         linkId: A.linkId,
@@ -298,9 +298,9 @@ run('담당 범위 겹침 선택과 동시 적용 (real DB)', () => {
 
     it('같이 맡기기: 겹치는 대상이 두 링크에 모두 있고, 두 링크의 외주 목록에 모두 보인다', async () => {
       await bHolds101to200();
-      const result = await apply(A, '51-150', 'share');
+      const result = await apply(A, '51-150', 'joint');
       expect(result).toMatchObject({
-        overlapChoice: 'share',
+        overlapChoice: 'joint',
         matched: 100,
         overlap: 50,
         after: 100,
@@ -316,7 +316,7 @@ run('담당 범위 겹침 선택과 동시 적용 (real DB)', () => {
 
     it('이미 같이 맡은 대상은 겹침이 아니다 — 가져오기로 다시 적용해도 양쪽에 그대로 남는다', async () => {
       await bHolds101to200();
-      await apply(A, '51-150', 'share');
+      await apply(A, '51-150', 'joint');
       const again = await apply(A, '51-150', 'take');
       expect(again).toMatchObject({ overlap: 0, fromOthers: [], after: 100 });
       expect(await shareResidsOf(A.linkId)).toEqual(range(51, 150));
@@ -324,7 +324,7 @@ run('담당 범위 겹침 선택과 동시 적용 (real DB)', () => {
     });
 
     it('어느 처리를 골라도 같은 적용을 두 번 하면 결과가 같다', async () => {
-      for (const overlap of ['take', 'keep', 'share'] as const) {
+      for (const overlap of ['take', 'keep', 'joint'] as const) {
         await owner.contacts.fieldworkShares.clear({ surveyId, linkId: A.linkId });
         await bHolds101to200();
         await apply(A, '51-150', overlap);
@@ -374,7 +374,7 @@ run('담당 범위 겹침 선택과 동시 적용 (real DB)', () => {
   describe('외주 콘솔에는 같이 맡음이 보이지 않는다', () => {
     it('같이 맡은 대상의 목록 행이 혼자 맡은 대상과 같은 모양이고, 상대 링크의 이름표·id 가 실리지 않는다', async () => {
       await bHolds101to200();
-      await apply(A, '51-150', 'share');
+      await apply(A, '51-150', 'joint');
       const page = await fwContactsPage(A);
       const shared = page.rows.find((r) => r.resid === 110)!;
       const alone = page.rows.find((r) => r.resid === 99)!;

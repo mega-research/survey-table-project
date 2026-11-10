@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 
 import { CampaignWizard } from '@/features/operations/mail-campaign/campaign-wizard';
 import type { CampaignFilterSnapshot } from '@/shared/contracts/mail';
-import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 import { getMailTemplatesBySurvey } from '@/server/mail/services/templates';
 import {
   CAMPAIGN_SORT_KEYS,

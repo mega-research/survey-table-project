@@ -180,12 +180,13 @@ export interface FieldworkShareListResult {
  *
  * - `take` 가져오기 — 이쪽에 넣고 그 링크에서 뺀다
  * - `keep` 남겨 두기 — 이쪽에 넣지 않는다(나머지만 적용)
- * - `share` 같이 맡기기 — 양쪽에 둔다
+ * - `joint` 같이 맡기기 — 양쪽에 둔다(이름이 `share` 가 아닌 것은 담당 범위 `FieldworkShare` 와 헷갈리지 않게다.
+ *   저장되지 않는 입력값이라 개명이 데이터에 남지 않는다 — `share_clauses` 는 조건만 담는다)
  *
  * 이미 이 링크와 다른 링크가 같이 맡고 있는 대상은 겹침이 아니다 — 무엇을 골라도 그대로 남는다.
  * 의미론은 `lib/operations/fieldwork-share-overlap` 의 `shareTargetOutcome`.
  */
-export const FIELDWORK_SHARE_OVERLAPS = ['take', 'keep', 'share'] as const;
+export const FIELDWORK_SHARE_OVERLAPS = ['take', 'keep', 'joint'] as const;
 export type FieldworkShareOverlap = (typeof FIELDWORK_SHARE_OVERLAPS)[number];
 
 /** 나누기 미리보기·적용 결과 — 둘이 같은 모양이다(적용은 적용 시점에 조건을 다시 계산한 실제 결과). */

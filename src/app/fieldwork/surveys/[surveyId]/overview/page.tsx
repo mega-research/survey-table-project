@@ -17,7 +17,7 @@ import { getPageDwell } from '@/server/operations/services/page-dwell';
 import { getResponseTime } from '@/server/operations/services/response-time';
 
 import { EXTERNAL_VIEWER_DATA_SCOPE } from '@/server/data-scope';
-import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 /** 옛 게스트 계정 화면 — 계정 주체라 담당 범위 축이 없다(설문 전체). */
 const SHARE = FIELDWORK_SHARE_ALL;

@@ -312,7 +312,7 @@ export const surveyAccessLinks = pgTable(
  * 외주 실사 링크의 **담당 범위** — 조사 대상 × 외주 링크 (마이그레이션 0160, ADR-0035).
  *
  * 행 하나 = 「이 대상은 지금 이 링크에 맡겨져 있다」. 같이 맡기기 때문에 다대다다. 컨택원 배정과 다른
- * 층이라 컨택원 교체 적용은 이 표를 건드리지 않는다. 읽는 자리는 담당 범위 해석(`server/fieldwork-share`)
+ * 층이라 컨택원 교체 적용은 이 표를 건드리지 않는다. 읽는 자리는 담당 범위 해석(`server/fieldwork-share-scope`)
  * 의 술어 조각, 행을 넣는 자리는 나누기 적용(`server/contacts/services/fieldwork-shares`) 하나, 링크 하나를
  * 통째로 푸는 자리는 코어 `server/fieldwork-share-write` 의 `releaseLinkShares`(없애기·링크 종료)다.
  *

@@ -9,7 +9,7 @@ import {
 import type { ContactsListPageData } from '@/shared/contracts/contacts-io';
 
 import type { OperationsDataScope } from '../data-scope';
-import type { FieldworkShare } from '../fieldwork-share';
+import type { FieldworkShare } from '../fieldwork-share-scope';
 import {
   contactFilterInputFromUrl,
   loadContactFilterContext,
@@ -53,7 +53,7 @@ export interface ContactsListPageArgs {
    */
   includeContactOwner: boolean;
   /**
-   * 담당 범위(`server/fieldwork-share`) — 목록·총수·검색(ID 목록 포함)이 이 범위 안에서만 돈다. 해석
+   * 담당 범위(`server/fieldwork-share-scope`) — 목록·총수·검색(ID 목록 포함)이 이 범위 안에서만 돈다. 해석
    * 컨텍스트에 강제 절로 실려 주소의 조건으로는 지울 수 없다. **필수다** — 내부 콘솔은
    * `FIELDWORK_SHARE_ALL`, `/fw` 는 `resolveFieldworkShare(actor, surveyId)` 를 넘긴다.
    */

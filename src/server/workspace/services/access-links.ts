@@ -8,7 +8,7 @@ import { decryptSharedSecret, encryptSharedSecret } from '@/lib/crypto/aes';
 import { logger } from '@/lib/logger';
 import { resolveClientResponseColumnKeys } from '@/lib/operations/client-response-columns-format';
 import { isUniqueViolation } from '@/lib/pg-error';
-import { linkShareCount } from '@/server/fieldwork-share';
+import { linkShareCount } from '@/server/fieldwork-share-scope';
 import {
   lockShareWriteScope,
   releaseLinkShares,

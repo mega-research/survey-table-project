@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { SendAddressResolution } from '@/lib/mail/send-address';
-import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 import { resolveSendAddresses } from '@/server/read-models/send-address';
 import { getResultCodeStatuses } from '@/server/read-models/result-code-statuses';
 

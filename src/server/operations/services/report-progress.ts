@@ -14,7 +14,7 @@ import {
   targetScopeCondition,
   testFlagForScope,
 } from '@/server/data-scope';
-import { type FieldworkShare, shareTargetSql } from '@/server/fieldwork-share';
+import { type FieldworkShare, shareTargetSql } from '@/server/fieldwork-share-scope';
 import { type FilterCondition, buildFilterSql } from './progress-filters';
 import {
   formatProgressGroupKey,
@@ -213,7 +213,7 @@ export const getProgressGroupLabel = cache(
 export interface GetProgressRowsArgs {
   surveyId: string;
   scope: OperationsDataScope;
-  /** 담당 범위 — 나눈 외주 링크면 그 범위 대상만 센다(`server/fieldwork-share`). */
+  /** 담당 범위 — 나눈 외주 링크면 그 범위 대상만 센다(`server/fieldwork-share-scope`). */
   share: FieldworkShare;
   condition: FilterCondition | null;
   page: number;

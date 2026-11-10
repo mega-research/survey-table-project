@@ -8,7 +8,7 @@ import { buildPiiRows, type PiiInput } from '@/lib/crypto/contact-pii-repo';
 import { createCampaign } from '@/server/mail/services/campaigns';
 import { preflightRecipients } from '@/server/mail/services/campaigns-read';
 import { lookupContactByToken } from '@/server/mail/services/unsubscribe';
-import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 import { getContactSampleById } from '@/server/read-models/contact-sample';
 import { loadBouncedAddresses } from '@/server/read-models/send-address';
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';

@@ -3,7 +3,7 @@ import 'server-only';
 import { sql } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { type FieldworkShare, shareTargetSql } from '@/server/fieldwork-share';
+import { type FieldworkShare, shareTargetSql } from '@/server/fieldwork-share-scope';
 import { loadPinnedVersionSnapshot } from '@/server/read-models/version-snapshot';
 
 import {

@@ -17,7 +17,7 @@ import {
   normalizeListArgs,
 } from '@/lib/operations/profiles-format';
 import { EXTERNAL_VIEWER_DATA_SCOPE } from '@/server/data-scope';
-import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 import {
   getActiveClientLinkResponseColumns,
   loadClientResponseColumnMaterial,

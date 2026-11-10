@@ -117,7 +117,7 @@ vi.mock('@/db', () => {
 
 import { deleteContactTarget, updateContactTarget } from '@/server/contacts/services/contact-targets';
 import { deleteAttempt, updateAttempt } from '@/server/contacts/services/contact-attempts';
-import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 // 이 브라우저가 「테스트 모드로 보기」를 켠 상태 — 전역 테스트 모드가 켜지면 콘솔이 테스트 파티션을 본다.
 // (쿠키가 없으면 전역 플래그가 켜져 있어도 실데이터다 — server/data-scope)
