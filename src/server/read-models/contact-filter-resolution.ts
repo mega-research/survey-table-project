@@ -137,8 +137,9 @@ export async function loadContactFilterContext(
 ): Promise<ContactFilterContext> {
   const { isExternal, surface, canViewMail = true, share, executor } = opts;
   const [loadedScheme, resultCodes, assignmentOptions] = await Promise.all([
-    getContactColumnScheme(surveyId, scope),
-    getContactResultCodes(surveyId),
+    // 셋 다 같은 executor — 트랜잭션 안에서 부르면 공용 풀에 연결을 하나 더 청하지 않는다.
+    getContactColumnScheme(surveyId, scope, executor),
+    getContactResultCodes(surveyId, executor),
     // 컨택원은 내부 실사 운영 정보 — 외부 주체에게는 열·후보·선택지·절 모두 싣지 않는다.
     isExternal ? Promise.resolve([]) : listAssignmentOptions(surveyId, scope, executor),
   ]);
@@ -170,11 +171,16 @@ export async function loadContactFilterContext(
 export async function resolveContactFilter<M extends ContactFilterMode>(
   ctx: ContactFilterContext,
   input: ContactFilterInput,
-  opts: { mode: M },
+  /**
+   * `executor` 는 컨텍스트에 싣지 않고 여기서 따로 받는다 — 컨텍스트는 페이지가 후보를 그리는 재료로
+   * 클라이언트까지 건너가는 값이라 트랜잭션 핸들을 담으면 안 된다.
+   */
+  opts: { mode: M; executor?: DbOrTx },
 ): Promise<ResolvedContactFilter<M>> {
   const idLists = await loadIdListsForValues(
     ctx.surveyId,
     (input.clauses ?? []).map((c) => c.value),
+    opts.executor,
   );
   return resolveContactFilterWith(ctx, input, idLists, opts.mode);
 }

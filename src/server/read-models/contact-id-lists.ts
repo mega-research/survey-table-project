@@ -1,7 +1,7 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import 'server-only';
 
-import { db } from '@/db';
+import { type DbOrTx, db } from '@/db';
 import { contactIdLists } from '@/db/schema';
 
 import { parseIdListToken } from '@/lib/operations/filter-shared';
@@ -14,6 +14,7 @@ import { parseIdListToken } from '@/lib/operations/filter-shared';
 export async function loadIdListsForValues(
   surveyId: string,
   values: string[] | string | undefined,
+  executor: DbOrTx = db,
 ): Promise<Map<string, number[]>> {
   const arr = values === undefined ? [] : Array.isArray(values) ? values : [values];
   const tokenIds = [
@@ -23,7 +24,7 @@ export async function loadIdListsForValues(
   ];
   const map = new Map<string, number[]>();
   if (tokenIds.length === 0) return map;
-  const rows = await db
+  const rows = await executor
     .select({ id: contactIdLists.id, ids: contactIdLists.ids })
     .from(contactIdLists)
     .where(and(eq(contactIdLists.surveyId, surveyId), inArray(contactIdLists.id, tokenIds)));

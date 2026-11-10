@@ -119,7 +119,7 @@ async function resolveShareFilter(
     share: FIELDWORK_SHARE_ALL,
     executor,
   });
-  return resolveContactFilter(ctx, { clauses }, { mode: 'write' });
+  return resolveContactFilter(ctx, { clauses }, { mode: 'write', executor });
 }
 
 /** 조건을 이 화면의 조건 편집기에 그릴 재료 — 페이지가 같은 컨텍스트로 열 후보를 그린다. */
@@ -174,7 +174,7 @@ async function summarize(
         AND s.link_id IN ${otherOpenLinkIds(surveyId, linkId)}
       GROUP BY s.link_id
     `),
-    loadFieldworkLinkNames(surveyId),
+    loadFieldworkLinkNames(surveyId, executor),
   ]);
   const t = (totals as unknown as Array<Record<string, unknown>>)[0] ?? {};
   // 링크별 인원은 발급 순 — 이름 맵이 같은 정렬(`created_at`, `id`)로 서 있다.

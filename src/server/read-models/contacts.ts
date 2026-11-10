@@ -14,7 +14,7 @@ import {
 } from 'drizzle-orm';
 import 'server-only';
 
-import { db } from '@/db';
+import { type DbOrTx, db } from '@/db';
 import {
   contactTargets,
   contactUploads,
@@ -359,13 +359,17 @@ export async function listContactUploads(surveyId: string): Promise<ContactUploa
 /**
  * surveys.contact_columns 캐시 (RSC pass 내 dedupe).
  * NULL 이면 null 반환 — 호출자가 디폴트 스킴 생성.
+ *
+ * `executor` 는 트랜잭션 안에서 부를 때 그 tx 를 넘긴다 — 공용 db 로 읽으면 연결을 쥔 트랜잭션이
+ * 풀에서 연결을 하나 더 기다린다(운영 풀 5개, 동시 적용 다섯이면 서로를 기다린다).
  */
 export const getContactColumnScheme = cache(
   async (
     surveyId: string,
     scope: OperationsDataScope,
+    executor: DbOrTx = db,
   ): Promise<NormalizedContactColumnScheme | null> => {
-    const [row] = await db
+    const [row] = await executor
       .select({
         scheme: scope === 'test' ? surveys.testContactColumns : surveys.contactColumns,
       })
@@ -562,11 +566,11 @@ export async function getEditableResponseIdForTarget(
 
 /**
  * 결과코드 조회 — surveys.contact_result_codes 가 NULL 이면 DEFAULT_RESULT_CODES 반환.
- * RSC dedupe 위해 React.cache 적용.
+ * RSC dedupe 위해 React.cache 적용. `executor` 는 `getContactColumnScheme` 와 같은 이유다.
  */
 export const getContactResultCodes = cache(
-  async (surveyId: string): Promise<ContactResultCode[]> => {
-    const [row] = await db
+  async (surveyId: string, executor: DbOrTx = db): Promise<ContactResultCode[]> => {
+    const [row] = await executor
       .select({ codes: surveys.contactResultCodes })
       .from(surveys)
       .where(eq(surveys.id, surveyId))

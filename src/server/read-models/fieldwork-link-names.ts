@@ -3,7 +3,7 @@ import type { SelectedFields } from 'drizzle-orm/pg-core';
 import type { SelectResultFields } from 'drizzle-orm/query-builders/select.types';
 import 'server-only';
 
-import { db } from '@/db';
+import { type DbOrTx, db } from '@/db';
 import { surveyAccessLinks } from '@/db/schema';
 import { type AccessLinkKind, fieldworkLinkName } from '@/shared/contracts/workspace';
 
@@ -19,9 +19,10 @@ export async function selectAccessLinksInIssueOrder<T extends SelectedFields>(
   fields: T,
   surveyId: string,
   kind: AccessLinkKind,
+  executor: DbOrTx = db,
 ): Promise<SelectResultFields<T>[]> {
   // 칸 묶음이 제네릭이라 drizzle 추론이 넓어진다 — 결과 모양은 넘긴 칸 그대로다.
-  return (await db
+  return (await executor
     .select(fields)
     .from(surveyAccessLinks)
     .where(and(eq(surveyAccessLinks.surveyId, surveyId), eq(surveyAccessLinks.kind, kind)))
@@ -44,11 +45,15 @@ export type FieldworkLinkNames = ReadonlyMap<string, string>;
  * **내부 콘솔 전용이다.** 외주 콘솔의 조립은 이 함수를 부르지 않는다 — 이름표는 연구원의 메모라
  * 링크 세션이 여는 어떤 응답 모양에도 실리지 않는다(`app/_operations/contact-detail-screen`).
  */
-export async function loadFieldworkLinkNames(surveyId: string): Promise<FieldworkLinkNames> {
+export async function loadFieldworkLinkNames(
+  surveyId: string,
+  executor: DbOrTx = db,
+): Promise<FieldworkLinkNames> {
   const rows = await selectAccessLinksInIssueOrder(
     { id: surveyAccessLinks.id, label: surveyAccessLinks.label },
     surveyId,
     'fieldwork',
+    executor,
   );
   return new Map(
     rows.map((row, index) => [row.id, fieldworkLinkName({ label: row.label, ordinal: index + 1 })]),

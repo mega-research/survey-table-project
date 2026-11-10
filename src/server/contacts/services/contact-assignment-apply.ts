@@ -49,7 +49,7 @@ async function resolveAssignmentFilter(
     share: FIELDWORK_SHARE_ALL,
     executor,
   });
-  return resolveContactFilter(ctx, { clauses }, { mode: 'write' });
+  return resolveContactFilter(ctx, { clauses }, { mode: 'write', executor });
 }
 
 /**

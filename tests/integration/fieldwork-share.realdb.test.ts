@@ -30,6 +30,7 @@ import { FILTER_SOURCE } from '@/lib/operations/filter-shared';
 import { authenticateAccessLink, resolveLinkActor } from '@/server/access-link';
 import { applyAssignment } from '@/server/contacts/services/contact-assignment-apply';
 import { createAssignment } from '@/server/contacts/services/contact-assignments';
+import { applyFieldworkShare } from '@/server/contacts/services/fieldwork-shares';
 import type { ORPCContext } from '@/server/context';
 import { loadOperationsDataScope } from '@/server/data-scope';
 import { resolveFieldworkShare } from '@/server/fieldwork-share-scope';
@@ -305,6 +306,34 @@ run('담당 범위 첫 줄기 (real DB)', () => {
       });
       expect(again).toMatchObject({ matched: 30, current: 30, incoming: 0, leaving: 0 });
       expect(await shareResidsOf(A.linkId)).toEqual(range(1, 30));
+    });
+
+    it('적용은 트랜잭션 연결 하나로 끝난다 — 공용 db 에 연결을 더 청하지 않는다', async () => {
+      // 연결을 쥔 트랜잭션이 공용 db 로 스킴·결과코드·ID 목록·링크 이름을 읽으면 풀에서 연결을 하나 더
+      // 기다린다. 운영 풀은 인스턴스당 5개라 동시 적용 다섯이 서로를 기다리다 idle-in-transaction 으로
+      // 끊긴다. tx 는 db 와 다른 인스턴스라 db 의 메서드만 감시하면 「tx 밖으로 샌 조회」가 보인다.
+      // 재료를 다 읽게 한다 — attrs 열(스킴), ID 목록 토큰, 다른 링크의 몫(이름) 셋 다 실린 조건.
+      await splitAB();
+      const list = await owner.contacts.idLists.create({ surveyId, ids: [90, 95, 110] });
+      const clauses = [
+        { source: FILTER_SOURCE.RESID, value: `list:${list.id}:${list.count}`, op: '' as const },
+      ];
+      const leaks = (['select', 'execute', 'insert', 'update', 'delete'] as const).map((m) =>
+        vi.spyOn(db, m),
+      );
+      try {
+        const shared = await applyFieldworkShare({ surveyId, linkId: A.linkId, clauses, overlap: 'take' });
+        expect(shared.fromOthers).toEqual([{ linkId: B.linkId, name: '프라임', count: 1 }]);
+        for (const spy of leaks) expect(spy).not.toHaveBeenCalled();
+        // 같은 해석을 쓰는 컨택원 교체 적용도 같다.
+        const assignment = await createAssignment({ surveyId, name: '연결 하나' });
+        for (const spy of leaks) spy.mockClear();
+        await applyAssignment({ surveyId, assignmentId: assignment.id, clauses });
+        for (const spy of leaks) expect(spy).not.toHaveBeenCalled();
+      } finally {
+        for (const spy of leaks) spy.mockRestore();
+      }
+      expect(await shareResidsOf(A.linkId)).toEqual([90, 95, 110]);
     });
 
     it('해석되지 않는 조건(지워진 열·읽지 못한 ID 목록)은 거부하고 범위를 바꾸지 않는다', async () => {
