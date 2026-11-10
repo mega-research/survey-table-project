@@ -90,3 +90,114 @@ export function findSurveyGroupPath<T extends SurveyGroupTreeRow>(
   }
   return path;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 옮길 수 있는 자리 (설문 그룹 중첩 티켓 05)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 「이 그룹을 저 자리로 옮길 수 있는가」는 한 벌이다. 옮기기 창과 그룹 관리 창이 갈 수 없는 자리를
+// 끄는 데 쓰고, 서버가 팀 키 잠금 아래서 그 팀의 그룹 전부를 읽어 **같은 함수로** 다시 판정한다.
+// 화면의 목록은 내게 보이는 그룹뿐이라(숨은 하위 그룹은 높이에 안 잡힌다) 화면 판정은 근사이고
+// 서버 판정이 답이다.
+
+/**
+ * 옮길 수 없는 사유.
+ *
+ * - `missing` — 옮기는 그룹이나 새 상위가 목록에 없다(없는 그룹·다른 팀의 그룹).
+ * - `self` · `descendant` — 자기 자신, 자기 하위 그룹 밑(순환).
+ * - `current` — 이미 그 자리다. 화면은 「지금 여기」로 끄고, 서버는 아무것도 바꾸지 않고 성공한다.
+ * - `too_deep` — 옮기면 그 가지의 맨 아래가 최대 단계를 넘는다.
+ */
+export type SurveyGroupRelocationBlock = 'missing' | 'self' | 'descendant' | 'current' | 'too_deep';
+
+/**
+ * 그룹을 `targetParentId` 밑으로(null 이면 최상위로) 옮길 수 있는가. 되면 null, 안 되면 사유.
+ *
+ * 깊이 규칙은 「새 상위의 깊이 + 옮기는 가지의 높이 ≤ `maxDepth`」다(최상위의 깊이는 0, 하위가
+ * 없는 그룹의 높이는 1). 깊이와 높이는 **이 목록 안에서** 센다.
+ */
+export function judgeSurveyGroupRelocation<T extends SurveyGroupTreeRow>(
+  groups: readonly T[],
+  groupId: string,
+  targetParentId: string | null,
+  maxDepth: number,
+): SurveyGroupRelocationBlock | null {
+  const group = groups.find((candidate) => candidate.id === groupId);
+  if (!group) return 'missing';
+  const height = subtreeHeight(groups, groupId);
+
+  if (targetParentId === null) {
+    if (group.parentGroupId === null) return 'current';
+    return height > maxDepth ? 'too_deep' : null;
+  }
+
+  if (targetParentId === groupId) return 'self';
+  const targetPath = findSurveyGroupPath(groups, targetParentId);
+  if (targetPath.length === 0) return 'missing';
+  if (targetPath.some((ancestor) => ancestor.id === groupId)) return 'descendant';
+  if (group.parentGroupId === targetParentId) return 'current';
+  return targetPath.length + height > maxDepth ? 'too_deep' : null;
+}
+
+/** 그 그룹에서 맨 아래 하위 그룹까지의 단 수 — 하위가 없으면 1. */
+function subtreeHeight<T extends SurveyGroupTreeRow>(groups: readonly T[], groupId: string): number {
+  const seen = new Set<string>();
+  function heightOf(id: string): number {
+    if (seen.has(id)) return 0;
+    seen.add(id);
+    let tallest = 0;
+    for (const child of groups) {
+      if (child.parentGroupId === id && child.id !== id) {
+        tallest = Math.max(tallest, heightOf(child.id));
+      }
+    }
+    return 1 + tallest;
+  }
+  return heightOf(groupId);
+}
+
+/** 옮기기 창의 한 줄 — 갈 수 있으면 `blocked` 가 null 이다. */
+export interface SurveyGroupRelocationTarget<T extends SurveyGroupTreeRow> {
+  group: T;
+  /** 이 목록 안에서의 깊이 — 들여쓰기에 쓴다. 뿌리가 1. */
+  depth: number;
+  blocked: SurveyGroupRelocationBlock | null;
+}
+
+export interface SurveyGroupRelocationTargets<T extends SurveyGroupTreeRow> {
+  /** 「최상위로」 줄. */
+  root: { blocked: SurveyGroupRelocationBlock | null };
+  /** 그룹 줄 — 트리 순서(부모 다음에 그 하위)로 편 목록. */
+  targets: SurveyGroupRelocationTarget<T>[];
+}
+
+/**
+ * 옮기기 창이 그릴 자리 전부 — 줄마다 위 판정을 붙인다.
+ *
+ * **자기 자신과 그 하위는 목록에서 뺀다**(고를 수 없는 자리를 늘어놓지 않는다). 지금 부모와 깊이가
+ * 넘는 자리는 남겨 두고 사유를 붙인다 — 왜 못 가는지 눌러 보지 않고 알 수 있게.
+ */
+export function listSurveyGroupRelocationTargets<T extends SurveyGroupTreeRow>(
+  groups: readonly T[],
+  groupId: string,
+  maxDepth: number,
+): SurveyGroupRelocationTargets<T> {
+  const root = { blocked: judgeSurveyGroupRelocation(groups, groupId, null, maxDepth) };
+  if (root.blocked === 'missing') return { root, targets: [] };
+
+  const targets: SurveyGroupRelocationTarget<T>[] = [];
+  function visit(nodes: readonly SurveyGroupTreeNode<T>[]): void {
+    for (const node of nodes) {
+      // 자기 자신을 건너뛰면 그 하위도 함께 빠진다.
+      if (node.group.id === groupId) continue;
+      targets.push({
+        group: node.group,
+        depth: node.depth,
+        blocked: judgeSurveyGroupRelocation(groups, groupId, node.group.id, maxDepth),
+      });
+      visit(node.children);
+    }
+  }
+  visit(buildSurveyGroupTree(groups));
+  return { root, targets };
+}

@@ -353,6 +353,24 @@ export const MoveSurveyToGroupInput = z.object({
 });
 export type MoveSurveyToGroupInput = z.infer<typeof MoveSurveyToGroupInput>;
 
+/**
+ * 그룹 옮기기 — 그룹을 **하위 그룹과 담긴 설문째** 다른 그룹 밑으로 옮긴다. `parentGroupId: null`
+ * 은 최상위로.
+ *
+ * 위의 `MoveSurveyToGroupInput`(설문 한 건을 그룹에 넣고 빼기)과 다른 표면이다 — 이쪽은 그룹
+ * 구조를 바꾸고 설문의 소속 그룹은 건드리지 않는다. 새 상위는 같은 팀의 그룹이어야 하고, 자기
+ * 자신·자기 하위·옮긴 결과가 3단계를 넘는 자리·같은 이름이 있는 자리는 서버가 거부한다. 지금
+ * 있는 자리로 옮기는 요청은 아무것도 바꾸지 않고 성공한다.
+ *
+ * `parentGroupId` 는 **기본값 없는 필수**다. 선택 칸으로 두면 칸을 빠뜨린 요청이 조용히
+ * 「최상위로」가 된다.
+ */
+export const RelocateSurveyGroupInput = z.object({
+  groupId: z.uuid(),
+  parentGroupId: z.uuid().nullable(),
+});
+export type RelocateSurveyGroupInput = z.infer<typeof RelocateSurveyGroupInput>;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 재배치 센터 (.pen FLOW 8-2~8-4·9-2) — 슈퍼어드민 전용 인박스
 // ─────────────────────────────────────────────────────────────────────────────
