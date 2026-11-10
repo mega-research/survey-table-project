@@ -169,7 +169,7 @@ async function summarize(
     executor.execute(sql`
       SELECT s.link_id, count(*)::int AS n
       FROM contact_targets
-      JOIN fieldwork_link_shares s ON s.contact_target_id = ${TARGET_ID}
+      JOIN ${fieldworkLinkShares} s ON s.contact_target_id = ${TARGET_ID}
       WHERE ${targetsInScope(surveyId)} AND ${match} AND NOT ${inLink(linkId)}
         AND s.link_id IN ${otherOpenLinkIds(surveyId, linkId)}
       GROUP BY s.link_id
@@ -301,7 +301,7 @@ export async function applyFieldworkShare(
       // 링크에 있음 — ①이 조건 결과를 지우지 않으므로 ②·③의 「이 링크에 없음」은 적용 전 상태다.
       // ① 조건 밖 — 이 링크에서만 뺀다(처리와 무관).
       await tx.execute(sql`
-        DELETE FROM fieldwork_link_shares s
+        DELETE FROM ${fieldworkLinkShares} s
         USING contact_targets
         WHERE s.link_id = ${linkId}
           AND s.contact_target_id = ${TARGET_ID}
@@ -310,7 +310,7 @@ export async function applyFieldworkShare(
       // ② 가져오기 — 겹치는 대상을 다른 열린 링크에서 뺀다. 이미 같이 맡은 대상(이 링크에도 있음)은 둔다.
       if (input.overlap === 'take') {
         await tx.execute(sql`
-          DELETE FROM fieldwork_link_shares s
+          DELETE FROM ${fieldworkLinkShares} s
           USING contact_targets
           WHERE s.contact_target_id = ${TARGET_ID}
             AND s.link_id IN ${otherOpenLinkIds(input.surveyId, linkId)}
@@ -321,7 +321,7 @@ export async function applyFieldworkShare(
       }
       // ③ 조건 결과를 이 링크로 — 남겨 두기면 겹치는 대상은 넣지 않는다. 이미 있는 줄은 그대로.
       await tx.execute(sql`
-        INSERT INTO fieldwork_link_shares (link_id, contact_target_id)
+        INSERT INTO ${fieldworkLinkShares} (link_id, contact_target_id)
         SELECT ${linkId}::uuid, ${TARGET_ID} FROM contact_targets
         WHERE ${scope} AND ${match}
           ${input.overlap === 'keep' ? sql`AND (${inLink(linkId)} OR NOT ${others})` : sql``}

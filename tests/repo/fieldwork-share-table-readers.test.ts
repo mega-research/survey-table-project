@@ -33,15 +33,10 @@ const KNOWN_REFERENCES: Record<string, string> = {
 };
 
 /**
- * 표 이름을 **날 문자열**로 쓴 자리. 스키마 심볼을 거치지 않아 개명이 따라오지 않는다.
- * 이 테스트를 들일 때 이미 있던 자리다 — **새 항목을 더하지 않는다.** 심볼(`${fieldworkLinkShares}`)로
- * 바꾸면 여기서도 지운다.
+ * 표 이름을 **날 문자열**로 쓰는 자리는 표 정의뿐이다. 날 SQL 안에서도 `${fieldworkLinkShares}` 로 쓴다 —
+ * 스키마 심볼을 거치지 않으면 개명이 따라오지 않는다.
  */
-const KNOWN_RAW_NAME = [
-  'src/db/schema/workspace.ts',
-  'src/server/contacts/services/fieldwork-share-release.ts',
-  'src/server/contacts/services/fieldwork-shares.ts',
-];
+const KNOWN_RAW_NAME = ['src/db/schema/workspace.ts'];
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -74,7 +69,7 @@ describe('담당 범위 표를 참조하는 자리', () => {
     );
   });
 
-  it('표 이름을 날 문자열로 쓴 자리는 늘지 않는다', () => {
+  it('표 이름을 날 문자열로 쓴 자리는 표 정의뿐이다', () => {
     expect(filesMatching(/\bfieldwork_link_shares\b/)).toEqual([...KNOWN_RAW_NAME].sort());
   });
 });

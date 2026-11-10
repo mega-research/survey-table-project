@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import 'server-only';
 
 import { db } from '@/db';
+import { fieldworkLinkShares } from '@/db/schema';
 import { loadFieldworkLinkNames } from '@/server/read-models/fieldwork-link-names';
 import type { FieldworkShareReleaseRow } from '@/shared/contracts/contacts-io';
 
@@ -26,7 +27,7 @@ export async function countFieldworkSharesToRelease(
     db.execute(sql`
       SELECT l.id AS link_id, count(*)::int AS n
       FROM survey_access_links l
-      JOIN fieldwork_link_shares s ON s.link_id = l.id
+      JOIN ${fieldworkLinkShares} s ON s.link_id = l.id
       JOIN contact_targets t ON t.id = s.contact_target_id
       WHERE l.survey_id = ${surveyId}
         AND l.kind = 'fieldwork'
