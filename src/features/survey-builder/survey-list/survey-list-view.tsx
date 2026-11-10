@@ -47,6 +47,7 @@ import {
 } from './empty-states';
 import { GroupManageModal } from './groups/group-manage-modal';
 import { GroupNameDialog, type GroupNameDialogTarget } from './groups/group-name-dialog';
+import { GroupRelocateDialog } from './groups/group-relocate-dialog';
 import { type GroupScreenSubgroup, resolveGroupScreen } from './groups/group-screen';
 import { GroupViewFooterNote, GroupViewHeader } from './groups/group-view-header';
 import {
@@ -180,6 +181,8 @@ export function SurveyListView() {
   const [groupManagerOpen, setGroupManagerOpen] = useState(false);
   // 그룹 화면의 이름 창 — 「새 하위 그룹」과 폴더 줄의 「이름 바꾸기」가 함께 쓴다.
   const [groupNameTarget, setGroupNameTarget] = useState<GroupNameDialogTarget | null>(null);
+  // 폴더 줄의 「옮기기」가 여는 창 — 그 그룹을 통째로 옮길 자리를 고른다.
+  const [relocateTarget, setRelocateTarget] = useState<{ id: string; name: string } | null>(null);
   const [teamPickOpen, setTeamPickOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
@@ -560,6 +563,7 @@ export function SurveyListView() {
           <SubgroupSection
             subgroups={subgroups}
             onRename={(group) => setGroupNameTarget({ kind: 'rename', group })}
+            onRelocate={setRelocateTarget}
           />
           {subgroups.length > 0 && (
             <GroupScreenSectionTitle count={counts.all}>
@@ -681,6 +685,14 @@ export function SurveyListView() {
 
       {groupNameTarget && (
         <GroupNameDialog target={groupNameTarget} onClose={() => setGroupNameTarget(null)} />
+      )}
+
+      {relocateTarget && (
+        <GroupRelocateDialog
+          group={relocateTarget}
+          groups={groupList}
+          onClose={() => setRelocateTarget(null)}
+        />
       )}
     </div>
   );

@@ -6,6 +6,7 @@ import type {
   CollectSurveysIntoGroupInput,
   CreateSurveyGroupInput,
   MoveSurveyToGroupInput,
+  RelocateSurveyGroupInput,
   RenameSurveyGroupInput,
   ReorderSurveyGroupsInput,
 } from '@/shared/contracts/workspace-io';
@@ -73,6 +74,18 @@ export function useRenameSurveyGroup() {
 export function useReorderSurveyGroups() {
   return useSurveyGroupMutation((input: ReorderSurveyGroupsInput) =>
     client.workspace.surveyGroups.reorder(input),
+  );
+}
+
+/**
+ * 그룹을 통째로 옮긴다(하위 그룹·담긴 설문째) — 설문 한 건의 그룹 이동(`useMoveSurveyToGroup`)과 다르다.
+ *
+ * 거부되어도 그룹 목록을 다시 읽는다(공통 `onSettled`). 거부의 대부분은 그 사이 다른 팀원이 구조를
+ * 바꾼 경우라, 옮기기 창이 지금 구조로 다시 그려져야 다음 선택이 맞는다.
+ */
+export function useRelocateSurveyGroup() {
+  return useSurveyGroupMutation((input: RelocateSurveyGroupInput) =>
+    client.workspace.surveyGroups.relocate(input),
   );
 }
 
