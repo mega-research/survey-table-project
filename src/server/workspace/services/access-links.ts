@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyAccessLinks } from '@/db/schema';
@@ -18,6 +18,7 @@ import {
   type ClientResponseColumnMaterial,
   loadClientResponseColumnMaterial,
 } from '@/server/read-models/client-response-columns';
+import { selectAccessLinksInIssueOrder } from '@/server/read-models/fieldwork-link-names';
 import {
   type AccessLinkKind,
   type ClientLinkTab,
@@ -140,23 +141,23 @@ function activeLinkById(surveyId: string, linkId: string) {
  * 링크도 「링크 2」로 구별되게 하려는 것이고(`fieldworkLinkName`), 순번은 **종료된 링크까지 센다**:
  * 하나를 종료해도 남은 링크의 이름이 바뀌지 않아야 지난 기록의 「외주 · 링크 2」가 같은 링크를
  * 가리킨다. 그래서 종료된 행까지 읽어 센 뒤 열린 것만 돌려준다(설문당 링크 수는 업체 수 정도다).
- * 내부 기록의 이름(`read-models/fieldwork-link-names`)도 같은 정렬로 센다.
+ * 쿼리는 내부 기록의 이름과 같은 `selectAccessLinksInIssueOrder`(`read-models/fieldwork-link-names`)다.
  */
 export async function listAccessLinks(
   surveyId: string,
   kind: AccessLinkKind,
 ): Promise<AccessLinkListItem[]> {
-  const rows = await db
-    .select({
+  const rows = await selectAccessLinksInIssueOrder(
+    {
       ...VIEW_COLUMNS,
       closedAt: surveyAccessLinks.closedAt,
       shareAppliedAt: surveyAccessLinks.shareAppliedAt,
       // 담당 범위 인원 — 나누기 화면과 같은 조각(`linkShareCount`)으로 센다.
       shareCount: linkShareCount(),
-    })
-    .from(surveyAccessLinks)
-    .where(and(eq(surveyAccessLinks.surveyId, surveyId), eq(surveyAccessLinks.kind, kind)))
-    .orderBy(asc(surveyAccessLinks.createdAt), asc(surveyAccessLinks.id));
+    },
+    surveyId,
+    kind,
+  );
   return rows.flatMap(({ closedAt, shareAppliedAt, shareCount, ...row }, index) =>
     closedAt === null
       ? [
