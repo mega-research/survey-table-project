@@ -14,6 +14,7 @@ import {
   ListUngroupedSurveysInput,
   ListUngroupedSurveysOutput,
   MoveSurveyToGroupInput,
+  RelocateSurveyGroupInput,
   RenameSurveyGroupInput,
   ReorderSurveyGroupsInput,
   SurveyAlreadyGroupedError,
@@ -21,6 +22,8 @@ import {
   SurveyGroupHasChildrenError,
   SurveyGroupIdInput,
   SurveyGroupNotFoundError,
+  SurveyGroupRelocationCycleError,
+  SurveyGroupRelocationTooDeepError,
   SurveyGroupTargetNotFoundError,
   SurveyTeamMismatchError,
 } from '../domain/survey-groups';
@@ -76,18 +79,21 @@ async function assertSurveyGroupManage(
  *
  * 없는 그룹과 타 팀 그룹이 갈리면 id 를 훑어 타 팀 그룹의 존재를 확인할 수 있다. 팀이
  * 다르면 존재 자체를 모르는 것이 맞으므로 조회 결과가 없을 때와 같은 NOT_FOUND 로 접는다.
+ *
+ * 통과하면 그 그룹의 소유 팀을 돌려준다 — 그룹 옮기기가 새 상위의 팀을 여기에 맞춰 본다.
  */
 async function assertSurveyGroupManageByGroupId(
   user: { id: string; isSuperadmin: boolean },
   groupId: string,
-): Promise<void> {
+): Promise<string> {
   const teamId = await svc.getSurveyGroupTeamId(groupId);
   if (!teamId) throw new ORPCError('NOT_FOUND', { message: '그룹을 찾을 수 없습니다.' });
-  if (user.isSuperadmin) return;
+  if (user.isSuperadmin) return teamId;
   const memberships = await getActiveTeamMemberships(user.id);
   if (!memberships.some((m) => m.teamId === teamId)) {
     throw new ORPCError('NOT_FOUND', { message: '그룹을 찾을 수 없습니다.' });
   }
+  return teamId;
 }
 
 /**
@@ -122,6 +128,13 @@ function rethrowSurveyGroupError(err: unknown): never {
     throw new ORPCError('CONFLICT', { message: err.message });
   }
   if (err instanceof SurveyGroupDepthExceededError || err instanceof SurveyGroupHasChildrenError) {
+    throw new ORPCError('CONFLICT', { message: err.message });
+  }
+  // 그룹 옮기기의 거부 — 자기 하위(순환)·3단계 초과. 그 사이 다른 팀원이 구조를 바꿔 생길 수 있다.
+  if (
+    err instanceof SurveyGroupRelocationCycleError ||
+    err instanceof SurveyGroupRelocationTooDeepError
+  ) {
     throw new ORPCError('CONFLICT', { message: err.message });
   }
   throw toWorkspaceRpcError(err) ?? err;
@@ -182,6 +195,26 @@ const remove = authed
     return svc.removeSurveyGroup(input.groupId).catch(rethrowSurveyGroupError);
   });
 
+/**
+ * 그룹 옮기기 — 그룹을 하위 그룹·담긴 설문째 다른 그룹 밑이나 최상위로 옮긴다.
+ *
+ * 아래 `move`(설문 한 건의 그룹 이동)와 다른 표면이다. 이쪽은 **그룹 구조** 쓰기라 설문 관문을
+ * 묻지 않는다 — 내가 편집할 수 없는 설문이 담긴 그룹도 팀원이면 옮긴다(구조는 팀 공용이고,
+ * 설문의 소속 그룹은 바뀌지 않는다).
+ *
+ * 관문은 두 겹이다. 옮기는 그룹의 소유 팀으로 구조 관문을 묻고(타 팀 그룹은 없는 그룹과 같은
+ * NOT_FOUND), 새 상위가 **그 팀의** 그룹인지 따로 묻는다 — 앞의 것만 보면 내 팀 그룹에 남의 팀
+ * 그룹 id 를 짝지은 요청이 서비스까지 간다. 서비스가 잠금 아래서 같은 판정을 다시 한다.
+ */
+const relocate = authed
+  .input(RelocateSurveyGroupInput)
+  .output(WorkspaceActionOutput)
+  .handler(async ({ input, context }) => {
+    const teamId = await assertSurveyGroupManageByGroupId(context.user, input.groupId);
+    if (input.parentGroupId !== null) await assertParentGroupInTeam(input.parentGroupId, teamId);
+    return svc.relocateSurveyGroup(input).catch(rethrowSurveyGroupError);
+  });
+
 const listUngrouped = authed
   .input(ListUngroupedSurveysInput)
   .output(ListUngroupedSurveysOutput)
@@ -238,6 +271,7 @@ export const surveyGroups = {
   create,
   rename,
   reorder,
+  relocate,
   remove,
   listUngrouped,
   collect,

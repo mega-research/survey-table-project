@@ -18,6 +18,7 @@ import 'server-only';
 
 import { type DbTransaction, db } from '@/db';
 import { surveyGroups, surveys, teams } from '@/db/schema';
+import { logger } from '@/lib/logger';
 import { escapeLikePattern } from '@/lib/operations/filter-shared';
 import { isUniqueViolation, retryOnTxConflict } from '@/lib/pg-error';
 import {
@@ -31,6 +32,7 @@ import {
   surveyClosedColumn,
 } from '@/server/survey-access';
 import { scopeLeaderTeamIds } from '@/server/work-scope';
+import { judgeSurveyGroupRelocation } from '@/utils/survey-group-tree';
 
 import {
   type CollectSurveysIntoGroupInput,
@@ -40,6 +42,7 @@ import {
   type ListSurveyGroupsOutput,
   type ListUngroupedSurveysOutput,
   type MoveSurveyToGroupInput,
+  type RelocateSurveyGroupInput,
   type RenameSurveyGroupInput,
   type ReorderSurveyGroupsInput,
   SURVEY_GROUP_MAX_DEPTH,
@@ -47,6 +50,8 @@ import {
   SurveyGroupDepthExceededError,
   SurveyGroupHasChildrenError,
   SurveyGroupNotFoundError,
+  SurveyGroupRelocationCycleError,
+  SurveyGroupRelocationTooDeepError,
   SurveyGroupTargetNotFoundError,
   SurveyTeamMismatchError,
 } from '../domain/survey-groups';
@@ -379,6 +384,111 @@ export async function renameSurveyGroup(
 }
 
 /**
+ * 그룹 옮기기 — 그룹을 하위 그룹·담긴 설문째 다른 그룹 밑으로(`parentGroupId: null` 은 최상위로) 옮긴다.
+ *
+ * 쓰는 것은 **그 그룹 한 행**의 상위 칸 둘과 순서뿐이다. 하위 그룹의 깊이는 DB 가 따라 고치고
+ * (0166 의 `survey_groups_parent_fk` ON UPDATE CASCADE), 설문은 그룹을 가리킬 뿐이라 손대지
+ * 않는다 — 담긴 설문의 소속 그룹도 `updatedAt` 도 그대로다.
+ *
+ * 판정은 **팀 키 아래서 읽은 그 팀의 구조 전부**로 한다. 화면의 옮기기 창과 같은 순수 함수
+ * (`judgeSurveyGroupRelocation`)를 쓰되, 화면은 요청자에게 보이는 그룹만 알고 여기는 전부를 안다.
+ * 구조를 바꾸는 쓰기가 모두 같은 키를 잡으므로 읽은 구조가 낡지 않는다 — 두 사람이 서로의 하위로
+ * 동시에 옮기거나 동시에 한 단씩 늘려도, 나중 요청은 먼저 끝난 결과를 보고 거부된다.
+ *
+ * - 다른 팀의 그룹·없는 그룹을 새 상위로 지목하면 같은 「없는 그룹」이다(구조를 그 팀으로 좁혀 읽는다).
+ * - 자기 자신·자기 하위 밑, 3단계를 넘는 자리는 DB 도 막지만 그쪽은 CHECK 위반(500)이라 여기서
+ *   먼저 알맞은 사유로 거부한다. DB 는 이 판정이 틀렸을 때의 마지막 방어선이다.
+ * - **지금 있는 자리로 옮기는 요청은 아무것도 쓰지 않고 성공한다** — 맨 뒤로 다시 붙이지도 않는다.
+ * - 옮겨 온 그룹은 새 부모의 맨 뒤에 붙는다. 그 자리에 같은 이름이 있으면 유일 인덱스가 막는다.
+ */
+export async function relocateSurveyGroup(
+  input: RelocateSurveyGroupInput,
+): Promise<WorkspaceActionOutput> {
+  const moved = await inGroupStructureTx(async (tx) => {
+    const group = await lockGroupStructureByGroup(tx, input.groupId);
+    const structure = await tx
+      .select({
+        id: surveyGroups.id,
+        parentGroupId: surveyGroups.parentGroupId,
+        depth: surveyGroups.depth,
+      })
+      .from(surveyGroups)
+      .where(eq(surveyGroups.teamId, group.teamId));
+
+    const blocked = judgeSurveyGroupRelocation(
+      structure,
+      input.groupId,
+      input.parentGroupId,
+      SURVEY_GROUP_MAX_DEPTH,
+    );
+    if (blocked === 'current') return null;
+    if (blocked === 'missing') throw new SurveyGroupNotFoundError();
+    if (blocked === 'self' || blocked === 'descendant') throw new SurveyGroupRelocationCycleError();
+    if (blocked === 'too_deep') throw new SurveyGroupRelocationTooDeepError();
+
+    const parent = structure.find((row) => row.id === input.parentGroupId) ?? null;
+    const [tail] = await tx
+      .select({ maxOrder: sql<number | null>`max(${surveyGroups.order})` })
+      .from(surveyGroups)
+      .where(and(eq(surveyGroups.teamId, group.teamId), isChildOf(parent?.id ?? null)));
+
+    try {
+      await tx
+        .update(surveyGroups)
+        .set({
+          parentGroupId: parent?.id ?? null,
+          parentDepth: parent?.depth ?? null,
+          order: (tail?.maxOrder ?? -1) + 1,
+          updatedAt: new Date(),
+        })
+        .where(eq(surveyGroups.id, input.groupId));
+    } catch (err) {
+      if (isUniqueViolation(err)) throw new DuplicateSurveyGroupNameError();
+      throw err;
+    }
+    return {
+      teamId: group.teamId,
+      movedSubgroups: countSubgroupsBelow(structure, input.groupId),
+    };
+  });
+
+  // RPC 로그 한 줄에는 그룹 id 가 없다 — 어느 그룹이 하위 그룹 몇 개를 달고 어디로 갔는지는 이 줄이 남긴다.
+  if (moved) {
+    logger.info(
+      {
+        teamId: moved.teamId,
+        groupId: input.groupId,
+        parentGroupId: input.parentGroupId,
+        movedSubgroups: moved.movedSubgroups,
+      },
+      '[survey-group] 그룹을 옮겼다',
+    );
+  }
+  return OK;
+}
+
+/** 그 그룹 아래 전체의 하위 그룹 수 — 옮길 때 함께 따라간 그룹을 로그에 남기려고 센다. */
+function countSubgroupsBelow(
+  structure: readonly { id: string; parentGroupId: string | null }[],
+  groupId: string,
+): number {
+  const below = new Set<string>();
+  let frontier = [groupId];
+  while (frontier.length > 0) {
+    const next: string[] = [];
+    for (const row of structure) {
+      if (row.parentGroupId === null || below.has(row.id) || row.id === groupId) continue;
+      if (frontier.includes(row.parentGroupId)) {
+        below.add(row.id);
+        next.push(row.id);
+      }
+    }
+    frontier = next;
+  }
+  return below.size;
+}
+
+/**
  * 정렬 — **한 부모의 형제만**, 화면이 준 순서대로 order 를 다시 매긴다.
  *
  * UPDATE 를 teamId 와 상위 그룹으로 함께 좁히는 것이 경계다: 배열에 타 팀 groupId 나 다른 부모
@@ -579,7 +689,7 @@ export async function moveSurveyToGroup(
 // 구조 쓰기의 한 줄 세우기 (3단계 중첩, 0166)
 // ─────────────────────────────────────────────────────────────────────────────
 //
-// 그룹 구조를 바꾸는 쓰기(만들기·이름 바꾸기·순서 바꾸기·지우기 — 뒤 티켓의 옮기기)는 전부
+// 그룹 구조를 바꾸는 쓰기(만들기·이름 바꾸기·순서 바꾸기·옮기기·지우기)는 전부
 // **한 트랜잭션에서 팀 키 advisory lock 을 먼저 잡는다.** 깊이·이름 겹침·「하위 그룹이 있는가」의
 // 판정이 모두 「읽고 나서 쓰기」라, 같은 팀의 구조 쓰기가 겹치면 서로가 읽은 것이 낡는다.
 //

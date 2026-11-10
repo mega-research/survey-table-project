@@ -1006,6 +1006,8 @@ const OTHER_BOUNDARY_SURFACES: Record<string, string> = {
     '입력 teamId 로 그룹 구조 관문을 지난다 — UPDATE 를 그 팀과 상위 그룹으로 좁혀 타 팀·다른 부모의 그룹에 닿지 않는다',
   'workspace.surveyGroups.create':
     '입력 teamId 로 그룹 구조 관문을 지나고, 상위 그룹(parentGroupId)은 그 팀의 그룹이어야 한다 — 타 팀·없는 그룹은 NOT_FOUND 로 접힌다',
+  'workspace.surveyGroups.relocate':
+    '옮기는 그룹의 소유 팀으로 그룹 구조 관문을 지나고(타 팀 그룹은 NOT_FOUND), 새 상위(parentGroupId)는 그 팀의 그룹이어야 한다 — 서비스가 구조를 그 팀으로 좁혀 읽어 다시 판정한다',
   'library.savedQuestions.update': '보관함은 조직 공용이라 설문 경계가 없다',
   'library.savedQuestions.remove': '보관함 — 조직 공용',
   'library.savedQuestions.apply': '보관함 — 조직 공용',

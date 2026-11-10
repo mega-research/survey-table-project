@@ -226,6 +226,21 @@ describe('그룹 화면 — 1단계 그룹', () => {
     expect(screen.getByRole('heading', { name: '새 하위 그룹' })).toBeInTheDocument();
     expect(screen.getByText(/「이정운」 안에 만듭니다/)).toBeInTheDocument();
   });
+
+  it('폴더 줄 ⋯ 의 「옮기기」를 누르면 그 그룹을 옮길 자리를 고르는 창이 열린다', async () => {
+    const user = userEvent.setup();
+    renderGroupScreen(G_LEE);
+
+    await user.click(await screen.findByRole('button', { name: '2025 더보기' }));
+    await user.click(await screen.findByRole('menuitem', { name: '옮기기' }));
+
+    expect(screen.getByRole('heading', { name: '「2025」 옮기기' })).toBeInTheDocument();
+    const places = within(screen.getByRole('radiogroup', { name: '옮길 자리' }));
+    // 지금 부모는 꺼져 있고, 다른 팀의 폴더(협업 그룹)는 옮길 자리가 아니다.
+    expect(places.getByRole('radio', { name: '이정운' })).toBeDisabled();
+    expect(places.getByRole('radio', { name: '2026' })).toBeEnabled();
+    expect(places.queryByRole('radio', { name: 'A고객사 2026' })).toBeNull();
+  });
 });
 
 describe('그룹 화면 — 2·3단계 그룹', () => {

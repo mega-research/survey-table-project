@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 
-import { Ellipsis, Folder, Pencil } from 'lucide-react';
+import { Ellipsis, Folder, FolderInput, Pencil } from 'lucide-react';
 
 import {
   DropdownMenu,
@@ -26,9 +26,12 @@ import { groupHref } from './group-view-header';
 export function SubgroupSection({
   subgroups,
   onRename,
+  onRelocate,
 }: {
   subgroups: readonly GroupScreenSubgroup[];
   onRename: (group: { id: string; name: string }) => void;
+  /** ⋯ 메뉴의 「옮기기」 — 그 그룹을 하위 그룹·담긴 설문째 옮길 자리를 고르는 창을 연다. */
+  onRelocate: (group: { id: string; name: string }) => void;
 }) {
   if (subgroups.length === 0) return null;
 
@@ -75,6 +78,10 @@ export function SubgroupSection({
                 <DropdownMenuItem onClick={() => onRename({ id: group.id, name: group.name })}>
                   <Pencil className="h-3.5 w-3.5" />
                   이름 바꾸기
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onRelocate({ id: group.id, name: group.name })}>
+                  <FolderInput className="h-3.5 w-3.5" />
+                  옮기기
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
