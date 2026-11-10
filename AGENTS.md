@@ -9,12 +9,13 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 ## 문서 지도
 
 이 파일은 **매 세션 실리는 공통 규칙**만 담는다. 영역별 상세는 그 코드 옆의 `AGENTS.md` 에 있다
-(각 폴더의 `CLAUDE.md` 는 그 파일의 심볼릭 링크). Claude Code 는 그 폴더의 파일을 읽을 때 자동으로
-싣지만, 다른 도구는 아니므로 **해당 영역을 만지기 전에 직접 읽을 것.**
+(각 폴더의 `CLAUDE.md` 는 그 파일의 심볼릭 링크). 자동으로 실리는 것은 Claude Code 가 그 폴더의
+파일을 **Read 도구로** 읽을 때뿐이다 — 셸(`sed`·`cat`·`grep`)로 읽거나 다른 도구를 쓰면 실리지 않는다.
+**해당 영역을 만지기 전에 아래 표의 문서를 직접 읽을 것.**
 
 | 작업 영역                                                                                                                                 | 읽을 문서                                        |
 | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| 라우트 트리 · 운영 콘솔·게스트·링크 콘솔 주소 · 응답 진입 경로(초대 링크·짧은 링크)                                                       | `src/app/AGENTS.md`                              |
+| 라우트 트리 · API 엔드포인트 · 운영 콘솔·게스트·링크 콘솔 주소 · 응답 진입 경로(초대 링크·짧은 링크)                                                       | `src/app/AGENTS.md`                              |
 | 운영 집계·파티션 · 진척 보고 분류 키                                                                                                      | `src/server/operations/AGENTS.md`                |
 | 메일 발송 주소·대체 발송                                                                                                                  | `src/server/mail/AGENTS.md`                      |
 | 서버 트리 · 설문 관문·procedure 베이스·capability 코어 · soft delete · 테스트 모드·테스트 버전 · 설문 목록 조회                           | `src/server/AGENTS.md`                           |
@@ -36,47 +37,17 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 | 도메인 용어                                                                                                                               | `CONTEXT.md`                                     |
 | 결정 배경                                                                                                                                 | `docs/adr/`                                      |
 
-**변경 이력은 어느 문서에도 쌓지 않는다** — git log 와 ADR 이 그 자리다. 크기 상한(루트 4.5만·영역 3만 자)과 이 표의 등재는 `tests/repo/agent-docs-size.test.ts` 가 강제한다. 새 상세 절은 루트가 아니라
+**변경 이력은 어느 문서에도 쌓지 않는다** — git log 와 ADR 이 그 자리다. 크기 상한(루트 3.7만·영역 3만 자)과 이 표의 등재는 `tests/repo/agent-docs-size.test.ts` 가 강제한다. 새 상세 절은 루트가 아니라
 해당 영역 문서에 쓴다.
 
 ---
 
 ## 기술 스택
 
-| 영역           | 기술                                         | 버전            |
-| -------------- | -------------------------------------------- | --------------- |
-| 프레임워크     | Next.js (App Router, Turbopack)              | 16.4.2          |
-| UI 라이브러리  | React (React Compiler)                       | 19.2.3          |
-| 스타일링       | TailwindCSS                                  | 4.x             |
-| 컴포넌트       | shadcn/ui (Base UI — @base-ui/react)         | 1.9.0           |
-| 상태관리       | Zustand + Immer                              | 5.0.8 / 11.1.3  |
-| 데이터 페칭    | TanStack Query                               | 5.90.11         |
-| RPC            | oRPC (server/client/tanstack-query/openapi)  | 1.14.4          |
-| 스키마 검증    | Zod                                          | 4.4.3           |
-| 인증           | Better Auth (email+password, drizzle 어댑터) | 1.7.14          |
-| 테이블         | TanStack Table                               | 8.21.3          |
-| 텍스트 측정    | @chenglou/pretext                            | 0.0.5           |
-| 리치 에디터    | TipTap                                       | 3.31.3          |
-| 드래그앤드롭   | @dnd-kit                                     | -               |
-| ID 생성        | NanoID                                       | 5.1.11          |
-| ORM            | Drizzle ORM                                  | 0.45.2          |
-| DB 드라이버    | postgres (postgres-js)                       | 3.4.7           |
-| 데이터베이스   | PostgreSQL (Supabase)                        | -               |
-| 파일 저장소    | Cloudflare R2 (S3 호환)                      | -               |
-| 이미지 처리    | sharp                                        | 0.35.5          |
-| HTML sanitize  | sanitize-html                                | 2.18.1          |
-| 이메일 발송    | Resend + React Email                         | 6.12.3          |
-| 이메일 webhook | svix                                         | 1.93.0          |
-| 백그라운드 잡  | Inngest                                      | 4.4.0           |
-| 레이트리밋     | @upstash/ratelimit + @upstash/redis          | 2.0.8 / 1.38.0  |
-| 로깅           | pino + @axiomhq/js                           | 10.3.1 / 2.0.0  |
-| PDF 렌더       | pdfjs-dist (조사표 뷰어 + 서버 쪽 수 판독)   | 6.3.289         |
-| 엑셀 생성      | ExcelJS                                      | 4.4.0           |
-| SPSS .sav 생성 | sav-writer                                   | 1.0.0           |
-| 차트           | Recharts + Tremor                            | 2.15.4 / 3.18.7 |
-| 에러 모니터링  | Sentry (@sentry/nextjs)                      | 10.x            |
-| 테스트         | Vitest + Testing Library + MSW + Playwright  | 4.1.12 / 1.60   |
-| 언어           | TypeScript (strict)                          | 5.9.3           |
+버전의 정본은 `package.json` 이다. 뼈대만 적는다 — Next.js 16(App Router·Turbopack) · React 19(React Compiler) ·
+TailwindCSS 4 · shadcn/ui(Base UI) · Zustand + Immer · TanStack Query·Table · oRPC · Zod 4 · Better Auth ·
+Drizzle ORM + postgres-js(Supabase PostgreSQL) · Cloudflare R2 · Resend + React Email · Inngest · Upstash 레이트리밋 ·
+pino + Axiom · Sentry · TipTap · ExcelJS · sav-writer · pdfjs-dist · Vitest + Testing Library + MSW + Playwright.
 
 > 참고: `xlsx`, `jszip` 의존성은 제거됨(2026-06-05). 엑셀 생성은 ExcelJS, SPSS는 sav-writer 사용.
 > `react-hook-form`, `@tanstack/react-virtual` 도 제거됨(2026-08-22).
@@ -200,30 +171,6 @@ RSC (서버 컴포넌트)
 
 ---
 
-## API 엔드포인트
-
-```
-POST   /api/rpc/[[...rest]]                    # oRPC 핸들러 — 전체 query/mutation (메인 경로)
-*      /api/v1/[[...rest]]                     # OpenAPI 핸들러 (ENABLE_PUBLIC_API 게이트, 기본 비활성)
-POST   /api/upload/image                       # 이미지 업로드 (multipart, 내부 전용, 삭제는 media.deleteImages RPC)
-POST   /api/upload/avatar                      # 아바타 업로드 (세 계정 유형 공통, 정사각 WebP 로 깎아 저장)
-POST   /api/upload/mail-attachment             # 메일 첨부 업로드 (삭제는 media.* RPC)
-POST   /api/upload/notice-attachment           # 공지 첨부 업로드 (삭제는 media.* RPC)
-POST   /api/upload/survey-document             # 조사표 PDF 업로드 (tmp 로 받고 쪽 수 판독, promote 는 attach RPC)
-GET    /api/surveys/[surveyId]/export          # SPSS(.sav)/엑셀 export (인증 + export.download 관문, 파일 스트림). raw/raw-split 은 `includeNonRespondents=1` 로 미응답 조사 대상 행 포함 (sav/sps 는 무시, 꺼도 컨택결과코드 1 은 포함). `includePriorAnswers=1` 은 이번 회차에 키가 없는 문항을 이월 응답으로 채운다 — 숨은 문항 strip 뒤에 병합하고 조건 판정은 하지 않되, 「이월값 불러오기」를 끈 문항(`priorAnswerDisabled`)은 현재 빌더 설정 기준으로 비워 둔다. 조사 대상 명단 열은 파라미터 없이 응답 내역 컬럼 설정(`profileColumns`)의 표시 attrs·pii 열을 항상 붙인다 (pii 열이 있으면 PII 평문 → no-store). — Raw 행 조립은 라우트 폴더 로컬 raw-export-load.ts (contacts·operations 를 함께 읽어 한 도메인에 못 둔다. 순수 조각은 lib/analytics/raw-export-rows.ts)
-GET    /api/surveys/[surveyId]/export/split-preview  # 분할 export 미리보기 (basis 없으면 `hasContacts` — 다이얼로그가 Raw Data 옵션 영역을 그릴지 판단. basis + `includeNonRespondents=1` 이면 `totalRows`·`nonRespondentRows` 를 더해 반환)
-GET    /api/surveys/[surveyId]/contacts/export # 조사 대상 목록 엑셀 다운로드
-GET    /api/surveys/[surveyId]/demand-summary  # 문항 수요 집계표 엑셀 (화면의 정렬·필터를 쿼리로 받음)
-POST   /api/response/segment                   # 구간 응답 저장 (sendBeacon — REST 유지)
-POST   /api/response/draft                     # 이탈 시점 임시 저장 (sendBeacon — REST 유지)
-*      /api/inngest                            # Inngest 핸들러
-POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
-GET    /api/legacy-guest-link/[surveyId]/[[...rest]]  # 옛 게스트 주소 다리 — 옛 운영 콘솔 주소를 직원은 내부 콘솔로, 옛 게스트는 외주 링크(/fw/<token>)로 — 링크가 여럿이면 브라우저 세션 또는 비밀번호 화면(/fw/legacy/<surveyId>)이 고른다 (307, 전환기 장치)
-*      /api/auth/[...all]                      # Better Auth 핸들러 (민감 POST 경로는 auth-sensitive IP rate limit 선적용)
-```
-
----
-
 ## 백그라운드 잡 (Inngest)
 
 `server/workflows/jobs/` — 5개 함수 (`jobs/index.ts` 등록). 잡은 여러 도메인의 쓰기를 조율하므로 workflows 층이 집이다.
@@ -243,16 +190,10 @@ GET    /api/legacy-guest-link/[surveyId]/[[...rest]]  # 옛 게스트 주소 다
 
 ## 개발 스크립트
 
+전체 목록은 `package.json` 의 `scripts` 다. 이름만으로는 알 수 없는 것만 적는다.
+
 ```bash
-pnpm dev              # 개발 서버 (Turbopack)
-pnpm build            # 프로덕션 빌드 (Turbopack)
-pnpm start            # 프로덕션 서버
-pnpm lint             # ESLint 검사 (eslint 9 flat config)
-pnpm lint:fix         # ESLint 자동 수정
 pnpm test             # Vitest 단일 실행 (realdb 스위트는 제외 — 아래 test:integration)
-pnpm test:watch       # Vitest watch
-pnpm test:coverage    # 커버리지 (spss 계열만 집계)
-pnpm test:e2e         # Playwright E2E
 pnpm test:integration # 실DB 왕복 (*.realdb.test.ts, 로컬 supabase 54322 필요)
                       # pretest 가드가 「이 브랜치 스키마인가」를 먼저 본다 (아래 주의사항 12)
 pnpm db:setup-test    # 공유 테스트 DB 를 통째로 다시 만든다 — 형제 워크트리의 realdb 가 깨진다
@@ -261,31 +202,15 @@ pnpm db:isolated <이름> # 내 브랜치 전용 테스트 DB(같은 컨테이�
 pnpm worktree:new <브랜치> [시작점] # .claude/worktrees 에 워크트리 생성 + env·공유 자료 링크 + 설치 (아래 Worktree bootstrap)
 pnpm db:drift         # 실 DB ↔ 레포 객체 대조 (아래 "DB 드리프트 점검")
 pnpm db:size          # 실 DB 테이블·인덱스 크기·사용 횟수 (읽기 전용 — 부풀었으면 손으로 REINDEX)
-pnpm inngest          # Inngest 로컬 dev 서버
 pnpm db:migrate       # 마이그레이션 실행 (_journal.json 기준 — 0019에서 동결, 주의사항 7 참조)
-pnpm db:studio        # Drizzle Studio
-pnpm survey:backup    # 설문 백업
-pnpm survey:restore   # 백업에서 복원
 pnpm survey:vars · survey:dump · survey:render  # 운영 설문 변수명 계산 · 응답 화면 그려 보기 (survey-ops 스킬 — 설문 고치기 도우미 포함)
-pnpm versions:prune   # 버전 스냅샷 정리 (DRY_RUN 기본, :live 로 실행)
-pnpm ledger:seed      # R2 발송 장부 시드
+pnpm versions:prune · spss:migrate · spss:rollback  # DRY_RUN 기본, `:live` 를 붙여야 실행
 pnpm auth:seed        # 슈퍼어드민 발급/승격 — <email> <name> <password> (기존 계정이면 승격만)
-pnpm workspace:seed   # 실전 시드 계획 출력 — 팀 5 + 실사 업체 + 0116 백필 검증 (DRY_RUN 기본)
-pnpm workspace:seed:live  # 위를 실제 적용 — 인자로 실사 업체 이름 지정 가능. 재실행 안전
-pnpm spss:migrate     # SPSS 필드 마이그레이션 (DRY_RUN 기본, :live 로 실행)
-pnpm spss:rollback    # SPSS 필드 롤백 (:live 동일)
-pnpm worker:sentry-jandi:dev     # Sentry→잔디 알림 워커 로컬
-pnpm worker:sentry-jandi:deploy  # 워커 배포 (Cloudflare)
+pnpm workspace:seed   # 실전 시드 계획 출력(DRY_RUN) — `workspace:seed:live` 가 적용, 재실행 안전
 ```
 
 > `scripts/` 바로 아래는 공유(추적), `scripts/private/` 는 공유하지 않는 일회성 스크립트(gitignore) — 명령·CI·문서가 부르는 것은 바로 아래에 둔다.
 > `pnpm db:generate` / `pnpm db:push` 는 정의는 살아 있으나 **사용 금지** — 마이그레이션은 수동 SQL 관행이다(주의사항 7).
-
----
-
-## 경로 별칭
-
-`@/*` → `./src/*` (tsconfig.json).
 
 ---
 
@@ -348,7 +273,7 @@ lib 은 도메인의 집이 아니라 **소유자를 특정할 수 없는 것들
 1. **인프라** — 외부 자원·프로세스 경계를 감싸는 어댑터(`logger`·`rate-limit`·`supabase`·`inngest`·`crypto`·`r2-env`). 앱 도메인이 아니라 실행 환경에 속해 어느 feature 도 소유하지 않는다.
 2. **서버와 프론트가 함께 쓰는 계산** — 두 런타임이 각자 구현하면 규칙이 갈리는 것(`survey/substitute-tokens`·`survey-url`·`sanitize`·`analytics/analyzer`·`question/*`).
 
-**판정은 폴더 이름이 아니라 소비자 실측으로 한다** (`node .scratch/tools/lib-final.mjs`).
+**판정은 폴더 이름이 아니라 소비자 실측으로 한다** — `tests/repo/lib-residency.test.ts` 가 강제한다(부르는 곳이 `features`·`components` 뿐인 lib 파일이 생기면 빨개진다).
 `src/server`·`src/app`·`src/actions` 중 하나라도 부르면 **잔류**, `features`·`components` 만 부르면 lib 을 떠난다.
 
 행선지:
@@ -384,31 +309,6 @@ lib 은 도메인의 집이 아니라 **소유자를 특정할 수 없는 것들
 - **`.server.ts` 는 lib 등 공유 트리 전용** — "공유 트리 속 서버 전용" 표시. 마킹은 내용물 기준(server-only·DB·서버 env 의존)이며 소비자 기준 금지
 - **서버 파일과 같은 어간의 lib 공유 계산은 역할 접미사** — `-format` 기본(예: `drop-funnel-format.ts` ↔ server `drop-funnel.ts`), 서버가 어간을 소유
 - **도메인명 접두 제거는 services 층 한정** — `domain/` 의 `mail-*`·`contact-*` 는 접두가 아니라 DB 테이블·도메인 어휘와 정합하는 개념명이라 유지한다 (예: `mail-campaign` ↔ `mail_campaigns`)
-
-### 컴포넌트 구조
-
-```typescript
-// 1. 임포트
-import { useState } from "react";
-import { useSurveyStore } from "@/features/survey-builder/stores/survey-store";
-import { Button } from "@/components/ui/button";
-
-// 2. 타입 정의
-interface Props {
-  questionId: string;
-  onSave: (data: QuestionData) => void;
-}
-
-// 3. 컴포넌트
-export function QuestionEditor({ questionId, onSave }: Props) {
-  const { questions, updateQuestion } = useSurveyStore();
-  const [isEditing, setIsEditing] = useState(false);
-
-  const handleSave = () => { /* ... */ };
-
-  return <div>{/* JSX */}</div>;
-}
-```
 
 ### 경계 스키마와 z.custom
 
@@ -482,7 +382,7 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 
 9. **서버 sanitize**: jsdom 의존 라이브러리 금지 (isomorphic-dompurify 크래시). `sanitize-html` 사용.
 
-10. **테스트**: 단위 테스트의 집은 SUT 소스 옆이다(ADR 0017, 전면 colocation — 2026-08-25 실측 src 466파일). 명명은 소스 어간 정합 — 1:1은 `<소스>.test.ts(x)`, 한 소스의 측면 시리즈는 `<어간>-<측면>.test.ts`, 여러 소스를 가로지르는 시나리오는 주 SUT 폴더에 주제명(app 라우트는 `route.test.ts`/`route-<측면>.test.ts`, 교차 라우트는 서술명). ESLint 경계가 colocation 을 막으면 의존 방향이 허용하는 쪽 SUT 폴더에 둔다(예: branch-logic-drift 는 공용 구역→server 금지라 server 도메인 쪽, 빌더 프리뷰 스토어 배선 테스트는 renderer 의 feature import 금지라 빌더 stores 쪽). 양쪽 다 막히는 교차 feature 계약은 `tests/repo` 로(예: measurement-font). `tests/` 에는 계층·계약 스위트만 산다 — `integration/`(service 모킹 패턴: top-level `vi.mock` + `vi.mocked`, realdb 포함)·`e2e/`·`repo/`(src 밖 소스·레포 계약)·fixtures/helpers/stubs/setup. 이 배치는 메타테스트(`tests/repo/test-tree-layout.test.ts`)가 강제한다. Vitest include 는 `tests/**` + `src/**/*.test.{ts,tsx}` + `workers/`, `.tsx` 는 jsdom 프로젝트 자동 분기(DOM 이 필요한 `.ts` 만 `DOM_TS_TESTS` 등재). 실DB 왕복은 `*.realdb.test.ts` — `pnpm test:integration`(로컬 supabase 54322 필요), 일반 `pnpm test`에서는 스킵. `tests/integration/profiles-row-actions.test.ts`의 오랜 flaky 는 2026-08-19 에 수리했다. 원인은 그 파일이 `@/db/schema` 에 `vi.mock` 을 두 번 걸고 있던 것이다 — 같은 경로에 두 번 걸면 어느 팩토리가 이기는지 보장되지 않고, `{ __table }` 만 주는 쪽이 이기면 `col.__col` 이 undefined 라 mock `eq()` 가 항상 false 를 반환해 모든 조건 조회가 빈 결과가 된다. 그 결과 14건 중 12건이 `SurveyOwnershipError:not_found` 로 무너졌다. "전체 스위트에서만 모킹 간섭으로 깨진다"·"격리하면 항상 통과" 두 진단 모두 틀렸고, 중복 제거 후 전체 스위트에 포함해도 통과해 2단 격리 구조와 `ISOLATED_FLAKY_TESTS` 를 걷어냈다. **같은 모듈에 `vi.mock` 을 두 번 걸지 말 것.**
+10. **테스트**: 단위 테스트의 집은 SUT 소스 옆이다(ADR 0017, 전면 colocation — 2026-08-25 실측 src 466파일). 명명은 소스 어간 정합 — 1:1은 `<소스>.test.ts(x)`, 한 소스의 측면 시리즈는 `<어간>-<측면>.test.ts`, 여러 소스를 가로지르는 시나리오는 주 SUT 폴더에 주제명(app 라우트는 `route.test.ts`/`route-<측면>.test.ts`, 교차 라우트는 서술명). ESLint 경계가 colocation 을 막으면 의존 방향이 허용하는 쪽 SUT 폴더에 둔다(예: branch-logic-drift 는 공용 구역→server 금지라 server 도메인 쪽, 빌더 프리뷰 스토어 배선 테스트는 renderer 의 feature import 금지라 빌더 stores 쪽). 양쪽 다 막히는 교차 feature 계약은 `tests/repo` 로(예: measurement-font). `tests/` 에는 계층·계약 스위트만 산다 — `integration/`(service 모킹 패턴: top-level `vi.mock` + `vi.mocked`, realdb 포함)·`e2e/`·`repo/`(src 밖 소스·레포 계약)·fixtures/helpers/stubs/setup. 이 배치는 메타테스트(`tests/repo/test-tree-layout.test.ts`)가 강제한다. Vitest include 는 `tests/**` + `src/**/*.test.{ts,tsx}` + `workers/`, `.tsx` 는 jsdom 프로젝트 자동 분기(DOM 이 필요한 `.ts` 만 `DOM_TS_TESTS` 등재). 실DB 왕복은 `*.realdb.test.ts` — `pnpm test:integration`(로컬 supabase 54322 필요), 일반 `pnpm test`에서는 스킵. **같은 모듈에 `vi.mock` 을 두 번 걸지 말 것** — 어느 팩토리가 이기는지 보장되지 않는다. `{ __table }` 만 주는 쪽이 이기면 mock `eq()` 가 항상 false 라 조건 조회가 전부 빈 결과가 된다(`profiles-row-actions` 가 그렇게 14건 중 12건이 무너졌고, 「전체 스위트에서만 깨지는 모킹 간섭」으로 오진됐다).
 
 11. **vitest의 `server-only` stub 사각지대**: 클라이언트/서버 경계 위반은 테스트가 통과해도 빌드에서만 드러난다. 경계를 건드렸으면 `pnpm build`로 확인할 것.
 
@@ -494,7 +394,7 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 
 14. **응답 루트 사이드카**: `questionResponses` 최상위의 `__` 접두 키(`__optTexts__` 기타/상세 기재, `__changeConfirm__` 추적조사 변동 확인)는 실존 문항이 아니라 저장 경계마다 분기가 필요하다 — 분리를 빠뜨리면 `saveDraft` 는 소속 검증에서 500 이 되고 `complete` 는 멤버십 필터에서 값을 조용히 버린다(둘 다 실제로 겪은 사고). 키와 정제 함수는 `lib/survey/response-sidecars.ts` 한 곳에 등록하고, 저장 경계는 `splitRootSidecars`/`isPersistedRootSidecarKey`/`sanitizeRootSidecar` 로만 판정한다. 등록되지 않은 `__` 키는 **저장에서 빠지고 경고 로그만 남는다** — 거부하면 등록을 빠뜨린 키 하나가 그 응답자의 초안 저장을 통째로 막는다(부분 저장이 없다). 문항 id 는 UUID 라 `__` 접두를 가질 수 없어 진짜 답변이 이 분기로 새지 않는다. `__dynamicRowSelections__` 는 2026-09-09 에 등재했다. `__prefillEdits__`(고친 프리필 칸 id — 응답 확정이 계산해 덮어쓴다, CONTEXT.md 「고친 프리필 따로 내보내기」)는 2026-11-05.
 
-    **키 상수는 import 0 인 잎 모듈이 소유하고, 어느 키 모듈도 등록부를 되부르면 안 된다.** 순환이 닫히면 등록부가 남의 상수를 초기화 전에 읽어 계산 키가 `undefined` 로 등록되고, 그 사이드카가 등록 목록에서 **조용히 빠진다** — 저장이 거부가 아니라 누락으로 끝나므로 아무도 모른다. 2026-09-16 에 실제로 닫혀 있었고(`__optTexts__` 를 `lib/option-text-read.ts` 로 내려 끊었다), 순환을 만든 것은 등록부의 직접 import 가 아니라 `prior-answers → response-sidecars` 라는 **전이 closure 안쪽 간선**이었다. 그래서 등록부에 새 import 를 들일 때는 그 모듈의 closure 가 등록부로 돌아오지 않는지 봐야 한다. `lib/survey/response-sidecars-import-order.test.ts` 가 소스를 읽어 이 간선을 막고, 등록 키 집합 전체를 리터럴로 못박는다 — 키 문자열은 `question_responses` JSONB 에 그대로 저장되므로 개명하면 이미 저장된 응답의 사이드카가 고아가 된다.
+    **키 상수는 import 0 인 잎 모듈이 소유하고, 어느 키 모듈도 등록부를 되부르면 안 된다.** 순환이 닫히면 등록부가 남의 상수를 초기화 전에 읽어 키가 `undefined` 로 등록되고, 그 사이드카가 **조용히 빠진다** — 저장이 거부가 아니라 누락으로 끝난다. 순환은 직접 import 가 아니라 전이 closure 안쪽 간선으로도 닫히므로(`prior-answers → response-sidecars` 실사례), 등록부에 새 import 를 들일 때는 그 모듈의 closure 가 등록부로 돌아오지 않는지 본다. `lib/survey/response-sidecars-import-order.test.ts` 가 이 간선을 막고 등록 키 집합을 리터럴로 못박는다 — 키 문자열은 `question_responses` JSONB 에 그대로 저장되므로 개명하면 이미 저장된 응답의 사이드카가 고아가 된다.
 
 15. **문항 가시성**: 표시 조건으로 숨겨진 문항의 응답은 **그 순간 지워진다. 되돌려도 살아나지 않는다** (2026-09-07 결정). 판정·삭제는 `lib/survey` 한 곳이고 복제 금지다. 완료 제출과 관리자 수정은 순서를 직접 조립하지 않고 응답 확정(`server/survey-response/services/answer-finalization.ts`)을 거친다. **초안·구간 저장에는 strip 을 걸지 않는다** — 그쪽 answers 는 더티 키만 담은 부분 패치라, 조건이 참조하는 상류 문항이 없어 멀쩡한 답이 지워진다. 새 저장 경로를 만들 때 이 구분을 지킬 것. 저장 경계 순서 · 조건 평가 컨텍스트 · 경로 밖 문항 · 표의 숨은 칸은 `src/lib/survey/AGENTS.md`.
 
@@ -504,13 +404,13 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 
 18. **설문 종료는 「새로 들어오는 사람」만 막는다 — 진행 중 응답은 끝까지 제출된다**(ADR-0030): 응답 접수 판정표(`server/survey-response/domain/acceptance.ts`)의 `survey_closed` 는 **신규 진입과 재응답 허용**만 거부하고 완료 제출·진행 중 계속은 통과시킨다(마감일과 같은 결 — 즉시 전면 중단의 수단은 `isPaused` 다). 술어가 **설문 행만** 본다: 종료는 버전 행을 건드리지 않아 버전은 published 로 남으므로 「설문 또는 버전」으로 물으면 새 응답이 그대로 들어온다. 반대로 `status_not_published` 는 closed 를 「발행된 적 있는 설문」으로 통과시킨다 — 한 술어에 섞으면 완료 게이트가 종료된 설문의 진행 중 응답을 미배포로 잘라낸다. **첫 화면 차단도 같은 범위다**: 종료된 설문은 이어 갈 것이 없는 방문자에게만 접수 종료 화면(`not_accepting`)을 그린다. 「이어 갈 것」은 서버가 초대 토큰의 조사 대상에게 열린 응답이 있는지 본 값(`SurveyControl.resumableByInvite`)과 브라우저의 세션 키 둘로 판정한다(`use-duplicate-guard` 의 `closedEntry`) — 중단처럼 무조건 첫 화면에서 막으면 새로고침 한 번에 진행 중 응답이 버려진다. 새 접수 게이트를 만들 때 종료를 중단과 같은 줄에 넣지 말 것.
 
-19. **`useEffectEvent` 를 `React.memo`·`forwardRef` 컴포넌트 안에 쓰지 말 것**: React 19.2.3 은 memo·forwardRef 로 감싼 컴포넌트의 `useEffectEvent` 를 갱신하지 않는다(react-dom 커밋 단계가 일반 함수 컴포넌트만 `ref.impl` 을 갈아끼운다 — dev·prod 둘 다). 이벤트가 첫 렌더 값을 계속 읽어, 표 입력 칸 `InputCell` 의 「응답자가 고칠 수 있게」 칸을 고치면 곧바로 명단 값으로 되돌아갔다(2026-10-27 — `InputCell` 의 memo 를 걷어 고쳤다, 부모 `CellRouter` 가 memo 라 손실 없음). `RichTextEditor`(forwardRef)도 바깥에서 바꾼 `initialHtml` 이 본문에 반영되지 않았다. 그 안에서 부르는 훅(이미지·첨부 추적기)의 `useEffectEvent` 도 같았다 — 컴포넌트 단위로 걸리므로 훅 안에 숨어 있어도 같다. forwardRef 를 걷고 React 19 의 `ref` prop 으로 받게 고쳤다(`rich-text-editor-prop-sync.test.tsx`). 지금 src 에 그 조합은 없다. ref 가 필요하면 forwardRef 대신 `ref` prop 을, memo 가 필요하면 바깥 컴포넌트를 memo 로 두고 안쪽은 일반 함수 컴포넌트로 둔다. **React 를 올리면 다시 확인할 것.**
+19. **`useEffectEvent` 를 `React.memo`·`forwardRef` 컴포넌트 안에 쓰지 말 것**: React 19.2.3 은 memo·forwardRef 로 감싼 컴포넌트의 `useEffectEvent` 를 갱신하지 않는다(dev·prod 둘 다) — 이벤트가 첫 렌더 값을 계속 읽는다. **그 안에서 부르는 훅 속의 `useEffectEvent` 도 같다**(컴포넌트 단위로 걸린다). 표 입력 칸 `InputCell` 이 고친 값을 명단 값으로 되돌리고 `RichTextEditor` 가 바깥에서 바꾼 `initialHtml` 을 반영하지 않던 원인이다(`rich-text-editor-prop-sync.test.tsx`). 지금 src 에 그 조합은 없다. ref 가 필요하면 forwardRef 대신 React 19 의 `ref` prop 을, memo 가 필요하면 바깥 컴포넌트를 memo 로 두고 안쪽은 일반 함수 컴포넌트로 둔다. **React 를 올리면 다시 확인할 것.**
 
 ---
 
 ## CI 게이트
 
-`.github/workflows/ci.yml` — 변경 범위 판별 후 아래를 순차 실행한다. 로컬에서 미리 돌려야 할 것은 `pnpm lint`, `pnpm exec tsc --noEmit`, `pnpm test`.
+`.github/workflows/ci.yml` — `main`·`staging` 푸시와 PR 에서 돈다. 변경 범위 판별 후 아래를 순차 실행한다. 로컬에서 미리 돌려야 할 것은 `pnpm lint`, `pnpm exec tsc --noEmit`, `pnpm test`.
 
 | 게이트                | 스크립트                            | 역할                                          |
 | --------------------- | ----------------------------------- | --------------------------------------------- |
@@ -531,7 +431,7 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 - 그래서 번호와 배열 순서가 어긋나 보일 수 있다. 만지는 객체가 서로소면 정상이다
 - **배열 순서를 지켜야 하는 쌍**: 0128 과 0129 는 같은 CHECK(`mobile_table_display_mode`)를 차례로 갈아끼운다 — 0128 을 뒤에 재생하면 `item-cards` 가 빠진다. **0152 는 0121 앞**(운영 순서 — 0121 이 같은 FK 를 다시 건다). **0156 도 0121 앞** — 운영 이력 칸의 옛 Supabase 계정 id 를 앱 users 로 잇지 않으면 0121 의 FK 가 실패한다(2026-11-09 운영 데이터 리허설)
 - **배포 전후가 갈리는 쌍**: 0142(이관 이력 표)는 앱 배포 **전**, 0143(`response_answers` 삭제 등)은 배포 **뒤** — 거꾸로 하면 구버전 앱의 완료 제출이 실패한다. 0145(언어별 설문 글자 `surveys.localized_messages`)도 배포 **전**이다(새 앱이 읽는다, nullable 이라 2단계 불필요)
-- **승격 때 프로덕션에 적용할 것**(staging 에만 있는 번호 — 0146·0147·0152·0153·0154·0155 는 운영에 이미 있다): 역할 모델 v2 는 **0112~0123·0156·0151** 다(0111 은 선반영 재현용이라 적용 금지 — 파일 머리 참조). 팀 종류(실사팀 표시) **0139** 는 teams 를 만지므로 역할 v2 와 함께 간다. 외주·클라이언트 링크는 **0126·0127·0133·0134 를 함께** 적용하고, 0134 는 테이블 개명이라 옛 코드와 양립하지 않아 **앱 배포 직전에** 적용한다. 외주 업체 여럿은 그 묶음 바로 뒤에 **0159**(외주 링크 여럿·이름표 — 활성 링크 유일 제약을 클라이언트로 좁힌다) → **0160**(담당 범위 표 `fieldwork_link_shares` + 링크의 「나눈 적 있음」) 순서로, 같은 날 앱 배포 **전**에 적용한다 — 새 표·nullable 칸·제약 완화뿐이라 구버전 앱과 양립하지만 0134 의 새 테이블 이름을 전제한다. 설문 즐겨찾기·내 태그 **0149·0150** 은 새 테이블만 만들어 앱 배포 **전**에 적용한다 — 태그 검색 빈도 **0157**·목록 보는 자리 **0158** 도 0150 뒤·앱 배포 전(기본값·nullable 칸 추가라 구버전 앱과 양립)(목록 제목순이 쓰는 `ko-x-icu` 정렬이 프로덕션에 있는지도 함께 본다). 카드 제목 **0140**, 클라이언트 링크 칩·열 **0144·0148** 도 함께 간다. 순서는 `manual-migrations.json` 배열이고, 운영 계정의 검증용 가짜 슈퍼어드민은 0116 전에 지운다(0116 이 가장 먼저 만든 활성 슈퍼어드민에게 소유를 몰아준다)
+- **승격 때 프로덕션에 적용할 번호와 순서**는 `docs/agents/promotion.md` 에 있다(staging 에만 있는 번호·묶음·배포 전후). 새 마이그레이션을 staging 에 넣으면 그 문서에 한 줄 더한다
 - 번호를 옮긴 이력은 문서에 두지 않는다 — 역할 v2 의 옛 번호 매핑(0101→0111 …)은 병합 커밋 `c7197701` 의 `AGENTS.md`, 외주 링크 0128→0133 은 0133 파일 머리에 있다. 이미 적용한 DB 는 번호와 무관하다(적용 이력 표가 없다)
 
 ---
@@ -542,7 +442,8 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 
 `migration-journal-gate`는 디렉터리에 있는 `.sql`이 등재됐는지만 본다. **파일로 쓰지 않고 실 DB에 직접 적용한 SQL은 그 검사에 걸리지 않는다** — 실제로 `lookup_contact_by_invite_token` 함수와 컬럼 6개가 그렇게 들어와 몇 달간 방치됐다(2026-08-19 발견·복구). 이 스크립트가 그 반대 방향을 본다.
 
-- 전제: 먼저 `pnpm db:setup-test`로 로컬 테스트 DB가 최신이어야 한다. **로컬 supabase 도커는 워크트리 공용 단일 인스턴스라 다른 브랜치가 재생하면 통째로 바뀐다** — `setup-test-db.sh`가 `_repo_meta.migration_stamp`에 재생 지문을 찍고 `db:drift`가 대조해, 남의 DB와 대조하려 하면 exit 2로 멈춘다 (조용히 틀린 결과를 내던 것을 2026-08-31에 잡았다)
+- 전제: 기준이 되는 로컬 DB 가 이 레포 상태로 재생돼 있어야 한다. **`pnpm db:isolated <이름>` 으로 만들고 `pnpm db:drift staging --local-db <이름>`** 으로 대조하면 형제 워크트리를 건드리지 않는다. `--local-db` 없이는 공유 DB 가 기준이라 `pnpm db:setup-test` 가 먼저다(형제의 DB 를 덮는다). 두 스크립트가 `_repo_meta.migration_stamp` 에 재생 지문을 찍고 `db:drift` 가 대조해, 남의 DB 나 낡은 DB 와 대조하려 하면 exit 2로 멈춘다
+- staging 주소는 `STAGING_DATABASE_URL`(환경 변수 또는 `.env.local`), 없으면 `.env.local` 의 `DATABASE_URL` 줄(주석 포함) 중 로컬도 prod 도 아닌 첫 줄이다. 호스트가 로컬이면 멈춘다 — 예전에는 `.env.local` 의 활성 줄(로컬)을 읽어 로컬끼리 대조하고 차이 0건을 냈다
 - 알려진 차이는 `supabase/drift-allowlist.json`에 **사유와 함께** 등재한다. 사유가 `미결`로 시작하면 결정이 남은 항목이며 매 실행 노출된다
 - 비-UNIQUE 성능 인덱스는 동작 무관이라 참고 카운트로만 센다
 - **배포 전에 돌릴 것.** 도구를 만든 것보다 정기적으로 돌리는 것이 값어치다

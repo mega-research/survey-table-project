@@ -14,7 +14,7 @@ import { describe, expect, it } from 'vitest';
  */
 
 const ROOT = process.cwd();
-const ROOT_LIMIT = 45_000;
+const ROOT_LIMIT = 37_000;
 const AREA_LIMIT = 30_000;
 const CAUTION_ITEM_LIMIT = 1_500;
 

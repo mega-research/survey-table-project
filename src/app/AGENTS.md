@@ -25,7 +25,7 @@ src/
 │   │   ├── file-cleanup/       # R2 유예 삭제 큐 관리
 │   │   ├── login/              # 로그인
 │   │   └── profile/            # 프로필
-│   ├── api/                    # API 라우트 (루트 AGENTS.md 의 "API 엔드포인트" 참조)
+│   ├── api/                    # API 라우트 (아래 "API 엔드포인트" 참조)
 │   ├── _operations/            # **두 라우트 트리가 공유하는 페이지 본문** (ADR-0026)
 │   │                           # overview-screen·report-screen·contact-detail-screen·profiles-screen
 │   │                           # ·response-edit-screen(+ 클라이언트 admin-response-editor) — 조립이
@@ -59,6 +59,30 @@ src/
 │   ├── analytics/              # 분석 대시보드
 │   └── unsubscribe/            # 메일 수신거부 (+ /restored)
 │
+```
+
+---
+
+## API 엔드포인트
+
+```
+POST   /api/rpc/[[...rest]]                    # oRPC 핸들러 — 전체 query/mutation (메인 경로)
+*      /api/v1/[[...rest]]                     # OpenAPI 핸들러 (ENABLE_PUBLIC_API 게이트, 기본 비활성)
+POST   /api/upload/image                       # 이미지 업로드 (multipart, 내부 전용, 삭제는 media.deleteImages RPC)
+POST   /api/upload/avatar                      # 아바타 업로드 (세 계정 유형 공통, 정사각 WebP 로 깎아 저장)
+POST   /api/upload/mail-attachment             # 메일 첨부 업로드 (삭제는 media.* RPC)
+POST   /api/upload/notice-attachment           # 공지 첨부 업로드 (삭제는 media.* RPC)
+POST   /api/upload/survey-document             # 조사표 PDF 업로드 (tmp 로 받고 쪽 수 판독, promote 는 attach RPC)
+GET    /api/surveys/[surveyId]/export          # SPSS(.sav)/엑셀 export (인증 + export.download 관문, 파일 스트림). raw/raw-split 은 `includeNonRespondents=1` 로 미응답 조사 대상 행 포함 (sav/sps 는 무시, 꺼도 컨택결과코드 1 은 포함). `includePriorAnswers=1` 은 이번 회차에 키가 없는 문항을 이월 응답으로 채운다 — 숨은 문항 strip 뒤에 병합하고 조건 판정은 하지 않되, 「이월값 불러오기」를 끈 문항(`priorAnswerDisabled`)은 현재 빌더 설정 기준으로 비워 둔다. 조사 대상 명단 열은 파라미터 없이 응답 내역 컬럼 설정(`profileColumns`)의 표시 attrs·pii 열을 항상 붙인다 (pii 열이 있으면 PII 평문 → no-store). — Raw 행 조립은 라우트 폴더 로컬 raw-export-load.ts (contacts·operations 를 함께 읽어 한 도메인에 못 둔다. 순수 조각은 lib/analytics/raw-export-rows.ts)
+GET    /api/surveys/[surveyId]/export/split-preview  # 분할 export 미리보기 (basis 없으면 `hasContacts` — 다이얼로그가 Raw Data 옵션 영역을 그릴지 판단. basis + `includeNonRespondents=1` 이면 `totalRows`·`nonRespondentRows` 를 더해 반환)
+GET    /api/surveys/[surveyId]/contacts/export # 조사 대상 목록 엑셀 다운로드
+GET    /api/surveys/[surveyId]/demand-summary  # 문항 수요 집계표 엑셀 (화면의 정렬·필터를 쿼리로 받음)
+POST   /api/response/segment                   # 구간 응답 저장 (sendBeacon — REST 유지)
+POST   /api/response/draft                     # 이탈 시점 임시 저장 (sendBeacon — REST 유지)
+*      /api/inngest                            # Inngest 핸들러
+POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
+GET    /api/legacy-guest-link/[surveyId]/[[...rest]]  # 옛 게스트 주소 다리 — 옛 운영 콘솔 주소를 직원은 내부 콘솔로, 옛 게스트는 외주 링크(/fw/<token>)로 — 링크가 여럿이면 브라우저 세션 또는 비밀번호 화면(/fw/legacy/<surveyId>)이 고른다 (307, 전환기 장치)
+*      /api/auth/[...all]                      # Better Auth 핸들러 (민감 POST 경로는 auth-sensitive IP rate limit 선적용)
 ```
 
 ---
