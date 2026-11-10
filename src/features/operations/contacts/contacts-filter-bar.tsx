@@ -8,7 +8,7 @@ import {
   type ClientFilterClause,
   type ColumnCandidate,
 } from '@/lib/operations/filter-shared';
-import { describeIdListValue, expandRangesToIds } from '@/lib/operations/id-list-paste';
+import { describeIdListValue, expandRangesToIds } from './id-list-paste';
 import {
   MAX_STORED_ID_LIST,
   parseIdListDetailed,

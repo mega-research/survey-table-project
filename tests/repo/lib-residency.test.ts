@@ -25,14 +25,10 @@ import { describe, expect, it } from 'vitest';
 const REPO_ROOT = join(import.meta.dirname, '../..');
 
 /**
- * 이 테스트를 들일 때 이미 있던 위반. **새 항목을 더하지 않는다** — 옮기는 것이 답이다.
- * 옮기고 나면 여기서도 지운다(지우지 않으면 아래 단언이 빨개진다).
+ * 등재된 위반. **비어 있는 것이 정상이다** — 새 항목을 더하지 않는다, 옮기는 것이 답이다.
+ * (들일 때 있던 셋은 2026-11-10 에 소비자 폴더로 옮겼다.)
  */
-const KNOWN_FRONT_ONLY: Record<string, string> = {
-  'src/lib/operations/contact-target-edit-format.ts': 'features/operations 만 부른다',
-  'src/lib/operations/id-list-paste.ts': 'features/operations 만 부른다',
-  'src/lib/question/label.ts': 'features/question-renderer·survey-response 만 부른다',
-};
+const KNOWN_FRONT_ONLY: Record<string, string> = {};
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -87,7 +83,7 @@ describe('src/lib 잔류 기준', () => {
     expect(consumers.size).toBeGreaterThan(100);
   });
 
-  it('부르는 곳이 features·components 뿐인 lib 파일은 등재된 기존 위반뿐이다', () => {
+  it('부르는 곳이 features·components 뿐인 lib 파일은 없다', () => {
     expect(frontOnly).toEqual(Object.keys(KNOWN_FRONT_ONLY).sort());
   });
 });

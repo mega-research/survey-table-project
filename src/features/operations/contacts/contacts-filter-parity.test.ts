@@ -3,7 +3,7 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 
 import { buildContactsFilterSql } from '@/lib/operations/contacts-filter-sql.server';
 import type { FilterClause } from '@/lib/operations/filter-shared';
-import { describeIdListValue } from '@/lib/operations/id-list-paste';
+import { describeIdListValue } from './id-list-paste';
 import { parseParityKeyword } from '@/lib/operations/range-list';
 
 const dialect = new PgDialect();

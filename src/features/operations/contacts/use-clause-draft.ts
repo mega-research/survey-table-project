@@ -8,7 +8,7 @@ import {
 } from '@/features/operations/filters/filter-bar-core';
 import { getErrorMessage } from '@/lib/get-error-message';
 import { type ColumnCandidate, FILTER_SOURCE } from '@/lib/operations/filter-shared';
-import { compactIdListValue } from '@/lib/operations/id-list-paste';
+import { compactIdListValue } from './id-list-paste';
 import type { ContactAssignmentClause } from '@/shared/contracts/contacts';
 
 /** 조건이 바뀐 뒤 서버에 인원을 다시 묻기까지 기다리는 시간. */

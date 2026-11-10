@@ -1,4 +1,8 @@
-import { FILTER_SOURCE, decodeMultiClauseValue, parseIdListToken } from './filter-shared';
+import {
+  FILTER_SOURCE,
+  decodeMultiClauseValue,
+  parseIdListToken,
+} from '@/lib/operations/filter-shared';
 import {
   type NumRange,
   type Parity,
@@ -8,7 +12,7 @@ import {
   hasLeadingZeroToken,
   parseIdListDetailed,
   parseParityKeyword,
-} from './range-list';
+} from '@/lib/operations/range-list';
 
 /**
  * 필터 입력칸의 ID 목록 붙여넣기 — 클라이언트(위젯·필터바)와 테스트가 공유하는 순수 모듈.

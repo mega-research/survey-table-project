@@ -3,7 +3,7 @@
  * 순수 모듈 — DB·React·pdf.js 를 모른다.
  */
 import { getInterleavedChildren } from '@/utils/group-ordering';
-import { questionShortCode } from '@/lib/question/label';
+import { questionShortCode } from './question-label';
 import type { Question, QuestionGroup } from '@/types/survey';
 
 export interface AnchorOutlineQuestion {

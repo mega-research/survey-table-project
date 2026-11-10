@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { questionShortCode } from './label';
+import { questionShortCode } from './question-label';
 
 describe('questionShortCode', () => {
   it('엑셀 라벨이 있으면 그것을 먼저 쓴다', () => {

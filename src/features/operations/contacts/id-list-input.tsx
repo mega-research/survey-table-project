@@ -7,7 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Textarea } from '@/components/ui/textarea';
 import { useAutoGrowTextarea } from '@/hooks/use-auto-grow-textarea';
 import { FILTER_SOURCE } from '@/lib/operations/filter-shared';
-import { describeIdListValue, normalizePastedIdList } from '@/lib/operations/id-list-paste';
+import { describeIdListValue, normalizePastedIdList } from './id-list-paste';
 import { SINGLE_COLUMN_ID_LIST_MAX, compactIdList, parityLabel } from '@/lib/operations/range-list';
 import { cn } from '@/lib/utils';
 import { client } from '@/shared/lib/rpc';

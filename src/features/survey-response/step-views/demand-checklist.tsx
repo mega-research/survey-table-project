@@ -10,7 +10,7 @@ import {
   resolveHoverAction,
   SCROLL_QUIET_MS,
 } from '@/features/survey-response/lib/hover-follow';
-import { questionShortCode } from '@/lib/question/label';
+import { questionShortCode } from '@/features/question-renderer/utils/question-label';
 import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import {
   hasOpinionText,

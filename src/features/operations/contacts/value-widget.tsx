@@ -26,7 +26,7 @@ import {
   webFilterOptionsFor,
   withNoneOption,
 } from '@/lib/operations/filter-shared';
-import { isIdListSource } from '@/lib/operations/id-list-paste';
+import { isIdListSource } from './id-list-paste';
 import type { ContactResultCode } from '@/shared/contracts/contacts';
 import type { ContactAssignmentOption } from '@/shared/contracts/contacts-io';
 

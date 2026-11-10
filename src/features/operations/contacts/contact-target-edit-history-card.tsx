@@ -4,7 +4,7 @@ import { LocalDateTime } from '@/components/ui/local-date-time';
 import {
   describeContactTargetEditChange,
   summarizeContactTargetEdit,
-} from '@/lib/operations/contact-target-edit-format';
+} from './contact-target-edit-format';
 import type { ContactTargetEditLogRow } from '@/shared/contracts/contacts-io';
 
 interface Props {
