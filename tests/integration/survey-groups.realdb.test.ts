@@ -826,6 +826,276 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
     });
   });
 
+  // ───────────────────────────────────────────────────────────────────────────
+  // 보이는 범위와 건수는 하위 그룹까지 본다 (설문 그룹 중첩 티켓 02)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /**
+   * 내 팀 그룹의 규칙은 셋이다.
+   *
+   * ① 그 그룹이나 **그 아래 어디든** 내가 볼 수 있는 설문이 있으면 보인다 — 위쪽 그룹까지 함께.
+   * ② 아래에 설문이 있는데 내가 볼 수 있는 것이 하나도 없으면 이름조차 나오지 않는다.
+   *    아래 **전체**가 비어 있을 때만 빈 그룹으로 보인다.
+   * ③ 위쪽 그룹이 전부 보일 때만 보인다 — 숨은 그룹 밑의 빈 가지가 뿌리처럼 떠오르지 않는다.
+   *
+   * 건수는 하위 그룹까지 합친, 내가 볼 수 있는 설문 수다. 협업 그룹(타 팀)은 전과 같다 —
+   * 직접 담긴 그룹만, 상위 없이, 직접 담긴 건수로.
+   *
+   * 보는 사람은 MEMBER(A팀 **팀원** — `invite_only` 가 숨는다)와 A_LEADER(전부 본다)다. 둘을
+   * 나란히 재야 「숨겼다」와 「원래 없다」가 갈린다.
+   */
+  describe('보이는 범위와 건수는 하위 그룹까지 본다', () => {
+    const leader = clientFor(A_LEADER_ID);
+
+    /** 그 그룹에 직접 담긴 설문 — `hidden` 이면 MEMBER 에게 보이지 않는다(남의 invite_only). */
+    async function seedSurveyIn(groupId: string, kind: 'visible' | 'hidden'): Promise<string> {
+      const id = crypto.randomUUID();
+      await db.insert(surveysTable).values({
+        id,
+        title: kind === 'hidden' ? '초대된 멤버만 조사' : '팀 공개 조사',
+        teamId: TEAM_A,
+        visibility: kind === 'hidden' ? 'invite_only' : 'team',
+        assignmentStatus: 'assigned',
+        ownerUserId: A_OWNER_ID,
+        createdBy: A_OWNER_ID,
+        surveyGroupId: groupId,
+      });
+      createdSurveyIds.push(id);
+      return id;
+    }
+
+    /** 이정운 › 2026 › 상반기 — 3단계 한 가지. */
+    async function seedBranch() {
+      const top = await seedGroup(member, TEAM_A, '이정운');
+      const second = await seedGroup(member, TEAM_A, '2026', top);
+      const third = await seedGroup(member, TEAM_A, '상반기', second);
+      return { top, second, third };
+    }
+
+    /** 내 팀 줄만 id → 줄 로. */
+    async function ownRows(client: ReturnType<typeof clientFor>) {
+      const rows = await client.surveyGroups.list({ teamId: TEAM_A });
+      return new Map(rows.filter((g) => g.foreignTeamName === null).map((g) => [g.id, g]));
+    }
+
+    it('3단계 그룹에만 볼 수 있는 설문이 있어도 1·2단계 그룹이 함께 보인다', async () => {
+      const { top, second, third } = await seedBranch();
+      const surveyId = await seedSurveyIn(third, 'hidden');
+      // 초대 전 — MEMBER 에게는 가지 전체가 없다.
+      expect([...(await ownRows(member)).keys()]).toEqual([]);
+
+      await db
+        .insert(participantsTable)
+        .values({ surveyId, userId: MEMBER_ID, kind: 'member', addedBy: A_OWNER_ID });
+
+      const rows = await ownRows(member);
+      expect([...rows.keys()].sort()).toEqual([top, second, third].sort());
+      expect(rows.get(top)).toMatchObject({ parentGroupId: null, surveyCount: 1 });
+      expect(rows.get(second)).toMatchObject({ parentGroupId: top, surveyCount: 1 });
+      expect(rows.get(third)).toMatchObject({ parentGroupId: second, surveyCount: 1 });
+    });
+
+    it('아래에 설문이 있지만 볼 수 있는 것이 하나도 없는 그룹은 행이 나오지 않는다 — 같은 팀 안에서도', async () => {
+      const { top, second, third } = await seedBranch();
+      await seedSurveyIn(third, 'hidden');
+
+      const asMember = await member.surveyGroups.list({ teamId: TEAM_A });
+      expect(asMember.map((g) => g.id)).toEqual([]);
+      expect(asMember.map((g) => g.name)).not.toContain('이정운');
+
+      // 팀장에게는 가지 전체가 보인다 — 숨긴 것이지 없는 것이 아니다.
+      expect([...(await ownRows(leader)).keys()].sort()).toEqual([top, second, third].sort());
+    });
+
+    it('볼 수 있는 설문이 다른 가지에만 있으면 그 가지와 위쪽만 보이고 숨은 가지는 빠진다', async () => {
+      const top = await seedGroup(member, TEAM_A, '이정운');
+      const open = await seedGroup(member, TEAM_A, '2026', top);
+      const secret = await seedGroup(member, TEAM_A, '임원 조사', top);
+      await seedSurveyIn(open, 'visible');
+      await seedSurveyIn(secret, 'hidden');
+
+      const rows = await ownRows(member);
+
+      expect([...rows.keys()].sort()).toEqual([top, open].sort());
+      expect(rows.get(top)?.surveyCount).toBe(1);
+    });
+
+    it('아래 전체가 빈 그룹은 보인다 — 방금 만든 빈 하위 그룹까지', async () => {
+      const { top, second, third } = await seedBranch();
+
+      const rows = await ownRows(member);
+
+      expect([...rows.keys()].sort()).toEqual([top, second, third].sort());
+      expect([top, second, third].map((id) => rows.get(id)?.surveyCount)).toEqual([0, 0, 0]);
+    });
+
+    it('지워진 설문만 든 그룹은 빈 그룹이다', async () => {
+      const { top, second, third } = await seedBranch();
+      const deleted = await seedSurveyIn(third, 'hidden');
+      await db
+        .update(surveysTable)
+        .set({ deletedAt: new Date() })
+        .where(eq(surveysTable.id, deleted));
+
+      const rows = await ownRows(member);
+
+      expect([...rows.keys()].sort()).toEqual([top, second, third].sort());
+      expect(rows.get(top)?.surveyCount).toBe(0);
+    });
+
+    it('내가 볼 수 없는 설문만 든 그룹 밑의 빈 하위 그룹은 행이 나오지 않는다', async () => {
+      const { top, second, third } = await seedBranch();
+      // 숨은 설문은 **맨 위 그룹에 직접** 담겼다 — 그 밑의 두 그룹은 비어 있다.
+      await seedSurveyIn(top, 'hidden');
+
+      expect([...(await ownRows(member)).keys()]).toEqual([]);
+
+      const asLeader = await ownRows(leader);
+      expect([...asLeader.keys()].sort()).toEqual([top, second, third].sort());
+      expect(asLeader.get(top)?.surveyCount).toBe(1);
+      expect(asLeader.get(third)?.surveyCount).toBe(0);
+    });
+
+    it('가운데 그룹이 숨으면 그 밑의 빈 그룹도 숨고, 위쪽은 자기 설문으로 남는다', async () => {
+      const { top, second, third } = await seedBranch();
+      await seedSurveyIn(top, 'visible');
+      await seedSurveyIn(second, 'hidden');
+
+      const rows = await ownRows(member);
+
+      expect([...rows.keys()]).toEqual([top]);
+      expect(rows.get(top)?.surveyCount).toBe(1);
+      expect([...(await ownRows(leader)).keys()].sort()).toEqual([top, second, third].sort());
+    });
+
+    it('내 팀 줄의 상위 그룹 id 는 언제나 목록 안의 줄을 가리킨다', async () => {
+      // 보이는 가지 · 통째로 숨는 가지 · 가운데가 숨는 가지 · 빈 가지를 한 팀에 섞는다.
+      const shown = await seedBranch();
+      await seedSurveyIn(shown.third, 'visible');
+      const hiddenTop = await seedGroup(member, TEAM_A, '임원 조사');
+      const underHidden = await seedGroup(member, TEAM_A, '빈 하위', hiddenTop);
+      await seedSurveyIn(hiddenTop, 'hidden');
+      const mixedTop = await seedGroup(member, TEAM_A, '부서 공통');
+      const mixedSecond = await seedGroup(member, TEAM_A, '비공개', mixedTop);
+      const mixedThird = await seedGroup(member, TEAM_A, '빈 3단계', mixedSecond);
+      await seedSurveyIn(mixedTop, 'visible');
+      await seedSurveyIn(mixedSecond, 'hidden');
+      const emptyTop = await seedGroup(member, TEAM_A, '기타');
+      const emptyChild = await seedGroup(member, TEAM_A, '새 폴더', emptyTop);
+
+      const rows = await ownRows(member);
+
+      const ids = new Set(rows.keys());
+      for (const row of rows.values()) {
+        if (row.parentGroupId !== null) expect(ids.has(row.parentGroupId)).toBe(true);
+      }
+      expect([...ids].sort()).toEqual(
+        [shown.top, shown.second, shown.third, mixedTop, emptyTop, emptyChild].sort(),
+      );
+      for (const gone of [hiddenTop, underHidden, mixedSecond, mixedThird]) {
+        expect(ids.has(gone)).toBe(false);
+      }
+    });
+
+    it('건수는 하위 그룹까지 합치고, 내가 볼 수 없는 설문은 세지 않는다', async () => {
+      const { top, second, third } = await seedBranch();
+      const sibling = await seedGroup(member, TEAM_A, '2025', top);
+      await seedSurveyIn(top, 'visible');
+      await seedSurveyIn(second, 'visible');
+      await seedSurveyIn(second, 'hidden');
+      await seedSurveyIn(third, 'visible');
+      await seedSurveyIn(third, 'visible');
+      await seedSurveyIn(sibling, 'hidden');
+
+      // 팀원 — 숨은 둘을 빼고 센다. 숨은 설문만 든 「2025」는 줄도 없다.
+      const asMember = await ownRows(member);
+      expect(asMember.get(top)?.surveyCount).toBe(4);
+      expect(asMember.get(second)?.surveyCount).toBe(3);
+      expect(asMember.get(third)?.surveyCount).toBe(2);
+      expect(asMember.has(sibling)).toBe(false);
+
+      // 팀장 — 전부 센다.
+      const asLeader = await ownRows(leader);
+      expect(asLeader.get(top)?.surveyCount).toBe(6);
+      expect(asLeader.get(second)?.surveyCount).toBe(4);
+      expect(asLeader.get(third)?.surveyCount).toBe(2);
+      expect(asLeader.get(sibling)?.surveyCount).toBe(1);
+    });
+
+    it('슈퍼어드민에게는 팀장과 같은 줄·같은 건수가 나온다', async () => {
+      const superadminId = crypto.randomUUID();
+      await seedUser(superadminId);
+      createdUserIds.push(superadminId);
+      const superadmin = createRouterClient(
+        { surveyGroups },
+        {
+          context: {
+            ...contextFor(superadminId),
+            user: { ...contextFor(superadminId).user!, isSuperadmin: true },
+          },
+        },
+      );
+      const { top, third } = await seedBranch();
+      await seedSurveyIn(top, 'hidden');
+      await seedSurveyIn(third, 'visible');
+
+      expect(await superadmin.surveyGroups.list({ teamId: TEAM_A })).toEqual(
+        await leader.surveyGroups.list({ teamId: TEAM_A }),
+      );
+    });
+
+    it('순서는 전과 같다 — 같은 부모 안에서는 순서 값대로', async () => {
+      const top = await seedGroup(member, TEAM_A, '이정운');
+      const first = await seedGroup(member, TEAM_A, '다', top);
+      const second = await seedGroup(member, TEAM_A, '가', top);
+      await seedSurveyIn(second, 'visible');
+
+      const children = (await member.surveyGroups.list({ teamId: TEAM_A }))
+        .filter((g) => g.parentGroupId === top)
+        .map((g) => g.id);
+
+      expect(children).toEqual([first, second]);
+    });
+
+    it('타 팀 사람에게는 볼 수 있는 설문이 직접 담긴 그룹만, 상위 없이, 직접 담긴 건수로 나온다', async () => {
+      const { top, second, third } = await seedBranch();
+      await seedSurveyIn(top, 'visible');
+      const invited = await seedSurveyIn(second, 'visible');
+      await seedSurveyIn(second, 'visible');
+      await seedSurveyIn(third, 'visible');
+      await db
+        .insert(participantsTable)
+        .values({ surveyId: invited, userId: OUTSIDER_ID, kind: 'member', addedBy: A_OWNER_ID });
+
+      const listed = await outsider.surveyGroups.list({ teamId: TEAM_B });
+
+      // 초대받은 설문이 **직접** 담긴 그룹 하나 — 위쪽(이정운)도 아래쪽(상반기)도 나오지 않는다.
+      expect(listed.map((g) => g.id)).toEqual([second]);
+      expect(listed[0]).toMatchObject({ parentGroupId: null, surveyCount: 1 });
+      expect(listed[0]?.foreignTeamName).toContain('그룹팀A');
+      expect(listed.map((g) => g.name)).not.toContain('이정운');
+      expect(listed.map((g) => g.name)).not.toContain('상반기');
+
+      // 같은 가지를 그 팀 사람이 보면 하위까지 합친 수다 — 두 숫자가 다른 것은 의도다.
+      expect((await ownRows(member)).get(second)?.surveyCount).toBe(3);
+    });
+
+    it('타 팀 사람이 3단계 그룹의 설문에만 초대됐으면 그 위쪽 그룹은 행이 나오지 않는다', async () => {
+      const { top, second, third } = await seedBranch();
+      const invited = await seedSurveyIn(third, 'hidden');
+      await db
+        .insert(participantsTable)
+        .values({ surveyId: invited, userId: OUTSIDER_ID, kind: 'member', addedBy: A_OWNER_ID });
+
+      const listed = await outsider.surveyGroups.list({ teamId: TEAM_B });
+
+      expect(listed.map((g) => g.id)).toEqual([third]);
+      expect(listed[0]?.parentGroupId).toBeNull();
+      expect(listed.map((g) => g.id)).not.toContain(top);
+      expect(listed.map((g) => g.id)).not.toContain(second);
+    });
+  });
+
   it('타 팀 그룹 id 가 정렬 배열에 섞여도 그 행에는 닿지 않는다', async () => {
     const mine = await seedGroup(member, TEAM_A, '내 그룹');
     const theirs = await seedGroup(outsider, TEAM_B, '남의 그룹');
