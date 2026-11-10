@@ -108,6 +108,7 @@ function survey(over: Partial<SurveyListPageItem> = {}): SurveyListPageItem {
     isLedParticipant: false,
     isFavorite: false,
     myTagIds: [],
+    groupPath: [],
     ...over,
   };
 }
@@ -128,6 +129,7 @@ function page(items: SurveyListPageItem[]): SurveyListPageResult {
     teamWideTotal: null,
     owners: [],
     activeTeam: null,
+    groupSubtree: false,
   };
 }
 

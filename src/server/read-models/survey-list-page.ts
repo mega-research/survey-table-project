@@ -12,7 +12,7 @@ import {
   lte,
   sql,
 } from 'drizzle-orm';
-import type { PgSelect } from 'drizzle-orm/pg-core';
+import { type PgSelect, alias } from 'drizzle-orm/pg-core';
 import 'server-only';
 
 import { db } from '@/db';
@@ -55,6 +55,7 @@ import {
 // 조건은 세 겹이다.
 //   ① 원천(source)   — 작업 범위(`scopedSurveyWhere`) 또는 휴지통(`deleted_at IS NOT NULL`)
 //   ② 좁힘(narrowing) — 그룹 화면·팀 좁힘·미분류·「내 설문」. 여기까지가 세그먼트 숫자·소유자 목록의 기준
+//                       그룹 좁힘의 범위만은 검색어를 따른다 — 없으면 직접 담긴 설문, 있으면 아래 전체(`resolveGroupSubtree`)
 //   ③ 거르기(filters) — 검색·목록 상태·상세 검색·즐겨찾기·검색 칩(태그). `total` 과 페이지 항목은 셋 모두를 적용한다
 //
 // 즐겨찾기(티켓 06)·내 태그(티켓 07)는 요청자 본인의 행만 본다(`viewerId`) — 동료의 별·태그는
@@ -94,6 +95,8 @@ export interface SurveyListPageRows {
   activeTeam: { id: string; name: string | null } | null;
   /** 「내 설문」일 때 같은 조건의 팀 전체 결과 수 — 팀 전체 보기에서는 null. */
   teamWideTotal: number | null;
+  /** 그룹 좁힘이 그 그룹 아래 전체로 넓어졌는가 — 그때만 행의 `groupPath` 가 채워진다. */
+  groupSubtree: boolean;
 }
 
 /** 원천의 요청자. */
@@ -286,7 +289,66 @@ function withListJoins<T extends PgSelect>(qb: T) {
     .leftJoin(surveyGroups, eq(surveyGroups.id, surveys.surveyGroupId));
 }
 
-function selectPage(params: SurveyListPageParams, where: SQL, page: number) {
+/**
+ * 그룹 좁힘을 그 그룹 **아래 전체**로 넓힐 것인가 (설문 그룹 3단계 중첩 티켓 08).
+ *
+ * 셋이 모두 맞을 때만이다 — ① 검색어가 있다(없으면 그룹 화면은 직접 담긴 설문만 보인다) ② 팀 범위다
+ * (시스템 전체 보기에는 그룹 화면이 없고 휴지통은 그룹을 접는다) ③ **그 그룹이 범위 팀의 것이다**.
+ *
+ * ③ 이 기밀성 계약이다. 타 팀 그룹(협업 그룹)은 내가 볼 수 있는 설문이 직접 담긴 그룹만 한 줄로
+ * 보이고 그 팀의 위쪽 구조는 나가지 않는다 — 아래쪽도 같다. 넓히면 경로(아래쪽 그룹 이름)가 타 팀에
+ * 실리므로 협업 그룹의 검색은 직접 담긴 설문에서 멈춘다. 「내 팀」의 기준은 그룹 목록
+ * (`listSurveyGroups`)과 같은 범위 팀이라, 겸직자가 다른 팀 범위에서 연 자기 팀 그룹도 협업 그룹이다.
+ *
+ * 검색 칩·즐겨찾기·목록 상태·상세 검색만으로는 넓히지 않는다 — 기준은 검색어 하나다.
+ */
+async function resolveGroupSubtree(params: SurveyListPageParams): Promise<boolean> {
+  const { source, groupId } = params;
+  if (!groupId || source.kind !== 'scoped' || source.filter.kind !== 'team') return false;
+  if (splitSurveyListSearchWords(params.q).length === 0) return false;
+  const [row] = await db
+    .select({ teamId: surveyGroups.teamId })
+    .from(surveyGroups)
+    .where(eq(surveyGroups.id, groupId))
+    .limit(1);
+  return row?.teamId === source.filter.teamId;
+}
+
+/**
+ * 설문이 이 그룹이나 그 아래 그룹에 담겼는가 — 조인된 설문의 그룹(`surveyGroups`)이 그 그룹 자신 ·
+ * 자식 · 손자인가. 깊이가 3으로 묶여 있어 재귀 없이 닫힌다(손자는 「부모가 그 그룹의 자식」 한 번).
+ *
+ * 직접 좁힘과 같은 접기(`visibleGroupId`)를 먼저 건다 — 팀이 다른 그룹에 남은 설문(깨진 상태)은
+ * 여기서도 미분류다. `withListJoins` 가 걸린 문장에서만 쓸 수 있다.
+ */
+function inGroupSubtreeSql(groupId: string): SQL {
+  const child = alias(surveyGroups, 'group_subtree_child');
+  const children = db.select({ id: child.id }).from(child).where(eq(child.parentGroupId, groupId));
+  return sql`(${visibleGroupId()} is not null and (${surveyGroups.id} = ${groupId} or ${surveyGroups.parentGroupId} = ${groupId} or ${inArray(surveyGroups.parentGroupId, children)}))`;
+}
+
+/**
+ * 좁힌 그룹에서부터 이 설문이 담긴 그룹까지의 이름 — 직접 담겼으면 빈 배열, 자식 그룹이면 그 이름,
+ * 손자 그룹이면 「자식, 손자」. `inGroupSubtreeSql` 을 지난 행만 읽으므로 마지막 갈래는 손자뿐이다.
+ *
+ * 이름이 나가도 되는 이유: 이 행은 요청자가 볼 수 있는 설문이고, 내 팀 그룹은 볼 수 있는 설문이 그
+ * 아래 어디든 있으면 보이는 그룹이다 — 경로의 그룹은 전부 요청자의 그룹 목록에 선 이름이다.
+ */
+function groupPathSql(groupId: string): SQL<string[]> {
+  const parent = alias(surveyGroups, 'group_path_parent');
+  const parentName = db
+    .select({ name: parent.name })
+    .from(parent)
+    .where(eq(parent.id, surveyGroups.parentGroupId));
+  return sql<
+    string[]
+  >`case when ${surveyGroups.id} = ${groupId} then '[]'::json when ${surveyGroups.parentGroupId} = ${groupId} then json_build_array(${surveyGroups.name}) else json_build_array(${parentName}, ${surveyGroups.name}) end`;
+}
+
+/** 경로가 없는 목록의 행 — 직접 좁힘·그룹 좁힘 없음·휴지통. */
+const NO_GROUP_PATH = sql<string[]>`'[]'::json`;
+
+function selectPage(params: SurveyListPageParams, where: SQL, page: number, groupSubtree: boolean) {
   const { source } = params;
   const viewerId = viewerOf(source);
   // 휴지통 카드는 참여 칸을 읽지 않는다 — 복구 말고 할 수 있는 일이 없다(`surveyListColumns`).
@@ -299,6 +361,7 @@ function selectPage(params: SurveyListPageParams, where: SQL, page: number) {
         surveyGroupId: groupColumn(source),
         isFavorite: isFavoriteSql(viewerId),
         myTagIds: myTagIdsSql(viewerId),
+        groupPath: groupSubtree && params.groupId ? groupPathSql(params.groupId) : NO_GROUP_PATH,
       })
       .from(surveys)
       .$dynamic(),
@@ -327,10 +390,23 @@ async function resolveActiveTeam(
   return row ? { id: teamId, name: row.name } : null;
 }
 
-/** 원천 + 그룹·팀·미분류 좁힘 — 세그먼트 숫자·소유자 목록의 기준. */
-function narrowedWhere(params: SurveyListPageParams, activeTeam: { id: string } | null): SQL {
+/**
+ * 원천 + 그룹·팀·미분류 좁힘 — 세그먼트 숫자·소유자 목록의 기준. 그룹 좁힘은 직접 담긴 설문이거나
+ * (`groupSubtree` 가 false) 그 그룹 아래 전체다 — 카드와 숫자가 같은 범위를 보도록 여기 한 곳에서 가른다.
+ */
+function narrowedWhere(
+  params: SurveyListPageParams,
+  activeTeam: { id: string } | null,
+  groupSubtree: boolean,
+): SQL {
   const conditions: SQL[] = [sourceWhere(params.source)];
-  if (params.groupId) conditions.push(sql`${groupColumn(params.source)} = ${params.groupId}`);
+  if (params.groupId) {
+    conditions.push(
+      groupSubtree
+        ? inGroupSubtreeSql(params.groupId)
+        : sql`${groupColumn(params.source)} = ${params.groupId}`,
+    );
+  }
   if (activeTeam) {
     conditions.push(eq(surveys.teamId, activeTeam.id));
     if (params.ungrouped) conditions.push(sql`${groupColumn(params.source)} is null`);
@@ -396,11 +472,14 @@ async function countMatches(where: SQL): Promise<number> {
 export async function querySurveyListPage(
   params: SurveyListPageParams,
 ): Promise<SurveyListPageRows> {
-  const activeTeam = await resolveActiveTeam(params.source, params.teamId);
+  const [activeTeam, groupSubtree] = await Promise.all([
+    resolveActiveTeam(params.source, params.teamId),
+    resolveGroupSubtree(params),
+  ]);
   const viewerId = viewerOf(params.source);
   // 「내 설문」은 좁힘 단계다 — 세그먼트 숫자·별 숫자·소유자 목록도 내 설문만 센다. 휴지통에는 없다.
   const mine = params.whose === 'mine' && params.source.kind === 'scoped';
-  const teamWide = narrowedWhere(params, activeTeam);
+  const teamWide = narrowedWhere(params, activeTeam, groupSubtree);
   const narrowed = mine ? and(teamWide, isMineSql(viewerId))! : teamWide;
 
   const filters: SQL[] = [];
@@ -421,12 +500,13 @@ export async function querySurveyListPage(
       countLifecycles(narrowed),
       countFavorites(params, narrowed),
       listOwners(narrowed),
-      selectPage(params, where, requestedPage),
+      selectPage(params, where, requestedPage, groupSubtree),
       mine ? countMatches(and(teamWide, ...filters)!) : Promise.resolve(null),
     ]);
   const totalPages = Math.max(1, Math.ceil(total / SURVEY_LIST_PAGE_SIZE));
   const page = Math.min(requestedPage, totalPages);
-  const rows = page === requestedPage ? optimisticRows : await selectPage(params, where, page);
+  const rows =
+    page === requestedPage ? optimisticRows : await selectPage(params, where, page, groupSubtree);
 
   return {
     rows,
@@ -438,6 +518,7 @@ export async function querySurveyListPage(
     owners,
     activeTeam,
     teamWideTotal,
+    groupSubtree,
   };
 }
 

@@ -364,6 +364,11 @@ export interface SurveyListPageItem extends SurveyListItem {
    * 에서 찾는다(이름을 고쳐도 목록 한 곳만 바뀌면 된다). 휴지통 행은 늘 빈 배열.
    */
   myTagIds: string[];
+  /**
+   * 그룹 화면의 검색이 아래 전체에서 찾았을 때(`groupSubtree`), 그 그룹에서부터 이 설문이 담긴 하위
+   * 그룹까지의 이름 — 「2026 › 상반기」. 그 그룹에 직접 담긴 설문과 그 밖의 모든 목록에서는 빈 배열이다.
+   */
+  groupPath: string[];
 }
 
 /**
@@ -371,6 +376,10 @@ export interface SurveyListPageItem extends SurveyListItem {
  *
  * 숫자 기준이 둘이다 — `lifecycleCounts`·`favoriteCount`·`owners` 는 범위·그룹·팀 좁힘까지만 적용해 센다(검색·
  * 상세 검색·목록 상태 무관). `total` 은 모든 조건을 적용한 결과 수다.
+ *
+ * **그룹 좁힘의 범위만은 검색어를 따른다**(설문 그룹 3단계 중첩) — 검색어가 없으면 그 그룹에 직접 담긴
+ * 설문, 있으면 그 그룹과 그 아래 전체다. 숫자 셋도 그 범위에서 센다(카드는 아래 전체에서 나오는데 숫자는
+ * 직접 담긴 것만 세는 어긋남이 없게). 어느 쪽이 걸렸는지는 `groupSubtree` 가 말한다.
  */
 export interface SurveyListPageResult extends Pick<
   SurveyListResult,
@@ -398,6 +407,12 @@ export interface SurveyListPageResult extends Pick<
    * 없으면 좁히지 않고 null 이다(참여가 끝난 팀 주소에 갇히지 않게).
    */
   activeTeam: { id: string; name: string | null } | null;
+  /**
+   * 그룹 좁힘이 그 그룹 **아래 전체**로 넓어졌는가 — 팀 범위에서 내 팀 그룹을 검색어와 함께 좁혔을 때만
+   * true. 그때 항목의 `groupPath` 가 채워지고 숫자 셋도 아래 전체를 센다. 타 팀 그룹(협업 그룹)·시스템
+   * 전체 보기·검색어 없는 조회는 언제나 false(직접 담긴 설문만)다.
+   */
+  groupSubtree: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
