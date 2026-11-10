@@ -17,10 +17,11 @@ import {
 } from '@/features/question-renderer/utils/table-radio-groups';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
-import type { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
+import type { ChoiceGroup, HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 
 import { CellText, resolveCellTextHtml } from './cell-text';
 import { InteractiveCell } from './cells';
+import { ChoiceOptCell } from './cells/choice-opt-cell';
 import { MobileSectionCard } from './mobile-card-shared';
 
 interface MobileColumnAxisCardsProps {
@@ -34,6 +35,11 @@ interface MobileColumnAxisCardsProps {
   errorCellIds?: Set<string> | undefined;
   /** 동적 행 그룹 선택 버튼 목록 — 호스트가 만들어 카드 목록 위에 둔다 */
   dynamicGroupPicker?: ReactNode;
+  /**
+   * 표의 보기 그룹 — 있으면 그룹에 속한 보기 칸(choice_opt)도 제 열 카드의 항목이 되고 보기 타일로 그린다
+   * (열마다 보기 그룹을 둔 표 — 청암대 재학생 문14). 없으면 종전대로 입력 칸만이다.
+   */
+  choiceGroups?: ChoiceGroup[] | undefined;
 }
 
 /** 상세 입력 칸을 금액 칸 아래에 그릴 모양 — 칸 글자(행 제목과 같은 「9) 기타비용」)는 빼고 모바일 라벨을 안내로 */
@@ -57,6 +63,7 @@ export const MobileColumnAxisCards = React.memo(function MobileColumnAxisCards({
   onChange,
   errorCellIds,
   dynamicGroupPicker,
+  choiceGroups,
 }: MobileColumnAxisCardsProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
@@ -66,8 +73,13 @@ export const MobileColumnAxisCards = React.memo(function MobileColumnAxisCards({
         columns: visibleColumns,
         headerGrid: visibleHeaderGrid,
         displayRows,
+        includeChoiceOptCells: (choiceGroups?.length ?? 0) > 0,
       }),
-    [displayRows, visibleColumns, visibleHeaderGrid],
+    [choiceGroups, displayRows, visibleColumns, visibleHeaderGrid],
+  );
+  const groupById = useMemo(
+    () => new Map((choiceGroups ?? []).map((group) => [group.id, group])),
+    [choiceGroups],
   );
   const radioBucketsByRowId = useMemo(
     () => new Map(displayRows.map((row) => [row.id, buildRadioGroupBuckets(row)])),
@@ -109,6 +121,31 @@ export const MobileColumnAxisCards = React.memo(function MobileColumnAxisCards({
               const previous = card.items[index - 1];
               const previousKey = previous?.groupCells.map((group) => group.id).join('/') ?? '';
               const groupChanged = groupKey !== previousKey;
+              // 보기 그룹 칸 — 타일 하나가 통째로 탭 영역이고 글자는 행 제목(보기 라벨은 데이터용 짧은 이름이다)
+              if (sourceCell.type === 'choice_opt') {
+                const choiceGroup = sourceCell.choiceGroupId
+                  ? groupById.get(sourceCell.choiceGroupId)
+                  : undefined;
+                if (!choiceGroup) return null;
+                return (
+                  <div
+                    key={sourceCell.id}
+                    data-cell-id={sourceCell.id}
+                    className={cn(invalid && 'rounded-lg ring-2 ring-red-300')}
+                  >
+                    <ChoiceOptCell
+                      cell={label ? { ...sourceCell, choiceLabel: label } : sourceCell}
+                      questionId={questionId}
+                      group={choiceGroup}
+                      value={value}
+                      onChange={onChange}
+                      inputIdScope={card.key}
+                      ariaInvalid={invalid}
+                      variant="tile"
+                    />
+                  </div>
+                );
+              }
               return (
                 <React.Fragment key={cell.id}>
                   {groupChanged && groupKey && (

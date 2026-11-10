@@ -60,6 +60,11 @@ function isAnswerCell(cell: TableCell): boolean {
   return isVisible(cell) && ANSWER_CELL_TYPES.has(cell.type);
 }
 
+/** 보기 그룹에 속한 보이는 보기 칸 — 표 유형 문항의 보기 그룹 표 */
+function isGroupChoiceCell(cell: TableCell): boolean {
+  return isVisible(cell) && cell.type === 'choice_opt' && Boolean(cell.choiceGroupId);
+}
+
 function normalize(label: string | undefined): string {
   return (label ?? '').replace(/\s+/g, ' ').trim();
 }
@@ -154,6 +159,13 @@ export function buildColumnAxisCards(input: {
   columns: readonly TableColumn[];
   headerGrid?: HeaderCell[][] | undefined;
   displayRows: TableRow[];
+  /**
+   * 보기 그룹 칸(그룹에 속한 choice_opt)도 카드 항목으로 넣는다 — 표 유형 문항에서 열마다 보기 그룹을
+   * 둔 표(「알고 있음」 · 「이용한 적 있음」)의 축 카드용. 응답 화면 축 카드만 켠다. 표 아래 상세 기재
+   * 투영(option-text-below-table)은 입력 칸 몫이라 끈 채로 둔다. 행 제목 판정은 그대로라 보기 칸 뒤의
+   * 글자 셀(부서 이름)도 행 제목이 된다.
+   */
+  includeChoiceOptCells?: boolean | undefined;
 }): ColumnAxisCard[] {
   const coverage = buildTableRowspanCoverage(input.displayRows);
   const labels = new Map(
@@ -165,7 +177,12 @@ export function buildColumnAxisCards(input: {
     const items: ColumnAxisCardItem[] = [];
     for (const row of input.displayRows) {
       const cell = row.cells[columnIndex];
-      if (!cell || !isAnswerCell(cell)) continue;
+      if (!cell) continue;
+      if (isGroupChoiceCell(cell)) {
+        if (input.includeChoiceOptCells) items.push({ cell, row, ...labels.get(row.id)!, details: [] });
+        continue;
+      }
+      if (!isAnswerCell(cell)) continue;
       const detailOf = detailsByRow.get(row.id)!;
       if (detailOf.has(cell.id)) continue;
       const details = row.cells.filter((other) => detailOf.get(other.id) === cell.id);

@@ -557,6 +557,45 @@ describe.skipIf(!isLocalDb)('surveyBuilder procedure round-trip (real local DB)'
     expect(copiedSurvey?.lookups).toEqual(lookups);
   });
 
+  // 복제 계약(디자인): 설문 「화면 너비」와 그룹 「그룹 이름 숨기기」·이름 디자인이 복제본에 그대로 온다.
+  // 둘이 조용히 빠졌던 2026-11-09 사고(AI 실태조사 복사본)의 회귀 방지.
+  it('duplicate: 화면 너비와 그룹 이름 숨기기·이름 디자인이 복제본에 보존된다', async () => {
+    const original = await client.surveys.create({ title: '복제-디자인보존-원본' });
+    createdSurveyIds.push(original.id);
+    await db
+      .update(surveysTable)
+      .set({ forceWideLayout: true })
+      .where(eq(surveysTable.id, original.id));
+    const nameDesign = { fontSize: 18, bold: true } as never;
+    await db.insert(questionGroupsTable).values([
+      { surveyId: original.id, name: '인트로', order: 0, hideName: true, nameDesign },
+      { surveyId: original.id, name: 'Ⅰ. 일반 현황', order: 1, hideName: false },
+    ]);
+
+    const copy = await client.surveys.duplicate({ surveyId: original.id });
+    if (!copy) throw new Error('duplicate 가 null 을 반환했다');
+    createdSurveyIds.push(copy.id);
+
+    const [copiedSurvey] = await db
+      .select({ forceWideLayout: surveysTable.forceWideLayout })
+      .from(surveysTable)
+      .where(eq(surveysTable.id, copy.id));
+    expect(copiedSurvey?.forceWideLayout).toBe(true);
+    const groups = await db
+      .select({
+        name: questionGroupsTable.name,
+        hideName: questionGroupsTable.hideName,
+        nameDesign: questionGroupsTable.nameDesign,
+      })
+      .from(questionGroupsTable)
+      .where(eq(questionGroupsTable.surveyId, copy.id))
+      .orderBy(questionGroupsTable.order);
+    expect(groups).toEqual([
+      { name: '인트로', hideName: true, nameDesign },
+      { name: 'Ⅰ. 일반 현황', hideName: false, nameDesign: null },
+    ]);
+  });
+
   // 복제 계약(스냅샷 횟수 초기화): 복제본은 발행 이력 없이 draft 로 시작하고,
   // 원본의 발행 횟수와 무관하게 복제본의 첫 발행이 v1 이어야 한다.
   it('duplicate: 복제본은 발행 이력 0개·draft 로 시작하고 첫 발행이 v1 이다', async () => {

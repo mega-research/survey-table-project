@@ -266,3 +266,71 @@ describe('buildColumnAxisCards — 같은 행 칸이 열어 주는 상세 입력
     expect(cards.map((card) => card.key)).toEqual(['item', 'amount']);
   });
 });
+
+describe('buildColumnAxisCards — 보기 그룹 칸(표 유형 문항의 choice_opt)', () => {
+  // 청암대 재학생 문14 모양 — 「알고 있음」 열 · 「이용한 적 있음」 열이 각각 복수선택 보기 그룹이고,
+  // 부서 이름(행 제목)은 보기 칸 뒤 마지막 열에 있다.
+  const groupColumns: TableColumn[] = [
+    { id: 'know', label: '알고 있음' },
+    { id: 'used', label: '이용한 적 있음' },
+    { id: 'dept', label: '행정부서' },
+  ];
+  const opt = (id: string, group: string, extra: Partial<TableCell> = {}): TableCell => ({
+    id,
+    type: 'choice_opt',
+    content: '',
+    choiceGroupId: group,
+    ...extra,
+  });
+  const groupRows: TableRow[] = [
+    {
+      id: 'r1',
+      label: '교무처',
+      cells: [opt('r1-k', 'gK'), opt('r1-u', 'gU'), text('r1-d', '1. 교무처')],
+    },
+    {
+      id: 'r2',
+      label: '사무처',
+      cells: [opt('r2-k', 'gK'), opt('r2-u', 'gU'), text('r2-d', '2. 사무처')],
+    },
+  ];
+
+  it('옵션을 켜지 않으면 보기 그룹 칸은 카드가 되지 않는다 — 표 아래 상세 기재 투영은 종전 그대로', () => {
+    expect(buildColumnAxisCards({ columns: groupColumns, displayRows: groupRows })).toEqual([]);
+  });
+
+  it('옵션을 켜면 보기 그룹 칸이 놓인 열마다 카드, 행 제목은 그 행의 글자 셀이다', () => {
+    const cards = buildColumnAxisCards({
+      columns: groupColumns,
+      displayRows: groupRows,
+      includeChoiceOptCells: true,
+    });
+    expect(cards.map((card) => [card.key, card.title])).toEqual([
+      ['know', '알고 있음'],
+      ['used', '이용한 적 있음'],
+    ]);
+    expect(cards[0]!.items.map((item) => [item.cell.id, item.label])).toEqual([
+      ['r1-k', '1. 교무처'],
+      ['r2-k', '2. 사무처'],
+    ]);
+  });
+
+  it('그룹이 없는 보기 칸과 숨은 보기 칸은 넣지 않는다', () => {
+    const cards = buildColumnAxisCards({
+      columns: groupColumns,
+      displayRows: [
+        {
+          id: 'r1',
+          label: '',
+          cells: [
+            { id: 'a', type: 'choice_opt', content: '' },
+            opt('b', 'gU', { isHidden: true }),
+            text('t', '교무처'),
+          ],
+        },
+      ],
+      includeChoiceOptCells: true,
+    });
+    expect(cards).toEqual([]);
+  });
+});

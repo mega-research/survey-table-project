@@ -20,6 +20,7 @@ import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
 import { TablePreview } from '@/features/question-renderer/table-preview';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { describeCellCondition } from '@/features/survey-builder/utils/describe-cell-condition';
 import { pruneSumConstraints } from '@/features/survey-builder/utils/prune-sum-constraints';
 import type {
   CalcExpr,
@@ -460,7 +461,10 @@ export function SumConstraintEditor({
                 {(constraint.when || constraint.whenQuestion || constraint.countValues || constraint.acrossRepeatBundles) && (
                   <p className="text-xs text-gray-500">
                     {[
-                      constraint.when || constraint.whenQuestion ? '적용 조건이 있습니다 — 조건을 충족할 때만 검사합니다' : null,
+                      constraint.when
+                        ? `적용 조건: ${describeCellCondition(constraint.when, tableRowsData)} 일 때만 검사합니다`
+                        : null,
+                      constraint.whenQuestion ? '다른 문항 조건을 충족할 때만 검사합니다' : null,
                       constraint.countValues ? `값 「${constraint.countValues.join('·')}」을 고른 칸만 셉니다` : null,
                       constraint.acrossRepeatBundles ? '반복 줄 전체를 한 번에 셉니다' : null,
                     ]

@@ -1777,6 +1777,7 @@ function InteractiveTableResponseBody({
                   onChange={mergedOnChange}
                   errorCellIds={errorCellIds}
                   dynamicGroupPicker={dynamicGroupPicker}
+                  choiceGroups={choiceGroups}
                 />
               ) : mobileUsesCards ? (
                 useOriginalRowDetail || useDrilldown ? (
