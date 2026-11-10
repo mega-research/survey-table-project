@@ -184,7 +184,7 @@ export interface FieldworkShareListResult {
  *   저장되지 않는 입력값이라 개명이 데이터에 남지 않는다 — `share_clauses` 는 조건만 담는다)
  *
  * 이미 이 링크와 다른 링크가 같이 맡고 있는 대상은 겹침이 아니다 — 무엇을 골라도 그대로 남는다.
- * 의미론은 `lib/operations/fieldwork-share-overlap` 의 `shareTargetOutcome`.
+ * 의미론은 `features/operations/contacts/shares/share-overlap` 의 `shareTargetOutcome`.
  */
 export const FIELDWORK_SHARE_OVERLAPS = ['take', 'keep', 'joint'] as const;
 export type FieldworkShareOverlap = (typeof FIELDWORK_SHARE_OVERLAPS)[number];

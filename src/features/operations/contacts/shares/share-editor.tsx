@@ -28,7 +28,7 @@ import {
   newDraftRowId,
 } from '@/features/operations/filters/filter-bar-core';
 import { getErrorMessage } from '@/lib/get-error-message';
-import { shareCountAfter } from '@/lib/operations/fieldwork-share-overlap';
+import { shareCountAfter } from './share-overlap';
 import { type ColumnCandidate, FILTER_SOURCE } from '@/lib/operations/filter-shared';
 import { compactIdListValue } from '@/lib/operations/id-list-paste';
 import type { ContactAssignmentClause, ContactResultCode } from '@/shared/contracts/contacts';

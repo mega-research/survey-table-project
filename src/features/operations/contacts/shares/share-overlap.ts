@@ -6,9 +6,12 @@ import type {
 /**
  * 담당 범위 적용의 겹침 처리 의미론 (fieldwork-multi-company 티켓 04, ADR-0035).
  *
- * 서버의 적용 SQL(`server/contacts/services/fieldwork-shares.ts`)이 이 표를 그대로 옮긴 것이고, 수정 화면은
+ * 서버의 적용 SQL(`server/contacts/services/fieldwork-shares.ts`)이 이 표를 손으로 옮긴 사본이고, 수정 화면은
  * `shareCountAfter` 로 고른 처리에 따른 적용 뒤 인원을 미리 보인다. 실제로 SQL 이 이 표대로 쓰는지는
- * `fieldwork-share-overlap.realdb` 가 링크 셋으로 본다.
+ * `fieldwork-share-overlap.realdb` 「적용 SQL 은 화면의 의미론 표와 같다」가 이 함수로 기댓값을 내어 맞춘다.
+ *
+ * lib 이 아니라 여기 사는 것은 소비자가 이 화면 하나라서다(루트 AGENTS.md 「src/lib 잔류 기준」) — 서버는 이
+ * 파일을 import 하지 않고 SQL 사본을 쓴다(서버는 features 를 import 할 수 없다).
  */
 
 export interface ShareTargetFacts {

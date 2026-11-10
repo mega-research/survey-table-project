@@ -57,7 +57,7 @@ import type {
  * - **겹침**은 조건 결과 중 이 링크에 아직 없고 다른 **열린** 외주 링크에 있는 대상이다(종료된 링크는
  *   몫이 없다, 이미 같이 맡은 대상은 겹침이 아니다). 적용 입력의 필수 값 `overlap` 이 처리를 정한다 —
  *   가져오기(그 링크에서 뺀다)·남겨 두기(이쪽에 넣지 않는다)·같이 맡기기(양쪽에 둔다). 의미론의 정본은
- *   `lib/operations/fieldwork-share-overlap` 의 `shareTargetOutcome` 이고 적용 SQL 은 그 표를 옮긴 것이다
+ *   `features/operations/contacts/shares/share-overlap` 의 `shareTargetOutcome` 이고 적용 SQL 은 그 표를 옮긴 것이다
  *   (티켓 04). 같이 맡은 대상에는 외주 쪽 표식이 없다 — 외주 표면은 「이 링크에 있는가」만 본다.
  * - 조건은 조사 대상 필터 해석의 **쓰기 모드**로 읽는다 — 해석 안 되는 절은 거부한다(버리면 조건이
  *   넓어져 연락처가 엉뚱한 업체로 간다).

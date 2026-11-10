@@ -26,6 +26,7 @@ import {
   users,
 } from '@/db/schema';
 import { logger } from '@/lib/logger';
+import { shareTargetOutcome } from '@/features/operations/contacts/shares/share-overlap';
 import { FILTER_SOURCE } from '@/lib/operations/filter-shared';
 import { authenticateAccessLink, resolveLinkActor } from '@/server/access-link';
 import type { ORPCContext } from '@/server/context';
@@ -231,6 +232,44 @@ run('담당 범위 겹침 선택과 동시 적용 (real DB)', () => {
     await db.delete(teamMembers).where(eq(teamMembers.userId, OWNER_ID));
     await db.delete(teams).where(eq(teams.id, TEAM_ID));
     await db.delete(users).where(inArray(users.id, [OWNER_ID]));
+  });
+
+  describe('적용 SQL 은 화면의 의미론 표(shareTargetOutcome)와 같다', () => {
+    // 서버 적용 SQL 은 화면이 미리 보이는 의미론 표를 손으로 옮긴 사본이다 — 둘이 갈리면 화면이 말한 것과 다른
+    // 범위가 선다. 사실 셋(조건에 맞음 · 이 링크에 있음 · 다른 열린 링크에 있음)의 여덟 조합을 시스템ID 1–8 에
+    // 깔고, 처리 셋마다 적용한 결과를 표가 낸 답과 대조한다.
+    const facts = range(1, 8).map((resid) => {
+      const bits = resid - 1;
+      return {
+        resid,
+        matched: (bits & 4) !== 0,
+        inThisLink: (bits & 2) !== 0,
+        inOtherOpenLink: (bits & 1) !== 0,
+      };
+    });
+    const matchedClause = facts
+      .filter((f) => f.matched)
+      .map((f) => f.resid)
+      .join(', ');
+
+    it.each(['take', 'keep', 'joint'] as const)('%s', async (overlap) => {
+      const rows = facts.flatMap((f) => [
+        ...(f.inThisLink ? [{ linkId: A.linkId, contactTargetId: targetIdByResid.get(f.resid)! }] : []),
+        ...(f.inOtherOpenLink ? [{ linkId: B.linkId, contactTargetId: targetIdByResid.get(f.resid)! }] : []),
+      ]);
+      await db.insert(fieldworkLinkShares).values(rows);
+
+      await apply(A, matchedClause, overlap);
+
+      const inA = new Set(await shareResidsOf(A.linkId));
+      const inB = new Set(await shareResidsOf(B.linkId));
+      const actual = facts.map((f) => [f.resid, inA.has(f.resid), inB.has(f.resid)]);
+      const expected = facts.map((f) => {
+        const outcome = shareTargetOutcome(f, overlap);
+        return [f.resid, outcome.inThisLink, f.inOtherOpenLink && !outcome.leavesOtherLinks];
+      });
+      expect(actual).toEqual(expected);
+    });
   });
 
   describe('미리보기 — 겹치는 대상을 링크별로', () => {

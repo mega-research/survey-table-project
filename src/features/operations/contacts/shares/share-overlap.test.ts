@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { shareCountAfter, shareTargetOutcome } from './fieldwork-share-overlap';
+import { shareCountAfter, shareTargetOutcome } from './share-overlap';
 
 describe('겹침 처리 — 대상 하나가 적용 뒤 어디에 있는가', () => {
   const overlapping = { matched: true, inThisLink: false, inOtherOpenLink: true };
