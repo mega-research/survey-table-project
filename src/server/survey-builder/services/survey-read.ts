@@ -14,6 +14,7 @@ import { normalizeQuestions } from '@/lib/question';
 import { buildQuotaGate } from '@/lib/quota/quota-gate-build';
 import { getR2PublicUrl } from '@/lib/r2-env';
 import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
+import { withSurveyListGroup } from '@/lib/survey-list-groups.server';
 import { isValidUUID } from '@/lib/utils';
 import { toAnchorSnapshot } from '@/server/read-models/anchor-row';
 import { getFieldworkCompletedCounts } from '@/server/read-models/fieldwork-completions';
@@ -97,7 +98,7 @@ export async function searchSurveys(query: string) {
 
 // 전체 설문 목록 조회 (요약 정보)
 export async function getSurveyListWithCounts(): Promise<SurveyListItem[]> {
-  const surveyList = await getSurveys();
+  const surveyList = withSurveyListGroup(await getSurveys());
   const surveyIds = surveyList.map((survey) => survey.id);
   // 목록은 실데이터만 센다 — 응답 수(notTestResponse)와 같은 파티션.
   const [responseCounts, fieldworkCounts] = await Promise.all([
@@ -117,6 +118,7 @@ export async function getSurveyListWithCounts(): Promise<SurveyListItem[]> {
     createdAt: survey.createdAt,
     updatedAt: survey.updatedAt,
     isPublic: survey.isPublic,
+    listGroup: survey.listGroup,
   }));
 }
 

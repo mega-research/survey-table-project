@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 
 import Link from 'next/link';
 
@@ -8,11 +8,15 @@ import {
   Activity,
   ArrowLeft,
   BarChart3,
+  ChevronDown,
+  ChevronUp,
   Copy,
   CopyPlus,
   Edit,
   ExternalLink,
   FileText,
+  Folder,
+  FolderOpen,
   Globe,
   Loader2,
   Lock,
@@ -29,9 +33,21 @@ import { logout } from '@/actions/auth-actions';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { useDeleteSurvey, useDuplicateSurvey, useSurveys } from '@/features/survey-builder/queries/use-surveys';
+import {
+  useDeleteSurvey,
+  useDuplicateSurvey,
+  useSurveys,
+} from '@/features/survey-builder/queries/use-surveys';
 import { formatLocalDate } from '@/lib/date-formatters';
 import { getSurveyAccessUrl } from '@/lib/survey-url';
+import { partitionSurveyList } from '@/utils/survey-list-groups';
+
+import { useOpenSurveyListGroups } from './use-open-survey-list-groups';
+
+/** 묶음 안에서 가장 최근에 고친 설문의 수정일 — 접힌 묶음 카드에 적는다. */
+function latestUpdatedAt(surveys: ReadonlyArray<{ updatedAt: Date | string }>): Date {
+  return new Date(Math.max(...surveys.map((survey) => new Date(survey.updatedAt).getTime())));
+}
 
 export default function SurveyListPage() {
   const { data: surveys, isLoading, error } = useSurveys();
@@ -39,6 +55,8 @@ export default function SurveyListPage() {
   const { mutate: duplicateSurvey, isPending: isDuplicating } = useDuplicateSurvey();
   const [searchQuery, setSearchQuery] = useState('');
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const { openGroups, toggleGroup } = useOpenSurveyListGroups();
+  const listId = useId();
 
   // 로딩 중
   if (isLoading) {
@@ -73,6 +91,11 @@ export default function SurveyListPage() {
   const filteredSurveys = surveyList.filter((survey) =>
     survey.title.toLowerCase().includes(searchQuery.toLowerCase()),
   );
+
+  // 묶음(임시 장치 — `lib/survey-list-groups.server.ts`). 검색 중에는 묶음을 풀어 한 목록으로 보여 준다 —
+  // 접혀 있다는 이유로 묶음 안의 설문이 검색에서 빠지면 「없다」고 오해한다.
+  const isSearching = searchQuery.trim() !== '';
+  const { groups, ungrouped } = partitionSurveyList(surveyList);
 
   const handleDeleteSurvey = (surveyId: string) => {
     if (confirm('이 설문을 삭제하시겠습니까?')) {
@@ -114,6 +137,153 @@ export default function SurveyListPage() {
       '',
     );
   };
+
+  // 설문 카드 한 장 — 묶음 안·묶음 밖·검색 결과가 같은 카드를 쓴다. groupName 은 검색 결과에서만 넘긴다.
+  const renderSurveyCard = (survey: (typeof surveyList)[0], groupName?: string | null) => (
+    <Card
+      key={survey.id}
+      className="group relative p-6 transition-shadow duration-200 hover:shadow-lg"
+    >
+      <div className="mb-4 flex items-start justify-between">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-100">
+          <FileText className="h-5 w-5 text-blue-600" />
+        </div>
+        <div className="flex min-w-0 items-center gap-1 pl-3">
+          {groupName && (
+            <span className="flex min-w-0 items-center gap-1.5 rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600">
+              <Folder className="h-3 w-3 shrink-0" aria-hidden />
+              <span className="truncate">{groupName}</span>
+            </span>
+          )}
+          <div className="relative">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="opacity-0 transition-opacity group-hover:opacity-100"
+              onClick={() => setOpenMenuId(openMenuId === survey.id ? null : survey.id)}
+            >
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+
+            {openMenuId === survey.id && (
+              <div className="absolute right-0 z-50 mt-2 w-48 rounded-lg border border-gray-200 bg-white shadow-lg">
+                <div className="py-1">
+                  <Link
+                    href={`/admin/surveys/${survey.id}/edit`}
+                    className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    onClick={() => setOpenMenuId(null)}
+                  >
+                    <Edit className="mr-2 h-4 w-4" />
+                    수정
+                  </Link>
+                  <Link
+                    href={`/admin/surveys/${survey.id}/analytics`}
+                    className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    onClick={() => setOpenMenuId(null)}
+                  >
+                    <BarChart3 className="mr-2 h-4 w-4" />
+                    분석
+                  </Link>
+                  <Link
+                    href={`/admin/surveys/${survey.id}/operations/overview`}
+                    className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    onClick={() => setOpenMenuId(null)}
+                  >
+                    <Activity className="mr-2 h-4 w-4" />
+                    현황
+                  </Link>
+                  <button
+                    onClick={() => handleCopyLink(survey)}
+                    className="flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    <Copy className="mr-2 h-4 w-4" />
+                    링크 복사
+                  </button>
+                  <Link
+                    href={getSurveyUrl(survey)}
+                    target="_blank"
+                    className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    onClick={() => setOpenMenuId(null)}
+                  >
+                    <ExternalLink className="mr-2 h-4 w-4" />
+                    설문 열기
+                  </Link>
+                  <button
+                    onClick={() => handleDuplicateSurvey(survey.id)}
+                    disabled={isDuplicating}
+                    className="flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:pointer-events-none disabled:opacity-50"
+                  >
+                    {isDuplicating ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <CopyPlus className="mr-2 h-4 w-4" />
+                    )}
+                    복제
+                  </button>
+                  <hr className="my-1" />
+                  <button
+                    onClick={() => handleDeleteSurvey(survey.id)}
+                    className="flex w-full items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    삭제
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <h3 className="mb-2 truncate text-lg font-semibold text-gray-900">{survey.title}</h3>
+      <p className="mb-4 text-sm text-gray-500">
+        {`온라인 응답 완료 ${survey.completedResponseCount.toLocaleString('ko-KR')}건`}
+        {` · 실사 완료 처리 ${survey.fieldworkCompletedCount.toLocaleString('ko-KR')}건`}
+      </p>
+
+      <div className="flex items-center justify-between text-xs text-gray-400">
+        <span>수정일: {formatLocalDate(survey.updatedAt)}</span>
+        <span
+          className={`flex items-center gap-1 rounded-full px-2 py-1 ${
+            survey.isPublic ? 'bg-green-100 text-green-600' : 'bg-amber-100 text-amber-600'
+          }`}
+        >
+          {survey.isPublic ? (
+            <>
+              <Globe className="h-3 w-3" />
+              공개
+            </>
+          ) : (
+            <>
+              <Lock className="h-3 w-3" />
+              비공개
+            </>
+          )}
+        </span>
+      </div>
+
+      <div className="mt-4 flex space-x-2 border-t border-gray-100 pt-4">
+        <Button variant="outline" size="sm" className="flex-1" asChild>
+          <Link href={`/admin/surveys/${survey.id}/edit`}>
+            <Edit className="mr-1 h-3 w-3" />
+            수정
+          </Link>
+        </Button>
+        <Button variant="outline" size="sm" className="flex-1" asChild>
+          <Link href={`/admin/surveys/${survey.id}/analytics`}>
+            <BarChart3 className="mr-1 h-3 w-3" />
+            분석
+          </Link>
+        </Button>
+        <Button variant="outline" size="sm" className="flex-1" asChild>
+          <Link href={`/admin/surveys/${survey.id}/operations/overview`}>
+            <Activity className="mr-1 h-3 w-3" />
+            현황
+          </Link>
+        </Button>
+      </div>
+    </Card>
+  );
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -197,149 +367,111 @@ export default function SurveyListPage() {
               </Button>
             )}
           </div>
+        ) : isSearching || groups.length === 0 ? (
+          <div>
+            {isSearching && groups.length > 0 && (
+              <h2 className="mb-3 text-sm font-semibold text-gray-700">
+                검색 결과{' '}
+                <span className="font-normal text-gray-500">{filteredSurveys.length}</span>
+              </h2>
+            )}
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {filteredSurveys.map((survey) =>
+                renderSurveyCard(survey, isSearching ? survey.listGroup : null),
+              )}
+            </div>
+          </div>
         ) : (
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {filteredSurveys.map((survey) => (
-              <Card
-                key={survey.id}
-                className="group relative p-6 transition-shadow duration-200 hover:shadow-lg"
-              >
-                <div className="mb-4 flex items-start justify-between">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100">
-                    <FileText className="h-5 w-5 text-blue-600" />
-                  </div>
-                  <div className="relative">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="opacity-0 transition-opacity group-hover:opacity-100"
-                      onClick={() => setOpenMenuId(openMenuId === survey.id ? null : survey.id)}
+          <div className="space-y-8">
+            <section aria-labelledby={`${listId}-groups`}>
+              <h2 id={`${listId}-groups`} className="mb-3 text-sm font-semibold text-gray-700">
+                묶음 <span className="font-normal text-gray-500">{groups.length}</span>
+              </h2>
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+                {groups.map((group, index) => {
+                  const isOpen = openGroups.includes(group.name);
+                  const panelId = `${listId}-group-${index}`;
+                  return (
+                    <div
+                      key={group.name}
+                      className={
+                        isOpen
+                          ? 'col-span-full rounded-xl border border-gray-200 bg-gray-100 p-5'
+                          : 'rounded-xl border border-gray-200 bg-white shadow-sm transition-shadow duration-200 hover:shadow-md'
+                      }
                     >
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-
-                    {openMenuId === survey.id && (
-                      <div className="absolute right-0 z-50 mt-2 w-48 rounded-lg border border-gray-200 bg-white shadow-lg">
-                        <div className="py-1">
-                          <Link
-                            href={`/admin/surveys/${survey.id}/edit`}
-                            className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                            onClick={() => setOpenMenuId(null)}
-                          >
-                            <Edit className="mr-2 h-4 w-4" />
-                            수정
-                          </Link>
-                          <Link
-                            href={`/admin/surveys/${survey.id}/analytics`}
-                            className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                            onClick={() => setOpenMenuId(null)}
-                          >
-                            <BarChart3 className="mr-2 h-4 w-4" />
-                            분석
-                          </Link>
-                          <Link
-                            href={`/admin/surveys/${survey.id}/operations/overview`}
-                            className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                            onClick={() => setOpenMenuId(null)}
-                          >
-                            <Activity className="mr-2 h-4 w-4" />
-                            현황
-                          </Link>
-                          <button
-                            onClick={() => handleCopyLink(survey)}
-                            className="flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                          >
-                            <Copy className="mr-2 h-4 w-4" />
-                            링크 복사
-                          </button>
-                          <Link
-                            href={getSurveyUrl(survey)}
-                            target="_blank"
-                            className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                            onClick={() => setOpenMenuId(null)}
-                          >
-                            <ExternalLink className="mr-2 h-4 w-4" />
-                            설문 열기
-                          </Link>
-                          <button
-                            onClick={() => handleDuplicateSurvey(survey.id)}
-                            disabled={isDuplicating}
-                            className="flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:pointer-events-none disabled:opacity-50"
-                          >
-                            {isDuplicating ? (
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            ) : (
-                              <CopyPlus className="mr-2 h-4 w-4" />
-                            )}
-                            복제
-                          </button>
-                          <hr className="my-1" />
-                          <button
-                            onClick={() => handleDeleteSurvey(survey.id)}
-                            className="flex w-full items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50"
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            삭제
-                          </button>
+                      <button
+                        type="button"
+                        aria-expanded={isOpen}
+                        aria-controls={isOpen ? panelId : undefined}
+                        onClick={() => toggleGroup(group.name)}
+                        className={`flex w-full items-center gap-3.5 rounded-xl text-left focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none ${
+                          isOpen ? '' : 'px-5 py-4'
+                        }`}
+                      >
+                        {isOpen ? (
+                          <FolderOpen
+                            className="h-[22px] w-[22px] shrink-0 text-gray-700"
+                            aria-hidden
+                          />
+                        ) : (
+                          <Folder
+                            className="h-[22px] w-[22px] shrink-0 text-gray-500"
+                            aria-hidden
+                          />
+                        )}
+                        {isOpen ? (
+                          <span className="flex min-w-0 flex-1 items-baseline gap-2">
+                            <span className="truncate font-semibold text-gray-900">
+                              {group.name}
+                            </span>
+                            <span className="shrink-0 text-[13px] text-gray-500">
+                              설문 {group.surveys.length}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate font-semibold text-gray-900">
+                              {group.name}
+                            </span>
+                            <span className="block truncate text-[13px] text-gray-500">
+                              설문 {group.surveys.length} · 최근 수정{' '}
+                              {formatLocalDate(latestUpdatedAt(group.surveys))}
+                            </span>
+                          </span>
+                        )}
+                        {isOpen ? (
+                          <span className="flex shrink-0 items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-sm font-medium text-gray-700">
+                            접기
+                            <ChevronUp className="h-4 w-4" aria-hidden />
+                          </span>
+                        ) : (
+                          <ChevronDown className="h-5 w-5 shrink-0 text-gray-500" aria-hidden />
+                        )}
+                      </button>
+                      {isOpen && (
+                        <div
+                          id={panelId}
+                          className="mt-5 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3"
+                        >
+                          {group.surveys.map((survey) => renderSurveyCard(survey))}
                         </div>
-                      </div>
-                    )}
-                  </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+            {ungrouped.length > 0 && (
+              <section aria-labelledby={`${listId}-ungrouped`}>
+                <h2 id={`${listId}-ungrouped`} className="mb-3 text-sm font-semibold text-gray-700">
+                  설문 <span className="font-normal text-gray-500">{ungrouped.length}</span>
+                </h2>
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+                  {ungrouped.map((survey) => renderSurveyCard(survey))}
                 </div>
-
-                <h3 className="mb-2 truncate text-lg font-semibold text-gray-900">
-                  {survey.title}
-                </h3>
-                <p className="mb-4 text-sm text-gray-500">
-                  {`온라인 응답 완료 ${survey.completedResponseCount.toLocaleString('ko-KR')}건`}
-                  {` · 실사 완료 처리 ${survey.fieldworkCompletedCount.toLocaleString('ko-KR')}건`}
-                </p>
-
-                <div className="flex items-center justify-between text-xs text-gray-400">
-                  <span>수정일: {formatLocalDate(survey.updatedAt)}</span>
-                  <span
-                    className={`flex items-center gap-1 rounded-full px-2 py-1 ${
-                      survey.isPublic
-                        ? 'bg-green-100 text-green-600'
-                        : 'bg-amber-100 text-amber-600'
-                    }`}
-                  >
-                    {survey.isPublic ? (
-                      <>
-                        <Globe className="h-3 w-3" />
-                        공개
-                      </>
-                    ) : (
-                      <>
-                        <Lock className="h-3 w-3" />
-                        비공개
-                      </>
-                    )}
-                  </span>
-                </div>
-
-                <div className="mt-4 flex space-x-2 border-t border-gray-100 pt-4">
-                  <Button variant="outline" size="sm" className="flex-1" asChild>
-                    <Link href={`/admin/surveys/${survey.id}/edit`}>
-                      <Edit className="mr-1 h-3 w-3" />
-                      수정
-                    </Link>
-                  </Button>
-                  <Button variant="outline" size="sm" className="flex-1" asChild>
-                    <Link href={`/admin/surveys/${survey.id}/analytics`}>
-                      <BarChart3 className="mr-1 h-3 w-3" />
-                      분석
-                    </Link>
-                  </Button>
-                  <Button variant="outline" size="sm" className="flex-1" asChild>
-                    <Link href={`/admin/surveys/${survey.id}/operations/overview`}>
-                      <Activity className="mr-1 h-3 w-3" />
-                      현황
-                    </Link>
-                  </Button>
-                </div>
-              </Card>
-            ))}
+              </section>
+            )}
           </div>
         )}
       </div>

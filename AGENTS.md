@@ -297,6 +297,7 @@ DUPLICATE_DETECTION_SALT=       # 중복 감지 해시 솔트
 # 권한
 ADMIN_USER_IDS=                 # admin 표면 허용 supabase user.id 콤마 목록. 미설정 시 fail-open + 경고
 GUEST_SURVEY_GRANTS=            # "<userId>:<surveyId>[,...]" 게스트 설문 위임
+SURVEY_LIST_GROUPS=             # "<묶음 이름>=<surveyId>,<surveyId>[;...]" 설문 목록에서 카드 한 장으로 접어 두는 묶음 (임시 — staging 병합·승격 때 버린다, lib/survey-list-groups.server.ts)
 
 # 레이트리밋 (미설정이면 limiter no-op)
 UPSTASH_REDIS_REST_URL=

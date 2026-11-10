@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_RESPONSE_HEADER_CONFIG } from '@/lib/survey/response-header-config';
+import { getFieldworkCompletedCounts } from '@/server/read-models/fieldwork-completions';
 import { findContactByInviteToken } from '@/server/read-models/invite-lookup';
 import { getResponseCountsGroupedBySurvey } from '@/server/read-models/responses';
-import { getFieldworkCompletedCounts } from '@/server/read-models/fieldwork-completions';
 import * as readModels from '@/server/read-models/survey-structure';
 import { getSurveyWithDetails as getSurveyWithDetailsData } from '@/server/read-models/survey-structure';
 import type { Survey as SurveyType } from '@/types/survey';
@@ -181,6 +181,7 @@ describe('survey-read.service getSurveyListWithCounts', () => {
         createdAt,
         updatedAt,
         isPublic: true,
+        listGroup: null,
       },
       {
         id: 'survey-2',
@@ -194,9 +195,39 @@ describe('survey-read.service getSurveyListWithCounts', () => {
         createdAt,
         updatedAt,
         isPublic: false,
+        listGroup: null,
       },
     ]);
     expect(result[0]).not.toHaveProperty('questionCount');
+  });
+
+  it('SURVEY_LIST_GROUPS 에 적힌 설문에 묶음 이름을 붙이고, 묶음에 든 설문도 목록과 집계에서 빠지지 않는다', async () => {
+    vi.stubEnv('SURVEY_LIST_GROUPS', '언론재단 만족도=survey-2');
+    const at = new Date('2026-06-01T00:00:00.000Z');
+    const row = (id: string) => ({
+      id,
+      title: id,
+      description: null,
+      slug: null,
+      privateToken: null,
+      createdAt: at,
+      updatedAt: at,
+      isPublic: false,
+    });
+    surveysFindMany.mockResolvedValue([row('survey-1'), row('survey-2')]);
+    vi.mocked(getResponseCountsGroupedBySurvey).mockResolvedValue(new Map());
+    vi.mocked(getFieldworkCompletedCounts).mockResolvedValue(new Map());
+
+    try {
+      const result = await getSurveyListWithCounts();
+      expect(result.map((s) => [s.id, s.listGroup])).toEqual([
+        ['survey-1', null],
+        ['survey-2', '언론재단 만족도'],
+      ]);
+      expect(getResponseCountsGroupedBySurvey).toHaveBeenLastCalledWith(['survey-1', 'survey-2']);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });
 

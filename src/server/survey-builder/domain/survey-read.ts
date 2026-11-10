@@ -53,6 +53,8 @@ export type SurveyListItem = {
   createdAt: Date;
   updatedAt: Date;
   isPublic: boolean;
+  /** 목록에서 접어 두는 묶음 이름 — 임시 장치(`lib/survey-list-groups.server.ts`). 묶이지 않았으면 null */
+  listGroup: string | null;
 };
 export const SurveyListItemSchema = z.custom<SurveyListItem>();
 export const SurveyListOutput = z.array(SurveyListItemSchema);
