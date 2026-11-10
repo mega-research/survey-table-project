@@ -21,6 +21,7 @@ import {
 import type { PersonalTagItem } from '@/shared/contracts/workspace-io';
 import { surveyListPageQueryOptions, surveyListScopeParam } from '@/shared/lib/survey-list-queries';
 import { useWorkScopeOptional } from '@/shared/lib/work-scope-context';
+import { internalOperationsPaths } from '@/utils/operations-paths';
 
 import {
   personalTagKeys,
@@ -447,7 +448,8 @@ export function SurveyListView() {
             onPickOwner={(ownerUserId, q) =>
               updateQuery({ q, advanced: { ...query.advanced, ownerUserId } })
             }
-            onPickSurvey={(surveyId) => router.push(`/surveys/${surveyId}/edit`)}
+            // 설문 후보를 고르면 카드의 「현황」과 같은 응답 현황으로 간다 — 편집 권한이 없는 팀원도 열 수 있다.
+            onPickSurvey={(surveyId) => router.push(internalOperationsPaths(surveyId).overview)}
             sortBy={query.sort}
             onSortByChange={(sort) => updateQuery({ sort })}
             searchPlaceholder={

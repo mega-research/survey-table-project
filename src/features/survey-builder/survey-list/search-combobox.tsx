@@ -182,7 +182,7 @@ export function SearchCombobox({
 
   // 마우스로 가리키기는 **커서가 실제로 움직였을 때만**이다. 창이 가만히 있는 커서 밑에 펼쳐지거나
   // 후보가 늦게 와 줄이 커서 밑으로 밀려 들어와도 브라우저는 mouseenter·mousemove 를 쏜다 — 그걸
-  // 가리키기로 받으면 Enter 가 「검색 적용」이 아니라 커서 밑 설문의 편집 화면으로 가 버렸다
+  // 가리키기로 받으면 Enter 가 「검색 적용」이 아니라 커서 밑 설문의 화면으로 가 버렸다
   // (2026-11-02). 직전 좌표와 같으면 움직임이 아니다.
   function hover(key: string, event: MouseEvent) {
     const last = lastPointerRef.current;
