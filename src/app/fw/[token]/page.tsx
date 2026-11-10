@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 
 import { Lock } from 'lucide-react';
 
-import { fieldworkLinkOperationsPaths } from '@/features/operations/operations-paths';
+import { fieldworkLinkOperationsPaths } from '@/utils/operations-paths';
 import { resolveAccessLinkEntry } from '@/server/access-link';
 
 import { FieldworkLinkPasswordForm } from './password-form';

@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 
-import { fieldworkLinkOperationsPaths } from '@/features/operations/operations-paths';
+import { fieldworkLinkOperationsPaths } from '@/utils/operations-paths';
 import { assertFieldworkLinkPageAccess } from '@/server/page-fieldwork-link-access';
 
 /**

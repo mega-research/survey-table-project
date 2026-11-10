@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import type { CycleSummary } from '@/shared/contracts/mail-io';
 
 import { formatInt, formatKrw } from './_format';
-import { internalOperationsPaths } from '../operations-paths';
+import { internalOperationsPaths } from '@/utils/operations-paths';
 
 interface Props {
   cycle: CycleSummary;

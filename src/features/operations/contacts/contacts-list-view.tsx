@@ -7,7 +7,7 @@ import type { ContactsListPageData } from '@/shared/contracts/contacts-io';
 import type { SurveyCapability } from '@/shared/contracts/workspace';
 
 import { EmptyState } from '../empty-state';
-import { operationsPaths } from '../operations-paths';
+import { operationsPaths } from '@/utils/operations-paths';
 import { ContactUploadAction } from './contact-upload-action';
 import { ContactsDownloadDialog } from './contacts-download-dialog';
 import { ContactsFilterBar } from './contacts-filter-bar';

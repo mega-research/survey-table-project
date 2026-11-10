@@ -42,6 +42,7 @@ import { cn } from '@/lib/utils';
 import { type SurveyListItem, surveyCardTitle } from '@/shared/contracts/survey-builder-io';
 import { SURVEY_VISIBILITY_LABEL, type WorkScope } from '@/shared/contracts/workspace';
 import type { PersonalTagItem, SurveyGroupListItem } from '@/shared/contracts/workspace-io';
+import { internalOperationsPaths } from '@/utils/operations-paths';
 
 import { ShareSettingsModal } from '../sharing/share-settings-modal';
 import { CardTitleDialog } from './card-title-dialog';
@@ -446,7 +447,7 @@ export function SurveyCard({
             disabled={!canEdit}
           />
           <CardActionLink
-            href={`/surveys/${survey.id}/operations/overview`}
+            href={internalOperationsPaths(survey.id).overview}
             icon={<Activity className="h-3.5 w-3.5" />}
             label="현황"
           />

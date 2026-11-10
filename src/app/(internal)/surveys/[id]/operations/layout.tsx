@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { surveyDocuments, teams, users } from '@/db/schema';
 import { OperationsPageHeader } from '@/features/operations/operations-page-header';
-import { internalOperationsBase } from '@/features/operations/operations-paths';
+import { internalOperationsBase } from '@/utils/operations-paths';
 import { OperationsTabStrip } from '@/features/operations/operations-tab-strip';
 import { ShareSettingsButton } from '@/features/survey-builder/sharing/share-settings-button';
 import { requirePageUser } from '@/lib/auth/require-page-user';

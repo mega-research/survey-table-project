@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 
-import { internalOperationsPaths } from '@/features/operations/operations-paths';
+import { internalOperationsPaths } from '@/utils/operations-paths';
 import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
 
 /**

@@ -21,7 +21,7 @@ import {
 import { PiiExactMarker } from '@/features/operations/filter-pii-marker';
 import { FilterResetButton } from '@/features/operations/filters/filter-reset-button';
 
-import { operationsPaths } from '../operations-paths';
+import { operationsPaths } from '@/utils/operations-paths';
 
 interface Props {
   /** 이 콘솔의 주소 접두. */

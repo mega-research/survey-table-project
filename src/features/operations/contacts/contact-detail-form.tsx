@@ -45,7 +45,7 @@ import type {
 import type { ContactDetailPermissions } from './contact-detail-permissions';
 import { client } from '@/shared/lib/rpc';
 
-import { operationsPaths } from '../operations-paths';
+import { operationsPaths } from '@/utils/operations-paths';
 
 interface ContactDetailFormProps {
   surveyId: string;

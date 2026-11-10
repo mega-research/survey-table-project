@@ -7,7 +7,7 @@ import { LocalDateTime } from '@/components/ui/local-date-time';
 import type { MailTemplate } from '@/db/schema/mail';
 
 import { DeleteTemplateButton } from './delete-template-button';
-import { internalOperationsPaths } from '../operations-paths';
+import { internalOperationsPaths } from '@/utils/operations-paths';
 
 interface Props {
   surveyId: string;

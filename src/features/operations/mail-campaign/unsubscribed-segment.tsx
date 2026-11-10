@@ -15,7 +15,7 @@ import { type MailDisplayColumn, mailColumnValue } from '@/lib/contacts/mail-dis
 import type { UnsubscribedContactRow } from '@/shared/contracts/mail-io';
 
 import { UnsubscribedRevertButton } from './unsubscribed-revert-button';
-import { internalOperationsPaths } from '../operations-paths';
+import { internalOperationsPaths } from '@/utils/operations-paths';
 
 interface Props {
   surveyId: string;

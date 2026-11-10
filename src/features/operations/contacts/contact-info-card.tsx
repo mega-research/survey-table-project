@@ -28,7 +28,7 @@ import { attrsKeyOf, piiKeyOf } from '@/lib/operations/contacts-format';
 import { piiFieldLabel, type PiiFieldType } from '@/lib/crypto/pii-fields';
 import { buildInviteUrl } from '@/lib/survey-url';
 
-import { operationsPaths } from '../operations-paths';
+import { operationsPaths } from '@/utils/operations-paths';
 
 interface ContactInfoCardProps {
   surveyId: string;

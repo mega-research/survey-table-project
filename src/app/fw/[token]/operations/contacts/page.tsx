@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 
 import { ContactsListView } from '@/features/operations/contacts/contacts-list-view';
-import { fieldworkLinkOperationsBase } from '@/features/operations/operations-paths';
+import { fieldworkLinkOperationsBase } from '@/utils/operations-paths';
 import { getOperationsDataScope } from '@/server/data-scope';
 import { resolveFieldworkShare } from '@/server/fieldwork-share-scope';
 import { assertFieldworkLinkPageAccess } from '@/server/page-fieldwork-link-access';

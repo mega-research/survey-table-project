@@ -7,7 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { db } from '@/db';
 import { questions as questionsTable } from '@/db/schema';
 import { EmptyState } from '@/features/operations/empty-state';
-import { operationsPaths } from '@/features/operations/operations-paths';
+import { operationsPaths } from '@/utils/operations-paths';
 import { ProfilesFilterBar } from '@/features/operations/profiles/profiles-filter-bar';
 import { ProfilesTable } from '@/features/operations/profiles/profiles-table';
 import { decryptPiiForTargets } from '@/lib/crypto/contact-pii-repo';

@@ -34,7 +34,7 @@ import {
 import { piiFieldLabel } from '@/lib/crypto/pii-fields';
 import { piiKeyOf } from '@/lib/operations/contacts-format';
 import { client } from '@/shared/lib/rpc';
-import { internalOperationsPaths } from '../operations-paths';
+import { internalOperationsPaths } from '@/utils/operations-paths';
 
 interface ColumnSchemeEditorProps {
   surveyId: string;

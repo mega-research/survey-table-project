@@ -8,7 +8,7 @@ import type { ContactsSortDir, ContactsSortKey } from '@/lib/operations/contacts
 import type { ContactColumnScheme, ContactResultCode } from '@/shared/contracts/contacts';
 import type { ContactAssignmentOption, ContactsRow } from '@/shared/contracts/contacts-io';
 
-import { operationsPaths } from '../operations-paths';
+import { operationsPaths } from '@/utils/operations-paths';
 
 interface ContactsPageClientProps {
   surveyId: string;

@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
-import { operationsPaths } from '@/features/operations/operations-paths';
+import { operationsPaths } from '@/utils/operations-paths';
 import { SurveyResponseFlow } from '@/features/survey-response/survey-response-flow';
 import { client } from '@/shared/lib/rpc';
 import type { SurveyDocumentView } from '@/shared/contracts/survey-builder-io';

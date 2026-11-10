@@ -17,6 +17,7 @@ import {
   fieldworkLinkName,
 } from '@/shared/contracts/workspace';
 import type { AccessLinkListItem } from '@/shared/contracts/workspace-io';
+import { internalOperationsPaths } from '@/utils/operations-paths';
 
 import {
   useCloseAccessLink,
@@ -27,7 +28,6 @@ import {
   useSetClientLinkTab,
   useSurveyAccessLinks,
 } from '../queries/use-survey-access-link';
-
 import { ClientResponseColumnsDialog } from './client-response-columns-dialog';
 
 interface AccessLinkPanelProps {
@@ -135,7 +135,9 @@ export function AccessLinkPanel({ surveyId, kind }: AccessLinkPanelProps) {
       kind={kind}
       canManage={data.canManage}
       onIssued={onIssued}
-      {...(kind === 'fieldwork' && data.links.length > 0 ? { onCancel: () => setAdding(false) } : {})}
+      {...(kind === 'fieldwork' && data.links.length > 0
+        ? { onCancel: () => setAdding(false) }
+        : {})}
     />
   );
 
@@ -416,7 +418,10 @@ function AccessLinkCard({
             바꾼 내용은 클라이언트의 다음 화면부터 반영됩니다.
           </p>
           {columnsOpen && (
-            <ClientResponseColumnsDialog surveyId={surveyId} onClose={() => setColumnsOpen(false)} />
+            <ClientResponseColumnsDialog
+              surveyId={surveyId}
+              onClose={() => setColumnsOpen(false)}
+            />
           )}
         </div>
       )}
@@ -431,8 +436,8 @@ function AccessLinkCard({
                 속하지 않게 됨을 알고 종료하게 한다. 인원은 링크 목록이 실어 온 지금 범위다. */}
             {link.share?.divided && link.share.count > 0 && (
               <span className="font-medium text-[#B45309]">
-                이 링크의 담당 범위 {link.share.count.toLocaleString('ko-KR')}명이 풀립니다 — 그 대상은
-                어느 링크에도 속하지 않게 됩니다. 이 링크가 남긴 회차·수정 기록은 남습니다.
+                이 링크의 담당 범위 {link.share.count.toLocaleString('ko-KR')}명이 풀립니다 — 그
+                대상은 어느 링크에도 속하지 않게 됩니다. 이 링크가 남긴 회차·수정 기록은 남습니다.
               </span>
             )}
           </span>
@@ -493,14 +498,6 @@ function AccessLinkCard({
 }
 
 /**
- * 외주 담당 범위 내부 주소 — survey-builder 는 operations 를 import 하지 못해(ESLint 경계) 같은 꼬리를
- * 여기 적는다. `operationsPaths(base).contactsShare` 와 같은지는 `tests/repo/fieldwork-share-href.test.ts` 가 본다.
- */
-export function fieldworkShareEditHref(surveyId: string, linkId: string): string {
-  return `/surveys/${surveyId}/operations/contacts/shares/${linkId}`;
-}
-
-/**
  * 링크 카드의 담당 범위 요약 — 건네기 전에 나눴는지 한눈에 보이게(ADR-0035). 나누지 않은 링크는 설문
  * 전체를 보므로 그 사실을 그대로 적고, 나눈 링크는 지금 인원을 적는다(0명이어도 0명). 이름표처럼
  * 연구원 화면에만 있다.
@@ -522,7 +519,7 @@ function ShareSummaryRow({
         {share.divided ? `나눔 · ${share.count.toLocaleString('ko-KR')}명` : '설문 전체'}
       </span>
       <a
-        href={fieldworkShareEditHref(surveyId, linkId)}
+        href={internalOperationsPaths(surveyId).contactsShare(linkId)}
         className="text-[#2743AE] transition-colors hover:underline"
       >
         담당 범위 나누기
@@ -557,7 +554,11 @@ function LinkLabelHeader({
     setError(null);
     const typed = draft.trim();
     try {
-      await saveLabel.mutateAsync({ surveyId, linkId: link.id, label: typed.length > 0 ? typed : null });
+      await saveLabel.mutateAsync({
+        surveyId,
+        linkId: link.id,
+        label: typed.length > 0 ? typed : null,
+      });
       setEditing(false);
     } catch (err) {
       setError(getErrorMessage(err, '이름표를 저장하지 못했습니다.'));
@@ -601,7 +602,9 @@ function LinkLabelHeader({
   return (
     <div className="flex items-center gap-1.5">
       <span className="min-w-0 truncate text-[12.5px] font-semibold text-[#1C1C1E]">{name}</span>
-      {link.label === null && <span className="shrink-0 text-[11px] text-[#9CA3AF]">이름표 없음</span>}
+      {link.label === null && (
+        <span className="shrink-0 text-[11px] text-[#9CA3AF]">이름표 없음</span>
+      )}
       <button
         type="button"
         disabled={!canManage}

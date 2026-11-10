@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { SurveyCapability } from '@/shared/contracts/workspace';
 
-import { surveyEditPath, surveyListPath, surveyPreviewPath } from './operations-paths';
+import { surveyEditPath, surveyListPath, surveyPreviewPath } from '@/utils/operations-paths';
 import { RefreshButton } from './refresh-button';
 import { SurveyControlButtons } from './survey-control-buttons';
 import { SurveyOpenMenu } from './survey-open-menu';

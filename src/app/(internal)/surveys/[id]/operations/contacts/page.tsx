@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 
 import { listQueryFromSearchParams } from '@/features/operations/contacts/contacts-list-return';
 import { ContactsListView } from '@/features/operations/contacts/contacts-list-view';
-import { internalOperationsBase } from '@/features/operations/operations-paths';
+import { internalOperationsBase } from '@/utils/operations-paths';
 import { getOperationsDataScope } from '@/server/data-scope';
 import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';

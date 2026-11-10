@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { ArrowLeft, Eye } from 'lucide-react';
 
 import { buttonVariants } from '@/components/ui/button';
-import { fieldworkLinkOperationsBase } from '@/features/operations/operations-paths';
+import { fieldworkLinkOperationsBase } from '@/utils/operations-paths';
 import { SurveyResponseFlow } from '@/features/survey-response/survey-response-flow';
 import { assertFieldworkLinkPageAccess } from '@/server/page-fieldwork-link-access';
 import { getSurveyForResponse } from '@/server/survey-builder/services/survey-read';

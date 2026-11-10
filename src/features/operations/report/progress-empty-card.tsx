@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { operationsPaths } from '../operations-paths';
+import { operationsPaths } from '@/utils/operations-paths';
 
 interface Props {
   /** 이 콘솔의 주소 접두. */

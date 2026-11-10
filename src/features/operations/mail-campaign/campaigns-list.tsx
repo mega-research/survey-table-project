@@ -14,7 +14,7 @@ import {
 import { PagerJump } from '@/features/operations/pager-jump';
 import { buildPageItems, pageBlockNavTargets } from '@/features/operations/table-primitives';
 import type { CampaignRow } from '@/shared/contracts/mail-io';
-import { internalOperationsPaths } from '../operations-paths';
+import { internalOperationsPaths } from '@/utils/operations-paths';
 
 interface Props {
   surveyId: string;

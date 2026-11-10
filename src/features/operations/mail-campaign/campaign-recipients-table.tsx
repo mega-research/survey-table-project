@@ -23,7 +23,7 @@ import {
 import type { HeaderFilterEntry } from '@/features/operations/filters/header-filter-url';
 
 import { RecipientStatusBadge } from './recipient-status-badge';
-import { internalOperationsPaths } from '../operations-paths';
+import { internalOperationsPaths } from '@/utils/operations-paths';
 
 interface Props {
   surveyId: string;

@@ -3,7 +3,7 @@ import { OperationsPageHeader } from '@/features/operations/operations-page-head
 import {
   fieldworkLinkOperationsBase,
   fieldworkLinkPreviewPath,
-} from '@/features/operations/operations-paths';
+} from '@/utils/operations-paths';
 import { OperationsTabStrip } from '@/features/operations/operations-tab-strip';
 import { assertFieldworkLinkPageAccess } from '@/server/page-fieldwork-link-access';
 import { hasQuotaPlan } from '@/server/quota/services/quota-status';

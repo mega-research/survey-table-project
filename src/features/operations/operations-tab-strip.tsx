@@ -13,7 +13,7 @@ import {
 import { cn } from '@/lib/utils';
 import type { SurveyCapability } from '@/shared/contracts/workspace';
 
-import { mailCostPath, operationsPaths } from './operations-paths';
+import { mailCostPath, operationsPaths } from '@/utils/operations-paths';
 
 interface OperationsTabStripProps {
   /** 이 콘솔의 주소 접두 — 내부는 `/surveys/<id>/operations`, 외주 실사 링크는 자기 트리(ADR-0026). */

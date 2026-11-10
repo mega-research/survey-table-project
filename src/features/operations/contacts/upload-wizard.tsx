@@ -55,7 +55,7 @@ import type {
 
 import { ShareReleaseWarning } from './share-release-warning';
 import { UploadMatchStep } from './upload-match-step';
-import { internalOperationsPaths } from '../operations-paths';
+import { internalOperationsPaths } from '@/utils/operations-paths';
 
 type Step = 'file' | 'mapping' | 'match' | 'result';
 

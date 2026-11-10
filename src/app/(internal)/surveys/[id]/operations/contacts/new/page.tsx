@@ -10,7 +10,7 @@ import {
 } from '@/server/read-models/contacts';
 import { getOperationsDataScope } from '@/server/data-scope';
 import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
-import { internalOperationsBase } from '@/features/operations/operations-paths';
+import { internalOperationsBase } from '@/utils/operations-paths';
 
 export const metadata: Metadata = {
   title: '현황 - 조사 대상 추가',

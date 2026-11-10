@@ -4,7 +4,7 @@ import {
   HEADER_FILTER_VALUE_SEPARATOR,
 } from '@/lib/operations/filter-shared';
 
-import { internalOperationsPaths } from '../../operations-paths';
+import { internalOperationsPaths } from '@/utils/operations-paths';
 
 // 컨택원 관리는 내부 콘솔 전용 화면이라 외주 실사 링크 콘솔에 주입받을 상대가 없다 — 스스로 조립한다.
 export function assignmentsHref(surveyId: string): string {
