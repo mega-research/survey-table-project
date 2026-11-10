@@ -71,10 +71,17 @@ team_lifecycle_events      # 팀 감사 (append-only) — 팀 자체 + 멤버 �
 ├── changedBy (FK restrict), metadata (JSONB — 사건 시점 팀 이름·역할)
 └── createdAt
 
-survey_groups              # 팀 공용 설문 그룹 = 정리용 폴더 (0117, 티켓 12)
-├── id, teamId (FK restrict), name, order
-├── createdBy (FK restrict)
-└── createdAt, updatedAt   (UNIQUE(teamId, name) — 팀 안에서만 유일)
+survey_groups              # 팀 공용 설문 그룹 = 정리용 폴더 (0117). 3단계까지 겹친다 (0166, ADR-0038)
+├── id, teamId (FK restrict), name, order   # order = 같은 상위 그룹 안에서의 표시 순서
+├── parentGroupId, parentDepth   # 상위 그룹(NULL = 최상위)과 그 깊이 1~2 (CHECK → 깊이 3 초과 금지). 앱이 **짝으로** 쓴다 —
+│     # 함께 NULL 이거나 함께 값(CHECK), 거짓 값은 아래 FK 가 막는다. 자기 자신이 부모인 것도 CHECK
+├── depth                  # GENERATED: COALESCE(parent_depth, 0) + 1 (1 = 최상위) — 쓸 수 없는 칸
+├── createdBy (FK restrict), createdAt, updatedAt
+├── FK (teamId, parentGroupId, parentDepth) → (teamId, id, depth)  ON UPDATE CASCADE · ON DELETE NO ACTION
+│     # 이 FK 하나가 깊이 3 초과·다른 팀의 부모·순환을 함께 막는다. 그룹을 옮기면 하위 그룹의 깊이가
+│     # 따라오고, 하위 그룹이 남은 그룹은 지워지지 않는다. 대상은 UNIQUE(teamId, id, depth)
+└── UNIQUE partial (teamId, name) WHERE 상위 없음 · (parentGroupId, name) WHERE 상위 있음 — 이름은 **같은 상위
+      그룹 안에서만** 유일 · INDEX (parentGroupId, order)
 
 fieldwork_orgs             # 실사 업체 = 외주 실사 인력의 소속 경계 (0120, 티켓 24)
 ├── id, name, status       # active | archived — 종료도 삭제가 아니라 archived (ADR-0019)
@@ -148,11 +155,11 @@ personal_survey_tag_links  # 내 태그 연결 (0150) — 행 있음 = 붙음, �
 > 「메가리서치」(시스템 전체 보기)는 팀이 아니라 슈퍼어드민의 가상 범위라 `teams` 에 행이 없다(ADR-0006).
 > archived 팀의 멤버십 행은 감사용으로 남지만 **유효 소속이 아니다** — 조회는 `server/read-models/team-memberships.ts`
 > 의 `getActiveTeamMemberships` 하나로 모은다(팀 관리와 설문 접근 판정이 함께 보므로 도메인이 아니라 read-model 이다).
-> `surveys.team_id` 는 티켓 07 이, `survey_groups` 는 티켓 12 가, `survey_participants` 는 티켓 18 이 붙였다.
 > **`survey_participants` 만 팀 축 밖이다** — 초대는 `team_members` 에 아무것도 쓰지 않고 그 설문 하나만 연다.
 > **그룹은 접근 권한이 아니라 정리용 묶음이다** — 담겼다는 사실이 판정에 들어가지 않는다.
-> `surveys.survey_group_id` 의 FK 는 `ON DELETE SET NULL` 이라 그룹 삭제는 설문을 미분류로
-> 되돌릴 뿐이다. 그룹은 팀 소유물이므로 **설문이 팀을 옮기면 `survey_group_id` 도 NULL 로
+> `surveys.survey_group_id` 의 FK 는 `ON DELETE SET NULL` 이지만 **그룹 삭제가 설문을 미분류로 내리는 것은
+> 최상위 그룹뿐이다** — 서비스가 지우기 전에 하위 그룹과 직접 담긴 설문을 한 단계 위로 올린다
+> (`src/server/workspace/services/AGENTS.md`). 그룹은 팀 소유물이므로 **설문이 팀을 옮기면 `survey_group_id` 도 NULL 로
 > 내려야 한다** — 복합 FK 로 강제하지 못한 이유(MATCH SIMPLE 은 team_id NULL 을 건너뛰고
 > MATCH FULL 은 그룹 없는 정상 설문을 위반으로 만든다)는 0117 헤더에 있고, 지키는 것은
 > 서비스(잠긴 값 재검증)와 조회(team_id 동시 일치 조인)다. 팀 해산·재배치·승계(티켓 13·14·19)의 계약이다.
@@ -194,7 +201,7 @@ surveys                    # 설문 설정
 ├── teamId                        # 소유 팀 (0116, nullable — 배치 대기면 NULL)
 ├── visibility                    # team | invite_only — invite_only 는 **소유 팀 팀원에게만** 숨김
 ├── ownerUserId, createdBy        # 소유자·작성자 (0116, 2단계 배포 중이라 아직 nullable)
-├── surveyGroupId                 # 소속 그룹 (NULL = 미분류, FK ON DELETE SET NULL — 0117)
+├── surveyGroupId                 # 소속 그룹 — 어느 단계든 하나 (NULL = 미분류, FK ON DELETE SET NULL — 0117)
 ├── ownershipStatus               # normal | succession_pending (승계 전이는 티켓 19)
 ├── assignmentStatus              # assigned | assignment_pending — teamId 와 CHECK 로 한 몸
 ├── deletedAt (soft delete)
