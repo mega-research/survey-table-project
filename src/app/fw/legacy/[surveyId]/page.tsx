@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { Lock } from 'lucide-react';
 
 import { legacyConsoleStaffPath } from '@/lib/auth/legacy-guest-link';
-import { isLegacyBridgeOpen } from '@/server/access-link';
+import { isLegacyBridgeOpen } from '@/server/legacy-bridge';
 
 import { LegacyBridgePasswordForm } from './password-form';
 

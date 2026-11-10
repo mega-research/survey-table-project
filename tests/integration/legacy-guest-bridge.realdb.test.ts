@@ -26,7 +26,8 @@ import {
   users as usersTable,
 } from '@/db/schema';
 import { readFieldworkLinkSessions } from '@/lib/auth/access-link-session';
-import { authenticateAccessLink, isLegacyBridgeOpen } from '@/server/access-link';
+import { authenticateAccessLink } from '@/server/access-link';
+import { isLegacyBridgeOpen } from '@/server/legacy-bridge';
 import type { ORPCContext } from '@/server/context';
 import { accessLinkSession } from '@/server/workspace/procedures/access-link-session';
 import { accessLinks } from '@/server/workspace/procedures/access-links';

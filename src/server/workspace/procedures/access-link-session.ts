@@ -30,10 +30,10 @@ import { cookies } from 'next/headers';
 import {
   authenticateAccessLink,
   authenticateClientLink,
-  authenticateLegacyBridge,
   type AccessLinkSessionCookie,
 } from '@/server/access-link';
 import type { ORPCContext } from '@/server/context';
+import { authenticateLegacyBridge } from '@/server/legacy-bridge';
 import { pub, withRateLimit } from '@/server/orpc';
 import {
   AccessLinkAuthOutput,

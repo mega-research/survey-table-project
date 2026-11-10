@@ -18,7 +18,7 @@ const nav = vi.hoisted(() => ({
 vi.mock('next/navigation', () => ({ redirect: nav.redirect }));
 
 const core = vi.hoisted(() => ({ open: vi.fn() }));
-vi.mock('@/server/access-link', () => ({ isLegacyBridgeOpen: core.open }));
+vi.mock('@/server/legacy-bridge', () => ({ isLegacyBridgeOpen: core.open }));
 
 vi.mock('@/shared/lib/rpc', () => ({ client: {} }));
 

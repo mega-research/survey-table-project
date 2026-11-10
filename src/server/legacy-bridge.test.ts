@@ -8,7 +8,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { authenticateLegacyBridge, isLegacyBridgeOpen } from './access-link';
+import { authenticateLegacyBridge, isLegacyBridgeOpen } from './legacy-bridge';
 
 const dbCalls = vi.hoisted(() => ({ select: vi.fn() }));
 vi.mock('@/db', () => ({
