@@ -415,20 +415,17 @@ run('담당 범위 — 단건 표면 (real DB)', () => {
       expect(inngestSend).not.toHaveBeenCalled();
     });
 
-    it.each([3, 6])('메일 미리보기 — 시스템ID %i 는 NOT_FOUND 다(주소·초대 링크가 실리지 않는다)', async (resid) => {
+    it.each([3, 6])('메일 미리보기 — 시스템ID %i 는 없는 대상과 같은 null 이다(주소·초대 링크가 실리지 않는다)', async (resid) => {
       await expect(
         linkClient(A).mail.preview.contactSample({ surveyId, contactTargetId: target(resid) }),
-      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      ).resolves.toBeNull();
     });
 
     it('범위 밖과 없는 대상이 같은 답이다 — 존재가 드러나지 않는다', async () => {
       const missing = crypto.randomUUID();
-      const outside = await linkClient(A)
-        .mail.preview.contactSample({ surveyId, contactTargetId: target(3) })
-        .catch((e: { code: string; message: string }) => ({ code: e.code, message: e.message }));
-      const absent = await linkClient(A)
-        .mail.preview.contactSample({ surveyId, contactTargetId: missing })
-        .catch((e: { code: string; message: string }) => ({ code: e.code, message: e.message }));
+      const outside = await linkClient(A).mail.preview.contactSample({ surveyId, contactTargetId: target(3) });
+      const absent = await linkClient(A).mail.preview.contactSample({ surveyId, contactTargetId: missing });
+      expect(outside).toBeNull();
       expect(outside).toEqual(absent);
       await expect(fwDetail(A, missing)).rejects.toThrow('NEXT_NOT_FOUND');
     });
