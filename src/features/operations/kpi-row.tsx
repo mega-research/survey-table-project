@@ -2,7 +2,7 @@ import { Fragment } from 'react';
 
 import type { StatusCounts } from '@/lib/operations/aggregate-status-format';
 import { numberFormatter } from '@/features/operations/format';
-import type { QuotaSummary, ShareQuotaSummary } from '@/lib/quota/quota-status-calc';
+import type { QuotaKpi } from '@/lib/quota/quota-status-calc';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
@@ -10,9 +10,9 @@ interface KpiRowProps {
   counts: StatusCounts;
   /**
    * 쿼터 요약. 쿼터 미설정(getQuotaStatus null)이면 카드 값만 '-'로 표시한다.
-   * 외주 실사 링크는 목표가 빠진 투영(`ShareQuotaSummary` — 내 완료 수·마감 셀 수)을 넘긴다(티켓 08).
+   * 나눈 외주 실사 링크는 목표가 빠진 투영(`kind: 'share'` — 내 완료 수·마감 셀 수)을 넘긴다(티켓 08).
    */
-  quota?: QuotaSummary | ShareQuotaSummary | null;
+  quota?: QuotaKpi | null;
 }
 
 interface KpiCellSpec {
@@ -136,16 +136,19 @@ function KpiCell({ label, value, delta, deltaTone, hint }: KpiCellProps) {
  * 완료/목표 총합 대비 % + 마감된 셀 수(closedCells)를 함께 보여줘, 쿼터 전체
  * 진척을 한눈에 파악할 수 있게 한다. 셀 단위 상세는 QuotaStatusPanel 담당.
  */
-function QuotaKpiCell({ quota }: { quota?: QuotaSummary | ShareQuotaSummary | null }) {
+function QuotaKpiCell({ quota }: { quota: QuotaKpi | null }) {
   const hasQuota = quota != null;
   // 외주 투영에는 목표가 없다 — 달성률 대신 내 완료 수를 크게, 마감 셀 수를 아래에 둔다.
-  const isShare = hasQuota && 'mineTotal' in quota;
-  const value = !hasQuota ? '-' : isShare ? numberFormatter.format(quota.mineTotal) : `${quota.pct}%`;
+  const value = !hasQuota
+    ? '-'
+    : quota.kind === 'share'
+      ? numberFormatter.format(quota.mine.mineTotal)
+      : `${quota.summary.pct}%`;
   const detail = !hasQuota
     ? '-'
-    : isShare
-      ? `내 완료 · ${quota.totalCells}셀 중 ${quota.closedCells} 마감`
-      : `${numberFormatter.format(quota.currentTotal)}/${numberFormatter.format(quota.targetTotal)} · ${quota.closedCells} 마감`;
+    : quota.kind === 'share'
+      ? `내 완료 · ${quota.mine.totalCells}셀 중 ${quota.mine.closedCells} 마감`
+      : `${numberFormatter.format(quota.summary.currentTotal)}/${numberFormatter.format(quota.summary.targetTotal)} · ${quota.summary.closedCells} 마감`;
 
   return (
     <Card>

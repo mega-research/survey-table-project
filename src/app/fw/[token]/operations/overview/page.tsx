@@ -28,8 +28,8 @@ interface PageProps {
  * 나눈 링크는 자기 범위 대상의 응답만 본다. 범위는 매 요청 링크 행에서 읽으므로 연구원이 범위를
  * 바꾸면 다음 화면부터 반영된다.
  *
- * 쿼터 조각만은 외주 투영이다(fieldwork-multi-company 티켓 08) — 담당 범위를 넘겨 KPI 쿼터 칸·현황판이
- * 셀마다 내 달성 수·마감 여부만 받는다. 전체 목표·전체 달성 수는 이 화면의 payload 에 없다.
+ * 쿼터 조각도 같은 담당 범위로 갈린다 — 나눈 링크는 셀마다 내 달성 수·마감 여부만 받고(전체 목표·전체 달성
+ * 수는 이 화면의 payload 에 없다), 나누지 않은 링크는 연구원과 같은 전체 현황이다.
  */
 export default async function FieldworkLinkOverviewPage({ params, searchParams }: PageProps) {
   const { token } = await params;
@@ -47,7 +47,6 @@ export default async function FieldworkLinkOverviewPage({ params, searchParams }
       scope={scope}
       share={share}
       searchParams={await searchParams}
-      fieldworkQuotaShare={share}
     />
   );
 }

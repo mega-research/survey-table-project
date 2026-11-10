@@ -133,8 +133,8 @@ src/
 /fw/[token]/operations/overview   # 응답 현황 · report 진척 보고 — 운영 위젯을 그대로 쓰되 숫자는 그 링크의 **담당 범위 대상** 기준이다
                                   # (나누지 않은 링크는 설문 전체 — 연구원과 같은 숫자). 응답 현황의 쿼터 조각은 아래 투영과 같다
 /fw/[token]/operations/quota      # 쿼터 현황 — **읽기 전용 현황판 하나**(2026-10-12). 플랜 편집은 없다(`survey.edit` 축).
-                                  # 셀마다 **내 달성 수 + 설문 전체 기준 마감 여부**만 싣는다(getShareQuotaStatus — 전체 목표·달성은
-                                  # RSC payload 에도 없다). 그래서 클라이언트 콘솔 본문을 더는 함께 쓰지 않는다. 관문은 operations.view —
+                                  # 나눈 링크는 셀마다 **내 달성 수 + 설문 전체 기준 마감 여부**만 싣는다(전체 목표·달성은 RSC payload 에도
+                                  # 없다), 나누지 않은 링크는 전체 현황이다 — 갈래는 getQuotaViewForShare 하나. 관문은 operations.view —
                                   # 새 capability 를 세우지 않았다(링크의 여섯 칸 그대로). 탭 이름은 「쿼터 현황」이고
                                   # **쿼터가 없는 설문에서는 탭이 서지 않는다**(`hasQuotaPlan` — 현황 화면의 빈 상태와 같은 술어)
                                   # 관문은 assertFieldworkLinkPageAccess 이고 leaf 마다 자기 capability 를 준다

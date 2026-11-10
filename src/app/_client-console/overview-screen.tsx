@@ -129,7 +129,10 @@ export async function ClientOverviewScreen({
         </p>
       </div>
 
-      <KpiRow counts={statusCounts} quota={quotaStatus?.summary ?? null} />
+      <KpiRow
+        counts={statusCounts}
+        quota={quotaStatus ? { kind: 'full', summary: quotaStatus.summary } : null}
+      />
 
       <DailyParticipationChart
         data={dailyBuckets}

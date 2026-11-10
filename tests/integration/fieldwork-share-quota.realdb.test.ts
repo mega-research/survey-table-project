@@ -311,17 +311,39 @@ run('쿼터 현황 — 외주 링크 투영 (real DB)', () => {
       expect([a['서울']![0], b['서울']![0]]).toEqual([3, 1]);
     });
 
-    it('한 번도 나누지 않은 링크 C 는 설문 전체 완료를 내 몫으로 보지만 목표는 여전히 없다', async () => {
-      const { status } = await fwQuotaPanelProps(C);
-      expect(cellsOf(status)).toEqual({ 서울: [4, true], 부산: [1, false] });
-      expectNoTotals(status);
+    it('한 번도 나누지 않은 링크 C 는 지금처럼 설문 전체의 목표·달성 수를 본다 — 안 나누면 지금과 똑같다', async () => {
+      signInAs(C);
+      const tree = await FieldworkQuotaPage({ params: Promise.resolve({ token: C.token }) });
+      expect(findElements(tree, ShareQuotaStatusPanel)).toHaveLength(0);
+      const [panel] = findElements(tree, QuotaStatusPanel);
+      const status = panel!.props['status'] as { cells: { labels: string[]; current: number; target: number }[] };
+      expect(status.cells.map((c) => [c.labels.join('·'), c.current, c.target])).toEqual([
+        ['서울', 4, 3],
+        ['부산', 1, 50],
+      ]);
+    });
+
+    it('나누지 않은 링크 C 의 응답 현황 KPI 쿼터 칸도 전체 요약이다', async () => {
+      signInAs(C);
+      const tree = await FieldworkOverviewPage({
+        params: Promise.resolve({ token: C.token }),
+        searchParams: Promise.resolve({}),
+      });
+      const [screen] = findElements(tree, OperationsOverviewScreen);
+      const screenTree = await OperationsOverviewScreen(
+        screen!.props as unknown as Parameters<typeof OperationsOverviewScreen>[0],
+      );
+      const [kpi] = findElements(screenTree, KpiRow);
+      expect(kpi!.props['quota']).toMatchObject({ kind: 'full', summary: { targetTotal: 53, currentTotal: 5 } });
+      expect(findElements(screenTree, QuotaStatusPanel)).toHaveLength(1);
+      expect(findElements(screenTree, ShareQuotaStatusPanel)).toHaveLength(0);
     });
   });
 
   describe('외주 응답 현황 화면의 쿼터 조각', () => {
     it('KPI 카드와 쿼터 패널이 A 몫의 투영을 받고 전체 목표·전체 달성 수 키가 없다', async () => {
       const { kpiQuota, panel } = await fwOverviewQuota(A);
-      expect(kpiQuota).toEqual({ mineTotal: 3, closedCells: 1, totalCells: 2 });
+      expect(kpiQuota).toEqual({ kind: 'share', mine: { mineTotal: 3, closedCells: 1, totalCells: 2 } });
       expect(cellsOf(panel.status)).toEqual({ 서울: [3, true], 부산: [0, false] });
       expectNoTotals({ kpiQuota, panel: panel.status });
     });
@@ -353,7 +375,7 @@ run('쿼터 현황 — 외주 링크 투영 (real DB)', () => {
         searchParams: {},
       });
       const [kpi] = findElements(tree, KpiRow);
-      expect(kpi!.props['quota']).toMatchObject({ targetTotal: 53, currentTotal: 5 });
+      expect(kpi!.props['quota']).toMatchObject({ kind: 'full', summary: { targetTotal: 53, currentTotal: 5 } });
       const [panel] = findElements(tree, QuotaStatusPanel);
       expect((panel!.props['status'] as { cells: unknown[] }).cells).toHaveLength(2);
       expect(findElements(tree, ShareQuotaStatusPanel)).toHaveLength(0);

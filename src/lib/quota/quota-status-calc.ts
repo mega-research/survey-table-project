@@ -185,3 +185,25 @@ export function summarizeShareQuota(status: ShareQuotaStatus): ShareQuotaSummary
     totalCells: status.cells.length,
   };
 }
+
+/**
+ * 응답 현황 KPI 카드의 쿼터 칸 — 어느 모양인지를 값이 들고 다닌다(판별 유니온).
+ *
+ * `full` 은 설문 전체 목표·달성(내부 콘솔·클라이언트·한 번도 나누지 않은 외주 링크), `share` 는 나눈 외주
+ * 링크의 투영(내 완료 수·마감 셀 수)이다. 갈래는 서버가 담당 범위로 한 번 정하고(`getQuotaViewForShare`),
+ * 카드는 `kind` 로만 고른다 — 키 유무(`'mineTotal' in …`)로 다시 판정하지 않는다.
+ */
+export type QuotaKpi =
+  | { kind: 'full'; summary: QuotaSummary }
+  | { kind: 'share'; mine: ShareQuotaSummary };
+
+/** 쿼터 현황 한 벌 — 위와 같은 갈래로 현황판까지. */
+export type QuotaView =
+  | { kind: 'full'; status: QuotaStatus }
+  | { kind: 'share'; status: ShareQuotaStatus };
+
+export function quotaKpiOf(view: QuotaView): QuotaKpi {
+  return view.kind === 'full'
+    ? { kind: 'full', summary: view.status.summary }
+    : { kind: 'share', mine: summarizeShareQuota(view.status) };
+}

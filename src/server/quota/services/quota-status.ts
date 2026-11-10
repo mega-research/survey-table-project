@@ -9,10 +9,11 @@ import {
 } from '@/server/read-models/completed-answers';
 
 import { EXTERNAL_VIEWER_DATA_SCOPE, type OperationsDataScope } from '@/server/data-scope';
-import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share';
+import { type FieldworkShare, isShareRestricted, shareTargetCondition } from '@/server/fieldwork-share';
 import {
   type QuotaStatus,
   type QuotaSummary,
+  type QuotaView,
   type ShareQuotaStatus,
   buildQuotaStatus,
   buildShareQuotaStatus,
@@ -43,12 +44,12 @@ export async function getQuotaStatus(
 }
 
 /**
- * 외주 실사 링크가 보는 쿼터 현황 — 셀마다 **내 달성 수와 셀 마감 여부만** (fieldwork-multi-company 티켓 08).
+ * 나눈 외주 실사 링크가 보는 쿼터 현황 — 셀마다 **내 달성 수와 셀 마감 여부만** (fieldwork-multi-company 티켓 08).
  * 쿼터 미설정이면 null.
  *
- * 외주 링크 주체면 나누었든 아니든 이 투영이다 — 전체 목표·전체 달성 수는 외주의 화면에도 RSC payload 에도
- * 싣지 않는다(PRD 「쿼터 현황 투영은 링크 주체일 때」, 스토리 41). 한 번도 나누지 않은 링크(`all`)는 내 몫이
- * 곧 설문 전체 완료일 뿐 모양은 같다. 클라이언트 링크·계정 주체는 `getQuotaStatus` 를 쓴다.
+ * 전체 목표·전체 달성 수는 외주의 화면에도 RSC payload 에도 싣지 않는다(PRD 스토리 41) — 업체가 여럿이면 남의
+ * 몫을 짐작할 재료가 된다. **한 번도 나누지 않은 링크는 이 투영이 아니다**(스토리 22 「안 나누면 지금과 똑같다」,
+ * 2026-11-10 연구원 결정) — 갈래는 `getQuotaViewForShare` 하나가 정한다.
  *
  * 마감은 설문 전체 실데이터 완료로 판정한다 — 집행(`checkQuota`)과 같은 모수·같은 술어라 「외주 화면은 열림인데
  * 응답자는 마감」이 생기지 않는다. 파티션은 실데이터 상수다(외부 주체는 언제나 실데이터를 본다).
@@ -69,6 +70,28 @@ export async function getShareQuotaStatus(
     shareCondition: shareTargetCondition(share, surveyResponses.contactTargetId),
   });
   return buildShareQuotaStatus(config, all, mine);
+}
+
+/**
+ * 쿼터 현황의 갈래 — 담당 범위 하나로 정한다. **화면은 이 함수만 부른다**(응답 현황의 쿼터 조각·`/fw` 쿼터 화면).
+ *
+ * - 거르는 범위(`targets`·`none` — 나눈 외주 링크)면 내 몫 투영(`getShareQuotaStatus`).
+ * - `all`(계정 주체·클라이언트 링크·한 번도 나누지 않은 외주 링크)이면 설문 전체 현황(`getQuotaStatus`). 나누지
+ *   않은 외주 링크는 업체 하나인 설문이라 지금처럼 목표·달성 수를 본다(스토리 22).
+ *
+ * `scope` 는 전체 현황에만 쓴다 — 외주 링크는 언제나 실데이터라 호출부가 넘기는 값도 `real` 이다.
+ */
+export async function getQuotaViewForShare(
+  surveyId: string,
+  scope: OperationsDataScope,
+  share: FieldworkShare,
+): Promise<QuotaView | null> {
+  if (isShareRestricted(share)) {
+    const status = await getShareQuotaStatus(surveyId, share);
+    return status ? { kind: 'share', status } : null;
+  }
+  const status = await getQuotaStatus(surveyId, scope);
+  return status ? { kind: 'full', status } : null;
 }
 
 /**
