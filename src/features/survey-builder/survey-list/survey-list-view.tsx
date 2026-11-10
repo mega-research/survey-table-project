@@ -248,12 +248,6 @@ export function SurveyListView() {
   // 검색어). 주소의 검색어가 아니라 **그려진 결과**의 값을 본다: 조건을 바꾸는 동안 흐리게 남긴 이전
   // 결과에는 이전 범위의 숫자와 카드가 있다.
   const searchedSubtree = activeGroup !== null && (data?.groupSubtree ?? false);
-  // **그룹 관리 창은 아직 최상위 그룹만 다룬다** — 창의 만들기·끌어서 순서 바꾸기가 한 단 목록을
-  // 전제한다(하위 그룹을 섞어 넘기면 서로 다른 부모의 줄이 한 목록에서 끌린다).
-  const topLevelGroups = useMemo(
-    () => manageableGroups.filter((g) => g.parentGroupId === null),
-    [manageableGroups],
-  );
   // 지목한 그룹이 없으면(삭제됐거나 남의 팀 id) 주소를 정리한다 — 서버는 그 그룹으로 좁혀 빈
   // 결과를 주므로, 두면 유령 그룹 주소로 빈 화면에 갇힌다. 시스템 전체 보기에는 그룹 개념이
   // 없어 언제나 정리한다. 그룹 목록이 아직 안 왔거나 실패했으면 손대지 않는다 — "아직 안 왔다"
@@ -433,7 +427,7 @@ export function SurveyListView() {
               className="flex h-[42px] items-center gap-1.5 rounded-[9px] border border-[#E5E5EA] bg-white px-[18px] text-[14px] font-medium text-[#374151] hover:bg-[#F5F5F7]"
             >
               <Folder className="h-4 w-4" />
-              {activeGroup ? '그룹 편집' : '그룹 관리'}
+              그룹 관리
             </button>
           )}
           {/* 3단계 그룹과 협업 그룹(타 팀 폴더)에서는 보이지 않는다 — 만들 수 없는 것을 눌러 보고
@@ -453,8 +447,7 @@ export function SurveyListView() {
               <FolderPlus className="h-4 w-4" />새 하위 그룹
             </button>
           )}
-          {/* 그룹 관리 창을 거치지 않고 이 그룹에 바로 담는다 — 하위 그룹은 그 창의 목록에 서지 않아
-              여기가 유일한 입구다. */}
+          {/* 이 그룹에 바로 담는다 — 「설문 담기」의 입구는 여기 하나다(그룹 관리 창은 구조만 다룬다). */}
           {collectTargetGroup && (
             <button
               type="button"
@@ -744,7 +737,7 @@ export function SurveyListView() {
       {groupManagerOpen && teamScopeId && (
         <GroupManageModal
           teamId={teamScopeId}
-          groups={topLevelGroups}
+          groups={manageableGroups}
           onClose={() => setGroupManagerOpen(false)}
         />
       )}

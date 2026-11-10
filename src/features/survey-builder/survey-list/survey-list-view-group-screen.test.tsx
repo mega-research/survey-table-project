@@ -386,18 +386,21 @@ describe('그룹 화면 — 검색은 아래 전체에서 찾는다', () => {
   });
 });
 
-describe('그룹 관리 창 — 아직 최상위 그룹만 다룬다', () => {
-  it('하위 그룹은 창의 목록에 서지 않는다', async () => {
+describe('그룹 관리 창 — 팀의 그룹 전체를 트리로 다룬다 (티켓 07)', () => {
+  it('그룹 화면에서도 버튼은 「그룹 관리」이고, 창에 하위 그룹까지 전부 선다', async () => {
     const user = userEvent.setup();
     renderGroupScreen(G_LEE);
 
-    await user.click(await screen.findByRole('button', { name: '그룹 편집' }));
+    // 전에는 그룹 화면에서만 「그룹 편집」이라고 불렀다 — 같은 창이라 이름도 하나다.
+    await user.click(await screen.findByRole('button', { name: '그룹 관리' }));
+    expect(screen.queryByRole('button', { name: '그룹 편집' })).toBeNull();
 
-    const dialog = within(await screen.findByRole('dialog'));
+    const dialog = within(await screen.findByRole('dialog', { name: '그룹 관리' }));
     expect(dialog.getByText('이정운')).toBeInTheDocument();
-    expect(dialog.queryByText('2026')).toBeNull();
-    expect(dialog.queryByText('상반기')).toBeNull();
-    // 타 팀 폴더는 전에도 관리 대상이 아니었다.
+    expect(dialog.getByText('2026')).toBeInTheDocument();
+    expect(dialog.getByText('2025')).toBeInTheDocument();
+    expect(dialog.getByText('상반기')).toBeInTheDocument();
+    // 타 팀 폴더는 관리 대상이 아니다.
     expect(dialog.queryByText('A고객사 2026')).toBeNull();
   });
 });
