@@ -296,6 +296,15 @@ export const surveyAccessLinks = pgTable(
     index('survey_access_links_active_survey_kind_idx')
       .on(t.surveyId, t.kind)
       .where(sql`closed_at IS NULL`),
+    // 0159 · 0160 CHECK 의 사본(루트 AGENTS.md 주의사항 1) — 대조는 workspace-access-link-checks.test.ts.
+    check(
+      'survey_access_links_label_check',
+      sql`${t.label} IS NULL OR (${t.kind} = 'fieldwork' AND char_length(${t.label}) BETWEEN 1 AND 40)`,
+    ),
+    check(
+      'survey_access_links_share_check',
+      sql`(${t.shareAppliedAt} IS NULL) = (${t.shareClauses} IS NULL) AND (${t.shareAppliedAt} IS NULL OR ${t.kind} = 'fieldwork')`,
+    ),
   ],
 );
 
