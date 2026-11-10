@@ -102,7 +102,18 @@ survey_access_links        # 링크 = 설문 하나를 여는 **접속 수단 �
 ├── passwordUpdatedAt       # **세션 폐기 표식** — 쿠키가 이 값을 들고 다니고 매 요청 대조한다(시각의 대소가 아니라 값의 일치)
 ├── passwordUpdatedBy, createdBy (FK restrict)
 ├── closedAt, closedBy      # 종료는 행 삭제가 아니라 상태 전환 — 귀속 FK 가 restrict 이라 하드 삭제가 막힌다
-└── createdAt  (UNIQUE partial(surveyId, kind) WHERE closed_at IS NULL — 활성 링크는 설문당 **종류별** 하나, 종료된 행은 계보)
+│                           # 외주 링크 종료는 같은 트랜잭션에서 그 링크의 fieldwork_link_shares 를 지운다
+├── label                   # 연구원용 이름표 (0159) — **외주 전용** 1~40자(CHECK), NULL 이면 화면이 「링크 N」. 외주 화면에 싣지 않는다
+├── shareAppliedAt, shareClauses (JSONB)  # 담당 범위 「나눈 적 있음」·마지막 조건 (0160) — 외주 전용, 함께 서고 함께 빈다(CHECK).
+│                           # NULL 이면 설문 전체를 보고, 값이 있으면 아래 표의 행만 본다(0명이어도 0명)
+└── createdAt  (UNIQUE partial(surveyId) WHERE kind='client' AND closed_at IS NULL — **클라이언트만** 설문당 하나(0159).
+                            #  외주 링크는 업체별로 여럿이다. 종료된 행은 계보)
+
+fieldwork_link_shares      # 담당 범위 = 「이 조사 대상은 지금 이 외주 링크에 맡겨져 있다」 (0160, ADR-0035) — 컨택원과 다른 층
+├── linkId (FK no action — 링크 행은 지우지 않는다), contactTargetId (FK **cascade** — 명단 교체 업로드가 범위를 푼다)
+├── createdAt
+└── PK(linkId, contactTargetId) · INDEX(contactTargetId)  # 같이 맡기기가 있어 다대다. 외주 링크만·같은 설문·실데이터 대상만은
+                           # 교차 테이블 조건이라 DB 로 걸지 않고 유일한 쓰기 자리(contacts/services/fieldwork-shares)가 잠근 행에서 본다
 
 survey_ownership_events    # 설문 소유 팀·소유자 이동 감사 (0118, 티켓 14 — append-only)
 ├── id, surveyId (FK **cascade**)

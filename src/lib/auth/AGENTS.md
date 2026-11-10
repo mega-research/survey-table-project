@@ -36,7 +36,11 @@
   일반 규칙보다 **앞선** 임시(307) 규칙이 다리 라우트 `/api/legacy-guest-link/[surveyId]` 로
   보내고, 라우트가 세션 쿠키의 존재로 가른다: 직원은 `/surveys/<id>/operations/…`(종전의 답),
   세션이 없고 **옛 grant 에 오른 설문**(`GUEST_SURVEY_GRANTS` 의 설문 id — 계정 쪽은 더는 뜻이
-  없다)이고 열린 외주 링크가 있으면 `/fw/<token>`. 목록 밖 설문은 링크가 있어도 조회하지
+  없다)이면 열린 외주 링크 수로 가른다 — 0개면 직원 주소, 1개면 `/fw/<token>`, 여럿이면 이 브라우저의
+  유효한 외주 세션이 정확히 하나일 때 그 링크(`resolveLinkActorForSurvey` — RPC 주체 판정과 같은 함수),
+  아니면 다리 전용 비밀번호 화면 `/fw/legacy/<surveyId>`(`accessLinkSession.authenticateLegacyBridge` 가
+  열린 외주 링크마다 상수 시간으로 대조해 맞는 링크의 세션을 심는다, 레이트리밋은 /fw 접속과 같은 그룹을
+  (IP, 설문)으로). 그 화면은 업체 목록·이름표·조사 이름을 그리지 않는다. 목록 밖 설문은 링크가 있어도 조회하지
   않는다(설문 id 로 토큰을 알아내는 창구가 되지 않게). **전환기 장치다** — env 를 비우면 꺼지고,
   서 있는 동안 그 설문들의 링크는 비밀번호 하나로 지켜진다. 규칙의 순서는
   `tests/repo/next-config-redirects.test.ts` 가, 판정은 라우트 옆 `route.test.ts` 가 본다.

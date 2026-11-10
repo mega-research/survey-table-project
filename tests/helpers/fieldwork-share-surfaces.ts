@@ -3,34 +3,25 @@
  *
  * 외주 링크 음성 스위트(`tests/integration/fieldwork-link-denial.test.ts`)가 이 표를 라우터 열거
  * (`LINK_OPEN_SCOPED_PATHS`)와 `src/app/fw` 트리에 맞춘다 — 새 표면이 링크에 열리면 여기 한 줄을 쓰기
- * 전까지 빨개진다. 셋 중 하나다.
+ * 전까지 빨개진다. 둘 중 하나다 — 「아직 안 거름」 범주는 없다(티켓 11 에서 지웠다). 새 표면은 거르거나
+ * 사유를 대야 링크에 열 수 있다.
  *
  * - `FILTERED` — 담당 범위로 거른다(`server/fieldwork-share` 의 해석·술어를 쓴다). 실제로 거르는지는
  *   실DB 스위트(`fieldwork-share.realdb` 등)가 링크 A·B 세션으로 본다.
  * - `exempt(사유)` — 대상 데이터를 읽지도 돌려주지도 않는다. 사유를 같은 줄에 적는다 — 적을 말이 없으면
  *   거르지 않은 것이다.
- * - `pending('NN')` — 아직 거르지 않는다. 담당 티켓 번호(05~09)를 적는다. 그 티켓이 거르면 `FILTERED` 로
- *   바꾼다. 하나도 남지 않으면 이 상태를 지운다(티켓 11).
  *
- * **표면 하나 = 한 줄**, 담당 티켓별로 묶고 묶음 사이를 빈 줄로 띄운다 — 여러 티켓이 병렬로 자기 줄만
- * 바꿔도 병합이 부딪히지 않게. 한 페이지를 두 티켓이 나눠 맡으면 `페이지#조각` 으로 줄을 가른다.
+ * **표면 하나 = 한 줄**, 거른 자리별로 묶는다. 한 페이지의 조각을 따로 거르면 `페이지#조각` 으로 줄을 가른다.
  *
  * 라우터·파일 트리로 열거할 수 없는 표면도 있다 — 대리 응답 진입(`server/fieldwork-proxy`, 응답 procedure 가
- * 초대 토큰으로 부른다)은 티켓 05 가 진다. 이 표는 그것을 잡지 못한다.
+ * 초대 토큰으로 부른다)은 `fieldwork-proxy` 가 직접 담당 범위를 건다(티켓 05). 이 표는 그것을 잡지 못한다.
  */
 import type { LINK_OPEN_SCOPED_PATHS } from './scoped-surface-inputs';
 
-export type ShareSurfaceStatus =
-  | { kind: 'filtered' }
-  | { kind: 'exempt'; reason: string }
-  | { kind: 'pending'; ticket: '05' | '06' | '07' | '08' | '09' };
+export type ShareSurfaceStatus = { kind: 'filtered' } | { kind: 'exempt'; reason: string };
 
 export const FILTERED: ShareSurfaceStatus = { kind: 'filtered' };
 export const exempt = (reason: string): ShareSurfaceStatus => ({ kind: 'exempt', reason });
-export const pending = (ticket: '05' | '06' | '07' | '08' | '09'): ShareSurfaceStatus => ({
-  kind: 'pending',
-  ticket,
-});
 
 type LinkOpenScopedPath = (typeof LINK_OPEN_SCOPED_PATHS)[number];
 

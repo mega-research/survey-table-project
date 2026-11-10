@@ -78,6 +78,8 @@ src/
 │   ├── new                       # 컨택 수동 추가
 │   ├── result-codes              # 결과코드 설정
 │   ├── assignments               # 컨택원 관리 → [assignmentId] 컨택원 수정(교체 적용) — 내부 계정·contacts.manage 전용, src/server/contacts/AGENTS.md 「컨택원 배정」
+│   ├── shares                    # 외주 담당 범위 → [linkId] 링크 하나의 범위 수정(겹침 처리 선택·범위 없애기) — 내부 계정·survey.manageAccess 전용,
+│   │                             # 실데이터 고정. 컨택원과 다른 층이다 — src/server/contacts/AGENTS.md 「외주 담당 범위」
 │   ├── prior-answers             # 이월 응답 임포트 (추적조사) — src/server/contacts/AGENTS.md 참조
 │   ├── upload                    # 업로드 이력
 │   └── upload/new                # 엑셀 업로드 마법사
@@ -128,12 +130,18 @@ src/
                                   # 명단 수정 폼·삭제·응답 초기화·재응답 허용은 없고, 그리지 않는 것은 읽지도 않는다
 /fw/[token]/operations/profiles   # 응답 내역 — 내부 콘솔과 같은 본문(profiles-screen). 삭제·복원·초기화·휴지통 보기·
                                   # 컬럼 설정은 없다 · [responseId]/edit 응답 수정 (ADR-0027)
-/fw/[token]/operations/overview   # 응답 현황 · report 진척 보고 — 운영 위젯을 그대로 쓴다(같은 숫자)
+/fw/[token]/operations/overview   # 응답 현황 · report 진척 보고 — 운영 위젯을 그대로 쓰되 숫자는 그 링크의 **담당 범위 대상** 기준이다
+                                  # (나누지 않은 링크는 설문 전체 — 연구원과 같은 숫자). 응답 현황의 쿼터 조각은 아래 투영과 같다
 /fw/[token]/operations/quota      # 쿼터 현황 — **읽기 전용 현황판 하나**(2026-10-12). 플랜 편집은 없다(`survey.edit` 축).
-                                  # 본문은 클라이언트 콘솔과 같은 것(app/_client-console/quota-screen), 관문은 operations.view —
+                                  # 셀마다 **내 달성 수 + 설문 전체 기준 마감 여부**만 싣는다(getShareQuotaStatus — 전체 목표·달성은
+                                  # RSC payload 에도 없다). 그래서 클라이언트 콘솔 본문을 더는 함께 쓰지 않는다. 관문은 operations.view —
                                   # 새 capability 를 세우지 않았다(링크의 여섯 칸 그대로). 탭 이름은 「쿼터 현황」이고
                                   # **쿼터가 없는 설문에서는 탭이 서지 않는다**(`hasQuotaPlan` — 현황 화면의 빈 상태와 같은 술어)
                                   # 관문은 assertFieldworkLinkPageAccess 이고 leaf 마다 자기 capability 를 준다
+                                  # 조사 대상·상세·응답 내역·수정·현황·쿼터는 전부 담당 범위로 거른다(나눈 링크는 0명도 0명)
+/fw/legacy/[surveyId]             # 옛 주소 다리의 비밀번호 화면 — 외주 링크가 여럿인 설문에서 이 브라우저의 세션으로 링크를
+                                  # 못 고를 때(fieldwork-multi-company 티켓 10). 맞는 비밀번호의 링크 세션을 심고 그 콘솔로 보낸다.
+                                  # 업체 목록·이름표·조사 이름을 그리지 않는다. 판정은 src/lib/auth/AGENTS.md 「게이트는 2단이다」
 
 /fieldwork                        # 실사 홈 — 초대 설문 목록 (.pen FLOW 10-1, 티켓 25)
                                   # 실사원은 초대 설문만, 실사 팀장은 「업체 전체」 세그먼트로 소속원 초대까지
@@ -144,7 +152,7 @@ src/
                                   # assertFieldworkSurveyPageAccess 이고 leaf 마다 자기 capability 를 준다
 ```
 
-응답 페이지 진입 경로: `/survey/[id]?invite=<uuid>` 또는 짧은 링크 `/i/<inviteCode>`. 실사 대행은 같은 주소에 `&fw=1` 힌트가 붙는다(티켓 27) — 배너를 물을지만 정하고 **권한은 주지 않는다**. invite 해석 → contact_targets lookup → survey_responses.contactTargetId 매칭. 토큰 무효 시 안내 화면 + 익명 응답 폴백. **수신거부(unsubscribed_at)·부정 결과코드는 초대 링크 응답을 막지 않는다** (2026-09-01 결정 — 수신거부는 메일 채널 해지일 뿐; 단체 메일 제외·모수 제외는 각자 경로가 담당). 완료 응답이 있는 토큰만 `token_already_used` 로 차단. surveyId가 UUID인 경우 private_token fallback 필요. 빌더 미리보기는 `/preview/<previewToken>`. 내부 「설문 보기」(`/surveys/[id]/preview`, 저장본)는 그 파티션(콘솔과 같은 `loadOperationsDataScope`)에서 resid 가 가장 작은 조사 대상의 명단 값·이월 응답으로 연다(`server/contacts/services/preview-contact` — 개인정보 열은 설문이 읽는 열만, 2026-11-04). 외부 공유용 `/preview/<token>`(배포본)도 같은 규칙으로 첫 번째 조사 대상의 값을 싣는다 — 링크를 받은 사람이 그 대상의 명단 값을 보게 되는 것을 알고 고른 결정이다(2026-11-04). 로그인 없는 방문자는 실데이터 파티션이다. 빌더(설문 편집) 미리보기는 `surveyBuilder.testSample` 이 같은 첫 대상의 명단 값·이월 응답을 싣고, 이월 값은 `survey-builder/lib/preview-prior-seeds` 가 응답 화면과 같은 규칙으로 테스트 응답에 깐다. 대상 id 로 이월 응답을 읽는 함수는 `server/read-models/contact-prior-answers`(빌더가 contacts 서비스를 부를 수 없어 읽기 경계를 read-model 이 소유한다).
+응답 페이지 진입 경로: `/survey/[id]?invite=<uuid>` 또는 짧은 링크 `/i/<inviteCode>`. 외주 대행도 같은 주소이고 표시가 없다 — 옛 `&fw=1` 힌트는 대행 배너와 함께 걷었다(ADR-0026). 귀속·담당 범위 밖 거부는 서버가 세션 쿠키로 판정한다(`server/fieldwork-proxy`). invite 해석 → contact_targets lookup → survey_responses.contactTargetId 매칭. 토큰 무효 시 안내 화면 + 익명 응답 폴백. **수신거부(unsubscribed_at)·부정 결과코드는 초대 링크 응답을 막지 않는다** (2026-09-01 결정 — 수신거부는 메일 채널 해지일 뿐; 단체 메일 제외·모수 제외는 각자 경로가 담당). 완료 응답이 있는 토큰만 `token_already_used` 로 차단. surveyId가 UUID인 경우 private_token fallback 필요. 빌더 미리보기는 `/preview/<previewToken>`. 내부 「설문 보기」(`/surveys/[id]/preview`, 저장본)는 그 파티션(콘솔과 같은 `loadOperationsDataScope`)에서 resid 가 가장 작은 조사 대상의 명단 값·이월 응답으로 연다(`server/contacts/services/preview-contact` — 개인정보 열은 설문이 읽는 열만, 2026-11-04). 외부 공유용 `/preview/<token>`(배포본)도 같은 규칙으로 첫 번째 조사 대상의 값을 싣는다 — 링크를 받은 사람이 그 대상의 명단 값을 보게 되는 것을 알고 고른 결정이다(2026-11-04). 로그인 없는 방문자는 실데이터 파티션이다. 빌더(설문 편집) 미리보기는 `surveyBuilder.testSample` 이 같은 첫 대상의 명단 값·이월 응답을 싣고, 이월 값은 `survey-builder/lib/preview-prior-seeds` 가 응답 화면과 같은 규칙으로 테스트 응답에 깐다. 대상 id 로 이월 응답을 읽는 함수는 `server/read-models/contact-prior-answers`(빌더가 contacts 서비스를 부를 수 없어 읽기 경계를 read-model 이 소유한다).
 
 > 운영 집계·파티션은 `src/server/operations/AGENTS.md`, 메일 발송 주소·대체 발송은 `src/server/mail/AGENTS.md`, 컨택원 배정·조사 대상 필터 해석·ID 목록 검색은 `src/server/contacts/AGENTS.md`, 필터 바 구조는 `src/features/operations/AGENTS.md` 에 있다.
 

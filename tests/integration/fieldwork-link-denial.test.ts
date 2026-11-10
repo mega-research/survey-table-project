@@ -276,7 +276,7 @@ describe('scoped 표면 전수 — 열린 열과 막힌 나머지', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 담당 범위 — 링크가 지나는 표면마다 「거름 / 해당 없음 / 미처리(티켓)」 등재 (fieldwork-multi-company 티켓 03)
+// 담당 범위 — 링크가 지나는 표면마다 「거름 / 해당 없음」 등재 (fieldwork-multi-company 티켓 03·11)
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('담당 범위 표면 등재 — 링크가 지나는 표면은 전부 범위 판정을 적어 둔다', () => {
@@ -304,14 +304,14 @@ describe('담당 범위 표면 등재 — 링크가 지나는 표면은 전부 �
     expect(unwired).toEqual([]);
   });
 
-  it('「해당 없음」에는 사유가, 「미처리」에는 담당 티켓(05~09)이 적혀 있다', () => {
+  it('모든 표면이 「거름」이나 사유 있는 「해당 없음」이다 — 미처리 범주는 없다', () => {
     const statuses = [
       ...Object.values(SCOPED_SHARE_SURFACES),
       ...Object.values(FW_PAGE_SHARE_SURFACES),
     ];
     for (const status of statuses) {
+      expect(['filtered', 'exempt']).toContain(status.kind);
       if (status.kind === 'exempt') expect(status.reason.trim().length).toBeGreaterThan(10);
-      if (status.kind === 'pending') expect(['05', '06', '07', '08', '09']).toContain(status.ticket);
     }
   });
 });
