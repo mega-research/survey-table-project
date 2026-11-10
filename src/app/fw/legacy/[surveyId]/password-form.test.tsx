@@ -5,7 +5,7 @@
  *  ① 성공하면 **다리 라우트로 돌아간다** — 응답에 토큰이 없으므로 화면은 링크 주소를 모른다. 라우트가
  *     방금 심은 쿠키 하나로 그 링크를 고른다.
  *  ② 틀림과 「둘 다 맞음」은 서버가 같은 `denied` 를 주므로 화면도 문구 하나다.
- *  ③ 닫힘은 새로 고쳐 서버가 닫힘 안내를 그리게 한다(`/fw` 입구와 같은 동선).
+ *  ③ 닫힘은 맞는 비밀번호에만 오므로 그 자리에서 닫힘 안내로 바꾼다 — 첫 화면(페이지)은 닫힘을 모른다.
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -64,12 +64,15 @@ describe('LegacyBridgePasswordForm', () => {
     expect(location.assign).not.toHaveBeenCalled();
   });
 
-  it('닫힘이면 새로 고쳐 서버가 닫힘 안내를 그리게 한다', async () => {
+  it('닫힘이면 그 자리에서 닫힘 안내로 바꾸고 비밀번호 칸을 거둔다 — 새로 고치지 않는다', async () => {
     rpc.authenticateLegacyBridge.mockResolvedValue({ ok: false, reason: 'closed' });
 
     submit('PrimePass2026');
 
-    await waitFor(() => expect(location.reload).toHaveBeenCalled());
+    expect(await screen.findByText('접속이 닫혔습니다')).toBeTruthy();
+    expect(screen.queryByLabelText('접속 비밀번호')).toBeNull();
+    expect(location.reload).not.toHaveBeenCalled();
+    expect(location.assign).not.toHaveBeenCalled();
   });
 
   it('시도 제한에 걸리면 잠시 후 다시 하라고 말한다', async () => {

@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { Lock } from 'lucide-react';
 
 import { legacyConsoleStaffPath } from '@/lib/auth/legacy-guest-link';
-import { resolveLegacyBridgeEntry } from '@/server/access-link';
+import { isLegacyBridgeOpen } from '@/server/access-link';
 
 import { LegacyBridgePasswordForm } from './password-form';
 
@@ -21,6 +21,9 @@ import { LegacyBridgePasswordForm } from './password-form';
  * 이름을 보이지만 이 화면은 설문 id 만 아는 사람 누구나 연다. 업체 목록·이름표·링크 수도 없다 —
  * 다리 경로에서는 비밀번호만이 업체 사이 칸막이라, 화면이 업체를 드러내면 짐작할 거리가 생긴다.
  *
+ * **닫힘도 그리지 않는다** — 닫힘(중단·종료·삭제·배치 대기)은 맞는 비밀번호에만 말해 주는 정보라, 첫 화면은
+ * 언제나 비밀번호 칸이고 닫힘 안내는 비밀번호 칸이 맞는 비밀번호의 `closed` 를 받은 뒤 그 자리에서 그린다.
+ *
  * 허용 목록 밖의 설문이면 다리가 꺼진 것과 같다 — 다리 라우트가 냈을 답(내부 콘솔 주소)으로 보낸다.
  */
 interface PageProps {
@@ -29,8 +32,7 @@ interface PageProps {
 
 export default async function LegacyBridgePasswordPage({ params }: PageProps) {
   const { surveyId } = await params;
-  const entry = await resolveLegacyBridgeEntry(surveyId);
-  if (entry === null) redirect(legacyConsoleStaffPath(surveyId, []));
+  if (!isLegacyBridgeOpen(surveyId)) redirect(legacyConsoleStaffPath(surveyId, []));
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#F4F5F8] p-4">
@@ -42,30 +44,7 @@ export default async function LegacyBridgePasswordPage({ params }: PageProps) {
           <span className="text-[15px] font-semibold text-[#0D1B4C]">메가리서치</span>
         </div>
 
-        {entry.kind === 'closed' ? (
-          <>
-            <p className="mt-5 text-[15px] font-medium text-[#1C1C1E]">접속이 닫혔습니다</p>
-            <p className="mt-2.5 text-[13px] leading-[1.7] text-[#6B7280]">
-              이 설문의 실사가 중단·종료되었습니다. 다시 열리면 지금 받은 비밀번호를 그대로 쓸 수
-              있으니, 담당 연구원에게 문의해 주세요.
-            </p>
-          </>
-        ) : (
-          <>
-            <p className="mt-5 text-[15px] font-medium text-[#1C1C1E]">외주 실사 접속</p>
-            <p className="mt-1.5 text-[13px] leading-[1.6] text-[#6B7280]">
-              전달받은 접속 비밀번호를 입력해 주세요.
-            </p>
-            <LegacyBridgePasswordForm surveyId={surveyId} />
-            <p className="mt-5 flex items-start gap-2 rounded-lg bg-[#F4F5F8] p-3 text-[12px] leading-[1.6] text-[#6B7280]">
-              <Lock className="mt-[2px] h-3.5 w-3.5 shrink-0" />
-              <span>
-                주소가 바뀌었습니다. 들어간 뒤의 주소를 즐겨찾기에 다시 저장해 두면 다음부터 이
-                화면을 거치지 않습니다.
-              </span>
-            </p>
-          </>
-        )}
+        <LegacyBridgePasswordForm surveyId={surveyId} />
       </div>
     </div>
   );

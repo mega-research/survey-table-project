@@ -8,7 +8,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { authenticateLegacyBridge, resolveLegacyBridgeEntry } from './access-link';
+import { authenticateLegacyBridge, isLegacyBridgeOpen } from './access-link';
 
 const dbCalls = vi.hoisted(() => ({ select: vi.fn() }));
 vi.mock('@/db', () => ({
@@ -69,10 +69,11 @@ describe('authenticateLegacyBridge — 허용 목록 관문', () => {
     expect(dbCalls.select).toHaveBeenCalledTimes(1);
   });
 
-  it('다리 비밀번호 화면의 입구도 허용 목록 밖이면 DB 를 묻지 않고 null 이다', async () => {
+  it('다리 비밀번호 화면의 입구는 DB 를 묻지 않는다 — 허용 목록만 본다(닫힘은 맞는 비밀번호 뒤에만 말한다)', () => {
     vi.stubEnv('GUEST_SURVEY_GRANTS', `${GUEST}:${GRANTED}`);
 
-    await expect(resolveLegacyBridgeEntry(OTHER)).resolves.toBeNull();
+    expect(isLegacyBridgeOpen(OTHER)).toBe(false);
+    expect(isLegacyBridgeOpen(GRANTED.toUpperCase())).toBe(true);
     expect(dbCalls.select).not.toHaveBeenCalled();
   });
 });

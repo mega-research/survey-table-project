@@ -26,7 +26,7 @@ import {
   users as usersTable,
 } from '@/db/schema';
 import { readFieldworkLinkSessions } from '@/lib/auth/access-link-session';
-import { authenticateAccessLink, resolveLegacyBridgeEntry } from '@/server/access-link';
+import { authenticateAccessLink, isLegacyBridgeOpen } from '@/server/access-link';
 import type { ORPCContext } from '@/server/context';
 import { accessLinkSession } from '@/server/workspace/procedures/access-link-session';
 import { accessLinks } from '@/server/workspace/procedures/access-links';
@@ -404,7 +404,8 @@ describe.skipIf(!isLocalDb)('옛 주소 다리 — 외주 링크 여럿 (real lo
 
       expect(await submitBridgePassword('PrimePass2026')).toEqual({ ok: false, reason: 'closed' });
       expect(jar.size).toBe(0);
-      expect(await resolveLegacyBridgeEntry(surveyId)).toEqual({ kind: 'closed' });
+      // 입구는 그대로 비밀번호 칸이다 — 닫힘은 맞는 비밀번호 뒤에만 말한다.
+      expect(isLegacyBridgeOpen(surveyId)).toBe(true);
     });
 
     it('허용 목록 밖 설문은 맞는 비밀번호여도 denied 다', async () => {
@@ -437,29 +438,32 @@ describe.skipIf(!isLocalDb)('옛 주소 다리 — 외주 링크 여럿 (real lo
   });
 
   describe('다리 비밀번호 화면의 입구', () => {
-    it('열린 설문이면 비밀번호 칸이다 — 모양에 조사 이름·이름표·링크 수가 없다', async () => {
+    it('열린 설문이면 비밀번호 칸이다', async () => {
       await issueAndSignIn('FromPass2026', '프롬');
       await issueAndSignIn('PrimePass2026', '프라임');
 
-      expect(await resolveLegacyBridgeEntry(surveyId)).toEqual({ kind: 'password' });
+      expect(isLegacyBridgeOpen(surveyId)).toBe(true);
     });
 
-    it('설문이 중단돼 있으면 닫힘 안내다 — 맞는 비밀번호의 closed 뒤 새로 고치면 이것을 그린다', async () => {
+    it('설문이 중단돼 있어도 비밀번호 칸이다 — 닫힘은 비밀번호 없이 말하지 않는다', async () => {
       await issueAndSignIn('FromPass2026');
       await issueAndSignIn('PrimePass2026');
       await db.update(surveysTable).set({ isPaused: true }).where(eq(surveysTable.id, surveyId));
 
-      expect(await resolveLegacyBridgeEntry(surveyId)).toEqual({ kind: 'closed' });
+      expect(isLegacyBridgeOpen(surveyId)).toBe(true);
+      // 닫힘을 듣는 길은 맞는 비밀번호 하나다.
+      expect(await submitBridgePassword('Wrong2026pw')).toEqual({ ok: false, reason: 'denied' });
+      expect(await submitBridgePassword('PrimePass2026')).toEqual({ ok: false, reason: 'closed' });
     });
 
     it('열린 외주 링크가 없어도 비밀번호 칸이다 — 「링크가 없다」를 말하지 않는다', async () => {
-      expect(await resolveLegacyBridgeEntry(surveyId)).toEqual({ kind: 'password' });
+      expect(isLegacyBridgeOpen(surveyId)).toBe(true);
     });
 
-    it('허용 목록 밖이면 null 이다 — 화면이 다리가 꺼진 자리로 보낸다', async () => {
+    it('허용 목록 밖이면 닫혀 있다 — 화면이 다리가 꺼진 자리로 보낸다', async () => {
       vi.stubEnv('GUEST_SURVEY_GRANTS', `${GUEST_USER}:${crypto.randomUUID()}`);
 
-      expect(await resolveLegacyBridgeEntry(surveyId)).toBeNull();
+      expect(isLegacyBridgeOpen(surveyId)).toBe(false);
     });
   });
 });

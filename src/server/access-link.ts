@@ -500,29 +500,20 @@ export async function authenticateLegacyBridge(
 }
 
 /**
- * 다리 비밀번호 화면을 열었을 때 무엇을 그릴지 — 비밀번호 칸이거나 닫힘 안내.
+ * 다리 비밀번호 화면을 열 수 있는가 — 허용 목록에 든 설문이면 언제나 비밀번호 칸이다. **DB 를 묻지 않는다.**
  *
- * **조사 이름이 이 모양에 없다.** `/fw` 입구는 토큰을 쥔 사람에게만 이름을 보이지만, 이 화면은
- * 설문 id 만 아는 사람 누구나 연다. 업체 목록·이름표·링크 수도 없다.
- *
- * 닫힘은 설문 단위의 닫힘(중단·설문 종료·삭제·배치 대기)이다 — 그것은 어느 링크에나 같으므로
- * 링크를 고르기 전에도 말할 수 있다. 접속 표면이 맞는 비밀번호에 `closed` 를 돌려주면 화면이
- * 새로 고쳐 이 판정으로 닫힘 안내를 그린다(`/fw` 입구와 같은 동선). 열린 외주 링크가 없으면
- * 비밀번호 칸을 그린다 — 무엇을 넣어도 `denied` 이고, 「링크가 없다」를 말하지 않는다.
- * 허용 목록 밖이면 `null` 이다(DB 를 묻지 않는다 — 화면이 다리가 꺼진 자리로 보낸다).
+ * 화면에 실릴 것이 없다: 조사 이름·업체 목록·이름표·링크 수는 물론 **닫힘도** 입구에서는 말하지 않는다.
+ * 이 화면은 설문 id 만 아는 사람 누구나 여는데, 닫힘(중단·설문 종료·삭제·배치 대기)을 비밀번호 없이 말하면
+ * 설문 상태가 그 사람에게 새어 나간다 — 위 접속 함수의 「닫힘은 맞는 비밀번호에만」과 같은 규칙이다. 맞는
+ * 비밀번호의 `closed` 를 받은 비밀번호 칸이 그 자리에서 닫힘 안내로 바뀐다. 열린 외주 링크가 없어도 칸은
+ * 같다(무엇을 넣어도 `denied` — 「링크가 없다」를 말하지 않는다). 허용 목록 밖이면 `false` 다(화면이 다리가
+ * 꺼진 자리로 보낸다).
  */
-export type LegacyBridgeEntry = { kind: 'password' } | { kind: 'closed' };
-
-export async function resolveLegacyBridgeEntry(
-  surveyId: string,
-): Promise<LegacyBridgeEntry | null> {
-  const normalizedId = surveyId.toLowerCase();
-  if (!isLegacyBridgeSurvey(normalizedId)) return null;
-  const [row] = await loadOpenFieldworkRows(normalizedId);
-  return row && isClosed(row) ? { kind: 'closed' } : { kind: 'password' };
+export function isLegacyBridgeOpen(surveyId: string): boolean {
+  return isLegacyBridgeSurvey(surveyId.toLowerCase());
 }
 
-/** 그 설문의 열린(종료되지 않은) 외주 링크 행 전부 — 설문 상태 조인까지. 다리 두 함수가 같이 쓴다. */
+/** 그 설문의 열린(종료되지 않은) 외주 링크 행 전부 — 설문 상태 조인까지. */
 async function loadOpenFieldworkRows(surveyId: string) {
   return db
     .select({ ...linkRowColumns(), token: surveyAccessLinks.token })
