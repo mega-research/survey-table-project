@@ -9,14 +9,14 @@
  * ③ 담기·이동이 팀 경계를 잠긴 값으로 재검증한다 (FOR UPDATE)
  * ④ 3단계 중첩의 깊이·같은 팀 부모·순환·이름 유일을 DB 가 막는다 (0166 — 복합 FK + CHECK)
  */
-import { ORPCError, createRouterClient } from '@orpc/server';
+import { createRouterClient, ORPCError } from '@orpc/server';
 import { eq, inArray } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
 import {
-  surveyParticipants as participantsTable,
   surveyGroups as surveyGroupsTable,
+  surveyParticipants as participantsTable,
   surveys as surveysTable,
   teamMembers as teamMembersTable,
   teams as teamsTable,
@@ -24,15 +24,15 @@ import {
 } from '@/db/schema';
 import { findPostgresError } from '@/lib/pg-error';
 import type { ORPCContext } from '@/server/context';
+import { ownership as ownershipProcedures } from '@/server/workspace/procedures/ownership';
+import { surveyGroups } from '@/server/workspace/procedures/survey-groups';
+import * as svc from '@/server/workspace/services/survey-groups';
 import {
   SurveyGroupDepthExceededError,
   SurveyGroupNotFoundError,
   SurveyTeamMismatchError,
 } from '@/server/workspace/domain/survey-groups';
 import { TeamNotFoundError } from '@/server/workspace/domain/teams';
-import { ownership as ownershipProcedures } from '@/server/workspace/procedures/ownership';
-import { surveyGroups } from '@/server/workspace/procedures/survey-groups';
-import * as svc from '@/server/workspace/services/survey-groups';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
@@ -203,7 +203,9 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
           ...createdUserIds,
         ]),
       );
-    await db.delete(teamsTable).where(inArray(teamsTable.id, [TEAM_A, TEAM_B, ...createdTeamIds]));
+    await db
+      .delete(teamsTable)
+      .where(inArray(teamsTable.id, [TEAM_A, TEAM_B, ...createdTeamIds]));
     await db
       .delete(usersTable)
       .where(
@@ -287,9 +289,9 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
      */
     await expect(outsider.surveyGroups.list({ teamId: TEAM_A })).resolves.toEqual([]);
     // 그룹 id 를 알아도 존재를 확인할 수 없다 — 사유는 NOT_FOUND 로 접힌다.
-    await expect(outsider.surveyGroups.rename({ groupId, name: '가로채기' })).rejects.toMatchObject(
-      { code: 'NOT_FOUND' },
-    );
+    await expect(
+      outsider.surveyGroups.rename({ groupId, name: '가로채기' }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     await expect(outsider.surveyGroups.remove({ groupId })).rejects.toMatchObject({
       code: 'NOT_FOUND',
     });
@@ -420,7 +422,9 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
   describe('해산된 팀의 그룹은 서비스 단계에서도 막힌다', () => {
     async function seedArchivedTeamGroup() {
       const teamId = crypto.randomUUID();
-      await db.insert(teamsTable).values({ id: teamId, name: `해산예정팀-${teamId.slice(0, 8)}` });
+      await db
+        .insert(teamsTable)
+        .values({ id: teamId, name: `해산예정팀-${teamId.slice(0, 8)}` });
       createdTeamIds.push(teamId);
       await db.insert(teamMembersTable).values({ teamId, userId: MEMBER_ID, role: 'leader' });
       const groupId = await seedGroup(clientFor(MEMBER_ID), teamId, '해산 전 그룹');
@@ -471,9 +475,9 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
     it('이름 변경 — 해산 시점 이름이 보존된다', async () => {
       const { groupId } = await seedArchivedTeamGroup();
 
-      await expect(svc.renameSurveyGroup({ groupId, name: '되살리기' })).rejects.toBeInstanceOf(
-        TeamNotFoundError,
-      );
+      await expect(
+        svc.renameSurveyGroup({ groupId, name: '되살리기' }),
+      ).rejects.toBeInstanceOf(TeamNotFoundError);
 
       const [row] = await db
         .select({ name: surveyGroupsTable.name })
@@ -494,11 +498,7 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
       const { teamId, groupId } = await seedArchivedTeamGroup();
 
       await expect(
-        svc.createSurveyGroup(MEMBER_ID, {
-          teamId,
-          name: '사후 하위 그룹',
-          parentGroupId: groupId,
-        }),
+        svc.createSurveyGroup(MEMBER_ID, { teamId, name: '사후 하위 그룹', parentGroupId: groupId }),
       ).rejects.toBeInstanceOf(TeamNotFoundError);
     });
 
@@ -1260,23 +1260,13 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
 
         expect(
           await violatedConstraint(
-            insertGroupDirectly({
-              teamId: TEAM_A,
-              name: '1분기',
-              parentGroupId: third,
-              parentDepth: 3,
-            }),
+            insertGroupDirectly({ teamId: TEAM_A, name: '1분기', parentGroupId: third, parentDepth: 3 }),
           ),
         ).toBe('survey_groups_parent_depth_check');
         // 3단계 그룹을 「깊이 2」라고 속이면 가리킬 (그룹, 깊이) 짝이 없다.
         expect(
           await violatedConstraint(
-            insertGroupDirectly({
-              teamId: TEAM_A,
-              name: '1분기',
-              parentGroupId: third,
-              parentDepth: 2,
-            }),
+            insertGroupDirectly({ teamId: TEAM_A, name: '1분기', parentGroupId: third, parentDepth: 2 }),
           ),
         ).toBe('survey_groups_parent_fk');
         // 깊이 칸을 비워 검사를 건너뛰려 해도 막힌다.
@@ -1292,12 +1282,7 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
 
         expect(
           await violatedConstraint(
-            insertGroupDirectly({
-              teamId: TEAM_A,
-              name: '하위',
-              parentGroupId: theirs,
-              parentDepth: 1,
-            }),
+            insertGroupDirectly({ teamId: TEAM_A, name: '하위', parentGroupId: theirs, parentDepth: 1 }),
           ),
         ).toBe('survey_groups_parent_fk');
       });
@@ -1380,12 +1365,7 @@ describe.skipIf(!isLocalDb)('설문 그룹 왕복 (real local DB)', () => {
 
         expect(
           await violatedConstraint(
-            insertGroupDirectly({
-              teamId: TEAM_A,
-              name: '2026',
-              parentGroupId: top,
-              parentDepth: 1,
-            }),
+            insertGroupDirectly({ teamId: TEAM_A, name: '2026', parentGroupId: top, parentDepth: 1 }),
           ),
         ).toBe('survey_groups_parent_name_uq');
         expect(
