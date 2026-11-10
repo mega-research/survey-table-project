@@ -10,6 +10,7 @@ export {
   ListUngroupedSurveysInput,
   ListUngroupedSurveysOutput,
   MoveSurveyToGroupInput,
+  RelocateSurveyGroupInput,
   RenameSurveyGroupInput,
   ReorderSurveyGroupsInput,
   SURVEY_GROUP_MAX_DEPTH,
@@ -63,6 +64,27 @@ export class SurveyGroupLiftNameConflictError extends Error {
     );
     this.name = 'SurveyGroupLiftNameConflictError';
     this.conflictingNames = conflictingNames;
+  }
+}
+
+/**
+ * 그룹을 자기 자신이나 자기 하위 그룹 밑으로 옮기려 했다 (그룹 옮기기) — 되면 순환이 생긴다.
+ *
+ * DB 도 같은 것을 막지만(0166 의 깊이 제약이 순환을 허용하지 않는다) 그쪽 거부는 CHECK 위반이라
+ * 화면에는 「내부 오류」로 보인다. 서비스가 먼저 판정해 이 사유로 답한다.
+ */
+export class SurveyGroupRelocationCycleError extends Error {
+  constructor() {
+    super('그룹을 자기 자신이나 자기 하위 그룹 밑으로 옮길 수 없습니다.');
+    this.name = 'SurveyGroupRelocationCycleError';
+  }
+}
+
+/** 옮긴 결과가 3단계를 넘는다 — 「새 상위의 깊이 + 옮기는 가지의 높이」가 최대 단계보다 크다. */
+export class SurveyGroupRelocationTooDeepError extends Error {
+  constructor() {
+    super('이 자리로 옮기면 그룹이 3단계를 넘습니다.');
+    this.name = 'SurveyGroupRelocationTooDeepError';
   }
 }
 

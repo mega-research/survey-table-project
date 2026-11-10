@@ -243,11 +243,16 @@ export const SurveyGroupListItem = z.object({
    * 상위 그룹 id — 최상위면 null. **협업 그룹(타 팀 폴더) 행에는 언제나 null 이다**: 설문 하나에
    * 초대했을 뿐인 타 팀 사람에게 그 팀의 정리 구조(위쪽 그룹)를 알려 주지 않는다.
    *
-   * 목록은 평평하게 오고 트리는 화면이 묶는다(`@/utils/survey-group-tree`). 상위 그룹이 내게
-   * 보이지 않으면 이 id 가 목록에 없을 수 있다 — 그 줄은 뿌리로 그린다.
+   * 목록은 평평하게 오고 트리는 화면이 묶는다(`@/utils/survey-group-tree`). 내 팀 줄의 이 id 는
+   * **언제나 같은 목록 안의 줄**을 가리킨다 — 위쪽 그룹이 하나라도 내게 숨으면 그 밑의 줄도 함께
+   * 나오지 않는다. 그래서 목록 안에서 센 깊이가 실제 깊이와 같다.
    */
   parentGroupId: z.uuid().nullable(),
-  /** 소속 설문 수 — 삭제되지 않은 설문만 센다. */
+  /**
+   * 요청자가 **볼 수 있는** 설문 수 — 삭제되지 않은 설문만 센다. 내 팀 그룹은 **하위 그룹까지
+   * 합친 수**이고(폴더 옆·사이드바·그룹 화면 제목의 「설문 N」), 협업 그룹은 직접 담긴 수다.
+   * 그 그룹에 직접 담긴 설문 수가 아니다 — 그것은 그 그룹으로 좁힌 설문 목록이 센다.
+   */
   surveyCount: z.number().int(),
   /**
    * 이 그룹이 **다른 팀의 것**일 때 그 팀 이름. 내 팀 그룹이면 null.
@@ -364,6 +369,24 @@ export const MoveSurveyToGroupInput = z.object({
   groupId: z.uuid().nullable(),
 });
 export type MoveSurveyToGroupInput = z.infer<typeof MoveSurveyToGroupInput>;
+
+/**
+ * 그룹 옮기기 — 그룹을 **하위 그룹과 담긴 설문째** 다른 그룹 밑으로 옮긴다. `parentGroupId: null`
+ * 은 최상위로.
+ *
+ * 위의 `MoveSurveyToGroupInput`(설문 한 건을 그룹에 넣고 빼기)과 다른 표면이다 — 이쪽은 그룹
+ * 구조를 바꾸고 설문의 소속 그룹은 건드리지 않는다. 새 상위는 같은 팀의 그룹이어야 하고, 자기
+ * 자신·자기 하위·옮긴 결과가 3단계를 넘는 자리·같은 이름이 있는 자리는 서버가 거부한다. 지금
+ * 있는 자리로 옮기는 요청은 아무것도 바꾸지 않고 성공한다.
+ *
+ * `parentGroupId` 는 **기본값 없는 필수**다. 선택 칸으로 두면 칸을 빠뜨린 요청이 조용히
+ * 「최상위로」가 된다.
+ */
+export const RelocateSurveyGroupInput = z.object({
+  groupId: z.uuid(),
+  parentGroupId: z.uuid().nullable(),
+});
+export type RelocateSurveyGroupInput = z.infer<typeof RelocateSurveyGroupInput>;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 재배치 센터 (.pen FLOW 8-2~8-4·9-2) — 슈퍼어드민 전용 인박스

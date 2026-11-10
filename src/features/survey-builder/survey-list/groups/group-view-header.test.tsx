@@ -58,4 +58,24 @@ describe('GroupViewHeader — 그룹 화면의 브레드크럼', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'A고객사 2026' })).toBeInTheDocument();
     expect(screen.getByText('연구1본부 1팀 소유')).toBeInTheDocument();
   });
+
+  it('제목 옆에 「설문 N」을 적는다 — 서버가 준 하위 포함 건수 그대로', () => {
+    render(<GroupViewHeader path={[step('g-lee', '이정운')]} surveyCount={34} />);
+
+    expect(screen.getByText('설문 34')).toBeInTheDocument();
+    // 건수는 제목 글자가 아니다 — 제목은 그룹 이름만 읽힌다.
+    expect(screen.getByRole('heading', { level: 1, name: '이정운' })).toBeInTheDocument();
+  });
+
+  it('건수가 0 이어도 적는다 — 빈 그룹이라는 사실이 숫자로 보인다', () => {
+    render(<GroupViewHeader path={[step('g-lee', '이정운')]} surveyCount={0} />);
+
+    expect(screen.getByText('설문 0')).toBeInTheDocument();
+  });
+
+  it('건수를 받지 못하면 적지 않는다', () => {
+    render(<GroupViewHeader path={[step('g-lee', '이정운')]} />);
+
+    expect(screen.queryByText(/^설문 \d/)).toBeNull();
+  });
 });

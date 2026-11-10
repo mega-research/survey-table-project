@@ -11,7 +11,7 @@ interface GroupPathStep {
 }
 
 /**
- * 그룹 화면 머리 (.pen FLOW 1-5 「그룹보기」 · 3단계 시안 G1·G2) — 브레드크럼 + 폴더 제목.
+ * 그룹 화면 머리 (.pen FLOW 1-5 「그룹보기」 · 3단계 시안 G1·G2) — 브레드크럼 + 폴더 제목 + 건수.
  *
  * 그룹 화면은 목록의 다른 상태가 아니라 `?group=<id>` 라는 별개의 주소다. 브레드크럼이
  * 있어야 어디에 있는지 알고 뒤로 나갈 수 있으며, 링크를 공유하면 같은 그룹이 열린다.
@@ -25,10 +25,17 @@ interface GroupPathStep {
 export function GroupViewHeader({
   path,
   foreignTeamName,
+  surveyCount,
 }: {
   /** 뿌리부터 지금 그룹까지(자기 포함). */
   path: readonly GroupPathStep[];
   foreignTeamName?: string | null;
+  /**
+   * 제목 옆 「설문 N」 — 그룹 목록이 준 건수 그대로다. 내 팀 그룹은 **하위 그룹까지 합친**, 내가 볼
+   * 수 있는 설문 수이고 협업 그룹은 직접 담긴 수다. 아래 카드(이 그룹에 직접 담긴 설문)의 수와
+   * 다를 수 있는 것은 의도다 — 그래서 본문이 「이 그룹에 직접 담긴 설문 N」을 따로 적는다.
+   */
+  surveyCount?: number;
 }) {
   const current = path.at(-1);
   if (!current) return null;
@@ -68,6 +75,9 @@ export function GroupViewHeader({
         <h1 title={current.name} className="truncate text-2xl font-semibold text-[#1C1C1E]">
           {current.name}
         </h1>
+        {surveyCount !== undefined && (
+          <span className="shrink-0 text-sm text-[#6E6E73] tabular-nums">설문 {surveyCount}</span>
+        )}
         {foreignTeamName && (
           <span className="shrink-0 rounded-full bg-[#F5F5F7] px-[11px] py-1 text-[13px] text-[#6E6E73]">
             {foreignTeamName} 소유
