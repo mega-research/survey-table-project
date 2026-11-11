@@ -219,17 +219,19 @@ export function ResultCodesEditor({ surveyId, initialCodes }: ResultCodesEditorP
         </div>
       )}
 
-      <div className="rounded-lg border bg-white">
+      {/* 코드·라벨 칸이 남는 폭을 나눠 갖는다 — 나머지 열은 내용 폭(w-px)으로 줄여, 글자가 긴 코드
+          (「10.메일발송」)가 한 글자만 보이던 것을 막는다. 좁은 화면은 가로 스크롤. */}
+      <div className="overflow-x-auto rounded-lg border bg-white">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-xs text-slate-600 uppercase">
             <tr>
-              <th className="px-3 py-2 text-left">순서</th>
+              <th className="w-px px-3 py-2 text-left whitespace-nowrap">순서</th>
               <th className="px-3 py-2 text-left">코드</th>
               <th className="px-3 py-2 text-left">라벨</th>
-              <th className="px-3 py-2 text-left">색상</th>
-              <th className="px-3 py-2 text-left">상태</th>
-              <th className="px-3 py-2 text-left">목록 행 표시</th>
-              <th className="px-3 py-2 text-center">액션</th>
+              <th className="w-px px-3 py-2 text-left whitespace-nowrap">색상</th>
+              <th className="w-px px-3 py-2 text-left whitespace-nowrap">상태</th>
+              <th className="w-px px-3 py-2 text-left whitespace-nowrap">목록 행 표시</th>
+              <th className="w-px px-3 py-2 text-center whitespace-nowrap">액션</th>
             </tr>
           </thead>
           <tbody>
@@ -259,14 +261,14 @@ export function ResultCodesEditor({ surveyId, initialCodes }: ResultCodesEditorP
                   <Input
                     value={c.code}
                     onChange={(e) => update(i, { code: e.target.value })}
-                    className="h-8 text-sm"
+                    className="h-8 min-w-40 text-sm"
                   />
                 </td>
                 <td className="px-3 py-2">
                   <Input
                     value={c.label}
                     onChange={(e) => update(i, { label: e.target.value })}
-                    className="h-8 text-sm"
+                    className="h-8 min-w-40 text-sm"
                   />
                 </td>
                 <td className="px-3 py-2">

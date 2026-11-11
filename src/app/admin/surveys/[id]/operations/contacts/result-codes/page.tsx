@@ -16,7 +16,7 @@ export default async function ContactResultCodesPage({ params }: PageProps) {
   const codes = await getContactResultCodes(surveyId);
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-8">
+    <main className="mx-auto max-w-5xl px-6 py-8">
       <div className="mb-4">
         <h2 className="text-xl font-bold text-gray-900">결과코드 설정</h2>
         <p className="text-sm text-slate-600">회차의 결과코드 라디오를 사용자 정의합니다.</p>
