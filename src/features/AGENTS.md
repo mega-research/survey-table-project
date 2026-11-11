@@ -48,6 +48,8 @@
 
 > **상세 기재 입력칸을 표 아래에** (`cell.optionTextBelowTable`, 테이블 유형 전용): 격자 표(`OptionTextBelowTableHost` 가 감싼 곳)에서만 옮기고 호스트 없는 모바일 카드는 종전대로 칸 안이다 — 칸 옵션만 보고 접으면 입력칸이 어디에도 없게 된다. 판정 `features/question-renderer/utils/option-text-below-table.ts`, 상세 CONTEXT.md 「표 아래 상세 기재」.
 
+> **보기 칸 안 상세 기재** (`cell.optionTextInCell`, 보기 소스 표의 choice_opt 셀, 2026-11-11): 켠 보기를 고르면 입력칸을 표 아래 스택 대신 그 칸 안 라벨 오른쪽에 그린다. 데스크톱 격자 전용이고 판정은 `features/question-renderer/utils/option-text-in-cell.ts`(보이는 격자의 행으로 판정 — 자리 셀과 같은 이유). 빌더 화면은 없고 스크립트로 적는다(칸 필드 정책 `kept`). 상세 CONTEXT.md 「보기 칸 안 상세 기재」.
+
 > **이미지 크게 보기**: 설정 없는 기본 기능(표 이미지 · 순위형 보기 이미지 · 안내문·설명 본문 이미지). 표 이미지는 `TableImageEnlargeProvider` 안에서만 켜진다(빌더 편집 표는 밖). 창은 휴대폰 뒤로 가기로 닫히도록 방문 기록 칸을 하나 쌓는다 — 페이지 위에 칸을 쌓는 기능을 새로 만들면 지금 칸(`stepIndex` 포함)을 이어 쌓는 같은 방식을 따를 것. 상세 CONTEXT.md 「이미지 크게 보기」.
 
 > **셀 본문 부분 강조** (`cell.contentHtml`, 2026-09-10): 셀 편집 모달의 "셀 텍스트 내용"은 굵게·글자색·변수 삽입만 있는 축소 편집기(`components/ui/rich-text-editor/inline-rich-text-editor.tsx`, 스키마는 `inline-cell-extensions.ts`)다. **정본은 여전히 평문 `content`** 이고, 글자 일부에 색·굵게가 있을 때만 `contentHtml` 을 곁에 둔다(`serialize-cell.ts` 가 마크 유무로 판정, 마이그레이션 없음). 내보내기·SPSS 라벨·보기 라벨 파생·행 높이 측정·행 라벨 비교는 전부 평문을 보므로 무변경이고, 화면 표시만 `CellText`(`features/question-renderer/cell-text.tsx`) 가 서식본을 우선한다 — 토큰 치환은 `resolveCellTextHtml`, sanitize 는 `sanitizeCellHtml`(문단·줄바꿈·strong·span color 만). 셀 본문을 새로 그리는 자리를 만들면 평문을 직접 흘리지 말고 `CellText` 에 `html` 까지 넘길 것. 문단 = 평문의 한 줄이라 "첫 줄만 굵게"는 첫 문단에 걸린다.

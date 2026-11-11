@@ -90,6 +90,8 @@ export const TABLE_CELL_FIELD_POLICY = {
   allowTextInput: OWNED,
   // 셀에는 쓰는 빌더 화면이 없다 — 폼 저장이 늘 걷어낸다
   textInputPlaceholder: { form: 'dropped', library: 'carry' },
+  // 보기 칸 안 상세 기재 — 폼에 칸이 없어 원본 그대로 둔다(스크립트로 적는다)
+  optionTextInCell: { form: 'kept', library: 'carry' },
   // 내용 선택 입력 — 폼에 칸이 없어 원본 그대로 둔다(스크립트로 적는다)
   textInputOptional: { form: 'kept', library: 'carry' },
   textInputType: OWNED,
