@@ -30,12 +30,21 @@ describe('resolveCodeRowMark', () => {
     expect(resolveCodeRowMark(code('12. 조사 대상 아님'))).toBe('out');
   });
 
-  it('그 밖의 코드는 표시 없음 — 붉은 색상 톤이나 부정 상태만으로는 붉어지지 않는다', () => {
-    expect(resolveCodeRowMark(code('6.거절', { tone: 'rose' }))).toBe('none');
+  it('고르지 않았으면 부정 상태(모집단에서 빼는 코드)도 빠지는 대상', () => {
+    expect(resolveCodeRowMark(code('9.휴/폐업', { status: 'negative' }))).toBe('out');
     expect(resolveCodeRowMark(code('7.결번·번호오류', { tone: 'rose', status: 'negative' }))).toBe(
+      'out',
+    );
+    // 설정에서 끄면 부정 상태여도 붉지 않다.
+    expect(resolveCodeRowMark(code('9.휴/폐업', { status: 'negative', rowMark: 'none' }))).toBe(
       'none',
     );
+  });
+
+  it('그 밖의 코드는 표시 없음 — 붉은 색상 톤만으로는 붉어지지 않는다', () => {
+    expect(resolveCodeRowMark(code('6.거절', { tone: 'rose' }))).toBe('none');
     expect(resolveCodeRowMark(code('4.부재'))).toBe('none');
+    expect(resolveCodeRowMark(code('2.재통화예약', { status: 'neutral' }))).toBe('none');
   });
 
   it('설정에서 고른 값이 기본값을 이긴다 — 끄기도 된다', () => {

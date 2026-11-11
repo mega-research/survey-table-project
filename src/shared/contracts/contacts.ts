@@ -181,7 +181,7 @@ export interface ContactResultCode {
    *
    * 화면 표시만 정한다 — 응답률·단체 메일 제외는 `status` 와 수신거부 축이 맡고 이 값과 무관하다.
    * 누락 (undefined) 시 fallback 은 `lib/contacts/result-code-row-mark` 의 `resolveCodeRowMark`:
-   * 긍정 상태 → 'done', 수신거부·조사대상아님 → 'out', 그 외 → 'none'.
+   * 긍정 상태 → 'done', 부정 상태·수신거부·조사대상아님 → 'out', 그 외 → 'none'.
    */
   rowMark?: ResultCodeRowMark;
 }

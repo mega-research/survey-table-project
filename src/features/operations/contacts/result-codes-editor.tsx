@@ -356,8 +356,9 @@ export function ResultCodesEditor({ surveyId, initialCodes }: ResultCodesEditorP
 
       <p className="text-xs text-slate-500">
         목록 행 표시: 조사 대상 목록에서 마지막 컨택결과가 이 코드인 대상의 행 색입니다. 「완료 음영」은
-        온라인 응답완료와 같은 파란 음영, 「붉게」는 붉은 음영입니다. 화면 표시만 바꾸며 응답률·단체
-        메일 대상에는 영향이 없습니다.
+        온라인 응답완료와 같은 파란 음영, 「붉게」는 붉은 음영입니다. 고르지 않으면 긍정 상태는 완료
+        음영, 부정 상태·수신거부·조사대상아님은 붉게 나옵니다. 여기서 고른 값은 화면 표시만 바꾸며
+        응답률·단체 메일 대상에는 영향이 없습니다.
       </p>
 
       <div className="flex flex-wrap gap-2">

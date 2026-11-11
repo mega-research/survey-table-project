@@ -24,13 +24,18 @@ function isNotTargetCode(code: string): boolean {
 
 /**
  * 결과코드 하나의 행 표시 — 설정에서 고른 값이 우선이고, 고르지 않았으면 코드에서 읽는다.
- * 긍정 상태(응답 완료로 인정하는 코드) → 끝난 대상, 수신거부·조사대상아님 → 빠지는 대상, 그 외 없음.
+ * 긍정 상태(응답 완료로 인정하는 코드) → 끝난 대상,
+ * 부정 상태(모집단에서 빼는 코드)·수신거부·조사대상아님 → 빠지는 대상, 그 외 없음.
  * 고르지 않은 설문도 곧바로 색이 붙도록 둔 기본값이고, 설정에서 「없음」을 고르면 꺼진다.
+ *
+ * 부정 상태가 붉은 것은 한 방향뿐이다 — 상태를 부정으로 두면 진척 보고 분모에서 빠지는 대상이라 목록에서도
+ * 빠지는 대상으로 보이지만, 행 표시를 「붉게」로 골라도 상태(응답률·발송 대상)는 바뀌지 않는다.
  */
 export function resolveCodeRowMark(code: ContactResultCode): ResultCodeRowMark {
   if (isResultCodeRowMark(code.rowMark)) return code.rowMark;
   if (isUnsubscribeResultCode(code.code) || isNotTargetCode(code.code)) return 'out';
-  return resolveCodeStatus(code) === 'positive' ? 'done' : 'none';
+  const status = resolveCodeStatus(code);
+  return status === 'positive' ? 'done' : status === 'negative' ? 'out' : 'none';
 }
 
 /**
