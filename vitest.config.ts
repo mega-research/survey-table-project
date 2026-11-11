@@ -52,6 +52,8 @@ export default defineConfig({
   },
   test: {
     globals: true,
+    // 실DB 테스트만: 대상 DB 가 이 브랜치의 마이그레이션으로 만들어졌는지 먼저 본다(아니면 한 문단으로 멈춘다).
+    globalSetup: ['./tests/realdb-global-setup.ts'],
     coverage: {
       provider: 'v8',
       include: [

@@ -71,3 +71,33 @@ verify_test_db() {
   _verify "RLS 활성 테이블" \
     "select count(*) from pg_tables where schemaname='public' and rowsecurity;" 15 || return 1
 }
+
+# 이 DB 가 "어느 레포 상태로" 만들어졌는지 남긴다 — 재생 태그 목록과 순서의 지문.
+#
+# 로컬 supabase 도커는 워크트리 전체가 공유하는 단일 인스턴스다. 다른 브랜치가 db:setup-test 를
+# 돌리면 공유 DB 는 그쪽 마이그레이션 집합으로 통째 교체된다. 그 상태를 알 방법이 없으면
+# pnpm db:drift 는 남의 DB 를 내 레포와 대조하고(2026-08-31), realdb 테스트는 없는 열에 INSERT 하다
+# 수십 건이 긴 SQL 덤프로 죽는다(2026-11-11). db-drift.mjs 와 tests/realdb-global-setup.ts 가 대조한다.
+#
+# public 이 아니라 _repo_meta 스키마에 둔다 — db:drift 는 public 만 훑으므로 드리프트 항목이 안 된다.
+stamp_test_db() {
+  local container="$1" db="$2" stamp total
+  stamp="$(node scripts/migration-order.mjs --hash)"
+  total="$(node scripts/migration-order.mjs | wc -l | tr -d ' ')"
+  docker exec -i "$container" psql -U postgres -d "$db" -q -v ON_ERROR_STOP=1 <<SQL >/dev/null
+CREATE SCHEMA IF NOT EXISTS _repo_meta;
+CREATE TABLE IF NOT EXISTS _repo_meta.migration_stamp (
+  singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
+  order_hash text NOT NULL,
+  tag_count integer NOT NULL,
+  stamped_at timestamptz NOT NULL DEFAULT now()
+);
+INSERT INTO _repo_meta.migration_stamp (singleton, order_hash, tag_count)
+VALUES (true, '${stamp}', ${total})
+ON CONFLICT (singleton) DO UPDATE
+  SET order_hash = EXCLUDED.order_hash,
+      tag_count = EXCLUDED.tag_count,
+      stamped_at = now();
+SQL
+  echo "  재생 지문: ${stamp} (${total}건)"
+}

@@ -54,5 +54,6 @@ replay_migrations "$CONTAINER" "$DB" 1
 
 echo "[3/3] 검증"
 verify_test_db "$CONTAINER" "$DB"
+stamp_test_db "$CONTAINER" "$DB"
 
 echo "DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/${DB}"
