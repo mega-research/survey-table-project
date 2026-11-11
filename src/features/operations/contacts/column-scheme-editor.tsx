@@ -313,7 +313,9 @@ export function ColumnSchemeEditor({ surveyId, scheme }: ColumnSchemeEditorProps
 
       <div className="text-xs text-slate-500">
         기본 정렬: 켠 열의 오름차순으로 조사 대상 목록이 열립니다(글자로 올린 숫자도 숫자순, 한 열만).
-        켜지 않으면 시스템ID 순이고, 목록에서 머리글을 눌러 바꾼 정렬이 있으면 그쪽이 우선합니다.
+        컨택원 수정 화면의 대상 목록, 단체 메일의 수신자 목록·수신거부 명단·발송 회차의 수신자 표도 같은
+        순서를 따릅니다. 켜지 않으면 시스템ID 순이고, 목록에서 머리글을 눌러 바꾼 정렬이 있으면 그쪽이
+        우선합니다.
       </div>
 
       {showMailOrder && (

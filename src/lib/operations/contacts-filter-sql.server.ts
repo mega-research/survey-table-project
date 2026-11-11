@@ -1,6 +1,7 @@
 import { sql, type SQL } from 'drizzle-orm';
 
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
+import { attrsSortKey } from './contacts-format';
 import type { NumRange, Parity } from './range-list';
 import {
   FILTER_SOURCE,
@@ -325,16 +326,30 @@ function webStatusCondSql(value: string): SQL {
  * 숫자 판정은 앞뒤 공백(스페이스·탭·줄바꿈)을 떼고 한다 — 엑셀에서 글자로 올라온 ID 는 끝에 공백이
  * 붙어 오는 일이 흔하고, 그 한 칸 때문에 숫자 무리에서 빠져 목록 끝으로 밀리면 안 된다.
  * 캐스트도 뗀 값으로 한다(판정과 캐스트가 같은 글자를 봐야 캐스트 오류로 목록이 통째 죽지 않는다).
+ * 글자 비교도 뗀 값으로 한다 — 「2」와 「2 」가 공백 하나로 갈려 그 뒤 꼬리 정렬(시스템ID)을 가로채지 않게.
  */
 export function attrsNaturalSortExprs(
   attrsKey: string,
   // 응답 내역은 numbered subquery 의 컨택 LEFT JOIN 컬럼을 주입 (기본값 = 조사 대상).
   attrsRef: SQL = sql`"contact_targets".attrs`,
 ): [SQL, SQL] {
-  const textExpr = sql`${attrsRef}->>${attrsKey}`;
   const trimmedExpr = sql`btrim(${attrsRef}->>${attrsKey}, E' \\t\\r\\n')`;
   const numericExpr = sql`(CASE WHEN ${trimmedExpr} ~ '^[0-9]+(\\.[0-9]+)?$' THEN (${trimmedExpr})::numeric END)`;
-  return [numericExpr, textExpr];
+  return [numericExpr, trimmedExpr];
+}
+
+/**
+ * 기본 정렬 열(컬럼 설정 — `lib/contacts/default-sort`) 오름차순 ORDER BY 조각.
+ * 조사 대상 목록 밖에서 조사 대상을 늘어놓는 표(수신거부 명단·캠페인 수신자 표 등)가 자기 정렬 앞에 붙인다.
+ * 정렬 키가 `attrs.<key>` 가 아니면(지정 없음 = 시스템ID) 빈 배열 — 그 표의 종전 순서 그대로다.
+ */
+export function defaultSortOrderExprs(
+  sortKey: string | null | undefined,
+  attrsRef?: SQL,
+): SQL[] {
+  const key = sortKey ? attrsSortKey(sortKey) : null;
+  if (key === null) return [];
+  return attrsNaturalSortExprs(key, attrsRef).map((expr) => sql`${expr} ASC NULLS LAST`);
 }
 
 /**

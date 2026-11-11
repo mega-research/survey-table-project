@@ -57,7 +57,7 @@ import type {
   CampaignCandidateRow,
   CampaignExclusionCounts,
   CampaignSortDir,
-  CampaignSortKey,
+  CampaignListSortKey,
 } from '@/shared/contracts/mail-io';
 import {
   CAMPAIGN_HEADER_FILTER_COLUMNS,
@@ -87,8 +87,13 @@ interface Props {
    */
   unresolvedClauseCount: number;
   initialClauses: { op: 'AND' | 'OR' | null; source: string; value: string }[];
-  sort: CampaignSortKey;
+  sort: CampaignListSortKey;
   dir: CampaignSortDir;
+  /**
+   * 컬럼 설정의 기본 정렬 열(`attrs.<key>`, 지정이 없으면 'resid') — 주소에 정렬이 없으면 이 순서로 열린다.
+   * 그 열이 메일 표시 열이면 머리글을 눌러 이 정렬로 돌아오거나 방향을 뒤집을 수 있다.
+   */
+  defaultSortKey?: CampaignListSortKey;
   /** 컬럼 설정에서 "메일 표시" 를 켠 attrs 컬럼 — 시스템ID 다음에 붙는다. */
   mailColumns: MailDisplayColumn[];
   /** 맨 앞 시스템ID 열을 그리는가 — 컬럼 설정의 메일 표시 스위치 */
@@ -108,6 +113,7 @@ export function CampaignWizard({
   initialClauses,
   sort,
   dir,
+  defaultSortKey,
   mailColumns,
   showResid,
 }: Props) {
@@ -167,7 +173,7 @@ export function CampaignWizard({
     router.push(`?${next.toString()}`);
   }
 
-  function changeSort(key: CampaignSortKey) {
+  function changeSort(key: CampaignListSortKey) {
     // 같은 컬럼 재클릭 → 방향 토글, 다른 컬럼 → asc 부터.
     const nextDir: CampaignSortDir = sort === key && dir === 'asc' ? 'desc' : 'asc';
     const next = new URLSearchParams(searchParams?.toString() ?? '');
@@ -474,11 +480,24 @@ export function CampaignWizard({
                     />
                   </th>
                 ) : null}
-                {mailColumns.map((c) => (
-                  <th key={`${c.kind}.${c.key}`} className="px-3 py-2">
-                    {c.label}
-                  </th>
-                ))}
+                {mailColumns.map((c) => {
+                  const columnSortKey = c.kind === 'attrs' ? (`attrs.${c.key}` as const) : null;
+                  return (
+                    <th key={`${c.kind}.${c.key}`} className="px-3 py-2">
+                      {columnSortKey !== null && columnSortKey === defaultSortKey ? (
+                        <SortHeader
+                          label={c.label}
+                          sortKey={columnSortKey}
+                          activeSort={sort}
+                          dir={dir}
+                          onSort={changeSort}
+                        />
+                      ) : (
+                        c.label
+                      )}
+                    </th>
+                  );
+                })}
                 <th className="px-3 py-2">이메일</th>
                 <th className="px-3 py-2">그룹</th>
                 <th className="px-3 py-2">
@@ -709,10 +728,10 @@ function SortHeader({
   onSort,
 }: {
   label: string;
-  sortKey: CampaignSortKey;
-  activeSort: CampaignSortKey;
+  sortKey: CampaignListSortKey;
+  activeSort: CampaignListSortKey;
   dir: CampaignSortDir;
-  onSort: (key: CampaignSortKey) => void;
+  onSort: (key: CampaignListSortKey) => void;
 }) {
   const active = activeSort === sortKey;
   return (

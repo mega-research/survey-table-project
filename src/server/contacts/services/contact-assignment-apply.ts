@@ -4,6 +4,7 @@ import 'server-only';
 
 import { type DbOrTx, db } from '@/db';
 import { contactAssignments, contactTargets } from '@/db/schema';
+import { resolveDefaultSortKey } from '@/lib/contacts/default-sort';
 import { buildContactsFilterSql } from '@/lib/operations/contacts-filter-sql.server';
 import { type OperationsDataScope, lockWriteScope, testFlagForScope } from '@/server/data-scope';
 import {
@@ -194,21 +195,26 @@ async function applyAssignmentOnce(
 export const ASSIGNMENT_MATCHES_PAGE_SIZE = 10;
 
 /**
- * 조건에 맞는 대상 목록(시스템ID 순, 10명씩) — 컨택원 수정 화면 오른쪽. 조사 대상 목록과
+ * 조건에 맞는 대상 목록(조사 대상 목록의 기본 순서, 10명씩) — 컨택원 수정 화면 오른쪽. 조사 대상 목록과
  * 같은 read model 을 써서 같은 조건이면 같은 사람이 나오고, 개인정보 열은 같은 마스킹 힌트만 싣는다.
  */
 export async function listAssignmentMatches(
   input: AssignmentMatchesInput,
   scope: OperationsDataScope,
 ): Promise<ContactAssignmentMatchesResult> {
-  const filter = await resolveAssignmentFilter(input.surveyId, scope, input.clauses);
+  const ctx = await loadContactFilterContext(input.surveyId, scope, {
+    isGuest: false,
+    surface: 'contacts',
+  });
+  const filter = await resolveContactFilter(ctx, { clauses: input.clauses }, { mode: 'write' });
   const { rows, total, page } = await listContactsForSurvey({
     surveyId: input.surveyId,
     scope,
     filter,
     page: input.page,
     pageSize: ASSIGNMENT_MATCHES_PAGE_SIZE,
-    sort: 'resid',
+    // 조사 대상 목록이 처음 열리는 순서와 같다 — 컬럼 설정의 기본 정렬 열, 없으면 시스템ID.
+    sort: resolveDefaultSortKey(ctx.scheme),
     dir: 'asc',
   });
   return {

@@ -8,6 +8,7 @@ import {
   carryOverDefaultSort,
   resolveContactListSort,
   resolveDefaultSortKey,
+  resolveSortWithDefault,
   validateDefaultSort,
 } from './default-sort';
 
@@ -91,6 +92,28 @@ describe('resolveContactListSort', () => {
   it('지정이 없는 설문은 종전대로 시스템ID', () => {
     expect(resolveContactListSort(undefined, scheme([resid, attrs('ID', 2)]))).toBe('resid');
     expect(resolveContactListSort(undefined, null)).toBe('resid');
+  });
+});
+
+describe('resolveSortWithDefault — 조사 대상 목록 밖의 표(단체 메일 위저드)', () => {
+  const allowed = ['resid', 'responded', 'mailStatus', 'resultCode'] as const;
+  const s = scheme([resid, attrs('ID', 2, { defaultSort: true }), attrs('NO', 3)]);
+
+  it('주소에 정렬이 없으면 기본 정렬 열, 지정이 없으면 시스템ID', () => {
+    expect(resolveSortWithDefault(undefined, allowed, s)).toBe('attrs.ID');
+    expect(resolveSortWithDefault(undefined, allowed, scheme([resid, attrs('ID', 2)]))).toBe('resid');
+    expect(resolveSortWithDefault(undefined, allowed, null)).toBe('resid');
+  });
+
+  it('그 표가 아는 정렬 키는 그대로 — 시스템ID 로 되돌릴 수 있다', () => {
+    expect(resolveSortWithDefault('resid', allowed, s)).toBe('resid');
+    expect(resolveSortWithDefault('mailStatus', allowed, s)).toBe('mailStatus');
+  });
+
+  it('명단 열 정렬은 기본 정렬 열 하나만 받는다 — 다른 열·모르는 값은 시스템ID', () => {
+    expect(resolveSortWithDefault('attrs.ID', allowed, s)).toBe('attrs.ID');
+    expect(resolveSortWithDefault('attrs.NO', allowed, s)).toBe('resid');
+    expect(resolveSortWithDefault('respondedAt', allowed, s)).toBe('resid');
   });
 });
 

@@ -8,8 +8,9 @@ import {
   CAMPAIGN_SORT_KEYS,
   previewCampaignCandidates,
   type CampaignSortDir,
-  type CampaignSortKey,
 } from '@/server/mail/services/campaigns-read';
+import type { CampaignListSortKey } from '@/shared/contracts/mail-io';
+import { resolveDefaultSortKey, resolveSortWithDefault } from '@/lib/contacts/default-sort';
 import {
   contactFilterInputFromUrl,
   loadContactFilterContext,
@@ -124,9 +125,8 @@ export default async function NewCampaignPage({ params, searchParams }: Props) {
   const unresolvedClauseCount = filter.unresolved.length;
   const unrespondedOnly = sp.unresponded === '1';
 
-  const sort: CampaignSortKey = CAMPAIGN_SORT_KEYS.includes(sp.sort as CampaignSortKey)
-    ? (sp.sort as CampaignSortKey)
-    : 'resid';
+  // 주소에 정렬이 없으면 컬럼 설정의 기본 정렬 열(없으면 시스템ID). 명단 열 정렬은 그 열 하나만 받는다.
+  const sort: CampaignListSortKey = resolveSortWithDefault(sp.sort, CAMPAIGN_SORT_KEYS, scheme);
   const dir: CampaignSortDir = sp.dir === 'desc' ? 'desc' : 'asc';
 
   // 컨택원 열은 내부 실사 정보라 게스트 표에는 켜 두어도 싣지 않는다.
@@ -199,6 +199,7 @@ export default async function NewCampaignPage({ params, searchParams }: Props) {
         unresolvedClauseCount={unresolvedClauseCount}
         initialClauses={initialClauses}
         sort={sort}
+        defaultSortKey={resolveDefaultSortKey(scheme)}
         dir={dir}
         mailColumns={mailColumns}
         showResid={resolveMailShowsResid(scheme)}

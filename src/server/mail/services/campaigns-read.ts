@@ -11,7 +11,7 @@ import {
 } from '@/db/schema';
 import type { MailEmailOrder } from '@/lib/contacts/mail-email-order';
 import { getMaskHintsForTargets } from '@/lib/crypto/contact-pii-repo';
-import { maskEmail } from '@/lib/operations/contacts-format';
+import { attrsSortKey, maskEmail } from '@/lib/operations/contacts-format';
 import {
   type BouncedAddresses,
   allCandidatesBouncedSql,
@@ -28,7 +28,9 @@ import {
   getResultCodeStatuses,
 } from '@/server/read-models/result-code-statuses';
 import {
+  attrsNaturalSortExprs,
   buildContactsFilterSql,
+  defaultSortOrderExprs,
   latestResultCodeExpr,
   latestResultUnsubscribedSql,
   matchedResponseSubquery,
@@ -58,6 +60,7 @@ import type {
   CampaignCandidateRow,
   CampaignExclusionCounts,
   CampaignRecipientRow,
+  CampaignListSortKey,
   CampaignRow,
   CampaignSortDir,
   CampaignSortKey,
@@ -436,6 +439,8 @@ export async function listCampaignRecipients(args: {
   piiMaskKeys?: readonly string[];
   /** 컨택원 이름을 행에 싣는가 — 컨택원 열을 메일 표시로 켠 비게스트 화면만 켠다. */
   includeAssignment?: boolean;
+  /** 컬럼 설정의 기본 정렬 열(`resolveDefaultSortKey`) — `attrs.<key>` 면 그 열 오름차순이 먼저다. */
+  defaultSort?: string;
 }): Promise<ListCampaignRecipientsResult> {
   const pageSize = args.pageSize ?? DEFAULT_PAGE_SIZE;
   const whereParts: SQL[] = [
@@ -509,7 +514,9 @@ export async function listCampaignRecipients(args: {
     .innerJoin(mailCampaigns, eq(mailRecipients.campaignId, mailCampaigns.id))
     .leftJoin(contactTargets, eq(mailRecipients.contactTargetId, contactTargets.id))
     .where(where)
-    .orderBy(desc(mailRecipients.createdAt))
+    // 컬럼 설정에 기본 정렬 열이 있으면 그 열 오름차순이 먼저다 — 한 회차의 수신자는 같은 순간에
+    // 만들어져 createdAt 만으로는 차례가 없다. 대상이 지워진 행(attrs 없음)은 뒤로 간다.
+    .orderBy(...defaultSortOrderExprs(args.defaultSort), desc(mailRecipients.createdAt))
     .limit(pageSize)
     .offset(offset);
 
@@ -780,8 +787,27 @@ async function fetchPiiMasks(
  * 응답여부는 미응답(respondedAt NULL) ↔ 응답완료 그룹 토글이 목적이므로 방향에 따라
  * NULL 위치를 바꾼다 — asc=미응답 먼저, desc=응답완료(최신) 먼저.
  * resid·수신 상황·결과코드는 NULL(이력 없음) 을 항상 뒤로(NULLS LAST).
+ * `attrs.<key>` 는 컬럼 설정의 기본 정렬 열 — 조사 대상 목록의 머리글 정렬과 같은 자연 정렬이고,
+ * 값이 같거나 빈 대상끼리는 시스템ID 순이다.
  */
-function buildCandidateOrderBy(
+export function buildCandidateOrderBy(
+  sort: CampaignListSortKey,
+  dir: CampaignSortDir,
+  scope: OperationsDataScope,
+): SQL[] {
+  const attrsKey = attrsSortKey(sort);
+  if (attrsKey !== null) {
+    return [
+      ...attrsNaturalSortExprs(attrsKey).map((expr) =>
+        dir === 'asc' ? sql`${expr} ASC NULLS LAST` : sql`${expr} DESC NULLS LAST`,
+      ),
+      sql`${contactTargets.resid} ASC`,
+    ];
+  }
+  return [buildSystemCandidateOrderBy(sort as CampaignSortKey, dir, scope)];
+}
+
+function buildSystemCandidateOrderBy(
   sort: CampaignSortKey,
   dir: CampaignSortDir,
   scope: OperationsDataScope,
@@ -811,7 +837,8 @@ export async function previewCampaignCandidates(args: {
   /** 조사 대상 필터 해석 결과 — 해석을 거친 조건만 받는다 */
   filter: ResolvedContactFilter;
   unrespondedOnly: boolean;
-  sort?: CampaignSortKey;
+  /** 표의 정렬 — 화면이 주소와 컬럼 설정의 기본 정렬 열로 정해 넘긴다. 없으면 시스템ID. */
+  sort?: CampaignListSortKey;
   dir?: CampaignSortDir;
   page?: number;
   pageSize?: number;
@@ -878,7 +905,7 @@ export async function previewCampaignCandidates(args: {
     .from(contactTargets)
     .where(where)
     .orderBy(
-      buildCandidateOrderBy(args.sort ?? 'resid', args.dir ?? 'asc', args.scope),
+      ...buildCandidateOrderBy(args.sort ?? 'resid', args.dir ?? 'asc', args.scope),
       asc(contactTargets.id),
     )
     .limit(pageSize)
@@ -957,6 +984,8 @@ export async function listUnsubscribedContacts(args: {
   piiMaskKeys?: readonly string[];
   /** 컨택원 이름을 행에 싣는가 — 컨택원 열을 메일 표시로 켠 비게스트 화면만 켠다. */
   includeAssignment?: boolean;
+  /** 컬럼 설정의 기본 정렬 열(`resolveDefaultSortKey`) — `attrs.<key>` 면 그 열 오름차순이 먼저다. */
+  defaultSort?: string;
 }): Promise<{ rows: UnsubscribedContactRow[]; total: number; page: number }> {
   const pageSize = args.pageSize ?? DEFAULT_PAGE_SIZE;
   // 수신거부 3축 중 컨택 차원의 두 신호를 union — 메일 해지(unsubscribed_at)와
@@ -989,7 +1018,9 @@ export async function listUnsubscribedContacts(args: {
     })
     .from(contactTargets)
     .where(where)
+    // 컬럼 설정에 기본 정렬 열이 있으면 그 열 오름차순, 없으면 종전대로 최근 수신거부 순.
     .orderBy(
+      ...defaultSortOrderExprs(args.defaultSort),
       sql`COALESCE(${contactTargets.unsubscribedAt}, ${latestAttemptAtExpr}) DESC NULLS LAST`,
     )
     .limit(pageSize)

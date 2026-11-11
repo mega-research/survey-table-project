@@ -20,6 +20,7 @@ import {
   resolveMailDisplayColumns,
   resolveMailShowsResid,
 } from '@/lib/contacts/mail-display-columns';
+import { resolveDefaultSortKey } from '@/lib/contacts/default-sort';
 import { getContactColumnScheme } from '@/server/read-models/contacts';
 import { getOperationsDataScope } from '@/server/data-scope';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
@@ -133,6 +134,7 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
       resultCodes,
       piiMaskKeys: mailPiiMaskKeys(mailColumns),
       includeAssignment: mailShowsContactOwner(mailColumns),
+      defaultSort: resolveDefaultSortKey(scheme),
     }),
     listCampaignRecipientFacets({ surveyId, campaignId: cid, scope }),
   ]);

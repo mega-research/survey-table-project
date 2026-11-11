@@ -17,6 +17,9 @@ import {
 
 type SortableColumn = Pick<ContactColumnDef, 'source'>;
 
+/** 기본 정렬이 될 수 있는 키 — 지정한 명단 열, 아니면 시스템ID. */
+export type DefaultSortKey = 'resid' | `attrs.${string}`;
+
 /** 기본 정렬을 걸 수 있는 열인가 — 명단 일반 열(attrs.*)만. 개인정보 열은 암호문이라 정렬이 없다. */
 export function canBeDefaultSort(col: SortableColumn): boolean {
   return attrsKeyOf(col.source) !== null;
@@ -25,7 +28,7 @@ export function canBeDefaultSort(col: SortableColumn): boolean {
 /** 스킴이 정한 기본 정렬 키. 지정이 없거나, 지정한 열이 숨김·일반 열이 아니면 시스템ID. */
 export function resolveDefaultSortKey(
   scheme: Pick<ContactColumnScheme, 'columns'> | null | undefined,
-): ContactsSortKey {
+): DefaultSortKey {
   const columns = scheme?.columns;
   if (!Array.isArray(columns)) return 'resid';
   const col = columns.find((c) => c.defaultSort === true && !c.hidden && canBeDefaultSort(c));
@@ -51,6 +54,22 @@ export function resolveContactListSort(
       .filter((k): k is string => k !== null),
   );
   return effectiveSortKey(normalizeSortKey(requested), visibleAttrsKeys);
+}
+
+/**
+ * 조사 대상 목록 밖의 표(단체 메일 위저드 등)가 쓰는 주소 `sort` 해석.
+ * 그 표가 아는 정렬 키(`allowed`)와 스킴의 기본 정렬 열만 받는다 — 다른 명단 열 정렬은 그 표에 없다.
+ * 주소에 정렬이 없으면 기본 정렬 열(없으면 시스템ID), 모르는 값이면 종전대로 시스템ID.
+ */
+export function resolveSortWithDefault<K extends string>(
+  requested: string | undefined,
+  allowed: readonly K[],
+  scheme: Pick<ContactColumnScheme, 'columns'> | null | undefined,
+): K | 'resid' | `attrs.${string}` {
+  const fallback = resolveDefaultSortKey(scheme);
+  if (!requested) return fallback;
+  if ((allowed as readonly string[]).includes(requested)) return requested as K;
+  return requested === fallback ? fallback : 'resid';
 }
 
 /**

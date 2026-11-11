@@ -455,6 +455,26 @@ describe('attrsNaturalSortExprs — attrs 자연 정렬 표현식', () => {
   });
 });
 
+describe('defaultSortOrderExprs — 기본 정렬 열 ORDER BY 조각', () => {
+  it('attrs 키면 숫자 → 글자 순서쌍을 오름차순·NULLS LAST 로 낸다', async () => {
+    const { defaultSortOrderExprs } = await import('@/lib/operations/contacts-filter-sql.server');
+    const exprs = defaultSortOrderExprs('attrs.ID').map((e) => dialect.sqlToQuery(e));
+    expect(exprs).toHaveLength(2);
+    expect(exprs[0]!.sql).toContain('::numeric END) ASC NULLS LAST');
+    expect(exprs[0]!.params).toContain('ID');
+    expect(exprs[1]!.sql).toBe(
+      `btrim("contact_targets".attrs->>$1, E' \\t\\r\\n') ASC NULLS LAST`,
+    );
+  });
+
+  it('시스템ID·빈 값이면 아무것도 붙이지 않는다 — 그 표의 종전 순서 그대로', async () => {
+    const { defaultSortOrderExprs } = await import('@/lib/operations/contacts-filter-sql.server');
+    expect(defaultSortOrderExprs('resid')).toEqual([]);
+    expect(defaultSortOrderExprs(undefined)).toEqual([]);
+    expect(defaultSortOrderExprs(null)).toEqual([]);
+  });
+});
+
 describe('buildContactsFilterSql — 메일 필터 (유효 메일 상태)', () => {
   function mailClause(value: string): FilterClause {
     return {
