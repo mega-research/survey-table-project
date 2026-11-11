@@ -8,6 +8,7 @@ import { normalizeContactColumnScheme } from '@/lib/operations/contacts-format';
 import { matchedResponseSubquery } from '@/lib/operations/contacts-filter-sql.server';
 import { logger } from '@/lib/logger';
 import { isUniqueViolation, retryOnTxConflict } from '@/lib/pg-error';
+import { InternalFailure } from '@/server/internal-failure';
 import {
   lockWriteScope,
   testFlagForScope,
@@ -110,7 +111,7 @@ export async function createAssignment(
           name: contactAssignments.name,
           order: contactAssignments.order,
         });
-      if (!created) throw new Error('컨택원을 만들지 못했습니다.');
+      if (!created) throw new InternalFailure('컨택원을 만들지 못했습니다.');
 
       await ensureOwnerColumnInScheme(tx, input.surveyId, locked.isTest, {
         contactColumns: locked.row.contactColumns,

@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 import 'server-only';
 
@@ -7,6 +8,7 @@ import { pinnedVersionId } from '@/shared/contracts/survey';
 import { resetTestResponseRow } from './reset-test-response';
 import { type PageVisit, isOpenResponseStatus } from '@/shared/contracts/survey-response';
 import type { TestAttemptIdentity } from '@/shared/types/test-attempt';
+import { InternalFailure } from '@/server/internal-failure';
 
 export interface AcquireTestTargetResponseInput {
   surveyId: string;
@@ -41,7 +43,7 @@ export async function assertAnonymousTestSession(
     .for('share')
     .limit(1);
   if (!survey) {
-    throw new Error('테스트 링크가 더 이상 유효하지 않습니다');
+    throw new ORPCError('CONFLICT', { message: '테스트 링크가 더 이상 유효하지 않습니다' });
   }
 
   const [count] = await tx
@@ -49,7 +51,7 @@ export async function assertAnonymousTestSession(
     .from(contactTargets)
     .where(and(eq(contactTargets.surveyId, input.surveyId), eq(contactTargets.isTest, true)));
   if ((count?.total ?? 0) > 0) {
-    throw new Error('테스트 링크가 더 이상 유효하지 않습니다');
+    throw new ORPCError('CONFLICT', { message: '테스트 링크가 더 이상 유효하지 않습니다' });
   }
 }
 
@@ -110,7 +112,7 @@ export async function acquireTestTargetResponse(
     .for('share')
     .limit(1);
   if (!survey) {
-    throw new Error('테스트 링크가 더 이상 유효하지 않습니다');
+    throw new ORPCError('CONFLICT', { message: '테스트 링크가 더 이상 유효하지 않습니다' });
   }
   // 테스트 대상자 응답의 고정 목적지 — 지금 테스트 버전(shared/contracts/survey 의 pinnedVersionId). 아직 없으면 배포본.
   const pinVersionId = pinnedVersionId(survey, true);
@@ -127,7 +129,7 @@ export async function acquireTestTargetResponse(
     .for('update')
     .limit(1);
   if (!liveTarget) {
-    throw new Error('테스트 링크가 더 이상 유효하지 않습니다');
+    throw new ORPCError('CONFLICT', { message: '테스트 링크가 더 이상 유효하지 않습니다' });
   }
 
   let [response] = await tx
@@ -155,7 +157,7 @@ export async function acquireTestTargetResponse(
       priorAttempt.responseId !== response.id ||
       priorAttempt.sessionId !== input.sessionId)
   ) {
-    throw new Error('테스트 세션이 다른 화면에서 시작되었습니다');
+    throw new ORPCError('CONFLICT', { message: '테스트 세션이 다른 화면에서 시작되었습니다' });
   }
 
   if (!response) {
@@ -203,7 +205,7 @@ export async function acquireTestTargetResponse(
         .limit(1);
     }
   }
-  if (!response) throw new Error('테스트 응답을 시작할 수 없습니다');
+  if (!response) throw new InternalFailure('테스트 응답을 시작할 수 없습니다');
 
   // 버전 불일치는 이탈 여부와 무관한 별개의 안전장치 — 재배포로 구조가 바뀐 구버전 답을
   // 주입하면 유령 답과 필수 검증 우회가 생기므로 status 와 무관하게 초기화한다.
@@ -216,7 +218,7 @@ export async function acquireTestTargetResponse(
   const revive = !reset && response.status === 'drop';
   if (reset) {
     if (priorAttempt) {
-      throw new Error('새로 연 테스트 화면에서 다시 입력해주세요');
+      throw new ORPCError('CONFLICT', { message: '새로 연 테스트 화면에서 다시 입력해주세요' });
     }
     await resetTestTargetResponse(tx, response.id, input, pinVersionId);
   }
@@ -300,7 +302,7 @@ export async function lockAndAssertResponseMutation(
       .from(contactTargets)
       .where(and(eq(contactTargets.surveyId, preflight.surveyId), eq(contactTargets.isTest, true)));
     if ((count?.total ?? 0) > 0) {
-      throw new Error('테스트 링크가 더 이상 유효하지 않습니다');
+      throw new ORPCError('CONFLICT', { message: '테스트 링크가 더 이상 유효하지 않습니다' });
     }
   } else {
     const [target] = await tx
@@ -316,7 +318,7 @@ export async function lockAndAssertResponseMutation(
       .for('update')
       .limit(1);
     if (!target) {
-      throw new Error('테스트 링크가 더 이상 유효하지 않습니다');
+      throw new ORPCError('CONFLICT', { message: '테스트 링크가 더 이상 유효하지 않습니다' });
     }
   }
 
@@ -331,13 +333,13 @@ export async function lockAndAssertResponseMutation(
     .where(eq(surveyResponses.id, input.responseId))
     .for('update')
     .limit(1);
-  if (!response) throw new Error('응답을 찾을 수 없습니다.');
+  if (!response) throw new ORPCError('NOT_FOUND', { message: '응답을 찾을 수 없습니다.' });
   if (
     !response.isTest ||
     response.surveyId !== preflight.surveyId ||
     response.contactTargetId !== preflight.contactTargetId
   ) {
-    throw new Error('테스트 링크가 더 이상 유효하지 않습니다');
+    throw new ORPCError('CONFLICT', { message: '테스트 링크가 더 이상 유효하지 않습니다' });
   }
   if (response.contactTargetId != null) {
     await assertTestTargetAttemptOwner(tx, input);
@@ -353,7 +355,7 @@ async function assertTestSurveyEnabled(tx: DbTransaction, surveyId: string): Pro
     .for('share')
     .limit(1);
   if (!survey?.enabled) {
-    throw new Error('테스트 링크가 더 이상 유효하지 않습니다');
+    throw new ORPCError('CONFLICT', { message: '테스트 링크가 더 이상 유효하지 않습니다' });
   }
 }
 
@@ -367,7 +369,7 @@ async function assertTestResponseTargetScope(
       .from(contactTargets)
       .where(and(eq(contactTargets.surveyId, response.surveyId), eq(contactTargets.isTest, true)));
     if ((count?.total ?? 0) > 0) {
-      throw new Error('테스트 링크가 더 이상 유효하지 않습니다');
+      throw new ORPCError('CONFLICT', { message: '테스트 링크가 더 이상 유효하지 않습니다' });
     }
     return;
   }
@@ -384,7 +386,7 @@ async function assertTestResponseTargetScope(
     )
     .limit(1);
   if (!target) {
-    throw new Error('테스트 링크가 더 이상 유효하지 않습니다');
+    throw new ORPCError('CONFLICT', { message: '테스트 링크가 더 이상 유효하지 않습니다' });
   }
 }
 
@@ -402,7 +404,7 @@ export async function assertTestTargetAttemptOwner(
   input: TestAttemptIdentity & { responseId: string },
 ): Promise<void> {
   if (!input.attemptId || !input.sessionId) {
-    throw new Error('테스트 세션이 다른 화면에서 시작되었습니다');
+    throw new ORPCError('CONFLICT', { message: '테스트 세션이 다른 화면에서 시작되었습니다' });
   }
 
   const [active] = await tx
@@ -418,6 +420,6 @@ export async function assertTestTargetAttemptOwner(
     )
     .limit(1);
   if (!active) {
-    throw new Error('테스트 세션이 다른 화면에서 시작되었습니다');
+    throw new ORPCError('CONFLICT', { message: '테스트 세션이 다른 화면에서 시작되었습니다' });
   }
 }

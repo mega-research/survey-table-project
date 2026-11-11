@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import { and, eq, sql } from 'drizzle-orm';
 import 'server-only';
 
@@ -30,29 +31,29 @@ export async function updateContactColumns(input: UpdateContactColumnsInput): Pr
   // 분류 기준 레벨 가드 — attrs.* 전용, 레벨 1..4, 레벨당 컬럼 1개
   const leveled = scheme.columns.filter((c) => c.groupLevel != null);
   if (leveled.some((c) => !c.source.startsWith('attrs.'))) {
-    throw new Error('분류 기준은 명단 속성(attrs) 컬럼에만 지정할 수 있습니다.');
+    throw new ORPCError('BAD_REQUEST', { message: '분류 기준은 명단 속성(attrs) 컬럼에만 지정할 수 있습니다.' });
   }
   if (leveled.some((c) => !isGroupLevel(c.groupLevel))) {
-    throw new Error('분류 기준 레벨은 대·중·소·세부분류만 가능합니다.');
+    throw new ORPCError('BAD_REQUEST', { message: '분류 기준 레벨은 대·중·소·세부분류만 가능합니다.' });
   }
   const levels = leveled.map((c) => c.groupLevel);
   if (new Set(levels).size !== levels.length) {
-    throw new Error('같은 분류 레벨을 여러 컬럼에 지정할 수 없습니다.');
+    throw new ORPCError('BAD_REQUEST', { message: '같은 분류 레벨을 여러 컬럼에 지정할 수 없습니다.' });
   }
   // 메일 표시 가드 — 명단 속성·개인정보·시스템ID 열만. 운영 컬럼(컨택결과·web 등)은 메일 표에 따로 있다.
   if (scheme.columns.some((c) => c.showInMail === true && !canShowInMail(c))) {
-    throw new Error('메일 표시는 명단 속성·개인정보·시스템ID 열에만 지정할 수 있습니다.');
+    throw new ORPCError('BAD_REQUEST', { message: '메일 표시는 명단 속성·개인정보·시스템ID 열에만 지정할 수 있습니다.' });
   }
   // 발송 주소 순서 가드 — 이메일로 암호화된 열 전용, 1 이상의 정수, 열마다 다른 값
   const mailOrderProblem = validateMailEmailOrder(scheme.columns);
-  if (mailOrderProblem) throw new Error(mailOrderProblem);
+  if (mailOrderProblem) throw new ORPCError('BAD_REQUEST', { message: mailOrderProblem });
   // 기본 정렬 가드 — 명단 속성 열 전용, 한 열만
   const defaultSortProblem = validateDefaultSort(scheme.columns);
-  if (defaultSortProblem) throw new Error(defaultSortProblem);
+  if (defaultSortProblem) throw new ORPCError('BAD_REQUEST', { message: defaultSortProblem });
   await db.transaction(async (tx) => {
     // authed 전용 경로라 게스트 세션이 없다 — isGuest=false 로 전역 플래그가 곧 쓰기 파티션이다.
     const locked = await lockWriteScope(tx, surveyId, false, { lock: 'update' });
-    if (!locked) throw new Error('NOT_FOUND');
+    if (!locked) throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
 
     await tx
       .update(surveys)
@@ -73,10 +74,10 @@ export async function updateContactGroupLevels(
   const { surveyId, levels } = input;
   const levelValues = Object.values(levels);
   if (levelValues.some((l) => !isGroupLevel(l))) {
-    throw new Error('분류 기준 레벨은 대·중·소·세부분류만 가능합니다.');
+    throw new ORPCError('BAD_REQUEST', { message: '분류 기준 레벨은 대·중·소·세부분류만 가능합니다.' });
   }
   if (new Set(levelValues).size !== levelValues.length) {
-    throw new Error('같은 분류 레벨을 여러 컬럼에 지정할 수 없습니다.');
+    throw new ORPCError('BAD_REQUEST', { message: '같은 분류 레벨을 여러 컬럼에 지정할 수 없습니다.' });
   }
   await db.transaction(async (tx) => {
     // authed 전용 경로라 게스트 세션이 없다 — isGuest=false 로 전역 플래그가 곧 쓰기 파티션이다.
@@ -84,11 +85,11 @@ export async function updateContactGroupLevels(
       lock: 'update',
       columns: ['contactColumns', 'testContactColumns'],
     });
-    if (!locked) throw new Error('NOT_FOUND');
+    if (!locked) throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
 
     const scheme = locked.isTest ? locked.row.testContactColumns : locked.row.contactColumns;
     if (!scheme || !Array.isArray(scheme.columns)) {
-      throw new Error('컬럼 스킴이 없습니다. 먼저 명단을 업로드하세요.');
+      throw new ORPCError('CONFLICT', { message: '컬럼 스킴이 없습니다. 먼저 명단을 업로드하세요.' });
     }
 
     const patched = {

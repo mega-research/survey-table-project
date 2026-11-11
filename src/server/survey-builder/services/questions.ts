@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import 'server-only';
 
 import { and, eq, inArray } from 'drizzle-orm';
@@ -15,6 +16,7 @@ import { collectFieldLimitedSaveDiff } from '@/server/storage-lifecycle/save-dif
 import { promoteNoticeAttachments } from '@/lib/survey/notice-attachment-promote';
 import { promoteSurveyImages, type PromotableQuestion } from '@/lib/survey/survey-image-promote';
 import { generateId, isValidUUID } from '@/lib/utils';
+import { InternalFailure } from '@/server/internal-failure';
 
 import type {
   CreateQuestionInput,
@@ -114,7 +116,7 @@ export async function createQuestion(data: CreateQuestionInput): Promise<Questio
     .values(questionToInsert as NewQuestion)
     .returning();
 
-  if (!question) throw new Error('질문 생성에 실패했습니다.');
+  if (!question) throw new InternalFailure('질문 생성에 실패했습니다.');
   return question as QuestionRow;
 }
 
@@ -164,7 +166,7 @@ export async function updateQuestion(
       .where(and(eq(questions.id, questionId), eq(questions.surveyId, surveyId)))
       .returning();
 
-    if (!updated) throw new Error('질문 업데이트에 실패했습니다.');
+    if (!updated) throw new ORPCError('NOT_FOUND', { message: '질문을 찾을 수 없습니다. 설문을 먼저 저장한 뒤 다시 시도하세요.' });
 
     if (oldRow) {
       await collectFieldLimitedSaveDiff(tx, {
@@ -236,7 +238,7 @@ export async function reorderQuestions(
   // 타 설문 소속(또는 미존재) id 가 섞인 것이므로 전체 reorder 를 거부한다.
   const allBelong = validQuestionIds.every((id) => currentOrderMap.has(id));
   if (!allBelong) {
-    throw new Error('다른 설문 소속 질문이 reorder 요청에 포함되어 거부되었습니다.');
+    throw new ORPCError('BAD_REQUEST', { message: '다른 설문 소속 질문이 reorder 요청에 포함되어 거부되었습니다.' });
   }
 
   const updates: Promise<unknown>[] = [];

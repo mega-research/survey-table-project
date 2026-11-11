@@ -1,4 +1,4 @@
-import { createRouterClient } from '@orpc/server';
+import { createRouterClient, ORPCError } from '@orpc/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
@@ -142,10 +142,14 @@ describe('surveyBuilder.questions procedures', () => {
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });
 
-  it('update 서비스가 "질문 업데이트에 실패했습니다." 에러 throw 시 NOT_FOUND로 매핑한다', async () => {
-    // 미영속 질문에 대해 update 경로가 실행될 때(0행 매칭) 서비스가 throw하는 에러를
-    // oRPC가 Internal server error로 마스킹하지 않고 NOT_FOUND로 노출해야 한다.
-    vi.mocked(svc.updateQuestion).mockRejectedValue(new Error('질문 업데이트에 실패했습니다.'));
+  it('update 서비스가 던진 NOT_FOUND 는 문구째 클라이언트까지 간다', async () => {
+    // 미영속 질문에 대해 update 경로가 실행될 때(0행 매칭) 서비스가 코드 있는 오류로 던진다 —
+    // 일반 Error 면 oRPC 가 Internal server error 로 마스킹한다(서비스 쪽 판정은 scope-guard 스위트).
+    vi.mocked(svc.updateQuestion).mockRejectedValue(
+      new ORPCError('NOT_FOUND', {
+        message: '질문을 찾을 수 없습니다. 설문을 먼저 저장한 뒤 다시 시도하세요.',
+      }),
+    );
     const client = createRouterClient({ questions }, { context: authedContext() });
     await expect(
       client.questions.update({ questionId: QUESTION_ID, surveyId: SURVEY_ID, data: { title: 'Q1-edit' } }),

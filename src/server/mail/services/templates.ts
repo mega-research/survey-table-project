@@ -13,6 +13,7 @@ import { collectFieldLimitedSaveDiff } from '@/server/storage-lifecycle/save-dif
 import { ensureImageLinkBandSlices } from './image-link-band-slices';
 import { promoteMailImages } from './image-promote';
 import { extractVariableKeys } from '@/lib/mail/variable-extractor';
+import { InternalFailure } from '@/server/internal-failure';
 
 import type {
   CreateMailTemplateInput,
@@ -129,7 +130,7 @@ export async function createMailTemplate(
     })
     .returning({ id: mailTemplates.id });
   const row = insertedRows[0];
-  if (!row) throw new Error('createMailTemplate: 템플릿 생성 실패');
+  if (!row) throw new InternalFailure('createMailTemplate: 템플릿 생성 실패');
 
   // promote 된 영구 key 를 클라이언트로 돌려줘 state 동기화 — 저장 직후 발송에서
   // stale tmp prefix 로 R2 download 시도하는 사고 차단.

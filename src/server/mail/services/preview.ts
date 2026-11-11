@@ -15,6 +15,7 @@ import { MailWrapper } from './template-wrapper';
 import { buildInviteUrl } from '@/lib/survey-url';
 import { getContactSampleById, getFirstContactSample } from '@/server/read-models/contact-sample';
 import { loadOperationsDataScope } from '@/server/data-scope';
+import { InternalFailure } from '@/server/internal-failure';
 
 import type {
   GetMailPreviewSampleInput,
@@ -42,7 +43,7 @@ export async function getMailPreviewSample(
   // 미리보기에서 끊긴 초대 링크를 조용히 노출한다. sendTestTemplateMail 과 동일하게 명시적 차단.
   const baseUrl = (process.env['NEXT_PUBLIC_APP_URL'] ?? '').replace(/\/+$/, '');
   if (!baseUrl) {
-    throw new Error('NEXT_PUBLIC_APP_URL 환경변수가 설정되지 않았습니다.');
+    throw new InternalFailure('NEXT_PUBLIC_APP_URL 환경변수가 설정되지 않았습니다.');
   }
   const inviteUrl = buildInviteUrl(sample.inviteCode, baseUrl);
 

@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import 'server-only';
 
 import { eq, sql } from 'drizzle-orm';
@@ -5,6 +6,7 @@ import { eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { savedLookups } from '@/db/schema';
 import type { SavedLookup } from '@/types/survey';
+import { InternalFailure } from '@/server/internal-failure';
 
 import type {
   CreateSavedLookupInput,
@@ -143,7 +145,7 @@ export async function createSavedLookup(
     .returning();
 
   if (!row) {
-    throw new Error('보관함 LUT 생성에 실패했습니다.');
+    throw new InternalFailure('보관함 LUT 생성에 실패했습니다.');
   }
 
   return toDomainSavedLookup(row);
@@ -169,7 +171,7 @@ export async function updateSavedLookup(
       .returning();
 
     if (!updatedRow) {
-      throw new Error('보관함 LUT 를 찾을 수 없습니다.');
+      throw new ORPCError('NOT_FOUND', { message: '보관함 LUT 를 찾을 수 없습니다.' });
     }
 
     await propagateSavedLookupUpdate(tx, id, {

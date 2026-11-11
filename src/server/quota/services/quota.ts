@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import 'server-only';
 import type * as z from 'zod';
@@ -33,7 +34,7 @@ export async function saveQuotaConfig(surveyId: string, config: QuotaConfig): Pr
     .where(eq(surveys.id, surveyId))
     .returning({ quotaConfig: surveys.quotaConfig });
 
-  if (!updated) throw new Error('쿼터 저장에 실패했습니다.');
+  if (!updated) throw new ORPCError('NOT_FOUND', { message: '쿼터 저장에 실패했습니다.' });
   return updated.quotaConfig ?? config;
 }
 
@@ -75,7 +76,7 @@ export async function checkQuota(input: {
     ),
     columns: { isTest: true, contactTargetId: true, status: true, metadata: true },
   });
-  if (!response) throw new Error('쿼터 응답 범위가 일치하지 않습니다.');
+  if (!response) throw new ORPCError('BAD_REQUEST', { message: '쿼터 응답 범위가 일치하지 않습니다.' });
   if (response.isTest) return { blocked: false, closedMessage: null };
   // 재응답 허용으로 되돌려진 응답(reeditPendingSince)은 막지 않는다 — 운영자가 되돌려 놓고
   // 재제출이 막히는 고아를 만들지 않는다(ADR 0025). 제출 경로의 면제와 같은 표식이며, 그

@@ -407,6 +407,26 @@ const eslintConfig = [
       ],
     },
   },
+  {
+    // 서버에서 일반 Error 를 던지지 않는다 — oRPC 는 비-ORPCError 의 문구를 운영에서
+    // 'Internal server error' 로 갈아 끼우고 Sentry 는 그것을 장애로 받는다(2026-11-11: 단건 메일의
+    // 「연락금지」 거부가 그렇게 묻혔고, 같은 모양이 144곳이었다). 던지는 쪽이 둘 중 하나를 고른다:
+    //   사용자가 이해하고 고칠 수 있는 거부  → new ORPCError('NOT_FOUND' | 'BAD_REQUEST' | 'CONFLICT' …, { message })
+    //   일어나면 안 되는 내부 실패            → new InternalFailure(...)  (src/server/internal-failure.ts)
+    // 이름 있는 도메인 오류 클래스(SurveyOwnershipError 등)는 그대로 쓴다.
+    files: ["src/server/**/*.ts"],
+    ignores: ["src/server/**/*.test.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "ThrowStatement > NewExpression[callee.name='Error']",
+          message:
+            "서버에서는 일반 Error 를 던지지 않습니다. 예상된 거부는 ORPCError(코드 + 문구), 내부 실패는 InternalFailure 로 던지세요 (src/server/internal-failure.ts).",
+        },
+      ],
+    },
+  },
 ];
 
 export default eslintConfig;

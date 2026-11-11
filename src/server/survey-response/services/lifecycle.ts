@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import 'server-only';
 
@@ -226,7 +227,7 @@ export async function recordStepVisit(
       sessionId: input.sessionId,
     });
     if (!response) {
-      throw new Error('응답을 찾을 수 없습니다.');
+      throw new ORPCError('NOT_FOUND', { message: '응답을 찾을 수 없습니다.' });
     }
     await tx
       .update(surveyResponses)

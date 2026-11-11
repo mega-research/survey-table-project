@@ -5,6 +5,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { surveyResponses } from '@/db/schema';
 import { notDeletedResponse } from '@/server/response-filters';
+import { InternalFailure } from '@/server/internal-failure';
 
 import {
   shapeDailyBuckets,
@@ -58,7 +59,7 @@ export async function aggregateDaily(input: {
       .orderBy(sql`1`);
   } else {
     if (!hourModeDate) {
-      throw new Error('aggregateDaily(hour) requires hourModeDate');
+      throw new InternalFailure('aggregateDaily(hour) requires hourModeDate');
     }
     rows = await db
       .select({

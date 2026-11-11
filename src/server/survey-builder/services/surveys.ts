@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import 'server-only';
 
 import { eq } from 'drizzle-orm';
@@ -21,6 +22,7 @@ import { promoteSurveyResponseHeader } from '@/lib/survey/survey-image-promote';
 import { generateId } from '@/lib/utils';
 import { stripOptionCodes } from '@/utils/option-code-generator';
 import { normalizeSurveyListTitle } from '@/utils/survey-card-title';
+import { InternalFailure } from '@/server/internal-failure';
 
 import type {
   CreateSurveyInput,
@@ -89,7 +91,7 @@ export async function createSurvey(data: CreateSurveyInput): Promise<SurveyRow> 
   };
 
   const [survey] = await db.insert(surveys).values(newSurvey).returning();
-  if (!survey) throw new Error('createSurvey: 설문 생성 실패');
+  if (!survey) throw new InternalFailure('createSurvey: 설문 생성 실패');
 
   return survey;
 }
@@ -120,7 +122,7 @@ export async function updateSurvey(input: UpdateSurveyInput): Promise<SurveyRow>
       })
       .where(eq(surveys.id, surveyId))
       .returning();
-    if (!updated) throw new Error('updateSurvey: 설문 업데이트 실패');
+    if (!updated) throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
 
     if (oldRow) {
       await collectFieldLimitedSaveDiff(tx, {
@@ -309,7 +311,7 @@ export async function duplicateSurvey(
       } satisfies CompleteSurveyCopy)
       .returning();
     const newSurvey = newSurveyRows[0];
-    if (!newSurvey) throw new Error('copySurvey: 새 설문 생성 실패');
+    if (!newSurvey) throw new InternalFailure('copySurvey: 새 설문 생성 실패');
 
     // 질문 id 를 선발번해 JSONB 재매핑(그룹 표시조건 포함)에 쓸 맵을 먼저 완성한다
     const questionIdMap = new Map<string, string>();
@@ -374,7 +376,7 @@ export async function duplicateSurvey(
     // 질문 데이터 준비 — id 는 선발번 맵에서 가져오고, 완성된 행 전체를 재귀 재매핑한다
     const newQuestionsData = originalQuestions.map((question) => {
       const newQuestionId = questionIdMap.get(question.id);
-      if (!newQuestionId) throw new Error('duplicateSurvey: 질문 id 매핑 누락');
+      if (!newQuestionId) throw new InternalFailure('duplicateSurvey: 질문 id 매핑 누락');
       const row = {
         id: newQuestionId,
         surveyId: newSurvey.id,

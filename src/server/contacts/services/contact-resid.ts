@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import 'server-only';
 
 import type { DbTransaction } from '@/db';
+import { InternalFailure } from '@/server/internal-failure';
 
 /**
  * 컨택 resid 발번 — 설문·파티션별 순번을 DB 함수 next_contact_resid 에서 하나 받는다.
@@ -19,6 +20,6 @@ export async function allocateContactResid(
     sql`SELECT next_contact_resid(${surveyId}::uuid, ${isTest}) AS resid`,
   );
   const resid = rows[0]?.resid;
-  if (resid == null) throw new Error('next_contact_resid 호출 실패');
+  if (resid == null) throw new InternalFailure('next_contact_resid 호출 실패');
   return Number(resid);
 }

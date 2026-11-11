@@ -23,6 +23,7 @@ import {
   loadBouncedAddresses,
 } from '@/server/read-models/send-address';
 import type { CampaignFilterSnapshot } from '@/shared/contracts/mail';
+import { InternalFailure } from '@/server/internal-failure';
 
 import type {
   CancelCampaignInput,
@@ -126,7 +127,7 @@ export async function createCampaign(
     );
     const runNumber = Number(runRows[0]?.next_id ?? 0);
     if (!runNumber) {
-      throw new Error('회차 번호 발급에 실패했습니다.');
+      throw new InternalFailure('회차 번호 발급에 실패했습니다.');
     }
 
     // d. campaign insert (스냅샷 explicit field set — spread 금지)
@@ -151,7 +152,7 @@ export async function createCampaign(
       })
       .returning({ id: mailCampaigns.id });
     if (!campaign) {
-      throw new Error('단체 메일 생성에 실패했습니다.');
+      throw new InternalFailure('단체 메일 생성에 실패했습니다.');
     }
 
     // e. valid contact 재페치 — contact_pii 에서 발송 주소 후보 칸까지 같이 가져온다.
@@ -277,7 +278,7 @@ export async function createCampaign(
       .set({ status: 'draft', updatedAt: new Date() })
       .where(eq(mailCampaigns.id, result.campaignId));
     const message = err instanceof Error ? err.message : '발송 큐 등록에 실패했습니다.';
-    throw new Error(
+    throw new InternalFailure(
       `단체 메일은 저장됐지만 발송 큐 등록에 실패했습니다 — ${message}. Inngest dev 서버 가 실행 중인지 확인하세요.`,
     );
   }

@@ -7,6 +7,7 @@ import type { MailAttachment } from '@/shared/contracts/mail';
 import { downloadR2Object } from '@/lib/image-utils-server';
 import { MAX_ATTACHMENT_TOTAL_BYTES } from '@/lib/mail/constants';
 import { mailToList } from '@/lib/mail/split-email-addresses';
+import { InternalFailure } from '@/server/internal-failure';
 import { getResend } from './resend-client';
 
 export interface ResolvedBulkAttachment {
@@ -24,7 +25,7 @@ export async function resolveCampaignAttachments(
 ): Promise<ResolvedBulkAttachment[]> {
   const declaredTotal = attachments.reduce((sum, a) => sum + a.size, 0);
   if (declaredTotal > MAX_ATTACHMENT_TOTAL_BYTES) {
-    throw new Error(
+    throw new InternalFailure(
       `첨부 총합이 한도를 초과합니다 (${Math.round(declaredTotal / 1024 / 1024)}MB / ${Math.round(MAX_ATTACHMENT_TOTAL_BYTES / 1024 / 1024)}MB).`,
     );
   }
@@ -41,7 +42,7 @@ export async function resolveCampaignAttachments(
           tags: { operation: 'campaign_attachment_download' },
           extra: { key: a.key, filename: a.filename },
         });
-        throw new Error(`'${a.filename}' 파일을 불러올 수 없습니다.`);
+        throw new InternalFailure(`'${a.filename}' 파일을 불러올 수 없습니다.`);
       }
     }),
   );

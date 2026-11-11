@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import 'server-only';
@@ -6,6 +7,7 @@ import { db } from '@/db';
 import { surveys } from '@/db/schema/surveys';
 import { getSurveyAccessIdentifier } from '@/lib/survey-url';
 import { readBrowserTestView } from '@/server/data-scope';
+import { InternalFailure } from '@/server/internal-failure';
 
 export { disableTestWorkspace } from './test-workspace';
 
@@ -97,7 +99,7 @@ export async function setPaused(input: {
     })
     .where(eq(surveys.id, input.surveyId))
     .returning({ isPaused: surveys.isPaused, pausedMessage: surveys.pausedMessage });
-  if (!updated) throw new Error('설문 중단 상태 저장에 실패했습니다.');
+  if (!updated) throw new ORPCError('NOT_FOUND', { message: '설문 중단 상태 저장에 실패했습니다.' });
   return updated;
 }
 
@@ -106,13 +108,13 @@ export async function setTestMode(input: {
   enabled: boolean;
 }): Promise<SurveyControlState> {
   if (!input.enabled) {
-    throw new Error('테스트 모드 OFF는 disableTestWorkspace를 사용해야 합니다.');
+    throw new InternalFailure('테스트 모드 OFF는 disableTestWorkspace를 사용해야 합니다.');
   }
   const row = await db.query.surveys.findFirst({
     where: and(eq(surveys.id, input.surveyId), isNull(surveys.deletedAt)),
     columns: { id: true, slug: true, privateToken: true, isPublic: true, testToken: true },
   });
-  if (!row) throw new Error('설문을 찾을 수 없습니다.');
+  if (!row) throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
   // 토큰은 최초 ON 때 한 번 생성 후 재사용 (rotate 없음 — 스펙 11절). 신규는 짧은 nanoid.
   const testToken = row.testToken ?? nanoid(8);
   const [updated] = await db
@@ -123,9 +125,9 @@ export async function setTestMode(input: {
       testModeEnabled: surveys.testModeEnabled,
       testToken: surveys.testToken,
     });
-  if (!updated) throw new Error('테스트 모드 저장에 실패했습니다.');
+  if (!updated) throw new ORPCError('NOT_FOUND', { message: '테스트 모드 저장에 실패했습니다.' });
   const state = await getControlState(input.surveyId);
   // 방금 UPDATE 가 성공한 설문 — 부재는 논리적으로 불가하므로 계약(비 null)을 유지한다.
-  if (!state) throw new Error('설문을 찾을 수 없습니다.');
+  if (!state) throw new InternalFailure('설문을 찾을 수 없습니다.');
   return state;
 }

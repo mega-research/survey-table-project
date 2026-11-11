@@ -1,9 +1,11 @@
+import { ORPCError } from '@orpc/server';
 import 'server-only';
 
 import { eq, gt } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { mailBillingPeriods } from '@/db/schema/mail-billing';
+import { InternalFailure } from '@/server/internal-failure';
 
 import type {
   CreateBillingPeriodInput,
@@ -26,7 +28,7 @@ export async function createBillingPeriod(
 ): Promise<MailBillingPeriod> {
   const day = parseInt(input.startDate.slice(8, 10), 10);
   if (!Number.isFinite(day) || day < 1 || day > 28) {
-    throw new Error('시작일은 매달 1~28일 사이여야 합니다 (월말 보정 회피).');
+    throw new ORPCError('BAD_REQUEST', { message: '시작일은 매달 1~28일 사이여야 합니다 (월말 보정 회피).' });
   }
 
   try {
@@ -43,12 +45,12 @@ export async function createBillingPeriod(
         createdBy,
       })
       .returning();
-    if (!row) throw new Error('mail_billing_periods INSERT 실패');
+    if (!row) throw new InternalFailure('mail_billing_periods INSERT 실패');
     return row;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes('start_date') && (msg.includes('unique') || msg.includes('duplicate key'))) {
-      throw new Error('동일한 시작일의 요금제가 이미 등록되어 있습니다.');
+      throw new ORPCError('CONFLICT', { message: '동일한 시작일의 요금제가 이미 등록되어 있습니다.' });
     }
     throw err;
   }
@@ -64,7 +66,7 @@ export async function deleteLatestBillingPeriod(id: string): Promise<void> {
     .where(eq(mailBillingPeriods.id, id))
     .limit(1);
   if (target.length === 0) {
-    throw new Error('대상 요금제를 찾을 수 없습니다.');
+    throw new ORPCError('NOT_FOUND', { message: '대상 요금제를 찾을 수 없습니다.' });
   }
 
   const newer = await db
@@ -73,9 +75,9 @@ export async function deleteLatestBillingPeriod(id: string): Promise<void> {
     .where(gt(mailBillingPeriods.startDate, target[0]!.startDate))
     .limit(1);
   if (newer.length > 0) {
-    throw new Error(
-      '더 최근의 요금제가 존재합니다. 가장 최근 행부터 차례로 삭제해주세요.',
-    );
+    throw new ORPCError('CONFLICT', {
+      message: '더 최근의 요금제가 존재합니다. 가장 최근 행부터 차례로 삭제해주세요.',
+    });
   }
 
   await db.delete(mailBillingPeriods).where(eq(mailBillingPeriods.id, id));

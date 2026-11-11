@@ -1,7 +1,8 @@
 import { ORPCError } from '@orpc/server';
 import { describe, expect, it } from 'vitest';
 
-import { isUnexpectedRpcError, toWireError } from './rpc-error-policy';
+import { InternalFailure } from './internal-failure';
+import { isSentryWorthyRpcError, isUnexpectedRpcError, toWireError } from './rpc-error-policy';
 
 // oRPC 는 ORPCError 가 아닌 모든 예외를 "Internal server error" 로 갈아끼우고 원본은
 // cause 에만 남긴다(직렬화 안 됨). 운영에서는 그 마스킹이 맞지만 dev 에서는 디버깅이 불가능하다.
@@ -57,5 +58,22 @@ describe('isUnexpectedRpcError', () => {
   it('일반 Error 와 defined 아닌 ORPCError 는 예기치 못한 에러다', () => {
     expect(isUnexpectedRpcError(new Error('boom'))).toBe(true);
     expect(isUnexpectedRpcError(new ORPCError('INTERNAL_SERVER_ERROR'))).toBe(true);
+  });
+});
+
+// 서버는 일반 Error 를 던지지 않는다(ESLint) — 던지는 쪽이 고른 둘이 정책에서 갈리는 것을 고정한다.
+describe('isSentryWorthyRpcError', () => {
+  it('예상된 거부(코드 있는 ORPCError)는 Sentry 로 보내지 않는다', () => {
+    for (const code of ['NOT_FOUND', 'BAD_REQUEST', 'CONFLICT', 'FORBIDDEN'] as const) {
+      expect(isSentryWorthyRpcError(new ORPCError(code, { message: '거부' }))).toBe(false);
+    }
+  });
+
+  it('내부 실패(InternalFailure)는 Sentry 로 보내고, 운영에서는 원본 그대로라 oRPC 가 문구를 가린다', () => {
+    const err = new InternalFailure('contact_targets INSERT 실패');
+    expect(err).toBeInstanceOf(Error);
+    expect(err.name).toBe('InternalFailure');
+    expect(isSentryWorthyRpcError(err)).toBe(true);
+    expect(toWireError(err, { dev: false })).toBe(err);
   });
 });

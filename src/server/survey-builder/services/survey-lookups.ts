@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import 'server-only';
 
 import { eq, sql } from 'drizzle-orm';
@@ -6,6 +7,7 @@ import { nanoid } from 'nanoid';
 import { db } from '@/db';
 import { savedLookups, surveys } from '@/db/schema';
 import type { SurveyLookup } from '@/types/survey';
+import { InternalFailure } from '@/server/internal-failure';
 
 // ========================
 // 설문 LUT (surveys.lookups jsonb)
@@ -23,7 +25,7 @@ export async function copySavedLookupToSurvey(
     where: eq(savedLookups.id, savedLookupId),
   });
   if (!saved) {
-    throw new Error('보관함 LUT 를 찾을 수 없습니다.');
+    throw new ORPCError('NOT_FOUND', { message: '보관함 LUT 를 찾을 수 없습니다.' });
   }
 
   // surveys.lookups jsonb 는 read-modify-write 이므로 동시 호출 시 lost update 가 발생한다.
@@ -36,7 +38,7 @@ export async function copySavedLookupToSurvey(
       .for('update');
     const survey = rows[0];
     if (!survey) {
-      throw new Error('설문을 찾을 수 없습니다.');
+      throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
     }
 
     const list = survey.lookups ?? [];
@@ -96,7 +98,7 @@ export async function upsertSurveyLookup(
       .for('update');
     const survey = rows[0];
     if (!survey) {
-      throw new Error('설문을 찾을 수 없습니다.');
+      throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
     }
 
     const list: SurveyLookup[] = survey.lookups ?? [];
@@ -114,7 +116,7 @@ export async function upsertSurveyLookup(
 
     const resultIndex = idx >= 0 ? idx : next.length - 1;
     const result = next[resultIndex];
-    if (!result) throw new Error('upsertSurveyLookup: 저장 결과 조회 실패');
+    if (!result) throw new InternalFailure('upsertSurveyLookup: 저장 결과 조회 실패');
     return result;
   });
 }
@@ -133,7 +135,7 @@ export async function deleteSurveyLookup(
       .for('update');
     const survey = rows[0];
     if (!survey) {
-      throw new Error('설문을 찾을 수 없습니다.');
+      throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
     }
 
     const next: SurveyLookup[] = (survey.lookups ?? []).filter(

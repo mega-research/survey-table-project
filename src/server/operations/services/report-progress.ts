@@ -25,6 +25,7 @@ import {
   type SortDir,
 } from '@/lib/operations/report-progress-format';
 import { buildNegativeCodeExists, getResultCodeStatuses } from '@/server/read-models/result-code-statuses';
+import { InternalFailure } from '@/server/internal-failure';
 
 const EMPTY_SCHEME: ProgressColumnScheme = { version: 1, columns: [] };
 
@@ -272,7 +273,7 @@ function systemGroupKeySql(key: ProgressSystemGroupKey): GroupKeySql {
       };
     default: {
       const unknownKey: never = key;
-      throw new Error(`알 수 없는 시스템 분류 기준: ${String(unknownKey)}`);
+      throw new InternalFailure(`알 수 없는 시스템 분류 기준: ${String(unknownKey)}`);
     }
   }
 }

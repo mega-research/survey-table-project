@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import 'server-only';
 
@@ -18,6 +19,7 @@ import { pruneVersionSnapshots } from './versioning/version-prune';
 import { findPrunableVersionIds } from './versioning/version-retention-sql';
 import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 import { openResponseStatusValues } from '@/shared/contracts/survey-response';
+import { InternalFailure } from '@/server/internal-failure';
 
 import type { PublishSurveyInput, SurveyVersion } from '../domain/survey-publish';
 
@@ -34,11 +36,11 @@ export async function publishSurvey(input: PublishSurveyInput): Promise<SurveyVe
 
   const surveyData = await getSurveyWithDetails(surveyId);
   if (!surveyData) {
-    throw new Error('설문을 찾을 수 없습니다.');
+    throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
   }
 
   if (!surveyData.questions || surveyData.questions.length === 0) {
-    throw new Error('질문이 없는 설문은 배포할 수 없습니다.');
+    throw new ORPCError('BAD_REQUEST', { message: '질문이 없는 설문은 배포할 수 없습니다.' });
   }
 
   // 변수명 게이트: 깨진 이름은 배포 단계에서 차단 (export 400보다 앞선 방어선)
@@ -100,7 +102,7 @@ export async function publishSurvey(input: PublishSurveyInput): Promise<SurveyVe
       })
       .returning();
     const newVersion = versionRows[0];
-    if (!newVersion) throw new Error('publishSurvey: 버전 생성 실패');
+    if (!newVersion) throw new InternalFailure('publishSurvey: 버전 생성 실패');
 
     await tx
       .update(surveys)

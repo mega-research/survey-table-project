@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import { cache } from 'react';
 
 import { cookies } from 'next/headers';
@@ -49,7 +50,7 @@ export async function loadOperationsDataScope(surveyId: string): Promise<Operati
   ]);
 
   const row = rows[0];
-  if (!row) throw new Error('설문을 찾을 수 없습니다.');
+  if (!row) throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
   return resolveWriteScopeIsTest(row.enabled, isGuest, browserTestView) ? 'test' : 'real';
 }
 

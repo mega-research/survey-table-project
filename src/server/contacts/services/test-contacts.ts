@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import 'server-only';
 
 import { db } from '@/db';
@@ -6,6 +7,7 @@ import { resolveTestContactFieldBindings } from './test-contact-columns';
 import { TEST_CONTACT_FIXTURES } from './test-contact-fixtures';
 import { upsertPiiValue } from '@/lib/crypto/contact-pii-repo';
 import { generateInviteCode } from '@/lib/survey-url';
+import { InternalFailure } from '@/server/internal-failure';
 
 import type { GenerateTestContactsInput } from '../domain/contact-target';
 import { prepareContactInsertScope } from './contact-insert-scope';
@@ -26,7 +28,7 @@ export async function generateTestContacts(
       requireEmptyTestScope: true,
       isGuest,
     });
-    if (!prepared.scheme) throw new Error('테스트 대상자 컬럼을 찾을 수 없습니다.');
+    if (!prepared.scheme) throw new ORPCError('CONFLICT', { message: '테스트 대상자 컬럼을 찾을 수 없습니다.' });
 
     const bindings = resolveTestContactFieldBindings(prepared.scheme);
     for (const fixture of TEST_CONTACT_FIXTURES.slice(0, input.count)) {
@@ -46,7 +48,7 @@ export async function generateTestContacts(
           inviteCode: generateInviteCode(),
         })
         .returning({ id: contactTargets.id });
-      if (!target) throw new Error('테스트 대상자 저장에 실패했습니다.');
+      if (!target) throw new InternalFailure('테스트 대상자 저장에 실패했습니다.');
 
       await upsertPiiValue(
         tx,

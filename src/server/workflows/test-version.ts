@@ -17,6 +17,7 @@ import {
 
 import { buildSurveySnapshot } from '@/server/survey-builder/services/versioning/snapshot-builder';
 import { pruneVersionSnapshots } from '@/server/survey-builder/services/versioning/version-prune';
+import { InternalFailure } from '@/server/internal-failure';
 
 /**
  * 테스트 버전 (CONTEXT.md 「테스트 버전」) — 테스트 링크 · 테스트 대상자 링크 · 관리자 미리보기가 보는,
@@ -124,7 +125,7 @@ export async function ensureTestVersion(surveyId: string): Promise<TestVersion |
         fingerprints: live.fingerprints,
       })
       .returning();
-    if (!created) throw new Error('ensureTestVersion: 테스트 버전 생성 실패');
+    if (!created) throw new InternalFailure('ensureTestVersion: 테스트 버전 생성 실패');
 
     await tx.update(surveys).set({ testVersionId: created.id }).where(eq(surveys.id, surveyId));
     // 불변 소스 인덱스 기록 — 배포와 같다(행 전체, 1회).

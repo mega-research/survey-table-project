@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import 'server-only';
 
 import { and, eq, inArray, sql } from 'drizzle-orm';
@@ -249,7 +250,7 @@ export async function saveSurveyDiff(
       columns: { id: true },
     });
     if (duplicate) {
-      throw new Error('이미 사용 중인 URL입니다. 다른 URL을 입력해주세요.');
+      throw new ORPCError('CONFLICT', { message: '이미 사용 중인 URL입니다. 다른 URL을 입력해주세요.' });
     }
   }
 
@@ -478,7 +479,7 @@ export async function saveSurveyWithDetails(
       columns: { id: true },
     });
     if (duplicate) {
-      throw new Error('이미 사용 중인 URL입니다. 다른 URL을 입력해주세요.');
+      throw new ORPCError('CONFLICT', { message: '이미 사용 중인 URL입니다. 다른 URL을 입력해주세요.' });
     }
   }
 

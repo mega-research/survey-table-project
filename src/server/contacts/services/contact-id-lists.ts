@@ -1,8 +1,10 @@
+import { ORPCError } from '@orpc/server';
 import 'server-only';
 
 import { db } from '@/db';
 import { contactIdLists } from '@/db/schema';
 import { MAX_STORED_ID_LIST, isValidId } from '@/lib/operations/range-list';
+import { InternalFailure } from '@/server/internal-failure';
 
 /** 1 이상 정수만 남기고 중복 제거·오름차순 — 저장 형식 불변식 (조회 SQL 이 IN 으로 그대로 쓴다). */
 function normalizeIds(ids: number[]): number[] {
@@ -24,16 +26,16 @@ export async function createContactIdList(input: {
   createdBy: string | null;
 }): Promise<{ id: string; count: number }> {
   const ids = normalizeIds(input.ids);
-  if (ids.length === 0) throw new Error('저장할 ID 가 없습니다.');
+  if (ids.length === 0) throw new ORPCError('BAD_REQUEST', { message: '저장할 ID 가 없습니다.' });
   if (ids.length > MAX_STORED_ID_LIST) {
-    throw new Error(
-      `ID 목록은 한 번에 ${MAX_STORED_ID_LIST.toLocaleString('ko-KR')}개까지 저장할 수 있습니다.`,
-    );
+    throw new ORPCError('BAD_REQUEST', {
+      message: `ID 목록은 한 번에 ${MAX_STORED_ID_LIST.toLocaleString('ko-KR')}개까지 저장할 수 있습니다.`,
+    });
   }
   const [row] = await db
     .insert(contactIdLists)
     .values({ surveyId: input.surveyId, ids, idCount: ids.length, createdBy: input.createdBy })
     .returning({ id: contactIdLists.id });
-  if (!row) throw new Error('ID 목록 저장에 실패했습니다.');
+  if (!row) throw new InternalFailure('ID 목록 저장에 실패했습니다.');
   return { id: row.id, count: ids.length };
 }

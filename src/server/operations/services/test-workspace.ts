@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import { and, count, eq, inArray, isNull } from 'drizzle-orm';
 import 'server-only';
 
@@ -53,11 +54,11 @@ export async function disableTestWorkspace(input: {
       .from(surveys)
       .where(eq(surveys.id, input.surveyId))
       .for('update');
-    if (!survey) throw new Error('설문을 찾을 수 없습니다.');
+    if (!survey) throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
     if (!survey.testModeEnabled) {
-      throw new Error(
-        'TEST_WORKSPACE_DISABLE_STALE: 다른 관리자가 테스트 모드 상태를 변경했습니다.',
-      );
+      throw new ORPCError('CONFLICT', {
+        message: 'TEST_WORKSPACE_DISABLE_STALE: 다른 관리자가 테스트 모드 상태를 변경했습니다.',
+      });
     }
 
     await tx

@@ -134,7 +134,7 @@ describe('updateQuestion 설문 스코프', () => {
     updateReturningQueue.push([]); // 0행 영향
     await expect(
       updateQuestion(QID, 'other-survey', { title: '바뀐 제목' }),
-    ).rejects.toThrow('질문 업데이트에 실패했습니다.');
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it('정상 설문이면(1행 영향) 성공한다', async () => {
@@ -184,7 +184,7 @@ describe('updateQuestionGroup 설문 스코프', () => {
     updateReturningQueue.push([]); // 0행 영향
     await expect(
       updateQuestionGroup(GID, 'other-survey', { name: '바뀐 그룹명' }),
-    ).rejects.toThrow('질문 그룹 업데이트에 실패했습니다.');
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it('정상 설문이면(1행 영향) 성공한다', async () => {

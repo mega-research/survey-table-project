@@ -27,6 +27,7 @@ import { MailWrapper } from './template-wrapper';
 import { UNSUBSCRIBE_SANDBOX_TOKEN } from '@/lib/mail/constants';
 import { getResultCodeStatuses } from '@/server/read-models/result-code-statuses';
 import { isUnsubscribeResultCode } from '@/lib/operations/filter-shared';
+import { InternalFailure } from '@/server/internal-failure';
 
 type CampaignDispatchState = Pick<
   typeof mailCampaigns.$inferSelect,
@@ -795,9 +796,9 @@ export async function dispatchCampaignChunk(
       if (row.status === 'queued' && row.unsubscribedAt !== null) {
         return { recipientId: row.recipientId, payload: null };
       }
-      if (!baseUrl) throw new Error('NEXT_PUBLIC_APP_URL 환경변수가 설정되지 않았습니다.');
+      if (!baseUrl) throw new InternalFailure('NEXT_PUBLIC_APP_URL 환경변수가 설정되지 않았습니다.');
       if (!from || !replyTo) {
-        throw new Error('RESEND_FROM_DOMAIN 환경변수가 설정되지 않았습니다.');
+        throw new InternalFailure('RESEND_FROM_DOMAIN 환경변수가 설정되지 않았습니다.');
       }
       if (
         row.contactTargetId === null

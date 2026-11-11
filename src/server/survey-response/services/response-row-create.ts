@@ -4,6 +4,7 @@ import 'server-only';
 import { db } from '@/db';
 import { NewSurveyResponse, surveyResponses } from '@/db/schema';
 import { isUniqueViolation } from '@/lib/pg-error';
+import { InternalFailure } from '@/server/internal-failure';
 
 import type { BlockReason } from '../domain/duplicate';
 import { extractDraftSeq } from '../domain/draft-seq';
@@ -266,7 +267,7 @@ export async function insertResponseWithContactReuse(params: {
     .limit(1);
 
   if (!existing) {
-    throw new Error(
+    throw new InternalFailure(
       `insertResponseWithContactReuse: 충돌 후 기존 행 조회 실패 (surveyId=${surveyId}, sessionId=${sessionId})`,
     );
   }
@@ -323,7 +324,7 @@ export async function insertAnonymousTestResponse(
         ),
       )
       .limit(1);
-    if (!existing) throw new Error('테스트 응답을 시작할 수 없습니다');
+    if (!existing) throw new InternalFailure('테스트 응답을 시작할 수 없습니다');
     return {
       id: existing.id,
       contactTargetId: null,

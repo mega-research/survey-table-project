@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import 'server-only';
 
 import { desc, eq, gt, ilike, inArray, or, sql } from 'drizzle-orm';
@@ -15,6 +16,7 @@ import { generateId } from '@/lib/utils';
 import type { Question, SavedQuestion } from '@/types/survey';
 import { resolveMobileDrilldownRepeatHeaderRange } from '@/utils/mobile-drilldown-repeat-header';
 import { resolveMobileTableDisplayMode } from '@/utils/mobile-table-display-mode';
+import { InternalFailure } from '@/server/internal-failure';
 
 import type {
   CreateSavedQuestionInput,
@@ -155,7 +157,7 @@ export async function createSavedQuestion(input: CreateSavedQuestionInput): Prom
   };
 
   const [saved] = await db.insert(savedQuestions).values(newSavedQuestion).returning();
-  if (!saved) throw new Error('질문 저장에 실패했습니다.');
+  if (!saved) throw new InternalFailure('질문 저장에 실패했습니다.');
   return toDomainSavedQuestion(saved);
 }
 
@@ -187,7 +189,7 @@ export async function updateSavedQuestion(
       .where(eq(savedQuestions.id, id))
       .returning();
 
-    if (!updated) throw new Error('질문 수정에 실패했습니다.');
+    if (!updated) throw new ORPCError('NOT_FOUND', { message: '질문 수정에 실패했습니다.' });
 
     if (oldRow && updates.question) {
       await collectFieldLimitedSaveDiff(tx, {
