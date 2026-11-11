@@ -78,7 +78,7 @@ export async function createCampaign(
       columns: ['contactColumns', 'testContactColumns'],
     });
     if (!locked) {
-      throw new Error('설문을 찾을 수 없습니다.');
+      throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
     }
     const { isTest } = locked;
     const emailOrder = resolveMailEmailOrder(
@@ -97,7 +97,9 @@ export async function createCampaign(
         ),
       );
     if (selectedTargets.length !== uniqueTargetIds.length) {
-      throw new Error('운영 모드가 변경되었습니다. 화면을 새로고침한 뒤 다시 시도하세요.');
+      throw new ORPCError('CONFLICT', {
+        message: '운영 모드가 변경되었습니다. 화면을 새로고침한 뒤 다시 시도하세요.',
+      });
     }
 
     // b. 템플릿 fetch — 실제/테스트 캠페인이 같은 템플릿을 공유한다.
@@ -113,7 +115,7 @@ export async function createCampaign(
       )
       .limit(1);
     if (!template) {
-      throw new Error('선택한 메일 템플릿을 찾을 수 없습니다.');
+      throw new ORPCError('NOT_FOUND', { message: '선택한 메일 템플릿을 찾을 수 없습니다.' });
     }
 
     // c. scope별 next run number — 단건은 1000001+ 대역으로 격리
@@ -222,9 +224,10 @@ export async function createCampaign(
     const skippedCount = uniqueTargetIds.length - validCount;
 
     if (validCount === 0) {
-      throw new Error(
-        '발송 가능한 수신자가 없습니다. 수신거부, 반송 이력 또는 이메일 누락 확인이 필요합니다.',
-      );
+      throw new ORPCError('BAD_REQUEST', {
+        message:
+          '발송 가능한 수신자가 없습니다. 수신거부, 반송 이력 또는 이메일 누락 확인이 필요합니다.',
+      });
     }
 
     // f. mail_recipients 벌크 insert (queued)
@@ -311,7 +314,7 @@ export async function cancelCampaign(input: CancelCampaignInput, isGuest: boolea
     .returning({ id: mailCampaigns.id });
 
   if (updated.length === 0) {
-    throw new Error('발송 시작 후에는 취소할 수 없습니다.');
+    throw new ORPCError('CONFLICT', { message: '발송 시작 후에는 취소할 수 없습니다.' });
   }
 }
 
@@ -331,7 +334,7 @@ export async function resyncCampaign(input: ResyncCampaignInput): Promise<Resync
     .where(and(eq(mailCampaigns.id, input.campaignId), eq(mailCampaigns.surveyId, input.surveyId)))
     .limit(1);
 
-  if (!campaign) throw new Error('단체 메일을 찾을 수 없습니다.');
+  if (!campaign) throw new ORPCError('NOT_FOUND', { message: '단체 메일을 찾을 수 없습니다.' });
 
   const { reconcileCampaignRecipients } = await import('./campaign-reconcile');
   return reconcileCampaignRecipients(input.campaignId);

@@ -134,8 +134,9 @@ describe('cancelCampaign 파티션 가드', () => {
     h.surveys.push({ id: SURVEY_ID, testModeEnabled: false });
     h.campaigns.push({ id: CAMPAIGN_ID, surveyId: SURVEY_ID, isTest: false, status: 'sending' });
 
+    // 예상된 거부라 코드 있는 오류다 — 일반 Error 면 Sentry 에 장애로 쌓이고 운영에서 문구가 가려진다.
     await expect(
       cancelCampaign({ surveyId: SURVEY_ID, campaignId: CAMPAIGN_ID }, false),
-    ).rejects.toThrow('발송 시작 후에는 취소할 수 없습니다.');
+    ).rejects.toMatchObject({ code: 'CONFLICT', message: '발송 시작 후에는 취소할 수 없습니다.' });
   });
 });

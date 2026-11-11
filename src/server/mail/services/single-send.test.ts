@@ -5,6 +5,7 @@ import type { SendAddressResolution } from '@/lib/mail/send-address';
 import { resolveSendAddresses } from '@/server/read-models/send-address';
 import { getResultCodeStatuses } from '@/server/read-models/result-code-statuses';
 
+import { isSentryWorthyRpcError } from '../../rpc-error-policy';
 import { createCampaign } from './campaigns';
 import { sendSingleCampaign } from './single-send';
 import { getMailTemplate } from './templates';
@@ -55,26 +56,29 @@ describe('sendSingleCampaign 가드', () => {
 
   it('컨택이 없으면 에러', async () => {
     selectResultQueue.push([]); // contact 조회 empty
-    await expect(sendSingleCampaign(INPUT, 'admin-1', false)).rejects.toThrow(
-      '조사 대상을 찾을 수 없습니다.',
-    );
+    await expect(sendSingleCampaign(INPUT, 'admin-1', false)).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+      message: '조사 대상을 찾을 수 없습니다.',
+    });
     expect(createCampaign).not.toHaveBeenCalled();
   });
 
   it('수신거부 컨택이면 에러', async () => {
     selectResultQueue.push([{ id: 'ct-1', surveyId: 'sv-1', unsubscribedAt: new Date() }]);
-    await expect(sendSingleCampaign(INPUT, 'admin-1', false)).rejects.toThrow(
-      '수신거부된 조사 대상',
-    );
+    await expect(sendSingleCampaign(INPUT, 'admin-1', false)).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: expect.stringContaining('수신거부된 조사 대상'),
+    });
     expect(createCampaign).not.toHaveBeenCalled();
   });
 
   it('최근 결과코드가 수신거부면 에러', async () => {
     selectResultQueue.push([{ id: 'ct-1', surveyId: 'sv-1', unsubscribedAt: null }]);
     selectResultQueue.push([{ id: 'ct-1' }]); // 최근 결과코드 수신거부
-    await expect(sendSingleCampaign(INPUT, 'admin-1', false)).rejects.toThrow(
-      '수신거부 결과코드가 기록된',
-    );
+    await expect(sendSingleCampaign(INPUT, 'admin-1', false)).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: expect.stringContaining('수신거부 결과코드가 기록된'),
+    });
     expect(createCampaign).not.toHaveBeenCalled();
   });
 
@@ -83,10 +87,22 @@ describe('sendSingleCampaign 가드', () => {
     selectResultQueue.push([]); // 결과코드 수신거부 없음
     vi.mocked(getResultCodeStatuses).mockResolvedValueOnce({ positive: [], negative: ['DNC'] });
     selectResultQueue.push([{ id: 'ct-1' }]); // 부정 결과코드 존재
-    await expect(sendSingleCampaign(INPUT, 'admin-1', false)).rejects.toThrow(
-      '연락금지 결과코드가 기록된',
-    );
+    await expect(sendSingleCampaign(INPUT, 'admin-1', false)).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: expect.stringContaining('연락금지 결과코드가 기록된'),
+    });
     expect(createCampaign).not.toHaveBeenCalled();
+  });
+
+  it('예상된 거부는 Sentry 로 보내지 않고, 사유가 클라이언트까지 간다', async () => {
+    // 회귀 배경(2026-11-11): 일반 Error 로 던져 Sentry 에 장애로 쌓였고, 운영에서는 oRPC 가
+    // 메시지를 'Internal server error' 로 갈아 끼워 담당자가 왜 안 되는지 볼 수 없었다.
+    selectResultQueue.push([{ id: 'ct-1', surveyId: 'sv-1', unsubscribedAt: null }]);
+    selectResultQueue.push([]); // 결과코드 수신거부 없음
+    vi.mocked(getResultCodeStatuses).mockResolvedValueOnce({ positive: [], negative: ['DNC'] });
+    selectResultQueue.push([{ id: 'ct-1' }]); // 부정 결과코드 존재
+    const error = await sendSingleCampaign(INPUT, 'admin-1', false).catch((e: unknown) => e);
+    expect(isSentryWorthyRpcError(error)).toBe(false);
   });
 
   it('이메일 PII 가 없으면 에러', async () => {
@@ -94,7 +110,10 @@ describe('sendSingleCampaign 가드', () => {
     selectResultQueue.push([]); // 결과코드 수신거부 없음
     selectResultQueue.push([]); // 부정 결과코드 없음
     vi.mocked(resolveSendAddresses).mockResolvedValueOnce(addressOf({ kind: 'missing' }));
-    await expect(sendSingleCampaign(INPUT, 'admin-1', false)).rejects.toThrow('이메일 정보가 없는');
+    await expect(sendSingleCampaign(INPUT, 'admin-1', false)).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: expect.stringContaining('이메일 정보가 없는'),
+    });
     expect(createCampaign).not.toHaveBeenCalled();
   });
 
@@ -114,9 +133,10 @@ describe('sendSingleCampaign 가드', () => {
     selectResultQueue.push([]); // 부정 결과코드 없음
     vi.mocked(resolveSendAddresses).mockResolvedValueOnce(SENDABLE);
     vi.mocked(getMailTemplate).mockResolvedValueOnce(null);
-    await expect(sendSingleCampaign(INPUT, 'admin-1', false)).rejects.toThrow(
-      '메일 템플릿을 찾을 수 없습니다.',
-    );
+    await expect(sendSingleCampaign(INPUT, 'admin-1', false)).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+      message: expect.stringContaining('메일 템플릿을 찾을 수 없습니다.'),
+    });
     expect(createCampaign).not.toHaveBeenCalled();
   });
 

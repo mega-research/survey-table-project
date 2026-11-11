@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import { and, eq, sql } from 'drizzle-orm';
 import 'server-only';
 
@@ -19,6 +20,9 @@ import { getMailTemplate } from './templates';
  *
  * 가드는 createCampaign 내부(수신거부/이메일/부정 결과코드 제외)에도 있지만,
  * 단건은 "왜 안 되는지"를 사용자에게 정확히 알려야 하므로 여기서 선검증한다 (fail-closed).
+ *
+ * 거부는 코드 있는 ORPCError 로 던진다 — 일반 Error 는 oRPC 가 운영에서 'Internal server error' 로
+ * 갈아 끼워 사유가 화면에 닿지 않고, Sentry 에는 장애로 쌓인다(2026-11-11 실제 발생).
  */
 export async function sendSingleCampaign(
   input: SendSingleCampaignInput,
@@ -41,10 +45,12 @@ export async function sendSingleCampaign(
     )
     .limit(1);
   if (!contact) {
-    throw new Error('조사 대상을 찾을 수 없습니다.');
+    throw new ORPCError('NOT_FOUND', { message: '조사 대상을 찾을 수 없습니다.' });
   }
   if (contact.unsubscribedAt) {
-    throw new Error('수신거부된 조사 대상에게는 메일을 보낼 수 없습니다.');
+    throw new ORPCError('BAD_REQUEST', {
+      message: '수신거부된 조사 대상에게는 메일을 보낼 수 없습니다.',
+    });
   }
 
   // 최근 결과코드 수신거부 — status(negative) 무관하게 발송 금지 (수신거부 3축).
@@ -56,7 +62,9 @@ export async function sendSingleCampaign(
     )
     .limit(1);
   if (resultUnsubscribed) {
-    throw new Error('수신거부 결과코드가 기록된 조사 대상에게는 메일을 보낼 수 없습니다.');
+    throw new ORPCError('BAD_REQUEST', {
+      message: '수신거부 결과코드가 기록된 조사 대상에게는 메일을 보낼 수 없습니다.',
+    });
   }
 
   const { negative: negativeCodes } = await getResultCodeStatuses(input.surveyId);
@@ -71,7 +79,9 @@ export async function sendSingleCampaign(
     )
     .limit(1);
   if (negativeCodeContact) {
-    throw new Error('연락금지 결과코드가 기록된 조사 대상입니다.');
+    throw new ORPCError('BAD_REQUEST', {
+      message: '연락금지 결과코드가 기록된 조사 대상에게는 메일을 보낼 수 없습니다.',
+    });
   }
 
   // 보낼 주소가 있는가 — 발송(createCampaign)과 같은 발송 주소 규칙. 단건은 반송을 보지 않는다
@@ -81,12 +91,12 @@ export async function sendSingleCampaign(
     input.contactTargetId,
   );
   if (address?.kind !== 'send') {
-    throw new Error('이메일 정보가 없는 조사 대상입니다.');
+    throw new ORPCError('BAD_REQUEST', { message: '이메일 정보가 없는 조사 대상입니다.' });
   }
 
   const template = await getMailTemplate(input.surveyId, input.mailTemplateId);
   if (!template) {
-    throw new Error('선택한 메일 템플릿을 찾을 수 없습니다.');
+    throw new ORPCError('NOT_FOUND', { message: '선택한 메일 템플릿을 찾을 수 없습니다.' });
   }
 
   return createCampaign(
