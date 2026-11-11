@@ -9,8 +9,10 @@ Sentry.init({
   // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
   tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
 
-  // Session Replay
-  replaysSessionSampleRate: 0.1,
+  // Session Replay — 월 예약 한도가 50건이라 오류가 난 세션만 녹화한다. 일반 세션을 10% 녹화하던 때는
+  // 닷새 만에 40건을 써서 정작 오류가 난 세션을 남길 자리가 없었다(2026-11-11). 한도는 그달에 받은
+  // 건수 기준이라 옛 녹화를 지워도 늘지 않는다.
+  replaysSessionSampleRate: 0,
   replaysOnErrorSampleRate: 1.0,
   integrations: [Sentry.replayIntegration()],
 
