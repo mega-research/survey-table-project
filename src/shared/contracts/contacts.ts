@@ -44,6 +44,12 @@ export interface ContactColumnDef {
    */
   mailOrder?: number;
   /**
+   * 조사 대상 목록의 기본 정렬 열 — 주소에 정렬이 없으면 이 열 오름차순으로 연다(글자로 올라온 숫자도 숫자순).
+   * 담당자 엑셀의 자체 ID 열용. attrs.* 소스 전용, 스킴에 한 열만 (UI + 서비스 이중 가드).
+   * 없으면 종전대로 시스템ID 순. 숨긴 열에 남은 지정은 무시한다. 해석은 `lib/contacts/default-sort`.
+   */
+  defaultSort?: true;
+  /**
    * PII 매핑 타입. 지정되면 해당 엑셀 컬럼 값이 contact_pii 사이드 테이블에
    * 암호화 저장되고, attrs 에는 저장되지 않는다. 사후 변경 불가 — 재업로드 필요.
    */

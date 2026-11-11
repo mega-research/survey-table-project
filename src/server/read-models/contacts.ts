@@ -195,8 +195,10 @@ export async function listContactsForSurvey(args: ListContactsArgs): Promise<Lis
   // 오름차순 = 처음 응답 순. 응답없음은 NULL(NULLS LAST) 이라 방향과 무관하게
   // 항상 마지막. 같은 시각(응답없음 블록 등)은 기본 순서(시스템ID 오름차순) 유지.
   const attrsKey = attrsSortKey(sort);
+  // attrs 값이 같거나 빈 대상끼리는 시스템ID 순 — 기본 정렬 열(컬럼 설정)로 목록 첫 화면이 이 정렬을
+  // 타므로, 자체 ID 가 겹치는 대상(공장이 여럿인 업체 등)이 페이지마다 같은 차례로 나와야 한다.
   const orderExprs: SQL[] = attrsKey
-    ? attrsNaturalSortExprs(attrsKey).map((c) => orderExpr(c, dir))
+    ? [...attrsNaturalSortExprs(attrsKey).map((c) => orderExpr(c, dir)), asc(contactTargets.resid)]
     : sort === 'webActivity'
       ? [orderExpr(responseActivityAtExpr, dir), asc(contactTargets.resid)]
       : sort === 'mailStatus'

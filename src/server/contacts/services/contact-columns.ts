@@ -3,6 +3,7 @@ import 'server-only';
 
 import { db } from '@/db';
 import { contactTargets, surveys } from '@/db/schema';
+import { validateDefaultSort } from '@/lib/contacts/default-sort';
 import { isGroupLevel } from '@/lib/contacts/group-levels';
 import { validateMailEmailOrder } from '@/lib/contacts/mail-email-order';
 import { canShowInMail } from '@/lib/contacts/mail-display-columns';
@@ -45,6 +46,9 @@ export async function updateContactColumns(input: UpdateContactColumnsInput): Pr
   // 발송 주소 순서 가드 — 이메일로 암호화된 열 전용, 1 이상의 정수, 열마다 다른 값
   const mailOrderProblem = validateMailEmailOrder(scheme.columns);
   if (mailOrderProblem) throw new Error(mailOrderProblem);
+  // 기본 정렬 가드 — 명단 속성 열 전용, 한 열만
+  const defaultSortProblem = validateDefaultSort(scheme.columns);
+  if (defaultSortProblem) throw new Error(defaultSortProblem);
   await db.transaction(async (tx) => {
     // authed 전용 경로라 게스트 세션이 없다 — isGuest=false 로 전역 플래그가 곧 쓰기 파티션이다.
     const locked = await lockWriteScope(tx, surveyId, false, { lock: 'update' });

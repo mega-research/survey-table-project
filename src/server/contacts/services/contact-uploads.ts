@@ -8,6 +8,7 @@ import { allocateContactResid } from './contact-resid';
 import { assertUploadRowLimit } from './upload-row-limit';
 import { parseExcelRows, previewExcel } from './excel-parser';
 import { type GroupLevel, isGroupLevel } from '@/lib/contacts/group-levels';
+import { carryOverDefaultSort } from '@/lib/contacts/default-sort';
 import { carryOverMailOrder } from '@/lib/contacts/mail-email-order';
 import {
   type ExistingContactKeyInfo,
@@ -518,10 +519,14 @@ export async function ingestContactUpload(
     // 스킴 갱신: replace 는 전체 재생성, merge/append 는 신규 컬럼만 append
     // 교체로 다시 만든 스킴에도 발송 주소 순서는 이어 붙인다 — 재업로드 한 번에 순서가
     // 열 이름순으로 돌아가면 다음 단체 메일이 엉뚱한 주소로 나간다.
+    // 목록 기본 정렬 열도 같은 이유로 이어 붙인다(같은 이름의 일반 열이 남아 있을 때만).
     const scheme =
       mode === 'replace' || existingScheme == null
-        ? carryOverMailOrder(
-            autoGenerateColumnScheme(headerKeys, mapping, piiKeySet),
+        ? carryOverDefaultSort(
+            carryOverMailOrder(
+              autoGenerateColumnScheme(headerKeys, mapping, piiKeySet),
+              existingScheme,
+            ),
             existingScheme,
           )
         : appendNewColumnsToScheme(existingScheme, headerKeys, mapping);

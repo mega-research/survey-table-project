@@ -12,12 +12,8 @@ import {
   contactDetailHref,
   listQueryFromSearchParams,
 } from '@/features/operations/contacts/contacts-list-return';
-import {
-  attrsKeyOf,
-  CONTACTS_PAGE_SIZE,
-  effectiveSortKey,
-  normalizeSortKey,
-} from '@/lib/operations/contacts-format';
+import { resolveContactListSort } from '@/lib/contacts/default-sort';
+import { CONTACTS_PAGE_SIZE } from '@/lib/operations/contacts-format';
 import { buildDownloadCandidates } from '@/lib/operations/contacts-export-format';
 import { listContactsForSurvey } from '@/server/read-models/contacts';
 import {
@@ -65,15 +61,9 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
   });
   const { scheme, resultCodes, assignmentOptions, columnCandidates } = filterCtx;
 
-  // sort key — hidden 컬럼이면 'resid' 폴백 (URL 직접 조작 가드)
-  const visibleAttrsKeys = new Set(
-    (scheme?.columns ?? [])
-      .filter((c) => !c.hidden)
-      .map((c) => attrsKeyOf(c.source))
-      .filter((k): k is string => k != null),
-  );
-
-  const requestedSort = effectiveSortKey(normalizeSortKey(sp.sort), visibleAttrsKeys);
+  // sort key — 주소에 정렬이 없으면 컬럼 설정의 기본 정렬 열(없으면 시스템ID),
+  // 있으면 그 값(hidden 컬럼이면 'resid' 폴백 — URL 직접 조작 가드).
+  const requestedSort = resolveContactListSort(sp.sort, scheme);
   const safeSort = isGuest && requestedSort === 'owner' ? 'resid' : requestedSort;
 
   const filter = await resolveContactFilter(filterCtx, contactFilterInputFromUrl(sp), {

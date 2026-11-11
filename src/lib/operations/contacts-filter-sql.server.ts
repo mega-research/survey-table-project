@@ -321,6 +321,10 @@ function webStatusCondSql(value: string): SQL {
  * 숫자로만 된 값은 numeric 으로 먼저 정렬되고(비숫자는 NULL → NULLS LAST 로 뒤),
  * 이어서 텍스트 사전순으로 정렬된다. NO 처럼 숫자인 attrs 컬럼이
  * 1, 10, 100, 11 사전순으로 꼬이는 문제를 해결한다.
+ *
+ * 숫자 판정은 앞뒤 공백(스페이스·탭·줄바꿈)을 떼고 한다 — 엑셀에서 글자로 올라온 ID 는 끝에 공백이
+ * 붙어 오는 일이 흔하고, 그 한 칸 때문에 숫자 무리에서 빠져 목록 끝으로 밀리면 안 된다.
+ * 캐스트도 뗀 값으로 한다(판정과 캐스트가 같은 글자를 봐야 캐스트 오류로 목록이 통째 죽지 않는다).
  */
 export function attrsNaturalSortExprs(
   attrsKey: string,
@@ -328,7 +332,8 @@ export function attrsNaturalSortExprs(
   attrsRef: SQL = sql`"contact_targets".attrs`,
 ): [SQL, SQL] {
   const textExpr = sql`${attrsRef}->>${attrsKey}`;
-  const numericExpr = sql`(CASE WHEN ${attrsRef}->>${attrsKey} ~ '^[0-9]+(\\.[0-9]+)?$' THEN (${attrsRef}->>${attrsKey})::numeric END)`;
+  const trimmedExpr = sql`btrim(${attrsRef}->>${attrsKey}, E' \\t\\r\\n')`;
+  const numericExpr = sql`(CASE WHEN ${trimmedExpr} ~ '^[0-9]+(\\.[0-9]+)?$' THEN (${trimmedExpr})::numeric END)`;
   return [numericExpr, textExpr];
 }
 

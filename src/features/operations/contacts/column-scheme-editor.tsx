@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import type { ContactColumnDef, ContactColumnScheme } from '@/shared/contracts/contacts';
+import { assignDefaultSort, canBeDefaultSort } from '@/lib/contacts/default-sort';
 import {
   GROUP_LEVELS,
   GROUP_LEVEL_LABELS,
@@ -104,6 +105,11 @@ export function ColumnSchemeEditor({ surveyId, scheme }: ColumnSchemeEditorProps
     setColumns((prev) => assignMailOrder(prev, index, rank));
   }
 
+  /** 기본 정렬 열 지정 — 한 열만. 켜면 다른 열의 지정은 풀리고, 켜진 열을 다시 누르면 풀린다. */
+  function toggleDefaultSort(index: number) {
+    setColumns((prev) => assignDefaultSort(prev, prev[index]?.defaultSort === true ? null : index));
+  }
+
   function setLabel(index: number, label: string) {
     setColumns((prev) => prev.map((c, i) => (i === index ? { ...c, label } : c)));
   }
@@ -147,6 +153,7 @@ export function ColumnSchemeEditor({ surveyId, scheme }: ColumnSchemeEditorProps
               <th className="px-3 py-2 text-left">소스</th>
               <th className="px-3 py-2 text-left">개인정보 (암호화)</th>
               <th className="px-3 py-2 text-center">분류 기준</th>
+              <th className="px-3 py-2 text-center">기본 정렬</th>
               <th className="px-3 py-2 text-center">메일 표시</th>
               {showMailOrder && <th className="px-3 py-2 text-center">발송 주소 순서</th>}
               <th className="px-3 py-2 text-center">표시</th>
@@ -208,6 +215,26 @@ export function ColumnSchemeEditor({ surveyId, scheme }: ColumnSchemeEditorProps
                           ))}
                         </SelectContent>
                       </Select>
+                    ) : (
+                      <span className="text-slate-300">—</span>
+                    )}
+                  </td>
+                  <td
+                    className="px-3 py-2 text-center"
+                    title={
+                      !canBeDefaultSort(col)
+                        ? '명단 속성(attrs) 컬럼만 기본 정렬로 지정할 수 있습니다.'
+                        : col.hidden && col.defaultSort === true
+                          ? '숨긴 열이라 적용되지 않습니다 — 목록은 시스템ID 순으로 열립니다.'
+                          : undefined
+                    }
+                  >
+                    {canBeDefaultSort(col) ? (
+                      <Switch
+                        checked={col.defaultSort === true}
+                        onCheckedChange={() => toggleDefaultSort(i)}
+                        aria-label={`${col.label} 기본 정렬`}
+                      />
                     ) : (
                       <span className="text-slate-300">—</span>
                     )}
@@ -282,6 +309,11 @@ export function ColumnSchemeEditor({ surveyId, scheme }: ColumnSchemeEditorProps
       <div className="text-xs text-slate-500">
         분류 기준: 컬럼을 대·중·소·세부분류 레벨에 배정하면 진척보고가 그 순서대로 조합
         집계합니다. 레벨당 컬럼 1개이며, 이미 쓰인 레벨을 고르면 기존 컬럼에서 해제됩니다.
+      </div>
+
+      <div className="text-xs text-slate-500">
+        기본 정렬: 켠 열의 오름차순으로 조사 대상 목록이 열립니다(글자로 올린 숫자도 숫자순, 한 열만).
+        켜지 않으면 시스템ID 순이고, 목록에서 머리글을 눌러 바꾼 정렬이 있으면 그쪽이 우선합니다.
       </div>
 
       {showMailOrder && (
