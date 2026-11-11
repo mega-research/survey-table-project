@@ -146,6 +146,9 @@ export const CONTACT_METHOD_LABEL: Record<ContactMethod, string> = {
 /** 결과코드 상태 — 응답률·모집단 처리 분류. */
 export type ResultCodeStatus = 'positive' | 'negative' | 'neutral';
 
+/** 조사 대상 목록의 행 표시 — 끝난 대상 · 빠지는 대상 · 없음. */
+export type ResultCodeRowMark = 'done' | 'out' | 'none';
+
 /** 결과코드 1개 정의 — surveys.contact_result_codes JSONB 안의 항목 */
 export interface ContactResultCode {
   /** UI 표시 코드 (예: '1.조사완료'). 사용자 자유 텍스트. */
@@ -170,6 +173,17 @@ export interface ContactResultCode {
    * 사용자가 빌더에서 한 번 저장하면 명시 status 박힘 → fallback 우회.
    */
   status?: ResultCodeStatus;
+  /**
+   * 조사 대상 목록에서 이 코드가 마지막 컨택결과인 대상의 행 표시.
+   * - 'done': 끝난 대상 — 온라인 응답완료 행과 같은 파란 음영
+   * - 'out': 빠지는 대상 — 붉은 음영 + 결과코드 글자 붉게
+   * - 'none': 표시 없음
+   *
+   * 화면 표시만 정한다 — 응답률·단체 메일 제외는 `status` 와 수신거부 축이 맡고 이 값과 무관하다.
+   * 누락 (undefined) 시 fallback 은 `lib/contacts/result-code-row-mark` 의 `resolveCodeRowMark`:
+   * 긍정 상태 → 'done', 수신거부·조사대상아님 → 'out', 그 외 → 'none'.
+   */
+  rowMark?: ResultCodeRowMark;
 }
 
 /**

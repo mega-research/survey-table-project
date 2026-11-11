@@ -7,6 +7,7 @@ import { useSearchParamsMutator } from '@/features/operations/hooks/use-search-p
 import { RecipientStatusBadge } from '@/features/operations/mail-campaign/recipient-status-badge';
 import { StatusPill } from '@/features/operations/profiles/status-pill';
 import { SortIndicator, TablePagerFooter } from '@/features/operations/table-primitives';
+import { resolveContactRowMark } from '@/lib/contacts/result-code-row-mark';
 import { formatLocalMonthDayTime } from '@/lib/date-formatters';
 import {
   type ContactsSortDir,
@@ -25,6 +26,7 @@ import type {
   ContactColumnDef,
   ContactColumnScheme,
   ContactResultCode,
+  ResultCodeRowMark,
 } from '@/shared/contracts/contacts';
 import type { ContactAssignmentOption, ContactsRow } from '@/shared/contracts/contacts-io';
 
@@ -87,9 +89,20 @@ function sortKeyOf(source: string): ContactsSortKey | null {
  */
 const PII_DASH = '—';
 
+/**
+ * 행 표시별 클래스 — 끝난 대상은 파란 음영(온라인 응답완료 행이 원래 쓰던 색), 빠지는 대상은 같은 세기의 붉은 음영.
+ * 음영 행은 줄 사이 선도 같은 색 계열로 그린다(회색 선이 음영을 끊어 보이지 않게).
+ */
+const ROW_MARK_CLASS: Record<ResultCodeRowMark, { row: string; cell: string; hover: string }> = {
+  none: { row: 'border-t', cell: '', hover: 'hover:bg-slate-50' },
+  done: { row: 'bg-blue-50', cell: 'border-t border-blue-100', hover: 'hover:bg-blue-100' },
+  out: { row: 'bg-rose-50', cell: 'border-t border-rose-100', hover: 'hover:bg-rose-100' },
+};
+
 function computeCell(
   col: ContactColumnDef,
   row: ContactsRow,
+  rowMark: ResultCodeRowMark,
 ): {
   display: React.ReactNode;
   plain: string | undefined;
@@ -120,8 +133,11 @@ function computeCell(
     case 'system.contact_result':
       return row.latestResultCode
         ? {
+            // 빠지는 대상은 결과코드 글자도 붉게 — 행 음영만으로 뜻을 전하지 않는다.
             display: (
-              <span className="text-xs">
+              <span
+                className={rowMark === 'out' ? 'text-xs font-semibold text-rose-700' : 'text-xs'}
+              >
                 [{row.latestAttemptNo}] {row.latestResultCode}
               </span>
             ),
@@ -166,10 +182,11 @@ function computeCell(
     }
     case 'system.contact_owner':
       // 지금 맡은 컨택원 — 배정 없음은 다른 열의 빈 값과 같은 「—」.
+      // 칩은 흰 바탕 + 테두리다 — 파란 바탕이면 끝난 대상의 파란 행 음영에 묻힌다.
       return row.assignment
         ? {
             display: (
-              <span className="inline-block rounded bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-700">
+              <span className="inline-block rounded border border-blue-200 bg-white px-1.5 py-px text-xs font-medium text-blue-700">
                 {row.assignment.name}
               </span>
             ),
@@ -298,19 +315,24 @@ export function ContactsTable({
           </thead>
           <tbody>
             {rows.map((row) => {
-              const responded = row.respondedAt != null;
+              const rowMark = resolveContactRowMark(
+                { responded: row.respondedAt != null, latestResultCode: row.latestResultCode },
+                resultCodeOptions,
+              );
+              const tone = ROW_MARK_CLASS[rowMark];
               return (
                 <tr
                   key={row.id}
-                  className={`${responded ? 'bg-blue-50' : 'border-t'} ${onRowClick ? 'cursor-pointer hover:bg-slate-50' : ''}`}
+                  data-row-mark={rowMark}
+                  className={`${tone.row} ${onRowClick ? `cursor-pointer ${tone.hover}` : ''}`}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
                 >
                   {visibleColumns.map((col) => {
-                    const { display, plain } = computeCell(col, row);
+                    const { display, plain } = computeCell(col, row, rowMark);
                     return (
                       <td
                         key={col.key}
-                        className={`max-w-[240px] truncate px-3 py-2 whitespace-nowrap ${responded ? 'border-t border-blue-100' : ''}`}
+                        className={`max-w-[240px] truncate px-3 py-2 whitespace-nowrap ${tone.cell}`}
                         title={plain}
                         suppressHydrationWarning
                       >

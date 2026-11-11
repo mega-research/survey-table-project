@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveys } from '@/db/schema';
+import { isResultCodeRowMark } from '@/lib/contacts/result-code-row-mark';
 import type { ContactResultCode } from '@/shared/contracts/contacts';
 
 /**
@@ -19,6 +20,10 @@ export async function updateResultCodes(
 ): Promise<void> {
   if (codes && codes.length === 0) {
     throw new Error('결과코드는 최소 1개 이상이어야 합니다.');
+  }
+  // 목록 행 표시 가드 — 입력 스키마가 z.custom 이라 런타임 검증이 없다. 모르는 값은 저장 전에 거부한다.
+  if (codes?.some((c) => c.rowMark !== undefined && !isResultCodeRowMark(c.rowMark))) {
+    throw new Error('목록 행 표시 값이 올바르지 않습니다.');
   }
 
   await db
