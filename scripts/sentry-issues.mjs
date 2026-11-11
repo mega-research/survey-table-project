@@ -72,7 +72,7 @@ if (!org) {
 const args = process.argv.slice(2);
 const queryIdx = args.indexOf('--query');
 const query = queryIdx >= 0 ? args[queryIdx + 1] : null;
-const issueId = args.find((a, i) => /^\d+$/.test(a) && i !== queryIdx + 1);
+const issueId = args.find((a, i) => /^\d+$/.test(a) && (queryIdx < 0 || i !== queryIdx + 1));
 
 if (issueId) {
   const event = await get(`/organizations/${org}/issues/${issueId}/events/latest/`);
