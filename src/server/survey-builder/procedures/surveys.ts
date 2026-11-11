@@ -1,3 +1,5 @@
+import { ORPCError } from '@orpc/server';
+
 import { authed } from '@/server/orpc';
 
 import {
@@ -6,6 +8,8 @@ import {
   DuplicateResultSchema,
   EnsureSurveyInDbInput,
   EnsureSurveyResultSchema,
+  SetSurveyListTitleInput,
+  SetSurveyListTitleOutput,
   SurveyIdInput,
   SurveyRowSchema,
   UpdateSurveyInput,
@@ -43,10 +47,21 @@ const duplicate = authed
   .output(DuplicateResultSchema)
   .handler(({ input }) => svc.duplicateSurvey(input));
 
+// 카드 제목 — 목록 카드에만 쓰는 이름. 설문 내용을 건드리지 않는다(`services/surveys.ts` setSurveyListTitle).
+const setListTitle = authed
+  .input(SetSurveyListTitleInput)
+  .output(SetSurveyListTitleOutput)
+  .handler(async ({ input }) => {
+    const result = await svc.setSurveyListTitle(input);
+    if (!result) throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
+    return result;
+  });
+
 export const surveys = {
   ensure,
   create,
   update,
   delete: del,
   duplicate,
+  setListTitle,
 };

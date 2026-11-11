@@ -20,11 +20,14 @@ import { collectFieldLimitedSaveDiff } from '@/server/storage-lifecycle/save-dif
 import { promoteSurveyResponseHeader } from '@/lib/survey/survey-image-promote';
 import { generateId } from '@/lib/utils';
 import { stripOptionCodes } from '@/utils/option-code-generator';
+import { normalizeSurveyListTitle } from '@/utils/survey-card-title';
 
 import type {
   CreateSurveyInput,
   EnsureSurveyInDbInput,
   EnsureSurveyResult,
+  SetSurveyListTitleInput,
+  SetSurveyListTitleOutput,
   SurveyIdInput,
   SurveyRow,
   UpdateSurveyInput,
@@ -128,6 +131,28 @@ export async function updateSurvey(input: UpdateSurveyInput): Promise<SurveyRow>
     }
 
     return updated;
+  });
+}
+
+/**
+ * 카드 제목(목록 카드에만 쓰는 이름)을 정한다. 빈 값이거나 설문 제목과 같으면 지운다 — 그 설문은 설문 제목을 따라간다.
+ *
+ * 설문 내용이 아니라 목록의 이름표라 `updatedAt` 을 올리지 않는다(카드의 「수정일」과 빌더의 저장 리비전이
+ * 이름표 때문에 움직이면 안 된다). 설문이 없으면 null.
+ */
+export async function setSurveyListTitle(
+  input: SetSurveyListTitleInput,
+): Promise<SetSurveyListTitleOutput | null> {
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({ title: surveys.title })
+      .from(surveys)
+      .where(eq(surveys.id, input.surveyId))
+      .for('update');
+    if (!row) return null;
+    const listTitle = normalizeSurveyListTitle(input.listTitle, row.title);
+    await tx.update(surveys).set({ listTitle }).where(eq(surveys.id, input.surveyId));
+    return { listTitle };
   });
 }
 
@@ -262,6 +287,8 @@ export async function duplicateSurvey(
       .insert(surveys)
       .values({
         title: `${original.title} (복사본)`,
+        // 카드 제목을 따로 지은 설문은 복제본도 카드에서 구별되게 같은 꼬리를 붙인다. 안 지었으면 설문 제목을 따라간다.
+        listTitle: original.listTitle ? `${original.listTitle} (복사본)` : null,
         description: original.description,
         isPublic: original.isPublic,
         allowMultipleResponses: original.allowMultipleResponses,

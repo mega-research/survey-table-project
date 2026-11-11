@@ -60,6 +60,9 @@ export const surveys = pgTable(
   {
     id: uuid('id').primaryKey().defaultRandom(),
     title: text('title').notNull(),
+    // 카드 제목 — 설문 관리·설문 분석 목록의 카드에만 쓰는 담당자용 이름(0167). NULL = 설문 제목을 그대로 보인다.
+    // 발행 스냅샷·응답 화면과 무관한 라이브 컬럼이고, 빌더 저장은 이 열을 쓰지 않는다(utils/survey-card-title).
+    listTitle: text('list_title'),
     description: text('description'),
     slug: text('slug').unique(),
     privateToken: uuid('private_token').defaultRandom(),

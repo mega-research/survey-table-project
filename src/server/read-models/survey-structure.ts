@@ -31,6 +31,7 @@ export async function getSurveys() {
     columns: {
       id: true,
       title: true,
+      listTitle: true,
       description: true,
       slug: true,
       privateToken: true,

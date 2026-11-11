@@ -13,6 +13,7 @@
 ```
 surveys                    # 설문 설정
 ├── id, title, description, slug, privateToken, previewToken
+├── listTitle                     # 카드 제목 — 설문 관리·설문 분석 목록의 카드에만 쓰는 이름(0167, NULL=설문 제목을 보인다). 라이브 컬럼, 빌더 저장은 쓰지 않는다 — CONTEXT.md 「카드 제목」
 ├── isPublic, allowMultipleResponses, showProgressBar, shuffleQuestions, requireLogin
 │                                 #   allowMultipleResponses = 「중복 응답 허용」(조사원 대리 응답, 2026-10-30) — 라이브 컬럼(control 로 흘린다). 켜면 초대 토큰 없는 응답의 기기 중복 검사(Track B)를 진입·첫 답 저장 둘 다 건너뛰고 완료 화면에 「새 응답 시작」. 초대 링크는 그대로 토큰당 하나
 ├── endDate, maxResponses, thankYouMessage, screenedOutMessage (자격미달 종료 문구, NULL=완료 문구 폴백, 0110), contactEmail, responseHeader (JSONB)

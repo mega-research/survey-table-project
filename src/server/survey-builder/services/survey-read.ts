@@ -109,6 +109,7 @@ export async function getSurveyListWithCounts(): Promise<SurveyListItem[]> {
   return surveyList.map((survey) => ({
     id: survey.id,
     title: survey.title,
+    listTitle: survey.listTitle,
     description: survey.description,
     slug: survey.slug,
     privateToken: survey.privateToken,

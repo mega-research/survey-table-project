@@ -43,6 +43,8 @@ export type ResponseIdInput = z.infer<typeof ResponseIdInput>;
 export type SurveyListItem = {
   id: string;
   title: string;
+  /** 카드 제목 — 목록 카드에만 쓰는 이름. null 이면 설문 제목을 보인다(`utils/survey-card-title`) */
+  listTitle: string | null;
   description: string | null;
   slug: string | null;
   privateToken: string | null;

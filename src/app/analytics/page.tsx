@@ -14,9 +14,15 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { LocalDateTime } from '@/components/ui/local-date-time';
+import { TruncatedText } from '@/components/ui/truncated-text';
 import { withSurveyListGroup } from '@/lib/survey-list-groups.server';
 import { getResponseCountsGroupedBySurvey } from '@/server/read-models/responses';
 import { getSurveys } from '@/server/read-models/survey-structure';
+import {
+  compareSurveyCardTitle,
+  hasOwnCardTitle,
+  surveyCardTitle,
+} from '@/utils/survey-card-title';
 import { partitionSurveyList } from '@/utils/survey-list-groups';
 
 // 라이브 응답 수를 보여주는 대시보드. 빌드 타임 prerender(static) 대상이 되면
@@ -84,7 +90,10 @@ export default async function AnalyticsListPage() {
                     <summary className="flex cursor-pointer list-none items-center gap-3.5 rounded-xl px-5 py-4 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none [&::-webkit-details-marker]:hidden">
                       <Folder className="h-[22px] w-[22px] shrink-0 text-gray-500" aria-hidden />
                       <span className="flex min-w-0 flex-1 items-baseline gap-2">
-                        <span className="truncate font-semibold text-gray-900">{group.name}</span>
+                        <TruncatedText
+                          text={group.name}
+                          className="min-w-0 font-semibold text-gray-900"
+                        />
                         <span className="shrink-0 text-[13px] text-gray-500">
                           설문 {group.surveys.length}
                         </span>
@@ -95,7 +104,8 @@ export default async function AnalyticsListPage() {
                       />
                     </summary>
                     <div className="grid grid-cols-1 gap-6 px-5 pb-5 md:grid-cols-2 lg:grid-cols-3">
-                      {group.surveys.map((survey) => (
+                      {/* 묶음 안은 카드 제목순 — 설문 관리 목록과 같은 순서 */}
+                      {[...group.surveys].sort(compareSurveyCardTitle).map((survey) => (
                         <AnalyticsSurveyCard key={survey.id} survey={survey} />
                       ))}
                     </div>
@@ -137,6 +147,7 @@ export const metadata = {
 interface AnalyticsSurveyRow {
   id: string;
   title: string;
+  listTitle: string | null;
   description: string | null;
   createdAt: Date;
   isPublic: boolean;
@@ -149,9 +160,15 @@ function AnalyticsSurveyCard({ survey }: { survey: AnalyticsSurveyRow }) {
       <Card className="group cursor-pointer p-6 transition-shadow hover:shadow-md">
         <div className="mb-4 flex items-start justify-between">
           <div className="min-w-0 flex-1">
-            <h3 className="truncate text-lg font-semibold text-gray-900 transition-colors group-hover:text-blue-600">
-              {survey.title}
+            <h3 className="min-w-0 text-lg font-semibold text-gray-900 transition-colors group-hover:text-blue-600">
+              <TruncatedText text={surveyCardTitle(survey)} />
             </h3>
+            {/* 카드 제목을 따로 지은 설문은 응답자가 보는 설문 제목을 한 줄 더 보인다 */}
+            {hasOwnCardTitle(survey) && (
+              <p className="mt-0.5 min-w-0 text-[13px] text-gray-500">
+                <TruncatedText text={`설문 제목: ${survey.title}`} />
+              </p>
+            )}
             {survey.description && (
               <p className="mt-1 line-clamp-2 text-sm text-gray-500">{survey.description}</p>
             )}

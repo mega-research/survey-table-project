@@ -85,6 +85,21 @@ export function useDeleteSurvey() {
 }
 
 /**
+ * 카드 제목(목록 카드에만 쓰는 이름) 바꾸기. 빈 글자 · null 이면 지워서 설문 제목을 따라가게 한다.
+ */
+export function useSetSurveyListTitle() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { surveyId: string; listTitle: string | null }) =>
+      client.surveyBuilder.surveys.setListTitle(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: surveyKeys.lists() });
+    },
+  });
+}
+
+/**
  * 설문 복제
  */
 export function useDuplicateSurvey() {

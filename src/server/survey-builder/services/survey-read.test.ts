@@ -127,6 +127,7 @@ describe('survey-read.service getSurveyListWithCounts', () => {
       {
         id: 'survey-1',
         title: '첫 설문',
+        listTitle: null,
         description: null,
         slug: 'first',
         privateToken: '11111111-1111-1111-1111-111111111111',
@@ -137,6 +138,7 @@ describe('survey-read.service getSurveyListWithCounts', () => {
       {
         id: 'survey-2',
         title: '둘째 설문',
+        listTitle: '2. 둘째',
         description: '설명',
         slug: null,
         privateToken: null,
@@ -157,6 +159,7 @@ describe('survey-read.service getSurveyListWithCounts', () => {
         columns: {
           id: true,
           title: true,
+          listTitle: true,
           description: true,
           slug: true,
           privateToken: true,
@@ -172,6 +175,7 @@ describe('survey-read.service getSurveyListWithCounts', () => {
       {
         id: 'survey-1',
         title: '첫 설문',
+        listTitle: null,
         description: null,
         slug: 'first',
         privateToken: '11111111-1111-1111-1111-111111111111',
@@ -186,6 +190,7 @@ describe('survey-read.service getSurveyListWithCounts', () => {
       {
         id: 'survey-2',
         title: '둘째 설문',
+        listTitle: '2. 둘째',
         description: '설명',
         slug: null,
         privateToken: null,

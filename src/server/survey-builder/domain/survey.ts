@@ -2,6 +2,7 @@ import * as z from 'zod';
 
 import type { Survey as SurveyRow } from '@/db/schema';
 import type { Survey as SurveyType, SurveySettings } from '@/types/survey';
+import { SURVEY_LIST_TITLE_MAX_LENGTH } from '@/utils/survey-card-title';
 
 export type { SurveyRow, SurveyType, SurveySettings };
 
@@ -87,6 +88,20 @@ export const UpdateSurveyInput = z.object({
   data: UpdateSurveyDataSchema,
 });
 export type UpdateSurveyInput = z.infer<typeof UpdateSurveyInput>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// setSurveyListTitle — 카드 제목(목록 카드에만 쓰는 이름)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const SetSurveyListTitleInput = z.object({
+  surveyId: z.string().uuid(),
+  /** 빈 글자 · null = 카드 제목을 지우고 설문 제목을 따라가게 한다 */
+  listTitle: z.string().max(SURVEY_LIST_TITLE_MAX_LENGTH).nullable(),
+});
+export type SetSurveyListTitleInput = z.infer<typeof SetSurveyListTitleInput>;
+
+export const SetSurveyListTitleOutput = z.object({ listTitle: z.string().nullable() });
+export type SetSurveyListTitleOutput = z.infer<typeof SetSurveyListTitleOutput>;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // deleteSurvey / duplicateSurvey

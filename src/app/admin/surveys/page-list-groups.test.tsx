@@ -9,6 +9,7 @@ vi.mock('@/features/survey-builder/queries/use-surveys', () => ({
   useSurveys: () => useSurveys(),
   useDeleteSurvey: () => ({ mutate: vi.fn() }),
   useDuplicateSurvey: () => ({ mutate: vi.fn(), isPending: false }),
+  useSetSurveyListTitle: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 vi.mock('@/actions/auth-actions', () => ({ logout: vi.fn() }));
 
@@ -27,6 +28,7 @@ function row(id: string, title: string, listGroup: string | null, updatedAt = '2
     createdAt: new Date('2026-11-01T00:00:00.000Z'),
     updatedAt: new Date(`${updatedAt}T03:00:00.000Z`),
     isPublic: false,
+    listTitle: null,
     listGroup,
   };
 }

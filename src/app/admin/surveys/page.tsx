@@ -22,6 +22,7 @@ import {
   Lock,
   LogOut,
   MoreVertical,
+  PencilLine,
   Plus,
   Search,
   Trash2,
@@ -33,6 +34,7 @@ import { logout } from '@/actions/auth-actions';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { TruncatedText } from '@/components/ui/truncated-text';
 import {
   useDeleteSurvey,
   useDuplicateSurvey,
@@ -40,8 +42,15 @@ import {
 } from '@/features/survey-builder/queries/use-surveys';
 import { formatLocalDate } from '@/lib/date-formatters';
 import { getSurveyAccessUrl } from '@/lib/survey-url';
+import {
+  compareSurveyCardTitle,
+  hasOwnCardTitle,
+  matchesSurveyListSearch,
+  surveyCardTitle,
+} from '@/utils/survey-card-title';
 import { partitionSurveyList } from '@/utils/survey-list-groups';
 
+import { SurveyCardTitleDialog } from './survey-card-title-dialog';
 import { useOpenSurveyListGroups } from './use-open-survey-list-groups';
 
 /** 묶음 안에서 가장 최근에 고친 설문의 수정일 — 접힌 묶음 카드에 적는다. */
@@ -55,6 +64,8 @@ export default function SurveyListPage() {
   const { mutate: duplicateSurvey, isPending: isDuplicating } = useDuplicateSurvey();
   const [searchQuery, setSearchQuery] = useState('');
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  // 카드 제목을 바꾸는 중인 설문 id — 창은 목록에서 그 설문을 다시 찾아 지금 값을 보인다.
+  const [cardTitleSurveyId, setCardTitleSurveyId] = useState<string | null>(null);
   const { openGroups, toggleGroup } = useOpenSurveyListGroups();
   const listId = useId();
 
@@ -88,8 +99,9 @@ export default function SurveyListPage() {
 
   const surveyList = surveys ?? [];
 
+  // 카드 제목과 설문 제목 어느 쪽으로도 찾는다 — 카드 제목을 따로 지은 설문을 설문 제목으로 찾지 못하면 「없다」고 오해한다.
   const filteredSurveys = surveyList.filter((survey) =>
-    survey.title.toLowerCase().includes(searchQuery.toLowerCase()),
+    matchesSurveyListSearch(survey, searchQuery),
   );
 
   // 묶음(임시 장치 — `lib/survey-list-groups.server.ts`). 검색 중에는 묶음을 풀어 한 목록으로 보여 준다 —
@@ -152,7 +164,7 @@ export default function SurveyListPage() {
           {groupName && (
             <span className="flex min-w-0 items-center gap-1.5 rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600">
               <Folder className="h-3 w-3 shrink-0" aria-hidden />
-              <span className="truncate">{groupName}</span>
+              <TruncatedText text={groupName} className="min-w-0" />
             </span>
           )}
           <div className="relative">
@@ -192,6 +204,16 @@ export default function SurveyListPage() {
                     <Activity className="mr-2 h-4 w-4" />
                     현황
                   </Link>
+                  <button
+                    onClick={() => {
+                      setCardTitleSurveyId(survey.id);
+                      setOpenMenuId(null);
+                    }}
+                    className="flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    <PencilLine className="mr-2 h-4 w-4" />
+                    카드 제목 바꾸기
+                  </button>
                   <button
                     onClick={() => handleCopyLink(survey)}
                     className="flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
@@ -235,7 +257,15 @@ export default function SurveyListPage() {
         </div>
       </div>
 
-      <h3 className="mb-2 truncate text-lg font-semibold text-gray-900">{survey.title}</h3>
+      <h3 className="mb-2 min-w-0 text-lg font-semibold text-gray-900">
+        <TruncatedText text={surveyCardTitle(survey)} />
+      </h3>
+      {/* 카드 제목을 따로 지은 설문은 응답자가 보는 설문 제목을 한 줄 더 보인다 */}
+      {hasOwnCardTitle(survey) && (
+        <p className="-mt-1 mb-2 min-w-0 text-[13px] text-gray-500">
+          <TruncatedText text={`설문 제목: ${survey.title}`} />
+        </p>
+      )}
       <p className="mb-4 text-sm text-gray-500">
         {`온라인 응답 완료 ${survey.completedResponseCount.toLocaleString('ko-KR')}건`}
         {` · 실사 완료 처리 ${survey.fieldworkCompletedCount.toLocaleString('ko-KR')}건`}
@@ -422,18 +452,20 @@ export default function SurveyListPage() {
                         )}
                         {isOpen ? (
                           <span className="flex min-w-0 flex-1 items-baseline gap-2">
-                            <span className="truncate font-semibold text-gray-900">
-                              {group.name}
-                            </span>
+                            <TruncatedText
+                              text={group.name}
+                              className="min-w-0 font-semibold text-gray-900"
+                            />
                             <span className="shrink-0 text-[13px] text-gray-500">
                               설문 {group.surveys.length}
                             </span>
                           </span>
                         ) : (
                           <span className="min-w-0 flex-1">
-                            <span className="block truncate font-semibold text-gray-900">
-                              {group.name}
-                            </span>
+                            <TruncatedText
+                              text={group.name}
+                              className="font-semibold text-gray-900"
+                            />
                             <span className="block truncate text-[13px] text-gray-500">
                               설문 {group.surveys.length} · 최근 수정{' '}
                               {formatLocalDate(latestUpdatedAt(group.surveys))}
@@ -454,7 +486,10 @@ export default function SurveyListPage() {
                           id={panelId}
                           className="mt-5 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3"
                         >
-                          {group.surveys.map((survey) => renderSurveyCard(survey))}
+                          {/* 묶음 안은 카드 제목순 — 번호를 붙인 카드 제목이 문서 순서대로 선다 */}
+                          {[...group.surveys]
+                            .sort(compareSurveyCardTitle)
+                            .map((survey) => renderSurveyCard(survey))}
                         </div>
                       )}
                     </div>
@@ -475,6 +510,11 @@ export default function SurveyListPage() {
           </div>
         )}
       </div>
+
+      <SurveyCardTitleDialog
+        survey={surveyList.find((survey) => survey.id === cardTitleSurveyId) ?? null}
+        onClose={() => setCardTitleSurveyId(null)}
+      />
 
       {/* Click outside to close menu */}
       {openMenuId && <div className="fixed inset-0 z-40" onClick={() => setOpenMenuId(null)} />}
