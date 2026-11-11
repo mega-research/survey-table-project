@@ -7,3 +7,7 @@
 ## 발송 주소 · 대체 발송
 
 **메일 발송 주소 · 대체 발송** (0135·0137): 이메일 열이 여럿일 때의 발송 주소 순서(`mailOrder`)와 반송·거부 시 다음 순위 주소로 한 통 더 보내는 대체 회차(`kind='fallback'`, cron `mailFallbackSweeper` — 새 Inngest 함수라 배포 뒤 수동 Resync)는 CONTEXT.md 「발송 주소」가 정본이다. 새로 "이 대상의 이메일"을 읽는 자리를 만들면 `field_type='email'` 을 직접 거르지 말고 `lib/mail/send-address`(규칙)·`server/read-models/send-address`(DB)를 쓸 것.
+
+## 테스트 발송
+
+템플릿 「테스트 발송」(`preview.testSend`)은 `server/workflows/test-send-live-link` 에 위임한다 — 테스트 모드가 켜진 설문이면 contacts 의 `ensureTestSendTarget` 이 정한 **테스트 대상자 링크**를 초대 링크로 넣고, 아니면 견본 링크(`/i/__test__`)다. `sendTestTemplateMail` 에 샘플(실제 대상자)의 초대 코드를 넘기지 말 것 — `testInviteCode` 는 테스트 대상자의 것만이다. 수신거부 링크는 늘 견본 토큰이다. 용어·규칙은 CONTEXT.md 「테스트 발송」.

@@ -30,6 +30,11 @@ export async function prepareContactInsertScope(
     requestedCount: number;
     requireEmptyTestScope: boolean;
     isGuest: boolean;
+    /**
+     * 이 브라우저의 보기와 무관하게 테스트 파티션에 쓴다 — 실데이터를 보는 채로 누른 「테스트 발송」이
+     * 테스트 사본 대상자를 만들 때(`test-send-target`). 전역 테스트 모드가 꺼져 있거나 게스트면 거부한다.
+     */
+    forceTestScope?: boolean;
   },
 ): Promise<PreparedContactInsertScope> {
   const locked = await lockWriteScope(tx, input.surveyId, input.isGuest, {
@@ -38,7 +43,14 @@ export async function prepareContactInsertScope(
   });
   if (!locked) throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
 
-  const { isTest, scope, row: survey } = locked;
+  const { row: survey } = locked;
+  if (input.forceTestScope && (!survey.enabled || input.isGuest)) {
+    throw new ORPCError('CONFLICT', {
+      message: '테스트 모드가 꺼져 있어 테스트 대상자를 만들 수 없습니다.',
+    });
+  }
+  const isTest = input.forceTestScope ? true : locked.isTest;
+  const scope: OperationsDataScope = input.forceTestScope ? 'test' : locked.scope;
   const [countRow] = await tx
     .select({ total: sql<number>`count(*)::int` })
     .from(contactTargets)

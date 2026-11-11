@@ -125,6 +125,57 @@ describe('sendTestTemplateMail', () => {
     expect(sent?.html).toContain('https://survey.example.com/i/__test__');
     expect(sent?.html).not.toContain('/i/abc123');
   });
+
+  const liveInput = {
+    surveyId: '00000000-0000-4000-8000-000000000001',
+    to: 'qa@example.com',
+    subject: '설문',
+    bodyHtml: '<p>{{invite_link}}</p>',
+    fromName: '조사팀',
+    fromLocal: 'survey',
+    replyTo: 'reply@example.com',
+    attachments: [],
+  };
+
+  it('테스트 대상자 초대 코드를 받으면 그 링크를 넣고 링크 종류를 live 로 알린다 — 샘플의 실제 링크는 여전히 싣지 않는다', async () => {
+    const result = await sendTestTemplateMail(liveInput, { testInviteCode: 'tst999' });
+
+    const sent = vi.mocked(sendTestMail).mock.calls.at(-1)?.[0];
+    expect(sent?.html).toContain('https://survey.example.com/i/tst999');
+    expect(sent?.html).not.toContain('/i/__test__');
+    expect(sent?.html).not.toContain('/i/abc123');
+    expect(result).toEqual({ ok: true, id: 'message-1', inviteLink: 'live' });
+    // 수신거부는 여전히 견본 토큰이다
+    expect(vi.mocked(MailWrapper).mock.calls.at(-1)?.[0]).toMatchObject({
+      unsubscribeUrl: 'https://survey.example.com/unsubscribe/__test__',
+    });
+  });
+
+  it('리뷰 3 — 명단 값을 받으면 샘플을 다시 읽지 않고 그 값으로 본문을 채운다', async () => {
+    vi.mocked(getFirstContactSample).mockClear();
+    await sendTestTemplateMail(
+      { ...liveInput, bodyHtml: '<p>{{name}} {{invite_link}}</p>' },
+      { testInviteCode: 'tst999', sampleAttrs: { name: '사본이 읽은 이름' } },
+    );
+    expect(getFirstContactSample).not.toHaveBeenCalled();
+    const sent = vi.mocked(sendTestMail).mock.calls.at(-1)?.[0];
+    expect(sent?.html).toContain('사본이 읽은 이름');
+    expect(sent?.html).not.toContain('홍길동');
+  });
+
+  it('초대 코드가 없으면 견본 링크이고 링크 종류를 sandbox 로 알린다', async () => {
+    const result = await sendTestTemplateMail(liveInput);
+    expect(vi.mocked(sendTestMail).mock.calls.at(-1)?.[0]?.html).toContain('/i/__test__');
+    expect(result).toEqual({ ok: true, id: 'message-1', inviteLink: 'sandbox' });
+  });
+
+  it('발송이 실패하면 링크 종류를 싣지 않는다', async () => {
+    vi.mocked(sendTestMail).mockResolvedValue({ ok: false, error: '거절' });
+    expect(await sendTestTemplateMail(liveInput, { testInviteCode: 'tst999' })).toEqual({
+      ok: false,
+      error: '거절',
+    });
+  });
 });
 
 describe('sendTestTemplateMail - 클릭 영역 밴드', () => {

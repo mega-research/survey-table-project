@@ -7,6 +7,11 @@ vi.mock('../services/preview', () => ({
   getMailPreviewSample: vi.fn(),
   sendTestTemplateMail: vi.fn(),
 }));
+vi.mock('@/server/workflows/test-send-live-link', () => ({
+  sendTestTemplateMailWithLiveLink: vi.fn(),
+}));
+
+import { sendTestTemplateMailWithLiveLink } from '@/server/workflows/test-send-live-link';
 
 import * as svc from '../services/preview';
 import { preview } from './preview';
@@ -53,20 +58,26 @@ describe('mail.preview procedures', () => {
     expect(res).toBeNull();
   });
 
-  it('testSend는 service.sendTestTemplateMail에 위임하고 결과객체를 반환한다', async () => {
-    vi.mocked(svc.sendTestTemplateMail).mockResolvedValue({ ok: true, id: 'msg-1' } as never);
+  it('testSend는 테스트 링크 워크플로에 위임하고 결과객체(링크 종류 포함)를 반환한다', async () => {
+    vi.mocked(sendTestTemplateMailWithLiveLink).mockResolvedValue({
+      ok: true,
+      id: 'msg-1',
+      inviteLink: 'live',
+    });
     const client = createRouterClient({ preview }, { context: authedContext() });
     const input = validSendInput();
     const res = await client.preview.testSend(input);
-    expect(svc.sendTestTemplateMail).toHaveBeenCalledWith(input);
-    expect(res).toEqual({ ok: true, id: 'msg-1' });
+    // 두 번째 인자 = 게스트 여부(인증한 사용자에서 파생)
+    expect(sendTestTemplateMailWithLiveLink).toHaveBeenCalledWith(input, false);
+    expect(svc.sendTestTemplateMail).not.toHaveBeenCalled();
+    expect(res).toEqual({ ok: true, id: 'msg-1', inviteLink: 'live' });
   });
 
   it('testSend는 env 가드 실패를 throw하지 않고 결과객체로 흘린다', async () => {
-    vi.mocked(svc.sendTestTemplateMail).mockResolvedValue({
+    vi.mocked(sendTestTemplateMailWithLiveLink).mockResolvedValue({
       ok: false,
       error: 'RESEND_FROM_DOMAIN 환경변수가 설정되지 않았습니다.',
-    } as never);
+    });
     const client = createRouterClient({ preview }, { context: authedContext() });
     const res = await client.preview.testSend(validSendInput());
     expect(res).toEqual({

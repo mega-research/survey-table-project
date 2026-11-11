@@ -22,6 +22,8 @@ import type { MailAttachment } from '@/shared/contracts/mail';
 import type { MailPreviewSample } from '@/shared/contracts/mail-io';
 import { client } from '@/shared/lib/rpc';
 
+import { testSendInviteNote } from './test-send-invite-note';
+
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -41,7 +43,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 type SendState =
   | { status: 'idle' }
   | { status: 'sending' }
-  | { status: 'sent'; to: string; id?: string }
+  | { status: 'sent'; to: string; id?: string; inviteLink?: 'live' | 'sandbox' }
   | { status: 'error'; message: string };
 
 type FetchState =
@@ -215,7 +217,12 @@ export function MailPreviewDialog({
         attachments,
       });
       if (res.ok) {
-        setSendState({ status: 'sent', to: testTo.trim(), ...sendIdPatch(res.id) });
+        setSendState({
+          status: 'sent',
+          to: testTo.trim(),
+          ...sendIdPatch(res.id),
+          ...(res.inviteLink !== undefined ? { inviteLink: res.inviteLink } : {}),
+        });
       } else {
         setSendState({ status: 'error', message: resultErrorMessage(res.error, '발송 실패') });
       }
@@ -358,8 +365,9 @@ export function MailPreviewDialog({
           </div>
 
           <p className="mt-2 text-xs text-gray-500">
-            실제 발송과 동일한 제목으로 전송되며, 본문 내 설문 링크는 응답되지 않는 미리보기용
-            토큰으로 치환됩니다.
+            실제 발송과 동일한 제목으로 전송됩니다. 본문의 설문 링크에는 실제 조사 대상의 링크가
+            들어가지 않습니다 — 테스트 모드를 켜고 테스트 조사 대상자를 만들어 둔 설문이면 눌러서
+            열리는 테스트 링크가, 아니면 열리지 않는 견본 링크가 들어갑니다.
           </p>
 
           {hasUnpromotedAttachment && (
@@ -378,6 +386,11 @@ export function MailPreviewDialog({
                 <div>
                   <span className="font-medium">{sendState.to}</span> 로 발송 완료
                 </div>
+                {testSendInviteNote(sendState.inviteLink) && (
+                  <div className="mt-0.5 text-xs text-emerald-700">
+                    {testSendInviteNote(sendState.inviteLink)}
+                  </div>
+                )}
                 {sendState.id && (
                   <div className="mt-0.5 font-mono text-[11px] break-all text-emerald-700">
                     id: {sendState.id}

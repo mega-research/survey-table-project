@@ -8,21 +8,26 @@ interface Input {
   subject: string;
   bodyHtml: string;
   fromName: string;
-  /** 첫 컨택 attrs 기반 — inviteUrl 은 무시하고 sandbox 로 강제 치환. */
+  /** 첫 컨택 attrs 기반 — inviteUrl 은 무시한다(실제 대상자의 초대 링크를 테스트 수신자에게 보내지 않는다). */
   sample: PreviewSample | null;
+  /**
+   * 눌러서 열리는 **테스트 대상자** 초대 링크 — 테스트 모드가 켜진 설문에서 워크플로
+   * (`workflows/test-send-live-link`)가 정해 넘긴다. 없으면 견본 링크다.
+   */
+  testInviteUrl?: string | null;
 }
 
 /**
  * 테스트 발송용 변수 치환. 미리보기와 다른 두 가지:
  *   1. mode: 'send' → missing/empty 강조 span 대신 빈 문자열로 치환.
- *   2. invite_link 는 sandbox 토큰으로 강제 치환 → 진짜 inviteToken 누출/오발송 방지.
- *      /i/__test__ 는 미리보기/테스트발송용 placeholder 코드로 실제 컨택에 매칭되지 않아,
- *      클릭 시 not-found(초대 링크가 유효하지 않음)로 처리된다. 테스트 발송은 본문 렌더
- *      확인이 목적이라 무해.
+ *   2. invite_link 에 샘플(실제 대상자)의 초대 링크를 쓰지 않는다 → 진짜 inviteToken 누출/오발송 방지.
+ *      - testInviteUrl 이 있으면 그 테스트 대상자 링크(눌러서 설문을 끝까지 테스트할 수 있다).
+ *      - 없으면 견본 링크 /i/__test__ — 실제 컨택에 매칭되지 않아 클릭 시 not-found(초대 링크가
+ *        유효하지 않음)로 처리된다.
  */
 export function renderForTestSend(input: Input): PreviewResult {
   const baseUrl = (process.env['NEXT_PUBLIC_APP_URL'] ?? '').replace(/\/+$/, '');
-  const sandboxInvite = buildInviteUrl('__test__', baseUrl);
+  const sandboxInvite = input.testInviteUrl || buildInviteUrl('__test__', baseUrl);
 
   const sandboxSample: PreviewSample = input.sample
     ? { attrs: input.sample.attrs, email: input.sample.email, inviteUrl: sandboxInvite }

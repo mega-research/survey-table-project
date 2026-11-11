@@ -43,5 +43,10 @@ export const SendTestTemplateMailOutput = z.object({
   ok: z.boolean(),
   id: z.string().optional(),
   error: z.string().optional(),
+  /**
+   * 보낸 메일의 초대 링크 종류(성공 시) — live = 눌러서 열리는 테스트 대상자 링크,
+   * sandbox = 열리지 않는 견본 링크(테스트 모드 꺼짐·게스트·조사 대상 없음).
+   */
+  inviteLink: z.enum(['live', 'sandbox']).optional(),
 });
 export type SendTestTemplateMailOutput = z.infer<typeof SendTestTemplateMailOutput>;

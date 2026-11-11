@@ -59,10 +59,19 @@ export async function getMailPreviewSample(
  * 테스트 발송.
  * env 가드(RESEND_FROM_DOMAIN / NEXT_PUBLIC_APP_URL) 실패와 발송 실패는 throw 하지 않고
  * 결과객체({ok:false,error})로 흘려 UI 에 사용자 친화 메시지를 그대로 보존한다.
- * 테스트 발송은 항상 sandbox 토큰 — 진짜 컨택의 unsubscribeToken 누출 방지.
+ * 수신거부는 항상 sandbox 토큰 — 진짜 컨택의 unsubscribeToken 누출 방지.
+ *
+ * 초대 링크는 `opts.testInviteCode`(테스트 대상자의 초대 코드)가 오면 그 링크, 없으면 견본 링크다.
+ * 코드를 정하는 것은 `workflows/test-send-live-link` 다 — 샘플(실제 대상자)의 코드를 넘기지 말 것.
+ * 성공 결과의 `inviteLink` 가 어느 쪽이었는지 알린다.
  */
 export async function sendTestTemplateMail(
   input: SendTestTemplateMailInput,
+  opts: {
+    testInviteCode?: string | undefined;
+    /** 본문 변수를 채울 명단 값 — 주면 샘플을 다시 읽지 않는다(링크의 테스트 대상자와 같은 값) */
+    sampleAttrs?: Record<string, string> | undefined;
+  } = {},
 ): Promise<SendTestTemplateMailOutput> {
   const fromDomain = process.env['RESEND_FROM_DOMAIN'];
   if (!fromDomain) {
@@ -82,8 +91,9 @@ export async function sendTestTemplateMail(
   // /unsubscribe/[token] 페이지가 sandbox 토큰을 감지해 안내만 표시.
   const unsubscribeUrl = `${baseUrl}/unsubscribe/${UNSUBSCRIBE_SANDBOX_TOKEN}`;
 
-  const scope = await loadOperationsDataScope(input.surveyId);
-  const sample = await getFirstContactSample(input.surveyId, scope);
+  const sample = opts.sampleAttrs
+    ? { attrs: opts.sampleAttrs, email: null }
+    : await getFirstContactSample(input.surveyId, await loadOperationsDataScope(input.surveyId));
 
   // 테스트 발송은 미저장 초안(bodyHtml)을 그대로 받으므로, 클릭 영역이 있으면
   // 저장 전이라도 밴드 슬라이스를 여기서 생성한다 (키가 결정적이라 재실행 무해).
@@ -114,6 +124,7 @@ export async function sendTestTemplateMail(
     sample: sample
       ? { attrs: sample.attrs, email: sample.email, inviteUrl: null }
       : null,
+    testInviteUrl: opts.testInviteCode ? buildInviteUrl(opts.testInviteCode, baseUrl) : null,
   });
 
   const html = await render(
@@ -126,7 +137,7 @@ export async function sendTestTemplateMail(
   );
 
   try {
-    return await sendTestMail({
+    const result = await sendTestMail({
       to: input.to,
       subject: rendered.subject,
       fromName: rendered.fromName,
@@ -136,6 +147,9 @@ export async function sendTestTemplateMail(
       html,
       attachments: input.attachments,
     });
+    return result.ok
+      ? { ...result, inviteLink: opts.testInviteCode ? ('live' as const) : ('sandbox' as const) }
+      : result;
   } catch (err) {
     const message = err instanceof Error ? err.message : '메일 발송 중 오류가 발생했습니다.';
     return { ok: false, error: message };
