@@ -1,3 +1,4 @@
+import { requireSurveyConsolePage } from '@/lib/auth/require-survey-console-page';
 import type { Metadata } from 'next';
 
 import { ExportDataModal } from '@/features/analytics/export-data-modal';
@@ -84,6 +85,8 @@ export default async function OperationsOverviewPage({
   searchParams,
 }: OperationsOverviewPageProps) {
   const { id: surveyId } = await params;
+  // 미들웨어를 통과한 무권한 세션을 거른다 — 이 설문에 접근할 수 있는 계정만.
+  await requireSurveyConsolePage(surveyId, { viewOnly: 'allow' });
   const {
     mode = 'day',
     date,

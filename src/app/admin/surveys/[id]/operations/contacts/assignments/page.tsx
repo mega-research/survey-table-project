@@ -1,9 +1,8 @@
+import { requireAdminPage } from '@/lib/auth/require-admin-page';
 import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
 
 import { AddAssignmentButton } from '@/features/operations/contacts/assignments/add-assignment-button';
 import { AssignmentList } from '@/features/operations/contacts/assignments/assignment-list';
-import { isGuestViewer } from '@/lib/auth/guest-viewer';
 import { listAssignmentsWithStats } from '@/server/contacts/services/contact-assignments';
 import { getOperationsDataScope } from '@/server/data-scope';
 
@@ -21,7 +20,8 @@ interface PageProps {
  */
 export default async function ContactAssignmentsPage({ params }: PageProps) {
   const { id: surveyId } = await params;
-  if (await isGuestViewer()) notFound();
+  // 관리자 전용 화면 — 미들웨어를 통과한 무권한 세션과 게스트를 거른다.
+  await requireAdminPage();
   const scope = await getOperationsDataScope(surveyId);
   const data = await listAssignmentsWithStats(surveyId, scope);
 

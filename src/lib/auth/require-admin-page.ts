@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import 'server-only';
 
 import { isAdminUserAllowed } from './admin-allowlist';
+import { isGuestUser } from './guest-grants';
 import { requirePageUser } from './require-page-user';
 
 /**
@@ -14,14 +15,14 @@ import { requirePageUser } from './require-page-user';
  * 이 가드가 procedure 와 같은 판정을 페이지에도 적용해 두 경로의 권한 축을 맞춘다.
  *
  * isAdminUserAllowed 는 ADMIN_USER_IDS 미설정 시 fail-open 이라(admin-allowlist.ts) 기존 배포의
- * 동작은 바뀌지 않는다. 게스트는 미들웨어가 grant 설문의 operations/preview 밖으로 나가지
- * 못하게 막으므로 여기까지 도달하지 않는다.
+ * 동작은 바뀌지 않는다. 게스트(grant 보유자)는 allowlist fail-open 과 무관하게 막는다 — authed
+ * procedure 의 grant-first 판정과 같다. 미들웨어가 먼저 돌려보내지만 그것 하나에 기대지 않는다.
  *
  * 존재 여부를 노출하지 않도록 거부는 notFound() 로 처리한다.
  */
 export async function requireAdminPage() {
   const user = await requirePageUser();
-  if (!isAdminUserAllowed(user.id)) {
+  if (isGuestUser(user.id) || !isAdminUserAllowed(user.id)) {
     notFound();
   }
   return user;

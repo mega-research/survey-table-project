@@ -1,3 +1,4 @@
+import { requireSurveyConsolePage } from '@/lib/auth/require-survey-console-page';
 import type { ReactNode } from 'react';
 
 import Link from 'next/link';
@@ -84,6 +85,8 @@ function parseStatuses(value: string | undefined): MailRecipientStatus[] {
 
 export default async function CampaignDetailPage({ params, searchParams }: Props) {
   const { id: surveyId, cid } = await params;
+  // 미들웨어를 통과한 무권한 세션을 거른다 — 이 설문에 접근할 수 있는 계정만.
+  await requireSurveyConsolePage(surveyId);
   const sp = await searchParams;
   const scope = await getOperationsDataScope(surveyId);
   const recipPage = parsePage(sp.recipPage);

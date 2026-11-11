@@ -7,6 +7,10 @@ const RESPONSE_ID = '00000000-0000-4000-8000-000000000053';
 const CONTACT_ID = '00000000-0000-4000-8000-000000000054';
 
 vi.mock('next/navigation', () => ({ notFound: vi.fn() }));
+// 페이지 진입 가드는 이 스위트의 관심사가 아니다 — 판정은 require-survey-console-page.test.ts 가 고정한다.
+vi.mock('@/lib/auth/require-survey-console-page', () => ({
+  requireSurveyConsolePage: vi.fn(async () => ({ id: 'admin-1' })),
+}));
 vi.mock('@/lib/auth/require-survey-ownership', () => ({
   requireSurveyOwnership: vi.fn(),
 }));

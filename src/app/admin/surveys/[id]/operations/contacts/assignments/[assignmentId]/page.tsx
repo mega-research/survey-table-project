@@ -1,10 +1,10 @@
+import { requireAdminPage } from '@/lib/auth/require-admin-page';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { AssignmentEditor } from '@/features/operations/contacts/assignments/assignment-editor';
 import { assignmentsHref } from '@/features/operations/contacts/assignments/assignment-hrefs';
-import { isGuestViewer } from '@/lib/auth/guest-viewer';
 import { FILTER_SOURCE } from '@/lib/operations/filter-shared';
 import { getAssignmentForEdit } from '@/server/contacts/services/contact-assignments';
 import { getOperationsDataScope } from '@/server/data-scope';
@@ -24,7 +24,8 @@ interface PageProps {
  */
 export default async function ContactAssignmentEditPage({ params }: PageProps) {
   const { id: surveyId, assignmentId } = await params;
-  if (await isGuestViewer()) notFound();
+  // 관리자 전용 화면 — 미들웨어를 통과한 무권한 세션과 게스트를 거른다.
+  await requireAdminPage();
   const scope = await getOperationsDataScope(surveyId);
 
   // 교체 적용이 조건을 해석하는 것과 같은 컨텍스트 — 후보·결과코드·컨택원이 서버 해석과 같다.

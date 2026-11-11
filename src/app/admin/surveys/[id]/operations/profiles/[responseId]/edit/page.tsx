@@ -1,3 +1,4 @@
+import { requireSurveyConsolePage } from '@/lib/auth/require-survey-console-page';
 import { notFound } from 'next/navigation';
 import { and, eq } from 'drizzle-orm';
 
@@ -43,6 +44,8 @@ export const metadata = { title: '응답 수정' };
  */
 export default async function AdminResponseEditPage({ params, searchParams }: PageProps) {
   const { id: surveyId, responseId } = await params;
+  // 미들웨어를 통과한 무권한 세션을 거른다 — 이 설문에 접근할 수 있는 계정만.
+  await requireSurveyConsolePage(surveyId);
   const sp = await searchParams;
   const idxNum = sp.idx ? parseInt(sp.idx, 10) : NaN;
   const idx = Number.isFinite(idxNum) && idxNum > 0 ? idxNum : null;

@@ -1,3 +1,4 @@
+import { requireSurveyConsolePage } from '@/lib/auth/require-survey-console-page';
 import { notFound } from 'next/navigation';
 
 import { eq } from 'drizzle-orm';
@@ -24,6 +25,9 @@ interface LayoutProps {
  */
 export default async function OperationsLayout({ children, params }: LayoutProps) {
   const { id: surveyId } = await params;
+  // 페이지 가드와 같은 판정을 헤더에도 — 페이지가 404 여도 레이아웃은 설문 제목을 그리기 때문이다.
+  // 응답 현황·응답 내역이 이 레이아웃 아래라 보기 전용 게스트는 여기서 막지 않는다(페이지가 가른다).
+  await requireSurveyConsolePage(surveyId, { viewOnly: 'allow' });
   const survey = await getSurveyById(surveyId);
   if (!survey || survey.deletedAt) notFound();
   const [control, isGuest, viewOnly, showPreview, documentRows] = await Promise.all([

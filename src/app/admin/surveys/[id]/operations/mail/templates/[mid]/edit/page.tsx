@@ -1,3 +1,4 @@
+import { requireSurveyConsolePage } from '@/lib/auth/require-survey-console-page';
 import { notFound } from 'next/navigation';
 
 import { TemplateEditForm } from '@/features/operations/mail-template/template-edit-form';
@@ -11,6 +12,8 @@ interface Props {
 
 export default async function EditMailTemplatePage({ params }: Props) {
   const { id: surveyId, mid: templateId } = await params;
+  // 미들웨어를 통과한 무권한 세션을 거른다 — 이 설문에 접근할 수 있는 계정만.
+  await requireSurveyConsolePage(surveyId);
   const template = await getMailTemplate(surveyId, templateId);
   if (!template) notFound();
 

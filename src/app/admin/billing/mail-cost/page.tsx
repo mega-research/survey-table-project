@@ -1,3 +1,4 @@
+import { requireAdminPage } from '@/lib/auth/require-admin-page';
 import { Receipt } from 'lucide-react';
 
 import { BackButton } from '@/features/operations/mail-cost/back-button';
@@ -16,6 +17,8 @@ interface Props {
 }
 
 export default async function GlobalMailCostPage({ searchParams }: Props) {
+  // 관리자 전용 화면 — 미들웨어를 통과한 무권한 세션과 게스트를 거른다.
+  await requireAdminPage();
   const { cycle: cycleKey } = await searchParams;
   const { periods, usingFallbackPeriod, cycles } = await computeCycleBreakdown();
 

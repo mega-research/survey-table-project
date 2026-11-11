@@ -31,6 +31,15 @@ describe('requireAdminPage', () => {
     notFound.mockClear();
     requireAuth.mockReset();
     delete process.env['ADMIN_USER_IDS'];
+    delete process.env['GUEST_SURVEY_GRANTS'];
+  });
+
+  it('게스트(grant 보유자)는 allowlist 가 비어 fail-open 이어도 막는다', async () => {
+    process.env['GUEST_SURVEY_GRANTS'] = 'guest-1:s1';
+    requireAuth.mockResolvedValue({ id: 'guest-1' });
+
+    const requireAdminPage = await loadGuard();
+    await expect(requireAdminPage()).rejects.toThrow('NEXT_NOT_FOUND');
   });
 
   it('allowlist 에 있는 사용자는 통과한다', async () => {

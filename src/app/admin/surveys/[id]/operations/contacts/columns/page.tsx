@@ -1,3 +1,4 @@
+import { requireAdminPage } from '@/lib/auth/require-admin-page';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
@@ -15,6 +16,8 @@ interface PageProps {
 
 export default async function ContactsColumnsPage({ params }: PageProps) {
   const { id: surveyId } = await params;
+  // 관리자 전용 화면 — 미들웨어를 통과한 무권한 세션과 게스트를 거른다.
+  await requireAdminPage();
   const scope = await getOperationsDataScope(surveyId);
   const scheme = await getContactColumnScheme(surveyId, scope);
   if (!scheme) notFound();

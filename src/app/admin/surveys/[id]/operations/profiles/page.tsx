@@ -1,3 +1,4 @@
+import { requireSurveyConsolePage } from '@/lib/auth/require-survey-console-page';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
@@ -73,6 +74,8 @@ interface PageProps {
  */
 export default async function ProfilesPage({ params, searchParams }: PageProps) {
   const { id: surveyId } = await params;
+  // 미들웨어를 통과한 무권한 세션을 거른다 — 이 설문에 접근할 수 있는 계정만.
+  await requireSurveyConsolePage(surveyId, { viewOnly: 'allow' });
   const sp = await searchParams;
 
   // col/q 는 다중 조건 필터로 전환돼 배열일 수 있다 — normalize 는 스칼라 파라미터만 받는다.

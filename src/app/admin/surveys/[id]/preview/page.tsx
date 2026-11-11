@@ -1,3 +1,4 @@
+import { requireSurveyConsolePage } from '@/lib/auth/require-survey-console-page';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
@@ -25,6 +26,8 @@ export const metadata = { title: '설문 보기' };
 
 export default async function SurveyPreviewPage({ params }: PageProps) {
   const { id: surveyId } = await params;
+  // 미들웨어를 통과한 무권한 세션을 거른다 — 이 설문에 접근할 수 있는 계정만.
+  await requireSurveyConsolePage(surveyId, { viewOnly: 'previewGrant' });
   const survey = await getSurveyById(surveyId);
   if (!survey || survey.deletedAt) notFound();
 

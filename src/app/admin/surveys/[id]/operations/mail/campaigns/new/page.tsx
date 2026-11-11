@@ -1,3 +1,4 @@
+import { requireSurveyConsolePage } from '@/lib/auth/require-survey-console-page';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
@@ -77,6 +78,8 @@ function parsePage(value: string | undefined): number {
 
 export default async function NewCampaignPage({ params, searchParams }: Props) {
   const { id: surveyId } = await params;
+  // 미들웨어를 통과한 무권한 세션을 거른다 — 이 설문에 접근할 수 있는 계정만.
+  await requireSurveyConsolePage(surveyId);
   const sp = await searchParams;
   const scope = await getOperationsDataScope(surveyId);
 

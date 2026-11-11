@@ -1,3 +1,4 @@
+import { requireSurveyConsolePage } from '@/lib/auth/require-survey-console-page';
 import { TemplateEditForm } from '@/features/operations/mail-template/template-edit-form';
 import { requirePageUser } from '@/lib/auth/require-page-user';
 import { getVariableCatalog } from '@/server/read-models/variable-catalog';
@@ -8,6 +9,8 @@ interface Props {
 
 export default async function NewMailTemplatePage({ params }: Props) {
   const { id: surveyId } = await params;
+  // 미들웨어를 통과한 무권한 세션을 거른다 — 이 설문에 접근할 수 있는 계정만.
+  await requireSurveyConsolePage(surveyId);
   const fromDomain = process.env['RESEND_FROM_DOMAIN'] ?? '';
   const catalog = await getVariableCatalog(surveyId);
   const user = await requirePageUser();

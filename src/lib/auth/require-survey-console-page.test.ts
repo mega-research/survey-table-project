@@ -84,6 +84,25 @@ describe('requireSurveyConsolePage', () => {
 
     const guard = await loadGuard();
     await expect(guard(AI_2026_PUBLIC)).rejects.toThrow('NEXT_NOT_FOUND');
+    // 응답 현황·응답 내역 목록은 연다.
+    await expect(guard(AI_2026_PUBLIC, { viewOnly: 'allow' })).resolves.toEqual({ id: GUEST9 });
+    // 설문 보기는 allowPreview 를 켠 grant 만 — guest9 는 꺼져 있다.
+    await expect(guard(AI_2026_PUBLIC, { viewOnly: 'previewGrant' })).rejects.toThrow(
+      'NEXT_NOT_FOUND',
+    );
+  });
+
+  it('설문 보기를 허용한 보기 전용 게스트는 previewGrant 화면을 연다', async () => {
+    // dairy@ — VIEW_ONLY_GUEST_GRANTS 에서 allowPreview 를 켠 실제 쌍.
+    const DAIRY = '75060289-51b4-44e7-8fd1-dabf73a0bfaf';
+    const surveyId = '24b15972-36fe-400a-adfe-7d4c80438204';
+    process.env['ADMIN_USER_IDS'] = 'admin-1';
+    process.env['GUEST_SURVEY_GRANTS'] = `${DAIRY}:${surveyId}`;
+    requireAuth.mockResolvedValue({ id: DAIRY });
+
+    const guard = await loadGuard();
+    await expect(guard(surveyId, { viewOnly: 'previewGrant' })).resolves.toEqual({ id: DAIRY });
+    await expect(guard(surveyId)).rejects.toThrow('NEXT_NOT_FOUND');
   });
 
   it('ADMIN_USER_IDS 미설정이면 grant 없는 세션은 fail-open — 기존 배포 동작을 바꾸지 않는다', async () => {

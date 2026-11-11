@@ -1,3 +1,4 @@
+import { requireAdminPage } from '@/lib/auth/require-admin-page';
 import Link from 'next/link';
 
 import {
@@ -31,6 +32,8 @@ import { partitionSurveyList } from '@/utils/survey-list-groups';
 export const dynamic = 'force-dynamic';
 
 export default async function AnalyticsListPage() {
+  // 관리자 전용 화면 — 미들웨어를 통과한 무권한 세션과 게스트를 거른다.
+  await requireAdminPage();
   // 모든 설문의 응답 수를 단일 GROUP BY 로 집계 (설문별 count fan-out 제거)
   const [surveys, countsMap] = await Promise.all([
     getSurveys(),

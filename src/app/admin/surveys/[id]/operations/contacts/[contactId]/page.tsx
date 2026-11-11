@@ -1,3 +1,4 @@
+import { requireSurveyConsolePage } from '@/lib/auth/require-survey-console-page';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
@@ -29,6 +30,8 @@ interface PageProps {
 
 export default async function ContactDetailPage({ params }: PageProps) {
   const { id: surveyId, contactId } = await params;
+  // 미들웨어를 통과한 무권한 세션을 거른다 — 이 설문에 접근할 수 있는 계정만.
+  await requireSurveyConsolePage(surveyId);
   const scope = await getOperationsDataScope(surveyId);
 
   const detail = await getContactDetailById(contactId, scope);

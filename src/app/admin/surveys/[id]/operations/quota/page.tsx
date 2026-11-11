@@ -1,3 +1,4 @@
+import { requireAdminPage } from '@/lib/auth/require-admin-page';
 import type { Metadata } from 'next';
 
 import { QuotaEditor } from '@/features/operations/quota/quota-editor';
@@ -42,6 +43,8 @@ function toQuestion(row: Awaited<ReturnType<typeof getQuestionsBySurvey>>[number
 
 export default async function QuotaPage({ params }: PageProps) {
   const { id: surveyId } = await params;
+  // 관리자 전용 화면 — 미들웨어를 통과한 무권한 세션과 게스트를 거른다.
+  await requireAdminPage();
   const scope = await getOperationsDataScope(surveyId);
   const [config, questionRows, scheme, survey] = await Promise.all([
     getQuotaConfig(surveyId),

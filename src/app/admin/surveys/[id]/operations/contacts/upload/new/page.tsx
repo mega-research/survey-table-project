@@ -1,3 +1,4 @@
+import { requireAdminPage } from '@/lib/auth/require-admin-page';
 import type { Metadata } from 'next';
 
 import { UploadWizard } from '@/features/operations/contacts/upload-wizard';
@@ -18,6 +19,8 @@ interface PageProps {
 
 export default async function ContactsUploadNewPage({ params }: PageProps) {
   const { id: surveyId } = await params;
+  // 관리자 전용 화면 — 미들웨어를 통과한 무권한 세션과 게스트를 거른다.
+  await requireAdminPage();
   const scope = await getOperationsDataScope(surveyId);
   // 아래 테스트 스코프 차단으로 좁혀지기 전에 잡아둔다 — 리터럴 false 로 두면 그 가드가
   // 완화될 때 조용히 실 파티션을 읽는다.

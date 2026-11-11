@@ -1,3 +1,4 @@
+import { requireAdminPage } from '@/lib/auth/require-admin-page';
 import type { Metadata } from 'next';
 
 import { ResultCodesEditor } from '@/features/operations/contacts/result-codes-editor';
@@ -13,6 +14,8 @@ interface PageProps {
 
 export default async function ContactResultCodesPage({ params }: PageProps) {
   const { id: surveyId } = await params;
+  // 관리자 전용 화면 — 미들웨어를 통과한 무권한 세션과 게스트를 거른다.
+  await requireAdminPage();
   const codes = await getContactResultCodes(surveyId);
 
   return (
