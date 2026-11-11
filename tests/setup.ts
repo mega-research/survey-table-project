@@ -40,5 +40,10 @@ process.env['CONTACT_PII_HMAC_KEY'] ??= Buffer.alloc(32, 0xcd).toString('base64'
 // postgres-js 의 postgres() 는 lazy — 실제 query 가 실행되지 않는 한 connection 미생성.
 process.env['DATABASE_URL'] ??= 'postgres://test:test@localhost:5432/test';
 
+// 테스트 출력에 서버 로그(pino JSON 줄)를 싣지 않는다 — 수천 줄이 실패 요약을 밀어낸다.
+// 로그를 봐야 할 때는 `LOG_LEVEL=debug pnpm exec vitest run <파일>`. 로그 호출을 확인하는 테스트는
+// 출력이 아니라 logger 메서드를 spy 하므로 수준과 무관하다.
+process.env['LOG_LEVEL'] ??= 'silent';
+
 // signals.ts 가 module-level 에서 salt 부재 시 throw 하므로 dummy 부여.
 process.env['DUPLICATE_DETECTION_SALT'] ??= 'test-salt-do-not-use-in-prod';
