@@ -130,6 +130,19 @@ const eslintConfig = [
     },
   },
   {
+    // .scratch 의 일회성 스크립트(설문 조립·데이터 점검) — gitignore 대상이라 CI 에는 없고 로컬 lint 에만 잡힌다.
+    // 2026-11-11 실측: 경고 442건 중 441건이 여기서 나와 「오류 0건」을 확인하기 어려웠다. 디렉터리를 통째
+    // ignore 하지 않고(다른 규칙은 그대로 본다) 위 scripts 블록처럼 고칠 계획이 없는 세 규칙만 끈다.
+    files: [".scratch/**/*.{ts,mts,tsx,mjs,js,cjs}"],
+    // 위 규칙을 끄면 스크립트들이 달아 둔 eslint-disable 주석 170개가 「안 쓰는 주석」 경고로 바뀐다 — 그것도 끈다.
+    linterOptions: { reportUnusedDisableDirectives: "off" },
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-unused-vars": "off",
+      "@typescript-eslint/no-unused-expressions": "off",
+    },
+  },
+  {
     // 서버 층 구조. 도메인은 서로를 모르고, 공용은 역할이 붙은 층으로만 뺀다.
     //   core(server/*.ts)          — oRPC·context·로깅·요청 스코프 판정. 누구나 읽는다
     //   read-models/               — 여러 도메인 테이블을 읽기만 하는 projection. 자기완결(도메인을 모른다)
