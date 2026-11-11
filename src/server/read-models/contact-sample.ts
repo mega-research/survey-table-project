@@ -4,6 +4,7 @@ import { and, asc, eq } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactTargets } from '@/db/schema/contacts';
+import { surveys } from '@/db/schema/surveys';
 import {
   targetScopeCondition,
   testFlagForScope,
@@ -80,6 +81,24 @@ export async function getFirstContactSample(
   if (!row) return null;
 
   return withDecryptedEmail(row, surveyId, scope);
+}
+
+/**
+ * 메일 템플릿 미리보기·테스트 발송용 — 설문의 **테스트 모드가 켜져 있을 때** 첫 테스트 조사 대상자
+ * (`resid ASC`). 테스트 모드가 꺼져 있거나 테스트 대상자가 없으면 null.
+ *
+ * 이 브라우저가 실데이터를 보는 중이어도 테스트 파티션에서 읽는다 — 미리보기와 테스트 메일의 초대 링크가
+ * 실제 조사 대상의 것이면 눌렀을 때 실제 응답이 생긴다(CONTEXT.md 「테스트 발송」). 테스트 모드가 꺼져
+ * 있으면 테스트 대상자 링크가 열리지 않으므로 돌려주지 않는다.
+ */
+export async function getFirstTestTargetSample(surveyId: string): Promise<FirstContactSample | null> {
+  const [survey] = await db
+    .select({ testModeEnabled: surveys.testModeEnabled })
+    .from(surveys)
+    .where(eq(surveys.id, surveyId))
+    .limit(1);
+  if (!survey?.testModeEnabled) return null;
+  return getFirstContactSample(surveyId, 'test');
 }
 
 /**

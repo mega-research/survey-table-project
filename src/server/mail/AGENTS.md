@@ -10,4 +10,4 @@
 
 ## 테스트 발송
 
-템플릿 「테스트 발송」(`preview.testSend`)은 `server/workflows/test-send-live-link` 에 위임한다 — 테스트 모드가 켜진 설문이면 contacts 의 `ensureTestSendTarget` 이 정한 **테스트 대상자 링크**를 초대 링크로 넣고, 아니면 견본 링크(`/i/__test__`)다. `sendTestTemplateMail` 에 샘플(실제 대상자)의 초대 코드를 넘기지 말 것 — `testInviteCode` 는 테스트 대상자의 것만이다. 수신거부 링크는 늘 견본 토큰이다. 용어·규칙은 CONTEXT.md 「테스트 발송」.
+템플릿 미리보기(`preview.sample`)와 「테스트 발송」(`preview.testSend`)은 설문의 테스트 모드가 켜져 있고 테스트 조사 대상자가 있으면 **첫 테스트 대상자**(`read-models/contact-sample` 의 `getFirstTestTargetSample`)의 값과 초대 링크를 쓴다 — 브라우저가 실데이터를 보는 중이어도 같다. 아니면 그 파티션의 첫 조사 대상 값이고, 테스트 발송의 초대 링크는 견본(`/i/__test__`)이다. **실제 조사 대상의 초대 링크를 테스트 메일에 넣지 말 것.** 수신거부 링크는 늘 견본 토큰이고, 게스트는 테스트 대상자를 쓰지 않는다. 용어·규칙은 CONTEXT.md 「테스트 발송」.

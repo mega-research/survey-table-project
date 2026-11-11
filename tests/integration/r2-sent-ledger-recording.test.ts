@@ -138,6 +138,7 @@ vi.mock('@/server/mail/services/send', () => ({
 vi.mock('@/server/read-models/contact-sample', () => ({
   getContactSampleById: vi.fn(async () => null),
   getFirstContactSample: vi.fn(async () => null),
+  getFirstTestTargetSample: vi.fn(async () => null),
 }));
 
 vi.mock('@/server/data-scope', () => ({

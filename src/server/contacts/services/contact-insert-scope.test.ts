@@ -109,34 +109,3 @@ describe('prepareContactInsertScope 게스트 쓰기 파티션', () => {
     expect(lockModes).toEqual(['update']);
   });
 });
-
-describe('prepareContactInsertScope — forceTestScope (테스트 발송의 테스트 사본)', () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  const base = { surveyId: SURVEY_ID, requestedCount: 1, requireEmptyTestScope: false };
-
-  it('테스트 모드가 켜져 있으면 test 파티션으로 준비된다', async () => {
-    const { tx } = makeTx(TEST_MODE_ON_ROW, 3);
-    const prepared = await prepareContactInsertScope(tx as never, {
-      ...base,
-      isGuest: false,
-      forceTestScope: true,
-    });
-    expect(prepared.isTest).toBe(true);
-    expect(prepared.scope).toBe('test');
-  });
-
-  it('전역 테스트 모드가 꺼져 있으면 거부한다 — 실데이터 파티션에 쓰지 않는다', async () => {
-    const { tx } = makeTx({ ...TEST_MODE_ON_ROW, enabled: false }, 0);
-    await expect(
-      prepareContactInsertScope(tx as never, { ...base, isGuest: false, forceTestScope: true }),
-    ).rejects.toMatchObject({ code: 'CONFLICT' });
-  });
-
-  it('게스트는 거부한다', async () => {
-    const { tx } = makeTx(TEST_MODE_ON_ROW, 3);
-    await expect(
-      prepareContactInsertScope(tx as never, { ...base, isGuest: true, forceTestScope: true }),
-    ).rejects.toMatchObject({ code: 'CONFLICT' });
-  });
-});

@@ -22,7 +22,7 @@ import type { MailAttachment } from '@/shared/contracts/mail';
 import type { MailPreviewSample } from '@/shared/contracts/mail-io';
 import { client } from '@/shared/lib/rpc';
 
-import { testSendInviteNote } from './test-send-invite-note';
+import { previewSampleDescription, testSendInviteNote } from './test-send-invite-note';
 
 interface Props {
   open: boolean;
@@ -244,7 +244,7 @@ export function MailPreviewDialog({
             {isReady
               ? isEmpty
                 ? '샘플 조사 대상이 없습니다. 모든 변수가 (없는 키)로 표시됩니다.'
-                : `첫 번째 조사 대상 (resid #${fetchState.sample!.resid}) 데이터로 변수를 치환했습니다.`
+                : previewSampleDescription(fetchState.sample!)
               : '조사 대상 샘플을 불러오는 중...'}
           </DialogDescription>
         </DialogHeader>
@@ -366,8 +366,8 @@ export function MailPreviewDialog({
 
           <p className="mt-2 text-xs text-gray-500">
             실제 발송과 동일한 제목으로 전송됩니다. 본문의 설문 링크에는 실제 조사 대상의 링크가
-            들어가지 않습니다 — 테스트 모드를 켜고 테스트 조사 대상자를 만들어 둔 설문이면 눌러서
-            열리는 테스트 링크가, 아니면 열리지 않는 견본 링크가 들어갑니다.
+            들어가지 않습니다 — 테스트 모드를 켜고 테스트 조사 대상자를 만들어 둔 설문이면 첫 번째
+            테스트 조사 대상자의 링크(눌러서 열림)가, 아니면 열리지 않는 견본 링크가 들어갑니다.
           </p>
 
           {hasUnpromotedAttachment && (

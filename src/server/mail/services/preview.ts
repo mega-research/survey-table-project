@@ -13,7 +13,11 @@ import { renderForTestSend } from './render-for-send';
 import { sendTestMail } from './send';
 import { MailWrapper } from './template-wrapper';
 import { buildInviteUrl } from '@/lib/survey-url';
-import { getContactSampleById, getFirstContactSample } from '@/server/read-models/contact-sample';
+import {
+  getContactSampleById,
+  getFirstContactSample,
+  getFirstTestTargetSample,
+} from '@/server/read-models/contact-sample';
 import { loadOperationsDataScope } from '@/server/data-scope';
 import { InternalFailure } from '@/server/internal-failure';
 
@@ -25,18 +29,36 @@ import type {
 } from '../domain/mail-preview';
 
 /**
- * 메일 템플릿 미리보기용 — 해당 설문의 첫 컨택 1건 샘플.
+ * 템플릿 미리보기·테스트 발송이 쓰는 **테스트 조사 대상자** — 설문의 테스트 모드가 켜져 있으면 첫 테스트
+ * 대상자, 아니면 null(CONTEXT.md 「테스트 발송」). 게스트는 늘 실데이터라 쓰지 않는다.
+ */
+async function loadTestLinkSample(surveyId: string, isGuest: boolean | undefined) {
+  return isGuest ? null : getFirstTestTargetSample(surveyId);
+}
+
+/**
+ * 메일 템플릿 미리보기용 — 해당 설문의 컨택 1건 샘플.
+ * - 테스트 모드가 켜져 있고 테스트 대상자가 있으면 **첫 테스트 대상자**(이 브라우저가 실데이터를 보는 중이어도).
+ *   화면에 보이는 초대 링크를 눌러도 실제 응답이 생기지 않고, 테스트 발송이 보내는 것과 같은 값이다.
+ * - 아니면 이 브라우저가 보는 파티션의 첫 컨택. contactTargetId 를 주면(단건 발송 미리보기) 그 컨택.
  * inviteUrl 은 NEXT_PUBLIC_APP_URL 기준으로 서버에서 빌드 (window.origin 사용 시
  * localhost 미리보기 / 실제 발송 도메인 불일치 문제 발생).
  * 컨택 0건이면 null.
  */
 export async function getMailPreviewSample(
   input: GetMailPreviewSampleInput,
+  opts: { isGuest?: boolean | undefined } = {},
 ): Promise<GetMailPreviewSampleOutput> {
-  const scope = await loadOperationsDataScope(input.surveyId);
-  const sample = input.contactTargetId
-    ? await getContactSampleById(input.surveyId, input.contactTargetId, scope)
-    : await getFirstContactSample(input.surveyId, scope);
+  const testTarget = input.contactTargetId
+    ? null
+    : await loadTestLinkSample(input.surveyId, opts.isGuest);
+  let sample = testTarget;
+  if (!sample) {
+    const scope = await loadOperationsDataScope(input.surveyId);
+    sample = input.contactTargetId
+      ? await getContactSampleById(input.surveyId, input.contactTargetId, scope)
+      : await getFirstContactSample(input.surveyId, scope);
+  }
   if (!sample) return null;
 
   // inviteUrl 은 절대 URL 이어야 한다 — NEXT_PUBLIC_APP_URL 가 없으면 relative path 가 되어
@@ -52,6 +74,7 @@ export async function getMailPreviewSample(
     inviteUrl,
     email: sample.email,
     resid: sample.resid,
+    ...(testTarget ? { isTest: true } : {}),
   };
 }
 
@@ -61,17 +84,13 @@ export async function getMailPreviewSample(
  * 결과객체({ok:false,error})로 흘려 UI 에 사용자 친화 메시지를 그대로 보존한다.
  * 수신거부는 항상 sandbox 토큰 — 진짜 컨택의 unsubscribeToken 누출 방지.
  *
- * 초대 링크는 `opts.testInviteCode`(테스트 대상자의 초대 코드)가 오면 그 링크, 없으면 견본 링크다.
- * 코드를 정하는 것은 `workflows/test-send-live-link` 다 — 샘플(실제 대상자)의 코드를 넘기지 말 것.
- * 성공 결과의 `inviteLink` 가 어느 쪽이었는지 알린다.
+ * 테스트 모드가 켜져 있고 테스트 대상자가 있으면 **첫 테스트 대상자**의 값으로 본문을 채우고 그 대상자의
+ * 초대 링크(눌러서 열리는 테스트 링크)를 넣는다. 아니면 이 브라우저가 보는 파티션의 첫 컨택 값 + 견본 링크다.
+ * **실제 조사 대상의 초대 링크는 어떤 경우에도 넣지 않는다.** 성공 결과의 `inviteLink` 가 어느 쪽이었는지 알린다.
  */
 export async function sendTestTemplateMail(
   input: SendTestTemplateMailInput,
-  opts: {
-    testInviteCode?: string | undefined;
-    /** 본문 변수를 채울 명단 값 — 주면 샘플을 다시 읽지 않는다(링크의 테스트 대상자와 같은 값) */
-    sampleAttrs?: Record<string, string> | undefined;
-  } = {},
+  opts: { isGuest?: boolean | undefined } = {},
 ): Promise<SendTestTemplateMailOutput> {
   const fromDomain = process.env['RESEND_FROM_DOMAIN'];
   if (!fromDomain) {
@@ -91,9 +110,10 @@ export async function sendTestTemplateMail(
   // /unsubscribe/[token] 페이지가 sandbox 토큰을 감지해 안내만 표시.
   const unsubscribeUrl = `${baseUrl}/unsubscribe/${UNSUBSCRIBE_SANDBOX_TOKEN}`;
 
-  const sample = opts.sampleAttrs
-    ? { attrs: opts.sampleAttrs, email: null }
-    : await getFirstContactSample(input.surveyId, await loadOperationsDataScope(input.surveyId));
+  const testTarget = await loadTestLinkSample(input.surveyId, opts.isGuest);
+  const sample =
+    testTarget ??
+    (await getFirstContactSample(input.surveyId, await loadOperationsDataScope(input.surveyId)));
 
   // 테스트 발송은 미저장 초안(bodyHtml)을 그대로 받으므로, 클릭 영역이 있으면
   // 저장 전이라도 밴드 슬라이스를 여기서 생성한다 (키가 결정적이라 재실행 무해).
@@ -124,7 +144,7 @@ export async function sendTestTemplateMail(
     sample: sample
       ? { attrs: sample.attrs, email: sample.email, inviteUrl: null }
       : null,
-    testInviteUrl: opts.testInviteCode ? buildInviteUrl(opts.testInviteCode, baseUrl) : null,
+    testInviteUrl: testTarget ? buildInviteUrl(testTarget.inviteCode, baseUrl) : null,
   });
 
   const html = await render(
@@ -148,7 +168,7 @@ export async function sendTestTemplateMail(
       attachments: input.attachments,
     });
     return result.ok
-      ? { ...result, inviteLink: opts.testInviteCode ? ('live' as const) : ('sandbox' as const) }
+      ? { ...result, inviteLink: testTarget ? ('live' as const) : ('sandbox' as const) }
       : result;
   } catch (err) {
     const message = err instanceof Error ? err.message : '메일 발송 중 오류가 발생했습니다.';

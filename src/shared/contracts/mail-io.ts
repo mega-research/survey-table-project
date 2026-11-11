@@ -22,6 +22,8 @@ export const MailPreviewSampleSchema = z.object({
   inviteUrl: z.string(),
   email: z.string().nullable(),
   resid: z.number(),
+  /** 샘플이 테스트 조사 대상자다 — 초대 링크가 눌러서 열리는 테스트 링크다(테스트 모드가 켜진 설문) */
+  isTest: z.boolean().optional(),
 });
 export type MailPreviewSample = z.infer<typeof MailPreviewSampleSchema>;
 

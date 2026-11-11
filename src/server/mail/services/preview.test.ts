@@ -5,6 +5,7 @@ import type { FirstContactSample } from '@/server/read-models/contact-sample';
 vi.mock('@/server/read-models/contact-sample', () => ({
   getFirstContactSample: vi.fn(),
   getContactSampleById: vi.fn(),
+  getFirstTestTargetSample: vi.fn(async () => null),
 }));
 vi.mock('@/server/data-scope', () => ({
   loadOperationsDataScope: vi.fn(),
@@ -23,7 +24,11 @@ vi.mock('./image-link-band-slices', () => ({
 
 import { ensureImageLinkBandSlices } from './image-link-band-slices';
 import { sendTestMail } from './send';
-import { getContactSampleById, getFirstContactSample } from '@/server/read-models/contact-sample';
+import {
+  getContactSampleById,
+  getFirstContactSample,
+  getFirstTestTargetSample,
+} from '@/server/read-models/contact-sample';
 import { loadOperationsDataScope } from '@/server/data-scope';
 import { MailWrapper } from './template-wrapper';
 
@@ -40,8 +45,50 @@ const sampleData: FirstContactSample = {
 const SURVEY_ID = 'sv-1';
 const CONTACT_ID = '22222222-2222-4222-8222-222222222222';
 
+const testTarget: FirstContactSample = {
+  id: 'ct-test',
+  attrs: { name: '테스트 대상자' },
+  inviteCode: 'tst999',
+  email: 'tester@example.com',
+  resid: 1,
+};
+
 describe('getMailPreviewSample', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getFirstTestTargetSample).mockResolvedValue(null);
+  });
+
+  it('테스트 모드가 켜져 있고 테스트 대상자가 있으면 실데이터를 보는 중이어도 첫 테스트 대상자 값과 그 링크를 준다', async () => {
+    vi.mocked(loadOperationsDataScope).mockResolvedValue('real');
+    vi.mocked(getFirstTestTargetSample).mockResolvedValue(testTarget);
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://survey.example.com');
+
+    const res = await getMailPreviewSample({ surveyId: 'sv-1' });
+
+    expect(res).toEqual({
+      attrs: testTarget.attrs,
+      inviteUrl: 'https://survey.example.com/i/tst999',
+      email: 'tester@example.com',
+      resid: 1,
+      isTest: true,
+    });
+    // 실제 조사 대상은 읽지 않는다 — 화면의 링크를 눌러도 실제 응답이 생기지 않는다
+    expect(getFirstContactSample).not.toHaveBeenCalled();
+  });
+
+  it('게스트는 테스트 대상자를 보지 않는다(늘 실데이터)', async () => {
+    vi.mocked(loadOperationsDataScope).mockResolvedValue('real');
+    vi.mocked(getFirstTestTargetSample).mockResolvedValue(testTarget);
+    vi.mocked(getFirstContactSample).mockResolvedValue(sampleData);
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://survey.example.com');
+
+    const res = await getMailPreviewSample({ surveyId: 'sv-1' }, { isGuest: true });
+
+    expect(getFirstTestTargetSample).not.toHaveBeenCalled();
+    expect(res?.inviteUrl).toBe('https://survey.example.com/i/abc123');
+    expect(res?.isTest).toBeUndefined();
+  });
   afterEach(() => vi.unstubAllEnvs());
 
   it('컨택 0건이면 null 을 반환한다', async () => {
@@ -100,6 +147,7 @@ describe('sendTestTemplateMail', () => {
     vi.mocked(loadOperationsDataScope).mockResolvedValue('test');
     vi.mocked(getFirstContactSample).mockResolvedValue(sampleData);
     vi.mocked(sendTestMail).mockResolvedValue({ ok: true, id: 'message-1' });
+    vi.mocked(getFirstTestTargetSample).mockResolvedValue(null);
     vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://survey.example.com');
     vi.stubEnv('RESEND_FROM_DOMAIN', 'mail.example.com');
   });
@@ -130,20 +178,26 @@ describe('sendTestTemplateMail', () => {
     surveyId: '00000000-0000-4000-8000-000000000001',
     to: 'qa@example.com',
     subject: '설문',
-    bodyHtml: '<p>{{invite_link}}</p>',
+    bodyHtml: '<p>{{name}} {{invite_link}}</p>',
     fromName: '조사팀',
     fromLocal: 'survey',
     replyTo: 'reply@example.com',
     attachments: [],
   };
 
-  it('테스트 대상자 초대 코드를 받으면 그 링크를 넣고 링크 종류를 live 로 알린다 — 샘플의 실제 링크는 여전히 싣지 않는다', async () => {
-    const result = await sendTestTemplateMail(liveInput, { testInviteCode: 'tst999' });
+  it('테스트 모드가 켜져 있고 테스트 대상자가 있으면 첫 테스트 대상자의 값과 링크로 보낸다 — 실제 조사 대상은 읽지 않는다', async () => {
+    vi.mocked(loadOperationsDataScope).mockResolvedValue('real');
+    vi.mocked(getFirstTestTargetSample).mockResolvedValue(testTarget);
+    vi.mocked(getFirstContactSample).mockClear();
+
+    const result = await sendTestTemplateMail(liveInput);
 
     const sent = vi.mocked(sendTestMail).mock.calls.at(-1)?.[0];
     expect(sent?.html).toContain('https://survey.example.com/i/tst999');
+    expect(sent?.html).toContain('테스트 대상자');
     expect(sent?.html).not.toContain('/i/__test__');
     expect(sent?.html).not.toContain('/i/abc123');
+    expect(getFirstContactSample).not.toHaveBeenCalled();
     expect(result).toEqual({ ok: true, id: 'message-1', inviteLink: 'live' });
     // 수신거부는 여전히 견본 토큰이다
     expect(vi.mocked(MailWrapper).mock.calls.at(-1)?.[0]).toMatchObject({
@@ -151,30 +205,28 @@ describe('sendTestTemplateMail', () => {
     });
   });
 
-  it('리뷰 3 — 명단 값을 받으면 샘플을 다시 읽지 않고 그 값으로 본문을 채운다', async () => {
-    vi.mocked(getFirstContactSample).mockClear();
-    await sendTestTemplateMail(
-      { ...liveInput, bodyHtml: '<p>{{name}} {{invite_link}}</p>' },
-      { testInviteCode: 'tst999', sampleAttrs: { name: '사본이 읽은 이름' } },
-    );
-    expect(getFirstContactSample).not.toHaveBeenCalled();
-    const sent = vi.mocked(sendTestMail).mock.calls.at(-1)?.[0];
-    expect(sent?.html).toContain('사본이 읽은 이름');
-    expect(sent?.html).not.toContain('홍길동');
-  });
-
-  it('초대 코드가 없으면 견본 링크이고 링크 종류를 sandbox 로 알린다', async () => {
+  it('테스트 대상자가 없으면 종전대로 견본 링크이고 링크 종류를 sandbox 로 알린다', async () => {
+    vi.mocked(getFirstTestTargetSample).mockResolvedValue(null);
     const result = await sendTestTemplateMail(liveInput);
-    expect(vi.mocked(sendTestMail).mock.calls.at(-1)?.[0]?.html).toContain('/i/__test__');
+    const sent = vi.mocked(sendTestMail).mock.calls.at(-1)?.[0];
+    expect(sent?.html).toContain('/i/__test__');
+    expect(sent?.html).not.toContain('/i/abc123');
     expect(result).toEqual({ ok: true, id: 'message-1', inviteLink: 'sandbox' });
   });
 
+  it('게스트는 테스트 대상자 링크를 쓰지 않는다', async () => {
+    vi.mocked(getFirstTestTargetSample).mockResolvedValue(testTarget);
+    vi.mocked(getFirstTestTargetSample).mockClear();
+    const result = await sendTestTemplateMail(liveInput, { isGuest: true });
+    expect(getFirstTestTargetSample).not.toHaveBeenCalled();
+    expect(vi.mocked(sendTestMail).mock.calls.at(-1)?.[0]?.html).toContain('/i/__test__');
+    expect(result.inviteLink).toBe('sandbox');
+  });
+
   it('발송이 실패하면 링크 종류를 싣지 않는다', async () => {
+    vi.mocked(getFirstTestTargetSample).mockResolvedValue(testTarget);
     vi.mocked(sendTestMail).mockResolvedValue({ ok: false, error: '거절' });
-    expect(await sendTestTemplateMail(liveInput, { testInviteCode: 'tst999' })).toEqual({
-      ok: false,
-      error: '거절',
-    });
+    expect(await sendTestTemplateMail(liveInput)).toEqual({ ok: false, error: '거절' });
   });
 });
 

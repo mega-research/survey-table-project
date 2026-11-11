@@ -11,8 +11,8 @@ interface Input {
   /** 첫 컨택 attrs 기반 — inviteUrl 은 무시한다(실제 대상자의 초대 링크를 테스트 수신자에게 보내지 않는다). */
   sample: PreviewSample | null;
   /**
-   * 눌러서 열리는 **테스트 대상자** 초대 링크 — 테스트 모드가 켜진 설문에서 워크플로
-   * (`workflows/test-send-live-link`)가 정해 넘긴다. 없으면 견본 링크다.
+   * 눌러서 열리는 **테스트 대상자** 초대 링크 — 테스트 모드가 켜진 설문의 첫 테스트 대상자 것
+   * (`sendTestTemplateMail` 이 넘긴다). 없으면 견본 링크다.
    */
   testInviteUrl?: string | null;
 }
