@@ -2,6 +2,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 
 import { type DbTransaction as Tx, db } from '@/db';
 import { type NewContactPii, contactPii } from '@/db/schema';
+import { logger } from '@/lib/logger';
 
 import { decryptPii, encryptPii } from './aes';
 import { blindIndex } from './blind';
@@ -149,9 +150,10 @@ export async function getMaskHintsForTargets(
 }
 
 /**
- * 여러 contact 의 지정 columnKey PII 만 일괄 복호화 — 응답 내역 목록 표시용.
+ * 여러 contact 의 지정 columnKey PII 만 일괄 복호화 — 응답 내역·조사 대상 목록 표시용.
  * 페이지 단위 targetIds 로만 호출할 것 (복호화 비용). 복호화 실패 항목은 결과에서 제외
- * (목록은 '—' 폴백 — 상세 페이지의 failed readonly 처리와 달리 편집 경로가 아니므로 안전).
+ * (목록은 '—'·마스킹 힌트 폴백 — 상세 페이지의 failed readonly 처리와 달리 편집 경로가 아니므로 안전)하고,
+ * 화면이 조용히 폴백하므로 호출당 경고 로그 한 줄을 남긴다(값 없이 건수와 첫 칸의 id·열 이름만).
  * 반환: targetId → columnKey → 평문
  */
 export async function decryptPiiForTargets(
@@ -175,16 +177,23 @@ export async function decryptPiiForTargets(
       ),
     );
 
+  let failedCount = 0;
+  let firstFailed: { contactTargetId: string; columnKey: string } | null = null;
   for (const r of rows) {
     let plain: string;
     try {
       plain = decryptPii(r.cipher);
     } catch {
+      failedCount += 1;
+      firstFailed ??= { contactTargetId: r.contactTargetId, columnKey: r.columnKey };
       continue;
     }
     const existing = result.get(r.contactTargetId) ?? {};
     existing[r.columnKey] = plain;
     result.set(r.contactTargetId, existing);
+  }
+  if (firstFailed) {
+    logger.warn({ failedCount, ...firstFailed }, 'contact pii list decrypt failed');
   }
   return result;
 }

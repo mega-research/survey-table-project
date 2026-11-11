@@ -30,7 +30,11 @@ import {
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { contactAttempts } from '@/db/schema';
-import { decryptForTarget, getMaskHintsForTargets } from '@/lib/crypto/contact-pii-repo';
+import {
+  decryptForTarget,
+  decryptPiiForTargets,
+  getMaskHintsForTargets,
+} from '@/lib/crypto/contact-pii-repo';
 import type { PiiFieldType } from '@/lib/crypto/pii-fields';
 import {
   type ContactsSortDir,
@@ -96,6 +100,11 @@ export interface ListContactsArgs {
    * 열·값 모두 게스트에게 보내지 않는다. 기본 true.
    */
   includeAssignment?: boolean;
+  /**
+   * 평문으로 실을 개인정보 열(column_key). 조사 대상 목록 화면만 표시 중인 열을 넘긴다
+   * (`visiblePiiColumnKeys`). 넘기지 않거나 비면 평문을 싣지 않는다 — 기본은 마스킹 힌트뿐.
+   */
+  plainPiiKeys?: readonly string[];
 }
 
 export interface ListContactsResult {
@@ -157,13 +166,23 @@ function orderExpr(col: AnyColumn | SQL, direction: ContactsSortDir): SQL {
  * - contact_targets 베이스 + 최신 contact_attempts (correlated subquery) 조인
  * - 조사 대상 필터 해석 결과의 다중 조건 필터 (buildContactsFilterSql)
  * - page 클램프 (profiles.server.ts 패턴)
- * - PII 마스킹 (email/biz)
+ * - 개인정보 열은 마스킹 힌트가 기본, `plainPiiKeys` 를 받으면 그 열만 이 쪽 행에 한해 복호화해 함께 싣는다
  *
  * 인덱스: idx_contact_attempts_target (contact_target_id, attempt_no DESC) INCLUDE (result_code)
  *   덕분에 latestResultCode subquery 가 index-only scan 으로 동작.
  */
 export async function listContactsForSurvey(args: ListContactsArgs): Promise<ListContactsResult> {
-  const { surveyId, scope, page, pageSize, filter, sort, dir, includeAssignment = true } = args;
+  const {
+    surveyId,
+    scope,
+    page,
+    pageSize,
+    filter,
+    sort,
+    dir,
+    includeAssignment = true,
+    plainPiiKeys = [],
+  } = args;
 
   const whereParts: SQL[] = [eq(contactTargets.surveyId, surveyId), targetScopeCondition(scope)];
 
@@ -242,8 +261,13 @@ export async function listContactsForSurvey(args: ListContactsArgs): Promise<Lis
     .limit(pageSize)
     .offset(offset);
 
-  // PII 마스킹 힌트 일괄 조회 (cipher 미포함, 비용 낮음)
-  const maskHintsMap = await getMaskHintsForTargets(dataRows.map((r) => r.id));
+  // PII 마스킹 힌트 일괄 조회 (cipher 미포함, 비용 낮음). 평문은 요청한 열만, 이 쪽 행(pageSize)만 복호화한다 —
+  // 복호화에 실패한 칸은 결과에서 빠져 표가 힌트로 그린다.
+  const targetIds = dataRows.map((r) => r.id);
+  const [maskHintsMap, plainMap] = await Promise.all([
+    getMaskHintsForTargets(targetIds),
+    plainPiiKeys.length > 0 ? decryptPiiForTargets(targetIds, plainPiiKeys) : null,
+  ]);
 
   const rows: ContactsRow[] = dataRows.map((r) => ({
     id: r.id,
@@ -251,6 +275,7 @@ export async function listContactsForSurvey(args: ListContactsArgs): Promise<Lis
     groupValue: r.groupValue,
     attrs: (r.attrs ?? {}) as Record<string, string>,
     piiMaskHints: maskHintsMap.get(r.id) ?? {},
+    ...(plainMap ? { piiPlain: plainMap.get(r.id) ?? {} } : {}),
     latestResultCode: r.latestResultCode,
     latestAttemptNo: r.latestAttemptNo,
     respondedAt: r.respondedAt,

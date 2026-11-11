@@ -169,6 +169,21 @@ export function piiKeyOf(source: string): string | null {
   return null;
 }
 
+/**
+ * 조사 대상 목록에 지금 보이는 개인정보 열의 column_key — 목록 화면이 평문으로 실을 열이다.
+ * 숨긴 열은 화면에 그리지 않으므로 복호화하지도 않는다.
+ */
+export function visiblePiiColumnKeys(scheme: ContactColumnScheme | null): string[] {
+  if (!scheme) return [];
+  const keys: string[] = [];
+  for (const col of scheme.columns) {
+    if (col.hidden) continue;
+    const key = piiKeyOf(col.source);
+    if (key !== null) keys.push(key);
+  }
+  return keys;
+}
+
 // ─────────── Raw 내보내기 조사 대상 명단 열 ───────────
 
 /**

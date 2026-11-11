@@ -114,6 +114,9 @@ function computeCell(
   }
   const piiKey = piiKeyOf(col.source);
   if (piiKey) {
+    // 목록 화면은 평문을 싣는다. 평문이 빠진 칸(복호화 실패)과 평문을 싣지 않은 호출은 힌트로 그린다.
+    const plainValue = row.piiPlain?.[piiKey];
+    if (plainValue) return { display: plainValue, plain: plainValue };
     const hint = row.piiMaskHints[piiKey];
     if (hint?.maskHint) {
       // 마스킹 힌트 (예: "naver.com", "5678", "김**")
@@ -202,7 +205,8 @@ function computeCell(
  * 조사 대상 목록 표.
  *
  * 컬럼 스킴(ContactColumnScheme) 기반 동적 헤더/셀 렌더 + 응답 완료 행 강조.
- * - attrs.* source: row.attrs[키] 표시 (이메일/사업자번호는 마스킹)
+ * - attrs.* source: row.attrs[키] 표시
+ * - pii.* source: 평문(row.piiPlain)이 실렸으면 그 값, 없으면 마스킹 힌트
  * - system.resid/contact_result/web: 시스템 필드
  * - system.email_count: 최신 메일 수신 상태 badge (mail_recipients, 발송 이력 없으면 —)
  * - system.contact_owner: 지금 맡은 컨택원 이름 칩 (배정 없음은 —)

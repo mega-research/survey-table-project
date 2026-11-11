@@ -14,15 +14,17 @@
  */
 
 import { createRouterClient } from '@orpc/server';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
 import {
+  contactPii as contactPiiTable,
   contactTargets as contactTargetsTable,
   surveyResponses as surveyResponsesTable,
   surveys as surveysTable,
 } from '@/db/schema';
+import { buildPiiRows } from '@/lib/crypto/contact-pii-repo';
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 import { listContactsForSurvey } from '@/server/read-models/contacts';
 import type { ORPCContext } from '@/server/context';
@@ -192,6 +194,65 @@ describe.skipIf(!isLocalDb)('contacts.targets/columns procedure round-trip (real
     expect(rowInProgress?.progressPct).toBe(40);
     expect(rowDropped?.responseStatus).toBe('drop');
     expect(rowDropped?.progressPct).toBe(70);
+  });
+
+  it('개인정보 평문: 넘긴 열만 복호화해 싣고, 넘기지 않으면 평문이 없다', async () => {
+    const [survey] = await db
+      .insert(surveysTable)
+      .values({ title: '컨택-개인정보-평문-테스트' })
+      .returning({ id: surveysTable.id });
+    if (!survey) throw new Error('survey 삽입 실패');
+    createdSurveyIds.push(survey.id);
+
+    const withPii = await client.targets.add({ surveyId: survey.id, attrs: { name: 'A' } });
+    const withoutPii = await client.targets.add({ surveyId: survey.id, attrs: { name: 'B' } });
+    await db.insert(contactPiiTable).values(
+      buildPiiRows(withPii.id, [
+        { columnKey: '대표자', fieldType: 'representative', plain: '장길산' },
+        { columnKey: '전화번호', fieldType: 'mobile', plain: '010-6640-1234' },
+        { columnKey: '이메일', fieldType: 'email', plain: 'jang@example.com' },
+      ]),
+    );
+
+    const base = {
+      surveyId: survey.id,
+      scope: 'real' as const,
+      filter: resolvedFilterForTest(),
+      page: 1,
+      pageSize: 20,
+      sort: 'resid' as const,
+      dir: 'asc' as const,
+    };
+
+    // 넘긴 열(표시 중인 열)만 평문 — 숨긴 열(이메일)은 복호화하지 않는다.
+    const plain = await listContactsForSurvey({ ...base, plainPiiKeys: ['대표자', '전화번호'] });
+    const rowWith = plain.rows.find((r) => r.id === withPii.id);
+    expect(rowWith?.piiPlain).toEqual({ 대표자: '장길산', 전화번호: '010-6640-1234' });
+    // 힌트는 그대로 함께 온다 — 복호화에 실패한 칸의 폴백.
+    expect(rowWith?.piiMaskHints['대표자']?.maskHint).toBe('장**');
+    // 개인정보 행이 없는 대상은 빈 객체.
+    expect(plain.rows.find((r) => r.id === withoutPii.id)?.piiPlain).toEqual({});
+
+    // 암호문이 깨진 칸은 평문에서 빠지고(표는 힌트로 그린다) 나머지 칸은 그대로 나온다.
+    await db
+      .update(contactPiiTable)
+      .set({ cipher: 'not-a-valid-cipher' })
+      .where(
+        and(
+          eq(contactPiiTable.contactTargetId, withPii.id),
+          eq(contactPiiTable.columnKey, '전화번호'),
+        ),
+      );
+    const broken = await listContactsForSurvey({ ...base, plainPiiKeys: ['대표자', '전화번호'] });
+    const rowBroken = broken.rows.find((r) => r.id === withPii.id);
+    expect(rowBroken?.piiPlain).toEqual({ 대표자: '장길산' });
+    expect(rowBroken?.piiMaskHints['전화번호']?.maskHint).toBe('010-66...');
+
+    // 열을 넘기지 않는 호출(컨택원 수정 화면 등)에는 평문 필드 자체가 없다.
+    const masked = await listContactsForSurvey(base);
+    expect(masked.rows.every((r) => !('piiPlain' in r))).toBe(true);
+    const emptyKeys = await listContactsForSurvey({ ...base, plainPiiKeys: [] });
+    expect(emptyKeys.rows.every((r) => !('piiPlain' in r))).toBe(true);
   });
 
   it('columns.update: resid hidden 스킴도 저장되고, 정상 스킴은 surveys.contactColumns에 저장된다', async () => {

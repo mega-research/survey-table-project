@@ -154,10 +154,16 @@ export interface ContactsRow {
   id: string;
   resid: number;
   groupValue: string | null;
-  /** attrs 통째 (비PII 만 포함됨 — PII 는 piiMaskHints 에) */
+  /** attrs 통째 (비PII 만 포함됨 — PII 는 piiMaskHints·piiPlain 에) */
   attrs: Record<string, string>;
   /** PII 컬럼별 마스킹 힌트 (columnKey → { fieldType, maskHint }) */
   piiMaskHints: Record<string, { fieldType: PiiFieldType; maskHint: string | null }>;
+  /**
+   * PII 컬럼별 평문 (columnKey → 평문). **조사 대상 목록 화면만** 채운다 — 표시 중인 열, 이 쪽 행만 복호화한다
+   * (2026-11-11 결정: 목록을 여는 계정은 상세에서 이미 평문을 본다). 필드가 없거나 그 열이 빠져 있으면
+   * (복호화 실패 포함) 표는 마스킹 힌트로 그린다. 컨택원 수정 화면·메일 표는 싣지 않는다.
+   */
+  piiPlain?: Record<string, string>;
   /** 최신 attempt result_code (없으면 null) */
   latestResultCode: string | null;
   latestAttemptNo: number | null;

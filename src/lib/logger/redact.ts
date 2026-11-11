@@ -34,6 +34,9 @@ export const REDACT_PATHS: string[] = [
   '*.blindIndex',
   'maskHint',
   '*.maskHint',
+  // 조사 대상 목록 행에 실리는 복호화 평문 묶음
+  'piiPlain',
+  '*.piiPlain',
 
   // 메일/컨택 스냅샷·토큰 (이메일 평문 + 사칭 가능 토큰)
   'emailSnapshot',

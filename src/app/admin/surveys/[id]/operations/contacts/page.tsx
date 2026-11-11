@@ -13,7 +13,7 @@ import {
   listQueryFromSearchParams,
 } from '@/features/operations/contacts/contacts-list-return';
 import { resolveContactListSort } from '@/lib/contacts/default-sort';
-import { CONTACTS_PAGE_SIZE } from '@/lib/operations/contacts-format';
+import { CONTACTS_PAGE_SIZE, visiblePiiColumnKeys } from '@/lib/operations/contacts-format';
 import { buildDownloadCandidates } from '@/lib/operations/contacts-export-format';
 import { listContactsForSurvey } from '@/server/read-models/contacts';
 import {
@@ -23,6 +23,7 @@ import {
 } from '@/server/read-models/contact-filter-resolution';
 import { getOperationsDataScope } from '@/server/data-scope';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
+import { requireSurveyConsolePage } from '@/lib/auth/require-survey-console-page';
 
 export const metadata: Metadata = {
   title: '현황 - 조사 대상 목록',
@@ -45,6 +46,8 @@ interface PageProps {
 
 export default async function ContactsPage({ params, searchParams }: PageProps) {
   const { id: surveyId } = await params;
+  // 이 화면은 개인정보 평문을 싣는다 — 미들웨어를 통과한 무권한 세션을 여기서 한 번 더 거른다.
+  await requireSurveyConsolePage(surveyId);
   const sp = await searchParams;
   const scope = await getOperationsDataScope(surveyId);
 
@@ -80,6 +83,9 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
     sort: safeSort,
     dir,
     includeAssignment: !isGuest,
+    // 표시 중인 개인정보 열은 가리지 않고 보인다 — 이 목록을 여는 계정(관리자·실사 게스트)은
+    // 행을 눌러 상세에서 이미 평문을 본다(2026-11-11 결정). 보기 전용 게스트는 이 경로에 못 온다.
+    plainPiiKeys: visiblePiiColumnKeys(scheme),
   });
 
   if (!scheme) {

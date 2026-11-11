@@ -14,6 +14,7 @@
 - 게스트 계정: `GUEST_SURVEY_GRANTS="<userId>:<surveyId>[,...]"` env로 설문 단위 위임 (한 유저가 복수 설문 grant 가능). 무권한 설문 콘솔 진입 시 강제 로그아웃 → 로그인 후 원래 목적지 복귀 (`lib/auth/guest-grants.ts`).
 - 보기 전용 게스트(`VIEW_ONLY_GUEST_GRANTS`)는 설문 보기(preview)도 막힌다 — grant 에 `allowPreview` 를 켠 고객 계정만 연다(dairy@ 유가공업). guest9(인공지능 실태조사)는 협업 업체 사정으로 막아 둔다.
 - 화면(RSC)이 세션을 확인할 때는 `requireAuth` 가 아니라 `lib/auth/require-page-user` 의 `requirePageUser` 를 쓴다 — 미들웨어를 통과한 뒤 렌더 중 세션을 잃으면 오류 화면 대신 원래 경로(미들웨어가 싣는 `x-request-path`)를 실어 로그인으로 보낸다. 게스트 판정(`guest-viewer`)·`requireAdminPage` 가 이것을 거친다. Route Handler·procedure 는 401 이 맞으니 `requireAuth` 그대로.
+- 미들웨어는 grant 보유자의 경로만 제한한다 — grant 도 없고 `ADMIN_USER_IDS` 에도 없는 세션은 `/admin` 화면을 그대로 통과한다. 그래서 개인정보 평문을 직접 렌더하는 RSC 페이지는 첫 줄에서 스스로 거른다: 관리자 전용은 `requireAdminPage`(분석), 게스트에게도 여는 운영 콘솔 화면은 `lib/auth/require-survey-console-page` 의 `requireSurveyConsolePage(surveyId)`(조사 대상 목록 — `canAccessSurvey` + 보기 전용 게스트 거부). 조사 대상 상세·응답 내역·응답 수정 화면에는 아직 이 가드가 없다(2026-11-11 리뷰에서 확인한 남은 틈).
 - allowlist 미설정이면 fail-open(인증된 모든 유저 통과) + 최초 1회 경고. 게스트 콘솔은 전역 테스트 모드와 무관하게 항상 실데이터를 본다.
 
 ## 테스트 모드
