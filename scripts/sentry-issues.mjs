@@ -31,10 +31,9 @@ const fileEnv = { ...readEnvFile('.env'), ...readEnvFile('.env.local') };
 const env = (key) => process.env[key] ?? fileEnv[key];
 
 const token = env('SENTRY_READ_TOKEN') ?? env('SENTRY_AUTH_TOKEN');
-const org = env('SENTRY_ORG');
 const project = env('SENTRY_PROJECT');
-if (!token || !org || !project) {
-  console.error('SENTRY_READ_TOKEN · SENTRY_ORG · SENTRY_PROJECT 가 .env.local 에 있어야 합니다.');
+if (!token || !project) {
+  console.error('SENTRY_READ_TOKEN · SENTRY_PROJECT 가 .env 또는 .env.local 에 있어야 합니다.');
   process.exit(2);
 }
 
@@ -59,6 +58,15 @@ async function get(path) {
     process.exit(1);
   }
   return res.json();
+}
+
+// 조직 슬러그는 env 의 SENTRY_ORG 를 믿지 않고 토큰이 보는 프로젝트 목록에서 푼다 — 로컬 env 의
+// SENTRY_ORG 가 실제 슬러그와 달라 모든 조회가 403 이던 적이 있다(2026-11-11).
+const projects = await get('/projects/');
+const org = projects.find((p) => p.slug === project)?.organization?.slug;
+if (!org) {
+  console.error(`이 토큰이 볼 수 있는 프로젝트에 '${project}' 가 없습니다 (SENTRY_PROJECT 확인).`);
+  process.exit(1);
 }
 
 const args = process.argv.slice(2);
