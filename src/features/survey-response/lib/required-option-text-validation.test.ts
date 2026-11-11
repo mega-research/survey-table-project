@@ -485,3 +485,121 @@ describe('collectRequiredOptionTextIssues — 보기 그룹 표', () => {
     ).toBe(false);
   });
 });
+
+describe('collectRequiredOptionTextIssues — 내용 선택 입력(textInputOptional)', () => {
+  it('필수 radio·checkbox 문항에서 내용 선택 입력 보기는 글자가 비어도 누락이 아니다', () => {
+    const radio = makeQuestion({
+      type: 'radio',
+      required: true,
+      options: [
+        { id: 'other', value: 'other-value', label: '기타', allowTextInput: true, textInputOptional: true },
+      ],
+    });
+    expect(collectRequiredOptionTextIssues(radio, 'other-value', { other: '  ' })).toEqual({
+      questionMissing: false,
+      cellIds: [],
+    });
+
+    const checkbox = makeQuestion({
+      type: 'checkbox',
+      required: true,
+      options: [
+        { id: 'loose', value: 'loose', label: '기타', allowTextInput: true, textInputOptional: true },
+        { id: 'strict', value: 'strict', label: '상세', allowTextInput: true },
+      ],
+    });
+    // 같은 문항 안에서도 플래그가 없는 보기는 종전대로 막는다
+    expect(collectRequiredOptionTextIssues(checkbox, ['loose', 'strict'], {})).toEqual({
+      questionMissing: true,
+      cellIds: [],
+      detailTargetIds: ['q1:option:strict'],
+    });
+    expect(collectRequiredOptionTextIssues(checkbox, ['loose'], {}).questionMissing).toBe(false);
+  });
+
+  it('순위형 보기도 내용 선택 입력이면 optionText 를 요구하지 않는다', () => {
+    const question = makeQuestion({
+      type: 'ranking',
+      required: true,
+      options: [
+        { id: 'rank-other', value: 'rank-value', label: '기타', allowTextInput: true, textInputOptional: true },
+      ],
+    });
+    expect(
+      collectRequiredOptionTextIssues(question, [{ rank: 1, optionValue: 'rank-value', optionText: '' }], undefined),
+    ).toEqual({ questionMissing: false, cellIds: [] });
+  });
+
+  it('보기 소스 표의 choice_opt·ranking_opt 칸에 적은 플래그도 같은 뜻이다', () => {
+    const choiceQuestion = makeQuestion({
+      type: 'checkbox',
+      required: true,
+      tableRowsData: [{
+        id: 'row', label: '행',
+        cells: [{ id: 'choice-source', type: 'choice_opt', content: '기타', allowTextInput: true, textInputOptional: true }],
+      }],
+    });
+    const rankingQuestion = makeQuestion({
+      type: 'ranking',
+      required: true,
+      rankingConfig: { optionsSource: 'table', positions: 1 },
+      tableRowsData: [{
+        id: 'row', label: '행',
+        cells: [{ id: 'ranking-source', type: 'ranking_opt', content: '기타', allowTextInput: true, textInputOptional: true }],
+      }],
+    });
+    expect(collectRequiredOptionTextIssues(choiceQuestion, ['choice-source'], {}).questionMissing).toBe(false);
+    expect(
+      collectRequiredOptionTextIssues(rankingQuestion, [{ rank: 1, optionValue: 'ranking-source', optionText: ' ' }], undefined)
+        .questionMissing,
+    ).toBe(false);
+  });
+
+  it('보기 그룹 표의 보기 칸과 표 칸 안 보기(radio·checkbox·select·ranking)도 플래그를 따른다', () => {
+    const groupedTable = makeQuestion({
+      type: 'table',
+      required: true,
+      choiceGroups: [{ id: 'g1', groupKey: 'rad1', type: 'radio', label: '보유' }],
+      tableRowsData: [{
+        id: 'r1', label: '',
+        cells: [{ id: 'etc', content: '기타', type: 'choice_opt', choiceGroupId: 'g1', allowTextInput: true, textInputOptional: true }],
+      }],
+    });
+    expect(collectRequiredOptionTextIssues(groupedTable, { __choiceGroups: { rad1: 'etc' } }, {}).questionMissing).toBe(false);
+
+    const cellTable = makeQuestion({
+      type: 'table',
+      required: true,
+      tableRowsData: [{
+        id: 'row', label: '행',
+        cells: [
+          { id: 'radio', type: 'radio', content: '', radioOptions: [{ id: 'radio-opt', value: 'radio-value', label: 'R', allowTextInput: true, textInputOptional: true }] },
+          { id: 'checkbox', type: 'checkbox', content: '', checkboxOptions: [{ id: 'checkbox-opt', value: 'checkbox-value', label: 'C', allowTextInput: true, textInputOptional: true }] },
+          { id: 'select', type: 'select', content: '', selectOptions: [{ id: 'select-opt', value: 'select-value', label: 'S', allowTextInput: true, textInputOptional: true }] },
+          { id: 'ranking', type: 'ranking', content: '', rankingOptions: [{ id: 'ranking-opt', value: 'ranking-value', label: 'K', allowTextInput: true, textInputOptional: true }] },
+        ],
+      }],
+    });
+    expect(collectRequiredOptionTextIssues(
+      cellTable,
+      { radio: 'radio-value', checkbox: ['checkbox-value'], select: 'select-value', ranking: [{ rank: 1, optionValue: 'ranking-value', optionText: '' }] },
+      {},
+    )).toEqual({ questionMissing: false, cellIds: [] });
+  });
+
+  it('순위형의 「기타(직접 입력)」 엔트리는 글자가 곧 답이라 플래그와 무관하게 요구한다', () => {
+    const question = makeQuestion({
+      type: 'ranking',
+      required: true,
+      rankingConfig: { optionsSource: 'table', positions: 1 },
+      tableRowsData: [{
+        id: 'row', label: '행',
+        cells: [{ id: 'other-entry', type: 'ranking_opt', content: '기타', isOtherRankingCell: true, textInputOptional: true }],
+      }],
+    });
+    expect(
+      collectRequiredOptionTextIssues(question, [{ rank: 1, optionValue: RANKING_OTHER_VALUE, otherText: '' }], undefined)
+        .questionMissing,
+    ).toBe(true);
+  });
+});

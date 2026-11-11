@@ -378,6 +378,12 @@ export interface QuestionOption {
   allowTextInput?: boolean;
   /** 주관식 입력칸 placeholder 텍스트. 비어있으면 응답/테스트 모드에서 '상세 기재' 기본값 사용. */
   textInputPlaceholder?: string;
+  /**
+   * 내용 선택 입력 — 켜면 이 보기를 고르고 글자를 비워도 필수 검증에 걸리지 않는다(기본은 꺼짐:
+   * 필수 문항에서 고른 상세 기재 보기는 글자가 있어야 넘어간다). `allowTextInput` 이 켜진 보기에서만 뜻이 있다.
+   * 판정은 survey-response/lib/required-option-text-validation 하나. 빌더 편집 화면은 없다(스크립트로 적는다).
+   */
+  textInputOptional?: boolean;
   /** 사이드카 텍스트 입력 모드 — 'number' 면 숫자만 (입력 셀과 같은 타이핑 규칙) */
   textInputType?: InputType;
   /** textInputType='number' 전용 표시·범위 형식 (입력 셀·단답형과 같은 NumberFormat) */
@@ -646,6 +652,8 @@ export interface TableCell {
   // 선택 시 사이드카 텍스트 입력 (radio/checkbox 옵션과 동일 의미). __optTexts__ 로 저장됨.
   allowTextInput?: boolean;
   textInputPlaceholder?: string;
+  /** 내용 선택 입력 — 보기(QuestionOption.textInputOptional)와 같은 뜻. choice_opt·ranking_opt 칸에 적는다. */
+  textInputOptional?: boolean;
   /** 사이드카 텍스트 입력 모드 — 'number' 면 숫자만 (입력 셀과 같은 타이핑 규칙) */
   textInputType?: InputType;
   /** textInputType='number' 전용 표시·범위 형식 (입력 셀·단답형과 같은 NumberFormat) */
@@ -738,6 +746,12 @@ export interface CheckboxOption {
   allowTextInput?: boolean;
   /** 주관식 입력칸 placeholder 텍스트. 비어있으면 응답/테스트 모드에서 '상세 기재' 기본값 사용. */
   textInputPlaceholder?: string;
+  /**
+   * 내용 선택 입력 — 켜면 이 보기를 고르고 글자를 비워도 필수 검증에 걸리지 않는다(기본은 꺼짐:
+   * 필수 문항에서 고른 상세 기재 보기는 글자가 있어야 넘어간다). `allowTextInput` 이 켜진 보기에서만 뜻이 있다.
+   * 판정은 survey-response/lib/required-option-text-validation 하나. 빌더 편집 화면은 없다(스크립트로 적는다).
+   */
+  textInputOptional?: boolean;
   /** 사이드카 텍스트 입력 모드 — 'number' 면 숫자만 (입력 셀과 같은 타이핑 규칙) */
   textInputType?: InputType;
   /** textInputType='number' 전용 표시·범위 형식 (입력 셀·단답형과 같은 NumberFormat) */
@@ -776,6 +790,12 @@ export interface RadioOption {
   allowTextInput?: boolean;
   /** 주관식 입력칸 placeholder 텍스트. 비어있으면 응답/테스트 모드에서 '상세 기재' 기본값 사용. */
   textInputPlaceholder?: string;
+  /**
+   * 내용 선택 입력 — 켜면 이 보기를 고르고 글자를 비워도 필수 검증에 걸리지 않는다(기본은 꺼짐:
+   * 필수 문항에서 고른 상세 기재 보기는 글자가 있어야 넘어간다). `allowTextInput` 이 켜진 보기에서만 뜻이 있다.
+   * 판정은 survey-response/lib/required-option-text-validation 하나. 빌더 편집 화면은 없다(스크립트로 적는다).
+   */
+  textInputOptional?: boolean;
   /** 사이드카 텍스트 입력 모드 — 'number' 면 숫자만 (입력 셀과 같은 타이핑 규칙) */
   textInputType?: InputType;
   /** textInputType='number' 전용 표시·범위 형식 (입력 셀·단답형과 같은 NumberFormat) */
