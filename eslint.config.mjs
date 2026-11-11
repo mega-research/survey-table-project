@@ -31,6 +31,19 @@ const SERVER_LAYER_PATTERNS = [
   },
 ];
 
+// no-restricted-syntax 항목 — 한 파일에 여러 블록이 걸리면 마지막 블록만 남으므로 상수로 두고 합쳐 싣는다.
+const NO_ANY_ARRAY_BINDING = {
+  selector:
+    "TaggedTemplateExpression[tag.name='sql'] > TemplateLiteral > TemplateElement[value.raw=/ANY\\s*\\(\\s*$/i]",
+  message:
+    "sql 템플릿에 ANY(${배열}) 바인딩을 쓰지 않습니다 — 길이 1 배열이 조용히 풀립니다. inArray 또는 sql.join 으로 값마다 바인딩하세요.",
+};
+const NO_PLAIN_ERROR_THROW = {
+  selector: "ThrowStatement > NewExpression[callee.name='Error']",
+  message:
+    "서버에서는 일반 Error 를 던지지 않습니다. 예상된 거부는 ORPCError(코드 + 문구), 내부 실패는 InternalFailure 로 던지세요 (src/server/internal-failure.ts).",
+};
+
 const eslintConfig = [
   {
     ignores: [
@@ -408,24 +421,22 @@ const eslintConfig = [
     },
   },
   {
+    // drizzle `sql` 템플릿에 배열을 ANY(${arr}) 로 바인딩하지 않는다 — 길이 1 배열이 조용히 스칼라로
+    // 풀려 PG 가 22P02 를 내거나 엉뚱한 행을 잡는다. inArray 또는 sql.join 으로 값마다 바인딩한다.
+    files: ["src/**/*.{ts,tsx}"],
+    rules: { "no-restricted-syntax": ["error", NO_ANY_ARRAY_BINDING] },
+  },
+  {
     // 서버에서 일반 Error 를 던지지 않는다 — oRPC 는 비-ORPCError 의 문구를 운영에서
     // 'Internal server error' 로 갈아 끼우고 Sentry 는 그것을 장애로 받는다(2026-11-11: 단건 메일의
     // 「연락금지」 거부가 그렇게 묻혔고, 같은 모양이 144곳이었다). 던지는 쪽이 둘 중 하나를 고른다:
     //   사용자가 이해하고 고칠 수 있는 거부  → new ORPCError('NOT_FOUND' | 'BAD_REQUEST' | 'CONFLICT' …, { message })
     //   일어나면 안 되는 내부 실패            → new InternalFailure(...)  (src/server/internal-failure.ts)
     // 이름 있는 도메인 오류 클래스(SurveyOwnershipError 등)는 그대로 쓴다.
+    // 같은 files 에 같은 규칙 블록이 둘이면 마지막이 덮어쓰므로, 위 블록의 ANY 금지를 여기서 다시 싣는다.
     files: ["src/server/**/*.ts"],
     ignores: ["src/server/**/*.test.ts"],
-    rules: {
-      "no-restricted-syntax": [
-        "error",
-        {
-          selector: "ThrowStatement > NewExpression[callee.name='Error']",
-          message:
-            "서버에서는 일반 Error 를 던지지 않습니다. 예상된 거부는 ORPCError(코드 + 문구), 내부 실패는 InternalFailure 로 던지세요 (src/server/internal-failure.ts).",
-        },
-      ],
-    },
+    rules: { "no-restricted-syntax": ["error", NO_ANY_ARRAY_BINDING, NO_PLAIN_ERROR_THROW] },
   },
 ];
 
