@@ -1011,10 +1011,11 @@ function InteractiveTableResponseBody({
         : undefined,
     [stagedInItemCards, stagedRowsConfig, stagedRows],
   );
-  const rowWiseDisplayRows = useMemo(() => {
-    if (!usesRowWiseSheet || !hasDynamicRows) {
-      return displayRows;
-    }
+  // 응답자가 볼 수 있는 행 — 본문 격자의 행(displayRows)에 응답자가 고른 동적 행과 그 그룹에 딸린 행을
+  // 더한 것. 데스크톱은 동적 행을 본문이 아니라 선택 줄 아래 펼친 자리에 그리므로 displayRows 에 없다.
+  // 그룹을 접어 두었어도 고른 행은 「보이는 행」이다 — 차단 검증(collectVisibleTableCells)과 같은 기준.
+  const selectionVisibleRows = useMemo(() => {
+    if (!hasDynamicRows) return displayRows;
 
     const selectedSet = new Set(selectedRowIds);
     const selectedGroupIds = new Set<string>();
@@ -1062,8 +1063,9 @@ function InteractiveTableResponseBody({
     hasDynamicRows,
     hiddenGroupIds,
     selectedRowIds,
-    usesRowWiseSheet,
   ]);
+  // 행별 원본·행별 척도 시트는 고른 동적 행까지 한 목록으로 그린다. 나머지 표시 방식은 본문 격자의 행만.
+  const rowWiseDisplayRows = usesRowWiseSheet ? selectionVisibleRows : displayRows;
 
   // 가로 스크롤 인디케이터 (좌/우 섀도우·버튼 표시 여부)
   const { canScrollLeft, canScrollRight } = useHorizontalScrollIndicators(tableContainerRef, {
@@ -1382,7 +1384,7 @@ function InteractiveTableResponseBody({
   // 있어야 하므로 표시 행이 아니라 원본 rows 전체다(값이 없으면 어차피 비활성).
   const gatingTableCells = useMemo(() => collectTableCells(rows), [rows]);
 
-  // 중복 불가 묶음의 구성원 범위 — 지금 그려지는 행·열에 있는 칸만. 표시 조건으로 숨은 칸은 값이
+  // 중복 불가 묶음의 구성원 범위 — 응답자가 볼 수 있는 행·열에 있는 칸만(고른 동적 행 포함). 표시 조건으로 숨은 칸은 값이
   // 응답에 남아 있어, 세면 보이지 않는 칸이 보기를 차지한다. 따라 선택도 같은 집합으로 숨은 칸을
   // 건너뛴다(응답자가 풀 수 없는 값을 만들지 않는다). 둘 다 없는 표(대다수)는 만들지 않는다.
   const visibleCellIds = useMemo(() => {
@@ -1393,11 +1395,11 @@ function InteractiveTableResponseBody({
       return null;
     }
     const ids = new Set<string>();
-    for (const row of rowWiseDisplayRows) {
+    for (const row of selectionVisibleRows) {
       for (const cell of row.cells) if (!cell.isHidden) ids.add(cell.id);
     }
     return ids;
-  }, [gatingTableCells, rowWiseDisplayRows]);
+  }, [gatingTableCells, selectionVisibleRows]);
 
   // ── 빈 테이블 ──
   if (columns.length === 0 || rows.length === 0) {

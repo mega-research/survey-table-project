@@ -5,6 +5,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type {
   ChoiceGroup,
+  DynamicRowGroupConfig,
   Question,
   QuestionConditionGroup,
   TableCell,
@@ -102,12 +103,14 @@ function Harness({
   mobileMode,
   allResponses,
   allQuestions,
+  dynamicRowConfigs,
 }: {
   rows?: TableRow[];
   initialValue?: Record<string, unknown>;
   mobileMode?: 'row-group-cards';
   allResponses?: Record<string, unknown>;
   allQuestions?: Question[];
+  dynamicRowConfigs?: DynamicRowGroupConfig[];
 }) {
   const [value, setValue] = useState<Record<string, unknown>>(initialValue);
   return (
@@ -122,6 +125,7 @@ function Harness({
         onChange={setValue}
         allResponses={allResponses}
         allQuestions={allQuestions}
+        dynamicRowConfigs={dynamicRowConfigs}
         enableSticky={false}
       />
       <output data-testid="value">{JSON.stringify(value)}</output>
@@ -259,5 +263,51 @@ describe('따라 선택 — 조건으로 숨은 행', () => {
     expect(screen.queryByRole('checkbox', { name: '알고 2' })).not.toBeInTheDocument();
     fireEvent.click(box('수혜 1'));
     expect(groupsOf()).toEqual({ chk03: ['benefit1'] });
+  });
+});
+
+describe('따라 선택 — 동적 행 (응답자가 골라 펼친 행)', () => {
+  // 두 행 모두 동적 그룹 소속 — 데스크톱에서는 본문 격자가 아니라 선택 줄 아래 펼친 자리에 그려진다
+  const dynamicConfigs: DynamicRowGroupConfig[] = [{ groupId: 'dg1', enabled: true }];
+  const dynamicRows = (): TableRow[] => [
+    {
+      ...itemRow(1, '① 금융/자금 지원', true, { dynamicGroupId: 'dg1' }),
+      cells: itemRow(1, '① 금융/자금 지원', true).cells.map((cell) =>
+        // 수혜 1 은 같은 행의 지원에 더해 둘째 행의 알고 있음도 가리킨다
+        cell.id === 'benefit1' ? { ...cell, impliedCellIds: ['apply1', 'know2'] } : cell,
+      ),
+    },
+    itemRow(2, '② 인력 지원', false, { dynamicGroupId: 'dg1' }),
+  ];
+
+  it('골라서 펼친 행 안에서도 같은 행의 칸이 함께 체크된다', () => {
+    render(
+      <Harness
+        rows={dynamicRows()}
+        dynamicRowConfigs={dynamicConfigs}
+        initialValue={{ __selectedRowIds: ['r1', 'r2'] }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: '펼치기' }));
+    fireEvent.click(box('수혜 1'));
+    // 사슬 순서 — 수혜 1 이 직접 가리킨 칸(지원 1 · 알고 2)이 먼저, 지원 1 을 거친 알고 1 이 다음
+    expect(groupsOf()).toEqual({
+      chk03: ['benefit1'],
+      chk02: ['apply1'],
+      chk01: ['know2', 'know1'],
+    });
+  });
+
+  it('응답자가 고르지 않은 동적 행의 칸은 따라 체크되지 않는다', () => {
+    render(
+      <Harness
+        rows={dynamicRows()}
+        dynamicRowConfigs={dynamicConfigs}
+        initialValue={{ __selectedRowIds: ['r1'] }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: '펼치기' }));
+    fireEvent.click(box('수혜 1'));
+    expect(groupsOf()).toEqual({ chk03: ['benefit1'], chk02: ['apply1'], chk01: ['know1'] });
   });
 });
