@@ -5,6 +5,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { Webhook } from 'svix';
 
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
+import { forwardReceivedReply } from '@/server/mail/services/reply-forward';
 import { processResendWebhookEvent } from '@/server/mail/services/resend-webhook';
 
 /**
@@ -22,7 +23,15 @@ import { processResendWebhookEvent } from '@/server/mail/services/resend-webhook
  * Finalize (status='sending' → 'completed'/'partial'):
  *   - 같은 트랜잭션에서 carrier UPDATE 다음에 한 번 더 UPDATE. queued+sent=0 도달 시 즉시 마킹.
  *   - opened 는 사후에도 계속 도착 가능하지만 status 변동은 없음 (opened_count 만 누증).
+ *
+ * 받은 메일 알림 (`email.received`):
+ *   - 보낸 사람 주소로 들어온 메일이다. 수신자 상태 전이 경로를 타지 않고 회신 전달 서비스로 간다.
+ *   - 서비스가 받은 메일 id 로 직접 조회하므로 알림에 실린 주소·제목은 넘기지 않는다.
+ *   - 넘기지 않은 메일도 200 이다. 조회·내려받기·발송 실패만 500 (장부에 적지 않아 재시도가 처음부터 다시 한다).
  */
+
+/** 보낸 사람 주소로 메일이 들어왔다는 알림. 이때 `data.email_id` 는 받은 메일의 id 다. */
+const RECEIVED_EVENT_TYPE = 'email.received';
 
 interface ResendEventPayload {
   type: string;
@@ -69,6 +78,10 @@ const POST_HANDLER = async (req: NextRequest, ctx: RouteLogContext): Promise<Nex
     ...(messageId !== undefined ? { resendMessageId: messageId } : {}),
   });
   try {
+    if (payload.type === RECEIVED_EVENT_TYPE && messageId !== undefined) {
+      const forwarded = await forwardReceivedReply({ eventId: svixId, receivedEmailId: messageId });
+      return NextResponse.json({ ok: true, replyForward: forwarded.outcome });
+    }
     const result = await processResendWebhookEvent({
       id: svixId,
       type: payload.type,

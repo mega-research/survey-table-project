@@ -253,6 +253,7 @@ mail_recipients            # 수신자별 status + Resend message id
 
 webhook_events             # Resend webhook idempotency dedupe (id = svix-id)
 ├── id, source, eventType, receivedAt
+│                          # eventType = 알림 종류 그대로. 회신 전달만 결과를 갈라 적는다 — email.received:forwarded(넘김) | email.received:skipped(넘기지 않음), `src/server/mail/AGENTS.md` 「회신 전달」
 
 mail_billing_periods       # 메일 비용 정산 (요금제+결제일 시계열)
 ├── id, startDate (UNIQUE), billingDayOfMonth, planLabel
