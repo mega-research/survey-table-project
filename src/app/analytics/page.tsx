@@ -6,9 +6,11 @@ import { ArrowRight, BarChart3, Calendar, FileText, Plus, Users } from 'lucide-r
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { LocalDateTime } from '@/components/ui/local-date-time';
+import { TruncatedText } from '@/components/ui/truncated-text';
 import { requireAdminPage } from '@/lib/auth/require-admin-page';
 import { getSurveyListWithCounts } from '@/server/survey-builder/services/survey-read';
 import { WorkScopeError } from '@/server/work-scope';
+import { surveyCardTitle } from '@/shared/contracts/survey-builder-io';
 import { WORK_SCOPE_COOKIE } from '@/shared/contracts/workspace';
 
 // 라이브 응답 수를 보여주는 대시보드. 빌드 타임 prerender(static) 대상이 되면
@@ -78,9 +80,16 @@ export default async function AnalyticsListPage() {
                 <Card className="group cursor-pointer p-6 transition-shadow hover:shadow-md">
                   <div className="mb-4 flex items-start justify-between">
                     <div className="min-w-0 flex-1">
-                      <h3 className="truncate text-lg font-semibold text-gray-900 transition-colors group-hover:text-blue-600">
-                        {survey.title}
+                      {/* 설문 목록 카드와 같은 이름(카드 제목, 없으면 설문지 제목) — 잘리면 마우스를 올려 전체를 본다 */}
+                      <h3 className="min-w-0 text-lg font-semibold text-gray-900 transition-colors group-hover:text-blue-600">
+                        <TruncatedText text={surveyCardTitle(survey)} />
                       </h3>
+                      {/* 카드 제목을 따로 지은 설문은 응답자가 보는 설문지 제목을 한 줄 더 보인다 */}
+                      {surveyCardTitle(survey) !== survey.title && (
+                        <p className="mt-0.5 min-w-0 text-[13px] text-gray-500">
+                          <TruncatedText text={`설문지 제목: ${survey.title}`} />
+                        </p>
+                      )}
                       {survey.description && (
                         <p className="mt-1 line-clamp-2 text-sm text-gray-500">
                           {survey.description}

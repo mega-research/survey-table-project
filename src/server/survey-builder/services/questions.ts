@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import 'server-only';
 
 import { and, eq, inArray } from 'drizzle-orm';
@@ -15,6 +16,7 @@ import { collectFieldLimitedSaveDiff } from '@/server/storage-lifecycle/save-dif
 import { promoteNoticeAttachments } from '@/lib/survey/notice-attachment-promote';
 import { promoteSurveyImages, type PromotableQuestion } from '@/lib/survey/survey-image-promote';
 import { generateId, isValidUUID } from '@/lib/utils';
+import { InternalFailure } from '@/server/internal-failure';
 
 import { CrossSurveyRowError } from '../domain/survey-save';
 import { assertGroupReferenceBelongsToSurvey } from './question-groups';
@@ -119,7 +121,7 @@ export async function createQuestion(data: CreateQuestionInput): Promise<Questio
     .values(questionToInsert as NewQuestion)
     .returning();
 
-  if (!question) throw new Error('질문 생성에 실패했습니다.');
+  if (!question) throw new InternalFailure('질문 생성에 실패했습니다.');
   return question as QuestionRow;
 }
 
@@ -171,7 +173,7 @@ export async function updateQuestion(
       .where(and(eq(questions.id, questionId), eq(questions.surveyId, surveyId)))
       .returning();
 
-    if (!updated) throw new Error('질문 업데이트에 실패했습니다.');
+    if (!updated) throw new ORPCError('NOT_FOUND', { message: '질문을 찾을 수 없습니다. 설문을 먼저 저장한 뒤 다시 시도하세요.' });
 
     if (oldRow) {
       await collectFieldLimitedSaveDiff(tx, {

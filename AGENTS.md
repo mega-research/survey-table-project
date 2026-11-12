@@ -25,7 +25,7 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 | 쿼터                                                                                                                                      | `src/server/quota/AGENTS.md`                     |
 | 문항 수요조사 (조사표·영역 앵커·분할 레이아웃)                                                                                            | `src/server/survey-document/AGENTS.md`           |
 | R2 파일 수명주기                                                                                                                          | `src/server/storage-lifecycle/AGENTS.md`         |
-| 조사 대상 — 이월 응답 임포트 · 컨택원 배정 · 외주 담당 범위(업체별로 볼 대상) · 필터 해석 · ID 목록 검색 · 대상 정보 수정 현황            | `src/server/contacts/AGENTS.md`                  |
+| 조사 대상 — 이월 응답 임포트 · 컨택원 배정 · 외주 담당 범위(업체별로 볼 대상) · 필터 해석 · ID 목록 검색 · 목록 기본 정렬·행 표시·개인정보 열 · 대상 정보 수정 현황 | `src/server/contacts/AGENTS.md`                  |
 | 운영 콘솔 필터 바 구조                                                                                                                    | `src/features/operations/AGENTS.md`              |
 | DB 스키마 (테이블·컬럼·관계)                                                                                                              | `src/db/schema/AGENTS.md`                        |
 | 프론트 기능 묶음 트리 · 질문 유형·셀 타입·테이블 검증 규칙 · 행 반복·차례로 열기 · 다국어 설문                                            | `src/features/AGENTS.md`                         |
@@ -202,6 +202,8 @@ pnpm db:isolated <이름> # 내 브랜치 전용 테스트 DB(같은 컨테이�
 pnpm worktree:new <브랜치> [시작점] # .claude/worktrees 에 워크트리 생성 + env·공유 자료 링크 + 설치 (아래 Worktree bootstrap)
 pnpm db:drift         # 실 DB ↔ 레포 객체 대조 (아래 "DB 드리프트 점검")
 pnpm db:size          # 실 DB 테이블·인덱스 크기·사용 횟수 (읽기 전용 — 부풀었으면 손으로 REINDEX)
+pnpm deploy:wait [sha] # main 에 푸시한 커밋의 Vercel 배포가 끝날 때까지 기다렸다가 결과 한 줄 (에이전트는 백그라운드로)
+pnpm sentry:issues [id | --query 검색어] # Sentry 미해결 이슈·최근 이벤트 태그 조회 (읽기 전용, .env.local 의 SENTRY_READ_TOKEN)
 pnpm db:migrate       # 마이그레이션 실행 (_journal.json 기준 — 0019에서 동결, 주의사항 7 참조)
 pnpm survey:vars · survey:dump · survey:render  # 운영 설문 변수명 계산 · 응답 화면 그려 보기 (survey-ops 스킬 — 설문 고치기 도우미 포함)
 pnpm versions:prune · spss:migrate · spss:rollback  # DRY_RUN 기본, `:live` 를 붙여야 실행
@@ -331,6 +333,7 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 
 - 문서/주석은 한국어, 변수명/함수명은 영어.
 - 코드(주석/로그/UI 텍스트/라벨)에 이모지 금지.
+- **Prettier 는 게이트가 아니다** — 설정(`.prettierrc`)은 편집기 저장용이고 CI·스크립트 어디에도 연결돼 있지 않다. src 의 60%(1,953파일 중 1,189, 2026-11-11)가 `prettier --check` 를 통과하지 못하므로 그 결과로 내 변경을 판단하지 말고, 고치는 파일을 통째로 다시 포맷하지도 않는다(무관한 diff 가 미병합 브랜치와 충돌한다). 포맷 게이트는 staging 승격 뒤 한 번에 전량 포맷하면서 붙인다.
 - git commit 메시지는 한국어: `feat: OOO 기능 추가` 형식, 괄호 `()` 금지.
 
 ---
@@ -382,7 +385,7 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 
 9. **서버 sanitize**: jsdom 의존 라이브러리 금지 (isomorphic-dompurify 크래시). `sanitize-html` 사용.
 
-10. **테스트**: 단위 테스트의 집은 SUT 소스 옆이다(ADR 0017, 전면 colocation — 2026-08-25 실측 src 466파일). 명명은 소스 어간 정합 — 1:1은 `<소스>.test.ts(x)`, 한 소스의 측면 시리즈는 `<어간>-<측면>.test.ts`, 여러 소스를 가로지르는 시나리오는 주 SUT 폴더에 주제명(app 라우트는 `route.test.ts`/`route-<측면>.test.ts`, 교차 라우트는 서술명). ESLint 경계가 colocation 을 막으면 의존 방향이 허용하는 쪽 SUT 폴더에 둔다(예: branch-logic-drift 는 공용 구역→server 금지라 server 도메인 쪽, 빌더 프리뷰 스토어 배선 테스트는 renderer 의 feature import 금지라 빌더 stores 쪽). 양쪽 다 막히는 교차 feature 계약은 `tests/repo` 로(예: measurement-font). `tests/` 에는 계층·계약 스위트만 산다 — `integration/`(service 모킹 패턴: top-level `vi.mock` + `vi.mocked`, realdb 포함)·`e2e/`·`repo/`(src 밖 소스·레포 계약)·fixtures/helpers/stubs/setup. 이 배치는 메타테스트(`tests/repo/test-tree-layout.test.ts`)가 강제한다. Vitest include 는 `tests/**` + `src/**/*.test.{ts,tsx}` + `workers/`, `.tsx` 는 jsdom 프로젝트 자동 분기(DOM 이 필요한 `.ts` 만 `DOM_TS_TESTS` 등재). 실DB 왕복은 `*.realdb.test.ts` — `pnpm test:integration`(로컬 supabase 54322 필요), 일반 `pnpm test`에서는 스킵. **같은 모듈에 `vi.mock` 을 두 번 걸지 말 것** — 어느 팩토리가 이기는지 보장되지 않는다. `{ __table }` 만 주는 쪽이 이기면 mock `eq()` 가 항상 false 라 조건 조회가 전부 빈 결과가 된다(`profiles-row-actions` 가 그렇게 14건 중 12건이 무너졌고, 「전체 스위트에서만 깨지는 모킹 간섭」으로 오진됐다).
+10. **테스트**: 단위 테스트의 집은 SUT 소스 옆이다(ADR 0017, 전면 colocation — 2026-08-25 실측 src 466파일). 명명은 소스 어간 정합 — 1:1은 `<소스>.test.ts(x)`, 한 소스의 측면 시리즈는 `<어간>-<측면>.test.ts`, 여러 소스를 가로지르는 시나리오는 주 SUT 폴더에 주제명(app 라우트는 `route.test.ts`/`route-<측면>.test.ts`, 교차 라우트는 서술명). ESLint 경계가 colocation 을 막으면 의존 방향이 허용하는 쪽 SUT 폴더에 둔다(예: branch-logic-drift 는 공용 구역→server 금지라 server 도메인 쪽, 빌더 프리뷰 스토어 배선 테스트는 renderer 의 feature import 금지라 빌더 stores 쪽). 양쪽 다 막히는 교차 feature 계약은 `tests/repo` 로(예: measurement-font). `tests/` 에는 계층·계약 스위트만 산다 — `integration/`(service 모킹 패턴: top-level `vi.mock` + `vi.mocked`, realdb 포함)·`e2e/`·`repo/`(src 밖 소스·레포 계약)·fixtures/helpers/stubs/setup. 이 배치는 메타테스트(`tests/repo/test-tree-layout.test.ts`)가 강제한다. Vitest include 는 `tests/**` + `src/**/*.test.{ts,tsx}` + `workers/`, `.tsx` 는 jsdom 프로젝트 자동 분기(DOM 이 필요한 `.ts` 만 `DOM_TS_TESTS` 등재). 실DB 왕복은 `*.realdb.test.ts` — `pnpm test:integration`(로컬 supabase 54322 필요), 일반 `pnpm test`에서는 스킵. **같은 모듈에 `vi.mock` 을 두 번 걸지 않는다** — 어느 팩토리가 이기는지 보장되지 않아 간헐 실패가 「모킹 간섭」으로 오진된다(`tests/repo/vi-mock-once.test.ts` 가 막는다). 서버 로그는 테스트 출력에 싣지 않는다(`tests/setup.ts` 가 `LOG_LEVEL=silent`) — 볼 때는 `LOG_LEVEL=debug` 를 앞에 붙인다. 실DB 실행은 대상 DB 의 재생 지문이 이 브랜치와 다르면 시작 전에 멈춘다(`tests/realdb-global-setup.ts`).
 
 11. **vitest의 `server-only` stub 사각지대**: 클라이언트/서버 경계 위반은 테스트가 통과해도 빌드에서만 드러난다. 경계를 건드렸으면 `pnpm build`로 확인할 것.
 
@@ -390,7 +393,7 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 
     **마이그레이션 번호는 그보다 조용한 축이다** — 같은 base 에서 갈라진 브랜치가 같은 번호를 서로 다른 뜻으로 선점할 수 있다(실제로 0101·0102). 번호는 **세 워크트리의 최댓값 + 1**, 배열 append 규칙은 아래 「마이그레이션 번호」.
 
-13. **drizzle 함정**: timestamptz optimistic lock은 PG μs ↔ JS ms 정밀도 차로 거짓 충돌 (version int 또는 string mode 사용). `ANY(${arr})` 바인딩 금지 (length=1 silent unwrap) → `inArray`/`sql.join`. jsonb 컬럼에 `JSON.stringify` 바인딩 금지 (이중 인코딩) → 객체 그대로 전달.
+13. **drizzle 함정**: timestamptz optimistic lock은 PG μs ↔ JS ms 정밀도 차로 거짓 충돌 (version int 또는 string mode 사용). `ANY(${arr})` 바인딩 금지 (length=1 silent unwrap) → `inArray`/`sql.join` — ESLint 가 막는다. jsonb 컬럼에 `JSON.stringify` 바인딩 금지 (이중 인코딩) → 객체 그대로 전달.
 
 14. **응답 루트 사이드카**: `questionResponses` 최상위의 `__` 접두 키(`__optTexts__` 기타/상세 기재, `__changeConfirm__` 추적조사 변동 확인)는 실존 문항이 아니라 저장 경계마다 분기가 필요하다 — 분리를 빠뜨리면 `saveDraft` 는 소속 검증에서 500 이 되고 `complete` 는 멤버십 필터에서 값을 조용히 버린다(둘 다 실제로 겪은 사고). 키와 정제 함수는 `lib/survey/response-sidecars.ts` 한 곳에 등록하고, 저장 경계는 `splitRootSidecars`/`isPersistedRootSidecarKey`/`sanitizeRootSidecar` 로만 판정한다. 등록되지 않은 `__` 키는 **저장에서 빠지고 경고 로그만 남는다** — 거부하면 등록을 빠뜨린 키 하나가 그 응답자의 초안 저장을 통째로 막는다(부분 저장이 없다). 문항 id 는 UUID 라 `__` 접두를 가질 수 없어 진짜 답변이 이 분기로 새지 않는다. `__dynamicRowSelections__` 는 2026-09-09 에 등재했다. `__prefillEdits__`(고친 프리필 칸 id — 응답 확정이 계산해 덮어쓴다, CONTEXT.md 「고친 프리필 따로 내보내기」)는 2026-11-05.
 
@@ -404,7 +407,7 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 
 18. **설문 종료는 「새로 들어오는 사람」만 막는다 — 진행 중 응답은 끝까지 제출된다**(ADR-0030): 응답 접수 판정표(`server/survey-response/domain/acceptance.ts`)의 `survey_closed` 는 **신규 진입과 재응답 허용**만 거부하고 완료 제출·진행 중 계속은 통과시킨다(마감일과 같은 결 — 즉시 전면 중단의 수단은 `isPaused` 다). 술어가 **설문 행만** 본다: 종료는 버전 행을 건드리지 않아 버전은 published 로 남으므로 「설문 또는 버전」으로 물으면 새 응답이 그대로 들어온다. 반대로 `status_not_published` 는 closed 를 「발행된 적 있는 설문」으로 통과시킨다 — 한 술어에 섞으면 완료 게이트가 종료된 설문의 진행 중 응답을 미배포로 잘라낸다. **첫 화면 차단도 같은 범위다**: 종료된 설문은 이어 갈 것이 없는 방문자에게만 접수 종료 화면(`not_accepting`)을 그린다. 「이어 갈 것」은 서버가 초대 토큰의 조사 대상에게 열린 응답이 있는지 본 값(`SurveyControl.resumableByInvite`)과 브라우저의 세션 키 둘로 판정한다(`use-duplicate-guard` 의 `closedEntry`) — 중단처럼 무조건 첫 화면에서 막으면 새로고침 한 번에 진행 중 응답이 버려진다. 새 접수 게이트를 만들 때 종료를 중단과 같은 줄에 넣지 말 것.
 
-19. **`useEffectEvent` 를 `React.memo`·`forwardRef` 컴포넌트 안에 쓰지 말 것**: React 19.2.3 은 memo·forwardRef 로 감싼 컴포넌트의 `useEffectEvent` 를 갱신하지 않는다(dev·prod 둘 다) — 이벤트가 첫 렌더 값을 계속 읽는다. **그 안에서 부르는 훅 속의 `useEffectEvent` 도 같다**(컴포넌트 단위로 걸린다). 표 입력 칸 `InputCell` 이 고친 값을 명단 값으로 되돌리고 `RichTextEditor` 가 바깥에서 바꾼 `initialHtml` 을 반영하지 않던 원인이다(`rich-text-editor-prop-sync.test.tsx`). 지금 src 에 그 조합은 없다. ref 가 필요하면 forwardRef 대신 React 19 의 `ref` prop 을, memo 가 필요하면 바깥 컴포넌트를 memo 로 두고 안쪽은 일반 함수 컴포넌트로 둔다. **React 를 올리면 다시 확인할 것.**
+19. **`useEffectEvent` 를 `React.memo`·`forwardRef` 컴포넌트 안에 쓰지 말 것**: React 19.2.3 은 그런 컴포넌트의 `useEffectEvent` 를 갱신하지 않아 이벤트가 첫 렌더 값을 계속 읽는다(dev·prod 둘 다). 컴포넌트 단위로 걸리므로 그 컴포넌트가 부르는 훅 안에 숨어 있어도 같다. ref 가 필요하면 forwardRef 대신 React 19 의 `ref` prop 을, memo 가 필요하면 바깥 컴포넌트를 memo 로 두고 안쪽은 일반 함수 컴포넌트로 둔다. `tests/repo/effect-event-in-memo.test.ts` 가 막는다 — **React 를 올리면 제약이 풀렸는지 확인하고 그 테스트를 지울 것.**
 
 ---
 

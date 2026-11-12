@@ -66,6 +66,7 @@ export function resolveRankingOptionsFromCells(cells: TableCell[]): QuestionOpti
       label: buildRankingOptLabel(cell, '(라벨 없음)'),
       spssNumericCode: cell.spssNumericCode ?? idx + 1,
       ...(cell.allowTextInput !== undefined ? { allowTextInput: cell.allowTextInput } : {}),
+      ...(cell.textInputOptional ? { textInputOptional: true } : {}),
       ...(cell.textInputPlaceholder !== undefined
         ? { textInputPlaceholder: cell.textInputPlaceholder }
         : {}),

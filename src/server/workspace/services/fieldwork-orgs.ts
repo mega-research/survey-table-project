@@ -2,6 +2,7 @@ import 'server-only';
 
 import { and, asc, count, countDistinct, eq, inArray, sql } from 'drizzle-orm';
 
+import { InternalFailure } from '@/server/internal-failure';
 import { db } from '@/db';
 import { fieldworkOrgs, surveyParticipants, users } from '@/db/schema';
 import { isUniqueViolation } from '@/lib/pg-error';
@@ -144,7 +145,7 @@ export async function createFieldworkOrg(
       .insert(fieldworkOrgs)
       .values({ name: input.name, memo: input.memo, createdBy: actorUserId })
       .returning({ id: fieldworkOrgs.id });
-    if (!org) throw new Error('createFieldworkOrg: 업체 생성 실패');
+    if (!org) throw new InternalFailure('createFieldworkOrg: 업체 생성 실패');
     return { id: org.id };
   } catch (err) {
     if (isUniqueViolation(err)) throw new DuplicateFieldworkOrgNameError();

@@ -196,7 +196,7 @@ describe('updateContactTarget 설문 스코프', () => {
         false,
         { id: 'editor-1', email: 'editor@local' },
       ),
-    ).rejects.toThrow('NOT_FOUND');
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it('다른 설문 소속이면(영향 0행) NOT_FOUND throw 하고 PII upsert 도 일어나지 않는다', async () => {
@@ -213,7 +213,7 @@ describe('updateContactTarget 설문 스코프', () => {
         false,
         { id: 'editor-1', email: 'editor@local' },
       ),
-    ).rejects.toThrow('NOT_FOUND');
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     // 소속 확정 전이므로 PII 재암호화는 호출되지 않아야 한다.
     expect(upsertPiiValueMock).not.toHaveBeenCalled();
   });
@@ -241,7 +241,7 @@ describe('deleteContactTarget 설문 스코프', () => {
     deleteReturningQueue.push([]); // 0행 영향
     await expect(
       deleteContactTarget({ id: 'ct-1', surveyId: 'other-survey' }, false),
-    ).rejects.toThrow('NOT_FOUND');
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it('정상 설문이면(1행 영향) 성공한다', async () => {
@@ -282,7 +282,7 @@ describe('updateAttempt 소속 스코프', () => {
         editor,
         FIELDWORK_SHARE_ALL,
       ),
-    ).rejects.toThrow('NOT_FOUND');
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it('contactTarget 이 설문에 없으면 NOT_FOUND throw', async () => {
@@ -299,7 +299,7 @@ describe('updateAttempt 소속 스코프', () => {
         editor,
         FIELDWORK_SHARE_ALL,
       ),
-    ).rejects.toThrow('NOT_FOUND');
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it('contactTarget 은 설문 소속이나 attempt 가 그 target 소속이 아니면(영향 0행) NOT_FOUND throw', async () => {
@@ -317,7 +317,7 @@ describe('updateAttempt 소속 스코프', () => {
         editor,
         FIELDWORK_SHARE_ALL,
       ),
-    ).rejects.toThrow('NOT_FOUND');
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it('정상 소속이면 성공한다', async () => {
@@ -344,7 +344,7 @@ describe('deleteAttempt 소속 스코프', () => {
     selectResultQueue.push([{ enabled: false }], []); // current scope 대상자 0행
     await expect(
       deleteAttempt({ id: 'att-1', contactTargetId: 'ct-1', surveyId: 'other-survey' }, false, editor, FIELDWORK_SHARE_ALL),
-    ).rejects.toThrow('NOT_FOUND');
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it('attempt 가 contactTargetId 소속이 아니면(영향 0행) NOT_FOUND throw', async () => {
@@ -352,7 +352,7 @@ describe('deleteAttempt 소속 스코프', () => {
     deleteReturningQueue.push([]); // attempt 영향 0행
     await expect(
       deleteAttempt({ id: 'att-1', contactTargetId: 'ct-1', surveyId: 'sv-1' }, false, editor, FIELDWORK_SHARE_ALL),
-    ).rejects.toThrow('NOT_FOUND');
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it('정상 소속이면 성공한다', async () => {

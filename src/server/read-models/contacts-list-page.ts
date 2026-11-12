@@ -1,11 +1,7 @@
 import 'server-only';
 
-import {
-  attrsKeyOf,
-  CONTACTS_PAGE_SIZE,
-  effectiveSortKey,
-  normalizeSortKey,
-} from '@/lib/operations/contacts-format';
+import { resolveContactListSort } from '@/lib/contacts/default-sort';
+import { CONTACTS_PAGE_SIZE, visiblePiiColumnKeys } from '@/lib/operations/contacts-format';
 import type { ContactsListPageData } from '@/shared/contracts/contacts-io';
 
 import type { OperationsDataScope } from '../data-scope';
@@ -94,14 +90,9 @@ export async function loadContactsListPage({
   });
   const { scheme, resultCodes, assignmentOptions, columnCandidates } = filterCtx;
 
-  // sort key — hidden 컬럼이면 'resid' 폴백 (URL 직접 조작 가드)
-  const visibleAttrsKeys = new Set(
-    (scheme?.columns ?? [])
-      .filter((c) => !c.hidden)
-      .map((c) => attrsKeyOf(c.source))
-      .filter((k): k is string => k != null),
-  );
-  const requestedSort = effectiveSortKey(normalizeSortKey(sp.sort), visibleAttrsKeys);
+  // sort key — 주소에 정렬이 없으면 컬럼 설정의 기본 정렬 열(없으면 시스템ID),
+  // 있으면 그 값(hidden 컬럼이면 'resid' 폴백 — URL 직접 조작 가드).
+  const requestedSort = resolveContactListSort(sp.sort, scheme);
   const sort =
     (!canViewMail && requestedSort === 'mailStatus') ||
     (!includeContactOwner && requestedSort === 'owner')
@@ -123,6 +114,10 @@ export async function loadContactsListPage({
     sort,
     dir,
     includeAssignment: includeContactOwner,
+    // 표시 중인 개인정보 열은 가리지 않고 보인다 — 이 목록을 여는 주체(내부 콘솔 · 외주 실사 링크)는
+    // 행을 눌러 상세에서 이미 평문을 본다(2026-11-11 결정). 게스트·클라이언트 링크는 이 조립을 쓰지
+    // 않는다(게스트는 마스킹 투영 `guest-contacts`).
+    plainPiiKeys: visiblePiiColumnKeys(scheme),
   });
 
   return {

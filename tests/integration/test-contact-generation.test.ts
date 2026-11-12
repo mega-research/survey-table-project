@@ -374,7 +374,10 @@ describe('수동 대상자 생성 스코프', () => {
 
     await expect(
       addContactTarget({ surveyId: SURVEY_ID, attrs: { 소속: '한도 초과' } }, false),
-    ).rejects.toThrow('TEST_TARGET_LIMIT');
+    ).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: '테스트 대상자는 20명까지 만들 수 있습니다.',
+    });
     expect(h.targets).toHaveLength(20);
   });
 

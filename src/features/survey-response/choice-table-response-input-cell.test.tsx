@@ -347,3 +347,51 @@ describe('보기-소스 표 input 셀 — 여러 줄·높이 늘리기', () => {
     expect(screen.getAllByRole('textbox')[0]!.tagName).toBe('INPUT');
   });
 });
+
+describe('보기-소스 표의 보기 칸 안 상세 기재(optionTextInCell)', () => {
+  /** ② 기타 행의 「현재」 보기 칸: 글자 「기타」 + 상세 기재. inCell = 칸 안에 그리기 옵션 */
+  function questionWithOtherChoice(inCell: boolean): Question {
+    const q = questionWithDetailRow(false);
+    const row2 = q.tableRowsData![1]!;
+    row2.cells[2] = {
+      ...row2.cells[2]!,
+      content: '기타',
+      allowTextInput: true,
+      textInputPlaceholder: '직접 기입',
+      ...(inCell ? { optionTextInCell: true } : {}),
+    };
+    q.tableRowsData = [q.tableRowsData![0]!, row2];
+    return q;
+  }
+
+  it('옵션을 켜고 그 보기를 고르면 입력칸이 보기 칸 안, 라벨과 같은 가로 줄에 나오고 표 아래에는 없다', () => {
+    renderTable(questionWithOtherChoice(true), { rad2: ETC_NOW_CELL });
+    const cell = screen.getByTestId(`cell-${ETC_NOW_CELL}`);
+    const input = screen.getByPlaceholderText('직접 기입');
+    expect(cell.contains(input)).toBe(true);
+    expect(screen.getAllByPlaceholderText('직접 기입')).toHaveLength(1);
+    // 라벨(체크 컨트롤)과 입력칸이 같은 가로 줄 컨테이너의 자식이다
+    const control = cell.querySelector('input[type="radio"]')!;
+    const row = control.closest('div.flex-row');
+    expect(row).not.toBeNull();
+    expect(row!.contains(input)).toBe(true);
+  });
+
+  it('옵션을 켜도 그 보기를 고르지 않았으면 입력칸이 없다', () => {
+    renderTable(questionWithOtherChoice(true), { rad2: 'r1c3' });
+    expect(screen.queryByPlaceholderText('직접 기입')).toBeNull();
+  });
+
+  it('옵션이 없으면 종전대로 표 아래에 나온다(보기 칸 안이 아니다)', () => {
+    renderTable(questionWithOtherChoice(false), { rad2: ETC_NOW_CELL });
+    const cell = screen.getByTestId(`cell-${ETC_NOW_CELL}`);
+    const input = screen.getByPlaceholderText('직접 기입');
+    expect(cell.contains(input)).toBe(false);
+  });
+
+  it('입력한 글자는 종전과 같은 자리(보기 칸 id 의 상세 기재)에 저장된다', async () => {
+    renderTable(questionWithOtherChoice(true), { rad2: ETC_NOW_CELL });
+    await userEvent.type(screen.getByPlaceholderText('직접 기입'), '직접 적음');
+    expect(useSurveyResponseStore.getState().optionTexts['q1']?.[ETC_NOW_CELL]).toBe('직접 적음');
+  });
+});

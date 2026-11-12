@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { Pencil } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { TruncatedText } from '@/components/ui/truncated-text';
 import {
   type ScaleMeanCandidate,
   type ScaleMeanSummary,
@@ -13,7 +14,6 @@ import {
 import { cn } from '@/lib/utils';
 
 import { ScaleMeanQuestionPicker } from './scale-mean-question-picker';
-import { TruncatedText } from './truncated-text';
 
 interface Props {
   surveyId: string;

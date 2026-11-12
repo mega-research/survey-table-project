@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import 'server-only';
 
@@ -35,7 +36,7 @@ export async function prepareContactInsertScope(
     lock: 'update',
     columns: ['contactColumns', 'testContactColumns'],
   });
-  if (!locked) throw new Error('설문을 찾을 수 없습니다.');
+  if (!locked) throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
 
   const { isTest, scope, row: survey } = locked;
   const [countRow] = await tx
@@ -45,10 +46,12 @@ export async function prepareContactInsertScope(
   const existingCount = countRow?.total ?? 0;
 
   if (input.requireEmptyTestScope && (!isTest || existingCount !== 0)) {
-    throw new Error('TEST_TARGET_GENERATION_STALE');
+    throw new ORPCError('CONFLICT', { message: 'TEST_TARGET_GENERATION_STALE' });
   }
   if (isTest && existingCount + input.requestedCount > 20) {
-    throw new Error('TEST_TARGET_LIMIT');
+    throw new ORPCError('BAD_REQUEST', {
+      message: '테스트 대상자는 20명까지 만들 수 있습니다.',
+    });
   }
 
   // 잠금 아래 raw JSONB 를 읽는 지점이라 소비처로 내보내기 전에 형태를 보정한다.

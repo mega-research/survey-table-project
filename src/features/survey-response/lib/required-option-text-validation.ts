@@ -48,6 +48,14 @@ function hasText(value: string | undefined): boolean {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
+/**
+ * 이 보기를 고르면 글자를 꼭 적어야 하는가 — 상세 기재 보기이고 「내용 선택 입력」을 켜지 않았을 때.
+ * 보기 소스 표·보기 그룹 표의 칸 플래그는 resolveChoiceOptions·resolveRankingOptions 가 보기로 옮겨 준다.
+ */
+function requiresOptionText(option: QuestionOption | undefined): boolean {
+  return option?.allowTextInput === true && option.textInputOptional !== true;
+}
+
 function collectMissingSelectedOptionTextTargetIds(
   questionId: string,
   value: unknown,
@@ -58,7 +66,7 @@ function collectMissingSelectedOptionTextTargetIds(
   return options
     .filter(
       (option) =>
-        option.allowTextInput === true &&
+        requiresOptionText(option) &&
         selectedIds.has(option.id) &&
         !hasText(optionTexts?.[option.id]),
     )
@@ -77,7 +85,7 @@ function collectMissingSelectedRankingTextTargetIds(
       return hasText(answer.otherText) ? [] : [targetId];
     }
     const option = options.find((candidate) => candidate.value === answer.optionValue);
-    return option?.allowTextInput === true && !hasText(answer.optionText) ? [targetId] : [];
+    return requiresOptionText(option) && !hasText(answer.optionText) ? [targetId] : [];
   });
 }
 

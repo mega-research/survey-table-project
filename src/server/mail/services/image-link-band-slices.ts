@@ -10,6 +10,7 @@
  * overwrite 되어 재저장이 idempotent 하다. rect 변경 시 이전 밴드 조각은
  * R2 에 orphan 으로 남는다 (소용량, 수용).
  */
+import { ORPCError } from '@orpc/server';
 import { createHash } from 'crypto';
 
 import sharp from 'sharp';
@@ -65,7 +66,7 @@ export async function ensureImageLinkBandSlices(bodyHtml: string): Promise<strin
     const width = meta.width ?? 0;
     const height = meta.height ?? 0;
     if (width <= 0 || height <= 0) {
-      throw new Error('클릭 영역 이미지의 크기를 읽을 수 없습니다.');
+      throw new ORPCError('BAD_REQUEST', { message: '클릭 영역 이미지의 크기를 읽을 수 없습니다.' });
     }
     const rows = computeBandRows(rect, height);
     if (!rows) continue;

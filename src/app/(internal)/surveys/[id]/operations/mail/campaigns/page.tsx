@@ -15,6 +15,7 @@ import {
   resolveMailDisplayColumns,
   resolveMailShowsResid,
 } from '@/lib/contacts/mail-display-columns';
+import { resolveDefaultSortKey } from '@/lib/contacts/default-sort';
 import { getContactColumnScheme } from '@/server/read-models/contacts';
 import { getOperationsDataScope } from '@/server/data-scope';
 import { isExternalViewer } from '@/lib/auth/external-viewer';
@@ -58,6 +59,7 @@ export default async function MailCampaignsListPage({ params, searchParams }: Pr
     pageSize: UNSUB_PAGE_SIZE,
     piiMaskKeys: mailPiiMaskKeys(mailColumns),
     includeAssignment: mailShowsContactOwner(mailColumns),
+    defaultSort: resolveDefaultSortKey(scheme),
   });
 
   return (

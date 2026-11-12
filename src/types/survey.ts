@@ -378,6 +378,12 @@ export interface QuestionOption {
   allowTextInput?: boolean;
   /** 주관식 입력칸 placeholder 텍스트. 비어있으면 응답/테스트 모드에서 '상세 기재' 기본값 사용. */
   textInputPlaceholder?: string;
+  /**
+   * 내용 선택 입력 — 켜면 이 보기를 고르고 글자를 비워도 필수 검증에 걸리지 않는다(기본은 꺼짐:
+   * 필수 문항에서 고른 상세 기재 보기는 글자가 있어야 넘어간다). `allowTextInput` 이 켜진 보기에서만 뜻이 있다.
+   * 판정은 survey-response/lib/required-option-text-validation 하나. 빌더 편집 화면은 없다(스크립트로 적는다).
+   */
+  textInputOptional?: boolean;
   /** 사이드카 텍스트 입력 모드 — 'number' 면 숫자만 (입력 셀과 같은 타이핑 규칙) */
   textInputType?: InputType;
   /** textInputType='number' 전용 표시·범위 형식 (입력 셀·단답형과 같은 NumberFormat) */
@@ -646,6 +652,8 @@ export interface TableCell {
   // 선택 시 사이드카 텍스트 입력 (radio/checkbox 옵션과 동일 의미). __optTexts__ 로 저장됨.
   allowTextInput?: boolean;
   textInputPlaceholder?: string;
+  /** 내용 선택 입력 — 보기(QuestionOption.textInputOptional)와 같은 뜻. choice_opt·ranking_opt 칸에 적는다. */
+  textInputOptional?: boolean;
   /** 사이드카 텍스트 입력 모드 — 'number' 면 숫자만 (입력 셀과 같은 타이핑 규칙) */
   textInputType?: InputType;
   /** textInputType='number' 전용 표시·범위 형식 (입력 셀·단답형과 같은 NumberFormat) */
@@ -683,6 +691,14 @@ export interface TableCell {
    * 데이터·검증·내보내기 무변경. 모바일 카드는 카드 아래 스택 그대로다.
    */
   optionTextSlot?: boolean;
+  /**
+   * 보기 소스 표의 보기 칸(choice_opt) 전용 — 이 보기를 골랐을 때 상세 기재 입력칸을 표 아래 스택이
+   * 아니라 **이 칸 안, 라벨 오른쪽 같은 줄**에 그린다(「☑ ⑩ 기타 [직접 기입]」). 두 칸을 합친 넓은
+   * 「기타」 칸용이고 기본은 꺼짐. 데스크톱 격자 전용 — 모바일은 종전대로 보기 아래다. 값이 사는
+   * 자리(`__optTexts__`)는 같아 검증·내보내기 무변경. 빌더 편집 화면은 없다(스크립트로 적는다).
+   * 판정은 question-renderer/utils/option-text-in-cell.
+   */
+  optionTextInCell?: boolean;
   /**
    * 중복 불가 묶음 이름 (선택 칸 전용). 같은 이름의 선택 칸끼리는 같은 보기를 두 번 고를 수 없다 —
    * 다른 칸이 고른 보기는 목록에 비활성으로 남고, 이미 들어온 중복은 차단형 검증이 막는다.
@@ -738,6 +754,12 @@ export interface CheckboxOption {
   allowTextInput?: boolean;
   /** 주관식 입력칸 placeholder 텍스트. 비어있으면 응답/테스트 모드에서 '상세 기재' 기본값 사용. */
   textInputPlaceholder?: string;
+  /**
+   * 내용 선택 입력 — 켜면 이 보기를 고르고 글자를 비워도 필수 검증에 걸리지 않는다(기본은 꺼짐:
+   * 필수 문항에서 고른 상세 기재 보기는 글자가 있어야 넘어간다). `allowTextInput` 이 켜진 보기에서만 뜻이 있다.
+   * 판정은 survey-response/lib/required-option-text-validation 하나. 빌더 편집 화면은 없다(스크립트로 적는다).
+   */
+  textInputOptional?: boolean;
   /** 사이드카 텍스트 입력 모드 — 'number' 면 숫자만 (입력 셀과 같은 타이핑 규칙) */
   textInputType?: InputType;
   /** textInputType='number' 전용 표시·범위 형식 (입력 셀·단답형과 같은 NumberFormat) */
@@ -776,6 +798,12 @@ export interface RadioOption {
   allowTextInput?: boolean;
   /** 주관식 입력칸 placeholder 텍스트. 비어있으면 응답/테스트 모드에서 '상세 기재' 기본값 사용. */
   textInputPlaceholder?: string;
+  /**
+   * 내용 선택 입력 — 켜면 이 보기를 고르고 글자를 비워도 필수 검증에 걸리지 않는다(기본은 꺼짐:
+   * 필수 문항에서 고른 상세 기재 보기는 글자가 있어야 넘어간다). `allowTextInput` 이 켜진 보기에서만 뜻이 있다.
+   * 판정은 survey-response/lib/required-option-text-validation 하나. 빌더 편집 화면은 없다(스크립트로 적는다).
+   */
+  textInputOptional?: boolean;
   /** 사이드카 텍스트 입력 모드 — 'number' 면 숫자만 (입력 셀과 같은 타이핑 규칙) */
   textInputType?: InputType;
   /** textInputType='number' 전용 표시·범위 형식 (입력 셀·단답형과 같은 NumberFormat) */

@@ -1,6 +1,7 @@
 import { and, asc, count, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import 'server-only';
 
+import { InternalFailure } from '@/server/internal-failure';
 import { db } from '@/db';
 import {
   surveyOwnershipEvents,
@@ -98,7 +99,7 @@ export async function createTeam(
         .insert(teams)
         .values({ name: input.name, order: (maxOrder?.value ?? -1) + 1 })
         .returning({ id: teams.id, name: teams.name });
-      if (!team) throw new Error('createTeam: 팀 생성 실패');
+      if (!team) throw new InternalFailure('createTeam: 팀 생성 실패');
 
       await tx.insert(teamLifecycleEvents).values({
         teamId: team.id,

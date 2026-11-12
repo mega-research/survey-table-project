@@ -1,4 +1,5 @@
 
+import { ORPCError } from '@orpc/server';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import 'server-only';
 
@@ -178,7 +179,7 @@ export async function applyQuestionResponseUpdate(
     .returning();
 
   if (!updated) {
-    throw new Error('응답을 수정할 수 없습니다.');
+    throw new ORPCError('CONFLICT', { message: '응답을 수정할 수 없습니다.' });
   }
   return updated;
 }
@@ -276,7 +277,7 @@ export async function loadResponseRowForMutation(responseId: string): Promise<Re
     },
   });
   if (!row) {
-    throw new Error('응답을 찾을 수 없습니다.');
+    throw new ORPCError('NOT_FOUND', { message: '응답을 찾을 수 없습니다.' });
   }
   return row;
 }

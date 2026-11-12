@@ -8,6 +8,7 @@ import { allocateContactResid } from './contact-resid';
 import { assertUploadRowLimit } from './upload-row-limit';
 import { parseExcelRows, previewExcel } from './excel-parser';
 import { type GroupLevel, isGroupLevel } from '@/lib/contacts/group-levels';
+import { carryOverDefaultSort } from '@/lib/contacts/default-sort';
 import { carryOverMailOrder } from '@/lib/contacts/mail-email-order';
 import {
   type ExistingContactKeyInfo,
@@ -55,6 +56,7 @@ import type {
   ParseExcelPreviewResult,
 } from '../domain/contact-upload';
 import { normalizeContactColumnScheme } from '@/lib/operations/contacts-format';
+import { InternalFailure } from '@/server/internal-failure';
 
 /**
  * 한 묶음에 싣는 행 수. contact_targets 7열 × 500행 = 3,500 파라미터로 PG 한도(65,535) 안쪽이고,
@@ -78,7 +80,7 @@ interface SurveyModeRow extends Record<string, unknown> {
 
 function ensureXlsx(file: File): void {
   const err = validateXlsxFile(file);
-  if (err) throw new Error(err);
+  if (err) throw new ORPCError('BAD_REQUEST', { message: err });
 }
 
 /**
@@ -144,7 +146,7 @@ export async function ingestContactUpload(
   // 클라이언트 상태를 신뢰하지 않는다. 테스트 모드에서는 실제 대상자 업로드가
   // 위험하므로, 파일을 읽기 전에 현재 DB 모드로 먼저 fail-closed 한다.
   if ((await loadOperationsDataScope(surveyId)) === 'test') {
-    throw new Error('테스트 모드에서는 실제 조사대상자를 업로드할 수 없습니다.');
+    throw new ORPCError('CONFLICT', { message: '테스트 모드에서는 실제 조사대상자를 업로드할 수 없습니다.' });
   }
 
   ensureXlsx(file);
@@ -196,9 +198,9 @@ export async function ingestContactUpload(
       FOR UPDATE
     `);
     const survey = scopeRows[0];
-    if (!survey) throw new Error('설문을 찾을 수 없습니다.');
+    if (!survey) throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
     if (resolveWriteScopeIsTest(survey.test_mode_enabled, false, browserTestView)) {
-      throw new Error('테스트 모드에서는 실제 조사대상자를 업로드할 수 없습니다.');
+      throw new ORPCError('CONFLICT', { message: '테스트 모드에서는 실제 조사대상자를 업로드할 수 없습니다.' });
     }
     const existingScheme = normalizeContactColumnScheme(survey.contact_columns ?? null);
 
@@ -236,7 +238,7 @@ export async function ingestContactUpload(
         mapping,
       })
       .returning({ id: contactUploads.id });
-    if (!upload) throw new Error('contact_uploads INSERT 실패');
+    if (!upload) throw new InternalFailure('contact_uploads INSERT 실패');
     const uploadId = upload.id;
 
     /** 분류 기준 값 — 빈 셀('')만 NULL. '0' 등 falsy 문자열 라벨은 보존 (|| 사용 금지). */
@@ -279,7 +281,7 @@ export async function ingestContactUpload(
           })),
         )
         .returning({ id: contactTargets.id, resid: contactTargets.resid });
-      if (inserted.length !== rows.length) throw new Error('contact_targets INSERT 실패');
+      if (inserted.length !== rows.length) throw new InternalFailure('contact_targets INSERT 실패');
 
       // PII 추출 + 암호화 저장 (buildPiiRows 가 빈 값/정규화 후 빈 값 자동 스킵).
       // RETURNING 순서에 기대지 않고 발번한 시스템ID 로 행을 짝짓는다.
@@ -287,7 +289,7 @@ export async function ingestContactUpload(
         const idByResid = new Map(inserted.map((t) => [t.resid, t.id]));
         const piiRows = rows.flatMap((row, i) => {
           const targetId = idByResid.get(startResid + i);
-          if (!targetId) throw new Error('contact_targets INSERT 결과 대조 실패');
+          if (!targetId) throw new InternalFailure('contact_targets INSERT 결과 대조 실패');
           const piiInputs: PiiInput[] = piiEntries.map((e) => ({
             columnKey: e.columnKey,
             fieldType: e.fieldType,
@@ -401,7 +403,7 @@ export async function ingestContactUpload(
         WHERE t.id = v.id
         RETURNING t.id
       `);
-      if (updated.length !== items.length) throw new Error('contact_targets 병합 UPDATE 실패');
+      if (updated.length !== items.length) throw new InternalFailure('contact_targets 병합 UPDATE 실패');
 
       if (piiEntries.length > 0) {
         const upserts = [];
@@ -521,10 +523,14 @@ export async function ingestContactUpload(
     // 스킴 갱신: replace 는 전체 재생성, merge/append 는 신규 컬럼만 append
     // 교체로 다시 만든 스킴에도 발송 주소 순서는 이어 붙인다 — 재업로드 한 번에 순서가
     // 열 이름순으로 돌아가면 다음 단체 메일이 엉뚱한 주소로 나간다.
+    // 목록 기본 정렬 열도 같은 이유로 이어 붙인다(같은 이름의 일반 열이 남아 있을 때만).
     const scheme =
       mode === 'replace' || existingScheme == null
-        ? carryOverMailOrder(
-            autoGenerateColumnScheme(headerKeys, mapping, piiKeySet),
+        ? carryOverDefaultSort(
+            carryOverMailOrder(
+              autoGenerateColumnScheme(headerKeys, mapping, piiKeySet),
+              existingScheme,
+            ),
             existingScheme,
           )
         : appendNewColumnsToScheme(existingScheme, headerKeys, mapping);
@@ -669,13 +675,13 @@ function validateMergeKeys(
   headerKeys: string[],
   piiKeySet: Set<string>,
 ): void {
-  if (mergeKeys.length === 0) throw new Error('매칭 키를 1개 이상 선택해주세요.');
+  if (mergeKeys.length === 0) throw new ORPCError('BAD_REQUEST', { message: '매칭 키를 1개 이상 선택해주세요.' });
   for (const key of mergeKeys) {
     if (!headerKeys.includes(key)) {
-      throw new Error(`매칭 키 '${key}' 가 엑셀 헤더에 없습니다.`);
+      throw new ORPCError('BAD_REQUEST', { message: `매칭 키 '${key}' 가 엑셀 헤더에 없습니다.` });
     }
     if (piiKeySet.has(key)) {
-      throw new Error(`개인정보 컬럼 '${key}' 은 매칭 키로 사용할 수 없습니다.`);
+      throw new ORPCError('BAD_REQUEST', { message: `개인정보 컬럼 '${key}' 은 매칭 키로 사용할 수 없습니다.` });
     }
   }
 }
@@ -732,10 +738,10 @@ export async function matchContactUpload(
   const { surveyId, file, mapping } = input;
 
   if ((await loadOperationsDataScope(surveyId)) === 'test') {
-    throw new Error('테스트 모드에서는 실제 조사대상자를 업로드할 수 없습니다.');
+    throw new ORPCError('CONFLICT', { message: '테스트 모드에서는 실제 조사대상자를 업로드할 수 없습니다.' });
   }
   if (mapping.mode !== 'merge' && mapping.mode !== 'append') {
-    throw new Error('매칭 미리보기는 병합 또는 추가 모드에서만 사용할 수 있습니다.');
+    throw new ORPCError('BAD_REQUEST', { message: '매칭 미리보기는 병합 또는 추가 모드에서만 사용할 수 있습니다.' });
   }
   ensureXlsx(file);
 

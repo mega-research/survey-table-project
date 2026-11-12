@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import type { ContactColumnDef, ContactColumnScheme } from '@/shared/contracts/contacts';
 import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts-format';
 
@@ -110,15 +111,15 @@ export function resolveTestContactFieldBindings(
   const email = scheme.columns.find((column) => column.piiType === 'email');
 
   if (!name || (name.piiType !== 'name' && name.piiType !== 'representative')) {
-    throw new Error('테스트 이름 컬럼을 찾을 수 없습니다.');
+    throw new ORPCError('CONFLICT', { message: '테스트 이름 컬럼을 찾을 수 없습니다.' });
   }
-  if (!company) throw new Error('테스트 회사 컬럼을 찾을 수 없습니다.');
-  if (!region) throw new Error('테스트 지역 컬럼을 찾을 수 없습니다.');
+  if (!company) throw new ORPCError('CONFLICT', { message: '테스트 회사 컬럼을 찾을 수 없습니다.' });
+  if (!region) throw new ORPCError('CONFLICT', { message: '테스트 지역 컬럼을 찾을 수 없습니다.' });
   if (!phone || (phone.piiType !== 'phone' && phone.piiType !== 'mobile')) {
-    throw new Error('테스트 전화 컬럼을 찾을 수 없습니다.');
+    throw new ORPCError('CONFLICT', { message: '테스트 전화 컬럼을 찾을 수 없습니다.' });
   }
   if (!email || email.piiType !== 'email') {
-    throw new Error('테스트 이메일 컬럼을 찾을 수 없습니다.');
+    throw new ORPCError('CONFLICT', { message: '테스트 이메일 컬럼을 찾을 수 없습니다.' });
   }
 
   return {

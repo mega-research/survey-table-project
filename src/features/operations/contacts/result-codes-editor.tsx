@@ -13,7 +13,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { type ContactResultCode, DEFAULT_RESULT_CODES, type ResultCodeStatus } from '@/shared/contracts/contacts';
+import {
+  type ContactResultCode,
+  DEFAULT_RESULT_CODES,
+  type ResultCodeRowMark,
+  type ResultCodeStatus,
+} from '@/shared/contracts/contacts';
+import { RESULT_CODE_ROW_MARKS, resolveCodeRowMark } from '@/lib/contacts/result-code-row-mark';
 import { resolveCodeStatus } from '@/lib/contacts/result-code-statuses-normalize';
 import { client } from '@/shared/lib/rpc';
 
@@ -41,6 +47,28 @@ const STATUS_LABEL: Record<ResultCodeStatus, string> = {
   neutral: '중립',
   negative: '부정',
 };
+
+const ROW_MARK_LABEL: Record<ResultCodeRowMark, string> = {
+  none: '없음',
+  done: '완료 음영',
+  out: '붉게',
+};
+
+/** 조사 대상 목록의 행 음영과 같은 색 견본 — `contacts-table` 의 ROW_MARK_CLASS 와 맞춘다. */
+const ROW_MARK_SWATCH: Record<ResultCodeRowMark, string> = {
+  none: 'border-slate-300 bg-white',
+  done: 'border-blue-200 bg-blue-50',
+  out: 'border-rose-200 bg-rose-50',
+};
+
+function RowMarkSwatch({ mark }: { mark: ResultCodeRowMark }) {
+  return (
+    <span
+      aria-hidden
+      className={`inline-block h-3 w-5 rounded-sm border ${ROW_MARK_SWATCH[mark]}`}
+    />
+  );
+}
 
 function StatusDot({ status }: { status: ResultCodeStatus }) {
   return (
@@ -191,16 +219,19 @@ export function ResultCodesEditor({ surveyId, initialCodes }: ResultCodesEditorP
         </div>
       )}
 
-      <div className="rounded-lg border bg-white">
+      {/* 코드·라벨 칸이 남는 폭을 나눠 갖는다 — 나머지 열은 내용 폭(w-px)으로 줄여, 글자가 긴 코드
+          (「10.메일발송」)가 한 글자만 보이던 것을 막는다. 좁은 화면은 가로 스크롤. */}
+      <div className="overflow-x-auto rounded-lg border bg-white">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-xs text-slate-600 uppercase">
             <tr>
-              <th className="px-3 py-2 text-left">순서</th>
+              <th className="w-px px-3 py-2 text-left whitespace-nowrap">순서</th>
               <th className="px-3 py-2 text-left">코드</th>
               <th className="px-3 py-2 text-left">라벨</th>
-              <th className="px-3 py-2 text-left">색상</th>
-              <th className="px-3 py-2 text-left">상태</th>
-              <th className="px-3 py-2 text-center">액션</th>
+              <th className="w-px px-3 py-2 text-left whitespace-nowrap">색상</th>
+              <th className="w-px px-3 py-2 text-left whitespace-nowrap">상태</th>
+              <th className="w-px px-3 py-2 text-left whitespace-nowrap">목록 행 표시</th>
+              <th className="w-px px-3 py-2 text-center whitespace-nowrap">액션</th>
             </tr>
           </thead>
           <tbody>
@@ -230,14 +261,14 @@ export function ResultCodesEditor({ surveyId, initialCodes }: ResultCodesEditorP
                   <Input
                     value={c.code}
                     onChange={(e) => update(i, { code: e.target.value })}
-                    className="h-8 text-sm"
+                    className="h-8 min-w-40 text-sm"
                   />
                 </td>
                 <td className="px-3 py-2">
                   <Input
                     value={c.label}
                     onChange={(e) => update(i, { label: e.target.value })}
-                    className="h-8 text-sm"
+                    className="h-8 min-w-40 text-sm"
                   />
                 </td>
                 <td className="px-3 py-2">
@@ -301,6 +332,42 @@ export function ResultCodesEditor({ surveyId, initialCodes }: ResultCodesEditorP
                     </SelectContent>
                   </Select>
                 </td>
+                <td className="px-3 py-2">
+                  <Select
+                    items={RESULT_CODE_ROW_MARKS.map((m) => ({
+                      value: m,
+                      label: (
+                        <span className="inline-flex items-center gap-2">
+                          <RowMarkSwatch mark={m} />
+                          {ROW_MARK_LABEL[m]}
+                        </span>
+                      ),
+                    }))}
+                    value={resolveCodeRowMark(c) || null}
+                    onValueChange={(v) => {
+                      if (v !== null) update(i, { rowMark: v as ResultCodeRowMark });
+                    }}
+                  >
+                    <SelectTrigger className="h-8 w-32" aria-label={`${c.label} 목록 행 표시`}>
+                      <SelectValue>
+                        <span className="inline-flex items-center gap-2">
+                          <RowMarkSwatch mark={resolveCodeRowMark(c)} />
+                          {ROW_MARK_LABEL[resolveCodeRowMark(c)]}
+                        </span>
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {RESULT_CODE_ROW_MARKS.map((m) => (
+                        <SelectItem key={m} value={m}>
+                          <span className="inline-flex items-center gap-2">
+                            <RowMarkSwatch mark={m} />
+                            {ROW_MARK_LABEL[m]}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </td>
                 <td className="px-3 py-2 text-center">
                   <Button
                     size="sm"
@@ -316,6 +383,13 @@ export function ResultCodesEditor({ surveyId, initialCodes }: ResultCodesEditorP
           </tbody>
         </table>
       </div>
+
+      <p className="text-xs text-slate-500">
+        목록 행 표시: 조사 대상 목록에서 마지막 컨택결과가 이 코드인 대상의 행 색입니다. 「완료 음영」은
+        온라인 응답완료와 같은 파란 음영, 「붉게」는 붉은 음영입니다. 고르지 않으면 긍정 상태는 완료
+        음영, 부정 상태·수신거부·조사대상아님은 붉게 나옵니다. 여기서 고른 값은 화면 표시만 바꾸며
+        응답률·단체 메일 대상에는 영향이 없습니다.
+      </p>
 
       <div className="flex flex-wrap gap-2">
         <Button onClick={add} variant="outline">

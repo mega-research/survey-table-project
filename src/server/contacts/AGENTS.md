@@ -66,6 +66,14 @@ pii 는 암호문이라 대조하려면 blind index 경로를 타야 한다.
 
 ---
 
+## 조사 대상 목록 — 기본 정렬 · 행 표시 · 개인정보 열
+
+용어와 규칙은 CONTEXT.md 「기본 정렬 열」·「행 표시」가 정본이다(2026-11-11, 둘 다 JSONB 라 마이그레이션 없음). 여기에는 자리만 적는다.
+
+- **기본 정렬 열**: `lib/contacts/default-sort`(`resolveContactListSort` — 주소의 `sort` 가 이긴다 · `resolveDefaultSortKey`). 목록 화면은 `read-models/contacts-list-page` 가 걸고(내부 콘솔 · `/fw` 공용), 컨택원 수정 화면의 대상 목록(`listAssignmentMatches`) · 단체 메일 위저드 후보 · 수신거부 명단 · 회차 수신자 표가 같은 지정을 따른다(`campaigns-read` 의 `defaultSort`).
+- **개인정보 열 평문**: 조사 대상 목록만 표시 중인 열을 평문으로 싣는다 — `contacts-list-page` 가 `visiblePiiColumnKeys(scheme)` 를 `listContactsForSurvey` 의 `plainPiiKeys` 로 넘기고, 이 쪽 행만 복호화해 `ContactsRow.piiPlain` 에 담는다(실패한 칸은 빠져 표가 힌트로 그린다 + 경고 로그 한 줄). 이 조립을 쓰는 주체(내부 콘솔 · 외주 실사 링크)는 상세에서 이미 평문을 본다. **`plainPiiKeys` 를 다른 표면에서 넘기지 말 것** — 게스트 목록(`guest-contacts`)·컨택원 수정 화면·메일 표는 마스킹 힌트만이다.
+- **행 표시**: `lib/contacts/result-code-row-mark`(`resolveCodeRowMark`) — 결과코드 `rowMark` 가 없으면 상태·글자에서 읽는다. 화면 표시일 뿐 응답률·발송 대상과 무관하다.
+
 ## 대상 정보 수정 현황
 
 **대상 정보 수정 현황** (2026-11-03, 0152 — CONTEXT.md 「조사 대상 수정 기록」이 정본): 표 `contact_target_edit_logs`(`action` = `info_edit | attempt_edit | attempt_delete | assignment_change`, `changes` 어휘는 `shared/contracts/contacts` 의 `ContactTargetEditChange`). 쓰기는 `services/contact-target-edit-log` 의 `recordContactTargetEdit` 하나를 각 쓰기 경로가 **같은 트랜잭션 · 대상 행 `FOR UPDATE` 아래**에서 부른다 — 상세 저장 `updateContactTarget` · 메모·연락 방법만 쓰는 `setContactTargetMemo`(외주 링크도 지나는 좁은 표면) · 컨택원 한 명 바꾸기 `setTargetAssignment`(잠금 순서는 설문 스코프 → 컨택원 → 대상) · 회차 `updateAttempt`·`deleteAttempt`. 판정은 `domain/contact-target-edit` 의 순수 함수(`diffContactTargetInfo` · `diffContactTargetPii` · `attemptEditChange`)이고, 개인정보 열의 지금 값은 잠금 아래에서 복호화해 메모리에서만 비교한다(`lib/crypto/contact-pii-repo` 의 `readStoredPiiPlain` · `piiPlainToStore`). `created_at` 은 `clock_timestamp()` 다 — 잠금 뒤 줄을 선 저장은 늦게 쓴 쪽이 먼저 시작했을 수 있어 `now()` 로는 최신순이 뒤집힌다. **편집자는 주체에서 파생한다** — procedure 가 `procedures/contact-editor` 의 `contactEditorOfContext` 로 만든다: 계정이면 세션의 id·이메일, 외주 실사 링크면 `link:<링크 id>` · 「외주」(`LINK_CONTACT_EDITOR_LABEL`). 회차는 귀속(`created_by` 계정 칸 · `fieldwork_link_id` 링크 칸, 0127 배타)과 별개로 기록자 글자 `created_by_email` 을 채운다. 외주 링크 화면(`hideStaffEmails`)은 기록과 회차의 내부 담당자 이메일을 걷고 「외주」 글자만 남긴다(ADR-0027 과 같은 규칙). 읽기는 `read-models/contact-target-edit-logs` 의 `getContactTargetEditLogs`(운영 데이터 스코프, 최신순 최대 200줄, 컨택원을 내리지 않는 화면이면 `visibleContactTargetEditChanges` 로 컨택원 변경을 뺀다), 화면 문구는 `features/operations/contacts/contact-target-edit-format`, 카드는 `contact-target-edit-history-card`. **조사 대상을 한 명씩 바꾸는 쓰기 경로를 새로 만들면** 대상 행 잠금 아래에서 지금 값을 읽고 같은 트랜잭션에서 `recordContactTargetEdit` 를 부를 것 — 일괄 쓰기(업로드·교체 적용·이월 임포트)는 남기지 않는 것이 정해진 범위다. Raw 내보내기의 노란 칸(CONTEXT.md 「조사 대상 명단 열」)이 이 기록을 읽는다(`read-models/contact-export-marks`). 기존 「수정 / 편집 현황」 칸은 「응답 수정 / 편집 현황」으로 이름만 바뀌었다.

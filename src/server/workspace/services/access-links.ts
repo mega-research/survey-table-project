@@ -2,6 +2,7 @@ import 'server-only';
 
 import { and, eq, isNull } from 'drizzle-orm';
 
+import { InternalFailure } from '@/server/internal-failure';
 import { db } from '@/db';
 import { surveyAccessLinks } from '@/db/schema';
 import { decryptSharedSecret, encryptSharedSecret } from '@/lib/crypto/aes';
@@ -206,7 +207,7 @@ export async function issueAccessLink(input: {
         createdBy: input.actorId,
       })
       .returning(VIEW_COLUMNS);
-    if (!row) throw new Error('접속 링크 INSERT 실패');
+    if (!row) throw new InternalFailure('접속 링크 INSERT 실패');
     return { link: toView(row), password };
   } catch (error) {
     if (isUniqueViolation(error)) throw new AccessLinkAlreadyIssuedError();

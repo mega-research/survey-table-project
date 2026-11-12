@@ -236,6 +236,15 @@ src/
 
 ---
 
+## 오류 던지기
+
+서버(`src/server`)는 일반 `Error` 를 던지지 않는다 — ESLint(`no-restricted-syntax`)가 막는다. oRPC 는 비-ORPCError 의 문구를 운영에서 'Internal server error' 로 갈아 끼우고 Sentry 는 그것을 장애로 받기 때문이다. 던지는 쪽이 둘 중 하나를 고른다.
+
+- **예상된 거부** — 사용자가 이해하고 고칠 수 있는 것(검증 실패·없음·충돌·상태가 바뀜): `new ORPCError('NOT_FOUND' | 'BAD_REQUEST' | 'CONFLICT' …, { message })`. 문구가 화면까지 가고 로그로만 남는다. UPDATE·DELETE 가 0행인 것은 「없음」이라 여기다.
+- **내부 실패** — 일어나면 안 되는 것(INSERT 가 행을 안 돌려줌·불변식 위반·환경변수 누락): `new InternalFailure(...)`(`server/internal-failure.ts`). 문구가 가려지고 Sentry 로 간다.
+
+클라이언트가 문구로 분기하는 표식(`TEST_TARGET_GENERATION_STALE` · `TEST_WORKSPACE_DISABLE_STALE` · 「테스트 링크가 더 이상 유효하지 않습니다」 · 「이미 사용 중인 URL」)은 문구에 그대로 둔다 — 지우면 그 화면의 분기가 죽는다.
+
 ## 테스트 모드
 
 두 겹이다(2026-10-16). **설문의 테스트 환경**(`surveys.testModeEnabled` + `testToken`)은 모두에게 같고 테스트 링크·테스트 대상자 링크가 사는지만 정한다(응답자 쪽 판정은 그대로 이 플래그). **콘솔이 테스트 파티션을 보는지는 브라우저마다** 쿠키 `ops-test-view-<surveyId>`(`lib/operations/test-view-cookie.ts`)로 정한다 — 전에는 한 사람이 켜면 모든 사람의 콘솔이 테스트 데이터로 바뀌었다. 파티션 키는 `is_test` 컬럼(`contact_targets`, `survey_responses`, `mail_campaigns`)이며, `contact_targets`의 resid UNIQUE도 `(surveyId, isTest, resid)`다.

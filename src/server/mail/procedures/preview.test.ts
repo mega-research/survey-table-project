@@ -50,7 +50,8 @@ describe('mail.preview procedures', () => {
       'sv-1',
       'mail.view',
     );
-    expect(svc.getMailPreviewSample).toHaveBeenCalledWith({ surveyId: 'sv-1' });
+    // 주체를 함께 넘긴다 — 외부 주체는 테스트 대상자 샘플을 쓰지 않는다
+    expect(svc.getMailPreviewSample).toHaveBeenCalledWith({ surveyId: 'sv-1' }, context.user);
     expect(res).toEqual(sampleData);
   });
 
@@ -100,8 +101,12 @@ describe('mail.preview procedures', () => {
     expect(svc.getMailPreviewSample).not.toHaveBeenCalled();
   });
 
-  it('testSend는 service.sendTestTemplateMail에 위임하고 결과객체를 반환한다', async () => {
-    vi.mocked(svc.sendTestTemplateMail).mockResolvedValue({ ok: true, id: 'msg-1' } as never);
+  it('testSend는 service.sendTestTemplateMail에 위임하고 결과객체(링크 종류 포함)를 반환한다', async () => {
+    vi.mocked(svc.sendTestTemplateMail).mockResolvedValue({
+      ok: true,
+      id: 'msg-1',
+      inviteLink: 'live',
+    });
     const context = authedContext();
     const client = createRouterClient({ preview }, { context });
     const input = validSendInput();
@@ -111,15 +116,15 @@ describe('mail.preview procedures', () => {
       input.surveyId,
       'mail.send',
     );
-    expect(svc.sendTestTemplateMail).toHaveBeenCalledWith(input);
-    expect(res).toEqual({ ok: true, id: 'msg-1' });
+    expect(svc.sendTestTemplateMail).toHaveBeenCalledWith(input, context.user);
+    expect(res).toEqual({ ok: true, id: 'msg-1', inviteLink: 'live' });
   });
 
   it('testSend는 env 가드 실패를 throw하지 않고 결과객체로 흘린다', async () => {
     vi.mocked(svc.sendTestTemplateMail).mockResolvedValue({
       ok: false,
       error: 'RESEND_FROM_DOMAIN 환경변수가 설정되지 않았습니다.',
-    } as never);
+    });
     const client = createRouterClient({ preview }, { context: authedContext() });
     const res = await client.preview.testSend(validSendInput());
     expect(res).toEqual({

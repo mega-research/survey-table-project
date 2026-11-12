@@ -80,6 +80,7 @@ import { MobileOptionCard, MobileSectionCard } from './mobile-card-shared';
 import { MobileOriginalRowTable } from './mobile-original-row-table';
 import { OptionTextInput } from './option-text-input';
 import { OptionTextInputStack, type OptionTextStackEntry } from './option-text-input-stack';
+import { collectInCellOptionTextIds } from './utils/option-text-in-cell';
 import { ValidationIssueBanner } from './validation-issue-banner';
 
 // useSyncExternalStore 안정 참조 — 원본이 undefined 를 줄 때 쓰는 고정 빈 맵
@@ -449,9 +450,18 @@ function ChoiceTableResponseBody({
     }
     return ids;
   }, [slotRowByCellId]);
+  // 보기 칸 안 상세 기재(optionTextInCell) — 그 보기의 입력칸은 표 아래도 자리 셀도 아니라 보기 칸 안,
+  // 라벨 오른쪽에 그린다. 자리 셀과 같은 이유로 보이는 격자의 행으로 판정한다(데스크톱 전용).
+  const inCellOptionIds = useMemo(
+    () => collectInCellOptionTextIds(rowWiseLayout.rows),
+    [rowWiseLayout.rows],
+  );
   const tableBelowEntries = useMemo(
-    () => textInputEntries.filter((entry) => !slottedOptionIds.has(entry.option.id)),
-    [textInputEntries, slottedOptionIds],
+    () =>
+      textInputEntries.filter(
+        (entry) => !slottedOptionIds.has(entry.option.id) && !inCellOptionIds.has(entry.option.id),
+      ),
+    [textInputEntries, slottedOptionIds, inCellOptionIds],
   );
 
   // 셀 게이팅 — 이 표의 input·선택형 셀에 걸린 활성 조건은 컨트롤러가 보기 옵션(선택 여부)
@@ -505,8 +515,10 @@ function ChoiceTableResponseBody({
     if (!isSelectedRowDetail && cell.type === 'text' && cell.optionTextSlot) {
       const row = slotRowByCellId.get(cell.id);
       const entries = row
-        ? textInputEntries.filter((entry) =>
-            row.cells.some((c) => c.type === 'choice_opt' && c.id === entry.option.id),
+        ? textInputEntries.filter(
+            (entry) =>
+              !inCellOptionIds.has(entry.option.id) &&
+              row.cells.some((c) => c.type === 'choice_opt' && c.id === entry.option.id),
           )
         : [];
       if (entries.length > 0) {
@@ -597,9 +609,16 @@ function ChoiceTableResponseBody({
     // 둘 다 있으면 content 만 표시. 비어 있으면(라벨이 다른 열에 있는 구성) 컨트롤만 렌더.
     const rawLabel = (cell.content ?? '').trim();
     const labelText = rawLabel ? substituteTokens(rawLabel, attrs, quotes) : '';
+    // 보기 칸 안 상세 기재 — 라벨 오른쪽 같은 줄에 입력칸을 둔다(데스크톱 격자 전용).
+    const textInCell = !isSelectedRowDetail && inCellOptionIds.has(cell.id);
 
     return (
-      <div className="flex flex-col items-center gap-2">
+      <div
+        className={cn(
+          'flex gap-2',
+          textInCell ? 'w-full flex-row items-center gap-3' : 'flex-col items-center',
+        )}
+      >
         <label
           className={cn(
             'flex cursor-pointer items-center justify-center gap-2',
@@ -648,6 +667,16 @@ function ChoiceTableResponseBody({
             좁아 우겨넣어지므로 표 아래 OptionTextInputStack 한 줄로 뺀다. */}
         {isSelectedRowDetail && option?.allowTextInput && checked && (
           <OptionTextInput questionId={question.id} option={option} className="w-full" />
+        )}
+        {textInCell && option && checked && (
+          <div className="min-w-0 flex-1">
+            <OptionTextInput
+              questionId={question.id}
+              option={option}
+              ariaLabel={labelText || option.label}
+              className="w-full"
+            />
+          </div>
         )}
       </div>
     );

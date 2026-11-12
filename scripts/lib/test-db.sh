@@ -78,8 +78,10 @@ verify_test_db() {
 # 로컬 supabase 도커는 워크트리 전체가 공유하는 단일 인스턴스다. 다른 브랜치가
 # db:setup-test 를 돌리면 공유 DB 는 그쪽 마이그레이션 집합으로 통째 교체되는데,
 # pnpm db:drift 는 그걸 알 방법이 없어 남의 DB 를 내 레포와 대조하고 조용히
-# 틀린 결과를 낸다 (2026-08-31 실제 발생). 그래서 지문을 찍어두고 db-drift.mjs
-# 가 대조한다. 격리 DB(db:isolated)에도 찍는다 — 만든 뒤 마이그레이션이 늘면 낡는다.
+# 틀린 결과를 낸다 (2026-08-31 실제 발생). realdb 테스트는 없는 열에 INSERT 하다
+# 수십 건이 긴 SQL 덤프로 죽는다 (2026-11-11). 그래서 지문을 찍어두고 db-drift.mjs 와
+# tests/realdb-global-setup.ts 가 대조한다. 격리 DB(db:isolated)에도 찍는다 — 만든 뒤
+# 마이그레이션이 늘면 낡는다.
 #
 # public 이 아니라 _repo_meta 스키마에 둔다 — db:drift 는 public 만 훑으므로
 # 이 표가 드리프트 항목으로 잡히지 않는다.

@@ -1,6 +1,7 @@
 import { and, asc, eq, ne, sql } from 'drizzle-orm';
 import 'server-only';
 
+import { InternalFailure } from '@/server/internal-failure';
 import { db } from '@/db';
 import { personalSurveyTagLinks, personalSurveyTags, surveyFavorites, users } from '@/db/schema';
 import { isForeignKeyViolation, isUniqueViolation } from '@/lib/pg-error';
@@ -219,7 +220,7 @@ export async function createTag(
         .insert(personalSurveyTags)
         .values({ userId, name: input.name, color: pickPersonalTagColor(mine.map((t) => t.color)) })
         .returning({ id: personalSurveyTags.id });
-      if (!inserted) throw new Error('personal_survey_tags insert returned no row');
+      if (!inserted) throw new InternalFailure('personal_survey_tags insert returned no row');
       tagId = inserted.id;
     }
 
@@ -240,7 +241,7 @@ export async function createTag(
       .select(tagItemColumns)
       .from(personalSurveyTags)
       .where(eq(personalSurveyTags.id, tagId));
-    if (!tag) throw new Error('personal_survey_tags row vanished inside its transaction');
+    if (!tag) throw new InternalFailure('personal_survey_tags row vanished inside its transaction');
     return { tag, created: !existing };
   });
 }
@@ -294,7 +295,7 @@ export async function updateTag(
       await tx.update(personalSurveyTags).set(patch).where(own);
 
       const [tag] = await tx.select(tagItemColumns).from(personalSurveyTags).where(own);
-      if (!tag) throw new Error('personal_survey_tags row vanished inside its transaction');
+      if (!tag) throw new InternalFailure('personal_survey_tags row vanished inside its transaction');
       return tag;
     });
   } catch (err) {

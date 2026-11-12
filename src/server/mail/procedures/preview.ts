@@ -16,7 +16,8 @@ const sample = scoped
   .output(GetMailPreviewSampleOutput)
   .handler(async ({ context, input }) => {
     await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'mail.view');
-    return svc.getMailPreviewSample(input);
+    // 주체를 넘긴다 — 외부 주체는 테스트 대상자 샘플을 쓰지 않는다(늘 실데이터).
+    return svc.getMailPreviewSample(input, context.actor);
   });
 
 /**
@@ -42,6 +43,7 @@ const contactSample = scoped
  * 테스트 발송.
  * env 가드/발송 실패는 결과객체({ok:false,error})로 흘려 사용자 메시지 보존
  * (throw 하지 않음 — 원본 의미론).
+ * 테스트 모드가 켜진 설문이면 첫 테스트 대상자의 값과 링크로 보낸다(외부 주체는 종전대로).
  */
 const testSend = scoped
   .input(SendTestTemplateMailInput)
@@ -49,7 +51,7 @@ const testSend = scoped
   .handler(async ({ context, input }) => {
     // 테스트 발송도 실제 메일이 나간다 — 열람(mail.view)이 아니라 발송 권한을 요구한다.
     await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'mail.send');
-    return svc.sendTestTemplateMail(input);
+    return svc.sendTestTemplateMail(input, context.actor);
   });
 
 export const preview = {

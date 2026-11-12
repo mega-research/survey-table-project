@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import { headers } from 'next/headers';
 
 import { eq } from 'drizzle-orm';
@@ -11,6 +12,7 @@ import { parseBrowser, parsePlatform } from '@/lib/operations/parse-ua';
 import { normalizePassParamNames, pickEntryParams } from '@/lib/survey/end-redirect';
 import { isValidTestToken } from '@/server/read-models/survey-control';
 import type { PageVisit } from '@/shared/contracts/survey-response';
+import { InternalFailure } from '@/server/internal-failure';
 
 import { extractDraftSeq } from '../domain/draft-seq';
 import type {
@@ -76,7 +78,7 @@ export async function startResponse(input: StartResponseInput): Promise<SurveyRe
 
   const [response] = await db.insert(surveyResponses).values(newResponse).returning();
   if (!response) {
-    throw new Error('startResponse: 응답 행 INSERT 실패');
+    throw new InternalFailure('startResponse: 응답 행 INSERT 실패');
   }
   return response;
 }
@@ -110,7 +112,7 @@ async function acquireTestTargetEntry(
       .from(surveyResponses)
       .where(eq(surveyResponses.id, acquired.responseId))
       .limit(1);
-    if (!response) throw new Error('응답을 찾을 수 없습니다.');
+    if (!response) throw new ORPCError('NOT_FOUND', { message: '응답을 찾을 수 없습니다.' });
 
     const piiFlag = await assertQuestionBelongsToResponse(
       response.versionId,

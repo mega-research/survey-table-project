@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import 'server-only';
 
 import { asc, eq, sql } from 'drizzle-orm';
@@ -5,6 +6,7 @@ import { asc, eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { NewQuestionCategory, questionCategories, savedQuestions } from '@/db/schema/surveys';
 import type { QuestionCategory } from '@/types/survey';
+import { InternalFailure } from '@/server/internal-failure';
 
 import type { CreateCategoryInput, UpdateCategoryInput } from '../domain/question-category';
 
@@ -56,7 +58,7 @@ export async function createCategory(input: CreateCategoryInput): Promise<Questi
       order: sql`(SELECT COALESCE(MAX(${questionCategories.order}), -1) + 1 FROM ${questionCategories})`,
     })
     .returning();
-  if (!category) throw new Error('카테고리 생성에 실패했습니다.');
+  if (!category) throw new InternalFailure('카테고리 생성에 실패했습니다.');
   return toDomainQuestionCategory(category);
 }
 
@@ -71,7 +73,7 @@ export async function updateCategory(
     .where(eq(questionCategories.id, id))
     .returning();
 
-  if (!updated) throw new Error('카테고리 수정에 실패했습니다.');
+  if (!updated) throw new ORPCError('NOT_FOUND', { message: '카테고리 수정에 실패했습니다.' });
   return toDomainQuestionCategory(updated);
 }
 

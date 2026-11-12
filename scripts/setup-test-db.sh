@@ -61,7 +61,7 @@ replay_migrations "$CONTAINER" postgres
 echo "[4/4] 검증: 프로덕션 고유 객체가 실제로 생성됐는지"
 verify_test_db "$CONTAINER" postgres
 
-# 이 DB 가 "어느 레포 상태로" 만들어졌는지 남긴다 (사유는 scripts/lib/test-db.sh stamp_test_db).
+# 재생 지문을 찍는다 — db:drift 와 realdb 테스트가 「이 DB 가 내 브랜치 것인가」를 대조한다.
 stamp_test_db "$CONTAINER" postgres
 
 echo "test DB 셋업 완료."

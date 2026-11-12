@@ -18,6 +18,7 @@ import {
   getResultCodeStatuses,
 } from '@/server/read-models/result-code-statuses';
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
+import { InternalFailure } from '@/server/internal-failure';
 
 import { triggersFallback } from './recipient-status-transition';
 
@@ -177,7 +178,7 @@ async function planRecipientFallback(
       sql`SELECT next_fallback_run_number(${parent.surveyId}, ${parent.isTest}) AS next_id`,
     );
     const runNumber = Number(runRows[0]?.next_id ?? 0);
-    if (!runNumber) throw new Error('대체 발송 회차 번호 발급에 실패했습니다.');
+    if (!runNumber) throw new InternalFailure('대체 발송 회차 번호 발급에 실패했습니다.');
     [fallback] = await tx
       .insert(mailCampaigns)
       .values({
@@ -203,7 +204,7 @@ async function planRecipientFallback(
         status: mailCampaigns.status,
         archivedAt: mailCampaigns.archivedAt,
       });
-    if (!fallback) throw new Error('대체 발송 회차 생성에 실패했습니다.');
+    if (!fallback) throw new InternalFailure('대체 발송 회차 생성에 실패했습니다.');
   }
   if (fallback.archivedAt !== null || fallback.status === 'cancelled') return null;
 

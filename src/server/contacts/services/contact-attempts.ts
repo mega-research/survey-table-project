@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import { and, eq, sql } from 'drizzle-orm';
 import 'server-only';
 
@@ -9,6 +10,7 @@ import { lockWriteScope } from '@/server/data-scope';
 import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share-scope';
 import type { ActorAttribution } from '@/server/survey-access';
 import type { ContactTargetEditAttemptSnapshot } from '@/shared/contracts/contacts';
+import { InternalFailure } from '@/server/internal-failure';
 
 import type {
   AddContactAttemptInput,
@@ -35,7 +37,7 @@ async function lockTargetInCurrentScope(
   share: FieldworkShare,
 ): Promise<void> {
   const locked = await lockWriteScope(tx, surveyId, isExternal, { lock: 'update' });
-  if (!locked) throw new Error('NOT_FOUND');
+  if (!locked) throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
   const { isTest } = locked;
 
   const [target] = await tx
@@ -50,7 +52,7 @@ async function lockTargetInCurrentScope(
       ),
     )
     .for('update');
-  if (!target) throw new Error('NOT_FOUND');
+  if (!target) throw new ORPCError('NOT_FOUND', { message: '조사 대상을 찾을 수 없습니다.' });
 }
 
 /**
@@ -114,7 +116,7 @@ export async function addAttempt(
             createdByEmail: editor.email,
           })
           .returning({ id: contactAttempts.id, attemptNo: contactAttempts.attemptNo });
-        if (!row) throw new Error('contact_attempts INSERT 실패');
+        if (!row) throw new InternalFailure('contact_attempts INSERT 실패');
         return row;
       });
       break; // 성공 시 retry loop 종료
@@ -127,7 +129,7 @@ export async function addAttempt(
 
   if (result == null) {
     logger.error({ contactTargetId, err: lastError }, '[addAttempt] race retry 소진');
-    throw new Error('동시 편집 충돌이 발생했습니다. 다시 시도해주세요.');
+    throw new ORPCError('CONFLICT', { message: '동시 편집 충돌이 발생했습니다. 다시 시도해주세요.' });
   }
 
   return result;
@@ -158,7 +160,7 @@ export async function updateAttempt(
       eq(contactAttempts.contactTargetId, contactTargetId),
     );
     const [before] = await tx.select().from(contactAttempts).where(scope);
-    if (!before) throw new Error('NOT_FOUND');
+    if (!before) throw new ORPCError('NOT_FOUND', { message: '컨택 기록을 찾을 수 없습니다.' });
     await tx.update(contactAttempts).set({ resultCode, note }).where(scope);
 
     const unchanged = before.resultCode === resultCode && (before.note ?? '') === (note ?? '');
@@ -195,7 +197,7 @@ export async function deleteAttempt(
       .delete(contactAttempts)
       .where(and(eq(contactAttempts.id, id), eq(contactAttempts.contactTargetId, contactTargetId)))
       .returning();
-    if (!deleted) throw new Error('NOT_FOUND');
+    if (!deleted) throw new ORPCError('NOT_FOUND', { message: '컨택 기록을 찾을 수 없습니다.' });
     await recordContactTargetEdit(tx, {
       surveyId,
       contactTargetId,

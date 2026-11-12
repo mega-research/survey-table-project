@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import 'server-only';
 
 import { and, eq, inArray } from 'drizzle-orm';
@@ -6,6 +7,7 @@ import { getQuestionGroupsBySurvey } from '@/server/read-models/survey-structure
 import { db } from '@/db';
 import { NewQuestionGroup, questionGroups, questions } from '@/db/schema';
 import { generateId, isValidUUID } from '@/lib/utils';
+import { InternalFailure } from '@/server/internal-failure';
 
 import { CrossSurveyRowError } from '../domain/survey-save';
 import type {
@@ -71,7 +73,7 @@ export async function createQuestionGroup(data: CreateQuestionGroupInput): Promi
 
   const [group] = await db.insert(questionGroups).values(newGroup).returning();
 
-  if (!group) throw new Error('질문 그룹 생성에 실패했습니다.');
+  if (!group) throw new InternalFailure('질문 그룹 생성에 실패했습니다.');
   return group as GroupRow;
 }
 
@@ -96,7 +98,7 @@ export async function updateQuestionGroup(
     .where(and(eq(questionGroups.id, groupId), eq(questionGroups.surveyId, surveyId)))
     .returning();
 
-  if (!updated) throw new Error('질문 그룹 업데이트에 실패했습니다.');
+  if (!updated) throw new ORPCError('NOT_FOUND', { message: '질문 그룹을 찾을 수 없습니다.' });
   return updated as GroupRow;
 }
 

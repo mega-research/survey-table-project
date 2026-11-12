@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import 'server-only';
 
 import { and, desc, eq } from 'drizzle-orm';
@@ -177,7 +178,7 @@ export async function getQuestionStatistics(
  */
 export async function analyzeSurveyById(surveyId: string): Promise<SurveyAnalytics> {
   const survey = await getSurveyWithDetails(surveyId);
-  if (!survey) throw new Error('설문을 찾을 수 없습니다.');
+  if (!survey) throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
 
   // analyzeSurvey 는 완료 응답을 내부에서 isCompleted 필터하지만,
   // 분모 일관성을 위해 완료 응답만 전달한다.

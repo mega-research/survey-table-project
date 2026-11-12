@@ -9,6 +9,7 @@ import { sumActiveSeconds } from '@/lib/operations/active-seconds';
 import { isMidSurveyCloseActive, resolveMidSurveyClosedMessage } from '@/lib/quota/closed-message';
 import type { NormalizedQuotaConfig } from '@/lib/quota/normalize';
 import { notTestResponse } from '@/server/response-filters';
+import { InternalFailure } from '@/server/internal-failure';
 import {
   isOpenResponseStatus,
   openResponseStatusValues,
@@ -433,7 +434,7 @@ export async function completeResponse(
         }
       } else {
         // 행이 없거나(삭제/존재 안 함) 종결 상태(screened_out 등)면 완료 처리를 거부한다.
-        throw new Error(
+        throw new InternalFailure(
           `completeResponse: 완료 처리 불가 행 (responseId=${responseId}, status=${existing?.status ?? 'not_found'}, deleted=${existing?.deletedAt != null})`,
         );
       }
@@ -490,7 +491,7 @@ export async function completeResponse(
         '[quota] 빈 complete 의 저장분 셀이 잠금 전과 달라 바뀐 셀로 다시 판정한다',
       );
       if (attempt >= QUOTA_CELL_RETRY_LIMIT) {
-        throw new Error(
+        throw new InternalFailure(
           `completeResponse: 쿼터 셀이 판정 중 계속 바뀌어 완료를 거부한다 (responseId=${responseId})`,
         );
       }

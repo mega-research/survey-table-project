@@ -6,6 +6,7 @@ import { db } from '@/db';
 import { type FieldworkShare, shareTargetCondition, shareTargetSql } from '@/server/fieldwork-share-scope';
 import { surveyResponses } from '@/db/schema';
 import { notDeletedResponse } from '@/server/response-filters';
+import { InternalFailure } from '@/server/internal-failure';
 
 import {
   shapeDailyBuckets,
@@ -63,7 +64,7 @@ export async function aggregateDaily(input: {
       .orderBy(sql`1`);
   } else {
     if (!hourModeDate) {
-      throw new Error('aggregateDaily(hour) requires hourModeDate');
+      throw new InternalFailure('aggregateDaily(hour) requires hourModeDate');
     }
     rows = await db
       .select({

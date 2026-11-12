@@ -9,6 +9,7 @@ import { registerDeletionCandidates } from '@/server/storage-lifecycle/deletion-
 import { extractR2KeysFromJsonbValue } from '@/server/storage-lifecycle/key-extract';
 import type { SavedCell, TableCell } from '@/types/survey';
 import { sanitizeCellForLibrary } from '@/utils/cell-library-helpers';
+import { InternalFailure } from '@/server/internal-failure';
 
 import type { CreateSavedCellInput } from '../domain/saved-cell';
 
@@ -65,7 +66,7 @@ export async function createSavedCell(input: CreateSavedCellInput): Promise<Save
   };
 
   const [saved] = await db.insert(savedCells).values(newSavedCell).returning();
-  if (!saved) throw new Error('셀 저장에 실패했습니다.');
+  if (!saved) throw new InternalFailure('셀 저장에 실패했습니다.');
   return toDomainSavedCell(saved);
 }
 

@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import { and, eq, sql } from 'drizzle-orm';
 import 'server-only';
 
@@ -108,7 +109,7 @@ export async function listPriorAnswerMatchFields(
 
 function ensureXlsx(file: File): void {
   const err = validateXlsxFile(file);
-  if (err) throw new Error(err);
+  if (err) throw new ORPCError('BAD_REQUEST', { message: err });
 }
 
 /**
@@ -242,7 +243,7 @@ export async function savePriorAnswerImportConfig(
     .set({ priorAnswerImportConfig: merged, updatedAt: new Date() })
     .where(eq(surveys.id, input.surveyId))
     .returning({ id: surveys.id });
-  if (!updated) throw new Error('설문을 찾을 수 없습니다.');
+  if (!updated) throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
   return { ok: true };
 }
 

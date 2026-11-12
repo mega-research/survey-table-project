@@ -22,6 +22,8 @@ export const MailPreviewSampleSchema = z.object({
   inviteUrl: z.string(),
   email: z.string().nullable(),
   resid: z.number(),
+  /** 샘플이 테스트 조사 대상자다 — 초대 링크가 눌러서 열리는 테스트 링크다(테스트 모드가 켜진 설문) */
+  isTest: z.boolean().optional(),
 });
 export type MailPreviewSample = z.infer<typeof MailPreviewSampleSchema>;
 
@@ -108,6 +110,12 @@ export interface CampaignCandidateRow {
 
 /** 미리보기 정렬 — 번호 / 응답여부 / 수신 상황 / 최근 결과코드. 이메일·그룹은 PII·비용 사유로 제외. */
 export type CampaignSortKey = 'resid' | 'responded' | 'mailStatus' | 'resultCode';
+
+/**
+ * 미리보기 표의 실제 정렬 — 위 넷에 더해 컬럼 설정의 기본 정렬 열(`attrs.<key>`) 하나.
+ * 주소에 정렬이 없으면 그 열 오름차순으로 열린다(`lib/contacts/default-sort`).
+ */
+export type CampaignListSortKey = CampaignSortKey | `attrs.${string}`;
 
 export type CampaignSortDir = 'asc' | 'desc';
 

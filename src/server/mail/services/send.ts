@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import 'server-only';
 
 import { randomUUID } from 'node:crypto';
@@ -8,12 +9,13 @@ import { Resend } from 'resend';
 import type { MailAttachment } from '@/shared/contracts/mail';
 import { downloadR2Object } from '@/lib/image-utils-server';
 import { MAX_ATTACHMENT_TOTAL_BYTES } from '@/lib/mail/constants';
+import { InternalFailure } from '@/server/internal-failure';
 
 let _resend: Resend | null = null;
 function getResend(): Resend {
   if (!_resend) {
     const apiKey = process.env['RESEND_API_KEY'];
-    if (!apiKey) throw new Error('RESEND_API_KEY 환경변수가 설정되지 않았습니다.');
+    if (!apiKey) throw new InternalFailure('RESEND_API_KEY 환경변수가 설정되지 않았습니다.');
     _resend = new Resend(apiKey);
   }
   return _resend;
@@ -35,9 +37,10 @@ async function resolveAttachments(
 ): Promise<ResolvedAttachment[]> {
   const declaredTotal = attachments.reduce((sum, a) => sum + a.size, 0);
   if (declaredTotal > MAX_ATTACHMENT_TOTAL_BYTES) {
-    throw new Error(
-      `첨부 총합이 한도를 초과합니다 (${Math.round(declaredTotal / 1024 / 1024)}MB / ${Math.round(MAX_ATTACHMENT_TOTAL_BYTES / 1024 / 1024)}MB).`,
-    );
+    throw new ORPCError('BAD_REQUEST', {
+      message:
+        `첨부 총합이 한도를 초과합니다 (${Math.round(declaredTotal / 1024 / 1024)}MB / ${Math.round(MAX_ATTACHMENT_TOTAL_BYTES / 1024 / 1024)}MB).`,
+    });
   }
 
   return Promise.all(
@@ -54,7 +57,7 @@ async function resolveAttachments(
           extra: { key: a.key, filename: a.filename },
         });
         // 사용자에게는 파일명만 노출 (R2 key 는 디버깅용 — Sentry 에 기록됨)
-        throw new Error(`'${a.filename}' 파일을 불러올 수 없습니다.`);
+        throw new ORPCError('NOT_FOUND', { message: `'${a.filename}' 파일을 불러올 수 없습니다.` });
       }
     }),
   );

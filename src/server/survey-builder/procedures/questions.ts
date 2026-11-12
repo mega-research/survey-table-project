@@ -1,5 +1,4 @@
 import { ORPCError } from '@orpc/server';
-
 import { authed } from '@/server/orpc';
 import { assertSurveyCapabilityRpc } from '@/server/rpc-survey-access';
 
@@ -40,19 +39,13 @@ const create = authed
 const update = authed
   .input(UpdateQuestionInput)
   .output(QuestionRow)
+  // 0행 매칭(존재하지 않는 질문)은 서비스가 NOT_FOUND 로 던진다.
   .handler(async ({ context, input }) => {
     await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.edit');
     try {
       return await svc.updateQuestion(input.questionId, input.surveyId, input.data);
     } catch (err) {
       if (err instanceof CrossSurveyRowError) rethrowCrossSurveyError(err);
-      // 0행 매칭(존재하지 않는 질문) — generic Error는 oRPC가 Internal server error로
-      // 마스킹해 원인 추적이 어려우므로 NOT_FOUND로 매핑한다.
-      if (err instanceof Error && err.message === '질문 업데이트에 실패했습니다.') {
-        throw new ORPCError('NOT_FOUND', {
-          message: '질문을 찾을 수 없습니다. 설문을 먼저 저장한 뒤 다시 시도하세요.',
-        });
-      }
       throw err;
     }
   });

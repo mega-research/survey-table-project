@@ -18,6 +18,7 @@ import {
   shareTargetCondition,
 } from '@/server/fieldwork-share-scope';
 import { generateInviteCode } from '@/lib/survey-url';
+import { InternalFailure } from '@/server/internal-failure';
 
 import {
   type ContactEditor,
@@ -95,7 +96,7 @@ async function lockTargetAndReadCurrent(
       ),
     )
     .for('update');
-  if (!target) throw new Error('NOT_FOUND');
+  if (!target) throw new ORPCError('NOT_FOUND', { message: '조사 대상을 찾을 수 없습니다.' });
 
   return {
     ...scope,
@@ -112,7 +113,7 @@ async function lockCurrentSurveyScope(
     lock: 'update',
     columns: ['contactColumns', 'testContactColumns'],
   });
-  if (!locked) throw new Error('NOT_FOUND');
+  if (!locked) throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
 
   const { isTest, row } = locked;
   return {
@@ -167,7 +168,7 @@ export async function addContactTarget(
         inviteCode: generateInviteCode(),
       })
       .returning({ id: contactTargets.id, resid: contactTargets.resid });
-    if (!row) throw new Error('contact_targets INSERT 실패');
+    if (!row) throw new InternalFailure('contact_targets INSERT 실패');
 
     if (piiUpdates && piiUpdates.length > 0) {
       for (const p of piiUpdates) {
@@ -219,7 +220,9 @@ export async function setContactTargetMemo(
         ),
       )
       .returning({ id: contactTargets.id });
-    if (updated.length === 0) throw new Error('NOT_FOUND');
+    if (updated.length === 0) {
+      throw new ORPCError('NOT_FOUND', { message: '조사 대상을 찾을 수 없습니다.' });
+    }
 
     // 메모·연락 방법도 「대상 정보 수정 현황」에 남긴다 — attrs 는 이 표면이 건드리지 않아 그대로 비교한다.
     await recordContactTargetEdit(tx, {
@@ -298,7 +301,7 @@ export async function updateContactTarget(
         ),
       )
       .returning({ id: contactTargets.id });
-    if (updated.length === 0) throw new Error('NOT_FOUND');
+    if (updated.length === 0) throw new ORPCError('NOT_FOUND', { message: '조사 대상을 찾을 수 없습니다.' });
 
     if (piiUpdates && piiUpdates.length > 0) {
       for (const p of piiUpdates) {
@@ -350,7 +353,7 @@ export async function deleteContactTarget(
           eq(contactTargets.isTest, isTest),
         ),
       );
-    if (!target) throw new Error('NOT_FOUND');
+    if (!target) throw new ORPCError('NOT_FOUND', { message: '조사 대상을 찾을 수 없습니다.' });
 
     if (isTest) {
       // helper가 campaign → contact → recipient 순서로 잠근다. ambiguous sending의
@@ -385,6 +388,6 @@ export async function deleteContactTarget(
         ),
       )
       .returning({ id: contactTargets.id });
-    if (deleted.length === 0) throw new Error('NOT_FOUND');
+    if (deleted.length === 0) throw new ORPCError('NOT_FOUND', { message: '조사 대상을 찾을 수 없습니다.' });
   });
 }

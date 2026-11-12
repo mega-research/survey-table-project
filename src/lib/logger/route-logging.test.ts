@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { lines, captureExceptionMock } = vi.hoisted(() => ({
   lines: [] as string[],
@@ -7,6 +7,12 @@ const { lines, captureExceptionMock } = vi.hoisted(() => ({
 }));
 
 // 싱글턴 logger 를 캡처 스트림으로 교체 — 나머지 export 는 원본 유지 (spread 보강 관례).
+// 테스트 셋업이 LOG_LEVEL 을 silent 로 둔다 — 여기는 로거가 쓴 줄 자체를 검증하므로 수준을 올린다.
+// 아래 mock 팩토리가 로거를 만들기 전에 서야 해서 hoisted 다.
+vi.hoisted(() => {
+  vi.stubEnv('LOG_LEVEL', 'info');
+});
+
 vi.mock('@/lib/logger/logger', async (importOriginal) => {
   const mod = await importOriginal<typeof import('@/lib/logger/logger')>();
   return {
@@ -22,6 +28,10 @@ vi.mock('@/lib/logger/logger', async (importOriginal) => {
 vi.mock('@sentry/nextjs', () => ({ captureException: captureExceptionMock }));
 
 import { withRouteLogging } from '@/lib/logger/route-logging';
+
+afterAll(() => {
+  vi.unstubAllEnvs();
+});
 
 function request(headers: Record<string, string> = {}): NextRequest {
   return new NextRequest('https://example.com/api/test', {

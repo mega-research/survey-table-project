@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import 'server-only';
 
@@ -163,7 +164,7 @@ async function judgeDraftZeroRow(
   if (seq !== undefined && row?.draft_seq != null && Number(row.draft_seq) > seq) return 'stale';
   // 종결(완료·스크린아웃 등) 행에 대한 잔여 화면의 쓰기 — 에러가 아니라 "이미 완료됨" 신호.
   if (row && !row.deleted && !isOpenResponseStatus(row.status)) return 'concluded';
-  throw new Error('응답을 수정할 수 없습니다.');
+  throw new ORPCError('CONFLICT', { message: '응답을 수정할 수 없습니다.' });
 }
 
 type DraftSeqClaim = 'claimed' | 'stale' | 'not_found';

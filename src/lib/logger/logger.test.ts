@@ -1,7 +1,15 @@
 import { DrizzleQueryError } from 'drizzle-orm/errors';
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { createLogger, REDACT_PATHS } from '@/lib/logger';
+
+// 테스트 셋업이 LOG_LEVEL 을 silent 로 둔다 — 여기는 로거가 쓴 줄 자체를 검증하므로 수준을 올린다.
+beforeAll(() => {
+  vi.stubEnv('LOG_LEVEL', 'info');
+});
+afterAll(() => {
+  vi.unstubAllEnvs();
+});
 
 function captureStream() {
   const lines: string[] = [];

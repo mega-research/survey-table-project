@@ -98,4 +98,52 @@ describe('updateContactColumns 현재 스코프', () => {
     );
     expect(capturedSets).toEqual([]);
   });
+
+  it('기본 정렬(defaultSort)은 명단 속성 열 하나에 저장된다', async () => {
+    const scheme = {
+      version: 1,
+      headerRow: 1,
+      columns: [
+        { key: 'resid', label: '시스템ID', source: 'system.resid' as const, order: 1 },
+        { key: 'ID', label: 'ID', source: 'attrs.ID' as const, order: 2, defaultSort: true as const },
+      ],
+    };
+
+    await updateContactColumns({ surveyId: 'sv-1', scheme });
+
+    expect(capturedSets).toEqual([{ testContactColumns: scheme }]);
+  });
+
+  it('기본 정렬을 개인정보 열에 걸거나 두 열에 걸면 거부한다', async () => {
+    const onPii = {
+      version: 1,
+      headerRow: 1,
+      columns: [
+        {
+          key: '대표자',
+          label: '대표자',
+          source: 'pii.대표자' as const,
+          order: 1,
+          piiType: 'name' as const,
+          defaultSort: true as const,
+        },
+      ],
+    };
+    await expect(updateContactColumns({ surveyId: 'sv-1', scheme: onPii })).rejects.toThrow(
+      '기본 정렬은 명단 속성(attrs) 컬럼에만 지정할 수 있습니다.',
+    );
+
+    const twice = {
+      version: 1,
+      headerRow: 1,
+      columns: [
+        { key: 'ID', label: 'ID', source: 'attrs.ID' as const, order: 1, defaultSort: true as const },
+        { key: 'NO', label: 'NO', source: 'attrs.NO' as const, order: 2, defaultSort: true as const },
+      ],
+    };
+    await expect(updateContactColumns({ surveyId: 'sv-1', scheme: twice })).rejects.toThrow(
+      '기본 정렬은 한 열에만 지정할 수 있습니다.',
+    );
+    expect(capturedSets).toEqual([]);
+  });
 });

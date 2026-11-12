@@ -25,6 +25,7 @@ import {
   loadBouncedAddresses,
 } from '@/server/read-models/send-address';
 import type { CampaignFilterSnapshot } from '@/shared/contracts/mail';
+import { InternalFailure } from '@/server/internal-failure';
 
 import type {
   CancelCampaignInput,
@@ -81,7 +82,7 @@ export async function createCampaign(
       columns: ['contactColumns', 'testContactColumns'],
     });
     if (!locked) {
-      throw new Error('설문을 찾을 수 없습니다.');
+      throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
     }
     const { isTest } = locked;
     const emailOrder = resolveMailEmailOrder(
@@ -100,7 +101,9 @@ export async function createCampaign(
         ),
       );
     if (selectedTargets.length !== uniqueTargetIds.length) {
-      throw new Error('운영 모드가 변경되었습니다. 화면을 새로고침한 뒤 다시 시도하세요.');
+      throw new ORPCError('CONFLICT', {
+        message: '운영 모드가 변경되었습니다. 화면을 새로고침한 뒤 다시 시도하세요.',
+      });
     }
 
     // b. 템플릿 fetch — 실제/테스트 캠페인이 같은 템플릿을 공유한다.
@@ -116,7 +119,7 @@ export async function createCampaign(
       )
       .limit(1);
     if (!template) {
-      throw new Error('선택한 메일 템플릿을 찾을 수 없습니다.');
+      throw new ORPCError('NOT_FOUND', { message: '선택한 메일 템플릿을 찾을 수 없습니다.' });
     }
 
     // c. scope별 next run number — 단건은 1000001+ 대역으로 격리
@@ -127,7 +130,7 @@ export async function createCampaign(
     );
     const runNumber = Number(runRows[0]?.next_id ?? 0);
     if (!runNumber) {
-      throw new Error('회차 번호 발급에 실패했습니다.');
+      throw new InternalFailure('회차 번호 발급에 실패했습니다.');
     }
 
     // d. campaign insert (스냅샷 explicit field set — spread 금지)
@@ -153,7 +156,7 @@ export async function createCampaign(
       })
       .returning({ id: mailCampaigns.id });
     if (!campaign) {
-      throw new Error('단체 메일 생성에 실패했습니다.');
+      throw new InternalFailure('단체 메일 생성에 실패했습니다.');
     }
 
     // e. valid contact 재페치 — contact_pii 에서 발송 주소 후보 칸까지 같이 가져온다.
@@ -226,9 +229,10 @@ export async function createCampaign(
     const skippedCount = uniqueTargetIds.length - validCount;
 
     if (validCount === 0) {
-      throw new Error(
-        '발송 가능한 수신자가 없습니다. 수신거부, 반송 이력 또는 이메일 누락 확인이 필요합니다.',
-      );
+      throw new ORPCError('BAD_REQUEST', {
+        message:
+          '발송 가능한 수신자가 없습니다. 수신거부, 반송 이력 또는 이메일 누락 확인이 필요합니다.',
+      });
     }
 
     // f. mail_recipients 벌크 insert (queued)
@@ -278,7 +282,7 @@ export async function createCampaign(
       .set({ status: 'draft', updatedAt: new Date() })
       .where(eq(mailCampaigns.id, result.campaignId));
     const message = err instanceof Error ? err.message : '발송 큐 등록에 실패했습니다.';
-    throw new Error(
+    throw new InternalFailure(
       `단체 메일은 저장됐지만 발송 큐 등록에 실패했습니다 — ${message}. Inngest dev 서버 가 실행 중인지 확인하세요.`,
     );
   }
@@ -315,7 +319,7 @@ export async function cancelCampaign(input: CancelCampaignInput, isExternal: boo
     .returning({ id: mailCampaigns.id });
 
   if (updated.length === 0) {
-    throw new Error('발송 시작 후에는 취소할 수 없습니다.');
+    throw new ORPCError('CONFLICT', { message: '발송 시작 후에는 취소할 수 없습니다.' });
   }
 }
 
@@ -335,7 +339,7 @@ export async function resyncCampaign(input: ResyncCampaignInput): Promise<Resync
     .where(and(eq(mailCampaigns.id, input.campaignId), eq(mailCampaigns.surveyId, input.surveyId)))
     .limit(1);
 
-  if (!campaign) throw new Error('단체 메일을 찾을 수 없습니다.');
+  if (!campaign) throw new ORPCError('NOT_FOUND', { message: '단체 메일을 찾을 수 없습니다.' });
 
   const { reconcileCampaignRecipients } = await import('./campaign-reconcile');
   return reconcileCampaignRecipients(input.campaignId);

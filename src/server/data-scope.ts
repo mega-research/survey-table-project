@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import { cache } from 'react';
 
 import { cookies } from 'next/headers';
@@ -82,7 +83,7 @@ export async function loadOperationsDataScope(
   ]);
 
   const row = rows[0];
-  if (!row) throw new Error('설문을 찾을 수 없습니다.');
+  if (!row) throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
   // 외부 주체(게스트·실사 계정·외주 실사 링크)는 전역 테스트 모드와 무관하게 항상 실데이터를 본다.
   return resolveWriteScopeIsTest(row.enabled, isExternal, browserTestView) ? 'test' : 'real';
 }
