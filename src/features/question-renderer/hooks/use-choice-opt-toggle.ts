@@ -1,6 +1,10 @@
 import { useCallback, useMemo } from 'react';
 
-import { useGatingTableCells } from '@/features/question-renderer/cells/gating-table-cells-context';
+import { useChoiceGroups } from '@/features/question-renderer/cells/choice-groups-context';
+import {
+  useGatingTableCells,
+  useVisibleTableCellIds,
+} from '@/features/question-renderer/cells/gating-table-cells-context';
 import { useQuestionResponseWriter } from '@/features/question-renderer/hooks/use-question-response-writer';
 import {
   useQuestionResponseSelector,
@@ -12,6 +16,7 @@ import {
   collectExclusiveChoiceCellIds,
   collectTableExclusiveChoiceCellIds,
 } from '@/features/question-renderer/utils/exclusive-choice';
+import { applyImpliedSelection } from '@/features/question-renderer/utils/implied-selection';
 import { CHOICE_GROUPS_KEY, readTableChoiceGroups } from '@/lib/survey/choice-selection';
 import type { ChoiceGroup, TableCell } from '@/types/survey';
 
@@ -45,7 +50,7 @@ interface UseChoiceGroupToggleArgs {
 
 /**
  * 보기 그룹 하나의 선택과 그 그룹의 보기 칸을 고르고 푸는 쓰기 — 데스크톱 셀·모바일 세로 타일·척도
- * 막대가 같은 규칙(단독 선택·표 전체 범위·라디오 다시 누르면 해제)을 쓰도록 한 곳에 둔다. 칸마다
+ * 막대가 같은 규칙(단독 선택·표 전체 범위·따라 선택·라디오 다시 누르면 해제)을 쓰도록 한 곳에 둔다. 칸마다
  * 훅을 부를 수 없는 자리(척도 막대)는 이것을, 칸 하나를 그리는 자리는 useChoiceOptToggle 을 쓴다.
  *
  * 쓰기는 질문 응답 쓰기 채널을 타되, 예약 키 아래 맵은 상위 병합이 통째로 바꾸므로 최신 맵 위에
@@ -81,22 +86,32 @@ export function useChoiceGroupToggle({
     [tableCells],
   );
 
+  // 따라 선택 판정 재료 — 대상 칸의 그룹 키를 찾을 그룹 정의와, 지금 그려지는 칸(숨은 행의 칸은
+  // 따라 고르지 않는다). 짝이 없는 표는 보이는 칸 집합이 공급되지 않고 규칙도 아무것도 하지 않는다.
+  const choiceGroups = useChoiceGroups();
+  const visibleCellIds = useVisibleTableCellIds();
+
   const commit = useCallback(
     (
       next: string | string[] | undefined,
-      picked?: { id: string; tableExclusiveIds: ReadonlySet<string> },
+      picked?: { cell: TableCell; tableExclusiveIds: ReadonlySet<string> },
     ) => {
       const latest = readTableChoiceGroups(source ? source.read(questionId) : value);
       let map: Record<string, string | string[]> = { ...latest };
       if (next === undefined) delete map[groupKey];
       else map[groupKey] = next;
-      // 고른 것이 있을 때만 표 전체 규칙을 돌린다 — 해제는 다른 그룹에 영향이 없다
+      // 고른 것이 있을 때만 표 전체 규칙·따라 선택을 돌린다 — 해제는 다른 칸에 영향이 없다
       if (picked !== undefined) {
-        map = applyTableExclusiveToGroups(map, groupKey, picked.id, picked.tableExclusiveIds);
+        map = applyTableExclusiveToGroups(map, groupKey, picked.cell.id, picked.tableExclusiveIds);
+        map = applyImpliedSelection(map, picked.cell, {
+          tableCells: tableCells ?? [],
+          groups: choiceGroups ?? [],
+          visibleCellIds,
+        });
       }
       mergePatch({ [CHOICE_GROUPS_KEY]: map });
     },
-    [groupKey, mergePatch, questionId, source, value],
+    [choiceGroups, groupKey, mergePatch, questionId, source, tableCells, value, visibleCellIds],
   );
 
   const toggle = useCallback(
@@ -106,7 +121,7 @@ export function useChoiceGroupToggle({
         exclusive && cell.exclusiveScope === 'table' && !tableExclusiveIds.has(cell.id)
           ? new Set([...tableExclusiveIds, cell.id])
           : tableExclusiveIds;
-      const picked = { id: cell.id, tableExclusiveIds: tableIds };
+      const picked = { cell, tableExclusiveIds: tableIds };
       if (isCheckbox) {
         const current = Array.isArray(selection) ? (selection as string[]) : [];
         if (current.includes(cell.id)) {

@@ -32,3 +32,23 @@ describe('remapCellRefs — 목록에서 찾기 채우기 대상', () => {
     expect(remapCellRefs(cell, new Map([['other', 'x']]))).toBe(cell);
   });
 });
+
+describe('remapCellRefs — 따라 선택 짝', () => {
+  const cell: TableCell = {
+    id: 'benefit1',
+    type: 'choice_opt',
+    content: '',
+    choiceGroupId: 'g',
+    impliedCellIds: ['apply1', 'outside'],
+  };
+
+  it('대응표에 있는 칸은 새 id 로, 없는 칸은 그대로 둔다', () => {
+    const next = remapCellRefs(cell, new Map([['apply1', 'apply1-copy']]));
+    expect(next.impliedCellIds).toEqual(['apply1-copy', 'outside']);
+    expect(cell.impliedCellIds).toEqual(['apply1', 'outside']);
+  });
+
+  it('바뀔 것이 없으면 원본 참조를 돌려준다', () => {
+    expect(remapCellRefs(cell, new Map([['other', 'x']]))).toBe(cell);
+  });
+});

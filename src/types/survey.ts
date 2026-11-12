@@ -517,6 +517,12 @@ export interface TableCell {
    */
   exclusiveScope?: 'group' | 'table';
   /**
+   * 따라 선택 (CONTEXT.md) — 이 보기 칸(choice_opt, 체크박스 그룹)을 고르면 함께 골라질 같은 표의 보기 칸 id.
+   * 한 방향이고 고를 때만 따라간다. 자격·사슬 판정은 `features/question-renderer/utils/implied-selection.ts` 하나다.
+   * 테이블 유형 문항 전용.
+   */
+  impliedCellIds?: string[];
+  /**
    * 평균에서 제외 (CONTEXT.md 「척도 평균」) — 보기 칸(choice_opt)이나 행렬 척도의 radio 칸이 「모름」처럼
    * 척도 밖일 때. 이 칸을 고른 응답은 척도 평균의 평균·응답수에서 빠진다.
    */

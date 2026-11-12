@@ -88,6 +88,11 @@ const VIEW_ONLY_GUEST_GRANTS: ReadonlyArray<{
     // 설문을 보여 줘도 되는 고객이라 설문 보기를 연다(2026-11-05 요청)
     allowPreview: true,
   },
+  // guest11 — 여성기업 실태조사 신규문항(안) 사전 설문조사, 응답 현황·응답 내역만(2026-11-12 요청)
+  {
+    userId: '6ca037a8-c282-4bbe-af64-f4f147bf5039',
+    surveyId: '8f2bc707-5821-4bbb-bc69-fcd7277cd1cb',
+  },
 ];
 
 /** 이 계정이 보기만 하는 grant 설문 목록 — grant 가 없는 설문은 빼고 돌려준다. */

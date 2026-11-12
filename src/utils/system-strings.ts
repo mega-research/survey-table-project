@@ -143,6 +143,8 @@ const KO = {
   'choice.selectedCount': '{count}개 선택됨',
   'choice.minSelections': '최소 {min}개 이상 선택해주세요',
   'choice.maxReached': '최대 선택 개수에 도달했습니다',
+  'choice.impliedOverMax':
+    '이 보기는 다른 보기와 함께 선택되어 최대 {max}개를 넘습니다. 선택한 보기를 먼저 풀어 주세요.',
 
   'a11y.requiredQuestion': '필수 질문',
 
@@ -420,6 +422,7 @@ const ZH: Dictionary = {
   'choice.selectedCount': '已选 {count} 项',
   'choice.minSelections': '请至少选择{min}项',
   'choice.maxReached': '已达到最多可选数量',
+  'choice.impliedOverMax': '该选项会与其他选项一并选中，将超过最多{max}项。请先取消已选的选项。',
 
   'a11y.requiredQuestion': '必答题',
 
@@ -706,6 +709,8 @@ const EN: Dictionary = {
   'choice.selectedCount': '{count} selected',
   'choice.minSelections': 'Please select at least {min}',
   'choice.maxReached': 'You have reached the maximum number of selections',
+  'choice.impliedOverMax':
+    'This option is selected together with other options and would exceed the maximum of {max}. Please clear a selection first.',
 
   'a11y.requiredQuestion': 'Required question',
 

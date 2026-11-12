@@ -182,6 +182,14 @@ describe('보기만 하는 게스트 grant', () => {
     expect(isViewOnlyGuest(CLIENT1, DAIRY_2026)).toBe(true);
   });
 
+  it('guest11 은 여성기업 사전 설문조사를 보기만 하고 설문 보기는 열지 않는다(2026-11-12)', () => {
+    const GUEST11 = '6ca037a8-c282-4bbe-af64-f4f147bf5039';
+    const WOMEN_BIZ_2026 = '8f2bc707-5821-4bbb-bc69-fcd7277cd1cb';
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `${GUEST11}:${WOMEN_BIZ_2026}`);
+    expect(isViewOnlyGuest(GUEST11, WOMEN_BIZ_2026)).toBe(true);
+    expect(canViewOnlyGuestPreview(GUEST11, WOMEN_BIZ_2026)).toBe(false);
+  });
+
   it('설문 보기를 허용한 보기 전용 grant 는 설문 보기만 더 열린다(dairy@, 2026-11-05)', () => {
     const DAIRY = '75060289-51b4-44e7-8fd1-dabf73a0bfaf';
     const DAIRY_2026 = '24b15972-36fe-400a-adfe-7d4c80438204';
