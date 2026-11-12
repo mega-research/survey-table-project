@@ -334,3 +334,86 @@ describe('processResendWebhookEvent — 전달 메일(kind=reply-forward)의 상
     },
   );
 });
+
+/**
+ * 중계 메일(답장 중계)의 상태 알림 — 발송 때 붙인 `kind=reply-relay` 태그로 가려낸다.
+ * 담당자의 답장이 응답자에게 닿지 못해도 담당자는 모른다 — 수신자 기록이 없는 메일이라 상태·집계는 건드리지 않고
+ * Sentry 경고로만 알린다.
+ */
+describe('processResendWebhookEvent — 중계 메일(kind=reply-relay)의 상태 알림', () => {
+  const { processResendWebhookEvent } = resendWebhook;
+  const RELAY_TAGS = { kind: 'reply-relay' };
+  const recipient = {
+    id: 'recipient-1',
+    campaignId: 'campaign-1',
+    status: 'sent',
+    archivedAt: null,
+    resendMessageId: 'relay-out-1',
+  };
+  let seq = 0;
+  const statusEvent = (type: string, tags?: unknown) => ({
+    id: `svix-relay-${(seq += 1)}`,
+    type,
+    createdAt: '2026-11-12T01:00:00Z',
+    resendMessageId: 'relay-out-1',
+    ...(tags !== undefined ? { tags: tags as Record<string, string> } : {}),
+  });
+
+  it.each(['email.bounced', 'email.failed', 'email.suppressed', 'email.complained'])(
+    '%s 는 Sentry 경고를 낸다 — 회신 전달의 경고와 갈리고, 주소·제목 없이 식별자만',
+    async (type) => {
+      state.selectResults = [[recipient], [recipient]];
+      const event = statusEvent(type, RELAY_TAGS);
+
+      await processResendWebhookEvent(event);
+
+      expect(sentryMessageMock).toHaveBeenCalledTimes(1);
+      expect(sentryMessageMock).toHaveBeenCalledWith('답장 중계 메일 반송·실패', {
+        level: 'warning',
+        tags: { operation: 'reply_relay_bounce', kind: 'reply-relay', eventType: type },
+        extra: { messageId: 'relay-out-1', svixId: event.id },
+      });
+    },
+  );
+
+  it.each(['email.bounced', 'email.failed', 'email.suppressed', 'email.complained', 'email.delivered', 'email.opened'])(
+    '%s 가 와도 수신자 상태·발송 회차 집계를 바꾸지 않는다',
+    async (type) => {
+      state.selectResults = [[recipient], [recipient]];
+
+      await processResendWebhookEvent(statusEvent(type, RELAY_TAGS));
+
+      expect(applyMock).not.toHaveBeenCalled();
+      expect(state.setPayloads).toEqual([]);
+      // 수신자 조회조차 하지 않는다 — 전이 경로를 아예 타지 않는다.
+      expect(state.selectCall).toBe(0);
+    },
+  );
+
+  it.each(['email.sent', 'email.delivered', 'email.opened', 'email.clicked', 'email.delivery_delayed'])(
+    '%s 는 조용히 지나간다 — 경고도 전이도 없다',
+    async (type) => {
+      await expect(processResendWebhookEvent(statusEvent(type, RELAY_TAGS))).resolves.not.toBe('deduped');
+
+      expect(sentryMessageMock).not.toHaveBeenCalled();
+      expect(applyMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it('장부에는 적는다 — 같은 반송 알림이 다시 와도 경고는 한 번이다', async () => {
+    const event = statusEvent('email.bounced', RELAY_TAGS);
+
+    await processResendWebhookEvent(event);
+    await expect(processResendWebhookEvent(event)).resolves.toBe('deduped');
+
+    expect(state.webhookIds.has(event.id)).toBe(true);
+    expect(sentryMessageMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('태그가 이름·값 목록 모양으로 와도 알아본다', async () => {
+    await processResendWebhookEvent(statusEvent('email.bounced', [{ name: 'kind', value: 'reply-relay' }]));
+
+    expect(sentryMessageMock).toHaveBeenCalledTimes(1);
+    expect(sentryMessageMock.mock.calls[0]?.[0]).toBe('답장 중계 메일 반송·실패');
+  });
+});

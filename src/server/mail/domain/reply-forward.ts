@@ -66,11 +66,13 @@ export function detectForwardLoop(input: {
 }
 
 /**
- * 웹훅 장부(`webhook_events.event_type`)에 적는 회신 전달 결과.
- * 넘긴 건과 넘기지 않은 건을 갈라 적는다. 이 줄의 id 는 알림 id 그대로라 「이미 처리한 알림」 판정에 쓰인다.
+ * 웹훅 장부(`webhook_events.event_type`)에 적는 받은 메일 처리 결과.
+ * 회신 주소로 넘긴 건(`forwarded`), 담당자의 답장을 응답자에게 넘긴 건(`relayed` — 답장 중계), 넘기지 않은 건을 갈라 적는다.
+ * 이 줄의 id 는 알림 id 그대로라 「이미 처리한 알림」 판정에 쓰인다.
  */
 export const REPLY_FORWARD_EVENT_TYPE = {
   forwarded: 'email.received:forwarded',
+  relayed: 'email.received:relayed',
   skipped: 'email.received:skipped',
 } as const;
 export type ReplyForwardLedgerOutcome = keyof typeof REPLY_FORWARD_EVENT_TYPE;
@@ -153,6 +155,9 @@ export function domainOf(address: string): string {
 /**
  * 받은 메일의 실제 수신 주소 목록에서 보낸이 계정(`@` 앞, 소문자)을 뽑는다.
  * 발송 전용 도메인의 주소만 보고, 받은 순서를 지키며 중복은 뺀다. 상한을 넘으면 앞에서부터 남긴다.
+ *
+ * `@` 앞의 첫 `+` 뒤는 떼고 본다 — 전달 메일의 보낸 사람 주소는 `계정+중계 꼬리` 다(`domain/reply-relay`).
+ * 보낸이 계정에는 `+` 가 올 수 없으므로(템플릿 입력 규칙) 그 앞이 계정이다. 꼬리의 서명은 여기서 보지 않는다.
  */
 export function extractSenderAccounts(receivedFor: readonly string[], sendDomain: string): string[] {
   const domain = sendDomain.trim().toLowerCase();
@@ -162,7 +167,10 @@ export function extractSenderAccounts(receivedFor: readonly string[], sendDomain
     const at = address.lastIndexOf('@');
     if (at <= 0) continue;
     if (address.slice(at + 1) !== domain) continue;
-    const account = address.slice(0, at);
+    const local = address.slice(0, at);
+    const plus = local.indexOf('+');
+    const account = plus < 0 ? local : local.slice(0, plus);
+    if (!account) continue;
     if (!accounts.includes(account)) accounts.push(account);
   }
   return accounts.slice(0, MAX_SENDER_ACCOUNTS);
@@ -473,8 +481,26 @@ const NOTICE_HEADLINE: Record<OmitAttachmentsReason, string> = {
   size: '첨부 파일이 커서 함께 전달하지 못했습니다.',
   rejected: '첨부 파일을 함께 전달하지 못했습니다.',
 };
-const NOTICE_ORIGIN = '원본은 메일 발송 서비스(Resend) 수신 목록에 있습니다.';
+/**
+ * 안내를 읽는 사람 — 마지막 줄이 갈린다.
+ * `staff`: 회신 전달을 받는 담당자. 원본이 어디 있는지 알려 준다.
+ * `respondent`: 답장 중계를 받는 응답자. 발송 서비스의 수신 목록은 응답자가 볼 수 없는 곳이라 말하지 않는다.
+ */
+export type NoticeAudience = 'staff' | 'respondent';
+
+const NOTICE_NEXT_STEP: Record<NoticeAudience, string> = {
+  staff: '원본은 메일 발송 서비스(Resend) 수신 목록에 있습니다.',
+  respondent: '보낸 사람에게 파일을 다시 요청해 주세요.',
+};
 const NOTICE_TEXT_RULE = '----------------------------------------';
+const NOTICE_BOX_OPEN =
+  '<div style="margin:0 0 16px;padding:12px 16px;border:1px solid #d1d5db;background:#f9fafb;color:#111827;font-size:14px;line-height:1.6;">';
+
+/** 본문 맨 위에 붙이는 안내 하나 — HTML 본문용과 텍스트 본문용. */
+export interface MailNotice {
+  html: string;
+  text: string;
+}
 
 /** 안내에 적는 파일 이름 — 줄바꿈·제어 문자가 안내의 줄을 흉내 내지 못하게 걷어내고 길이를 자른다. */
 function noticeFilename(filename: string): string {
@@ -498,11 +524,10 @@ function escapeHtml(value: string): string {
 export function buildOmittedAttachmentsNotice(
   files: readonly OmittedAttachment[],
   reason: OmitAttachmentsReason = 'size',
-): {
-  html: string;
-  text: string;
-} {
+  audience: NoticeAudience = 'staff',
+): MailNotice {
   const headline = NOTICE_HEADLINE[reason];
+  const nextStep = NOTICE_NEXT_STEP[audience];
   const total = files.reduce((sum, file) => sum + file.sizeBytes, 0);
   const summary = `빠진 파일 (${files.length}개, 합계 ${formatBytes(total)})`;
   const labels = files.slice(0, MAX_NOTICE_FILES).map((file) => {
@@ -515,22 +540,37 @@ export function buildOmittedAttachmentsNotice(
     `[안내] ${headline}`,
     summary,
     ...labels.map((label) => `- ${label}`),
-    NOTICE_ORIGIN,
+    nextStep,
     NOTICE_TEXT_RULE,
     '',
     '',
   ].join('\n');
   const html = [
-    '<div style="margin:0 0 16px;padding:12px 16px;border:1px solid #d1d5db;background:#f9fafb;color:#111827;font-size:14px;line-height:1.6;">',
+    NOTICE_BOX_OPEN,
     `<p style="margin:0 0 8px;font-weight:bold;">${headline}</p>`,
     `<p style="margin:0;">${summary}</p>`,
     '<ul style="margin:4px 0 8px;padding-left:20px;">',
     ...labels.map((label) => `<li>${escapeHtml(label)}</li>`),
     '</ul>',
-    `<p style="margin:0;">${NOTICE_ORIGIN}</p>`,
+    `<p style="margin:0;">${nextStep}</p>`,
     '</div>',
   ].join('');
   return { html, text };
+}
+
+/**
+ * 「답장할 때는 받는 사람을 직접」 안내 — 전달 메일의 보낸 사람 주소에 중계 주소를 쓰지 못할 때 본문 맨 위에 붙인다.
+ * 답장 주소를 무시하는 메일 프로그램에서 「답장」을 누르면 보낸 사람 주소(보낸이 계정)로 가고, 그 메일은
+ * 회사 도메인에서 온 메일이라 넘어가지 않는다 — 담당자가 받는 사람을 직접 고쳐야 응답자에게 간다.
+ * 모양은 첨부 안내와 같다(같은 상자, 텍스트는 구분선으로 끝난다).
+ */
+export function buildReplyGuideNotice(respondentAddress: string): MailNotice {
+  const address = cleanFilename(respondentAddress);
+  const line = `이 메일에 답장할 때는 받는 사람을 ${address} 로 직접 넣어 주세요.`;
+  return {
+    html: `${NOTICE_BOX_OPEN}<p style="margin:0;">${escapeHtml(line)}</p></div>`,
+    text: [`[안내] ${line}`, NOTICE_TEXT_RULE, '', ''].join('\n'),
+  };
 }
 
 const BODY_OPEN_TAG = /<body\b[^>]*>/i;
@@ -543,12 +583,27 @@ function prependHtmlNotice(html: string, notice: string): string {
   return `${html.slice(0, at)}${notice}${html.slice(at)}`;
 }
 
+/**
+ * 전달 메일의 보낸 사람 주소.
+ * - `account`: 보낸이 계정 그대로(`계정@발송 전용 도메인`), 안내 없음.
+ * - `relay`: 중계 주소(`domain/reply-relay` 의 `buildRelayLocalPart`). 답장 주소를 무시하는 메일 프로그램에서
+ *   담당자가 「답장」을 눌러도 응답자에게 가도록, 누구의 답장인지를 서명과 함께 담는다.
+ * - `account_with_guide`: 중계 주소를 쓸 수 없을 때(길거나, 옮길 수 없는 글자거나, 발송 서비스가 거절) —
+ *   보낸이 계정 그대로 두고 본문 맨 위에 「받는 사람을 직접 넣어 달라」는 안내를 붙인다.
+ */
+export type ForwardFromAddress =
+  | { kind: 'account' }
+  | { kind: 'relay'; localPart: string }
+  | { kind: 'account_with_guide'; respondentAddress: string };
+
 export interface ForwardMailInput {
   reply: ReceivedReply;
   /** 보낸 사람 주소에 쓰는 보낸이 계정. */
   senderAccount: string;
   sendDomain: string;
   forwardAddresses: readonly string[];
+  /** 보낸 사람 주소의 모양. 기본은 보낸이 계정 그대로(`account`). */
+  fromAddress?: ForwardFromAddress;
   /**
    * 첨부(본문 속 이미지 포함)를 하나도 싣지 않고 본문 맨 위에 안내를 붙인다 — 발송 한도를 넘을 때.
    * 첨부가 없는 메일에는 아무 일도 하지 않는다.
@@ -558,35 +613,57 @@ export interface ForwardMailInput {
   omitReason?: OmitAttachmentsReason;
 }
 
-/**
- * 받은 메일을 전달 메일의 모양으로 바꾼다.
- * 받는 사람은 전달 주소뿐이다 — 원본의 참조·다른 받는 사람은 옮기지 않는다.
- */
-export function buildForwardMail(input: ForwardMailInput): ForwardMail {
-  const { reply } = input;
+/** 받은 메일에서 답장 주소로 옮길 것 — 따로 지정한 답장 주소, 없으면 보낸 사람 주소. */
+export function forwardReplyTo(reply: Pick<ReceivedReply, 'senderAddress' | 'replyTo'>): string[] {
   const replyTo = dedupeAddresses(reply.replyTo).slice(0, MAX_REPLY_TO_ADDRESSES);
+  return replyTo.length > 0 ? replyTo : [reply.senderAddress];
+}
+
+/** 받은 메일을 다른 사람에게 넘길 때 바뀌는 겉봉 — 누구에게, 누구의 이름으로, 어떤 표식을 달고. */
+export interface MailEnvelope {
+  from: string;
+  to: readonly string[];
+  replyTo: readonly string[];
+  headers: Readonly<Record<string, string>>;
+  tags: ReadonlyArray<{ name: string; value: string }>;
+}
+
+/**
+ * 받은 메일의 제목·본문·첨부를 그대로 옮겨 겉봉만 갈아 끼운다 — 회신 전달과 답장 중계가 함께 쓴다.
+ * 안내(`leadNotice`)는 본문 맨 위에, 첨부를 빼면 그 안내가 뒤이어 붙는다.
+ */
+export function composeForwardedMail(input: {
+  reply: ReceivedReply;
+  envelope: MailEnvelope;
+  /** 본문 맨 위에 붙이는 안내. 없으면 null. */
+  leadNotice?: MailNotice | null;
+  omitAttachments?: boolean;
+  omitReason?: OmitAttachmentsReason;
+  /** 첨부 안내를 읽는 사람. 기본은 담당자. */
+  audience?: NoticeAudience;
+}): ForwardMail {
+  const { reply, envelope } = input;
   const omit = input.omitAttachments === true && reply.attachments.length > 0;
   const referenced = referencedContentIds(reply.html ?? '');
-  const notice = omit
+  const omitNotice = omit
     ? buildOmittedAttachmentsNotice(
         listOmittedAttachments(reply.attachments, reply.html),
         input.omitReason,
+        input.audience,
       )
     : null;
-  const html = reply.html && notice ? prependHtmlNotice(reply.html, notice.html) : reply.html;
-  const text = reply.text ? `${notice?.text ?? ''}${reply.text}` : reply.text;
+  const notices = [input.leadNotice ?? null, omitNotice].filter((notice) => notice !== null);
+  const noticeHtml = notices.map((notice) => notice.html).join('');
+  const noticeText = notices.map((notice) => notice.text).join('');
+  const html = reply.html && noticeHtml ? prependHtmlNotice(reply.html, noticeHtml) : reply.html;
+  const text = reply.text ? `${noticeText}${reply.text}` : reply.text;
   const body: ForwardBody = html
     ? { html, ...(text ? { text } : {}) }
-    : { text: text || `${notice?.text ?? ''}${NO_BODY_PLACEHOLDER}` };
+    : { text: text || `${noticeText}${NO_BODY_PLACEHOLDER}` };
   return {
-    from: formatForwardFrom({
-      senderName: reply.senderName,
-      senderAddress: reply.senderAddress,
-      senderAccount: input.senderAccount,
-      sendDomain: input.sendDomain,
-    }),
-    to: [...input.forwardAddresses],
-    replyTo: replyTo.length > 0 ? replyTo : [reply.senderAddress],
+    from: envelope.from,
+    to: [...envelope.to],
+    replyTo: [...envelope.replyTo],
     subject: reply.subject?.trim() ? reply.subject : NO_SUBJECT_PLACEHOLDER,
     ...body,
     attachments: omit
@@ -594,7 +671,37 @@ export function buildForwardMail(input: ForwardMailInput): ForwardMail {
       : reply.attachments.map((attachment, index) =>
           toForwardAttachment(attachment, index, isInlineImage(attachment, reply.html, referenced)),
         ),
-    headers: { ...REPLY_FORWARD_HEADERS },
-    tags: [{ ...REPLY_FORWARD_TAG }],
+    headers: { ...envelope.headers },
+    tags: envelope.tags.map((tag) => ({ ...tag })),
   };
+}
+
+/**
+ * 받은 메일을 전달 메일의 모양으로 바꾼다.
+ * 받는 사람은 전달 주소뿐이다 — 원본의 참조·다른 받는 사람은 옮기지 않는다.
+ */
+export function buildForwardMail(input: ForwardMailInput): ForwardMail {
+  const { reply } = input;
+  const fromAddress = input.fromAddress ?? { kind: 'account' };
+  return composeForwardedMail({
+    reply,
+    envelope: {
+      from: formatForwardFrom({
+        senderName: reply.senderName,
+        senderAddress: reply.senderAddress,
+        senderAccount: fromAddress.kind === 'relay' ? fromAddress.localPart : input.senderAccount,
+        sendDomain: input.sendDomain,
+      }),
+      to: input.forwardAddresses,
+      replyTo: forwardReplyTo(reply),
+      headers: REPLY_FORWARD_HEADERS,
+      tags: [REPLY_FORWARD_TAG],
+    },
+    leadNotice:
+      fromAddress.kind === 'account_with_guide'
+        ? buildReplyGuideNotice(fromAddress.respondentAddress)
+        : null,
+    ...(input.omitAttachments !== undefined ? { omitAttachments: input.omitAttachments } : {}),
+    ...(input.omitReason !== undefined ? { omitReason: input.omitReason } : {}),
+  });
 }

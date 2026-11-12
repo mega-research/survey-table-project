@@ -138,6 +138,17 @@ describe('Resend webhook route — 받은 메일 알림(email.received)', () => 
     expect(forwardMock).toHaveBeenCalledWith({ eventId: 'svix-event-1', receivedEmailId: 'received-1' });
   });
 
+  it('담당자의 답장을 응답자에게 넘긴 것(답장 중계)도 200 이고 결과가 갈려 나온다', async () => {
+    forwardMock.mockResolvedValueOnce({ outcome: 'relayed', relayCount: 1, alreadySent: false });
+
+    const response = await POST(webhookRequest());
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true, replyForward: 'relayed' });
+    expect(processMock).not.toHaveBeenCalled();
+    expect(captureMock).not.toHaveBeenCalled();
+  });
+
   it('넘기지 않은 메일도 200 이다 — 실패가 아니라 정상 처리', async () => {
     forwardMock.mockResolvedValueOnce({ outcome: 'skipped', reason: 'unused_sender_account' });
 

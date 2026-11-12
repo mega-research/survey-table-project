@@ -7,6 +7,7 @@ import {
   MAX_SENDER_ACCOUNTS,
   buildForwardMail,
   buildOmittedAttachmentsNotice,
+  buildReplyGuideNotice,
   detectForwardLoop,
   exceedsForwardSizeBudget,
   listOmittedAttachments,
@@ -34,6 +35,11 @@ describe('extractSenderAccounts — 받는 주소에서 보낸이 계정 뽑기'
     ['꺾쇠로 감싼 주소도 읽는다', ['<survey@send.example.co.kr>'], ['survey']],
     ['비슷한 도메인은 아니다', ['survey@send.example.co.kr.evil.com', 'x@notsend.example.co.kr'], []],
     ['@ 앞이 비면 계정이 아니다', ['@send.example.co.kr'], []],
+    // 전달 메일의 보낸 사람 주소는 `계정+중계 꼬리` 다 — 꼬리의 서명이 맞든 틀리든 계정은 + 앞이다.
+    ['+ 뒤(중계 꼬리)는 떼고 본다', ['survey+kim=corp.co.kr=42a7387e98@send.example.co.kr'], ['survey']],
+    ['꼬리의 모양이 달라도 + 앞이 계정이다', ['Survey+anything@send.example.co.kr'], ['survey']],
+    ['꼬리만 다른 같은 계정은 한 번만', ['survey+a=b.c=0000000000@send.example.co.kr', 'survey@send.example.co.kr'], ['survey']],
+    ['+ 앞이 비면 계정이 아니다', ['+kim=corp.co.kr=42a7387e98@send.example.co.kr'], []],
     ['하나도 없으면 빈 배열', [], []],
   ])('%s', (_name, receivedFor, expected) => {
     expect(extractSenderAccounts(receivedFor, SEND_DOMAIN)).toEqual(expected);
@@ -648,5 +654,80 @@ describe('detectForwardLoop — 넘기면 고리가 되는 메일', () => {
     ['헤더가 없는 메일', 'kim@corp.co.kr', [], null],
   ])('%s', (_name, senderAddress, headers, expected) => {
     expect(detectForwardLoop({ senderAddress, headers })).toBe(expected);
+  });
+});
+
+describe('buildForwardMail — 보낸 사람 주소의 모양', () => {
+  const reply: ReceivedReply = {
+    senderAddress: 'kim@corp.co.kr',
+    senderName: '김응답',
+    replyTo: [],
+    subject: 'RE: 설문 회신드립니다',
+    html: '<p>스캔본 보냅니다</p>',
+    text: '스캔본 보냅니다',
+    attachments: [{ filename: '설문지.pdf', mimeType: 'application/pdf', contentId: null, contentBase64: 'UERG' }],
+  };
+  const base = { reply, senderAccount: 'survey', sendDomain: SEND_DOMAIN, forwardAddresses: ['help@example.co.kr'] };
+  const GUIDE_LINE = '이 메일에 답장할 때는 받는 사람을 kim@corp.co.kr 로 직접 넣어 주세요.';
+
+  it('중계 주소를 주면 보낸 사람 주소의 @ 앞이 그것이 된다 — 이름·답장 주소·본문·첨부는 그대로다', () => {
+    const plain = buildForwardMail(base);
+    const relayed = buildForwardMail({
+      ...base,
+      fromAddress: { kind: 'relay', localPart: 'survey+kim=corp.co.kr=42a7387e98' },
+    });
+
+    expect(relayed.from).toBe('김응답 <survey+kim=corp.co.kr=42a7387e98@send.example.co.kr>');
+    expect({ ...relayed, from: plain.from }).toEqual(plain);
+  });
+
+  it('중계 주소를 쓰지 못하면 보낸이 계정 그대로 두고 본문 맨 위에 안내 한 줄을 붙인다', () => {
+    const mail = buildForwardMail({
+      ...base,
+      fromAddress: { kind: 'account_with_guide', respondentAddress: 'kim@corp.co.kr' },
+    });
+
+    expect(mail.from).toBe('김응답 <survey@send.example.co.kr>');
+    expect(mail.replyTo).toEqual(['kim@corp.co.kr']);
+    expect(mail.text).toBe(`[안내] ${GUIDE_LINE}\n----------------------------------------\n\n스캔본 보냅니다`);
+    expect(String(mail.html).endsWith('<p>스캔본 보냅니다</p>')).toBe(true);
+    expect(String(mail.html).startsWith('<div ')).toBe(true);
+    expect(mail.html).toContain(GUIDE_LINE);
+    expect(mail.attachments).toHaveLength(1);
+  });
+
+  it('안내의 주소는 HTML 이스케이프하고 줄바꿈을 걷는다', () => {
+    const notice = buildReplyGuideNotice('"a<b>&c"@corp.co.kr\r\nBcc: x@evil.com');
+
+    expect(notice.html).toContain('&quot;a&lt;b&gt;&amp;c&quot;@corp.co.kr Bcc: x@evil.com');
+    expect(notice.html).not.toContain('<b>');
+    expect(notice.text.split('\n')[0]).toBe(
+      '[안내] 이 메일에 답장할 때는 받는 사람을 "a<b>&c"@corp.co.kr Bcc: x@evil.com 로 직접 넣어 주세요.',
+    );
+  });
+
+  it('첨부까지 빼면 답장 안내가 먼저, 첨부 안내가 그 뒤에 온다 — 원래 본문은 맨 끝이다', () => {
+    const mail = buildForwardMail({
+      ...base,
+      fromAddress: { kind: 'account_with_guide', respondentAddress: 'kim@corp.co.kr' },
+      omitAttachments: true,
+      omitReason: 'rejected',
+    });
+    const guide = buildReplyGuideNotice('kim@corp.co.kr');
+    const omitted = buildOmittedAttachmentsNotice(listOmittedAttachments(reply.attachments, reply.html), 'rejected');
+
+    expect(mail.attachments).toEqual([]);
+    expect(mail.html).toBe(`${guide.html}${omitted.html}${reply.html}`);
+    expect(mail.text).toBe(`${guide.text}${omitted.text}${reply.text}`);
+  });
+
+  it('본문이 아예 없는 메일도 안내 뒤에 자리 채움 글자가 온다', () => {
+    const mail = buildForwardMail({
+      ...base,
+      reply: { ...reply, html: null, text: null },
+      fromAddress: { kind: 'account_with_guide', respondentAddress: 'kim@corp.co.kr' },
+    });
+
+    expect(mail.text).toBe(`${buildReplyGuideNotice('kim@corp.co.kr').text}(본문 없음)`);
   });
 });

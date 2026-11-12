@@ -168,6 +168,8 @@ describe.skipIf(!isLocalDb)('회신 전달 안전장치 (real local DB)', () => 
 
   beforeAll(async () => {
     process.env['RESEND_FROM_DOMAIN'] = SEND_DOMAIN;
+    // 중계 주소의 서명 키 — 웹훅 서명 키를 그대로 쓴다.
+    process.env['RESEND_WEBHOOK_SECRET'] = 'test-relay-secret';
     await clearLedger();
   });
 
@@ -485,6 +487,117 @@ describe.skipIf(!isLocalDb)('회신 전달 안전장치 (real local DB)', () => 
       const after = await aggregatesOf(surveyId, campaignId);
       expect(after.campaigns[0]?.deliveredCount).toBe(1);
       expect(after).not.toEqual(before);
+    });
+
+    it('전달 메일에 담당자가 한 답장은 응답자에게 가고, 그 중계 메일과 상태 알림도 아무것도 바꾸지 않는다', async () => {
+      const account = newAccount();
+      const { surveyId, campaignId, messageIds, recipientIds } = await seedSentCampaign(account);
+      const before = await aggregatesOf(surveyId, campaignId);
+
+      // ① 응답자의 답장을 회신 주소로 넘긴다 — 전달 메일의 보낸 사람 주소가 중계 주소다.
+      const forwardEvent = { eventId: newEventId(), receivedEmailId: `recv-${randomUUID()}` };
+      getMock.mockResolvedValue(receivedFor(account, forwardEvent.receivedEmailId));
+      expect(await forwardReceivedReply(forwardEvent)).toMatchObject({ outcome: 'forwarded' });
+      const forwardedFrom = String((sendMock.mock.calls[0]?.[0] as { from: string }).from);
+      const relayAddress = /<([^>]+)>$/.exec(forwardedFrom)?.[1];
+      expect(relayAddress).toMatch(new RegExp(`^${account}\\+kim=corp\\.co\\.kr=[0-9a-f]{10}@send\\.example\\.co\\.kr$`));
+
+      // ② 담당자가 그 전달 메일에 「답장」을 누른다 — 회사 메일은 답장 주소가 아니라 보낸 사람 주소(중계 주소)로 보낸다.
+      const relayEvent = { eventId: newEventId(), receivedEmailId: `recv-${randomUUID()}` };
+      const staffReply = receivedFor(account, relayEvent.receivedEmailId);
+      getMock.mockResolvedValue({
+        ...staffReply,
+        data: {
+          ...staffReply.data,
+          from: '이담당 <lee@example.co.kr>',
+          to: [relayAddress!],
+          received_for: [relayAddress!],
+          subject: 'RE: 설문지 회신',
+        },
+      });
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(
+          async () =>
+            new Response(
+              new Uint8Array(
+                Buffer.from(
+                  [
+                    'From: =?UTF-8?B?7J2064u064u5?= <lee@example.co.kr>',
+                    `To: ${relayAddress}`,
+                    'Subject: RE: reply',
+                    'MIME-Version: 1.0',
+                    'Content-Type: text/plain; charset=utf-8',
+                    '',
+                    'confirmed',
+                    '',
+                  ].join('\r\n'),
+                  'utf8',
+                ),
+              ),
+              { status: 200 },
+            ),
+        ),
+      );
+      const relayMessageId = `out-${randomUUID()}`;
+      sendMock.mockResolvedValue({ data: { id: relayMessageId }, error: null, headers: null });
+
+      expect(await forwardReceivedReply(relayEvent)).toEqual({ outcome: 'relayed', relayCount: 1, alreadySent: false });
+      expect(sendMock).toHaveBeenCalledTimes(2);
+      expect(sendMock.mock.calls[1]?.[0]).toMatchObject({
+        from: `이담당 <${account}@send.example.co.kr>`,
+        to: ['kim@corp.co.kr'],
+        replyTo: ['lee@example.co.kr'],
+        tags: [{ name: 'kind', value: 'reply-relay' }],
+      });
+      // 같은 알림이 다시 와도 한 번만 넘긴다 — 「중계」 결과 줄이 중복 판정에 쓰인다.
+      expect(await forwardReceivedReply(relayEvent)).toEqual({ outcome: 'deduped' });
+      expect(sendMock).toHaveBeenCalledTimes(2);
+
+      // ③ 중계 메일의 상태 알림 — 반송·실패까지, 그리고 실제 수신자의 메시지 id·수신자 태그를 달고 온 것까지.
+      sentryMessageMock.mockClear();
+      const relayTags = { kind: 'reply-relay' };
+      const statusTypes = ['email.sent', 'email.delivered', 'email.bounced', 'email.failed', 'email.suppressed', 'email.complained'];
+      for (const type of statusTypes) {
+        await processResendWebhookEvent({
+          id: newEventId(),
+          type,
+          createdAt: new Date().toISOString(),
+          resendMessageId: relayMessageId,
+          tags: relayTags,
+        });
+      }
+      await processResendWebhookEvent({
+        id: newEventId(),
+        type: 'email.bounced',
+        createdAt: new Date().toISOString(),
+        resendMessageId: messageIds[0]!,
+        tags: { ...relayTags, campaign_id: campaignId, recipient_id: recipientIds[0]! },
+      });
+
+      expect(await aggregatesOf(surveyId, campaignId)).toEqual(before);
+      expect(sentryMessageMock.mock.calls.map((call) => [call[0], call[1]?.tags?.eventType])).toEqual([
+        ['답장 중계 메일 반송·실패', 'email.bounced'],
+        ['답장 중계 메일 반송·실패', 'email.failed'],
+        ['답장 중계 메일 반송·실패', 'email.suppressed'],
+        ['답장 중계 메일 반송·실패', 'email.complained'],
+        ['답장 중계 메일 반송·실패', 'email.bounced'],
+      ]);
+      // 장부: 받은 메일 둘의 자리 줄 둘, 결과 줄은 「넘김」 하나와 「중계」 하나. 기존 종류 값은 그대로다.
+      const ledger = await db
+        .select({ eventType: webhookEvents.eventType })
+        .from(webhookEvents)
+        .where(like(webhookEvents.id, `${EVENT_PREFIX}%`));
+      expect(ledger.map((row) => row.eventType).sort()).toEqual(
+        [
+          'email.received:slot',
+          'email.received:slot',
+          'email.received:forwarded',
+          'email.received:relayed',
+          ...statusTypes,
+          'email.bounced',
+        ].sort(),
+      );
     });
   });
 });
