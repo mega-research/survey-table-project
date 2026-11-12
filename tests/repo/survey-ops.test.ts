@@ -18,6 +18,7 @@ import {
   parseOpsArgs,
   resolveOpsEnv,
 } from '../../scripts/survey-ops/env';
+import { formatFound, likePattern } from '../../scripts/survey-ops/find';
 import { diffVariables, structureVariables } from '../../scripts/survey-ops/variables';
 
 describe('parseOpsArgs', () => {
@@ -233,5 +234,45 @@ describe('pruneOldDumps — 명단 평문이 든 dump 를 7일 뒤 지운다', (
 
   it('폴더가 없으면 아무것도 안 한다', () => {
     expect(pruneOldDumps(path.join(tmpdir(), 'no-such-survey-ops-dir'))).toEqual([]);
+  });
+});
+
+describe('survey:find', () => {
+  it('찾는 글자의 % · _ · \\ 는 와일드카드가 아니라 글자 그대로 찾는다', () => {
+    expect(likePattern('수혜 경험')).toBe('%수혜 경험%');
+    expect(likePattern('100%_a\\b')).toBe('%100\\%\\_a\\\\b%');
+  });
+
+  it('설문별로 묶어 설문 id · 문항 id · 응답 수를 낸다', () => {
+    const text = formatFound(
+      [
+        {
+          surveyId: 's1',
+          surveyTitle: '사전 설문조사',
+          surveyStatus: 'published',
+          published: true,
+          questionId: 'q7',
+          questionCode: 'C7',
+          type: 'table',
+          title: '문 7. 지원정책',
+          matched: ['제목', '표 칸'],
+          updatedAt: '2026-11-12T05:32:02.768Z',
+        },
+      ],
+      [
+        { surveyId: 's1', status: 'completed', isTest: false, n: 2 },
+        { surveyId: 's1', status: 'completed', isTest: true, n: 1 },
+        { surveyId: 'other', status: 'completed', isTest: false, n: 99 },
+      ],
+    );
+    expect(text).toContain('설문 id s1');
+    expect(text).toContain('문항 id q7');
+    expect(text).toContain('C7 · table · 제목·표 칸 일치');
+    expect(text).toContain('실응답 completed 2 / 테스트 completed 1');
+    expect(text).not.toContain('99');
+  });
+
+  it('찾은 것이 없으면 그렇게 말한다', () => {
+    expect(formatFound([], [])).toBe('찾은 문항이 없습니다');
   });
 });

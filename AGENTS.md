@@ -245,7 +245,7 @@ pnpm db:migrate       # 마이그레이션 실행 (_journal.json 기준 — 0019
 pnpm db:studio        # Drizzle Studio
 pnpm survey:backup    # 설문 백업
 pnpm survey:restore   # 백업에서 복원
-pnpm survey:vars · survey:dump · survey:render  # 운영 설문 변수명 계산 · 응답 화면 그려 보기 (survey-ops 스킬 — 설문 고치기 도우미 포함)
+pnpm survey:find · survey:vars · survey:dump · survey:render  # 운영 설문 문구로 찾기 · 변수명 계산 · 응답 화면 그려 보기 (survey-ops 스킬 — 설문 고치기 도우미 포함)
 pnpm versions:prune   # 버전 스냅샷 정리 (DRY_RUN 기본, :live 로 실행)
 pnpm ledger:seed      # R2 발송 장부 시드
 pnpm spss:migrate     # SPSS 필드 마이그레이션 (DRY_RUN 기본, :live 로 실행)

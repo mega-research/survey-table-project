@@ -36,7 +36,7 @@ export interface OpsArgs {
   flags: Map<string, string | true>;
 }
 
-const VALUE_FLAGS = new Set(['env', 'resid', 'next', 'grep', 'out']);
+const VALUE_FLAGS = new Set(['env', 'resid', 'next', 'grep', 'out', 'limit']);
 
 export function parseOpsArgs(argv: readonly string[]): OpsArgs {
   const flags = new Map<string, string | true>();
