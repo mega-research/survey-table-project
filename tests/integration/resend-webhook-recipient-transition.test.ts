@@ -245,7 +245,7 @@ describe('processResendWebhookEvent — 전달 메일(kind=reply-forward)의 상
     ...(tags !== undefined ? { tags: tags as Record<string, string> } : {}),
   });
 
-  it.each(['email.bounced', 'email.failed'])('%s 는 Sentry 경고를 낸다 — 주소·제목 없이 식별자만', async (type) => {
+  it.each(['email.bounced', 'email.failed', 'email.suppressed', 'email.complained'])('%s 는 Sentry 경고를 낸다 — 주소·제목 없이 식별자만', async (type) => {
     state.selectResults = [[recipient], [recipient]];
     const event = statusEvent(type, FORWARD_TAGS);
 
@@ -259,7 +259,7 @@ describe('processResendWebhookEvent — 전달 메일(kind=reply-forward)의 상
     });
   });
 
-  it.each(['email.bounced', 'email.failed', 'email.complained'])(
+  it.each(['email.bounced', 'email.failed', 'email.suppressed', 'email.complained'])(
     '%s 가 와도 수신자 상태·발송 회차 집계를 바꾸지 않는다',
     async (type) => {
       state.selectResults = [[recipient], [recipient]];
@@ -273,7 +273,7 @@ describe('processResendWebhookEvent — 전달 메일(kind=reply-forward)의 상
     },
   );
 
-  it.each(['email.sent', 'email.delivered', 'email.opened', 'email.clicked', 'email.delivery_delayed', 'email.complained'])(
+  it.each(['email.sent', 'email.delivered', 'email.opened', 'email.clicked', 'email.delivery_delayed'])(
     '%s 는 조용히 지나간다 — 경고도 전이도 없다',
     async (type) => {
       state.selectResults = [[recipient], [recipient]];
@@ -302,6 +302,18 @@ describe('processResendWebhookEvent — 전달 메일(kind=reply-forward)의 상
 
     expect(sentryMessageMock).toHaveBeenCalledTimes(1);
   });
+
+  it.each(['email.suppressed', 'email.complained'])(
+    '태그가 없는 %s 알림은 회신 전달 경고를 내지 않는다 — 설문 발송의 알림이다',
+    async (type) => {
+      state.selectResults = [[recipient], [recipient]];
+      applyMock.mockResolvedValueOnce(false);
+
+      await processResendWebhookEvent(statusEvent(type));
+
+      expect(sentryMessageMock).not.toHaveBeenCalled();
+    },
+  );
 
   it('태그가 없는 반송 알림은 지금처럼 수신자 전이 경로를 타고 경고를 내지 않는다', async () => {
     state.selectResults = [[recipient], [recipient]];

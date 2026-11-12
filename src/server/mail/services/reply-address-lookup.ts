@@ -104,11 +104,15 @@ const ACCOUNT_LOOKBACK_YEARS = 1;
 const DISTINCT_REPLY_LIMIT = 200;
 
 /**
- * 보낸이 계정 기준 전달 주소.
+ * 보낸이 계정 기준 전달 주소 — 발송 회차의 회신 주소 ∪ 템플릿의 회신 주소.
  *
  * 그 계정으로 최근 1년 안에 만든 발송 회차(단체·단건·대체 발송·테스트 회차, 보관된 회차, 실/테스트 파티션 전부)의
- * 회신 주소 스냅샷을 중복 없이 모은다. 하나도 없으면 그 계정을 쓰는 삭제되지 않은 템플릿의 회신 주소다
- * (캠페인 없이 「테스트 발송」만 한 템플릿의 답장). 회신 주소가 빈 회차와 발송 전용 도메인의 주소는 후보가 아니다.
+ * 회신 주소 스냅샷에, 그 계정을 쓰는 삭제되지 않은 템플릿의 회신 주소를 합친다(중복 없이, 회차 것이 앞).
+ * 회차가 있다고 템플릿을 건너뛰지 않는다 — 같은 계정으로 새 설문의 템플릿을 만들어 「테스트 발송」만 한 단계에서는
+ * 그 회신 주소가 어느 회차에도 없어, 답장이 옛 설문 담당자에게만 가고 새 담당자는 받지 못한다.
+ * 회신 주소가 빈 회차·템플릿과 발송 전용 도메인의 주소는 후보가 아니다.
+ *
+ * `source` 는 회차의 회신 주소가 하나라도 있으면 `campaign`, 템플릿에서만 나왔으면 `template` 이다.
  *
  * @param senderAccount 보낸이 계정 — 소문자로 넘길 것(대소문자 무시 비교).
  */
@@ -137,11 +141,6 @@ export async function loadAccountReplyAddresses(
     .groupBy(mailCampaigns.replyToSnapshot)
     .orderBy(desc(campaignLastAt))
     .limit(DISTINCT_REPLY_LIMIT);
-  const fromCampaigns = collectReplyAddresses(
-    campaignRows.map((row) => row.replyTo),
-    options.sendDomain,
-  );
-  if (fromCampaigns.length > 0) return { source: 'campaign', addresses: fromCampaigns };
 
   const templateLastAt = max(mailTemplates.updatedAt);
   const templateRows = await db
@@ -158,11 +157,16 @@ export async function loadAccountReplyAddresses(
     .groupBy(mailTemplates.replyTo)
     .orderBy(desc(templateLastAt))
     .limit(DISTINCT_REPLY_LIMIT);
-  const fromTemplates = collectReplyAddresses(
-    templateRows.map((row) => row.replyTo),
+
+  const fromCampaigns = collectReplyAddresses(
+    campaignRows.map((row) => row.replyTo),
     options.sendDomain,
   );
-  if (fromTemplates.length > 0) return { source: 'template', addresses: fromTemplates };
-
-  return { source: null, addresses: [] };
+  // 회차 것을 앞에 두고 한 번에 정리한다 — 대소문자만 다른 주소는 먼저 온(회차) 표기가 남는다.
+  const addresses = collectReplyAddresses(
+    [...campaignRows, ...templateRows].map((row) => row.replyTo),
+    options.sendDomain,
+  );
+  if (addresses.length === 0) return { source: null, addresses: [] };
+  return { source: fromCampaigns.length > 0 ? 'campaign' : 'template', addresses };
 }

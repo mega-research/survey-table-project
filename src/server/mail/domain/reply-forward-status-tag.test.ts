@@ -36,11 +36,14 @@ describe('isReplyForwardDeliveryFailure — 전달 메일이 닿지 못했다는
   it.each<[string, boolean]>([
     ['email.bounced', true],
     ['email.failed', true],
+    // 이전에 반송된 회신 주소로 다시 보내면 발송 서비스가 반송 대신 「보내지 않음」으로 알린다.
+    ['email.suppressed', true],
+    // 담당자가 전달 메일을 스팸으로 신고했다 — 그 회신 주소로는 더 보내지 못하게 된다.
+    ['email.complained', true],
     ['email.sent', false],
     ['email.delivered', false],
     ['email.opened', false],
     ['email.clicked', false],
-    ['email.complained', false],
     ['email.delivery_delayed', false],
     ['email.received', false],
   ])('%s → %s', (eventType, expected) => {

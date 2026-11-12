@@ -7,6 +7,7 @@ import {
   MAX_SENDER_ACCOUNTS,
   buildForwardMail,
   buildOmittedAttachmentsNotice,
+  detectForwardLoop,
   exceedsForwardSizeBudget,
   listOmittedAttachments,
   measureForwardSize,
@@ -182,8 +183,20 @@ describe('buildForwardMail — 받은 메일을 전달 메일로', () => {
         { filename: '설문지.pdf', content: 'UERG', contentType: 'application/pdf' },
         { filename: 'sign.png', content: 'UE5H', contentType: 'image/png', contentId: 'sign@corp' },
       ],
+      headers: { 'X-Survey-Reply-Forward': '1', 'Auto-Submitted': 'auto-forwarded' },
       tags: [{ name: 'kind', value: 'reply-forward' }],
     });
+  });
+
+  it('첨부를 뺀 전달 메일에도 고리 표식 헤더가 붙는다', () => {
+    const mail = buildForwardMail({
+      reply,
+      senderAccount: 'survey',
+      sendDomain: SEND_DOMAIN,
+      forwardAddresses: ['help@example.co.kr'],
+      omitAttachments: true,
+    });
+    expect(mail.headers).toEqual({ 'X-Survey-Reply-Forward': '1', 'Auto-Submitted': 'auto-forwarded' });
   });
 
   it('받은 메일에 답장 주소가 따로 있으면 그것을 쓴다', () => {
@@ -270,11 +283,14 @@ describe('measureForwardSize · exceedsForwardSizeBudget — 발송 한도 판�
 
 describe('listOmittedAttachments — 빠진 파일의 이름·크기', () => {
   it('크기는 인코딩 전(원래 파일) 바이트이고, 본문 속 이미지는 따로 표시한다', () => {
-    const files = listOmittedAttachments([
-      // base64 8글자 = 6바이트, 패딩 하나면 5바이트
-      { filename: '설문지.pdf', mimeType: 'application/pdf', contentId: null, contentBase64: 'QUJDREU=' },
-      { filename: 'sign.png', mimeType: 'image/png', contentId: '<sign@corp>', contentBase64: 'QUJD' },
-    ]);
+    const files = listOmittedAttachments(
+      [
+        // base64 8글자 = 6바이트, 패딩 하나면 5바이트
+        { filename: '설문지.pdf', mimeType: 'application/pdf', contentId: null, contentBase64: 'QUJDREU=' },
+        { filename: 'sign.png', mimeType: 'image/png', contentId: '<sign@corp>', contentBase64: 'QUJD' },
+      ],
+      '<p><img src="cid:sign@corp"></p>',
+    );
     expect(files).toEqual([
       { filename: '설문지.pdf', sizeBytes: 5, inline: false },
       { filename: 'sign.png', sizeBytes: 3, inline: true },
@@ -382,7 +398,10 @@ describe('buildForwardMail — 첨부를 빼고 보낼 때', () => {
       forwardAddresses: ['help@example.co.kr'],
       omitAttachments,
     });
-  const notice = buildOmittedAttachmentsNotice(listOmittedAttachments(reply.attachments));
+  const notice = buildOmittedAttachmentsNotice(listOmittedAttachments(reply.attachments, reply.html));
+  /** 본문이 그 이미지를 가리키지 않는(또는 HTML 본문이 없는) 메일의 안내 — 「본문 속 이미지」 표시가 없다. */
+  const noticeFor = (html: string | null) =>
+    buildOmittedAttachmentsNotice(listOmittedAttachments(reply.attachments, html));
 
   it('첨부는 하나도 싣지 않고, 본문 속 이미지도 빠진 파일 목록에 든다', () => {
     const mail = build();
@@ -406,14 +425,14 @@ describe('buildForwardMail — 첨부를 빼고 보낼 때', () => {
   it('온전한 HTML 문서면 안내를 body 여는 태그 바로 뒤에 넣는다', () => {
     const html = '<!DOCTYPE html><html><head><title>t</title></head><BODY class="x"><p>본문</p></body></html>';
     expect(build({ html }).html).toBe(
-      `<!DOCTYPE html><html><head><title>t</title></head><BODY class="x">${notice.html}<p>본문</p></body></html>`,
+      `<!DOCTYPE html><html><head><title>t</title></head><BODY class="x">${noticeFor(html).html}<p>본문</p></body></html>`,
     );
   });
 
   it('본문이 한쪽만 있으면 그쪽에만 안내를 붙인다', () => {
     const textOnly = build({ html: null });
     expect(textOnly.html).toBeUndefined();
-    expect(textOnly.text).toBe(`${notice.text}${reply.text}`);
+    expect(textOnly.text).toBe(`${noticeFor(null).text}${reply.text}`);
 
     const htmlOnly = build({ text: null });
     expect(htmlOnly.html).toBe(`${notice.html}${reply.html}`);
@@ -423,7 +442,7 @@ describe('buildForwardMail — 첨부를 빼고 보낼 때', () => {
   it('본문이 아예 없으면(첨부만 보낸 스캔본) 안내 뒤에 자리 채움 글자가 온다', () => {
     const mail = build({ html: null, text: null });
     expect(mail.html).toBeUndefined();
-    expect(mail.text).toBe(`${notice.text}(본문 없음)`);
+    expect(mail.text).toBe(`${noticeFor(null).text}(본문 없음)`);
   });
 
   it('첨부가 없는 메일은 뺄 것이 없으니 안내도 없다', () => {
@@ -437,5 +456,197 @@ describe('buildForwardMail — 첨부를 빼고 보낼 때', () => {
     expect(mail.attachments).toHaveLength(2);
     expect(mail.html).toBe(reply.html);
     expect(mail.text).toBe(reply.text);
+  });
+});
+
+describe('본문 속 이미지 판정 — 내용 ID 는 본문 속 이미지에만 넘긴다', () => {
+  const HTML_WITH_SIGN = '<p>서명 <img src="cid:sign@corp"></p>';
+  const base: ReceivedReply = {
+    senderAddress: 'kim@corp.co.kr',
+    senderName: '김응답',
+    replyTo: [],
+    subject: 'x',
+    html: HTML_WITH_SIGN,
+    text: '서명',
+    attachments: [],
+  };
+  const forwardedAttachment = (attachment: ReceivedAttachment, html: string | null = HTML_WITH_SIGN) =>
+    buildForwardMail({
+      reply: { ...base, html, attachments: [attachment] },
+      senderAccount: 'survey',
+      sendDomain: SEND_DOMAIN,
+      forwardAddresses: ['help@example.co.kr'],
+    }).attachments[0];
+
+  it.each<[string, ReceivedAttachment, string | null, string | undefined]>([
+    [
+      '원본 풀기가 본문 속(related)이라고 한 이미지',
+      { filename: 'logo.png', mimeType: 'image/png', contentId: '<logo@corp>', related: true, contentBase64: 'QQ==' },
+      '<p>본문이 그 이미지를 가리키지 않아도</p>',
+      'logo@corp',
+    ],
+    [
+      '본문 속 파트가 아니어도 HTML 본문이 그 cid 를 참조하는 이미지',
+      { filename: 'sign.png', mimeType: 'image/png', contentId: '<sign@corp>', contentBase64: 'QQ==' },
+      HTML_WITH_SIGN,
+      'sign@corp',
+    ],
+    [
+      'cid 참조의 대소문자가 달라도',
+      { filename: 'sign.png', mimeType: 'image/png', contentId: '<Sign@Corp>', contentBase64: 'QQ==' },
+      '<img src="CID:sign@corp">',
+      'Sign@Corp',
+    ],
+    [
+      '내용 ID 가 붙었을 뿐인 일반 PDF — 본문이 참조하지 않는다',
+      { filename: '설문지.pdf', mimeType: 'application/pdf', contentId: '<part1.abc@corp>', contentBase64: 'QQ==' },
+      HTML_WITH_SIGN,
+      undefined,
+    ],
+    [
+      '다른 내용 ID 의 앞부분만 같은 첨부',
+      { filename: 'x.png', mimeType: 'image/png', contentId: '<sign@corp.extra>', contentBase64: 'QQ==' },
+      '<img src="cid:sign@corp">',
+      undefined,
+    ],
+    [
+      'HTML 본문이 없는 메일 — 보여 줄 자리가 없으니 일반 첨부다',
+      { filename: 'logo.png', mimeType: 'image/png', contentId: '<logo@corp>', related: true, contentBase64: 'QQ==' },
+      null,
+      undefined,
+    ],
+    [
+      '내용 ID 가 없는 첨부',
+      { filename: 'a.pdf', mimeType: 'application/pdf', contentId: null, related: true, contentBase64: 'QQ==' },
+      HTML_WITH_SIGN,
+      undefined,
+    ],
+    [
+      '내용 ID 가 꺾쇠뿐인 첨부',
+      { filename: 'a.pdf', mimeType: 'application/pdf', contentId: '<>', related: true, contentBase64: 'QQ==' },
+      HTML_WITH_SIGN,
+      undefined,
+    ],
+  ])('%s', (_name, attachment, html, expectedContentId) => {
+    const forwarded = forwardedAttachment(attachment, html);
+
+    expect(forwarded?.contentId).toBe(expectedContentId);
+    // 일반 첨부로 보낼 때는 내용 ID 칸 자체가 없다 — 있으면 받는 쪽 메일 프로그램이 첨부를 숨긴다.
+    if (expectedContentId === undefined) expect(forwarded).not.toHaveProperty('contentId');
+    // 안내문의 「본문 속 이미지」 표시도 같은 기준이다.
+    expect(listOmittedAttachments([attachment], html)[0]?.inline).toBe(expectedContentId !== undefined);
+  });
+
+  it('첨부를 뺄 때 안내의 「본문 속 이미지」 표시는 실제로 본문 속 이미지인 것에만 붙는다', () => {
+    const mail = buildForwardMail({
+      reply: {
+        ...base,
+        attachments: [
+          { filename: '설문지.pdf', mimeType: 'application/pdf', contentId: '<part1@corp>', contentBase64: 'QUJD' },
+          { filename: 'sign.png', mimeType: 'image/png', contentId: '<sign@corp>', related: true, contentBase64: 'QUJD' },
+        ],
+      },
+      senderAccount: 'survey',
+      sendDomain: SEND_DOMAIN,
+      forwardAddresses: ['help@example.co.kr'],
+      omitAttachments: true,
+    });
+
+    expect(mail.text).toContain('- 설문지.pdf (3 B)');
+    expect(mail.text).toContain('- sign.png (3 B, 본문 속 이미지)');
+  });
+});
+
+describe('발송으로 넘기는 첨부 파일 이름 — 줄바꿈·제어 문자를 걷는다', () => {
+  const namesOf = (attachments: ReceivedAttachment[]) =>
+    buildForwardMail({
+      reply: {
+        senderAddress: 'kim@corp.co.kr',
+        senderName: null,
+        replyTo: [],
+        subject: 'x',
+        html: null,
+        text: '본문',
+        attachments,
+      },
+      senderAccount: 'survey',
+      sendDomain: SEND_DOMAIN,
+      forwardAddresses: ['help@example.co.kr'],
+    }).attachments.map((attachment) => attachment.filename);
+  const pdf = (filename: string | null): ReceivedAttachment => ({
+    filename,
+    mimeType: 'application/pdf',
+    contentId: null,
+    contentBase64: 'QQ==',
+  });
+
+  it.each<[string, string, string]>([
+    ['줄바꿈', '설문지\r\nContent-Type: text/html.pdf', '설문지 Content-Type: text/html.pdf'],
+    ['탭과 널 문자', 'a\tb\u0000c.pdf', 'a b c.pdf'],
+    ['유니코드 줄 구분자', 'a\u2028b\u2029c.pdf', 'a b c.pdf'],
+    ['C1 제어 문자', 'a\u0085b.pdf', 'a b.pdf'],
+    ['앞뒤 공백', '  설문지.pdf  ', '설문지.pdf'],
+    ['평범한 이름은 그대로', '설문지 (최종).pdf', '설문지 (최종).pdf'],
+  ])('%s', (_name, filename, expected) => {
+    expect(namesOf([pdf(filename)])).toEqual([expected]);
+  });
+
+  it('걷어내고 나면 빈 이름에는 대체 이름을 쓴다', () => {
+    expect(namesOf([pdf('\r\n\t'), pdf('\u0000'), pdf(null)])).toEqual([
+      'attachment-1.pdf',
+      'attachment-2.pdf',
+      'attachment-3.pdf',
+    ]);
+  });
+
+  it('안내문의 빠진 파일 이름도 같은 이름이다', () => {
+    expect(listOmittedAttachments([pdf('a\r\nb.pdf'), pdf('\r\n')], null).map((file) => file.filename)).toEqual([
+      'a b.pdf',
+      'attachment-2.pdf',
+    ]);
+  });
+});
+
+describe('buildOmittedAttachmentsNotice — 첨부를 뺀 까닭에 따라 문구가 갈린다', () => {
+  const files: OmittedAttachment[] = [{ filename: 'run.exe', sizeBytes: 10, inline: false }];
+
+  it('크기 초과면 「커서」라고 말한다 — 까닭을 주지 않아도 같다', () => {
+    for (const notice of [buildOmittedAttachmentsNotice(files), buildOmittedAttachmentsNotice(files, 'size')]) {
+      expect(notice.text).toContain('[안내] 첨부 파일이 커서 함께 전달하지 못했습니다.');
+      expect(notice.html).toContain('첨부 파일이 커서 함께 전달하지 못했습니다.');
+    }
+  });
+
+  it('발송 서비스가 거절한 것이면 크기를 탓하지 않는다 — 파일 목록과 원본이 있는 곳은 그대로다', () => {
+    const notice = buildOmittedAttachmentsNotice(files, 'rejected');
+
+    for (const body of [notice.text, notice.html]) {
+      expect(body).toContain('첨부 파일을 함께 전달하지 못했습니다.');
+      expect(body).not.toContain('커서');
+      expect(body).toContain('run.exe (10 B)');
+      expect(body).toContain('원본은 메일 발송 서비스(Resend) 수신 목록에 있습니다.');
+    }
+  });
+});
+
+describe('detectForwardLoop — 넘기면 고리가 되는 메일', () => {
+  const REPORT = 'multipart/report; report-type=delivery-status; boundary="b1"';
+
+  it.each<[string, string, Array<{ key: string; value: string }>, ReturnType<typeof detectForwardLoop>]>([
+    ['우리 표식 헤더를 단 메일 — 전달 메일이 되돌아왔다', 'kim@corp.co.kr', [{ key: 'x-survey-reply-forward', value: '1' }], 'forward_mark'],
+    ['표식 헤더 이름의 대소문자가 달라도', 'kim@corp.co.kr', [{ key: 'X-Survey-Reply-Forward', value: '1' }], 'forward_mark'],
+    ['표식 헤더의 값이 달라도 이름으로 알아본다', 'kim@corp.co.kr', [{ key: 'x-survey-reply-forward', value: 'yes' }], 'forward_mark'],
+    ['배달 상태 통지(multipart/report 의 delivery-status)', 'bounce@mx.corp.co.kr', [{ key: 'content-type', value: REPORT }], 'delivery_report'],
+    ['통지 종류에 따옴표·대문자가 섞여도', 'bounce@mx.corp.co.kr', [{ key: 'Content-Type', value: 'Multipart/Report; boundary=x; Report-Type="Delivery-Status"' }], 'delivery_report'],
+    ['보낸 사람이 mailer-daemon', 'MAILER-DAEMON@mx.corp.co.kr', [], 'delivery_report'],
+    ['보낸 사람이 postmaster', 'Postmaster@corp.co.kr', [], 'delivery_report'],
+    ['응답자의 부재중 자동응답은 넘긴다', 'kim@corp.co.kr', [{ key: 'auto-submitted', value: 'auto-replied' }, { key: 'x-autoreply', value: 'yes' }], null],
+    ['남이 자동 전달한 메일(우리 표식 없음)은 넘긴다', 'kim@corp.co.kr', [{ key: 'auto-submitted', value: 'auto-forwarded' }], null],
+    ['읽음 확인(multipart/report 의 disposition-notification)은 넘긴다', 'kim@corp.co.kr', [{ key: 'content-type', value: 'multipart/report; report-type=disposition-notification; boundary=x' }], null],
+    ['평범한 첨부 메일', 'kim@corp.co.kr', [{ key: 'content-type', value: 'multipart/mixed; boundary=x' }], null],
+    ['이름에 daemon 이 들어갈 뿐인 사람', 'mailer-daemon-fan@corp.co.kr', [], null],
+    ['헤더가 없는 메일', 'kim@corp.co.kr', [], null],
+  ])('%s', (_name, senderAddress, headers, expected) => {
+    expect(detectForwardLoop({ senderAddress, headers })).toBe(expected);
   });
 });

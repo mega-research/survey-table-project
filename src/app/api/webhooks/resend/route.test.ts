@@ -113,9 +113,29 @@ describe('Resend webhook route — 받은 메일 알림(email.received)', () => 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ ok: true, replyForward: 'forwarded' });
     expect(forwardMock).toHaveBeenCalledOnce();
-    // 알림에 실려 온 주소·제목은 넘기지 않는다 — 서비스가 받은 메일 id 로 직접 조회한다.
-    expect(forwardMock).toHaveBeenCalledWith({ eventId: 'svix-event-1', receivedEmailId: 'received-1' });
+    // 알림에 실린 받는 주소·보낸 사람은 넘긴다 — 서비스가 받은 메일을 조회하기 전에 넘기지 않을 메일을 거른다.
+    // 제목·참조 같은 나머지는 넘기지 않는다.
+    expect(forwardMock).toHaveBeenCalledWith({
+      eventId: 'svix-event-1',
+      receivedEmailId: 'received-1',
+      receivedFor: ['survey@send.example.co.kr'],
+      from: '김응답 <kim@corp.co.kr>',
+    });
+    expect(JSON.stringify(forwardMock.mock.calls)).not.toContain('설문지 회신');
     expect(processMock).not.toHaveBeenCalled();
+  });
+
+  it('알림에 받는 주소·보낸 사람이 없거나 모양이 다르면 그 칸을 넘기지 않는다 — 서비스가 조회 뒤에 판정한다', async () => {
+    verified.payload = {
+      type: 'email.received',
+      created_at: '2026-11-12T01:00:00Z',
+      data: { email_id: 'received-1', from: { name: '김응답' }, received_for: 'survey@send.example.co.kr' },
+    };
+    forwardMock.mockResolvedValueOnce({ outcome: 'skipped', reason: 'no_sender_account' });
+
+    await POST(webhookRequest());
+
+    expect(forwardMock).toHaveBeenCalledWith({ eventId: 'svix-event-1', receivedEmailId: 'received-1' });
   });
 
   it('넘기지 않은 메일도 200 이다 — 실패가 아니라 정상 처리', async () => {

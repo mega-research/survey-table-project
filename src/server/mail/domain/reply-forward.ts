@@ -13,8 +13,61 @@ import { formatBytes } from '@/lib/utils';
 export const REPLY_FORWARD_TAG = { name: 'kind', value: 'reply-forward' } as const;
 
 /**
+ * 전달 메일에 붙이는 헤더 — 고리를 끊는 표식.
+ * 자체 표식은 전달 메일이 (자동 전달·반송으로) 보낸 사람 주소에 되돌아왔을 때 알아보는 데 쓰고,
+ * `Auto-Submitted: auto-forwarded`(RFC 3834)는 받는 쪽 메일 서버가 자동응답을 돌려보내지 않게 한다.
+ */
+export const REPLY_FORWARD_MARK_HEADER = 'X-Survey-Reply-Forward';
+export const REPLY_FORWARD_HEADERS: Readonly<Record<string, string>> = {
+  [REPLY_FORWARD_MARK_HEADER]: '1',
+  'Auto-Submitted': 'auto-forwarded',
+};
+
+/** 받은 메일의 헤더 한 줄. 이름의 대소문자는 가리지 않는다. */
+export interface MailHeader {
+  key: string;
+  value: string;
+}
+
+/** 넘기면 고리가 되는 메일 — 우리 표식을 단 메일(`forward_mark`)과 배달 상태 통지(`delivery_report`). */
+export type ForwardLoopSignal = 'forward_mark' | 'delivery_report';
+
+const DELIVERY_REPORT_SENDERS: ReadonlySet<string> = new Set(['mailer-daemon', 'postmaster']);
+const MULTIPART_REPORT = /^\s*multipart\/report\b/i;
+const DELIVERY_STATUS_REPORT = /report-type\s*=\s*"?delivery-status"?/i;
+
+/**
+ * 받은 메일이 넘기면 고리가 되는 메일인가.
+ *
+ * - 우리 표식 헤더가 있다 — 전달 메일이 되돌아온 것이다. 다시 넘기면 끝없이 돈다.
+ * - 배달 상태 통지다 — `multipart/report` 의 `delivery-status`, 또는 보낸 사람이 `mailer-daemon`·`postmaster`.
+ *   전달 메일의 반송 통지가 보낸 사람 주소로 오면, 그것을 넘긴 메일이 또 반송되어 돈다.
+ *
+ * 응답자 메일 서버의 부재중 자동응답(`Auto-Submitted: auto-replied`)과 읽음 확인은 고리가 아니다 — 넘긴다.
+ */
+export function detectForwardLoop(input: {
+  senderAddress: string;
+  headers: readonly MailHeader[];
+}): ForwardLoopSignal | null {
+  const mark = REPLY_FORWARD_MARK_HEADER.toLowerCase();
+  if (input.headers.some((header) => header.key.toLowerCase() === mark)) return 'forward_mark';
+
+  const at = input.senderAddress.lastIndexOf('@');
+  const localPart = (at < 0 ? input.senderAddress : input.senderAddress.slice(0, at)).trim().toLowerCase();
+  if (DELIVERY_REPORT_SENDERS.has(localPart)) return 'delivery_report';
+
+  const isDeliveryReport = input.headers.some(
+    (header) =>
+      header.key.toLowerCase() === 'content-type' &&
+      MULTIPART_REPORT.test(header.value) &&
+      DELIVERY_STATUS_REPORT.test(header.value),
+  );
+  return isDeliveryReport ? 'delivery_report' : null;
+}
+
+/**
  * 웹훅 장부(`webhook_events.event_type`)에 적는 회신 전달 결과.
- * 넘긴 건과 넘기지 않은 건을 갈라 적는다 — 시간당 상한이 「넘긴 건」만 센다.
+ * 넘긴 건과 넘기지 않은 건을 갈라 적는다. 이 줄의 id 는 알림 id 그대로라 「이미 처리한 알림」 판정에 쓰인다.
  */
 export const REPLY_FORWARD_EVENT_TYPE = {
   forwarded: 'email.received:forwarded',
@@ -23,8 +76,20 @@ export const REPLY_FORWARD_EVENT_TYPE = {
 export type ReplyForwardLedgerOutcome = keyof typeof REPLY_FORWARD_EVENT_TYPE;
 
 /**
- * 시간당 상한 — 최근 한 시간에 넘긴 건이 이만큼이면 더 넘기지 않는다.
+ * 시간당 상한이 세는 「자리」 줄의 종류 — 발송 **전에** 잡는다.
+ * 결과 줄과 종류도 id 도 다르다: 자리만 잡고 실패한 알림이 「이미 처리한 알림」으로 보이면 재시도가 그 메일을 버린다.
+ */
+export const REPLY_FORWARD_SLOT_EVENT_TYPE = 'email.received:slot';
+
+/** 자리 줄의 id — 알림 id 에서 파생한다. 같은 알림의 재시도는 같은 자리를 다시 쓴다. */
+export function replyForwardSlotId(eventId: string): string {
+  return `${eventId}:reply-forward-slot`;
+}
+
+/**
+ * 시간당 상한 — 최근 한 시간에 잡힌 자리가 이만큼이면 더 넘기지 않는다.
  * 회신 전달은 설문 발송과 같은 발송 한도를 쓴다. 보낸 사람 주소로 메일을 쏟아부어도 설문 발송이 막히지 않게 한다.
+ * 자리는 발송이 실패해도 한 시간 동안 센다(보수적) — 상한은 「나간 메일」이 아니라 「발송을 시도한 메일」의 수다.
  */
 export const REPLY_FORWARD_HOURLY_CAP = 200;
 export const REPLY_FORWARD_CAP_WINDOW_MS = 60 * 60 * 1000;
@@ -48,8 +113,19 @@ export function hasReplyForwardTag(tags: unknown): boolean {
   return (tags as Record<string, unknown>)[REPLY_FORWARD_TAG.name] === REPLY_FORWARD_TAG.value;
 }
 
-/** 전달 메일이 회신 주소에 닿지 못했다는 상태 알림 — 회신 주소 오타·메일함 폐쇄·발송 거절. */
-const REPLY_FORWARD_DELIVERY_FAILURE_EVENT_TYPES: readonly string[] = ['email.bounced', 'email.failed'];
+/**
+ * 전달 메일이 회신 주소에 닿지 못했다는(또는 앞으로 닿지 못하게 됐다는) 상태 알림.
+ * - `email.bounced`·`email.failed`: 회신 주소 오타·메일함 폐쇄·발송 거절.
+ * - `email.suppressed`: 이전에 반송·신고된 주소라 발송 서비스가 아예 보내지 않았다. 한 번 반송된 회신 주소는
+ *   그 뒤로 반송이 아니라 이것으로만 알려 온다 — 빼면 두 번째 답장부터 조용히 사라진다.
+ * - `email.complained`: 담당자가 전달 메일을 스팸으로 신고했다. 그 주소는 수신 거부 목록에 들어 다음부터 위와 같이 된다.
+ */
+const REPLY_FORWARD_DELIVERY_FAILURE_EVENT_TYPES: readonly string[] = [
+  'email.bounced',
+  'email.failed',
+  'email.suppressed',
+  'email.complained',
+];
 
 export function isReplyForwardDeliveryFailure(eventType: string): boolean {
   return REPLY_FORWARD_DELIVERY_FAILURE_EVENT_TYPES.includes(eventType);
@@ -205,8 +281,13 @@ export function findCompanyDomainMatch(
 export interface ReceivedAttachment {
   filename: string | null;
   mimeType: string;
-  /** 본문 속 이미지의 내용 ID(꺾쇠가 붙어 있어도 된다). 일반 첨부는 null. */
+  /**
+   * 원본 파트에 붙어 있던 내용 ID(꺾쇠가 붙어 있어도 된다). 없으면 null.
+   * 이것만으로는 본문 속 이미지가 아니다 — 일반 PDF 에 내용 ID 를 붙여 보내는 메일 프로그램이 있다(`isInlineImage`).
+   */
   contentId: string | null;
+  /** 원본 풀기가 본문 속(`multipart/related`) 파트라고 한 첨부. */
+  related?: boolean;
   contentBase64: string;
 }
 
@@ -242,6 +323,8 @@ export type ForwardMail = ForwardBody & {
   replyTo: string[];
   subject: string;
   attachments: ForwardAttachment[];
+  /** 고리 표식 — `REPLY_FORWARD_HEADERS`. */
+  headers: Record<string, string>;
   tags: Array<{ name: string; value: string }>;
 };
 
@@ -253,20 +336,71 @@ const EXTENSION_BY_MIME: Record<string, string> = {
   'image/webp': 'webp',
 };
 
+/**
+ * 파일 이름은 응답자가 정한 글자다 — 줄바꿈·제어 문자를 공백으로 바꾸고 앞뒤 공백을 걷는다.
+ * 발송 요청의 첨부 이름과 안내문의 파일 목록이 함께 쓴다(헤더·안내의 줄을 흉내 내지 못하게).
+ */
+function cleanFilename(filename: string): string {
+  return filename
+    .replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function attachmentFilename(attachment: ReceivedAttachment, index: number): string {
-  const name = attachment.filename?.trim();
+  const name = cleanFilename(attachment.filename ?? '');
   if (name) return name;
   const extension = EXTENSION_BY_MIME[attachment.mimeType.toLowerCase()];
   return extension ? `attachment-${index + 1}.${extension}` : `attachment-${index + 1}`;
 }
 
-function toForwardAttachment(attachment: ReceivedAttachment, index: number): ForwardAttachment {
-  const contentId = attachment.contentId?.trim().replace(/^<|>$/g, '');
+function bareContentId(attachment: ReceivedAttachment): string {
+  return attachment.contentId?.trim().replace(/^<|>$/g, '').trim() ?? '';
+}
+
+/** HTML 본문에서 `cid:` 참조를 뽑는다(소문자). 따옴표·꺾쇠·공백에서 끊는다. */
+function referencedContentIds(html: string): Set<string> {
+  const ids = new Set<string>();
+  for (const match of html.matchAll(/cid:([^"'\s<>)]+)/gi)) {
+    const raw = match[1];
+    if (!raw) continue;
+    ids.add(raw.toLowerCase());
+    try {
+      ids.add(decodeURIComponent(raw).toLowerCase());
+    } catch {
+      // 잘못된 퍼센트 인코딩 — 글자 그대로만 본다.
+    }
+  }
+  return ids;
+}
+
+/**
+ * 본문 속 이미지인가 — 내용 ID 를 발송으로 넘길지와 안내의 「본문 속 이미지」 표시가 이 판정 하나를 쓴다.
+ *
+ * 내용 ID 가 붙어 있다는 것만으로는 아니다. 내용 ID 를 넘기면 받는 쪽 메일 프로그램이 그 파일을 본문 속 그림으로 보고
+ * 첨부 목록에서 감춘다 — 본문이 가리키지 않는 PDF 에 그렇게 하면 스캔본이 사라진다.
+ * 그래서 HTML 본문이 있고, 원본 풀기가 본문 속(related) 파트라고 했거나 본문이 그 `cid:` 를 실제로 참조할 때만이다.
+ */
+function isInlineImage(
+  attachment: ReceivedAttachment,
+  html: string | null,
+  referenced: ReadonlySet<string>,
+): boolean {
+  const contentId = bareContentId(attachment);
+  if (!contentId || !html) return false;
+  return attachment.related === true || referenced.has(contentId.toLowerCase());
+}
+
+function toForwardAttachment(
+  attachment: ReceivedAttachment,
+  index: number,
+  inline: boolean,
+): ForwardAttachment {
   return {
     filename: attachmentFilename(attachment, index),
     content: attachment.contentBase64,
     contentType: attachment.mimeType,
-    ...(contentId ? { contentId } : {}),
+    ...(inline ? { contentId: bareContentId(attachment) } : {}),
   };
 }
 
@@ -300,7 +434,7 @@ export interface OmittedAttachment {
   filename: string;
   /** 인코딩 전(원래 파일) 크기. */
   sizeBytes: number;
-  /** 본문 속 이미지인가(내용 ID 가 있는 첨부). */
+  /** 본문 속 이미지인가 — 전달할 때 내용 ID 를 넘겼을 첨부(`isInlineImage`). */
   inline: boolean;
 }
 
@@ -309,31 +443,42 @@ function decodedByteLength(base64: string): number {
   return Math.max(0, Math.floor((base64.length * 3) / 4) - padding);
 }
 
-/** 받은 메일의 첨부 전부를 「빠진 파일」 목록으로. 이름은 전달할 때 붙였을 이름과 같다. */
+/**
+ * 받은 메일의 첨부 전부를 「빠진 파일」 목록으로. 이름과 「본문 속 이미지」 판정은 전달할 때와 같다.
+ * @param html 받은 메일의 HTML 본문 — 본문 속 이미지 판정의 재료. 없으면 본문 속 이미지도 없다.
+ */
 export function listOmittedAttachments(
   attachments: readonly ReceivedAttachment[],
+  html: string | null = null,
 ): OmittedAttachment[] {
+  const referenced = referencedContentIds(html ?? '');
   return attachments.map((attachment, index) => ({
     filename: attachmentFilename(attachment, index),
     sizeBytes: decodedByteLength(attachment.contentBase64),
-    inline: Boolean(attachment.contentId?.trim()),
+    inline: isInlineImage(attachment, html, referenced),
   }));
 }
 
 /** 안내문에 이름을 적는 파일 수 상한 — 넘는 것은 개수로만 알린다. */
 const MAX_NOTICE_FILES = 20;
 const NOTICE_FILENAME_MAX_LENGTH = 120;
-const NOTICE_HEADLINE = '첨부 파일이 커서 함께 전달하지 못했습니다.';
+/**
+ * 첨부를 뺀 까닭 — 안내의 첫 문장이 갈린다.
+ * `size`: 발송 한도를 넘었다(앱의 판정이든 발송 서비스의 크기 초과 거절이든).
+ * `rejected`: 발송 서비스가 크기와 무관하게 거절했다(막힌 파일 종류 등) — 크기를 탓하면 틀린 안내가 된다.
+ */
+export type OmitAttachmentsReason = 'size' | 'rejected';
+
+const NOTICE_HEADLINE: Record<OmitAttachmentsReason, string> = {
+  size: '첨부 파일이 커서 함께 전달하지 못했습니다.',
+  rejected: '첨부 파일을 함께 전달하지 못했습니다.',
+};
 const NOTICE_ORIGIN = '원본은 메일 발송 서비스(Resend) 수신 목록에 있습니다.';
 const NOTICE_TEXT_RULE = '----------------------------------------';
 
-/** 파일 이름은 응답자가 정한 글자다 — 줄바꿈·제어 문자가 안내의 줄을 흉내 내지 못하게 걷어내고 길이를 자른다. */
+/** 안내에 적는 파일 이름 — 줄바꿈·제어 문자가 안내의 줄을 흉내 내지 못하게 걷어내고 길이를 자른다. */
 function noticeFilename(filename: string): string {
-  const cleaned = filename
-    .replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return Array.from(cleaned).slice(0, NOTICE_FILENAME_MAX_LENGTH).join('');
+  return Array.from(cleanFilename(filename)).slice(0, NOTICE_FILENAME_MAX_LENGTH).join('');
 }
 
 function escapeHtml(value: string): string {
@@ -350,10 +495,14 @@ function escapeHtml(value: string): string {
  * 본문 속 이미지도 첨부와 함께 빠지므로 목록에 넣고 따로 표시한다(본문에서 그 자리가 깨져 보인다).
  * 텍스트 안내는 원래 본문과 갈리도록 구분선과 빈 줄로 끝난다.
  */
-export function buildOmittedAttachmentsNotice(files: readonly OmittedAttachment[]): {
+export function buildOmittedAttachmentsNotice(
+  files: readonly OmittedAttachment[],
+  reason: OmitAttachmentsReason = 'size',
+): {
   html: string;
   text: string;
 } {
+  const headline = NOTICE_HEADLINE[reason];
   const total = files.reduce((sum, file) => sum + file.sizeBytes, 0);
   const summary = `빠진 파일 (${files.length}개, 합계 ${formatBytes(total)})`;
   const labels = files.slice(0, MAX_NOTICE_FILES).map((file) => {
@@ -363,7 +512,7 @@ export function buildOmittedAttachmentsNotice(files: readonly OmittedAttachment[
   if (files.length > MAX_NOTICE_FILES) labels.push(`외 ${files.length - MAX_NOTICE_FILES}개`);
 
   const text = [
-    `[안내] ${NOTICE_HEADLINE}`,
+    `[안내] ${headline}`,
     summary,
     ...labels.map((label) => `- ${label}`),
     NOTICE_ORIGIN,
@@ -373,7 +522,7 @@ export function buildOmittedAttachmentsNotice(files: readonly OmittedAttachment[
   ].join('\n');
   const html = [
     '<div style="margin:0 0 16px;padding:12px 16px;border:1px solid #d1d5db;background:#f9fafb;color:#111827;font-size:14px;line-height:1.6;">',
-    `<p style="margin:0 0 8px;font-weight:bold;">${NOTICE_HEADLINE}</p>`,
+    `<p style="margin:0 0 8px;font-weight:bold;">${headline}</p>`,
     `<p style="margin:0;">${summary}</p>`,
     '<ul style="margin:4px 0 8px;padding-left:20px;">',
     ...labels.map((label) => `<li>${escapeHtml(label)}</li>`),
@@ -405,6 +554,8 @@ export interface ForwardMailInput {
    * 첨부가 없는 메일에는 아무 일도 하지 않는다.
    */
   omitAttachments?: boolean;
+  /** 첨부를 뺀 까닭 — 안내 문구를 고른다. 기본은 크기(`size`). */
+  omitReason?: OmitAttachmentsReason;
 }
 
 /**
@@ -415,8 +566,12 @@ export function buildForwardMail(input: ForwardMailInput): ForwardMail {
   const { reply } = input;
   const replyTo = dedupeAddresses(reply.replyTo).slice(0, MAX_REPLY_TO_ADDRESSES);
   const omit = input.omitAttachments === true && reply.attachments.length > 0;
+  const referenced = referencedContentIds(reply.html ?? '');
   const notice = omit
-    ? buildOmittedAttachmentsNotice(listOmittedAttachments(reply.attachments))
+    ? buildOmittedAttachmentsNotice(
+        listOmittedAttachments(reply.attachments, reply.html),
+        input.omitReason,
+      )
     : null;
   const html = reply.html && notice ? prependHtmlNotice(reply.html, notice.html) : reply.html;
   const text = reply.text ? `${notice?.text ?? ''}${reply.text}` : reply.text;
@@ -434,7 +589,12 @@ export function buildForwardMail(input: ForwardMailInput): ForwardMail {
     replyTo: replyTo.length > 0 ? replyTo : [reply.senderAddress],
     subject: reply.subject?.trim() ? reply.subject : NO_SUBJECT_PLACEHOLDER,
     ...body,
-    attachments: omit ? [] : reply.attachments.map(toForwardAttachment),
+    attachments: omit
+      ? []
+      : reply.attachments.map((attachment, index) =>
+          toForwardAttachment(attachment, index, isInlineImage(attachment, reply.html, referenced)),
+        ),
+    headers: { ...REPLY_FORWARD_HEADERS },
     tags: [{ ...REPLY_FORWARD_TAG }],
   };
 }

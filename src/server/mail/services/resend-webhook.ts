@@ -118,7 +118,8 @@ export interface VerifiedResendWebhookEvent {
 }
 
 /**
- * 전달 메일(회신 전달)이 회신 주소에 닿지 못했다 — 회신 주소 오타·메일함 폐쇄 등.
+ * 전달 메일(회신 전달)이 회신 주소에 닿지 못했다 — 회신 주소 오타·메일함 폐쇄·수신 거부 목록·스팸 신고
+ * (`isReplyForwardDeliveryFailure`). 알림 종류는 태그 `eventType` 으로 갈린다.
  * 수신자 기록이 없어 화면 어디에도 드러나지 않으므로 Sentry 경고로 알린다. 주소·제목은 싣지 않는다(식별자만).
  */
 function reportReplyForwardDeliveryFailure(event: VerifiedResendWebhookEvent): void {
@@ -138,7 +139,8 @@ function reportReplyForwardDeliveryFailure(event: VerifiedResendWebhookEvent): v
  * 전이 실패 시 dedupe insert도 rollback되어 provider retry가 이벤트를 다시 처리할 수 있다.
  *
  * 전달 메일(`kind=reply-forward` 태그)의 상태 알림은 장부에만 적고 전이하지 않는다.
- * 그 가운데 반송·실패는 커밋 뒤 Sentry 경고를 낸다 — 장부에 적힌 알림이 다시 오면 경고도 다시 내지 않는다.
+ * 그 가운데 닿지 못했다는 알림(반송·실패·보내지 않음·스팸 신고)은 커밋 뒤 Sentry 경고를 낸다 — 수신자 전이로 옮길 수
+ * 없는 종류(`email.failed`·`email.suppressed`)도 낸다. 장부에 적힌 알림이 다시 오면 경고도 다시 내지 않는다.
  */
 export async function processResendWebhookEvent(
   event: VerifiedResendWebhookEvent,

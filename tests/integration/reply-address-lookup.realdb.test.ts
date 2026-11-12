@@ -203,13 +203,38 @@ describe.skipIf(!isLocalDb)('회신 주소 조회 (real local DB)', () => {
     expect(await lookup(account)).toEqual({ source: 'template', addresses: ['tpl@example.co.kr'] });
   });
 
-  it('발송 회차에 회신 주소가 있으면 템플릿은 보지 않는다', async () => {
+  it('발송 회차의 회신 주소에 그 계정을 쓰는 템플릿의 회신 주소를 합친다 — 회차 것이 앞, 중복 없이', async () => {
+    const account = newAccount();
+    const surveyA = await seedSurvey();
+    const surveyB = await seedSurvey();
+    await seedCampaign(surveyA, { fromLocal: account, replyTo: 'campaign@example.co.kr', createdAt: daysAgo(1) });
+    await seedCampaign(surveyA, { fromLocal: account, replyTo: 'older@example.co.kr', createdAt: daysAgo(30) });
+    // 회차를 아직 만들지 않은(「테스트 발송」만 한) 새 설문의 템플릿 — 회신 주소가 다르다.
+    await seedTemplate(surveyB, { fromLocal: account, replyTo: 'tpl@example.co.kr', updatedAt: daysAgo(2) });
+    // 회차와 같은 회신 주소(대소문자만 다름) · 삭제된 템플릿 · 다른 계정의 템플릿 · 발송 전용 도메인 · 빈 값은 더하지 않는다.
+    await seedTemplate(surveyA, { fromLocal: account, replyTo: 'Campaign@Example.co.kr', updatedAt: daysAgo(1) });
+    await seedTemplate(surveyA, { fromLocal: account, replyTo: 'deleted@example.co.kr', deletedAt: daysAgo(1) });
+    await seedTemplate(surveyB, { fromLocal: newAccount(), replyTo: 'other@example.co.kr' });
+    await seedTemplate(surveyB, { fromLocal: account, replyTo: `${account}@${SEND_DOMAIN}` });
+    await seedTemplate(surveyB, { fromLocal: account, replyTo: null });
+
+    expect(await lookup(account)).toEqual({
+      source: 'campaign',
+      addresses: ['campaign@example.co.kr', 'older@example.co.kr', 'tpl@example.co.kr'],
+    });
+  });
+
+  it('1년이 넘은 발송 회차의 회신 주소도 그 템플릿이 남아 있으면 템플릿 쪽에서 후보가 된다', async () => {
     const account = newAccount();
     const surveyId = await seedSurvey();
-    await seedCampaign(surveyId, { fromLocal: account, replyTo: 'campaign@example.co.kr', createdAt: daysAgo(1) });
-    await seedTemplate(surveyId, { fromLocal: account, replyTo: 'tpl@example.co.kr' });
+    await seedCampaign(surveyId, { fromLocal: account, replyTo: 'recent@example.co.kr', createdAt: daysAgo(10) });
+    await seedCampaign(surveyId, { fromLocal: account, replyTo: 'old@example.co.kr', createdAt: daysAgo(400) });
+    await seedTemplate(surveyId, { fromLocal: account, replyTo: 'old@example.co.kr' });
 
-    expect(await lookup(account)).toEqual({ source: 'campaign', addresses: ['campaign@example.co.kr'] });
+    expect(await lookup(account)).toEqual({
+      source: 'campaign',
+      addresses: ['recent@example.co.kr', 'old@example.co.kr'],
+    });
   });
 
   it('쓴 적 없는 보낸이 계정은 전달 주소가 없다', async () => {
