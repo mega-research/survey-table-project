@@ -77,6 +77,46 @@ const PANEL_COPY: Record<
 };
 
 /**
+ * 이 패널의 칸·버튼 치수 — 줄마다 같은 문자열을 적어 두면 한 줄만 고쳐져 칸 끝이 어긋난다.
+ *
+ * 높이는 전부 36px 이고 값 칸 옆 버튼은 폭까지 같다. 「복사 ↔ 복사됨」「보기 ↔ 가리기」로 글자가
+ * 바뀌어도 왼쪽 칸의 끝이 움직이지 않고, 세 줄(주소·비밀번호·직접 입력)의 양 끝이 한 줄로 선다.
+ * 색은 이 모달의 것(주 동작 #2E4FCE)을 따른다 — 모달 하단 「저장」과 같은 버튼으로 읽혀야 한다.
+ */
+const FOCUS_RING =
+  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2E4FCE]';
+
+/** 고칠 수 있는 칸 — 흰 바탕 + 테두리. 읽기 전용 값 칸(`READONLY_BOX`)과 바탕으로 갈린다. */
+const TEXT_INPUT =
+  'h-9 min-w-0 rounded-[8px] border border-[#D1D5DB] bg-white px-2.5 text-[12px] text-[#1C1C1E] transition-[border-color,box-shadow] placeholder:text-[#9CA3AF] focus:outline-none focus-visible:border-[#2E4FCE] focus-visible:ring-2 focus-visible:ring-[#2E4FCE]/20 disabled:cursor-not-allowed disabled:bg-[#F3F4F6]';
+
+/** 읽기 전용 값 칸(주소·비밀번호) — 채운 바탕, 테두리 없음. */
+const READONLY_BOX = 'h-9 min-w-0 flex-1 rounded-[8px] bg-[#F3F4F6] px-2.5';
+
+const SECONDARY_BUTTON = cn(
+  'flex h-9 shrink-0 items-center justify-center gap-1 rounded-[8px] border border-[#D1D5DB] bg-white px-3 text-[12px] text-[#374151] transition-colors enabled:hover:bg-[#F5F5F7] disabled:cursor-not-allowed disabled:text-[#9CA3AF]',
+  FOCUS_RING,
+);
+
+/** 값 칸 옆 동작(복사·보기·변경) — 폭 고정. */
+const ROW_ACTION = cn(SECONDARY_BUTTON, 'w-[72px] px-0');
+
+const PRIMARY_BUTTON = cn(
+  'flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-[8px] bg-[#2E4FCE] px-3.5 text-[12.5px] font-semibold text-white transition-colors enabled:hover:bg-[#2743AE] disabled:cursor-not-allowed disabled:bg-[#E5E7EB] disabled:text-[#9CA3AF]',
+  FOCUS_RING,
+);
+
+const TEXT_LINK = cn(
+  'rounded-[4px] text-[12px] text-[#2743AE] underline-offset-2 transition-colors hover:underline disabled:cursor-not-allowed disabled:text-[#9CA3AF] disabled:no-underline',
+  FOCUS_RING,
+);
+
+/** 안내 문단 — 닫히는 조건처럼 읽어야 하는 글이라 본문 대비(4.5:1 이상)를 지킨다. */
+const HELP_TEXT = 'text-[11px] leading-[1.5] text-[#6E6E73]';
+
+const ERROR_TEXT = 'text-[12px] text-[#DC2626]';
+
+/**
  * 링크 패널 — 전용 링크와 공유 비밀번호 (ADR-0026·0029, .pen FLOW 10-2).
  *
  * 실사 블록의 「외주」 세그먼트와 클라이언트 블록이 **같은 패널**을 쓴다. 갈리는 것은 몇 개가
@@ -121,7 +161,11 @@ export function AccessLinkPanel({ surveyId, kind }: AccessLinkPanelProps) {
   }
 
   if (isError || !data) {
-    return <p className="py-3 text-[12px] text-[#DC2626]">링크 정보를 불러오지 못했습니다.</p>;
+    return (
+      <p role="alert" className={cn(ERROR_TEXT, 'py-3')}>
+        링크 정보를 불러오지 못했습니다.
+      </p>
+    );
   }
 
   const onIssued = (linkId: string, password: string) => {
@@ -144,7 +188,7 @@ export function AccessLinkPanel({ surveyId, kind }: AccessLinkPanelProps) {
   // 클라이언트 링크는 설문당 하나다 — 있으면 그 카드, 없으면 발급 칸.
   if (kind === 'client') {
     const link = data.links[0];
-    if (!link) return issueSection;
+    if (!link) return <div className="pt-1">{issueSection}</div>;
     return (
       <AccessLinkCard
         key={link.id}
@@ -157,7 +201,7 @@ export function AccessLinkPanel({ surveyId, kind }: AccessLinkPanelProps) {
   }
 
   return (
-    <div className="flex flex-col gap-2.5 py-1">
+    <div className="flex flex-col gap-2.5 pt-1">
       {data.links.map((link) => (
         <AccessLinkCard
           key={link.id}
@@ -174,7 +218,10 @@ export function AccessLinkPanel({ surveyId, kind }: AccessLinkPanelProps) {
           type="button"
           disabled={!data.canManage}
           onClick={() => setAdding(true)}
-          className="flex h-8 items-center justify-center gap-1 self-start rounded-[8px] border border-dashed border-[#D1D5DB] px-3 text-[12px] text-[#374151] transition-colors hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:text-[#9CA3AF]"
+          className={cn(
+            'flex h-9 w-full items-center justify-center gap-1 rounded-[10px] border border-dashed border-[#C7CBD4] text-[12px] text-[#374151] transition-colors enabled:hover:border-[#2E4FCE] enabled:hover:bg-[#F7F8FF] enabled:hover:text-[#2743AE] disabled:cursor-not-allowed disabled:text-[#9CA3AF]',
+            FOCUS_RING,
+          )}
         >
           <Plus className="h-3.5 w-3.5" />
           외주 링크 추가
@@ -230,40 +277,49 @@ function IssueSection({
 
   const disabled = issue.isPending || !canManage;
   return (
-    <div className="flex flex-col gap-2 py-1">
+    // 이미 링크가 있는 목록 끝에서 연 칸은 카드 틀을 두른다 — 위 카드들과 같은 줄에 서는 「새 링크」로 읽힌다.
+    <div
+      className={cn(
+        'flex flex-col gap-2',
+        onCancel && 'rounded-[10px] border border-[#E5E5EA] bg-[#FAFAFC] p-3',
+      )}
+    >
       {kind === 'fieldwork' && (
         <input
+          aria-label="이름표"
           value={label}
           onChange={(e) => setLabel(e.target.value)}
           disabled={disabled}
           maxLength={ACCESS_LINK_LABEL_MAX_LENGTH}
           placeholder="이름표 (예: 업체명) — 연구원만 봅니다"
-          className="h-9 rounded-[8px] border border-[#D1D5DB] bg-white px-2.5 text-[12px] text-[#1C1C1E] placeholder:text-[#9CA3AF] focus:outline-none disabled:bg-[#F3F4F6]"
+          className={cn(TEXT_INPUT, 'w-full')}
         />
       )}
-      <PasswordDraftInput value={draft} onChange={setDraft} disabled={disabled} />
-      <div className="flex items-center gap-1.5">
-        <button
-          type="button"
+      {/* 칸과 버튼을 한 줄에 둔다 — 비밀번호를 정하고 바로 발급하는 한 동작이다. 좁으면 버튼이 아래로 내려간다. */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <PasswordDraftInput
+          ariaLabel="접속 비밀번호"
+          value={draft}
+          onChange={setDraft}
           disabled={disabled}
-          onClick={handleIssue}
-          className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-[8px] bg-[#3b82f6] px-3 text-[13px] font-medium text-white transition-colors hover:bg-[#2563eb] disabled:cursor-not-allowed disabled:bg-[#9CA3AF]"
-        >
+          className="min-w-[200px] flex-1"
+        />
+        <button type="button" disabled={disabled} onClick={handleIssue} className={PRIMARY_BUTTON}>
           {issue.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
           링크 발급
         </button>
         {onCancel && (
-          <button
-            type="button"
-            onClick={onCancel}
-            className="h-9 rounded-[8px] border border-[#D1D5DB] px-3 text-[12px] text-[#374151]"
-          >
+          <button type="button" onClick={onCancel} className={SECONDARY_BUTTON}>
             취소
           </button>
         )}
       </div>
-      <p className="text-[11px] leading-[1.45] text-[#9CA3AF]">{copy.intro}</p>
-      {error && <p className="text-[12px] text-[#DC2626]">{error}</p>}
+      <p className={HELP_TEXT}>{copy.intro}</p>
+      {error && (
+        <p role="alert" className={ERROR_TEXT}>
+          {error}
+        </p>
+      )}
     </div>
   );
 }
@@ -325,71 +381,103 @@ function AccessLinkCard({
 
   const body = (
     <>
-      <div className="flex items-center gap-1.5">
-        <code className="min-w-0 flex-1 truncate rounded-[8px] bg-[#F3F4F6] px-2.5 py-2 text-[12px] text-[#374151]">
-          {url}
-        </code>
-        <button
-          type="button"
-          onClick={() => {
-            void navigator.clipboard.writeText(url);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
-          }}
-          className="flex h-9 items-center gap-1 rounded-[8px] border border-[#D1D5DB] px-2.5 text-[12px] text-[#374151] transition-colors hover:bg-[#F9FAFB]"
-        >
-          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-          {copied ? '복사됨' : '복사'}
-        </button>
-      </div>
+      {/* 주소 · 비밀번호 · 직접 입력 — 세 줄의 양 끝이 한 줄로 선다(칸 높이 36px, 오른쪽 버튼 폭 고정).
+          「변경」은 직접 입력 칸 옆에 둔다: 그 칸에 적은 값(비우면 자동 생성)으로 바꾸는 버튼이라,
+          떨어져 있으면 칸이 무엇에 쓰이는지 보이지 않는다. */}
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center gap-1.5">
+          <code
+            title={url}
+            className={cn(
+              READONLY_BOX,
+              'block truncate text-[12px] leading-9 text-[#374151] select-all',
+            )}
+          >
+            {url}
+          </code>
+          <button
+            type="button"
+            onClick={() => {
+              void navigator.clipboard.writeText(url);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1500);
+            }}
+            className={ROW_ACTION}
+          >
+            {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+            {copied ? '복사됨' : '복사'}
+          </button>
+        </div>
 
-      <div className="flex items-center gap-1.5">
-        <span className="w-[76px] shrink-0 text-[12px] text-[#6E6E73]">접속 비밀번호</span>
-        <code
-          className={cn(
-            'min-w-0 flex-1 truncate rounded-[8px] bg-[#F3F4F6] px-2.5 py-2 text-[12px]',
-            password ? 'text-[#374151]' : 'tracking-[0.2em] text-[#9CA3AF]',
-          )}
-        >
-          {password ?? '••••••••'}
-        </code>
-        <button
-          type="button"
-          disabled={busy || !canManage}
-          onClick={() =>
-            password
-              ? setPassword(null)
-              : run(async () => (await reveal.mutateAsync(target)).password)
-          }
-          className="flex h-9 items-center gap-1 rounded-[8px] border border-[#D1D5DB] px-2.5 text-[12px] text-[#374151] transition-colors hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:text-[#9CA3AF]"
-        >
-          {password ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-          {password ? '가리기' : '보기'}
-        </button>
-        <button
-          type="button"
-          disabled={busy || !canManage}
-          onClick={() =>
-            run(async () => (await reset.mutateAsync({ ...target, ...passwordArg() })).password)
-          }
-          className="flex h-9 items-center gap-1 rounded-[8px] border border-[#D1D5DB] px-2.5 text-[12px] text-[#374151] transition-colors hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:text-[#9CA3AF]"
-        >
-          {reset.isPending ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <RefreshCw className="h-3.5 w-3.5" />
-          )}
-          변경
-        </button>
-      </div>
+        <div className="flex items-center gap-1.5">
+          <div className={cn(READONLY_BOX, 'flex items-center gap-2.5')}>
+            <span className="shrink-0 text-[12px] text-[#6E6E73]">접속 비밀번호</span>
+            <code
+              className={cn(
+                'min-w-0 truncate text-[12px]',
+                password ? 'text-[#1C1C1E] select-all' : 'tracking-[0.2em] text-[#9CA3AF]',
+              )}
+            >
+              {password ?? '••••••••'}
+            </code>
+          </div>
+          <button
+            type="button"
+            disabled={busy || !canManage}
+            onClick={() =>
+              password
+                ? setPassword(null)
+                : run(async () => (await reveal.mutateAsync(target)).password)
+            }
+            className={ROW_ACTION}
+          >
+            {password ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            {password ? '가리기' : '보기'}
+          </button>
+        </div>
 
-      <PasswordDraftInput value={draft} onChange={setDraft} disabled={busy || !canManage} />
+        <div className="flex items-center gap-1.5">
+          <PasswordDraftInput
+            ariaLabel="새 접속 비밀번호"
+            value={draft}
+            onChange={setDraft}
+            disabled={busy || !canManage}
+            className="flex-1"
+          />
+          <button
+            type="button"
+            disabled={busy || !canManage}
+            onClick={() =>
+              run(async () => (await reset.mutateAsync({ ...target, ...passwordArg() })).password)
+            }
+            className={ROW_ACTION}
+          >
+            {reset.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" />
+            )}
+            변경
+          </button>
+        </div>
+      </div>
 
       {/* 클라이언트 링크에만 있는 축 — 보여 줄 화면. 외주 링크는 탭이 고정이라 값이 null 이다.
           권한이 없어도 칩은 **보인다**: 지금 무엇이 열려 있는지는 초대한 사람도 알아야 한다. */}
       {tabs && (
-        <div className="flex flex-col gap-1.5">
-          <span className="text-[12px] text-[#6E6E73]">보여 줄 화면</span>
+        <div className="flex flex-col gap-2 pt-1">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[12px] font-semibold text-[#374151]">보여 줄 화면</span>
+            {/* 응답 내역 칩이 꺼져 있어도 열은 미리 고를 수 있다 — 켜는 순간 고른 열로 열린다. */}
+            <button
+              type="button"
+              disabled={busy || !canManage}
+              onClick={() => setColumnsOpen(true)}
+              className={TEXT_LINK}
+            >
+              응답 내역 열 설정
+            </button>
+          </div>
           <ClientTabChips
             tabs={tabs}
             disabled={busy || !canManage}
@@ -405,18 +493,7 @@ function AccessLinkCard({
               }
             }}
           />
-          {/* 응답 내역 칩이 꺼져 있어도 열은 미리 고를 수 있다 — 켜는 순간 고른 열로 열린다. */}
-          <button
-            type="button"
-            disabled={busy || !canManage}
-            onClick={() => setColumnsOpen(true)}
-            className="self-start text-[12px] text-[#2743AE] transition-colors hover:underline disabled:cursor-not-allowed disabled:text-[#9CA3AF]"
-          >
-            응답 내역 열 설정
-          </button>
-          <p className="text-[11px] leading-[1.45] text-[#9CA3AF]">
-            바꾼 내용은 클라이언트의 다음 화면부터 반영됩니다.
-          </p>
+          <p className={HELP_TEXT}>바꾼 내용은 클라이언트의 다음 화면부터 반영됩니다.</p>
           {columnsOpen && (
             <ClientResponseColumnsDialog
               surveyId={surveyId}
@@ -426,72 +503,90 @@ function AccessLinkCard({
         </div>
       )}
 
-      <p className="text-[11px] leading-[1.45] text-[#9CA3AF]">{copy.lifecycle}</p>
+      {/* 닫히는 조건과 종료 — 이 링크의 수명을 다루는 한 묶음이다. */}
+      <div className="flex flex-col gap-1.5">
+        <p className={HELP_TEXT}>{copy.lifecycle}</p>
 
-      {confirmingClose ? (
-        <div className="flex items-center gap-1.5">
-          <span className="flex flex-1 flex-col gap-0.5 text-[12px] text-[#374151]">
-            <span>{copy.closeConfirm}</span>
-            {/* 종료가 같은 트랜잭션에서 이 링크의 담당 범위를 푼다(티켓 09) — 그 대상들이 어느 업체에도
-                속하지 않게 됨을 알고 종료하게 한다. 인원은 링크 목록이 실어 온 지금 범위다. */}
-            {link.share?.divided && link.share.count > 0 && (
-              <span className="font-medium text-[#B45309]">
-                이 링크의 담당 범위 {link.share.count.toLocaleString('ko-KR')}명이 풀립니다 — 그
-                대상은 어느 링크에도 속하지 않게 됩니다. 이 링크가 남긴 회차·수정 기록은 남습니다.
-              </span>
-            )}
-          </span>
+        {confirmingClose ? (
+          <div className="flex flex-col gap-2 rounded-[8px] bg-[#FEF2F2] p-2.5">
+            <div className="flex flex-col gap-1 text-[12px] leading-[1.5] text-[#374151]">
+              <span>{copy.closeConfirm}</span>
+              {/* 종료가 같은 트랜잭션에서 이 링크의 담당 범위를 푼다(티켓 09) — 그 대상들이 어느 업체에도
+                  속하지 않게 됨을 알고 종료하게 한다. 인원은 링크 목록이 실어 온 지금 범위다. */}
+              {link.share?.divided && link.share.count > 0 && (
+                <span className="font-semibold text-[#B45309]">
+                  이 링크의 담당 범위 {link.share.count.toLocaleString('ko-KR')}명이 풀립니다 — 그
+                  대상은 어느 링크에도 속하지 않게 됩니다. 이 링크가 남긴 회차·수정 기록은 남습니다.
+                </span>
+              )}
+            </div>
+            <div className="flex justify-end gap-1.5">
+              <button
+                type="button"
+                onClick={() => setConfirmingClose(false)}
+                className={cn(SECONDARY_BUTTON, 'h-8')}
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={async () => {
+                  setError(null);
+                  try {
+                    await close.mutateAsync(target);
+                    setPassword(null);
+                    setConfirmingClose(false);
+                  } catch (err) {
+                    setError(getErrorMessage(err, copy.failure));
+                  }
+                }}
+                className={cn(
+                  'flex h-8 items-center rounded-[8px] bg-[#DC2626] px-3 text-[12px] font-semibold text-white transition-colors enabled:hover:bg-[#B91C1C] disabled:cursor-not-allowed disabled:bg-[#E5E7EB] disabled:text-[#9CA3AF]',
+                  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#DC2626]',
+                )}
+              >
+                종료
+              </button>
+            </div>
+          </div>
+        ) : (
           <button
             type="button"
-            disabled={busy}
-            onClick={async () => {
-              setError(null);
-              try {
-                await close.mutateAsync(target);
-                setPassword(null);
-                setConfirmingClose(false);
-              } catch (err) {
-                setError(getErrorMessage(err, copy.failure));
-              }
-            }}
-            className="h-8 rounded-[8px] bg-[#DC2626] px-2.5 text-[12px] font-medium text-white transition-colors hover:bg-[#B91C1C] disabled:bg-[#9CA3AF]"
+            disabled={busy || !canManage}
+            onClick={() => setConfirmingClose(true)}
+            className={cn(
+              '-ml-1.5 flex h-7 items-center self-start rounded-[6px] px-1.5 text-[12px] text-[#DC2626] transition-colors enabled:hover:bg-[#FEF2F2] disabled:cursor-not-allowed disabled:text-[#9CA3AF]',
+              'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#DC2626]',
+            )}
           >
             종료
           </button>
-          <button
-            type="button"
-            onClick={() => setConfirmingClose(false)}
-            className="h-8 rounded-[8px] border border-[#D1D5DB] px-2.5 text-[12px] text-[#374151]"
-          >
-            취소
-          </button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          disabled={busy || !canManage}
-          onClick={() => setConfirmingClose(true)}
-          className="self-start text-[12px] text-[#DC2626] transition-colors hover:underline disabled:cursor-not-allowed disabled:text-[#9CA3AF]"
-        >
-          종료
-        </button>
-      )}
+        )}
+      </div>
 
-      {error && <p className="text-[12px] text-[#DC2626]">{error}</p>}
+      {error && (
+        <p role="alert" className={ERROR_TEXT}>
+          {error}
+        </p>
+      )}
     </>
   );
 
   // 클라이언트 링크는 하나라 머리줄이 없다 — 블록 제목이 곧 그 링크다.
-  if (!isFieldwork) return <div className="flex flex-col gap-2 py-1">{body}</div>;
+  if (!isFieldwork) return <div className="flex flex-col gap-2.5 pt-1">{body}</div>;
 
   return (
     <div
       role="group"
       aria-label={name}
-      className="flex flex-col gap-2 rounded-[10px] border border-[#E5E5EA] p-2.5"
+      className="flex flex-col gap-2.5 rounded-[10px] border border-[#E5E5EA] bg-white p-3"
     >
-      <LinkLabelHeader surveyId={surveyId} link={link} canManage={canManage} name={name} />
-      <ShareSummaryRow surveyId={surveyId} linkId={link.id} share={link.share} />
+      {/* 머리 — 이 링크가 누구 것이고 무엇을 맡는가. 아래 접속 수단과 간격으로 가른다. */}
+      <div className="flex flex-col gap-1">
+        <LinkLabelHeader surveyId={surveyId} link={link} canManage={canManage} name={name} />
+        <ShareSummaryRow surveyId={surveyId} linkId={link.id} share={link.share} />
+      </div>
       {body}
     </div>
   );
@@ -513,14 +608,14 @@ function ShareSummaryRow({
 }) {
   if (!share) return null;
   return (
-    <div className="flex items-center gap-1.5 text-[12px]">
-      <span className="w-[76px] shrink-0 text-[#6E6E73]">담당 범위</span>
-      <span className="flex-1 text-[#374151]">
+    <div className="flex items-center gap-2 text-[12px]">
+      <span className="shrink-0 text-[#6E6E73]">담당 범위</span>
+      <span className="min-w-0 flex-1 truncate text-[#1C1C1E]">
         {share.divided ? `나눔 · ${share.count.toLocaleString('ko-KR')}명` : '설문 전체'}
       </span>
       <a
         href={internalOperationsPaths(surveyId).contactsShare(linkId)}
-        className="text-[#2743AE] transition-colors hover:underline"
+        className={cn(TEXT_LINK, 'shrink-0')}
       >
         담당 범위 나누기
       </a>
@@ -576,34 +671,41 @@ function LinkLabelHeader({
             maxLength={ACCESS_LINK_LABEL_MAX_LENGTH}
             placeholder={`비우면 「${fieldworkLinkName({ label: null, ordinal: link.ordinal })}」`}
             disabled={saveLabel.isPending}
-            className="h-8 min-w-0 flex-1 rounded-[8px] border border-[#D1D5DB] bg-white px-2.5 text-[12px] text-[#1C1C1E] placeholder:text-[#9CA3AF] focus:outline-none"
+            className={cn(TEXT_INPUT, 'h-8 flex-1')}
           />
           <button
             type="button"
             disabled={saveLabel.isPending}
             onClick={handleSave}
-            className="h-8 rounded-[8px] bg-[#3b82f6] px-2.5 text-[12px] font-medium text-white transition-colors hover:bg-[#2563eb] disabled:bg-[#9CA3AF]"
+            className={cn(PRIMARY_BUTTON, 'h-8 px-3 text-[12px]')}
           >
             저장
           </button>
           <button
             type="button"
             onClick={() => setEditing(false)}
-            className="h-8 rounded-[8px] border border-[#D1D5DB] px-2.5 text-[12px] text-[#374151]"
+            className={cn(SECONDARY_BUTTON, 'h-8')}
           >
             취소
           </button>
         </div>
-        {error && <p className="text-[12px] text-[#DC2626]">{error}</p>}
+        {error && (
+          <p role="alert" className={ERROR_TEXT}>
+            {error}
+          </p>
+        )}
       </div>
     );
   }
 
   return (
-    <div className="flex items-center gap-1.5">
-      <span className="min-w-0 truncate text-[12.5px] font-semibold text-[#1C1C1E]">{name}</span>
+    // 머리줄 높이를 편집 상태(32px)와 같게 둔다 — 「이름표 고치기」를 눌러도 아래 줄이 밀리지 않는다.
+    <div className="flex h-8 items-center gap-2">
+      <span className="min-w-0 truncate text-[13px] font-semibold text-[#1C1C1E]">{name}</span>
       {link.label === null && (
-        <span className="shrink-0 text-[11px] text-[#9CA3AF]">이름표 없음</span>
+        <span className="shrink-0 rounded-full bg-[#F3F4F6] px-2 py-0.5 text-[10.5px] font-semibold text-[#4B5563]">
+          이름표 없음
+        </span>
       )}
       <button
         type="button"
@@ -613,7 +715,7 @@ function LinkLabelHeader({
           setError(null);
           setEditing(true);
         }}
-        className="ml-auto flex shrink-0 items-center gap-1 text-[12px] text-[#2743AE] transition-colors hover:underline disabled:cursor-not-allowed disabled:text-[#9CA3AF]"
+        className={cn(TEXT_LINK, 'ml-auto flex shrink-0 items-center gap-1')}
       >
         <Pencil className="h-3 w-3" />
         이름표 고치기
@@ -662,10 +764,11 @@ function ClientTabChips({
             }
             onClick={() => onToggle(tab)}
             className={cn(
-              'flex h-[26px] items-center gap-1 rounded-full border px-2.5 text-[11px] font-medium transition-colors disabled:opacity-50',
+              'flex h-7 items-center gap-1 rounded-full border px-2.5 text-[11.5px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+              FOCUS_RING,
               active
-                ? 'border-[#2E4FCE] bg-[#EEF2FF] text-[#2743AE]'
-                : 'border-[#E5E5EA] bg-white text-[#6E6E73] hover:text-[#1C1C1E]',
+                ? 'border-[#2E4FCE] bg-[#EEF2FF] text-[#2743AE] enabled:hover:bg-[#E0E7FF]'
+                : 'border-[#E5E5EA] bg-white text-[#6E6E73] enabled:hover:border-[#C7CBD4] enabled:hover:text-[#1C1C1E]',
             )}
           >
             {active && <Check className="h-3 w-3" />}
@@ -687,18 +790,24 @@ function PasswordDraftInput({
   value,
   onChange,
   disabled,
+  ariaLabel,
+  className,
 }: {
   value: string;
   onChange: (next: string) => void;
   disabled: boolean;
+  /** 눈에 보이는 라벨이 없는 칸이라 스크린리더가 읽을 이름을 받는다 — 발급 칸과 변경 칸이 다르다. */
+  ariaLabel: string;
+  className?: string;
 }) {
   return (
     <input
+      aria-label={ariaLabel}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       disabled={disabled}
       placeholder="비밀번호 직접 입력 (비우면 자동 생성)"
-      className="h-9 rounded-[8px] border border-[#D1D5DB] bg-white px-2.5 text-[12px] text-[#1C1C1E] placeholder:text-[#9CA3AF] focus:outline-none disabled:bg-[#F3F4F6]"
+      className={cn(TEXT_INPUT, className)}
     />
   );
 }

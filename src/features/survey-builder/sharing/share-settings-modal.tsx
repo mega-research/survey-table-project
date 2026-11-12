@@ -112,8 +112,13 @@ export function ShareSettingsModal({
 
   return (
     <Dialog open onOpenChange={(next) => (next ? undefined : onClose())}>
-      <DialogContent className="max-h-[85vh] max-w-[560px] gap-0 overflow-y-auto rounded-2xl p-[22px]">
-        <DialogTitle className="truncate text-[16.5px] font-semibold text-[#1C1C1E]">
+      {/* 폭은 `sm:` 으로 준다 — DialogContent 기본값이 `sm:max-w-md`(448px)라 접두 없는 max-w 는
+          그것을 못 이기고(변형이 달라 병합되지 않는다) 좁은 화면의 좌우 여백 규칙만 지운다.
+          `grid-cols-1` 은 칸 최소폭을 0 으로 둔다 — 없으면 줄바꿈 없는 링크 주소 한 줄이 칸을
+          밀어내 모달 안에 가로 스크롤이 생긴다. */}
+      <DialogContent className="max-h-[85vh] grid-cols-1 gap-0 overflow-y-auto rounded-2xl p-[22px] sm:max-w-[560px]">
+        {/* 오른쪽 여백은 닫기 버튼 자리 — 긴 설문 제목의 말줄임이 버튼 밑으로 들어가지 않게 한다. */}
+        <DialogTitle className="truncate pr-8 text-[16.5px] font-semibold text-[#1C1C1E]">
           초대와 공개 범위 — {surveyTitle}
         </DialogTitle>
 
@@ -131,12 +136,12 @@ export function ShareSettingsModal({
             }}
           />
 
-          <p className="text-[11px] leading-[1.45] text-[#9CA3AF]">
+          <p className="text-[11px] leading-[1.5] text-[#6E6E73]">
             「초대된 멤버만」은 소유 팀 팀원에게만 숨깁니다 — 소유자·참여자·팀장·슈퍼어드민은 항상
             접근합니다.
           </p>
           {!canManageAccess && (
-            <p className="text-[11px] leading-[1.45] text-[#9CA3AF]">
+            <p className="text-[11px] leading-[1.5] text-[#6E6E73]">
               공개 범위는 소유자·팀장·슈퍼어드민만 바꿀 수 있습니다.
             </p>
           )}

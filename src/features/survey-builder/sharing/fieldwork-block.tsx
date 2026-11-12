@@ -142,7 +142,7 @@ function InternalFieldworkSection({ surveyId }: { surveyId: string }) {
       )}
       {error && <p className="text-[11.5px] text-red-600">{error}</p>}
 
-      <p className="text-[11px] leading-[1.45] text-[#9CA3AF]">
+      <p className="text-[11px] leading-[1.5] text-[#6E6E73]">
         사내 실사원에게는 전용 콘솔이 없습니다. 초대하면 평소 설문 목록에 이 설문이 서고, 운영
         콘솔의 조사 대상·응답 수정·단건 메일을 모두 씁니다. 추가·등급·제외는 위 「참여자 —
         직원」 목록에서 다룹니다.
