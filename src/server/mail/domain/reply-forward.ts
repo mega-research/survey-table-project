@@ -21,6 +21,39 @@ export const REPLY_FORWARD_EVENT_TYPE = {
 } as const;
 export type ReplyForwardLedgerOutcome = keyof typeof REPLY_FORWARD_EVENT_TYPE;
 
+/**
+ * 시간당 상한 — 최근 한 시간에 넘긴 건이 이만큼이면 더 넘기지 않는다.
+ * 회신 전달은 설문 발송과 같은 발송 한도를 쓴다. 보낸 사람 주소로 메일을 쏟아부어도 설문 발송이 막히지 않게 한다.
+ */
+export const REPLY_FORWARD_HOURLY_CAP = 200;
+export const REPLY_FORWARD_CAP_WINDOW_MS = 60 * 60 * 1000;
+
+/**
+ * 상태 알림에 실린 태그가 전달 메일의 것인가.
+ * 알림의 태그는 `{ 이름: 값 }` 객체로 오지만, 발송 요청과 같은 `[{ name, value }]` 목록으로 와도 알아본다 —
+ * 모양이 달라졌다고 반송 알림이 조용히 사라지면 안 된다.
+ */
+export function hasReplyForwardTag(tags: unknown): boolean {
+  if (tags === null || typeof tags !== 'object') return false;
+  if (Array.isArray(tags)) {
+    return tags.some(
+      (tag: unknown) =>
+        tag !== null &&
+        typeof tag === 'object' &&
+        (tag as { name?: unknown }).name === REPLY_FORWARD_TAG.name &&
+        (tag as { value?: unknown }).value === REPLY_FORWARD_TAG.value,
+    );
+  }
+  return (tags as Record<string, unknown>)[REPLY_FORWARD_TAG.name] === REPLY_FORWARD_TAG.value;
+}
+
+/** 전달 메일이 회신 주소에 닿지 못했다는 상태 알림 — 회신 주소 오타·메일함 폐쇄·발송 거절. */
+const REPLY_FORWARD_DELIVERY_FAILURE_EVENT_TYPES: readonly string[] = ['email.bounced', 'email.failed'];
+
+export function isReplyForwardDeliveryFailure(eventType: string): boolean {
+  return REPLY_FORWARD_DELIVERY_FAILURE_EVENT_TYPES.includes(eventType);
+}
+
 export const NO_SUBJECT_PLACEHOLDER = '(제목 없음)';
 /** 본문이 아예 없는 메일(첨부만 보낸 스캔본) — 발송 API 가 본문 없는 메일을 받지 않아 채운다. */
 export const NO_BODY_PLACEHOLDER = '(본문 없음)';

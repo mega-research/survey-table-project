@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { applyMock, state } = vi.hoisted(() => ({
+const { applyMock, sentryMessageMock, state } = vi.hoisted(() => ({
   applyMock: vi.fn(async () => true),
+  sentryMessageMock: vi.fn(),
   state: {
     selectResults: [] as Array<Array<{
       id: string;
@@ -71,6 +72,8 @@ vi.mock('@/server/mail/services/recipient-status-transition', async (importOrigi
   return { ...actual, applyRecipientTransition: applyMock };
 });
 
+vi.mock('@sentry/nextjs', () => ({ captureMessage: sentryMessageMock }));
+
 import * as resendWebhook from '@/server/mail/services/resend-webhook';
 
 const processResendEvent = resendWebhook.processResendEvent;
@@ -81,6 +84,7 @@ beforeEach(() => {
   state.setPayloads = [];
   state.webhookIds = new Set();
   applyMock.mockClear();
+  sentryMessageMock.mockClear();
 });
 
 describe('processResendEvent', () => {
@@ -215,4 +219,106 @@ describe('processResendEvent', () => {
     ])).resolves.toEqual(expect.arrayContaining(['processed', 'deduped']));
     expect(applyMock).toHaveBeenCalledOnce();
   });
+});
+
+/**
+ * 전달 메일(회신 전달)의 상태 알림 — 발송 때 붙인 `kind=reply-forward` 태그로 가려낸다.
+ * 수신자 기록이 없는 메일이라 상태·집계는 건드리지 않고, 반송·실패만 Sentry 경고로 알린다.
+ */
+describe('processResendWebhookEvent — 전달 메일(kind=reply-forward)의 상태 알림', () => {
+  const { processResendWebhookEvent } = resendWebhook;
+  const FORWARD_TAGS = { kind: 'reply-forward' };
+  /** 조회가 수신자를 돌려주더라도(메시지 id 가 겹치는 있을 수 없는 경우) 전이하지 않는 것을 보려는 행. */
+  const recipient = {
+    id: 'recipient-1',
+    campaignId: 'campaign-1',
+    status: 'sent',
+    archivedAt: null,
+    resendMessageId: 'forward-out-1',
+  };
+  let seq = 0;
+  const statusEvent = (type: string, tags?: unknown) => ({
+    id: `svix-forward-${(seq += 1)}`,
+    type,
+    createdAt: '2026-11-12T01:00:00Z',
+    resendMessageId: 'forward-out-1',
+    ...(tags !== undefined ? { tags: tags as Record<string, string> } : {}),
+  });
+
+  it.each(['email.bounced', 'email.failed'])('%s 는 Sentry 경고를 낸다 — 주소·제목 없이 식별자만', async (type) => {
+    state.selectResults = [[recipient], [recipient]];
+    const event = statusEvent(type, FORWARD_TAGS);
+
+    await processResendWebhookEvent(event);
+
+    expect(sentryMessageMock).toHaveBeenCalledTimes(1);
+    expect(sentryMessageMock).toHaveBeenCalledWith('회신 전달 메일 반송·실패', {
+      level: 'warning',
+      tags: { operation: 'reply_forward_bounce', eventType: type },
+      extra: { messageId: 'forward-out-1', svixId: event.id },
+    });
+  });
+
+  it.each(['email.bounced', 'email.failed', 'email.complained'])(
+    '%s 가 와도 수신자 상태·발송 회차 집계를 바꾸지 않는다',
+    async (type) => {
+      state.selectResults = [[recipient], [recipient]];
+
+      await processResendWebhookEvent(statusEvent(type, FORWARD_TAGS));
+
+      expect(applyMock).not.toHaveBeenCalled();
+      expect(state.setPayloads).toEqual([]);
+      // 수신자 조회조차 하지 않는다 — 전이 경로를 아예 타지 않는다.
+      expect(state.selectCall).toBe(0);
+    },
+  );
+
+  it.each(['email.sent', 'email.delivered', 'email.opened', 'email.clicked', 'email.delivery_delayed', 'email.complained'])(
+    '%s 는 조용히 지나간다 — 경고도 전이도 없다',
+    async (type) => {
+      state.selectResults = [[recipient], [recipient]];
+
+      await expect(processResendWebhookEvent(statusEvent(type, FORWARD_TAGS))).resolves.not.toBe('deduped');
+
+      expect(sentryMessageMock).not.toHaveBeenCalled();
+      expect(applyMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it('장부에는 적는다 — 같은 반송 알림이 다시 와도 경고는 한 번이다', async () => {
+    const event = statusEvent('email.bounced', FORWARD_TAGS);
+
+    await processResendWebhookEvent(event);
+    await expect(processResendWebhookEvent(event)).resolves.toBe('deduped');
+
+    expect(state.webhookIds.has(event.id)).toBe(true);
+    expect(sentryMessageMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('태그가 이름·값 목록 모양으로 와도 알아본다', async () => {
+    await processResendWebhookEvent(
+      statusEvent('email.bounced', [{ name: 'kind', value: 'reply-forward' }]),
+    );
+
+    expect(sentryMessageMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('태그가 없는 반송 알림은 지금처럼 수신자 전이 경로를 타고 경고를 내지 않는다', async () => {
+    state.selectResults = [[recipient], [recipient]];
+    applyMock.mockResolvedValueOnce(false);
+
+    await expect(processResendWebhookEvent(statusEvent('email.bounced'))).resolves.toBe('processed');
+
+    expect(applyMock).toHaveBeenCalledTimes(1);
+    expect(sentryMessageMock).not.toHaveBeenCalled();
+  });
+
+  it.each([{ kind: 'campaign' }, { kind: 'template-test' }, { category: 'reply-forward' }])(
+    '다른 태그(%j)의 반송 알림은 경고를 내지 않는다',
+    async (tags) => {
+      await processResendWebhookEvent(statusEvent('email.bounced', tags));
+
+      expect(sentryMessageMock).not.toHaveBeenCalled();
+    },
+  );
 });

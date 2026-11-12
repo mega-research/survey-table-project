@@ -28,6 +28,7 @@ vi.mock('@/server/mail/services/reply-forward', () => ({
 }));
 
 import { POST } from '@/app/api/webhooks/resend/route';
+import { markSentryCaptured } from '@/server/rpc-error-policy';
 
 const STATUS_EVENT = {
   type: 'email.delivered',
@@ -140,6 +141,20 @@ describe('Resend webhook route — 받은 메일 알림(email.received)', () => 
     expect(captured).toContain('received-1');
     expect(captured).not.toContain('kim@corp.co.kr');
     expect(captured).not.toContain('설문지 회신');
+  });
+
+  it('시간당 상한 초과는 500 으로 답해 재시도에 맡기고, 서비스가 이미 경고로 보낸 오류를 Sentry 에 또 보내지 않는다', async () => {
+    // 서비스가 Sentry 경고를 낸 뒤 표식을 달아 던진다(reply-forward 의 ReplyForwardCapExceeded).
+    const capExceeded = new Error('회신 전달 시간당 상한 초과');
+    markSentryCaptured(capExceeded);
+    forwardMock.mockRejectedValueOnce(capExceeded);
+
+    const response = await POST(webhookRequest());
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ ok: false });
+    expect(captureMock).not.toHaveBeenCalled();
+    expect(processMock).not.toHaveBeenCalled();
   });
 
   it('받은 메일 id 가 없는 알림은 회신 전달을 부르지 않고 기존 경로가 「지원하지 않는 이벤트」로 끝낸다', async () => {

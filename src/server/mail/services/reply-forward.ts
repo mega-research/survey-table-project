@@ -1,12 +1,16 @@
 import 'server-only';
 
+import * as Sentry from '@sentry/nextjs';
 import PostalMime from 'postal-mime';
 import type { GetReceivingEmailResponseSuccess } from 'resend';
 
 import { logger } from '@/lib/logger';
 import { InternalFailure } from '@/server/internal-failure';
+import { markSentryCaptured } from '@/server/rpc-error-policy';
 
 import {
+  REPLY_FORWARD_CAP_WINDOW_MS,
+  REPLY_FORWARD_HOURLY_CAP,
   buildForwardMail,
   extractSenderAccounts,
   findCompanyDomainMatch,
@@ -16,7 +20,11 @@ import {
   type ReceivedAttachment,
 } from '../domain/reply-forward';
 import { loadAccountReplyAddresses, type ReplyAddressSource } from './reply-address-lookup';
-import { isWebhookEventRecorded, recordReplyForwardEvent } from './reply-forward-ledger';
+import {
+  countForwardedRepliesSince,
+  isWebhookEventRecorded,
+  recordReplyForwardEvent,
+} from './reply-forward-ledger';
 import { getResend } from './resend-client';
 
 /**
@@ -26,6 +34,7 @@ import { getResend } from './resend-client';
  * ②·③의 실패는 던진다 — 라우트가 500 으로 답해 Resend 가 다시 보내고, 장부에 적지 않았으므로 처음부터 다시 한다.
  * ③은 됐는데 ④가 실패해도 발송 멱등 키(받은 메일 id)가 두 번째 발송을 막는다.
  * 넘기지 않는 것은 실패가 아니라 정상 처리다(장부에 「넘기지 않음」으로 적고 끝).
+ * 넘기기로 한 메일은 ③ 직전에 시간당 상한을 본다 — 넘었으면 던져서(500) Resend 재시도가 뒤로 미루게 한다.
  *
  * 로그·오류 문구에는 주소·이름·제목·본문을 싣지 않는다 — 식별자와 분류값만.
  * 규칙은 `domain/reply-forward`, 전달 주소는 `reply-address-lookup` 이 DB 에서 읽은 회신 주소뿐이다.
@@ -192,6 +201,43 @@ async function skip(
   return { outcome: 'skipped', reason };
 }
 
+/**
+ * 시간당 상한을 넘어 이번 알림을 넘기지 않았다. 던지면 라우트가 500 으로 답하고 Resend 가 간격을 늘려 다시 보낸다 —
+ * 장부에 적지 않았으므로 재시도가 처음부터 다시 하고, 원본은 수신 목록에 남는다.
+ * Sentry 경고는 던지기 전에 이미 냈다(표식을 달아 라우트가 장애로 또 보내지 않는다).
+ */
+export class ReplyForwardCapExceeded extends InternalFailure {}
+
+/**
+ * 시간당 상한 확인 — 판정이 끝나 넘기기로 한 메일만 여기에 온다(넘기지 않는 메일은 상한과 무관하게 끝난다).
+ * 세는 재료는 웹훅 장부에 「넘김」으로 적힌 최근 한 시간의 줄 수다.
+ * 확인과 발송이 한 덩어리가 아니라 동시에 몰린 요청은 상한을 조금 넘겨 나갈 수 있다 — 한도 보호에는 그 정도면 된다.
+ */
+async function assertUnderHourlyCap(event: ReplyForwardEvent): Promise<void> {
+  const forwardedLastHour = await countForwardedRepliesSince(
+    new Date(Date.now() - REPLY_FORWARD_CAP_WINDOW_MS),
+  );
+  if (forwardedLastHour < REPLY_FORWARD_HOURLY_CAP) return;
+
+  logger.warn(
+    { receivedEmailId: event.receivedEmailId, outcome: 'deferred', reason: 'hourly_cap' },
+    '[reply-forward] 시간당 상한 초과 — 넘기지 않고 재시도에 맡김',
+  );
+  // 문구는 고정이다 — 건수를 넣으면 이벤트마다 이슈가 갈린다. 주소·제목은 싣지 않는다.
+  Sentry.captureMessage('회신 전달 시간당 상한 초과', {
+    level: 'warning',
+    tags: { operation: 'reply_forward_cap' },
+    extra: {
+      receivedEmailId: event.receivedEmailId,
+      forwardedLastHour,
+      cap: REPLY_FORWARD_HOURLY_CAP,
+    },
+  });
+  const error = new ReplyForwardCapExceeded('회신 전달 시간당 상한 초과');
+  markSentryCaptured(error);
+  throw error;
+}
+
 /** 회신 전달 진입점 — 웹훅 라우트가 `email.received` 알림일 때 부른다. */
 export async function forwardReceivedReply(event: ReplyForwardEvent): Promise<ReplyForwardResult> {
   const sendDomain = requireSendDomain();
@@ -221,6 +267,9 @@ export async function forwardReceivedReply(event: ReplyForwardEvent): Promise<Re
       externalReplyDomain: companyMatch.kind === 'reply_domain' && companyMatch.external,
     });
   }
+
+  // 넘기기로 한 메일만 시간당 상한을 본다.
+  await assertUnderHourlyCap(event);
 
   // ③ 원본 내려받기·발송 — 이 사이 DB 트랜잭션을 잡지 않는다.
   if (!received.raw?.download_url) {

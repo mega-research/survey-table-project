@@ -1,8 +1,11 @@
+import * as Sentry from '@sentry/nextjs';
 import { and, eq, isNull } from 'drizzle-orm';
 import 'server-only';
 
 import { type DbTransaction as Tx, db } from '@/db';
 import { mailCampaigns, mailRecipients, webhookEvents } from '@/db/schema/mail';
+import { logger } from '@/lib/logger';
+import { hasReplyForwardTag, isReplyForwardDeliveryFailure } from '../domain/reply-forward';
 import { requestRecipientFallbacks } from './campaign-fallback';
 import {
   applyRecipientTransition,
@@ -20,6 +23,8 @@ async function applyResendEvent(
 ): Promise<string | null> {
   const newStatus = mapResendWebhookType(eventType);
   if (!newStatus) return null;
+  // 전달 메일(회신 전달)은 수신자 기록이 없는 메일이다 — 수신자 상태·발송 회차 집계를 건드리지 않는다.
+  if (hasReplyForwardTag(tags)) return null;
 
   const eventAt = new Date(createdAtRaw);
   if (Number.isNaN(eventAt.getTime())) eventAt.setTime(Date.now());
@@ -113,8 +118,27 @@ export interface VerifiedResendWebhookEvent {
 }
 
 /**
+ * 전달 메일(회신 전달)이 회신 주소에 닿지 못했다 — 회신 주소 오타·메일함 폐쇄 등.
+ * 수신자 기록이 없어 화면 어디에도 드러나지 않으므로 Sentry 경고로 알린다. 주소·제목은 싣지 않는다(식별자만).
+ */
+function reportReplyForwardDeliveryFailure(event: VerifiedResendWebhookEvent): void {
+  logger.warn(
+    { resendMessageId: event.resendMessageId, eventType: event.type },
+    '[reply-forward] 전달 메일 반송·실패',
+  );
+  Sentry.captureMessage('회신 전달 메일 반송·실패', {
+    level: 'warning',
+    tags: { operation: 'reply_forward_bounce', eventType: event.type },
+    extra: { messageId: event.resendMessageId, svixId: event.id },
+  });
+}
+
+/**
  * webhook dedupe 기록과 recipient 전이를 한 transaction으로 커밋한다.
  * 전이 실패 시 dedupe insert도 rollback되어 provider retry가 이벤트를 다시 처리할 수 있다.
+ *
+ * 전달 메일(`kind=reply-forward` 태그)의 상태 알림은 장부에만 적고 전이하지 않는다.
+ * 그 가운데 반송·실패는 커밋 뒤 Sentry 경고를 낸다 — 장부에 적힌 알림이 다시 오면 경고도 다시 내지 않는다.
  */
 export async function processResendWebhookEvent(
   event: VerifiedResendWebhookEvent,
@@ -139,6 +163,13 @@ export async function processResendWebhookEvent(
     );
     return { result: 'processed' as const, fallbackRecipientId };
   });
+  if (
+    outcome.result !== 'deduped' &&
+    hasReplyForwardTag(event.tags) &&
+    isReplyForwardDeliveryFailure(event.type)
+  ) {
+    reportReplyForwardDeliveryFailure(event);
+  }
   if (outcome.fallbackRecipientId) await requestRecipientFallbacks([outcome.fallbackRecipientId]);
   return outcome.result;
 }

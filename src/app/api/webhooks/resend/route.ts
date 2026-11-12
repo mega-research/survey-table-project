@@ -7,6 +7,7 @@ import { Webhook } from 'svix';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import { forwardReceivedReply } from '@/server/mail/services/reply-forward';
 import { processResendWebhookEvent } from '@/server/mail/services/resend-webhook';
+import { isSentryCaptured } from '@/server/rpc-error-policy';
 
 /**
  * Resend webhook handler.
@@ -28,6 +29,7 @@ import { processResendWebhookEvent } from '@/server/mail/services/resend-webhook
  *   - 보낸 사람 주소로 들어온 메일이다. 수신자 상태 전이 경로를 타지 않고 회신 전달 서비스로 간다.
  *   - 서비스가 받은 메일 id 로 직접 조회하므로 알림에 실린 주소·제목은 넘기지 않는다.
  *   - 넘기지 않은 메일도 200 이다. 조회·내려받기·발송 실패만 500 (장부에 적지 않아 재시도가 처음부터 다시 한다).
+ *   - 시간당 상한 초과도 500 이다 — 재시도가 뒤로 미룬다. Sentry 경고는 서비스가 내고 여기서는 다시 보내지 않는다.
  */
 
 /** 보낸 사람 주소로 메일이 들어왔다는 알림. 이때 `data.email_id` 는 받은 메일의 id 다. */
@@ -98,10 +100,13 @@ const POST_HANDLER = async (req: NextRequest, ctx: RouteLogContext): Promise<Nex
     return NextResponse.json({ ok: true });
   } catch (err) {
     ctx.log.error({ err }, 'resend webhook 처리 실패');
-    Sentry.captureException(err, {
-      tags: { operation: 'resend_webhook' },
-      extra: { eventType: payload.type, messageId, svixId },
-    });
+    // 서비스가 이미 경고로 보낸 오류(회신 전달 시간당 상한 초과)는 장애로 또 보내지 않는다.
+    if (!isSentryCaptured(err)) {
+      Sentry.captureException(err, {
+        tags: { operation: 'resend_webhook' },
+        extra: { eventType: payload.type, messageId, svixId },
+      });
+    }
     // non-2xx로 provider retry를 요청한다. transaction rollback으로 dedupe row도 남지 않는다.
     return NextResponse.json({ ok: false }, { status: 500 });
   }

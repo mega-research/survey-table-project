@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { eq } from 'drizzle-orm';
+import { and, eq, gte, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { webhookEvents } from '@/db/schema/mail';
@@ -37,4 +37,21 @@ export async function recordReplyForwardEvent(
     .insert(webhookEvents)
     .values({ id: eventId, source: 'resend', eventType: REPLY_FORWARD_EVENT_TYPE[outcome] })
     .onConflictDoNothing();
+}
+
+/**
+ * `since` 이후 장부에 「넘김」으로 적힌 알림 수 — 시간당 상한의 재료다.
+ * 넘기지 않은 건(`email.received:skipped`)과 다른 알림은 세지 않는다. 기준은 장부에 적은 시각이다.
+ */
+export async function countForwardedRepliesSince(since: Date): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(webhookEvents)
+    .where(
+      and(
+        eq(webhookEvents.eventType, REPLY_FORWARD_EVENT_TYPE.forwarded),
+        gte(webhookEvents.receivedAt, since),
+      ),
+    );
+  return row?.count ?? 0;
 }

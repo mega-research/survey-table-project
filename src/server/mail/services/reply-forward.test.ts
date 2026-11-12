@@ -6,14 +6,22 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { forwardReceivedReply } from './reply-forward';
-import { loadAccountReplyAddresses } from './reply-address-lookup';
-import { isWebhookEventRecorded, recordReplyForwardEvent } from './reply-forward-ledger';
+import { isSentryCaptured } from '@/server/rpc-error-policy';
 
-const { getMock, sendMock, logMock } = vi.hoisted(() => ({
+import { REPLY_FORWARD_HOURLY_CAP } from '../domain/reply-forward';
+import { ReplyForwardCapExceeded, forwardReceivedReply } from './reply-forward';
+import { loadAccountReplyAddresses } from './reply-address-lookup';
+import {
+  countForwardedRepliesSince,
+  isWebhookEventRecorded,
+  recordReplyForwardEvent,
+} from './reply-forward-ledger';
+
+const { getMock, sendMock, logMock, sentryMessageMock } = vi.hoisted(() => ({
   getMock: vi.fn(),
   sendMock: vi.fn(),
   logMock: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+  sentryMessageMock: vi.fn(),
 }));
 
 vi.mock('./resend-client', () => ({
@@ -23,8 +31,10 @@ vi.mock('./reply-address-lookup', () => ({ loadAccountReplyAddresses: vi.fn() })
 vi.mock('./reply-forward-ledger', () => ({
   isWebhookEventRecorded: vi.fn(),
   recordReplyForwardEvent: vi.fn(),
+  countForwardedRepliesSince: vi.fn(),
 }));
 vi.mock('@/lib/logger', () => ({ logger: logMock }));
+vi.mock('@sentry/nextjs', () => ({ captureMessage: sentryMessageMock }));
 
 const fetchMock = vi.fn();
 
@@ -134,6 +144,7 @@ beforeEach(() => {
 
   vi.mocked(isWebhookEventRecorded).mockResolvedValue(false);
   vi.mocked(recordReplyForwardEvent).mockResolvedValue(undefined);
+  vi.mocked(countForwardedRepliesSince).mockResolvedValue(0);
   vi.mocked(loadAccountReplyAddresses).mockResolvedValue({
     source: 'campaign',
     addresses: ['help@example.co.kr'],
@@ -384,6 +395,133 @@ describe('forwardReceivedReply — 넘기지 않는 메일', () => {
     getMock.mockResolvedValue(receivedEmail({ from: 'undisclosed-sender' }));
 
     expectSkipped(await forwardReceivedReply(EVENT), 'unreadable_sender');
+  });
+});
+
+describe('forwardReceivedReply — 시간당 상한', () => {
+  const HOUR_MS = 60 * 60 * 1000;
+
+  it('최근 한 시간에 넘긴 건이 상한 바로 아래면 넘긴다 — 세는 범위는 지금부터 한 시간 전까지', async () => {
+    vi.mocked(countForwardedRepliesSince).mockResolvedValue(REPLY_FORWARD_HOURLY_CAP - 1);
+    const before = Date.now();
+
+    const result = await forwardReceivedReply(EVENT);
+
+    expect(result).toMatchObject({ outcome: 'forwarded' });
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(recordReplyForwardEvent).toHaveBeenCalledWith('svix-1', 'forwarded');
+    expect(sentryMessageMock).not.toHaveBeenCalled();
+
+    expect(countForwardedRepliesSince).toHaveBeenCalledTimes(1);
+    const since = vi.mocked(countForwardedRepliesSince).mock.calls[0]?.[0];
+    expect(since).toBeInstanceOf(Date);
+    expect(since!.getTime()).toBeGreaterThanOrEqual(before - HOUR_MS);
+    expect(since!.getTime()).toBeLessThanOrEqual(Date.now() - HOUR_MS);
+  });
+
+  it('상한은 200통이다', () => {
+    expect(REPLY_FORWARD_HOURLY_CAP).toBe(200);
+  });
+
+  it('최근 한 시간에 넘긴 건이 상한에 닿았으면 넘기지 않고 실패로 던진다 — 장부에 적지 않아 재시도가 뒤로 미룬다', async () => {
+    vi.mocked(countForwardedRepliesSince).mockResolvedValue(REPLY_FORWARD_HOURLY_CAP);
+
+    const error = await forwardReceivedReply(EVENT).catch((err: unknown) => err);
+
+    expect(error).toBeInstanceOf(ReplyForwardCapExceeded);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(recordReplyForwardEvent).not.toHaveBeenCalled();
+  });
+
+  it('상한 초과는 Sentry 경고를 한 번 내고, 그 오류는 라우트가 다시 보내지 않게 표식을 단다', async () => {
+    vi.mocked(countForwardedRepliesSince).mockResolvedValue(REPLY_FORWARD_HOURLY_CAP + 37);
+
+    const error = await forwardReceivedReply(EVENT).catch((err: unknown) => err);
+
+    expect(sentryMessageMock).toHaveBeenCalledTimes(1);
+    expect(sentryMessageMock).toHaveBeenCalledWith('회신 전달 시간당 상한 초과', {
+      level: 'warning',
+      tags: { operation: 'reply_forward_cap' },
+      extra: {
+        receivedEmailId: 'recv-1',
+        forwardedLastHour: REPLY_FORWARD_HOURLY_CAP + 37,
+        cap: REPLY_FORWARD_HOURLY_CAP,
+      },
+    });
+    expect(isSentryCaptured(error)).toBe(true);
+  });
+
+  it('상한 초과의 Sentry 경고·로그·오류 문구에 주소·이름·제목·본문을 싣지 않는다', async () => {
+    vi.mocked(countForwardedRepliesSince).mockResolvedValue(REPLY_FORWARD_HOURLY_CAP);
+
+    const error = await forwardReceivedReply(EVENT).catch((err: unknown) => err);
+
+    expect(logMock.warn).toHaveBeenCalledTimes(1);
+    expect(logMock.warn.mock.calls[0]?.[0]).toEqual({
+      receivedEmailId: 'recv-1',
+      outcome: 'deferred',
+      reason: 'hourly_cap',
+    });
+    const exposed = JSON.stringify([
+      sentryMessageMock.mock.calls,
+      logMock.info.mock.calls,
+      logMock.warn.mock.calls,
+      (error as Error).message,
+    ]);
+    for (const fragment of ['kim@corp.co.kr', 'help@example.co.kr', 'corp.co.kr', '김응답', '설문지 회신', '스캔본']) {
+      expect(exposed).not.toContain(fragment);
+    }
+  });
+
+  it('넘기지 않는 메일은 상한을 넘긴 동안에도 「넘기지 않음」으로 끝난다 — 상한을 세지도, 막히지도 않는다', async () => {
+    vi.mocked(countForwardedRepliesSince).mockResolvedValue(REPLY_FORWARD_HOURLY_CAP * 5);
+    vi.mocked(loadAccountReplyAddresses).mockResolvedValue({ source: null, addresses: [] });
+
+    const result = await forwardReceivedReply(EVENT);
+
+    expect(result).toEqual({ outcome: 'skipped', reason: 'unused_sender_account' });
+    expect(recordReplyForwardEvent).toHaveBeenCalledWith('svix-1', 'skipped');
+    expect(countForwardedRepliesSince).not.toHaveBeenCalled();
+    expect(sentryMessageMock).not.toHaveBeenCalled();
+  });
+
+  it('회사 도메인에서 온 메일도 상한과 무관하게 「넘기지 않음」이다', async () => {
+    vi.mocked(countForwardedRepliesSince).mockResolvedValue(REPLY_FORWARD_HOURLY_CAP);
+    getMock.mockResolvedValue(receivedEmail({ from: '자동응답 <help@example.co.kr>' }));
+
+    const result = await forwardReceivedReply(EVENT);
+
+    expect(result).toEqual({ outcome: 'skipped', reason: 'company_domain' });
+    expect(countForwardedRepliesSince).not.toHaveBeenCalled();
+  });
+
+  it('이미 처리한 알림은 상한을 넘긴 동안에도 중복으로 끝난다', async () => {
+    vi.mocked(countForwardedRepliesSince).mockResolvedValue(REPLY_FORWARD_HOURLY_CAP);
+    vi.mocked(isWebhookEventRecorded).mockResolvedValue(true);
+
+    expect(await forwardReceivedReply(EVENT)).toEqual({ outcome: 'deduped' });
+    expect(countForwardedRepliesSince).not.toHaveBeenCalled();
+  });
+
+  it('상한 확인은 판정 뒤·원본 내려받기 앞이다', async () => {
+    await forwardReceivedReply(EVENT);
+
+    const order = (mock: { mock: { invocationCallOrder: number[] } }) => {
+      const first = mock.mock.invocationCallOrder[0];
+      if (first === undefined) throw new Error('호출되지 않았다');
+      return first;
+    };
+    expect(order(vi.mocked(loadAccountReplyAddresses))).toBeLessThan(order(vi.mocked(countForwardedRepliesSince)));
+    expect(order(vi.mocked(countForwardedRepliesSince))).toBeLessThan(order(fetchMock));
+  });
+
+  it('건수를 세지 못하면 실패다 — 상한을 모르는 채로 넘기지 않는다', async () => {
+    vi.mocked(countForwardedRepliesSince).mockRejectedValue(new Error('db down'));
+
+    await expect(forwardReceivedReply(EVENT)).rejects.toThrow();
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(recordReplyForwardEvent).not.toHaveBeenCalled();
   });
 });
 

@@ -22,5 +22,7 @@
 - **SDK 의 전달 도우미(`emails.receiving.forward`)를 쓰지 말 것.** 답장 주소와 보낸 사람 이름을 넣지 못해 담당자의 「답장」이 응답자에게 가지 않는다. 원본을 내려받아 `postal-mime` 으로 직접 풀고 발송 API 로 보낸다. 원본은 글자가 아니라 바이트(`arrayBuffer`)로 읽는다.
 - **장부 확인과 기록이 한 트랜잭션이 아니다.** 그 사이에 외부 호출(조회·내려받기·발송)이 끼기 때문이다 — 틈은 발송 멱등 키(`reply-forward/<받은 메일 id>`)가 덮는다. 실패는 던져서 500 으로 답하고 장부에 적지 않는다(Resend 재시도가 처음부터 다시 한다). 넘기지 않은 것은 실패가 아니라 200 이다.
 - **장부의 이벤트 종류 칸**: `email.received:forwarded`(넘김) · `email.received:skipped`(넘기지 않음). 배포 전에 온 알림은 기존 경로가 `email.received` 그대로 적는다.
+- **시간당 상한**(`REPLY_FORWARD_HOURLY_CAP` 200통): 넘기기로 한 메일만 발송 직전에 본다 — 장부의 최근 한 시간 「넘김」 줄 수(`countForwardedRepliesSince`)가 상한에 닿았으면 `ReplyForwardCapExceeded` 를 던져 500 으로 답하고 장부에 적지 않는다(Resend 재시도가 뒤로 미룬다). 넘기지 않는 메일은 상한과 무관하게 「넘기지 않음」으로 끝난다. Sentry 경고는 서비스가 내고 오류에 표식(`markSentryCaptured`)을 달아 라우트가 장애로 또 보내지 않는다. 확인과 발송이 한 덩어리가 아니라 동시에 몰리면 조금 넘을 수 있다.
+- **전달 메일의 상태 알림**: 발송 태그 `kind=reply-forward` 로 가려낸다(`hasReplyForwardTag`). `resend-webhook` 은 이 알림을 장부에만 적고 수신자 전이 경로를 타지 않는다 — 발송 회차 집계·메일 비용 집계가 회신 전달로 바뀌면 안 된다(`tests/integration/reply-forward-safeguards.realdb.test.ts` 가 못박는다). `email.bounced`·`email.failed` 만 Sentry 경고(`operation: reply_forward_bounce`)이고 나머지는 조용히 지나간다. 전달 메일의 `kind` 태그를 빼거나 값을 바꾸면 이 분기가 죽는다.
 - **로그·오류 문구·Sentry 에 주소·이름·제목·본문을 싣지 않는다.** 발송 서비스가 돌려준 오류 문구도 주소를 담을 수 있어 분류값(`error.name`·상태 코드)만 옮긴다. 웹훅 라우트도 알림에 실린 주소·제목을 서비스에 넘기지 않는다.
 - **배포**: 마이그레이션·Inngest Resync 없음. 앱 배포 뒤 Resend 웹훅 구독에 `email.received` 를 더한다.
