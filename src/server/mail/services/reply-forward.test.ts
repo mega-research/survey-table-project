@@ -2255,6 +2255,42 @@ describe('forwardReceivedReply — 답장 중계(담당자의 답장을 응답�
       expect(sentRequest().mail['to']).toEqual(['kim@corp.co.kr']);
     });
 
+    it('회사 도메인 판정은 그 중계 주소의 계정으로 한다 — 다른 계정의 회신 주소와 같은 도메인이라고 중계하지 않는다', async () => {
+      // survey 계정의 회신 주소는 회사 도메인, panel 계정의 회신 주소는 외부 메일(gmail)이다.
+      vi.mocked(loadAccountReplyAddresses).mockImplementation(async (account) =>
+        account === 'panel'
+          ? { source: 'template', addresses: ['manager@gmail.com'] }
+          : { source: 'campaign', addresses: ['help@example.co.kr'] },
+      );
+      // gmail 사용자가 survey 계정의 중계 주소와 panel 계정 주소를 함께 받는 사람에 넣었다.
+      getMock.mockResolvedValue(
+        staffEmail({
+          from: '누군가 <someone@gmail.com>',
+          received_for: [RELAY_FROM_KIM, 'panel@send.example.co.kr'],
+        }),
+      );
+
+      expectNotRelayed(await forwardReceivedReply(EVENT), 'company_domain');
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('중계 주소가 여럿이면 보낸 사람이 회사 도메인인 계정의 것만 넘긴다', async () => {
+      vi.mocked(loadAccountReplyAddresses).mockImplementation(async (account) =>
+        account === 'panel'
+          ? { source: 'template', addresses: ['manager@other-company.co.kr'] }
+          : { source: 'campaign', addresses: ['help@example.co.kr'] },
+      );
+      getMock.mockResolvedValue(
+        staffEmail({ received_for: ['panel+park=other.co.kr=9d39a32c6b@send.example.co.kr', RELAY_FROM_KIM] }),
+      );
+
+      const result = await forwardReceivedReply(EVENT);
+
+      expect(result).toEqual({ outcome: 'relayed', relayCount: 1, alreadySent: false });
+      expect(sentRequest().mail['to']).toEqual(['kim@corp.co.kr']);
+      expect(sentRequest().mail['from']).toBe('이담당 <survey@send.example.co.kr>');
+    });
+
     it('회사 도메인에서 중계 꼬리 없는 계정 주소로 온 메일은 지금처럼 넘기지 않는다', async () => {
       getMock.mockResolvedValue(staffEmail({ received_for: ['survey@send.example.co.kr'] }));
 

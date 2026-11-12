@@ -762,6 +762,36 @@ function toReceivedReply(
 }
 
 /**
+ * 중계 주소가 가리킨 응답자 가운데, 보낸 사람이 **그 중계 주소의 계정**에서 회사 도메인인 것만 남긴다.
+ *
+ * 회사 도메인 판정은 받는 주소의 계정을 모두 합친 회신 주소로 먼저 한다(회신 전달의 판정). 중계는 그보다 좁게 본다 —
+ * 계정을 합친 채로 두면, 회신 주소를 외부 메일로 적은 다른 계정을 받는 사람에 함께 넣어 그 외부 도메인의 누구나
+ * 중계를 열 수 있다. 서명은 계정까지 묶여 있으므로 판정도 계정마다 한다.
+ * 받는 주소의 계정이 하나면(보통 그렇다) 이미 찾아 둔 전달 주소를 그대로 쓴다.
+ */
+async function keepCompanyRelayTargets(input: {
+  targets: readonly RelayTarget[];
+  senderAccounts: readonly string[];
+  senderAddress: string;
+  sendDomain: string;
+  resolved: ResolvedForwardAddresses;
+}): Promise<RelayTarget[]> {
+  const fromCompany = new Map<string, boolean>();
+  for (const { senderAccount } of input.targets) {
+    if (fromCompany.has(senderAccount)) continue;
+    // 계정 수 상한(`extractSenderAccounts`) 밖으로 밀려난 계정의 중계 주소는 보지 않는다.
+    if (!input.senderAccounts.includes(senderAccount)) {
+      fromCompany.set(senderAccount, false);
+      continue;
+    }
+    const { resolution } = await resolveOnce([senderAccount], input.senderAddress, input.sendDomain, input.resolved);
+    const match = findCompanyDomainMatch(input.senderAddress, input.sendDomain, resolution.addresses);
+    fromCompany.set(senderAccount, match?.kind === 'reply_domain');
+  }
+  return input.targets.filter((target) => fromCompany.get(target.senderAccount) === true);
+}
+
+/**
  * 답장 중계 — 회사 도메인에서 서명이 맞는 중계 주소로 온 메일(담당자가 전달 메일에 한 답장)을 응답자에게 넘긴다.
  *
  * 받는 사람은 `targets`(서명이 맞는 중계 주소가 가리킨 응답자 주소)뿐이다 — 받은 메일의 다른 값은 받는 사람이 되지 않는다.
@@ -868,7 +898,8 @@ export async function forwardReceivedReply(event: ReplyForwardEvent): Promise<Re
   if (earlyLoop) return skip(event, LOOP_SKIP_REASON[earlyLoop]);
 
   // 알림 값과 조회한 값이 같으면(보통 같다) 미리 찾은 전달 주소를 그대로 쓴다.
-  const { resolution } = await resolveOnce(senderAccounts, sender.address, sendDomain, prefilter.resolved);
+  const resolved = await resolveOnce(senderAccounts, sender.address, sendDomain, prefilter.resolved);
+  const { resolution } = resolved;
   if (resolution.addresses.length === 0 || resolution.senderAccount === null) {
     return skip(event, 'unused_sender_account');
   }
@@ -877,7 +908,15 @@ export async function forwardReceivedReply(event: ReplyForwardEvent): Promise<Re
     // 회사 도메인에서 온 메일은 넘기지 않는다 — 다만 서명이 맞는 중계 주소로 왔으면 담당자의 답장이다(답장 중계).
     // 중계는 여기서만 갈라진다: 회사 밖에서 중계 주소로 온 메일은 꼬리를 무시하고 아래 회신 전달로 간다.
     const relayTargets =
-      companyMatch.kind === 'reply_domain' ? extractRelayTargets(receivedFor, sendDomain, signer) : [];
+      companyMatch.kind === 'reply_domain'
+        ? await keepCompanyRelayTargets({
+            targets: extractRelayTargets(receivedFor, sendDomain, signer),
+            senderAccounts,
+            senderAddress: sender.address,
+            sendDomain,
+            resolved,
+          })
+        : [];
     if (relayTargets.length > 0) {
       return relayStaffReply({ event, received, sender, targets: relayTargets, sendDomain });
     }

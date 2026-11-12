@@ -209,6 +209,7 @@ const NEEDS_QUOTING = /[()[\]:;@,.]/;
 
 /**
  * 전달 메일의 보낸 사람 표기 — 이름은 응답자가 쓴 이름(없으면 응답자 주소), 주소는 보낸이 계정.
+ * `senderAccount` 는 주소의 `@` 앞이다 — 보낸이 계정 그대로이거나 중계 주소(`계정+중계 꼬리`, `domain/reply-relay`)다.
  * 쉼표·`@` 같은 글자가 든 이름은 따옴표로 감싼다(안 감싸면 주소 둘로 읽힌다).
  */
 export function formatForwardFrom(input: {
