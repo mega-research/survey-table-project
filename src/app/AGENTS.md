@@ -1,7 +1,7 @@
 # 앱 라우트 — src/app
 
 > 루트 `AGENTS.md` 에서 떼어 낸 상세 참조다. 이 디렉터리 아래를 만질 때 읽는다.
-> 공통 규칙(주의사항·코드 컨벤션·마이그레이션 번호·CI 게이트)은 루트 `AGENTS.md` 에 있다.
+> 공통 규칙(주의사항·코드 컨벤션·CI 게이트)은 루트 `AGENTS.md` 에, 마이그레이션 번호는 `supabase/AGENTS.md` 에 있다.
 > `CLAUDE.md` 는 이 파일을 가리키는 심볼릭 링크다 — 수정은 이 파일에 한다.
 
 ## 운영 콘솔 라우트
@@ -35,3 +35,22 @@
 ```
 
 응답 페이지 진입 경로: `/survey/[id]?invite=<uuid>` 또는 짧은 링크 `/i/<inviteCode>`. invite 해석 → contact_targets lookup → survey_responses.contactTargetId 매칭. 토큰 무효 시 안내 화면 + 익명 응답 폴백. **수신거부(unsubscribed_at)·부정 결과코드는 초대 링크 응답을 막지 않는다** (2026-09-01 결정 — 수신거부는 메일 채널 해지일 뿐; 단체 메일 제외·모수 제외는 각자 경로가 담당). 완료 응답이 있는 토큰만 `token_already_used` 로 차단. surveyId가 UUID인 경우 private_token fallback 필요. 빌더 미리보기는 `/preview/<previewToken>`. 관리자 「설문 보기」(`/admin/surveys/[id]/preview`, 저장본)는 그 파티션(콘솔과 같은 `loadOperationsDataScope`)에서 resid 가 가장 작은 조사 대상의 명단 값·이월 응답으로 연다(`server/contacts/services/preview-contact` — 개인정보 열은 설문이 읽는 열만, 2026-11-04). 외부 공유용 `/preview/<token>`(배포본)도 같은 규칙으로 첫 번째 조사 대상의 값을 싣는다 — 링크를 받은 사람이 그 대상의 명단 값을 보게 되는 것을 알고 고른 결정이다(2026-11-04). 로그인 없는 방문자는 실데이터 파티션이다. 빌더(설문 편집) 미리보기는 `surveyBuilder.testSample` 이 같은 첫 대상의 명단 값·이월 응답을 싣고, 이월 값은 `survey-builder/lib/preview-prior-seeds` 가 응답 화면과 같은 규칙으로 테스트 응답에 깐다. 대상 id 로 이월 응답을 읽는 함수는 `server/read-models/contact-prior-answers`(빌더가 contacts 서비스를 부를 수 없어 읽기 경계를 read-model 이 소유한다).
+
+## API 엔드포인트
+
+```
+POST   /api/rpc/[[...rest]]                    # oRPC 핸들러 — 전체 query/mutation (메인 경로)
+*      /api/v1/[[...rest]]                     # OpenAPI 핸들러 (ENABLE_PUBLIC_API 게이트, 기본 비활성)
+POST   /api/upload/image                       # 이미지 업로드 (multipart, 삭제는 media.deleteImages RPC)
+POST   /api/upload/mail-attachment             # 메일 첨부 업로드 (삭제는 media.* RPC)
+POST   /api/upload/notice-attachment           # 공지 첨부 업로드 (삭제는 media.* RPC)
+POST   /api/upload/survey-document             # 조사표 PDF 업로드 (tmp 로 받고 쪽 수 판독, promote 는 attach RPC)
+GET    /api/surveys/[surveyId]/export          # SPSS(.sav)/엑셀 export (인증 필요, 파일 스트림). raw/raw-split 은 `includeNonRespondents=1` 로 미응답 조사 대상 행 포함 (sav/sps 는 무시). `includePriorAnswers=1` 은 이번 회차에 키가 없는 문항을 이월 응답으로 채운다 — 숨은 문항 strip 뒤에 병합하고 조건 판정은 하지 않되, 「이월값 불러오기」를 끈 문항(`priorAnswerDisabled`)은 현재 빌더 설정 기준으로 비워 둔다. 조사 대상 명단 열은 파라미터 없이 응답 내역 컬럼 설정(`profileColumns`)의 표시 attrs·pii 열을 항상 붙인다 (pii 열이 있으면 PII 평문 → no-store). 시스템ID·순번 열은 없고 온라인 응답 상태 다음에 컨택결과코드(숫자, 마지막 회차)·조사 현황(온라인 완료 또는 코드 1) 열, 손으로 고친 명단 칸은 노랗다 (CONTEXT.md 「응답 메타 열」·「조사 대상 명단 열」) — Raw 행 조립은 라우트 폴더 로컬 raw-export-load.ts (contacts·operations 를 함께 읽어 한 도메인에 못 둔다. 순수 조각은 lib/analytics/raw-export-rows.ts — 이름이 같아 헷갈리던 것을 로더 쪽 개명으로 갈랐다)
+GET    /api/surveys/[surveyId]/export/split-preview  # 분할 export 미리보기 (basis 없으면 `hasContacts` — 다이얼로그가 Raw Data 옵션 영역을 그릴지 판단. basis + `includeNonRespondents=1` 이면 `totalRows`·`nonRespondentRows` 를 더해 반환)
+GET    /api/surveys/[surveyId]/contacts/export # 조사 대상 목록 엑셀 다운로드
+GET    /api/surveys/[surveyId]/demand-summary  # 문항 수요 집계표 엑셀 (화면의 정렬·필터를 쿼리로 받음)
+POST   /api/response/segment                   # 구간 응답 저장 (sendBeacon — REST 유지)
+POST   /api/response/draft                     # 이탈 시점 임시 저장 (sendBeacon — REST 유지)
+*      /api/inngest                            # Inngest 핸들러
+POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
+```

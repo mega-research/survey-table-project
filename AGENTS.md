@@ -14,7 +14,7 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 
 | 작업 영역                                                                                   | 읽을 문서                                        |
 | ------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| 운영 콘솔 라우트 트리 · 응답 진입 경로(초대 링크·짧은 링크)                                 | `src/app/AGENTS.md`                              |
+| 운영 콘솔 라우트 트리 · 응답 진입 경로(초대 링크·짧은 링크) · API 엔드포인트                | `src/app/AGENTS.md`                              |
 | 운영 집계·파티션 · 진척 보고 분류 키                                                        | `src/server/operations/AGENTS.md`                |
 | 메일 발송 주소·대체 발송                                                                    | `src/server/mail/AGENTS.md`                      |
 | procedure 베이스·인증과 권한(게스트·보기 전용 게스트) · 테스트 모드·테스트 버전             | `src/server/AGENTS.md`                           |
@@ -24,6 +24,7 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 | 조사 대상 — 이월 응답 임포트 · 컨택원 배정 · 필터 해석 · ID 목록 검색 · 대상 정보 수정 현황 | `src/server/contacts/AGENTS.md`                  |
 | 운영 콘솔 필터 바 구조                                                                      | `src/features/operations/AGENTS.md`              |
 | DB 스키마 (테이블·컬럼·관계)                                                                | `src/db/schema/AGENTS.md`                        |
+| 마이그레이션 번호 고르기·배열 순서·배포 전후 · DB 드리프트 점검                             | `supabase/AGENTS.md`                             |
 | 질문 유형·셀 타입·테이블 검증 규칙 · 행 반복·차례로 열기 · 다국어 설문                      | `src/features/AGENTS.md`                         |
 | 숨은 답 지우기 — 저장 경계 순서·조건 평가 컨텍스트·경로 밖 문항·표의 숨은 칸                | `src/lib/survey/AGENTS.md`                       |
 | 레이트리밋 · 로깅 · Sentry                                                                  | `src/lib/AGENTS.md`                              |
@@ -38,39 +39,41 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 
 ## 기술 스택
 
-| 영역           | 기술                                        | 버전            |
-| -------------- | ------------------------------------------- | --------------- |
-| 프레임워크     | Next.js (App Router, Turbopack)             | 16.4.2          |
-| UI 라이브러리  | React (React Compiler)                      | 19.2.3          |
-| 스타일링       | TailwindCSS                                 | 4.x             |
-| 컴포넌트       | shadcn/ui (Radix UI)                        | -               |
-| 상태관리       | Zustand + Immer                             | 5.0.8 / 11.1.3  |
-| 데이터 페칭    | TanStack Query                              | 5.90.11         |
-| RPC            | oRPC (server/client/tanstack-query/openapi) | 1.14.4          |
-| 스키마 검증    | Zod                                         | 4.4.3           |
-| 테이블         | TanStack Table                              | 8.21.3          |
-| 텍스트 측정    | @chenglou/pretext                           | 0.0.5           |
-| 리치 에디터    | TipTap                                      | 3.31.3          |
-| 드래그앤드롭   | @dnd-kit                                    | -               |
-| ID 생성        | NanoID                                      | 5.1.11          |
-| ORM            | Drizzle ORM                                 | 0.45.2          |
-| DB 드라이버    | postgres (postgres-js)                      | 3.4.7           |
-| 데이터베이스   | PostgreSQL (Supabase)                       | -               |
-| 파일 저장소    | Cloudflare R2 (S3 호환)                     | -               |
-| 이미지 처리    | sharp                                       | 0.35.5          |
-| HTML sanitize  | sanitize-html                               | 2.18.1          |
-| 이메일 발송    | Resend + React Email                        | 6.12.3          |
-| 이메일 webhook | svix                                        | 1.93.0          |
-| 백그라운드 잡  | Inngest                                     | 4.4.0           |
-| 레이트리밋     | @upstash/ratelimit + @upstash/redis         | 2.0.8 / 1.38.0  |
-| 로깅           | pino + @axiomhq/js                          | 10.3.1 / 2.0.0  |
-| PDF 렌더       | pdfjs-dist (조사표 뷰어 + 서버 쪽 수 판독)  | 6.3.289         |
-| 엑셀 생성      | ExcelJS                                     | 4.4.0           |
-| SPSS .sav 생성 | sav-writer                                  | 1.0.0           |
-| 차트           | Recharts + Tremor                           | 2.15.4 / 3.18.7 |
-| 에러 모니터링  | Sentry (@sentry/nextjs)                     | 10.x            |
-| 테스트         | Vitest + Testing Library + MSW + Playwright | 4.1.12 / 1.60   |
-| 언어           | TypeScript (strict)                         | 5.9.3           |
+버전은 `package.json` 이 정본이라 여기 적지 않는다 — 무엇을 어디에 쓰는지만 적는다.
+
+| 영역           | 기술                                        |
+| -------------- | ------------------------------------------- |
+| 프레임워크     | Next.js (App Router, Turbopack)             |
+| UI 라이브러리  | React (React Compiler)                      |
+| 스타일링       | TailwindCSS                                 |
+| 컴포넌트       | shadcn/ui (Radix UI)                        |
+| 상태관리       | Zustand + Immer                             |
+| 데이터 페칭    | TanStack Query                              |
+| RPC            | oRPC (server/client/tanstack-query/openapi) |
+| 스키마 검증    | Zod                                         |
+| 테이블         | TanStack Table                              |
+| 텍스트 측정    | @chenglou/pretext                           |
+| 리치 에디터    | TipTap                                      |
+| 드래그앤드롭   | @dnd-kit                                    |
+| ID 생성        | NanoID                                      |
+| ORM            | Drizzle ORM                                 |
+| DB 드라이버    | postgres (postgres-js)                      |
+| 데이터베이스   | PostgreSQL (Supabase)                       |
+| 파일 저장소    | Cloudflare R2 (S3 호환)                     |
+| 이미지 처리    | sharp                                       |
+| HTML sanitize  | sanitize-html                               |
+| 이메일 발송    | Resend + React Email                        |
+| 이메일 webhook | svix                                        |
+| 백그라운드 잡  | Inngest                                     |
+| 레이트리밋     | @upstash/ratelimit + @upstash/redis         |
+| 로깅           | pino + @axiomhq/js                          |
+| PDF 렌더       | pdfjs-dist (조사표 뷰어 + 서버 쪽 수 판독)  |
+| 엑셀 생성      | ExcelJS                                     |
+| SPSS .sav 생성 | sav-writer                                  |
+| 차트           | Recharts + Tremor                           |
+| 에러 모니터링  | Sentry (@sentry/nextjs)                     |
+| 테스트         | Vitest + Testing Library + MSW + Playwright |
+| 언어           | TypeScript (strict)                         |
 
 > 참고: `xlsx`, `jszip` 의존성은 제거됨(2026-06-05). 엑셀 생성은 ExcelJS, SPSS는 sav-writer 사용.
 > `react-hook-form`, `@tanstack/react-virtual` 도 제거됨(2026-08-22) — 소스 참조가 처음부터 0이었다.
@@ -180,27 +183,6 @@ RSC (서버 컴포넌트)
 
 ---
 
-## API 엔드포인트
-
-```
-POST   /api/rpc/[[...rest]]                    # oRPC 핸들러 — 전체 query/mutation (메인 경로)
-*      /api/v1/[[...rest]]                     # OpenAPI 핸들러 (ENABLE_PUBLIC_API 게이트, 기본 비활성)
-POST   /api/upload/image                       # 이미지 업로드 (multipart, 삭제는 media.deleteImages RPC)
-POST   /api/upload/mail-attachment             # 메일 첨부 업로드 (삭제는 media.* RPC)
-POST   /api/upload/notice-attachment           # 공지 첨부 업로드 (삭제는 media.* RPC)
-POST   /api/upload/survey-document             # 조사표 PDF 업로드 (tmp 로 받고 쪽 수 판독, promote 는 attach RPC)
-GET    /api/surveys/[surveyId]/export          # SPSS(.sav)/엑셀 export (인증 필요, 파일 스트림). raw/raw-split 은 `includeNonRespondents=1` 로 미응답 조사 대상 행 포함 (sav/sps 는 무시). `includePriorAnswers=1` 은 이번 회차에 키가 없는 문항을 이월 응답으로 채운다 — 숨은 문항 strip 뒤에 병합하고 조건 판정은 하지 않되, 「이월값 불러오기」를 끈 문항(`priorAnswerDisabled`)은 현재 빌더 설정 기준으로 비워 둔다. 조사 대상 명단 열은 파라미터 없이 응답 내역 컬럼 설정(`profileColumns`)의 표시 attrs·pii 열을 항상 붙인다 (pii 열이 있으면 PII 평문 → no-store). 시스템ID·순번 열은 없고 온라인 응답 상태 다음에 컨택결과코드(숫자, 마지막 회차)·조사 현황(온라인 완료 또는 코드 1) 열, 손으로 고친 명단 칸은 노랗다 (CONTEXT.md 「응답 메타 열」·「조사 대상 명단 열」) — Raw 행 조립은 라우트 폴더 로컬 raw-export-load.ts (contacts·operations 를 함께 읽어 한 도메인에 못 둔다. 순수 조각은 lib/analytics/raw-export-rows.ts — 이름이 같아 헷갈리던 것을 로더 쪽 개명으로 갈랐다)
-GET    /api/surveys/[surveyId]/export/split-preview  # 분할 export 미리보기 (basis 없으면 `hasContacts` — 다이얼로그가 Raw Data 옵션 영역을 그릴지 판단. basis + `includeNonRespondents=1` 이면 `totalRows`·`nonRespondentRows` 를 더해 반환)
-GET    /api/surveys/[surveyId]/contacts/export # 조사 대상 목록 엑셀 다운로드
-GET    /api/surveys/[surveyId]/demand-summary  # 문항 수요 집계표 엑셀 (화면의 정렬·필터를 쿼리로 받음)
-POST   /api/response/segment                   # 구간 응답 저장 (sendBeacon — REST 유지)
-POST   /api/response/draft                     # 이탈 시점 임시 저장 (sendBeacon — REST 유지)
-*      /api/inngest                            # Inngest 핸들러
-POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
-```
-
----
-
 ## 백그라운드 잡 (Inngest)
 
 `server/workflows/jobs/` — 5개 함수 (`jobs/index.ts` 등록). 잡은 여러 도메인의 쓰기를 조율하므로 workflows 층이 집이다.
@@ -235,7 +217,7 @@ pnpm db:setup-test    # 공유 테스트 DB 를 통째로 다시 만든다 — �
 pnpm db:isolated <이름> # 내 브랜치 전용 테스트 DB(같은 컨테이너, 마이그레이션 전량 재생 = 재생 검증). 실행은 출력된 URL 로
                       #   RUN_REALDB=1 DATABASE_URL=<URL> pnpm exec vitest run <realdb 파일> · 지우기 `--drop`
 pnpm worktree:new <브랜치> [시작점] # .claude/worktrees 에 워크트리 생성 + env·공유 자료 링크 + 설치 (아래 Worktree bootstrap)
-pnpm db:drift         # 실 DB ↔ 레포 객체 대조 (아래 "DB 드리프트 점검")
+pnpm db:drift         # 실 DB ↔ 레포 객체 대조 (supabase/AGENTS.md 「DB 드리프트 점검」)
 pnpm db:size          # 실 DB 테이블·인덱스 크기와 인덱스 사용 횟수 (읽기 전용 — 대량 작업 뒤·배포 전에 보고, 부풀었으면 손으로 REINDEX CONCURRENTLY)
 pnpm inngest          # Inngest 로컬 dev 서버
 pnpm deploy:wait [sha] # main 에 푸시한 커밋의 Vercel 배포가 끝날 때까지 기다렸다가 결과 한 줄 (에이전트는 백그라운드로)
@@ -408,9 +390,9 @@ lib 은 도메인의 집이 아니라 **소유자를 특정할 수 없는 것들
 
 6. **export 라벨**: `cell.exportLabel || generateExportLabel(questionCode_열_행)` 폴백 필수 (빌더는 placeholder만 표시, DB null 흔함).
 
-7. **마이그레이션 — 수동 SQL 관행**: drizzle `_journal.json`은 **0019에서 동결**됐고 0020 이후는 전부 손으로 쓴 `.sql`을 `supabase/migrations/`에 두고 Supabase MCP `apply_migration` 또는 직접 SQL로 적용한다. 새 파일을 추가하면 **반드시 `supabase/migrations/manual-migrations.json`의 `migrations`에 tag(확장자 제외 파일명)를 등재**해야 한다 — 미등재는 추적 불가 drift로 보고 CI(`.github/migration-journal-gate.ts`)가 차단한다. `pnpm db:generate`/`db:push`는 이 관행과 충돌하므로 쓰지 않는다. `TRUNCATE CASCADE` 금지 (ON DELETE SET NULL 무시).
+7. **마이그레이션 — 수동 SQL 관행**: drizzle `_journal.json`은 **0019에서 동결**됐고 0020 이후는 전부 손으로 쓴 `.sql`을 `supabase/migrations/`에 두고 Supabase MCP `apply_migration` 또는 직접 SQL로 적용한다. 새 파일을 추가하면 **반드시 `supabase/migrations/manual-migrations.json`의 `migrations`에 tag(확장자 제외 파일명)를 등재**해야 한다 — 미등재는 추적 불가 drift로 보고 CI(`.github/migration-journal-gate.ts`)가 차단한다. `pnpm db:generate`/`db:push`는 이 관행과 충돌하므로 쓰지 않는다. `TRUNCATE CASCADE` 금지 (ON DELETE SET NULL 무시). **번호를 고르기 전에 `supabase/AGENTS.md` 를 읽을 것** — staging 이 쓰고 있어 비워 둔 번호, 배열 순서, 배포 전·뒤 적용 구분이 거기 있다.
 
-   **새 마이그레이션은 빈 DB에서 재생 가능해야 한다.** 2026-08-19부터 테스트 DB는 `drizzle-kit push`가 아니라 마이그레이션 전량 재생으로 만들어진다(`scripts/setup-test-db.sh`). 즉 `pnpm db:setup-test`(공유 DB)·`pnpm db:isolated <이름>`(전용 DB)이 곧 재생 검증이며, 기존 상태를 전제한 문장을 넣으면 거기서 깨진다. 실 DB에만 있고 레포에 없는 객체는 `pnpm db:drift`가 잡는다 — 자세한 내용은 아래 "DB 드리프트 점검" 참조.
+   **새 마이그레이션은 빈 DB에서 재생 가능해야 한다.** 2026-08-19부터 테스트 DB는 `drizzle-kit push`가 아니라 마이그레이션 전량 재생으로 만들어진다(`scripts/setup-test-db.sh`). 즉 `pnpm db:setup-test`(공유 DB)·`pnpm db:isolated <이름>`(전용 DB)이 곧 재생 검증이며, 기존 상태를 전제한 문장을 넣으면 거기서 깨진다. 실 DB에만 있고 레포에 없는 객체는 `pnpm db:drift`가 잡는다 — 자세한 내용은 `supabase/AGENTS.md`.
 
 8. **앱 생성값 NOT NULL 컬럼은 2단계 배포**: nullable 추가 + 백필(배포 전) → 앱 배포 → `SET NOT NULL`(라이브 후). 한 번에 걸면 구버전 앱 INSERT가 깨진다.
 
@@ -447,33 +429,6 @@ lib 은 도메인의 집이 아니라 **소유자를 특정할 수 없는 것들
 | 마이그레이션 드리프트 | `.github/migration-journal-gate.ts` | 미등재 `.sql` + 접두 번호 중복 차단           |
 
 통합/E2E 잡은 로컬 supabase를 띄워 `pnpm test:integration` + `pnpm test:e2e`(Playwright chromium)를 돌린다.
-
----
-
-## 마이그레이션 번호
-
-파일명 접두는 재생 순서가 **아니다**. 순서는 `manual-migrations.json` 배열이 쥐고 있고 `scripts/migration-order.mjs`가 그대로 따른다 (`0003`·`0009`·`0019`는 이미 접두가 중복된다). 그래도 새 중복은 CI가 막는다 — 번호로 최신을 읽을 수 없게 되고 순서를 눈으로 확인할 수 없기 때문이다. 여러 브랜치가 같은 DB를 만지는 동안 각자 다음 번호를 집으면 이 상태가 재생산된다.
-
-- 새 마이그레이션은 **디스크에 없는 다음 번호**를 쓴다. 다른 브랜치가 이미 쓴 번호도 피한다
-- **나중에 병합하는 쪽은 `manual-migrations.json` 배열 끝에 append 한다.** 번호순으로 끼워 넣지 않는다 — 그 배열이 곧 빈 DB 재생 순서다
-- 그래서 번호와 배열 순서가 어긋나 보일 수 있다. 만지는 객체가 서로소면 정상이다
-- **staging 이 쓰고 있어 main 에서 비워 둔 번호**: `0111`부터 `0123` · `0126`·`0127` · `0133`·`0134` · `0139`·`0140` · `0144` · `0148`부터 `0151`. 새 번호는 이것과 디스크에 있는 번호를 둘 다 피한다
-- **배열 순서를 지켜야 하는 쌍**: 0128 과 0129 는 같은 CHECK(`mobile_table_display_mode`)를 차례로 갈아끼운다 — 0128 을 뒤에 재생하면 `item-cards` 가 빠진다
-- **배포 전후**: 새 앱이 읽거나 쓰는 표·열은 앱 배포 **전**, 옛 앱이 쓰는 것을 지우거나 옛 앱이 계속 옛 값을 쓰는 데이터 이관은 배포 **뒤**에 적용한다. 어느 쪽인지는 파일 머리 주석에 적는다(0143·0153 이 배포 뒤 선례)
-- 번호별 적용 이력은 문서에 두지 않는다 — 파일 머리 주석과 git log 가 그 자리다
-
----
-
-## DB 드리프트 점검
-
-`pnpm db:drift [prod|staging]` — 실 DB와 레포가 만들어내는 DB(로컬 테스트 DB)의 객체 목록을 대조한다. 테이블·컬럼·enum·함수·인덱스·RLS·정책·anon 권한·이벤트 트리거(public 함수 연결 — 활성 상태·연결 함수 본문 해시·SECDEF·search_path·소유자 포함)를 보고, 이름이 같은데 정의가 다른 인덱스도 잡는다. 모든 조회는 READ ONLY 트랜잭션이다.
-
-`migration-journal-gate`는 디렉터리에 있는 `.sql`이 등재됐는지만 본다. **파일로 쓰지 않고 실 DB에 직접 적용한 SQL은 그 검사에 걸리지 않는다** — 실제로 `lookup_contact_by_invite_token` 함수와 컬럼 6개가 그렇게 들어와 몇 달간 방치됐다(2026-08-19 발견·복구). 이 스크립트가 그 반대 방향을 본다.
-
-- 전제: 먼저 `pnpm db:setup-test`로 로컬 테스트 DB가 최신이어야 한다. **로컬 supabase 도커는 워크트리 공용 단일 인스턴스라 다른 브랜치가 재생하면 통째로 바뀐다** — `setup-test-db.sh`가 `_repo_meta.migration_stamp`에 재생 지문을 찍고 `db:drift`가 대조해, 남의 DB와 대조하려 하면 exit 2로 멈춘다 (조용히 틀린 결과를 내던 것을 2026-08-31에 잡았다)
-- 알려진 차이는 `supabase/drift-allowlist.json`에 **사유와 함께** 등재한다. 사유가 `미결`로 시작하면 결정이 남은 항목이며 매 실행 노출된다
-- 비-UNIQUE 성능 인덱스는 동작 무관이라 참고 카운트로만 센다
-- **배포 전에 돌릴 것.** 도구를 만든 것보다 정기적으로 돌리는 것이 값어치다
 
 ---
 

@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
  * 15만 자 경고를 넘었고, 영역 문서로 나눈 직후(4.1만)에도 병합 한 번에 5만 자로 돌아갔다 —
  * update-docs 스킬의 「4만 자 안팎」 규칙만으로는 막지 못했다. 그래서 상한을 테스트로 건다.
  *
- * 영역 문서(`src/**\/AGENTS.md`)는 그 폴더의 파일을 읽을 때 실리므로 상한이 따로다. 넘으면
+ * 영역 문서(`src/**\/AGENTS.md` · `supabase/AGENTS.md`)는 그 폴더의 파일을 읽을 때 실리므로 상한이 따로다. 넘으면
  * 문장을 줄이기 전에 **더 깊은 폴더로 내릴 수 있는지**를 먼저 본다.
  */
 
@@ -35,7 +35,8 @@ function areaDocs(dir = path.join(ROOT, 'src')): string[] {
 
 const charCount = (rel: string) => [...readFileSync(path.join(ROOT, rel), 'utf8')].length;
 
-const AREA_DOCS = areaDocs();
+// 영역 문서가 사는 뿌리 — src 아래와, 마이그레이션·드리프트 문서가 있는 supabase.
+const AREA_DOCS = [...areaDocs(), ...areaDocs(path.join(ROOT, 'supabase'))];
 
 describe('에이전트 문서 크기', () => {
   it('열거가 죽지 않았다 — 영역 문서를 실제로 찾는다', () => {
@@ -115,7 +116,9 @@ describe('영역 문서 배선', () => {
 
   it('루트 "문서 지도"가 영역 문서를 빠짐없이 가리킨다', () => {
     const root = readFileSync(path.join(ROOT, 'AGENTS.md'), 'utf8');
-    const listed = new Set([...root.matchAll(/`(src\/[^`]+\/AGENTS\.md)`/g)].map((m) => m[1]));
+    const listed = new Set(
+      [...root.matchAll(/`((?:src\/[^`]+\/|supabase\/)AGENTS\.md)`/g)].map((m) => m[1]),
+    );
     const missing = AREA_DOCS.filter((rel) => !listed.has(rel));
     expect(missing, '문서 지도 표에 없는 영역 문서 — 다른 도구는 이 표로 문서를 찾는다').toEqual(
       [],
