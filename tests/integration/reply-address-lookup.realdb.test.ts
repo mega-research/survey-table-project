@@ -14,8 +14,11 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
 import { surveys as surveysTable } from '@/db/schema';
-import { mailCampaigns, mailTemplates, webhookEvents } from '@/db/schema/mail';
-import { loadAccountReplyAddresses } from '@/server/mail/services/reply-address-lookup';
+import { mailCampaigns, mailRecipients, mailTemplates, webhookEvents } from '@/db/schema/mail';
+import {
+  findReplyAddressByRespondent,
+  loadAccountReplyAddresses,
+} from '@/server/mail/services/reply-address-lookup';
 import {
   isWebhookEventRecorded,
   recordReplyForwardEvent,
@@ -62,9 +65,9 @@ describe.skipIf(!isLocalDb)('회신 주소 조회 (real local DB)', () => {
       isTest?: boolean;
       archivedAt?: Date | null;
     },
-  ): Promise<void> {
+  ): Promise<string> {
     runNumber += 1;
-    await db.insert(mailCampaigns).values({
+    const [campaign] = await db.insert(mailCampaigns).values({
       surveyId,
       runNumber,
       title: `회차 ${runNumber}`,
@@ -77,6 +80,23 @@ describe.skipIf(!isLocalDb)('회신 주소 조회 (real local DB)', () => {
       replyToSnapshot: values.replyTo,
       archivedAt: values.archivedAt ?? null,
       createdAt: values.createdAt,
+    }).returning({ id: mailCampaigns.id });
+    if (!campaign) throw new Error('campaign 삽입 실패');
+    return campaign.id;
+  }
+
+  /** 수신자 한 줄 — 조사 대상 없이 발송 스냅샷 주소만 심는다(조회가 보는 것은 주소와 보낸 시각뿐이다). */
+  async function seedRecipient(
+    campaignId: string,
+    values: { email: string | null; sentAt?: Date | null; createdAt?: Date; archivedAt?: Date | null },
+  ): Promise<void> {
+    await db.insert(mailRecipients).values({
+      campaignId,
+      emailSnapshot: values.email,
+      status: values.sentAt ? 'sent' : 'queued',
+      sentAt: values.sentAt ?? null,
+      archivedAt: values.archivedAt ?? null,
+      ...(values.createdAt ? { createdAt: values.createdAt } : {}),
     });
   }
 
@@ -195,6 +215,265 @@ describe.skipIf(!isLocalDb)('회신 주소 조회 (real local DB)', () => {
   it('쓴 적 없는 보낸이 계정은 전달 주소가 없다', async () => {
     expect(await lookup(newAccount())).toEqual({ source: null, addresses: [] });
     expect(await lookup('')).toEqual({ source: null, addresses: [] });
+  });
+
+  // ── 응답자 주소로 찾기 ────────────────────────────────────────────────────────
+
+  const lookupByRespondent = (account: string, respondentAddress: string) =>
+    findReplyAddressByRespondent(account, respondentAddress, { sendDomain: SEND_DOMAIN });
+  const NOT_FOUND = { source: null, addresses: [] };
+
+  it('응답자 주소: 같은 보낸이 계정이 설문마다 다른 회신 주소를 쓰면 그 응답자에게 보낸 회차의 회신 주소 하나만 돌려준다', async () => {
+    const account = newAccount();
+    const surveyA = await seedSurvey();
+    const surveyB = await seedSurvey();
+    const campaignA = await seedCampaign(surveyA, { fromLocal: account, replyTo: 'abc@example.co.kr', createdAt: daysAgo(10) });
+    const campaignB = await seedCampaign(surveyB, { fromLocal: account, replyTo: 'cba@example.co.kr', createdAt: daysAgo(5) });
+    await seedRecipient(campaignA, { email: 'kim@corp.co.kr', sentAt: daysAgo(10) });
+    await seedRecipient(campaignB, { email: 'lee@corp.co.kr', sentAt: daysAgo(5) });
+
+    expect(await lookupByRespondent(account, 'kim@corp.co.kr')).toEqual({
+      source: 'respondent',
+      addresses: ['abc@example.co.kr'],
+    });
+    expect(await lookupByRespondent(account, 'lee@corp.co.kr')).toEqual({
+      source: 'respondent',
+      addresses: ['cba@example.co.kr'],
+    });
+  });
+
+  it('응답자 주소: 대체 발송·단건·테스트 회차와 보관된 회차·보관된 수신자도 본다', async () => {
+    const account = newAccount();
+    const surveyId = await seedSurvey();
+    const cases = [
+      { address: 'fallback@corp.co.kr', replyTo: 'r-fallback@example.co.kr', kind: 'fallback' as const },
+      { address: 'single@corp.co.kr', replyTo: 'r-single@example.co.kr', kind: 'single' as const },
+      { address: 'test@corp.co.kr', replyTo: 'r-test@example.co.kr', isTest: true },
+      { address: 'archived@corp.co.kr', replyTo: 'r-archived@example.co.kr', archivedAt: daysAgo(1) },
+    ];
+    for (const item of cases) {
+      const campaignId = await seedCampaign(surveyId, {
+        fromLocal: account,
+        replyTo: item.replyTo,
+        createdAt: daysAgo(3),
+        ...(item.kind ? { kind: item.kind } : {}),
+        ...(item.isTest ? { isTest: true } : {}),
+        ...(item.archivedAt ? { archivedAt: item.archivedAt } : {}),
+      });
+      await seedRecipient(campaignId, {
+        email: item.address,
+        sentAt: daysAgo(3),
+        archivedAt: item.archivedAt ?? null,
+      });
+    }
+
+    for (const item of cases) {
+      expect(await lookupByRespondent(account, item.address)).toEqual({
+        source: 'respondent',
+        addresses: [item.replyTo],
+      });
+    }
+  });
+
+  it('응답자 주소: 1년이 넘은 발송 회차의 수신자도 찾는다 — 기간 제한은 계정 기준에만 있다', async () => {
+    const account = newAccount();
+    const surveyId = await seedSurvey();
+    const campaignId = await seedCampaign(surveyId, { fromLocal: account, replyTo: 'old@example.co.kr', createdAt: daysAgo(500) });
+    await seedRecipient(campaignId, { email: 'kim@corp.co.kr', sentAt: daysAgo(500), createdAt: daysAgo(500) });
+
+    expect(await lookupByRespondent(account, 'kim@corp.co.kr')).toEqual({
+      source: 'respondent',
+      addresses: ['old@example.co.kr'],
+    });
+  });
+
+  it('응답자 주소: 칸 안 여러 주소는 주소 나누기 규칙으로 나눠 하나하나와 비교한다', async () => {
+    const account = newAccount();
+    const surveyId = await seedSurvey();
+    const campaignId = await seedCampaign(surveyId, { fromLocal: account, replyTo: 'help@example.co.kr', createdAt: daysAgo(2) });
+    await seedRecipient(campaignId, { email: 'ceo@corp.co.kr / staff@corp.co.kr', sentAt: daysAgo(2) });
+    await seedRecipient(campaignId, { email: 'a@two.co.kr, b@two.co.kr;c@two.co.kr', sentAt: daysAgo(2) });
+    await seedRecipient(campaignId, { email: 'first@line.co.kr\nsecond@line.co.kr', sentAt: daysAgo(2) });
+    // 주소 가운데서 줄이 바뀐 칸 — 발송 때 한 주소로 붙여 보낸다.
+    await seedRecipient(campaignId, { email: 'broken@\nwrap.co.kr', sentAt: daysAgo(2) });
+
+    const found = { source: 'respondent', addresses: ['help@example.co.kr'] };
+    for (const address of [
+      'ceo@corp.co.kr',
+      'staff@corp.co.kr',
+      'a@two.co.kr',
+      'b@two.co.kr',
+      'c@two.co.kr',
+      'first@line.co.kr',
+      'second@line.co.kr',
+      'broken@wrap.co.kr',
+    ]) {
+      expect(await lookupByRespondent(account, address), address).toEqual(found);
+    }
+  });
+
+  it('응답자 주소: 보낸이 계정과 주소의 대소문자를 무시한다', async () => {
+    const account = newAccount();
+    const surveyId = await seedSurvey();
+    const campaignId = await seedCampaign(surveyId, {
+      fromLocal: account.toUpperCase(),
+      replyTo: 'help@example.co.kr',
+      createdAt: daysAgo(2),
+    });
+    await seedRecipient(campaignId, { email: 'Kim.Eungdap@Corp.co.kr', sentAt: daysAgo(2) });
+
+    const found = { source: 'respondent', addresses: ['help@example.co.kr'] };
+    expect(await lookupByRespondent(account, 'kim.eungdap@corp.co.kr')).toEqual(found);
+    expect(await lookupByRespondent(account.toUpperCase(), ' KIM.EUNGDAP@CORP.CO.KR ')).toEqual(found);
+  });
+
+  it('응답자 주소: 부분 문자열로는 일치하지 않는다', async () => {
+    const account = newAccount();
+    const surveyId = await seedSurvey();
+    const campaignId = await seedCampaign(surveyId, { fromLocal: account, replyTo: 'help@example.co.kr', createdAt: daysAgo(2) });
+    await seedRecipient(campaignId, { email: 'akim@x.com', sentAt: daysAgo(2) });
+    await seedRecipient(campaignId, { email: 'kim@x.com.au', sentAt: daysAgo(2) });
+    await seedRecipient(campaignId, { email: 'lee@y.com / parkkim@x.com', sentAt: daysAgo(2) });
+
+    expect(await lookupByRespondent(account, 'kim@x.com')).toEqual(NOT_FOUND);
+    expect(await lookupByRespondent(account, 'akim@x.com')).toEqual({
+      source: 'respondent',
+      addresses: ['help@example.co.kr'],
+    });
+  });
+
+  it('응답자 주소: 주소 속 밑줄·퍼센트는 글자 그대로 비교한다', async () => {
+    const account = newAccount();
+    const surveyId = await seedSurvey();
+    const campaignId = await seedCampaign(surveyId, { fromLocal: account, replyTo: 'help@example.co.kr', createdAt: daysAgo(2) });
+    await seedRecipient(campaignId, { email: 'kimXlee@x.com', sentAt: daysAgo(2) });
+
+    expect(await lookupByRespondent(account, 'kim_lee@x.com')).toEqual(NOT_FOUND);
+    expect(await lookupByRespondent(account, 'kim%lee@x.com')).toEqual(NOT_FOUND);
+    expect(await lookupByRespondent(account, '%@x.com')).toEqual(NOT_FOUND);
+  });
+
+  it('응답자 주소: 여러 회차에 걸리면 가장 최근에 보낸 수신자의 회차를 쓴다 — 회차를 만든 순서가 아니다', async () => {
+    const account = newAccount();
+    const surveyA = await seedSurvey();
+    const surveyB = await seedSurvey();
+    // 설문 B 의 회차를 나중에 만들었지만, 이 응답자에게는 설문 A 의 회차가 더 최근에 보냈다.
+    const campaignA = await seedCampaign(surveyA, { fromLocal: account, replyTo: 'abc@example.co.kr', createdAt: daysAgo(30) });
+    const campaignB = await seedCampaign(surveyB, { fromLocal: account, replyTo: 'cba@example.co.kr', createdAt: daysAgo(20) });
+    await seedRecipient(campaignA, { email: 'kim@corp.co.kr', sentAt: daysAgo(3), createdAt: daysAgo(30) });
+    await seedRecipient(campaignB, { email: 'kim@corp.co.kr', sentAt: daysAgo(15), createdAt: daysAgo(20) });
+
+    expect(await lookupByRespondent(account, 'kim@corp.co.kr')).toEqual({
+      source: 'respondent',
+      addresses: ['abc@example.co.kr'],
+    });
+  });
+
+  it('응답자 주소: 아직 보내지 않은 수신자는 보낸 수신자보다 뒤에 본다', async () => {
+    const account = newAccount();
+    const surveyA = await seedSurvey();
+    const surveyB = await seedSurvey();
+    const sent = await seedCampaign(surveyA, { fromLocal: account, replyTo: 'abc@example.co.kr', createdAt: daysAgo(30) });
+    const queued = await seedCampaign(surveyB, { fromLocal: account, replyTo: 'cba@example.co.kr', createdAt: daysAgo(1) });
+    await seedRecipient(sent, { email: 'kim@corp.co.kr', sentAt: daysAgo(30), createdAt: daysAgo(30) });
+    await seedRecipient(queued, { email: 'kim@corp.co.kr', sentAt: null, createdAt: daysAgo(1) });
+    await seedRecipient(queued, { email: 'only-queued@corp.co.kr', sentAt: null, createdAt: daysAgo(1) });
+
+    // 응답자가 받은 메일은 설문 A 의 것뿐이다.
+    expect(await lookupByRespondent(account, 'kim@corp.co.kr')).toEqual({
+      source: 'respondent',
+      addresses: ['abc@example.co.kr'],
+    });
+    // 보낸 기록이 하나도 없으면 대기 중인 수신자의 회차라도 쓴다.
+    expect(await lookupByRespondent(account, 'only-queued@corp.co.kr')).toEqual({
+      source: 'respondent',
+      addresses: ['cba@example.co.kr'],
+    });
+  });
+
+  it('응답자 주소: 걸린 회차의 회신 주소가 비었거나 발송 전용 도메인이면 건너뛰고 다음으로 최근 것을 본다', async () => {
+    const account = newAccount();
+    const surveyId = await seedSurvey();
+    const replies: Array<[string | null, number]> = [
+      [null, 1],
+      ['   ', 2],
+      [`${account}@${SEND_DOMAIN}`, 3],
+      ['help@example.co.kr', 4],
+      ['older@example.co.kr', 5],
+    ];
+    for (const [replyTo, days] of replies) {
+      const campaignId = await seedCampaign(surveyId, { fromLocal: account, replyTo, createdAt: daysAgo(days) });
+      await seedRecipient(campaignId, { email: 'kim@corp.co.kr', sentAt: daysAgo(days) });
+    }
+
+    expect(await lookupByRespondent(account, 'kim@corp.co.kr')).toEqual({
+      source: 'respondent',
+      addresses: ['help@example.co.kr'],
+    });
+  });
+
+  it('응답자 주소: 걸린 회차에 쓸 회신 주소가 하나도 없으면 못 찾은 것이다', async () => {
+    const account = newAccount();
+    const surveyId = await seedSurvey();
+    const empty = await seedCampaign(surveyId, { fromLocal: account, replyTo: null, createdAt: daysAgo(1) });
+    const looped = await seedCampaign(surveyId, { fromLocal: account, replyTo: `${account}@${SEND_DOMAIN.toUpperCase()}`, createdAt: daysAgo(2) });
+    await seedRecipient(empty, { email: 'kim@corp.co.kr', sentAt: daysAgo(1) });
+    await seedRecipient(looped, { email: 'kim@corp.co.kr', sentAt: daysAgo(2) });
+
+    expect(await lookupByRespondent(account, 'kim@corp.co.kr')).toEqual(NOT_FOUND);
+  });
+
+  it('응답자 주소: 다른 보낸이 계정의 발송 회차는 보지 않는다', async () => {
+    const account = newAccount();
+    const other = newAccount();
+    const surveyId = await seedSurvey();
+    const mine = await seedCampaign(surveyId, { fromLocal: account, replyTo: 'mine@example.co.kr', createdAt: daysAgo(9) });
+    const theirs = await seedCampaign(surveyId, { fromLocal: other, replyTo: 'theirs@example.co.kr', createdAt: daysAgo(1) });
+    await seedRecipient(mine, { email: 'kim@corp.co.kr', sentAt: daysAgo(9) });
+    await seedRecipient(theirs, { email: 'kim@corp.co.kr', sentAt: daysAgo(1) });
+    await seedRecipient(theirs, { email: 'lee@corp.co.kr', sentAt: daysAgo(1) });
+
+    // 다른 계정이 더 최근에 보냈어도 이 계정의 회차만 본다.
+    expect(await lookupByRespondent(account, 'kim@corp.co.kr')).toEqual({
+      source: 'respondent',
+      addresses: ['mine@example.co.kr'],
+    });
+    // 다른 계정의 수신자일 뿐이면 못 찾는다.
+    expect(await lookupByRespondent(account, 'lee@corp.co.kr')).toEqual(NOT_FOUND);
+  });
+
+  it('응답자 주소: 수신자 기록에 없는 주소·주소 모양이 아닌 값·빈 계정은 못 찾은 것이다', async () => {
+    const account = newAccount();
+    const surveyId = await seedSurvey();
+    const campaignId = await seedCampaign(surveyId, { fromLocal: account, replyTo: 'help@example.co.kr', createdAt: daysAgo(2) });
+    await seedRecipient(campaignId, { email: 'kim@corp.co.kr', sentAt: daysAgo(2) });
+    await seedRecipient(campaignId, { email: null, sentAt: null });
+
+    expect(await lookupByRespondent(account, 'stranger@corp.co.kr')).toEqual(NOT_FOUND);
+    expect(await lookupByRespondent(account, '')).toEqual(NOT_FOUND);
+    expect(await lookupByRespondent(account, 'corp.co.kr')).toEqual(NOT_FOUND);
+    expect(await lookupByRespondent('', 'kim@corp.co.kr')).toEqual(NOT_FOUND);
+  });
+
+  it('응답자 주소: 부분 문자열로만 걸리는 수신자가 한 쪽을 넘게 앞에 있어도 그 뒤의 정확한 수신자를 찾는다', async () => {
+    const account = newAccount();
+    const surveyId = await seedSurvey();
+    const noise = await seedCampaign(surveyId, { fromLocal: account, replyTo: 'noise@example.co.kr', createdAt: daysAgo(1) });
+    const real = await seedCampaign(surveyId, { fromLocal: account, replyTo: 'help@example.co.kr', createdAt: daysAgo(40) });
+    await db.insert(mailRecipients).values(
+      Array.from({ length: 230 }, (_, index) => ({
+        campaignId: noise,
+        emailSnapshot: `p${index}kim@x.com`,
+        status: 'sent' as const,
+        sentAt: daysAgo(1),
+      })),
+    );
+    await seedRecipient(real, { email: 'kim@x.com', sentAt: daysAgo(40), createdAt: daysAgo(40) });
+
+    expect(await lookupByRespondent(account, 'kim@x.com')).toEqual({
+      source: 'respondent',
+      addresses: ['help@example.co.kr'],
+    });
   });
 
   it('웹훅 장부: 적기 전에는 없고, 적은 뒤에는 있다 — 결과를 갈라 적는다', async () => {
