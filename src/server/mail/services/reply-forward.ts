@@ -15,7 +15,11 @@ import {
   type ForwardMail,
   type ReceivedAttachment,
 } from '../domain/reply-forward';
-import { loadAccountReplyAddresses, type ReplyAddressSource } from './reply-address-lookup';
+import {
+  findReplyAddressByRespondent,
+  loadAccountReplyAddresses,
+  type ReplyAddressSource,
+} from './reply-address-lookup';
 import { isWebhookEventRecorded, recordReplyForwardEvent } from './reply-forward-ledger';
 import { getResend } from './resend-client';
 
@@ -82,10 +86,15 @@ export interface ForwardAddressResolution {
 
 /**
  * 전달 주소 조회 — 받는 주소에서 뽑은 보낸이 계정마다 회신 주소를 찾아 한 통의 받는 사람으로 합친다.
- * 지금은 계정 기준(`loadAccountReplyAddresses`)뿐이다. 응답자 주소로 찾는 경로는 계정 루프 안에서 먼저 시도하면 된다.
+ *
+ * 계정마다 먼저 응답자 주소로 찾는다(그 주소에 가장 최근에 보낸 발송 회차의 회신 주소 한 곳). 못 찾으면
+ * 계정 기준(`loadAccountReplyAddresses` — 그 계정이 쓴 회신 주소 전부)으로 물러난다.
+ * 응답자 주소는 「어느 회차인가」를 고르는 재료일 뿐이고, 전달 주소는 어느 경로든 DB 의 회신 주소다.
  */
 export async function resolveForwardAddresses(input: {
   senderAccounts: readonly string[];
+  /** 답장을 보낸 주소. 없으면 계정 기준으로만 찾는다. */
+  respondentAddress?: string;
   sendDomain: string;
   now?: Date;
 }): Promise<ForwardAddressResolution> {
@@ -94,7 +103,15 @@ export async function resolveForwardAddresses(input: {
   const sources: ReplyAddressSource[] = [];
   let senderAccount: string | null = null;
   for (const account of input.senderAccounts) {
-    const found = await loadAccountReplyAddresses(account, { sendDomain: input.sendDomain, now });
+    const byRespondent = input.respondentAddress
+      ? await findReplyAddressByRespondent(account, input.respondentAddress, {
+          sendDomain: input.sendDomain,
+        })
+      : null;
+    const found =
+      byRespondent && byRespondent.source !== null && byRespondent.addresses.length > 0
+        ? byRespondent
+        : await loadAccountReplyAddresses(account, { sendDomain: input.sendDomain, now });
     if (found.source === null || found.addresses.length === 0) continue;
     senderAccount ??= account;
     lists.push(found.addresses);
@@ -211,7 +228,11 @@ export async function forwardReceivedReply(event: ReplyForwardEvent): Promise<Re
   if (!sender) return skip(event, 'unreadable_sender');
   if (findCompanyDomainMatch(sender.address, sendDomain, [])) return skip(event, 'company_domain');
 
-  const resolution = await resolveForwardAddresses({ senderAccounts, sendDomain });
+  const resolution = await resolveForwardAddresses({
+    senderAccounts,
+    respondentAddress: sender.address,
+    sendDomain,
+  });
   if (resolution.addresses.length === 0 || resolution.senderAccount === null) {
     return skip(event, 'unused_sender_account');
   }
