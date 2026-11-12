@@ -7,6 +7,7 @@
 import { addressParser, decodeWords } from 'postal-mime';
 
 import { MAX_RECIPIENTS_PER_MAIL, splitEmailAddresses } from '@/lib/mail/split-email-addresses';
+import { formatBytes } from '@/lib/utils';
 
 /** 전달 메일에 붙이는 발송 태그 — 상태 알림(webhook)에서 회신 전달 메일을 가려내는 표식. */
 export const REPLY_FORWARD_TAG = { name: 'kind', value: 'reply-forward' } as const;
@@ -237,21 +238,158 @@ function toForwardAttachment(attachment: ReceivedAttachment, index: number): For
 }
 
 /**
- * 받은 메일을 전달 메일의 모양으로 바꾼다.
- * 받는 사람은 전달 주소뿐이다 — 원본의 참조·다른 받는 사람은 옮기지 않는다.
+ * 그대로 넘길 수 있는 크기 — 인코딩한 첨부 합계 + 본문 바이트의 상한.
+ * 발송 서비스의 한도는 인코딩 후 40MB 다. 거기서 5MB 를 남긴다: 발송 서비스가 첨부를 메일로 엮을 때 붙는
+ * 줄바꿈(약 3%)과 본문 재인코딩(한글 본문은 최대 3배)·헤더 몫이다. 그래도 넘치면 발송 API 가 거절하고,
+ * 그때는 서비스가 첨부를 빼고 한 번 더 보낸다(`services/reply-forward`).
  */
-export function buildForwardMail(input: {
+export const FORWARD_SIZE_BUDGET_BYTES = 35 * 1024 * 1024;
+
+type SizedReply = Pick<ReceivedReply, 'html' | 'text' | 'attachments'>;
+
+function utf8ByteLength(value: string | null): number {
+  return value ? new TextEncoder().encode(value).length : 0;
+}
+
+/** 전달 메일의 크기 — 인코딩한(base64) 첨부 합계와 본문(HTML·텍스트)의 바이트. */
+export function measureForwardSize(reply: SizedReply): number {
+  const attachments = reply.attachments.reduce((sum, a) => sum + a.contentBase64.length, 0);
+  return attachments + utf8ByteLength(reply.html) + utf8ByteLength(reply.text);
+}
+
+/** 첨부를 빼고 보내야 하는가. 첨부가 없으면 뺄 것이 없으니 늘 아니다. */
+export function exceedsForwardSizeBudget(reply: SizedReply): boolean {
+  return reply.attachments.length > 0 && measureForwardSize(reply) > FORWARD_SIZE_BUDGET_BYTES;
+}
+
+/** 함께 전달하지 못한 첨부 하나 — 안내문의 재료. */
+export interface OmittedAttachment {
+  filename: string;
+  /** 인코딩 전(원래 파일) 크기. */
+  sizeBytes: number;
+  /** 본문 속 이미지인가(내용 ID 가 있는 첨부). */
+  inline: boolean;
+}
+
+function decodedByteLength(base64: string): number {
+  const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
+  return Math.max(0, Math.floor((base64.length * 3) / 4) - padding);
+}
+
+/** 받은 메일의 첨부 전부를 「빠진 파일」 목록으로. 이름은 전달할 때 붙였을 이름과 같다. */
+export function listOmittedAttachments(
+  attachments: readonly ReceivedAttachment[],
+): OmittedAttachment[] {
+  return attachments.map((attachment, index) => ({
+    filename: attachmentFilename(attachment, index),
+    sizeBytes: decodedByteLength(attachment.contentBase64),
+    inline: Boolean(attachment.contentId?.trim()),
+  }));
+}
+
+/** 안내문에 이름을 적는 파일 수 상한 — 넘는 것은 개수로만 알린다. */
+const MAX_NOTICE_FILES = 20;
+const NOTICE_FILENAME_MAX_LENGTH = 120;
+const NOTICE_HEADLINE = '첨부 파일이 커서 함께 전달하지 못했습니다.';
+const NOTICE_ORIGIN = '원본은 메일 발송 서비스(Resend) 수신 목록에 있습니다.';
+const NOTICE_TEXT_RULE = '----------------------------------------';
+
+/** 파일 이름은 응답자가 정한 글자다 — 줄바꿈·제어 문자가 안내의 줄을 흉내 내지 못하게 걷어내고 길이를 자른다. */
+function noticeFilename(filename: string): string {
+  const cleaned = filename
+    .replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return Array.from(cleaned).slice(0, NOTICE_FILENAME_MAX_LENGTH).join('');
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * 한도 초과 안내문 — 전달 메일 본문 맨 위에 붙인다.
+ * 본문 속 이미지도 첨부와 함께 빠지므로 목록에 넣고 따로 표시한다(본문에서 그 자리가 깨져 보인다).
+ * 텍스트 안내는 원래 본문과 갈리도록 구분선과 빈 줄로 끝난다.
+ */
+export function buildOmittedAttachmentsNotice(files: readonly OmittedAttachment[]): {
+  html: string;
+  text: string;
+} {
+  const total = files.reduce((sum, file) => sum + file.sizeBytes, 0);
+  const summary = `빠진 파일 (${files.length}개, 합계 ${formatBytes(total)})`;
+  const labels = files.slice(0, MAX_NOTICE_FILES).map((file) => {
+    const detail = file.inline ? `${formatBytes(file.sizeBytes)}, 본문 속 이미지` : formatBytes(file.sizeBytes);
+    return `${noticeFilename(file.filename)} (${detail})`;
+  });
+  if (files.length > MAX_NOTICE_FILES) labels.push(`외 ${files.length - MAX_NOTICE_FILES}개`);
+
+  const text = [
+    `[안내] ${NOTICE_HEADLINE}`,
+    summary,
+    ...labels.map((label) => `- ${label}`),
+    NOTICE_ORIGIN,
+    NOTICE_TEXT_RULE,
+    '',
+    '',
+  ].join('\n');
+  const html = [
+    '<div style="margin:0 0 16px;padding:12px 16px;border:1px solid #d1d5db;background:#f9fafb;color:#111827;font-size:14px;line-height:1.6;">',
+    `<p style="margin:0 0 8px;font-weight:bold;">${NOTICE_HEADLINE}</p>`,
+    `<p style="margin:0;">${summary}</p>`,
+    '<ul style="margin:4px 0 8px;padding-left:20px;">',
+    ...labels.map((label) => `<li>${escapeHtml(label)}</li>`),
+    '</ul>',
+    `<p style="margin:0;">${NOTICE_ORIGIN}</p>`,
+    '</div>',
+  ].join('');
+  return { html, text };
+}
+
+const BODY_OPEN_TAG = /<body\b[^>]*>/i;
+
+/** 안내를 HTML 본문 맨 위에 — 온전한 문서면 body 여는 태그 바로 뒤, 조각이면 맨 앞. */
+function prependHtmlNotice(html: string, notice: string): string {
+  const match = BODY_OPEN_TAG.exec(html);
+  if (!match) return `${notice}${html}`;
+  const at = match.index + match[0].length;
+  return `${html.slice(0, at)}${notice}${html.slice(at)}`;
+}
+
+export interface ForwardMailInput {
   reply: ReceivedReply;
   /** 보낸 사람 주소에 쓰는 보낸이 계정. */
   senderAccount: string;
   sendDomain: string;
   forwardAddresses: readonly string[];
-}): ForwardMail {
+  /**
+   * 첨부(본문 속 이미지 포함)를 하나도 싣지 않고 본문 맨 위에 안내를 붙인다 — 발송 한도를 넘을 때.
+   * 첨부가 없는 메일에는 아무 일도 하지 않는다.
+   */
+  omitAttachments?: boolean;
+}
+
+/**
+ * 받은 메일을 전달 메일의 모양으로 바꾼다.
+ * 받는 사람은 전달 주소뿐이다 — 원본의 참조·다른 받는 사람은 옮기지 않는다.
+ */
+export function buildForwardMail(input: ForwardMailInput): ForwardMail {
   const { reply } = input;
   const replyTo = dedupeAddresses(reply.replyTo).slice(0, MAX_REPLY_TO_ADDRESSES);
-  const body: ForwardBody = reply.html
-    ? { html: reply.html, ...(reply.text ? { text: reply.text } : {}) }
-    : { text: reply.text || NO_BODY_PLACEHOLDER };
+  const omit = input.omitAttachments === true && reply.attachments.length > 0;
+  const notice = omit
+    ? buildOmittedAttachmentsNotice(listOmittedAttachments(reply.attachments))
+    : null;
+  const html = reply.html && notice ? prependHtmlNotice(reply.html, notice.html) : reply.html;
+  const text = reply.text ? `${notice?.text ?? ''}${reply.text}` : reply.text;
+  const body: ForwardBody = html
+    ? { html, ...(text ? { text } : {}) }
+    : { text: text || `${notice?.text ?? ''}${NO_BODY_PLACEHOLDER}` };
   return {
     from: formatForwardFrom({
       senderName: reply.senderName,
@@ -263,7 +401,7 @@ export function buildForwardMail(input: {
     replyTo: replyTo.length > 0 ? replyTo : [reply.senderAddress],
     subject: reply.subject?.trim() ? reply.subject : NO_SUBJECT_PLACEHOLDER,
     ...body,
-    attachments: reply.attachments.map(toForwardAttachment),
+    attachments: omit ? [] : reply.attachments.map(toForwardAttachment),
     tags: [{ ...REPLY_FORWARD_TAG }],
   };
 }

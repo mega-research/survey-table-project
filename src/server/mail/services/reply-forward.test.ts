@@ -6,6 +6,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { FORWARD_SIZE_BUDGET_BYTES } from '../domain/reply-forward';
 import { forwardReceivedReply } from './reply-forward';
 import { loadAccountReplyAddresses } from './reply-address-lookup';
 import { isWebhookEventRecorded, recordReplyForwardEvent } from './reply-forward-ledger';
@@ -543,5 +544,243 @@ describe('forwardReceivedReply — 건별 로그', () => {
     for (const fragment of [...PRIVATE_FRAGMENTS, 'example.co.kr']) {
       expect(allLogText().toLowerCase()).not.toContain(fragment.toLowerCase());
     }
+  });
+});
+
+describe('forwardReceivedReply — 첨부가 한도를 넘을 때', () => {
+  const NOTICE_HEADLINE = '첨부 파일이 커서 함께 전달하지 못했습니다';
+  const NOTICE_ORIGIN = '원본은 메일 발송 서비스(Resend) 수신 목록에 있습니다';
+
+  /** 텍스트 본문 한 줄과 PDF 첨부 하나(지정한 바이트)가 든 원본. 첨부는 실제 메일처럼 76자 줄로 싣는다. */
+  function rawWithAttachment(bodyText: string, attachmentBytes: number): Buffer {
+    const encoded = Buffer.alloc(attachmentBytes, 0x41).toString('base64');
+    return Buffer.from(
+      [
+        'From: =?UTF-8?B?6rmA7J2R64u1?= <kim@corp.co.kr>',
+        'To: survey@send.example.co.kr',
+        'Subject: scan',
+        'MIME-Version: 1.0',
+        'Content-Type: multipart/mixed; boundary="mix"',
+        '',
+        '--mix',
+        'Content-Type: text/plain; charset=utf-8',
+        '',
+        bodyText,
+        '--mix',
+        'Content-Type: application/pdf; name="big.pdf"',
+        'Content-Transfer-Encoding: base64',
+        'Content-Disposition: attachment; filename="big.pdf"',
+        '',
+        encoded.replace(/(.{76})/g, '$1\r\n'),
+        '--mix--',
+        '',
+      ].join('\r\n'),
+      'ascii',
+    );
+  }
+
+  /**
+   * 풀어 낸 텍스트 본문은 끝에 줄바꿈이 하나 붙는다 — 「abc」는 4바이트, 「abcd」는 5바이트.
+   * 인코딩한 첨부가 (한도 - 4)글자면 「abc」 메일은 한도와 꼭 같고 「abcd」 메일은 1바이트 넘는다.
+   */
+  const ENCODED_ATTACHMENT_LENGTH = FORWARD_SIZE_BUDGET_BYTES - 4;
+  const ATTACHMENT_BYTES = (ENCODED_ATTACHMENT_LENGTH / 4) * 3;
+
+  function sentRequestAt(index: number) {
+    const call = sendMock.mock.calls[index];
+    if (!call) throw new Error(`${index + 1}번째 발송 요청이 없다`);
+    return { mail: call[0] as Record<string, unknown>, options: call[1] as Record<string, unknown> };
+  }
+
+  function sizeRejection(overrides: { name?: string; statusCode?: number; message?: string } = {}) {
+    return {
+      data: null,
+      error: { name: 'application_error', statusCode: 413, message: 'Request Entity Too Large', ...overrides },
+      headers: null,
+    };
+  }
+
+  const SENT = { data: { id: 'out-1' }, error: null, headers: null };
+
+  it('경계 바로 아래 — 인코딩한 첨부와 본문이 한도와 꼭 같으면 01 과 똑같이 첨부째 넘긴다', async () => {
+    fetchMock.mockImplementation(async () => rawResponse(rawWithAttachment('abc', ATTACHMENT_BYTES)));
+
+    const result = await forwardReceivedReply(EVENT);
+
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    const { mail, options } = sentRequest();
+    const attachments = mail['attachments'] as Array<{ filename: string; content: string }>;
+    expect(attachments).toHaveLength(1);
+    expect(attachments[0]?.filename).toBe('big.pdf');
+    // 이 메일이 정말 한도와 꼭 같은 크기인지 — 경계 계산이 어긋나면 여기서 드러난다.
+    const text = String(mail['text']);
+    expect((attachments[0]?.content.length ?? 0) + Buffer.byteLength(text)).toBe(FORWARD_SIZE_BUDGET_BYTES);
+    expect(text).not.toContain(NOTICE_HEADLINE);
+    expect(options).toEqual({ idempotencyKey: 'reply-forward/recv-1' });
+    expect(result).toEqual({ outcome: 'forwarded', forwardCount: 1, sources: ['campaign'], alreadySent: false });
+    expect(logMock.info.mock.calls[0]?.[0]).not.toHaveProperty('attachmentsOmitted');
+  }, 30_000);
+
+  it('경계 바로 위 — 1바이트라도 넘으면 첨부 없이 보내고 본문 맨 위에 안내와 빠진 파일의 이름·크기를 붙인다', async () => {
+    fetchMock.mockImplementation(async () => rawResponse(rawWithAttachment('abcd', ATTACHMENT_BYTES)));
+
+    const result = await forwardReceivedReply(EVENT);
+
+    // 한도를 넘는 메일은 발송 서비스에 올려 보지도 않는다 — 한 번만 보낸다.
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    const { mail, options } = sentRequest();
+    expect(mail['attachments']).toEqual([]);
+    const text = String(mail['text']);
+    expect(text.startsWith(`[안내] ${NOTICE_HEADLINE}`)).toBe(true);
+    expect(text).toContain('- big.pdf (26.2 MB)');
+    expect(text).toContain(NOTICE_ORIGIN);
+    expect(text.trimEnd().endsWith('abcd')).toBe(true);
+    expect(mail).not.toHaveProperty('html');
+    // 받는 사람·보낸 사람 표기·답장 주소·제목·태그는 01 과 같다.
+    expect(mail).toMatchObject({
+      from: '김응답 <survey@send.example.co.kr>',
+      to: ['help@example.co.kr'],
+      replyTo: ['kim@corp.co.kr'],
+      subject: '설문지 회신',
+      tags: [{ name: 'kind', value: 'reply-forward' }],
+    });
+    expect(options).toEqual({ idempotencyKey: 'reply-forward/recv-1/no-attachments' });
+    expect(result).toEqual({
+      outcome: 'forwarded',
+      forwardCount: 1,
+      sources: ['campaign'],
+      alreadySent: false,
+      attachmentsOmitted: true,
+    });
+    expect(recordReplyForwardEvent).toHaveBeenCalledWith('svix-1', 'forwarded');
+  }, 30_000);
+
+  it.each<[string, { name?: string; statusCode?: number; message?: string }]>([
+    ['413 응답', {}],
+    ['크기를 말하는 검증 오류', { name: 'validation_error', statusCode: 422, message: 'Attachment size exceeds the 40MB limit' }],
+  ])('발송 API 가 크기 초과로 거절하면(%s) 첨부 없이 한 번 더 보낸다', async (_name, rejection) => {
+    sendMock.mockResolvedValueOnce(sizeRejection(rejection)).mockResolvedValueOnce(SENT);
+
+    const result = await forwardReceivedReply(EVENT);
+
+    expect(sendMock).toHaveBeenCalledTimes(2);
+    const first = sentRequestAt(0);
+    expect(first.mail['attachments']).toHaveLength(2);
+    expect(first.options).toEqual({ idempotencyKey: 'reply-forward/recv-1' });
+
+    // 같은 멱등 키로 내용이 다른 요청은 거절되므로 재발송은 다른 키로 나간다.
+    const second = sentRequestAt(1);
+    expect(second.options).toEqual({ idempotencyKey: 'reply-forward/recv-1/no-attachments' });
+    expect(second.mail['attachments']).toEqual([]);
+    const html = String(second.mail['html']);
+    const text = String(second.mail['text']);
+    for (const body of [html, text]) {
+      expect(body).toContain(NOTICE_HEADLINE);
+      expect(body).toContain('survey.pdf');
+      // 본문 속 이미지도 함께 빠진다는 것이 목록에 드러난다.
+      expect(body).toMatch(/sign\.png \([^)]*본문 속 이미지\)/);
+      expect(body).toContain(NOTICE_ORIGIN);
+    }
+    expect(html.endsWith('<p>스캔본 보냅니다 <img src="cid:sign@corp"></p>')).toBe(true);
+    expect(text.endsWith('스캔본 보냅니다')).toBe(true);
+    expect(second.mail).toMatchObject({
+      from: first.mail['from'],
+      to: first.mail['to'],
+      replyTo: first.mail['replyTo'],
+      subject: first.mail['subject'],
+      tags: first.mail['tags'],
+    });
+    expect(result).toMatchObject({ outcome: 'forwarded', attachmentsOmitted: true, alreadySent: false });
+    expect(recordReplyForwardEvent).toHaveBeenCalledTimes(1);
+    expect(recordReplyForwardEvent).toHaveBeenCalledWith('svix-1', 'forwarded');
+  });
+
+  it('첨부를 뺀 재발송도 실패하면 실패다 — 세 번째는 없고 장부에 적지 않는다', async () => {
+    sendMock
+      .mockResolvedValueOnce(sizeRejection())
+      .mockResolvedValueOnce({
+        data: null,
+        error: { name: 'application_error', statusCode: 500, message: 'boom' },
+        headers: null,
+      });
+
+    await expect(forwardReceivedReply(EVENT)).rejects.toThrow();
+    expect(sendMock).toHaveBeenCalledTimes(2);
+    expect(recordReplyForwardEvent).not.toHaveBeenCalled();
+  });
+
+  it('첨부를 빼도 크기 초과면 실패다', async () => {
+    sendMock.mockResolvedValue(sizeRejection());
+
+    await expect(forwardReceivedReply(EVENT)).rejects.toThrow();
+    expect(sendMock).toHaveBeenCalledTimes(2);
+    expect(recordReplyForwardEvent).not.toHaveBeenCalled();
+  });
+
+  it('크기와 무관한 거절은 다시 보내지 않는다', async () => {
+    sendMock.mockResolvedValue({
+      data: null,
+      error: { name: 'validation_error', statusCode: 422, message: 'Invalid `to` field' },
+      headers: null,
+    });
+
+    await expect(forwardReceivedReply(EVENT)).rejects.toThrow();
+    expect(sendMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('첨부가 없는 메일이 크기 초과로 거절되면 뺄 것이 없으니 다시 보내지 않고 실패다', async () => {
+    fetchMock.mockImplementation(async () =>
+      rawResponse(
+        ['From: kim@corp.co.kr', 'To: survey@send.example.co.kr', 'Subject: x', '', 'hello', ''].join('\r\n'),
+      ),
+    );
+    sendMock.mockResolvedValue(sizeRejection());
+
+    await expect(forwardReceivedReply(EVENT)).rejects.toThrow();
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(recordReplyForwardEvent).not.toHaveBeenCalled();
+  });
+
+  it('첨부를 뺀 재발송이 「같은 멱등 키에 내용이 다르다」로 거절되면 이미 보낸 것이다', async () => {
+    sendMock.mockResolvedValueOnce(sizeRejection()).mockResolvedValueOnce({
+      data: null,
+      error: { name: 'invalid_idempotent_request', statusCode: 409, message: 'payload mismatch' },
+      headers: null,
+    });
+
+    const result = await forwardReceivedReply(EVENT);
+
+    expect(result).toMatchObject({ outcome: 'forwarded', alreadySent: true, attachmentsOmitted: true });
+    expect(recordReplyForwardEvent).toHaveBeenCalledWith('svix-1', 'forwarded');
+  });
+
+  it('로그 결과에 「첨부 제외」가 남고, 파일 이름·주소·본문은 싣지 않는다', async () => {
+    sendMock.mockResolvedValueOnce(sizeRejection()).mockResolvedValueOnce(SENT);
+
+    await forwardReceivedReply(EVENT);
+
+    expect(logMock.info).toHaveBeenCalledTimes(1);
+    expect(logMock.info.mock.calls[0]?.[0]).toEqual({
+      receivedEmailId: 'recv-1',
+      outcome: 'forwarded',
+      lookup: 'campaign',
+      forwardCount: 1,
+      attachmentsOmitted: true,
+    });
+    const logged = JSON.stringify([...logMock.info.mock.calls, ...logMock.warn.mock.calls]);
+    for (const fragment of ['survey.pdf', 'sign.png', 'kim@corp.co.kr', 'help@example.co.kr', '스캔본']) {
+      expect(logged).not.toContain(fragment);
+    }
+  });
+
+  it('발송 서비스가 돌려준 크기 초과 문구는 오류 문구에 싣지 않는다', async () => {
+    sendMock.mockResolvedValue(
+      sizeRejection({ name: 'validation_error', statusCode: 422, message: 'help@example.co.kr: size limit exceeded' }),
+    );
+
+    const error = await forwardReceivedReply(EVENT).catch((err: unknown) => err);
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).not.toContain('help@example.co.kr');
   });
 });

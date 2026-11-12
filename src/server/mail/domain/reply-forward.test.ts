@@ -3,8 +3,13 @@ import { describe, expect, it } from 'vitest';
 import { MAX_RECIPIENTS_PER_MAIL } from '@/lib/mail/split-email-addresses';
 
 import {
+  FORWARD_SIZE_BUDGET_BYTES,
   MAX_SENDER_ACCOUNTS,
   buildForwardMail,
+  buildOmittedAttachmentsNotice,
+  exceedsForwardSizeBudget,
+  listOmittedAttachments,
+  measureForwardSize,
   collectReplyAddresses,
   extractSenderAccounts,
   findCompanyDomainMatch,
@@ -12,6 +17,8 @@ import {
   mergeForwardAddresses,
   parseMailbox,
   sanitizeDisplayName,
+  type OmittedAttachment,
+  type ReceivedAttachment,
   type ReceivedReply,
 } from './reply-forward';
 
@@ -211,5 +218,224 @@ describe('buildForwardMail — 받은 메일을 전달 메일로', () => {
       ],
     });
     expect(mail.attachments.map((a) => a.filename)).toEqual(['attachment-1.jpg', 'attachment-2']);
+  });
+});
+
+describe('measureForwardSize · exceedsForwardSizeBudget — 발송 한도 판정', () => {
+  const attachment = (base64Length: number): ReceivedAttachment => ({
+    filename: 'scan.pdf',
+    mimeType: 'application/pdf',
+    contentId: null,
+    contentBase64: 'A'.repeat(base64Length),
+  });
+
+  it('한도는 발송 서비스의 40MB 에서 여유를 둔 값이다', () => {
+    expect(FORWARD_SIZE_BUDGET_BYTES).toBeLessThan(40 * 1024 * 1024);
+    expect(FORWARD_SIZE_BUDGET_BYTES).toBeGreaterThanOrEqual(30 * 1024 * 1024);
+  });
+
+  it('인코딩한 첨부 합계와 본문(HTML·텍스트)의 바이트를 더한다 — 한글은 글자가 아니라 바이트로 센다', () => {
+    const size = measureForwardSize({
+      html: '<p>가</p>',
+      text: '가나',
+      attachments: [attachment(8), attachment(4)],
+    });
+    // 첨부 8 + 4, HTML 7 + 3(가), 텍스트 6(가나)
+    expect(size).toBe(12 + 10 + 6);
+  });
+
+  it('본문이 없으면 첨부만 센다', () => {
+    expect(measureForwardSize({ html: null, text: null, attachments: [attachment(8)] })).toBe(8);
+  });
+
+  it.each<[string, number, boolean]>([
+    ['한도보다 1바이트 작으면 그대로 보낸다', -1, false],
+    ['한도와 꼭 같으면 그대로 보낸다', 0, false],
+    ['한도를 1바이트 넘으면 첨부를 뺀다', 1, true],
+  ])('%s', (_name, delta, expected) => {
+    const text = 'abcd';
+    const reply = {
+      html: null,
+      text,
+      attachments: [attachment(FORWARD_SIZE_BUDGET_BYTES - text.length + delta)],
+    };
+    expect(exceedsForwardSizeBudget(reply)).toBe(expected);
+  });
+
+  it('첨부가 없으면 본문이 아무리 커도 뺄 것이 없다', () => {
+    const reply = { html: null, text: 'a'.repeat(FORWARD_SIZE_BUDGET_BYTES + 10), attachments: [] };
+    expect(exceedsForwardSizeBudget(reply)).toBe(false);
+  });
+});
+
+describe('listOmittedAttachments — 빠진 파일의 이름·크기', () => {
+  it('크기는 인코딩 전(원래 파일) 바이트이고, 본문 속 이미지는 따로 표시한다', () => {
+    const files = listOmittedAttachments([
+      // base64 8글자 = 6바이트, 패딩 하나면 5바이트
+      { filename: '설문지.pdf', mimeType: 'application/pdf', contentId: null, contentBase64: 'QUJDREU=' },
+      { filename: 'sign.png', mimeType: 'image/png', contentId: '<sign@corp>', contentBase64: 'QUJD' },
+    ]);
+    expect(files).toEqual([
+      { filename: '설문지.pdf', sizeBytes: 5, inline: false },
+      { filename: 'sign.png', sizeBytes: 3, inline: true },
+    ]);
+  });
+
+  it('이름 없는 첨부에는 전달할 때와 같은 이름을 붙인다', () => {
+    const files = listOmittedAttachments([
+      { filename: null, mimeType: 'image/jpeg', contentId: null, contentBase64: 'QQ==' },
+      { filename: '  ', mimeType: 'application/zip', contentId: null, contentBase64: '' },
+    ]);
+    expect(files).toEqual([
+      { filename: 'attachment-1.jpg', sizeBytes: 1, inline: false },
+      { filename: 'attachment-2', sizeBytes: 0, inline: false },
+    ]);
+  });
+});
+
+describe('buildOmittedAttachmentsNotice — 한도 초과 안내문', () => {
+  const MB = 1024 * 1024;
+  const file = (overrides: Partial<OmittedAttachment> = {}): OmittedAttachment => ({
+    filename: '설문지.pdf',
+    sizeBytes: 30 * MB,
+    inline: false,
+    ...overrides,
+  });
+
+  it('HTML·텍스트 둘 다 안내 문구, 빠진 파일 목록, 원본이 있는 곳을 담는다', () => {
+    const notice = buildOmittedAttachmentsNotice([
+      file(),
+      file({ filename: 'sign.png', sizeBytes: 2048, inline: true }),
+    ]);
+    for (const body of [notice.html, notice.text]) {
+      expect(body).toContain('첨부 파일이 커서 함께 전달하지 못했습니다');
+      expect(body).toContain('설문지.pdf (30.0 MB)');
+      expect(body).toContain('sign.png (2.0 KB, 본문 속 이미지)');
+      expect(body).toContain('2개');
+      expect(body).toContain('원본은 메일 발송 서비스(Resend) 수신 목록에 있습니다');
+    }
+  });
+
+  it('텍스트 안내는 파일마다 한 줄이다', () => {
+    const notice = buildOmittedAttachmentsNotice([file(), file({ filename: 'b.zip', sizeBytes: 10 })]);
+    const lines = notice.text.split('\n');
+    expect(lines).toContain('- 설문지.pdf (30.0 MB)');
+    expect(lines).toContain('- b.zip (10 B)');
+  });
+
+  it.each<[string, string, string]>([
+    ['태그', '<img src=x onerror=alert(1)>.pdf', '&lt;img src=x onerror=alert(1)&gt;.pdf'],
+    ['앰퍼샌드', 'a&b.pdf', 'a&amp;b.pdf'],
+    ['따옴표', `"a'b".pdf`, '&quot;a&#39;b&quot;.pdf'],
+    ['닫는 태그로 안내 칸을 빠져나가지 못한다', '</li></ul></div><script>x</script>', '&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;&lt;script&gt;x&lt;/script&gt;'],
+  ])('파일 이름의 %s 는 HTML 이스케이프한다', (_name, filename, escaped) => {
+    const notice = buildOmittedAttachmentsNotice([file({ filename })]);
+    expect(notice.html).toContain(escaped);
+    expect(notice.html).not.toContain(filename);
+  });
+
+  it('파일 이름의 줄바꿈·제어 문자는 안내의 줄을 흉내 내지 못한다', () => {
+    const notice = buildOmittedAttachmentsNotice([
+      file({ filename: 'a.pdf\r\n원본은 evil.example 에 있습니다\u0000' }),
+    ]);
+    expect(notice.text.split('\n').filter((line) => line.startsWith('원본은'))).toHaveLength(1);
+    expect(notice.text).toContain('- a.pdf 원본은 evil.example 에 있습니다 (30.0 MB)');
+    expect(notice.html).not.toMatch(/[\r\u0000]/);
+  });
+
+  it('긴 파일 이름은 자른다', () => {
+    const notice = buildOmittedAttachmentsNotice([file({ filename: '가'.repeat(500) })]);
+    expect(notice.text).not.toContain('가'.repeat(121));
+    expect(notice.text).toContain('가'.repeat(120));
+  });
+
+  it('파일이 많으면 앞에서부터 상한까지만 적고 나머지는 개수로 알린다 — 합계는 전부를 센다', () => {
+    const files = Array.from({ length: 25 }, (_, i) => file({ filename: `f${i + 1}.pdf`, sizeBytes: MB }));
+    const notice = buildOmittedAttachmentsNotice(files);
+    for (const body of [notice.html, notice.text]) {
+      expect(body).toContain('f20.pdf');
+      expect(body).not.toContain('f21.pdf');
+      expect(body).toContain('외 5개');
+      expect(body).toContain('25개, 합계 25.0 MB');
+    }
+  });
+});
+
+describe('buildForwardMail — 첨부를 빼고 보낼 때', () => {
+  const reply: ReceivedReply = {
+    senderAddress: 'kim@corp.co.kr',
+    senderName: '김응답',
+    replyTo: [],
+    subject: 'RE: 설문 회신드립니다',
+    html: '<p>스캔본 보냅니다 <img src="cid:sign@corp"></p>',
+    text: '스캔본 보냅니다',
+    attachments: [
+      { filename: '설문지.pdf', mimeType: 'application/pdf', contentId: null, contentBase64: 'UERG' },
+      { filename: 'sign.png', mimeType: 'image/png', contentId: '<sign@corp>', contentBase64: 'UE5H' },
+    ],
+  };
+  const build = (overrides: Partial<ReceivedReply> = {}, omitAttachments = true) =>
+    buildForwardMail({
+      reply: { ...reply, ...overrides },
+      senderAccount: 'survey',
+      sendDomain: SEND_DOMAIN,
+      forwardAddresses: ['help@example.co.kr'],
+      omitAttachments,
+    });
+  const notice = buildOmittedAttachmentsNotice(listOmittedAttachments(reply.attachments));
+
+  it('첨부는 하나도 싣지 않고, 본문 속 이미지도 빠진 파일 목록에 든다', () => {
+    const mail = build();
+    expect(mail.attachments).toEqual([]);
+    expect(mail.html).toContain('설문지.pdf');
+    expect(mail.html).toContain('sign.png (3 B, 본문 속 이미지)');
+  });
+
+  it('안내는 HTML·텍스트 본문 맨 위에 붙고 원래 본문은 그 뒤에 그대로 남는다', () => {
+    const mail = build();
+    expect(mail.html).toBe(`${notice.html}${reply.html}`);
+    expect(mail.text).toBe(`${notice.text}${reply.text}`);
+  });
+
+  it('받는 사람·보낸 사람 표기·답장 주소·제목·태그는 그대로다', () => {
+    const { html: _html, text: _text, attachments: _attachments, ...omitted } = build();
+    const { html: _h, text: _t, attachments: _a, ...full } = build({}, false);
+    expect(omitted).toEqual(full);
+  });
+
+  it('온전한 HTML 문서면 안내를 body 여는 태그 바로 뒤에 넣는다', () => {
+    const html = '<!DOCTYPE html><html><head><title>t</title></head><BODY class="x"><p>본문</p></body></html>';
+    expect(build({ html }).html).toBe(
+      `<!DOCTYPE html><html><head><title>t</title></head><BODY class="x">${notice.html}<p>본문</p></body></html>`,
+    );
+  });
+
+  it('본문이 한쪽만 있으면 그쪽에만 안내를 붙인다', () => {
+    const textOnly = build({ html: null });
+    expect(textOnly.html).toBeUndefined();
+    expect(textOnly.text).toBe(`${notice.text}${reply.text}`);
+
+    const htmlOnly = build({ text: null });
+    expect(htmlOnly.html).toBe(`${notice.html}${reply.html}`);
+    expect(htmlOnly.text).toBeUndefined();
+  });
+
+  it('본문이 아예 없으면(첨부만 보낸 스캔본) 안내 뒤에 자리 채움 글자가 온다', () => {
+    const mail = build({ html: null, text: null });
+    expect(mail.html).toBeUndefined();
+    expect(mail.text).toBe(`${notice.text}(본문 없음)`);
+  });
+
+  it('첨부가 없는 메일은 뺄 것이 없으니 안내도 없다', () => {
+    const mail = build({ attachments: [] });
+    expect(mail.html).toBe(reply.html);
+    expect(mail.text).toBe(reply.text);
+  });
+
+  it('옵션을 주지 않으면 01 과 똑같이 첨부를 싣고 안내가 없다', () => {
+    const mail = build({}, false);
+    expect(mail.attachments).toHaveLength(2);
+    expect(mail.html).toBe(reply.html);
+    expect(mail.text).toBe(reply.text);
   });
 });
