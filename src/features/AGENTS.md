@@ -43,7 +43,7 @@
 - `choice_opt`: 이 셀이 질문 레벨 radio/checkbox 의 옵션 소스. 칸에 `optionCode`(변수번호, 예 `opt01`)를 적으면 일반 보기처럼 변수명 숫자 자리에 쓴다(`D2_1_opt01`·`D2_1_opt04_text`, 2026-10-20). 비우면 종전대로 순번 — 빌더 편집 폼에는 칸이 없다(`kept`)
 - `calc`: 수식 기반 읽기 전용 계산 셀
 
-> **중복 불가 묶음** (`cell.distinctGroup`, select 셀, 테이블 유형 전용): 같은 묶음 이름의 선택 칸끼리 같은 보기를 두 번 고를 수 없다. 화면 비활성과 검증이 `features/question-renderer/utils/distinct-select-group.ts` 하나를 쓰므로 둘이 넘기는 보이는 칸 범위(`visibleCellIds`)를 같게 유지할 것. 상세 CONTEXT.md 「중복 불가 묶음」.
+> **중복 불가 묶음** (`cell.distinctGroup`, select 셀, 테이블 유형 전용): 같은 묶음 이름의 선택 칸끼리 같은 보기를 두 번 고를 수 없다. 화면 비활성과 검증이 `features/question-renderer/utils/distinct-select-group.ts` 하나를 쓰므로 둘이 넘기는 보이는 칸 범위(`visibleCellIds`)를 같게 유지할 것 — 숨기는 장치마다 화면 쪽 집합과 `collectVisibleTableCells` 를 `survey-response/lib/hidden-cell-screen-parity.test.tsx` 가 대조한다(따라 선택도 같은 집합을 쓴다). 상세 CONTEXT.md 「중복 불가 묶음」.
 
 > **목록에서 찾기** (`cell.lookupSearch`, input 셀, 2026-10-21 — CONTEXT.md 「목록에서 찾기」가 정본): 칸을 누르면 설문 참조표(LUT) 목록이 선택 상자처럼 펼쳐지고 글자를 치면 좁혀지며, 고르면 이 칸과 **같은 표의** 지정 입력 칸(법인·사업자번호 등)을 한 번에 채운다. 목록 밖 값도 직접 적을 수 있고 저장되는 것은 글자뿐이라 저장·검증·내보내기 무변경, 마이그레이션 없음. 판정 `features/question-renderer/utils/lookup-search`(검색 정규화·채울 값 — 대상 칸 형식으로 정돈, 가려진 칸·잠긴 prefill 칸 제외), 여러 칸 쓰기는 `useCellResponse` 의 `patchValues` → `InputCell` 의 `onPatchValues`, 표 셀 정의는 `useGatingTableCells`, 참조표는 `useSurveyLookups`(빌더 편집 목록도 이제 공급한다). 빌더 설정은 `table-editor/cell-editor/lookup-search-fields`(채울 칸 이름은 `utils/lookup-fill-targets` — 같은 행 앞 글자 칸 첫 줄). 셀 필드 정책은 폼 소유·보관함 제외, 복제·행 반복의 칸 id 이동은 `remapCellRefs`. 평문 한 줄 칸·테이블 유형 문항 전용.
 
