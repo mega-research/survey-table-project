@@ -537,6 +537,36 @@ html {
 /* 모달의 스크롤 잠금(Base UI)은 html 의 scrollbar-gutter 를 stable 로 두고 overflow 만 막아,
    위 gutter 와 겹쳐도 본문 폭이 바뀌지 않는다 — Radix 시절의 body margin 보정은 필요 없다. */
 
+/* 조용한 세로 스크롤바 — 모달 본문처럼 흰 면 안에서 스크롤되는 영역에 쓴다.
+   스크롤바가 늘 보이는 환경(마우스 연결 macOS·Windows)의 기본 스크롤바는 15px 안팎의 회색 홈과
+   짙은 막대라 흰 모달 안에서 혼자 튄다. 홈은 투명하게, 막대는 6px 알약으로 그린다.
+   자리(12px)는 이 클래스가 정하지 않는다 — 쓰는 쪽이 오른쪽 여백 안에 들어오게 둔다. */
+.scrollbar-quiet::-webkit-scrollbar {
+  width: 12px;
+}
+.scrollbar-quiet::-webkit-scrollbar-track {
+  margin-block: 6px;
+  background: transparent;
+}
+.scrollbar-quiet::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 9999px;
+  background-color: #c7c7cc;
+  background-clip: content-box;
+}
+.scrollbar-quiet::-webkit-scrollbar-thumb:hover,
+.scrollbar-quiet::-webkit-scrollbar-thumb:active {
+  background-color: #8e8e93;
+}
+/* Firefox 는 위 의사 요소를 모른다. 표준 속성은 여기서만 준다 — Chrome 은 표준 속성이 하나라도
+   있으면 ::-webkit-scrollbar 를 통째로 무시한다. */
+@supports not selector(::-webkit-scrollbar) {
+  .scrollbar-quiet {
+    scrollbar-width: thin;
+    scrollbar-color: #c7c7cc transparent;
+  }
+}
+
 /* 인쇄 시 테이블 sticky 해제 — 종이에서는 의미 없음 */
 @media print {
   [data-grid-cell],

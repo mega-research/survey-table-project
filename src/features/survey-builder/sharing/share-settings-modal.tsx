@@ -13,11 +13,11 @@ import {
 } from '@/shared/contracts/workspace';
 
 import { useSetSurveyVisibility } from '../queries/use-survey-sharing';
-import { FieldworkBlock } from './fieldwork-block';
 import { ClientBlock } from './client-block';
+import { FieldworkBlock } from './fieldwork-block';
 import { OwnershipTransferModal } from './ownership-transfer-modal';
 import { ParticipantsBlock } from './participants-block';
-import { SegmentRow, type SegmentOption } from './segment-row';
+import { type SegmentOption, SegmentRow } from './segment-row';
 
 interface ShareSettingsModalProps {
   surveyId: string;
@@ -114,94 +114,112 @@ export function ShareSettingsModal({
     <Dialog open onOpenChange={(next) => (next ? undefined : onClose())}>
       {/* 폭은 `sm:` 으로 준다 — DialogContent 기본값이 `sm:max-w-md`(448px)라 접두 없는 max-w 는
           그것을 못 이기고(변형이 달라 병합되지 않는다) 좁은 화면의 좌우 여백 규칙만 지운다.
-          `grid-cols-1` 은 칸 최소폭을 0 으로 둔다 — 없으면 줄바꿈 없는 링크 주소 한 줄이 칸을
-          밀어내 모달 안에 가로 스크롤이 생긴다. */}
-      <DialogContent className="max-h-[85vh] grid-cols-1 gap-0 overflow-y-auto rounded-2xl p-[22px] sm:max-w-[560px]">
-        {/* 오른쪽 여백은 닫기 버튼 자리 — 긴 설문 제목의 말줄임이 버튼 밑으로 들어가지 않게 한다. */}
-        <DialogTitle className="truncate pr-8 text-[16.5px] font-semibold text-[#1C1C1E]">
-          초대와 공개 범위 — {surveyTitle}
-        </DialogTitle>
-
-        <div className="mt-4 flex flex-col gap-1.5">
-          <span className="text-[13px] font-semibold text-[#374151]">팀 공개 범위</span>
-
-          <SegmentRow
-            label="공개 범위"
-            options={VISIBILITY_OPTIONS}
-            value={selected}
-            disabled={!canManageAccess || setVisibility.isPending}
-            onChange={(value) => {
-              setSelected(value);
-              setError(null);
-            }}
-          />
-
-          <p className="text-[11px] leading-[1.5] text-[#6E6E73]">
-            「초대된 멤버만」은 소유 팀 팀원에게만 숨깁니다 — 소유자·참여자·팀장·슈퍼어드민은 항상
-            접근합니다.
-          </p>
-          {!canManageAccess && (
-            <p className="text-[11px] leading-[1.5] text-[#6E6E73]">
-              공개 범위는 소유자·팀장·슈퍼어드민만 바꿀 수 있습니다.
-            </p>
-          )}
+          머리·본문·바닥 세 칸으로 쌓고 본문만 스크롤한다 — 창 전체가 스크롤되면 스크롤바가 둥근
+          모서리를 지나가고 제목과 저장 버튼이 함께 밀려 올라간다. `@container` 는 아래 본문
+          폭 계산(cqw)의 기준이다. */}
+      <DialogContent className="@container flex max-h-[85vh] flex-col gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-[560px]">
+        <div className="shrink-0 border-b border-[#F0F0F2] px-[22px] pt-[22px] pb-4">
+          {/* 오른쪽 여백은 닫기 버튼 자리 — 긴 설문 제목의 말줄임이 버튼 밑으로 들어가지 않게 한다. */}
+          <DialogTitle className="truncate pr-8 text-[16.5px] font-semibold text-[#1C1C1E]">
+            초대와 공개 범위 — {surveyTitle}
+          </DialogTitle>
         </div>
 
-        {/* 참여자 블록은 자기 mutation 을 즉시 반영한다 — 공개 범위의 「저장」과 축이 다르다.
+        <div className="scrollbar-quiet min-h-0 overflow-y-auto overscroll-contain">
+          {/* 내용 폭을 스크롤 영역이 아니라 창 폭에서 잰다(창 폭 − 좌우 22px). 스크롤바가 자리를
+            차지하는 환경에서는 스크롤 영역이 그만큼 좁아져, 여백을 padding 으로 주면 오른쪽만
+            스크롤바 폭만큼 더 벌어진다. 이렇게 두면 스크롤바는 오른쪽 여백 22px 안에 들어가고
+            좌우 여백은 스크롤바가 있든 없든, 어느 브라우저든 같다. 폭이 정해져 있으므로 줄바꿈
+            없는 링크 주소가 칸을 밀어 가로 스크롤을 만들지도 못한다. */}
+          <div className="ml-[22px] w-[calc(100cqw-44px)] pt-4 pb-5">
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[13px] font-semibold text-[#374151]">팀 공개 범위</span>
+
+              <SegmentRow
+                label="공개 범위"
+                options={VISIBILITY_OPTIONS}
+                value={selected}
+                disabled={!canManageAccess || setVisibility.isPending}
+                onChange={(value) => {
+                  setSelected(value);
+                  setError(null);
+                }}
+              />
+
+              <p className="text-[11px] leading-[1.5] text-[#6E6E73]">
+                「초대된 멤버만」은 소유 팀 팀원에게만 숨깁니다 — 소유자·참여자·팀장·슈퍼어드민은
+                항상 접근합니다.
+              </p>
+              {!canManageAccess && (
+                <p className="text-[11px] leading-[1.5] text-[#6E6E73]">
+                  공개 범위는 소유자·팀장·슈퍼어드민만 바꿀 수 있습니다.
+                </p>
+              )}
+            </div>
+
+            {/* 참여자 블록은 자기 mutation 을 즉시 반영한다 — 공개 범위의 「저장」과 축이 다르다.
             들이고 빼는 일은 되돌릴 확인이 필요 없고, 한 모달의 저장 버튼에 묶으면 검색·추가
             도중 취소를 누른 사람이 초대까지 되돌아간 줄로 읽는다. */}
-        <div className="mt-4 border-t border-[#F0F0F2] pt-4">
-          <ParticipantsBlock
-            surveyId={surveyId}
-            ownerName={currentOwnerName}
-            ownerTeamName={ownerTeamName}
-          />
+            <div className="mt-4 border-t border-[#F0F0F2] pt-4">
+              <ParticipantsBlock
+                surveyId={surveyId}
+                ownerName={currentOwnerName}
+                ownerTeamName={ownerTeamName}
+              />
+            </div>
+
+            {/* 클라이언트 블록도 같은 축이다 — 링크 발급·탭 저장이 즉시 반영되고 「저장」에 묶이지 않는다. */}
+            <div className="mt-4 border-t border-[#F0F0F2] pt-4">
+              <ClientBlock surveyId={surveyId} />
+            </div>
+
+            {/* 실사 블록 — 네 번째이자 마지막 블록(.pen 4-2). 초대는 개인 단위이고 즉시 반영이다. */}
+            <div className="mt-4 border-t border-[#F0F0F2] pt-4">
+              <FieldworkBlock surveyId={surveyId} />
+            </div>
+          </div>
         </div>
 
-        {/* 클라이언트 블록도 같은 축이다 — 링크 발급·탭 저장이 즉시 반영되고 「저장」에 묶이지 않는다. */}
-        <div className="mt-4 border-t border-[#F0F0F2] pt-4">
-          <ClientBlock surveyId={surveyId} />
-        </div>
-
-        {/* 실사 블록 — 네 번째이자 마지막 블록(.pen 4-2). 초대는 개인 단위이고 즉시 반영이다. */}
-        <div className="mt-4 border-t border-[#F0F0F2] pt-4">
-          <FieldworkBlock surveyId={surveyId} />
-        </div>
-
-        {error && <p className="mt-3 text-[12.5px] text-red-600">{error}</p>}
-
-        <div className="mt-5 flex items-center justify-between gap-2 border-t border-[#F0F0F2] pt-3.5">
-          {/* 이전 권한은 공개 범위와 같은 열(소유자·팀장·슈퍼어드민)이라 같은 값으로 잠근다. */}
-          {canManageAccess ? (
-            <button
-              type="button"
-              onClick={() => setTransferOpen(true)}
-              className="flex items-center gap-1.5 text-[12.5px] font-medium text-[#2E4FCE] hover:underline"
-            >
-              <ArrowRightLeft className="h-3.5 w-3.5" />
-              소유권 이전
-            </button>
-          ) : (
-            <span />
+        {/* 저장 실패는 바닥 칸에 둔다 — 본문 끝에 두면 위쪽을 보고 있던 사람에게는 안 보인다. */}
+        <div className="shrink-0 border-t border-[#F0F0F2] px-[22px] py-3.5">
+          {error && (
+            <p role="alert" className="mb-2.5 text-[12.5px] text-red-600">
+              {error}
+            </p>
           )}
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={setVisibility.isPending}
-              className="flex h-[34px] items-center rounded-[9px] border border-[#E5E5EA] bg-white px-4 text-[13px] font-medium text-[#374151] hover:bg-[#F5F5F7] disabled:opacity-50"
-            >
-              취소
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={!canManageAccess || setVisibility.isPending}
-              className="flex h-[34px] items-center gap-1.5 rounded-[9px] bg-[#2E4FCE] px-4 text-[13px] font-semibold text-white hover:bg-[#2743AE] disabled:bg-[#E5E7EB] disabled:text-[#9CA3AF]"
-            >
-              {setVisibility.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              저장
-            </button>
+          <div className="flex items-center justify-between gap-2">
+            {/* 이전 권한은 공개 범위와 같은 열(소유자·팀장·슈퍼어드민)이라 같은 값으로 잠근다. */}
+            {canManageAccess ? (
+              <button
+                type="button"
+                onClick={() => setTransferOpen(true)}
+                className="flex items-center gap-1.5 text-[12.5px] font-medium text-[#2E4FCE] hover:underline"
+              >
+                <ArrowRightLeft className="h-3.5 w-3.5" />
+                소유권 이전
+              </button>
+            ) : (
+              <span />
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={setVisibility.isPending}
+                className="flex h-[34px] items-center rounded-[9px] border border-[#E5E5EA] bg-white px-4 text-[13px] font-medium text-[#374151] hover:bg-[#F5F5F7] disabled:opacity-50"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={!canManageAccess || setVisibility.isPending}
+                className="flex h-[34px] items-center gap-1.5 rounded-[9px] bg-[#2E4FCE] px-4 text-[13px] font-semibold text-white hover:bg-[#2743AE] disabled:bg-[#E5E7EB] disabled:text-[#9CA3AF]"
+              >
+                {setVisibility.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                저장
+              </button>
+            </div>
           </div>
         </div>
       </DialogContent>
