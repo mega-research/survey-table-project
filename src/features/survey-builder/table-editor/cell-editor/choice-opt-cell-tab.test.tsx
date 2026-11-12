@@ -436,3 +436,94 @@ describe('ChoiceOptCellTab — 평균에서 제외', () => {
     expect(screen.getByRole('switch', { name: '평균에서 제외' })).toBeInTheDocument();
   });
 });
+
+describe('ChoiceOptCellTab — 따라 선택', () => {
+  const cb1: ChoiceGroup = { id: 'g3', groupKey: 'chk01', type: 'checkbox', label: '수혜 경험' };
+  function impliedProps(overrides: Record<string, unknown> = {}) {
+    return {
+      selected: [{ cellId: 'apply1', label: '① 금융/자금 지원 · 지원 경험 있음' }],
+      candidates: [
+        { cellId: 'know1', label: '① 금융/자금 지원 · 알고 있음' },
+        { cellId: 'know2', label: '② 인력 지원 · 알고 있음' },
+      ],
+      onAdd: vi.fn(),
+      onRemove: vi.fn(),
+      applyToColumn: false,
+      onApplyToColumnChange: vi.fn(),
+      columnApplyCount: 5,
+      ...overrides,
+    };
+  }
+  const checkboxCell = { choiceGroups: [cb1], choiceGroupId: 'g3' };
+
+  it('체크박스 그룹의 일반 보기 칸에서 걸린 칸과 후보를 보인다', () => {
+    render(<ChoiceOptCellTab {...makeProps({ ...checkboxCell, impliedSelection: impliedProps() })} />);
+    const list = screen.getByRole('list', { name: '함께 고를 칸' });
+    expect(list).toHaveTextContent('① 금융/자금 지원 · 지원 경험 있음');
+    const add = screen.getByRole('combobox', { name: '함께 고를 칸 더하기' });
+    expect(add).toHaveTextContent('② 인력 지원 · 알고 있음');
+  });
+
+  it('후보를 고르면 더하고, 칩의 빼기 버튼을 누르면 뺀다', async () => {
+    const user = userEvent.setup();
+    const implied = impliedProps();
+    render(<ChoiceOptCellTab {...makeProps({ ...checkboxCell, impliedSelection: implied })} />);
+    await user.selectOptions(screen.getByRole('combobox', { name: '함께 고를 칸 더하기' }), 'know2');
+    expect(implied.onAdd).toHaveBeenCalledWith('know2');
+    await user.click(
+      screen.getByRole('button', { name: '① 금융/자금 지원 · 지원 경험 있음 빼기' }),
+    );
+    expect(implied.onRemove).toHaveBeenCalledWith('apply1');
+  });
+
+  it('같은 열 일괄 적용 체크는 대상 칸 수와 함께 보이고, 대상이 없으면 숨는다', async () => {
+    const user = userEvent.setup();
+    const implied = impliedProps();
+    const { rerender } = render(
+      <ChoiceOptCellTab {...makeProps({ ...checkboxCell, impliedSelection: implied })} />,
+    );
+    await user.click(
+      screen.getByRole('checkbox', {
+        name: '같은 열의 다른 보기 칸에도 같은 위치 관계로 적용 (5개)',
+      }),
+    );
+    expect(implied.onApplyToColumnChange).toHaveBeenCalledWith(true);
+
+    rerender(
+      <ChoiceOptCellTab
+        {...makeProps({
+          ...checkboxCell,
+          impliedSelection: impliedProps({ columnApplyCount: 0 }),
+        })}
+      />,
+    );
+    expect(screen.queryByRole('checkbox', { name: /같은 위치 관계로 적용/ })).not.toBeInTheDocument();
+  });
+
+  it('후보가 없으면 더하기를 잠그고 이유를 적는다', () => {
+    render(
+      <ChoiceOptCellTab
+        {...makeProps({
+          ...checkboxCell,
+          impliedSelection: impliedProps({ selected: [], candidates: [] }),
+        })}
+      />,
+    );
+    expect(screen.getByRole('combobox', { name: '함께 고를 칸 더하기' })).toBeDisabled();
+    expect(screen.getByText(/같은 표에 체크박스 그룹의 다른 보기 칸이 없습니다/)).toBeInTheDocument();
+  });
+
+  it.each([
+    ['단독 선택 보기', { ...checkboxCell, exclusiveChoice: true }],
+    ['라디오 그룹의 보기 칸', { choiceGroups: [rad1], choiceGroupId: 'g1' }],
+    ['그룹에 속하지 않은 보기 칸', { choiceGroups: [cb1], choiceGroupId: '' }],
+  ])('%s에서는 구역을 그리지 않는다', (_name, cellProps) => {
+    render(<ChoiceOptCellTab {...makeProps({ ...cellProps, impliedSelection: impliedProps() })} />);
+    expect(screen.queryByText('따라 선택')).not.toBeInTheDocument();
+  });
+
+  it('공급이 없으면(보기 소스 표) 구역을 그리지 않는다', () => {
+    render(<ChoiceOptCellTab {...makeProps(checkboxCell)} />);
+    expect(screen.queryByText('따라 선택')).not.toBeInTheDocument();
+  });
+});

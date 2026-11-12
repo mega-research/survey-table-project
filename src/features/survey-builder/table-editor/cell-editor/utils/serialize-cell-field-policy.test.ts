@@ -182,6 +182,15 @@ const SAMPLES: Record<string, TableCell> = {
     spssNumericCode: 9,
     ...CODE,
   },
+  // 따라 선택은 단독 선택 보기와 배타라 견본을 따로 둔다
+  choiceOptImplied: {
+    id: 'c1',
+    type: 'choice_opt',
+    content: '',
+    choiceGroupId: 'grp',
+    impliedCellIds: ['c2', 'c3'],
+    ...CODE,
+  },
   calc: {
     id: 'c1',
     type: 'calc',

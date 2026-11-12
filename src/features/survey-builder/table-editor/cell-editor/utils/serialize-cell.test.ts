@@ -612,6 +612,36 @@ describe('buildUpdatedCell — 셀타입별 characterization', () => {
     expect(off).not.toHaveProperty('exclusiveScope');
   });
 
+  it('choice_opt: 따라 선택 짝은 그룹에 속한 일반 보기 칸에만 남는다', () => {
+    const linked: TableCell = {
+      id: 'c1',
+      type: 'choice_opt',
+      content: '',
+      choiceGroupId: 'g1',
+      impliedCellIds: ['c2', 'c3'],
+    };
+    const form = cellToFormState(linked);
+    expect(form.choiceImpliedCellIds).toEqual(['c2', 'c3']);
+    expect(buildUpdatedCell(form, linked).impliedCellIds).toEqual(['c2', 'c3']);
+
+    // 목록을 비우면 키를 남기지 않는다
+    expect(buildUpdatedCell({ ...form, choiceImpliedCellIds: [] }, linked)).not.toHaveProperty(
+      'impliedCellIds',
+    );
+    // 단독 선택 보기를 켜면 걷어낸다 — 「그것 하나만 남는다」와 어긋난다
+    expect(buildUpdatedCell({ ...form, choiceExclusive: true }, linked)).not.toHaveProperty(
+      'impliedCellIds',
+    );
+    // 그룹에서 빼면 걷어낸다
+    expect(buildUpdatedCell({ ...form, choiceGroupId: '' }, linked)).not.toHaveProperty(
+      'impliedCellIds',
+    );
+    // 보기 칸이 아닌 유형으로 바꾸면 걷어낸다
+    expect(buildUpdatedCell({ ...form, contentType: 'text' }, linked)).not.toHaveProperty(
+      'impliedCellIds',
+    );
+  });
+
   it('choice_opt: 단독 선택 보기 플래그는 켰을 때만 exclusiveChoice 키를 남기고, 끄면 기존 값도 지운다', () => {
     const on = buildUpdatedCell({ ...baseForm('choice_opt'), choiceExclusive: true }, baseCell);
     expect(on.exclusiveChoice).toBe(true);

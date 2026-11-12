@@ -24,6 +24,7 @@ import {
   pruneDeadGatingAfterPaste,
   regenerateCellOptionIds,
   resolvePastedGating,
+  resolvePastedImpliedCellIds,
   expandSelectionForMerges,
   extractRegionFromRows,
 } from '../utils/drag-copy-utils';
@@ -250,6 +251,22 @@ export function useDragCopy({
                 delete (targetCell as { enabledWhen?: unknown }).enabledWhen;
                 delete (targetCell as { requiredWhenEnabled?: boolean }).requiredWhenEnabled;
               }
+            }
+
+            // 따라 선택 짝 재해석: 영역 안을 가리키면 같은 상대 위치의 대상 칸으로, 밖이면 뺀다
+            // (resolvePastedImpliedCellIds 규약 — 원본 행의 칸을 끌고 가지 않는다).
+            if (targetCell.impliedCellIds) {
+              const impliedCellIds = resolvePastedImpliedCellIds(
+                targetCell.impliedCellIds,
+                (targetCellId) => {
+                  const pos = findRegionSourceCellPos(region, targetCellId);
+                  return pos
+                    ? rows[targetRow + pos.row]?.cells[targetCol + pos.col]?.id
+                    : undefined;
+                },
+              );
+              if (impliedCellIds.length > 0) targetCell.impliedCellIds = impliedCellIds;
+              else delete (targetCell as { impliedCellIds?: string[] }).impliedCellIds;
             }
 
             // cellCode/exportLabel 재생성

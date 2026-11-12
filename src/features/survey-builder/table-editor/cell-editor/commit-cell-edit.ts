@@ -23,6 +23,10 @@ import { collectChoiceOptCells } from '@/utils/choice-source';
 import { collectRankingOptCells } from '@/utils/ranking-source';
 
 import { applyDistinctGroupToColumn } from '../utils/column-distinct-group';
+import {
+  applyImpliedSelectionPlan,
+  planColumnImpliedSelection,
+} from '../utils/column-implied-selection';
 import { type CellSaveOptions, applyMobileDisplayToColumn } from '../utils/column-mobile-display';
 import { GROUPABLE_CELL_TYPES, buildUpdatedCell } from './utils/serialize-cell';
 import type { UseCellFormResult } from './hooks/use-cell-form';
@@ -58,6 +62,8 @@ export interface CommitCellEditArgs {
   mobileDisplayColumnWide?: boolean | undefined;
   /** 이 칸의 「중복 불가 묶음 이름」을 같은 열의 다른 선택 칸에도 적용할지 (모달의 체크). */
   distinctGroupColumnWide?: boolean | undefined;
+  /** 이 칸의 따라 선택 짝을 같은 열의 다른 보기 칸에도 같은 위치 관계로 걸지 (모달의 체크). */
+  impliedSelectionColumnWide?: boolean | undefined;
 }
 
 /**
@@ -81,6 +87,7 @@ export async function commitCellEdit({
   onChoiceGroupsChange,
   mobileDisplayColumnWide,
   distinctGroupColumnWide,
+  impliedSelectionColumnWide,
 }: CommitCellEditArgs): Promise<void> {
   const readBuilderState = useSurveyBuilderStore.getState;
   const writeBuilderState = useSurveyBuilderStore.setState;
@@ -97,9 +104,29 @@ export async function commitCellEdit({
     // dynamic-table-editor 의 currentRowsRef 가 이미 새 셀을 포함한 상태에서 prune 이 동작한다.
     // 옵션 optionCode 편집으로 누적된 value 변경 쌍도 같은 커밋에 실어 게이팅을 리매핑한다.
     // 열 일괄 지정은 저장되는 셀의 값(미지정 포함)을 그대로 따른다.
+    // 따라 선택 열 일괄 적용 — 이 칸을 반영한 최신 행과 편집 중인 그룹으로 칸마다 걸 짝을 정한다.
+    // 기준 칸의 짝이 비어 있으면 같은 열의 짝을 지우는 계획이 된다.
+    const impliedPlanRows = impliedSelectionColumnWide
+      ? (getLatestRows?.() ??
+        questions.find((q) => q.id === currentQuestionId)?.tableRowsData)
+      : undefined;
+    const impliedSelectionPlan = impliedPlanRows
+      ? planColumnImpliedSelection(
+          impliedPlanRows.map((row) => ({
+            ...row,
+            cells: row.cells.map((c) => (c.id === cell.id ? updatedCell : c)),
+          })),
+          cell.id,
+          updatedCell.impliedCellIds ?? [],
+          editChoiceGroups,
+        )
+      : undefined;
     const saveOptions: CellSaveOptions | undefined =
-      mobileDisplayColumnWide || distinctGroupColumnWide
+      mobileDisplayColumnWide || distinctGroupColumnWide || impliedSelectionPlan
         ? {
+            ...(impliedSelectionPlan
+              ? { columnImpliedSelection: { plan: impliedSelectionPlan } }
+              : {}),
             ...(mobileDisplayColumnWide
               ? { columnMobileDisplay: { value: updatedCell.mobileDisplay } }
               : {}),
@@ -146,13 +173,16 @@ export async function commitCellEdit({
               saveOptions.columnMobileDisplay.value,
             )
           : rowsWithCell;
-        const updatedRowsData = saveOptions?.columnDistinctGroup
+        const rowsWithDistinctGroup = saveOptions?.columnDistinctGroup
           ? applyDistinctGroupToColumn(
               rowsWithMobileDisplay,
               cell.id,
               saveOptions.columnDistinctGroup.value,
             )
           : rowsWithMobileDisplay;
+        const updatedRowsData = saveOptions?.columnImpliedSelection
+          ? applyImpliedSelectionPlan(rowsWithDistinctGroup, saveOptions.columnImpliedSelection.plan)
+          : rowsWithDistinctGroup;
 
         // choice_opt 저장 시 choiceGroups 도 함께 저장한다.
         // prune 은 updatedRowsData 기준으로 계산해 빈 그룹이 DB 에 남지 않도록 한다.

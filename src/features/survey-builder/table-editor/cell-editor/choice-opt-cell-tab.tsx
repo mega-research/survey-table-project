@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 
+import { X } from 'lucide-react';
+
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -31,6 +33,26 @@ const MOBILE_VIEW_CHOICES: ReadonlyArray<{ view: ChoiceGroupMobileView; label: s
   { view: 'scale-bar', label: '척도 막대' },
 ];
 
+interface ImpliedSelectionCell {
+  cellId: string;
+  /** 「행 제목 · 열 제목」 */
+  label: string;
+}
+
+export interface ImpliedSelectionFields {
+  /** 걸린 칸 — 살아 있는 짝만 */
+  selected: readonly ImpliedSelectionCell[];
+  /** 더할 수 있는 칸 — 이미 걸린 칸은 빠져 있다 */
+  candidates: readonly ImpliedSelectionCell[];
+  onAdd: (cellId: string) => void;
+  onRemove: (cellId: string) => void;
+  /** 「같은 열의 다른 보기 칸에도 같은 위치 관계로 적용」 체크 — 저장할 때 함께 반영된다 */
+  applyToColumn: boolean;
+  onApplyToColumnChange: (v: boolean) => void;
+  /** 같은 열의 다른 대상 칸 수 — 0 이면 체크를 보이지 않는다 */
+  columnApplyCount: number;
+}
+
 interface ChoiceOptCellTabProps {
   choiceLabel: string;
   onChoiceLabelChange: (v: string) => void;
@@ -44,6 +66,11 @@ interface ChoiceOptCellTabProps {
   /** 단독 선택 범위 — 그룹이 여럿인 표에서만 노출 */
   exclusiveScope: 'group' | 'table';
   onExclusiveScopeChange: (v: 'group' | 'table') => void;
+  /**
+   * 따라 선택 (CONTEXT.md) — 이 보기를 고르면 함께 골라질 칸. 테이블 유형 문항에서만 공급되고,
+   * 체크박스 그룹의 일반 보기 칸(단독 선택 보기 아님)일 때만 구역을 그린다.
+   */
+  impliedSelection?: ImpliedSelectionFields | undefined;
   /** 평균에서 제외 (CONTEXT.md 「척도 평균」) — 라디오로 그려지는 보기 칸에서만 노출 */
   excludeFromMean: boolean;
   onExcludeFromMeanChange: (v: boolean) => void;
@@ -97,6 +124,7 @@ export function ChoiceOptCellTab({
   onExclusiveChoiceChange,
   exclusiveScope,
   onExclusiveScopeChange,
+  impliedSelection,
   excludeFromMean,
   onExcludeFromMeanChange,
   parentQuestionType,
@@ -365,6 +393,72 @@ export function ChoiceOptCellTab({
                   : '이 보기가 속한 그룹만 비웁니다'}
               </span>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* 따라 선택 — 체크박스 그룹의 일반 보기 칸에서만. 단독 선택 보기는 「그것 하나만 남는다」라 배타다 */}
+      {impliedSelection && currentGroup?.type === 'checkbox' && !exclusiveChoice && (
+        <div className="space-y-1.5">
+          <Label htmlFor="choice-opt-implied-add" className="text-sm font-medium">
+            따라 선택
+          </Label>
+          <p className="text-xs text-gray-500">
+            이 보기를 고르면 아래 칸도 함께 골라집니다. 풀 때는 누른 칸 하나만 풀립니다.
+          </p>
+          {impliedSelection.selected.length > 0 && (
+            <ul aria-label="함께 고를 칸" className="flex flex-wrap gap-1.5">
+              {impliedSelection.selected.map((target) => (
+                <li
+                  key={target.cellId}
+                  className="inline-flex min-w-0 items-center gap-1 rounded-md border border-gray-200 bg-gray-50 py-0.5 pr-0.5 pl-2 text-xs text-gray-700"
+                >
+                  <span className="min-w-0 [overflow-wrap:anywhere]">{target.label}</span>
+                  <button
+                    type="button"
+                    aria-label={`${target.label} 빼기`}
+                    onClick={() => impliedSelection.onRemove(target.cellId)}
+                    className="shrink-0 rounded p-0.5 text-gray-400 hover:bg-gray-200 hover:text-gray-700 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
+                  >
+                    <X className="h-3 w-3" aria-hidden="true" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <select
+            id="choice-opt-implied-add"
+            aria-label="함께 고를 칸 더하기"
+            value=""
+            disabled={impliedSelection.candidates.length === 0}
+            onChange={(e) => {
+              if (e.target.value) impliedSelection.onAdd(e.target.value);
+            }}
+            className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:bg-gray-50 disabled:text-gray-400"
+          >
+            <option value="">함께 고를 칸 더하기</option>
+            {impliedSelection.candidates.map((candidate) => (
+              <option key={candidate.cellId} value={candidate.cellId}>
+                {candidate.label}
+              </option>
+            ))}
+          </select>
+          {impliedSelection.candidates.length === 0 && impliedSelection.selected.length === 0 && (
+            <p className="text-xs text-gray-500">
+              같은 표에 체크박스 그룹의 다른 보기 칸이 없습니다.
+            </p>
+          )}
+          {impliedSelection.columnApplyCount > 0 && (
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-gray-300"
+                checked={impliedSelection.applyToColumn}
+                onChange={(e) => impliedSelection.onApplyToColumnChange(e.target.checked)}
+              />
+              같은 열의 다른 보기 칸에도 같은 위치 관계로 적용 ({impliedSelection.columnApplyCount}
+              개)
+            </label>
           )}
         </div>
       )}

@@ -22,6 +22,7 @@ import {
   decideDrilldown,
 } from '@/features/question-renderer/utils/classify-table';
 import { distinctGroupOf } from '@/features/question-renderer/utils/distinct-select-group';
+import { hasImpliedSelection } from '@/features/question-renderer/utils/implied-selection';
 import { expandHeaderGrid } from '@/features/question-renderer/utils/expand-header-grid';
 import {
   findColumnRevealHostId,
@@ -1382,9 +1383,15 @@ function InteractiveTableResponseBody({
   const gatingTableCells = useMemo(() => collectTableCells(rows), [rows]);
 
   // 중복 불가 묶음의 구성원 범위 — 지금 그려지는 행·열에 있는 칸만. 표시 조건으로 숨은 칸은 값이
-  // 응답에 남아 있어, 세면 보이지 않는 칸이 보기를 차지한다. 묶음이 없는 표(대다수)는 만들지 않는다.
+  // 응답에 남아 있어, 세면 보이지 않는 칸이 보기를 차지한다. 따라 선택도 같은 집합으로 숨은 칸을
+  // 건너뛴다(응답자가 풀 수 없는 값을 만들지 않는다). 둘 다 없는 표(대다수)는 만들지 않는다.
   const visibleCellIds = useMemo(() => {
-    if (!gatingTableCells.some((cell) => distinctGroupOf(cell) !== null)) return null;
+    if (
+      !gatingTableCells.some((cell) => distinctGroupOf(cell) !== null) &&
+      !hasImpliedSelection(gatingTableCells)
+    ) {
+      return null;
+    }
     const ids = new Set<string>();
     for (const row of rowWiseDisplayRows) {
       for (const cell of row.cells) if (!cell.isHidden) ids.add(cell.id);

@@ -63,7 +63,7 @@ export function remapGateConditionCellIds(
   });
 }
 
-/** 셀 하나의 게이팅·수식·목록에서 찾기 참조를 대응표로 옮긴다 (바뀔 것이 없으면 원본 참조 반환). */
+/** 셀 하나의 게이팅·수식·목록에서 찾기·따라 선택 참조를 대응표로 옮긴다 (바뀔 것이 없으면 원본 참조 반환). */
 export function remapCellRefs(
   cell: TableCell,
   idMap: ReadonlyMap<string, string>,
@@ -116,6 +116,11 @@ export function remapCellRefs(
       return { ...fill, cellId: mapped };
     });
     if (changed) next = { ...next, lookupSearch: { ...cell.lookupSearch, fills } };
+  }
+
+  if (cell.impliedCellIds?.some((id) => idMap.has(id))) {
+    // 따라 선택 짝 — 사본은 사본 안의 칸을 함께 골라야 한다
+    next = { ...next, impliedCellIds: cell.impliedCellIds.map((id) => idMap.get(id) ?? id) };
   }
 
   return next;

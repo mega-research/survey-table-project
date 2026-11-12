@@ -1,5 +1,7 @@
 import type { TableCell, TableRow } from '@/types/survey';
 
+import type { ImpliedSelectionPlan } from './column-implied-selection';
+
 /**
  * 열 단위 모바일 표시 일괄 지정 — 셀 편집 모달에서 고른 「모바일 카드 표시」를 같은 열의
  * 다른 표시 셀에 한 번에 건다. 설명 열처럼 행마다 같은 설정을 반복해야 하는 자리를 위한 것.
@@ -20,6 +22,11 @@ export interface CellSaveOptions {
    * 같은 이유로 `{ value }` 로 감싼다 — undefined 는 "이름을 지워라"다.
    */
   columnDistinctGroup?: { value: string | undefined } | undefined;
+  /**
+   * 따라 선택 짝을 같은 열의 다른 보기 칸에도 같은 위치 관계로 건다 (column-implied-selection).
+   * 칸마다 걸 짝을 미리 계산한 계획이다 — 자격 판정에 보기 그룹이 필요해 저장을 확정하는 쪽이 만든다.
+   */
+  columnImpliedSelection?: { plan: ImpliedSelectionPlan } | undefined;
 }
 
 const DISPLAY_TYPES = new Set<TableCell['type']>(['text', 'image', 'video']);

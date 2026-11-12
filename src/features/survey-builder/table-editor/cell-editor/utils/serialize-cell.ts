@@ -95,6 +95,8 @@ export interface CellFormState {
   choiceExclusive: boolean;
   /** 단독 선택 범위 (TableCell.exclusiveScope). 'group' 이 기본이라 저장 시 키를 만들지 않는다 */
   choiceExclusiveScope: 'group' | 'table';
+  /** 따라 선택 짝 (TableCell.impliedCellIds) — 그룹에 속한 일반 보기 칸 전용. 단독 선택 보기와 배타 */
+  choiceImpliedCellIds: string[];
   /** 평균에서 제외 (TableCell.excludeFromMean) — 보기 칸(choice_opt)·radio 칸 전용 */
   excludeFromMean: boolean;
   /** 사이드카 텍스트 입력 모드 (TableCell.textInputType) */
@@ -304,6 +306,7 @@ export function cellToFormState(cell: TableCell): CellFormState {
     choiceAllowTextInput: cell.allowTextInput === true,
     choiceExclusive: cell.exclusiveChoice === true,
     choiceExclusiveScope: cell.exclusiveScope === 'table' ? 'table' : 'group',
+    choiceImpliedCellIds: cell.impliedCellIds ?? [],
     excludeFromMean: cell.excludeFromMean === true,
     choiceTextInputType: cell.textInputType ?? 'text',
     choiceTextInputNumberFormat: cell.textInputNumberFormat,
@@ -575,6 +578,11 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
           ...(form.choiceExclusive ? { exclusiveChoice: true } : {}),
           ...(form.choiceExclusive && form.choiceExclusiveScope === 'table'
             ? { exclusiveScope: 'table' as const }
+            : {}),
+          // 따라 선택 짝 — 그룹에 속한 일반 보기 칸만. 그룹이 체크박스인지·대상이 살아 있는지는
+          // 표를 봐야 알 수 있어 모달이 저장 전에 걸러 넘긴다(pruneImpliedCellIds).
+          ...(!form.choiceExclusive && form.choiceGroupId && form.choiceImpliedCellIds.length > 0
+            ? { impliedCellIds: form.choiceImpliedCellIds }
             : {}),
           // 'text'(=지정 안 함)만 키를 남기지 않는다. 숫자 모드와 입력 형식 5종은 그대로
           // 싣는다 — 'number' 만 통과시키면 빌더에서 고른 형식이 조용히 버려진다.

@@ -41,6 +41,8 @@ export const TABLE_CELL_FIELD_POLICY = {
   choiceGroupId: OWNED,
   exclusiveChoice: OWNED,
   exclusiveScope: OWNED,
+  // 따라 선택 짝은 그 표의 다른 칸을 가리킨다
+  impliedCellIds: OWNED_NOT_LIBRARY,
   excludeFromMean: OWNED,
   spssVarType: OWNED,
   spssMeasure: OWNED,
