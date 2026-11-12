@@ -6,6 +6,12 @@
  *
  * 응답 화면의 쓰기 셋(보기 그룹 표의 use-choice-opt-toggle · 보기 소스 표의 그룹 선택 · 그룹 없는
  * 체크박스 문항의 선택 목록)과 빌더의 후보·정리(survey-builder)가 같은 자격 판정을 쓴다.
+ * 쓰기는 직접 고른 쓰기 뒤 같은 쓰기 안에서 부르고, 서버는 다시 적용하지 않는다(입력 편의이지 검증이 아니다).
+ *
+ * 최대 선택 수와 만날 때: 그룹 없는 체크박스 문항의 `maxSelections` 만 지금 동작한다 — 함께 골라질 보기까지
+ * 넣으면 넘을 때는 누른 보기도 받지 않고 안내한다(`choice.impliedOverMax`). 그룹 최대 선택 수
+ * (`ChoiceGroup.maxSelections`)는 아직 어디서도 읽지 않는다. 살릴 때는 같은 규칙을 그룹마다 건다
+ * (2026-11-12 결정, `.scratch/implied-selection/PRD.md`).
  */
 import type { ChoiceGroup, TableCell } from '@/types/survey';
 import { resolveChoiceCellGroup } from '@/utils/choice-group-helpers';

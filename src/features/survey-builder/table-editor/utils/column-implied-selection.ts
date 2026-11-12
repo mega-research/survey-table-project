@@ -15,7 +15,15 @@ import type { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/surve
  *
  * 열 일괄 적용은 「같은 위치 관계」로 옮긴다: 기준 칸에서 대상까지의 (행 차이, 열 차이)를 같은 열의
  * 다른 칸에 그대로 적용한다. 수혜 ①칸에 「왼쪽 한 칸」을 걸고 일괄 적용하면 ②~⑥도 각자 왼쪽 한 칸이다
- * (열 일괄 지정 선례: column-distinct-group).
+ * (열 일괄 지정 선례: column-distinct-group). 저장 확정(commit-cell-edit)이 칸마다 걸 짝을 미리 계산한
+ * 계획(`CellSaveOptions.columnImpliedSelection`)을 에디터와 DB 에 같이 보낸다.
+ *
+ * 칸을 복사하는 길마다 짝이 남의 칸을 가리키지 않게 한다 — 새 복사 경로를 만들면 이 넷 중 어느 규칙인지 정할 것.
+ * - 문항 복제: `remapCellRefs` 가 사본 안의 칸으로 옮긴다.
+ * - 행 복제(use-table-editor `duplicateRow`): 같은 행을 가리키던 짝은 복제 행의 칸으로, 행 밖 참조는 그대로.
+ * - 영역 붙여넣기: 영역 안을 가리키던 짝만 같은 위치로 옮기고 나머지는 뺀다(`resolvePastedImpliedCellIds` —
+ *   게이팅의 「같은 표에 있으면 유지」와 다르다. 짝은 대개 같은 행의 옆 칸이라 유지하면 2행에 붙인 칸이 1행을 체크한다).
+ * - 칸 하나 붙여넣기: 짝을 싣지 않는다. 설문 복제는 칸 id 를 그대로 두므로 짝도 그대로다. 보관함에는 싣지 않는다.
  */
 
 type Position = { row: number; column: number };
