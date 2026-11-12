@@ -1,15 +1,17 @@
+import { buildCellPositionLabels } from '@/features/question-renderer/utils/column-axis-cards';
 import {
+  type ImpliedSelectionScope,
   canImplySelection,
   isImpliedSelectionTarget,
 } from '@/features/question-renderer/utils/implied-selection';
-import { buildCellPositionLabels } from '@/features/question-renderer/utils/column-axis-cards';
-import type { ChoiceGroup, HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
+import type { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 
 /**
  * 따라 선택의 빌더 쪽 (CONTEXT.md "따라 선택") — 함께 고를 칸 후보, 죽은 짝 정리, 열 일괄 적용.
  *
  * 자격 판정은 응답 화면과 같은 함수(question-renderer/utils/implied-selection)를 쓴다 —
- * 빌더가 걸 수 있게 해 준 짝을 응답 화면이 무시하는 일이 없어야 한다.
+ * 빌더가 걸 수 있게 해 준 짝을 응답 화면이 무시하는 일이 없어야 한다. 그래서 문항의 그룹 정의와
+ * 그룹 없는 칸의 선택 방식(`ImpliedSelectionScope`)을 함께 받는다.
  *
  * 열 일괄 적용은 「같은 위치 관계」로 옮긴다: 기준 칸에서 대상까지의 (행 차이, 열 차이)를 같은 열의
  * 다른 칸에 그대로 적용한다. 수혜 ①칸에 「왼쪽 한 칸」을 걸고 일괄 적용하면 ②~⑥도 각자 왼쪽 한 칸이다
@@ -17,10 +19,6 @@ import type { ChoiceGroup, HeaderCell, TableCell, TableColumn, TableRow } from '
  */
 
 type Position = { row: number; column: number };
-
-function groupsByIdOf(groups: readonly ChoiceGroup[]): Map<string, ChoiceGroup> {
-  return new Map(groups.map((group) => [group.id, group]));
-}
 
 function locate(rows: readonly TableRow[], cellId: string): Position | null {
   for (const [row, tableRow] of rows.entries()) {
@@ -62,14 +60,12 @@ export function labelImpliedSelectionCells(input: {
 export function listImpliedSelectionCandidates(
   rows: readonly TableRow[],
   ownCellId: string,
-  groups: readonly ChoiceGroup[],
+  scope: ImpliedSelectionScope,
 ): string[] {
-  const groupsById = groupsByIdOf(groups);
   return rows
     .flatMap((row) => row.cells)
     .filter(
-      (cell) =>
-        cell.id !== ownCellId && isLiveCell(cell) && isImpliedSelectionTarget(cell, groupsById),
+      (cell) => cell.id !== ownCellId && isLiveCell(cell) && isImpliedSelectionTarget(cell, scope),
     )
     .map((cell) => cell.id);
 }
@@ -80,10 +76,10 @@ export function listImpliedSelectionCandidates(
  */
 export function pruneImpliedCellIds(
   impliedCellIds: readonly string[],
-  context: { rows: readonly TableRow[]; ownCellId: string; groups: readonly ChoiceGroup[] },
+  context: ImpliedSelectionScope & { rows: readonly TableRow[]; ownCellId: string },
 ): string[] {
   const candidates = new Set(
-    listImpliedSelectionCandidates(context.rows, context.ownCellId, context.groups),
+    listImpliedSelectionCandidates(context.rows, context.ownCellId, context),
   );
   return [...new Set(impliedCellIds)].filter((id) => candidates.has(id));
 }
@@ -91,21 +87,20 @@ export function pruneImpliedCellIds(
 function isColumnSource(
   cell: TableCell | undefined,
   anchorCellId: string,
-  groupsById: ReadonlyMap<string, ChoiceGroup>,
+  scope: ImpliedSelectionScope,
 ): cell is TableCell {
-  return isLiveCell(cell) && cell.id !== anchorCellId && canImplySelection(cell, groupsById);
+  return isLiveCell(cell) && cell.id !== anchorCellId && canImplySelection(cell, scope);
 }
 
 /** 일괄 적용이 바꿀 칸 수 — 기준 칸과 같은 열의 다른 출발 자격 칸. */
 export function countColumnImpliedSelectionTargets(
   rows: readonly TableRow[],
   anchorCellId: string,
-  groups: readonly ChoiceGroup[],
+  scope: ImpliedSelectionScope,
 ): number {
   const anchor = locate(rows, anchorCellId);
   if (!anchor) return 0;
-  const groupsById = groupsByIdOf(groups);
-  return rows.filter((row) => isColumnSource(row.cells[anchor.column], anchorCellId, groupsById))
+  return rows.filter((row) => isColumnSource(row.cells[anchor.column], anchorCellId, scope))
     .length;
 }
 
@@ -120,11 +115,10 @@ export function planColumnImpliedSelection(
   rows: readonly TableRow[],
   anchorCellId: string,
   anchorImpliedCellIds: readonly string[],
-  groups: readonly ChoiceGroup[],
+  scope: ImpliedSelectionScope,
 ): ImpliedSelectionPlan {
   const anchor = locate(rows, anchorCellId);
   if (!anchor) return {};
-  const groupsById = groupsByIdOf(groups);
   const offsets = anchorImpliedCellIds
     .map((id) => locate(rows, id))
     .filter((position): position is Position => position !== null)
@@ -136,12 +130,12 @@ export function planColumnImpliedSelection(
   const plan: ImpliedSelectionPlan = {};
   for (const [rowIndex, row] of rows.entries()) {
     const source = row.cells[anchor.column];
-    if (!isColumnSource(source, anchorCellId, groupsById)) continue;
+    if (!isColumnSource(source, anchorCellId, scope)) continue;
     const targets: string[] = [];
     for (const offset of offsets) {
       const target = rows[rowIndex + offset.row]?.cells[anchor.column + offset.column];
       if (!isLiveCell(target) || target.id === source.id) continue;
-      if (!isImpliedSelectionTarget(target, groupsById)) continue;
+      if (!isImpliedSelectionTarget(target, scope)) continue;
       if (!targets.includes(target.id)) targets.push(target.id);
     }
     plan[source.id] = targets;

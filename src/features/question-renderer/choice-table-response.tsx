@@ -35,6 +35,7 @@ import {
   countSelectionsTowardMax,
   satisfiesMinSelections,
 } from './utils/exclusive-choice';
+import { applyImpliedSelection, applyImpliedSelectionToList } from './utils/implied-selection';
 import { PRIOR_HIGHLIGHT_CONTROL_CLS, isPriorChoice } from '@/features/question-renderer/utils/prior-answer-highlight';
 import { usePriorHighlight } from '@/features/question-renderer/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
@@ -277,6 +278,27 @@ function ChoiceTableResponseBody({
     [question.tableRowsData],
   );
 
+  /**
+   * 따라 선택 (CONTEXT.md) 판정 재료 — 고른 칸에 짝이 걸려 있을 때만 만든다(짝 없는 표는 비용이 없다).
+   * 보이는 칸은 화면·검증과 같은 투영이라, 숨은 행의 칸은 따라 골라지지 않는다.
+   */
+  const impliedContextFor = (cellId: string) => {
+    const tableCells = (question.tableRowsData ?? []).flatMap((row) => row.cells);
+    const picked = tableCells.find((cell) => cell.id === cellId);
+    if (!picked?.impliedCellIds?.length) return null;
+    return {
+      picked,
+      context: {
+        tableCells,
+        groups: question.choiceGroups ?? [],
+        ungroupedSelectionType: resolveUngroupedSelectionType(question.type),
+        visibleCellIds: collectProjectedCellIds(rowWiseLayout.rows),
+      },
+    };
+  };
+  // 함께 골라질 보기까지 넣으면 최대 선택 수를 넘어 누른 보기를 받지 않았다 — 순위형의 「다 찼다」 안내와 같은 결
+  const [impliedOverMax, setImpliedOverMax] = useState(false);
+
   const toggle = (cellId: string, checked: boolean) => {
     if (isGrouped) {
       const groupKey = getGroupKeyOfCell(question, cellId);
@@ -302,16 +324,18 @@ function ChoiceTableResponseBody({
           onChange(omitKey(map, groupKey));
         } else {
           const merged = { ...map, [groupKey]: next } as GroupSelectionMap;
-          onChange(
-            (arr.includes(cellId)
-              ? merged
-              : applyTableExclusiveToGroups(
-                  merged,
-                  groupKey,
-                  cellId,
-                  tableExclusiveIds,
-                )) as GroupedChoiceAnswer,
-          );
+          if (arr.includes(cellId)) {
+            onChange(merged as GroupedChoiceAnswer);
+          } else {
+            // 고른 것 — 표 전체 단독 선택을 정리한 뒤, 걸린 보기를 같은 쓰기에 함께 넣는다
+            const picked = applyTableExclusiveToGroups(merged, groupKey, cellId, tableExclusiveIds);
+            const implied = impliedContextFor(cellId);
+            onChange(
+              (implied
+                ? applyImpliedSelection(picked, implied.picked, implied.context)
+                : picked) as GroupedChoiceAnswer,
+            );
+          }
         }
         return;
       }
@@ -350,9 +374,24 @@ function ChoiceTableResponseBody({
         return;
       // 단독 선택 보기 규칙 — 비그룹 문항은 문항 전체가 한 그룹이다
       next = applyExclusiveSelection(next, cellId, isExclusiveChoiceCell).next;
+      // 따라 선택 — 걸린 보기까지 넣었을 때 상한을 넘으면 누른 보기도 받지 않고 알린다.
+      // 일부만 넣으면 「이 보기를 고르면 저 보기도」가 깨진 응답이 남는다.
+      const implied = impliedContextFor(cellId);
+      if (implied) {
+        next = [...applyImpliedSelectionToList(next, implied.picked, implied.context)];
+        if (
+          maxSel !== undefined &&
+          maxSel > 0 &&
+          countSelectionsTowardMax(next, isExclusiveChoiceCell) > maxSel
+        ) {
+          setImpliedOverMax(true);
+          return;
+        }
+      }
     } else {
       next = next.filter((id) => id !== cellId);
     }
+    setImpliedOverMax(false);
     onChange(next);
   };
 
@@ -685,19 +724,26 @@ function ChoiceTableResponseBody({
   const showCounter = isCheckbox && (minSel !== undefined || maxSel !== undefined);
 
   const counter = showCounter ? (
-    <div className="flex items-center justify-end gap-2 text-sm">
-      <span className="text-gray-600">
-        {maxSel !== undefined && maxSel > 0
-          ? systemText('choice.selectedCountOf', locale, {
-              count: visibleSelectedIds.length,
-              max: maxSel,
-            })
-          : systemText('choice.selectedCount', locale, { count: visibleSelectedIds.length })}
-      </span>
-      {!satisfiesMinSelections(visibleSelectedIds, minSel, isExclusiveChoiceCell) && (
-        <span className="text-orange-600">
-          {systemText('choice.minSelections', locale, { min: minSel ?? 0 })}
+    <div className="space-y-1">
+      <div className="flex items-center justify-end gap-2 text-sm">
+        <span className="text-gray-600">
+          {maxSel !== undefined && maxSel > 0
+            ? systemText('choice.selectedCountOf', locale, {
+                count: visibleSelectedIds.length,
+                max: maxSel,
+              })
+            : systemText('choice.selectedCount', locale, { count: visibleSelectedIds.length })}
         </span>
+        {!satisfiesMinSelections(visibleSelectedIds, minSel, isExclusiveChoiceCell) && (
+          <span className="text-orange-600">
+            {systemText('choice.minSelections', locale, { min: minSel ?? 0 })}
+          </span>
+        )}
+      </div>
+      {impliedOverMax && maxSel !== undefined && (
+        <p role="status" className="text-right text-sm text-amber-700">
+          {systemText('choice.impliedOverMax', locale, { max: maxSel })}
+        </p>
       )}
     </div>
   ) : null;

@@ -22,6 +22,8 @@ import { client } from '@/shared/lib/rpc';
 import { collectChoiceOptCells } from '@/utils/choice-source';
 import { collectRankingOptCells } from '@/utils/ranking-source';
 
+import { resolveUngroupedSelectionType } from '@/features/question-renderer/utils/row-scale-bars';
+
 import { applyDistinctGroupToColumn } from '../utils/column-distinct-group';
 import {
   applyImpliedSelectionPlan,
@@ -106,9 +108,11 @@ export async function commitCellEdit({
     // 열 일괄 지정은 저장되는 셀의 값(미지정 포함)을 그대로 따른다.
     // 따라 선택 열 일괄 적용 — 이 칸을 반영한 최신 행과 편집 중인 그룹으로 칸마다 걸 짝을 정한다.
     // 기준 칸의 짝이 비어 있으면 같은 열의 짝을 지우는 계획이 된다.
+    const impliedPlanQuestion = impliedSelectionColumnWide
+      ? questions.find((q) => q.id === currentQuestionId)
+      : undefined;
     const impliedPlanRows = impliedSelectionColumnWide
-      ? (getLatestRows?.() ??
-        questions.find((q) => q.id === currentQuestionId)?.tableRowsData)
+      ? (getLatestRows?.() ?? impliedPlanQuestion?.tableRowsData)
       : undefined;
     const impliedSelectionPlan = impliedPlanRows
       ? planColumnImpliedSelection(
@@ -118,7 +122,11 @@ export async function commitCellEdit({
           })),
           cell.id,
           updatedCell.impliedCellIds ?? [],
-          editChoiceGroups,
+          {
+            groups: editChoiceGroups,
+            // 그룹 없는 보기 칸은 문항 유형을 따른다 — 체크박스 문항의 내장 표는 문항 전체가 한 묶음
+            ungroupedSelectionType: resolveUngroupedSelectionType(impliedPlanQuestion?.type),
+          },
         )
       : undefined;
     const saveOptions: CellSaveOptions | undefined =

@@ -513,16 +513,7 @@ describe('ChoiceOptCellTab — 따라 선택', () => {
     expect(screen.getByText(/같은 표에 체크박스 그룹의 다른 보기 칸이 없습니다/)).toBeInTheDocument();
   });
 
-  it.each([
-    ['단독 선택 보기', { ...checkboxCell, exclusiveChoice: true }],
-    ['라디오 그룹의 보기 칸', { choiceGroups: [rad1], choiceGroupId: 'g1' }],
-    ['그룹에 속하지 않은 보기 칸', { choiceGroups: [cb1], choiceGroupId: '' }],
-  ])('%s에서는 구역을 그리지 않는다', (_name, cellProps) => {
-    render(<ChoiceOptCellTab {...makeProps({ ...cellProps, impliedSelection: impliedProps() })} />);
-    expect(screen.queryByText('따라 선택')).not.toBeInTheDocument();
-  });
-
-  it('공급이 없으면(보기 소스 표) 구역을 그리지 않는다', () => {
+  it('공급이 없으면(걸 수 없는 칸 — 판정은 모달) 구역을 그리지 않는다', () => {
     render(<ChoiceOptCellTab {...makeProps(checkboxCell)} />);
     expect(screen.queryByText('따라 선택')).not.toBeInTheDocument();
   });

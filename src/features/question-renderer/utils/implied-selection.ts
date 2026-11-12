@@ -4,34 +4,55 @@
  * 한 방향이고 고를 때만 따라간다. 풀 때는 규칙이 없어 여기서 다루지 않는다(누른 칸 하나만 풀린다).
  * 사슬은 끝까지 따라간다 — 수혜 → 지원, 지원 → 알고 이면 수혜 하나로 셋이 골라진다.
  *
- * 응답 화면의 쓰기(use-choice-opt-toggle)와 빌더의 후보·정리(survey-builder)가 같은 자격 판정을 쓴다.
- * 테이블 유형 문항의 체크박스 보기 그룹 전용이다 — 보기 소스 표는 쓰기 경로가 달라 대상이 아니다.
+ * 응답 화면의 쓰기 셋(보기 그룹 표의 use-choice-opt-toggle · 보기 소스 표의 그룹 선택 · 그룹 없는
+ * 체크박스 문항의 선택 목록)과 빌더의 후보·정리(survey-builder)가 같은 자격 판정을 쓴다.
  */
 import type { ChoiceGroup, TableCell } from '@/types/survey';
+import { DEFAULT_GROUP_KEY } from '@/utils/choice-group-helpers';
 
 import {
   type GroupSelectionMap,
   applyExclusiveSelection,
   applyTableExclusiveToGroups,
-  collectExclusiveChoiceCellIds,
   collectTableExclusiveChoiceCellIds,
   isExclusiveChoiceCell,
 } from './exclusive-choice';
 
-type GroupsById = ReadonlyMap<string, ChoiceGroup>;
-
-function checkboxGroupOf(cell: TableCell, groupsById: GroupsById): ChoiceGroup | undefined {
-  if (cell.type !== 'choice_opt' || cell.choiceGroupId === undefined) return undefined;
-  const group = groupsById.get(cell.choiceGroupId);
-  return group?.type === 'checkbox' ? group : undefined;
+/** 보기 칸이 어느 선택 묶음에 드는지 정하는 재료 — 문항의 그룹 정의와, 그룹 없는 칸의 선택 방식 */
+export interface ImpliedSelectionScope {
+  groups: readonly ChoiceGroup[];
+  /**
+   * 그룹 없는 보기 칸의 선택 방식 (`resolveUngroupedSelectionType(문항 유형)`). 체크박스·라디오 문항의
+   * 내장 표는 문항 유형이고, 테이블 유형은 null — 그룹 없는 보기 칸은 답할 수 없는 글자 칸이다.
+   * 미지정은 null 과 같다.
+   */
+  ungroupedSelectionType?: 'radio' | 'checkbox' | null | undefined;
 }
 
 /**
- * 따라 선택을 일으킬 수 있는 칸인가 — 체크박스 그룹의 보기 칸이고 단독 선택 보기가 아니다.
+ * 이 칸이 속한 **체크박스** 묶음의 응답 키 — 체크박스로 고르는 보기 칸이 아니면 null.
+ *
+ * 그룹에 속하면 그 그룹의 종류를 따른다(체크박스면 그룹 키, 라디오면 null). 그룹이 없거나 없어진
+ * 그룹·순위 그룹을 가리키면 문항 유형의 기본 묶음이다 — 보기 소스 표의 getGroupKeyOfCell ·
+ * getGroupTypeOfCell 과 같은 규칙이고, 테이블 유형은 기본 묶음이 없어 null 이다.
+ */
+function checkboxGroupKeyOf(cell: TableCell, scope: ImpliedSelectionScope): string | null {
+  if (cell.type !== 'choice_opt') return null;
+  const group =
+    cell.choiceGroupId !== undefined
+      ? scope.groups.find((candidate) => candidate.id === cell.choiceGroupId)
+      : undefined;
+  if (group?.type === 'checkbox') return group.groupKey;
+  if (group?.type === 'radio') return null;
+  return scope.ungroupedSelectionType === 'checkbox' ? DEFAULT_GROUP_KEY : null;
+}
+
+/**
+ * 따라 선택을 일으킬 수 있는 칸인가 — 체크박스로 고르는 보기 칸이고 단독 선택 보기가 아니다.
  * 단독 선택 보기는 「그것 하나만 남는다」가 뜻이라 다른 칸을 함께 고르는 것과 어긋난다.
  */
-export function canImplySelection(cell: TableCell, groupsById: GroupsById): boolean {
-  return checkboxGroupOf(cell, groupsById) !== undefined && !isExclusiveChoiceCell(cell);
+export function canImplySelection(cell: TableCell, scope: ImpliedSelectionScope): boolean {
+  return checkboxGroupKeyOf(cell, scope) !== null && !isExclusiveChoiceCell(cell);
 }
 
 /**
@@ -39,8 +60,8 @@ export function canImplySelection(cell: TableCell, groupsById: GroupsById): bool
  * 단독 선택 보기를 대상으로 두면 일반 보기를 눌렀는데 「없음」이 따라 골라져 그 그룹이 통째로 빈다.
  * 「지금 그려지는가」는 응답 화면만 아는 것이라 여기서 보지 않는다(resolveImpliedCells 가 본다).
  */
-export function isImpliedSelectionTarget(cell: TableCell, groupsById: GroupsById): boolean {
-  return canImplySelection(cell, groupsById) && !cell.isHidden;
+export function isImpliedSelectionTarget(cell: TableCell, scope: ImpliedSelectionScope): boolean {
+  return canImplySelection(cell, scope) && !cell.isHidden;
 }
 
 /** 이 표에 따라 선택 짝이 하나라도 걸려 있는가 — 없는 표(대다수)는 아무 준비도 하지 않는다 */
@@ -48,12 +69,11 @@ export function hasImpliedSelection(cells: readonly TableCell[]): boolean {
   return cells.some((cell) => (cell.impliedCellIds?.length ?? 0) > 0);
 }
 
-export interface ImpliedSelectionContext {
+export interface ImpliedSelectionContext extends ImpliedSelectionScope {
   /** 표 전체 셀 정의 — 대상은 다른 행에 있을 수 있다 */
   tableCells: readonly TableCell[];
-  groups: readonly ChoiceGroup[];
   /**
-   * 지금 그려지는 칸 — 행·열 표시 조건과 동적 행 선택을 거쳐 남은 칸. 주어지면 그 밖의 칸은
+   * 응답자가 볼 수 있는 칸 — 행·열 표시 조건과 동적 행 선택을 거쳐 남은 칸. 주어지면 그 밖의 칸은
    * 따라 고르지 않는다(응답자가 풀 수 없는 값을 만들지 않는다). null·미지정이면 표 전체가 보이는 것으로 본다.
    */
   visibleCellIds?: ReadonlySet<string> | null | undefined;
@@ -65,8 +85,7 @@ export interface ImpliedSelectionContext {
  */
 export function resolveImpliedCells(picked: TableCell, context: ImpliedSelectionContext): TableCell[] {
   if (!picked.impliedCellIds?.length) return [];
-  const groupsById = new Map(context.groups.map((group) => [group.id, group]));
-  if (!canImplySelection(picked, groupsById)) return [];
+  if (!canImplySelection(picked, context)) return [];
 
   const cellsById = new Map(context.tableCells.map((cell) => [cell.id, cell]));
   const visibleCellIds = context.visibleCellIds ?? null;
@@ -78,7 +97,7 @@ export function resolveImpliedCells(picked: TableCell, context: ImpliedSelection
       if (visited.has(targetId)) continue;
       visited.add(targetId);
       const target = cellsById.get(targetId);
-      if (!target || !isImpliedSelectionTarget(target, groupsById)) continue;
+      if (!target || !isImpliedSelectionTarget(target, context)) continue;
       if (visibleCellIds !== null && !visibleCellIds.has(targetId)) continue;
       resolved.push(target);
       queue.push(target);
@@ -87,8 +106,20 @@ export function resolveImpliedCells(picked: TableCell, context: ImpliedSelection
   return resolved;
 }
 
+/** 같은 체크박스 묶음에 든 단독 선택 보기 칸 id — 따라 골라진 칸이 직접 고른 것처럼 이들을 푼다 */
+function exclusiveIdsInGroup(groupKey: string, context: ImpliedSelectionContext): Set<string> {
+  const ids = new Set<string>();
+  for (const cell of context.tableCells) {
+    if (isExclusiveChoiceCell(cell) && checkboxGroupKeyOf(cell, context) === groupKey) {
+      ids.add(cell.id);
+    }
+  }
+  return ids;
+}
+
 /**
  * 따라 선택을 그룹 선택 맵에 적용한다 — 고른 칸의 쓰기가 끝난 **뒤** 호출한다.
+ * 보기 그룹 표의 `__choiceGroups` 와 보기 소스 표 그룹 문항의 응답이 이 모양이다.
  *
  * 따라 골라진 칸은 직접 고른 것과 같은 보기다: 그 그룹의 단독 선택 보기를 풀고, 다른 그룹에 들어 있던
  * 표 전체 단독 선택 보기를 뺀다. 이미 골라진 칸은 그대로 둔다. 바뀔 것이 없으면 받은 맵을 그대로 돌려준다.
@@ -101,25 +132,45 @@ export function applyImpliedSelection(
   const implied = resolveImpliedCells(picked, context);
   if (implied.length === 0) return map;
 
-  const groupsById = new Map(context.groups.map((group) => [group.id, group]));
   const tableExclusiveIds = collectTableExclusiveChoiceCellIds(context.tableCells);
   let next = map;
   for (const cell of implied) {
-    const group = checkboxGroupOf(cell, groupsById);
-    if (!group) continue;
-    const selection = next[group.groupKey];
+    const groupKey = checkboxGroupKeyOf(cell, context);
+    if (groupKey === null) continue;
+    const selection = next[groupKey];
     const current = Array.isArray(selection) ? selection : [];
     if (current.includes(cell.id)) continue;
-    const groupExclusiveIds = collectExclusiveChoiceCellIds(context.tableCells, group.id);
+    const groupExclusiveIds = exclusiveIdsInGroup(groupKey, context);
     const selected = applyExclusiveSelection(current, cell.id, (id) =>
       groupExclusiveIds.has(id),
     ).next;
     next = applyTableExclusiveToGroups(
-      { ...next, [group.groupKey]: selected },
-      group.groupKey,
+      { ...next, [groupKey]: selected },
+      groupKey,
       cell.id,
       tableExclusiveIds,
     );
+  }
+  return next;
+}
+
+/**
+ * 따라 선택을 선택 목록에 적용한다 — 그룹 없는 체크박스 문항의 내장 표는 문항 전체가 한 묶음이라
+ * 응답이 보기 칸 id 배열 하나다. 고른 칸의 쓰기가 끝난 **뒤** 호출한다. 바뀔 것이 없으면 받은 목록 그대로다.
+ */
+export function applyImpliedSelectionToList(
+  current: readonly string[],
+  picked: TableCell,
+  context: ImpliedSelectionContext,
+): readonly string[] {
+  const implied = resolveImpliedCells(picked, context);
+  if (implied.length === 0) return current;
+
+  const exclusiveIds = exclusiveIdsInGroup(DEFAULT_GROUP_KEY, context);
+  let next: readonly string[] = current;
+  for (const cell of implied) {
+    if (next.includes(cell.id)) continue;
+    next = applyExclusiveSelection(next, cell.id, (id) => exclusiveIds.has(id)).next;
   }
   return next;
 }

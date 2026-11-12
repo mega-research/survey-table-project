@@ -55,7 +55,7 @@ const itemRow = (n: number, title: string, benefit: Partial<TableCell> = {}): Ta
   ],
 });
 
-function setup(rows: TableRow[], cellId: string) {
+function setup(rows: TableRow[], cellId: string, overrides: Partial<Question> = {}) {
   const question: Question = {
     id: 'q1',
     type: 'table',
@@ -65,6 +65,7 @@ function setup(rows: TableRow[], cellId: string) {
     tableColumns: columns,
     tableRowsData: rows,
     choiceGroups: groups,
+    ...overrides,
   };
   useSurveyBuilderStore.getState().setSurvey({
     id: 's1',
@@ -87,9 +88,9 @@ function setup(rows: TableRow[], cellId: string) {
       cell={rows.flatMap((row) => row.cells).find((cell) => cell.id === cellId)!}
       ownQuestion={question}
       currentQuestionId="q1"
-      choiceGroups={groups}
+      choiceGroups={question.choiceGroups ?? []}
       getLatestRows={() => rows}
-      getLatestColumns={() => columns}
+      getLatestColumns={() => question.tableColumns}
       onSave={onSave}
     />,
   );
@@ -188,5 +189,79 @@ describe('CellContentModal — 따라 선택', () => {
     await waitFor(() => expect(updateQuestionMock).toHaveBeenCalled());
     expect(savedCell('benefit1')).not.toHaveProperty('impliedCellIds');
     expect(savedCell('benefit1').exclusiveChoice).toBe(true);
+  });
+});
+
+describe('CellContentModal — 따라 선택을 걸 수 있는 칸', () => {
+  beforeEach(() => {
+    useSurveyBuilderStore.getState().resetSurvey();
+    updateQuestionMock.mockResolvedValue({ id: 'q1' });
+  });
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  // 체크박스·라디오 문항의 내장 표 — 그룹 없이 보기 칸만 있다
+  const bare = (id: string, extra: Partial<TableCell> = {}): TableCell => ({
+    id,
+    type: 'choice_opt',
+    content: '',
+    ...extra,
+  });
+  const sourceRows = (): TableRow[] => [
+    { id: 'r1', label: '세트', cells: [{ id: 't1', type: 'text', content: '세트' }, bare('set')] },
+    { id: 'r2', label: 'TV', cells: [{ id: 't2', type: 'text', content: 'TV' }, bare('tv')] },
+    {
+      id: 'r3',
+      label: '없음',
+      cells: [{ id: 't3', type: 'text', content: '없음' }, bare('none', { exclusiveChoice: true })],
+    },
+  ];
+  const sourceColumns: TableColumn[] = [
+    { id: 'c0', label: '항목', width: 200 },
+    { id: 'c1', label: '선택', width: 100 },
+  ];
+  const addBox = () => screen.queryByRole('combobox', { name: '함께 고를 칸 더하기' });
+
+  it('체크박스 문항의 내장 표는 그룹 없는 보기 칸끼리 건다 — 단독 선택 보기는 후보가 아니다', async () => {
+    setup(sourceRows(), 'set', { type: 'checkbox', choiceGroups: [], tableColumns: sourceColumns });
+
+    const add = addBox()!;
+    expect(add).toHaveTextContent('TV · 선택');
+    expect(add).not.toHaveTextContent('없음');
+    fireEvent.change(add, { target: { value: 'tv' } });
+
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() => expect(updateQuestionMock).toHaveBeenCalled());
+    expect(savedCell('set').impliedCellIds).toEqual(['tv']);
+  });
+
+  it('라디오 문항의 내장 표에서는 구역이 없고, 남아 있던 짝은 저장하면 사라진다', async () => {
+    const rows = sourceRows().map((row) => ({
+      ...row,
+      cells: row.cells.map((cell) =>
+        cell.id === 'set' ? { ...cell, impliedCellIds: ['tv'] } : cell,
+      ),
+    }));
+    setup(rows, 'set', { type: 'radio', choiceGroups: [], tableColumns: sourceColumns });
+    expect(addBox()).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() => expect(updateQuestionMock).toHaveBeenCalled());
+    expect(savedCell('set')).not.toHaveProperty('impliedCellIds');
+  });
+
+  it('테이블 유형 문항의 그룹 없는 보기 칸에서는 구역이 없다 — 답할 수 없는 글자 칸이다', () => {
+    setup(sourceRows(), 'set', { type: 'table', choiceGroups: [], tableColumns: sourceColumns });
+    expect(addBox()).not.toBeInTheDocument();
+  });
+
+  it('라디오 그룹의 보기 칸에서는 구역이 없다', () => {
+    const radioGroups: ChoiceGroup[] = groups.map((group) => ({ ...group, type: 'radio' }));
+    setup([itemRow(1, '① 금융/자금 지원'), itemRow(2, '② 인력 지원')], 'benefit1', {
+      choiceGroups: radioGroups,
+    });
+    expect(addBox()).not.toBeInTheDocument();
   });
 });

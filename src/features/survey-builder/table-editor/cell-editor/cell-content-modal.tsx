@@ -40,6 +40,11 @@ import { useEnsureSurveyInDb } from '@/features/survey-builder/hooks/use-ensure-
 import { useSurveySync } from '@/features/survey-builder/hooks/use-survey-sync';
 import { NumberFormatFields } from '@/features/survey-builder/number-format-fields';
 import { OptionsLayoutSelector } from '@/features/survey-builder/options-layout-selector';
+import {
+  type ImpliedSelectionScope,
+  canImplySelection,
+} from '@/features/question-renderer/utils/implied-selection';
+import { resolveUngroupedSelectionType } from '@/features/question-renderer/utils/row-scale-bars';
 import { diagnoseChoiceGroupScaleBar } from '@/features/survey-builder/lib/scale-bar-diagnostics';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
@@ -402,16 +407,32 @@ export function CellContentModal({
           applyToColumn: distinctGroupColumnWide,
         })
       : null;
-  // 따라 선택 — 테이블 유형 문항의 체크박스 그룹 일반 보기 칸 전용(보기 소스 표는 쓰기 경로가 달라 뺀다).
+  // 따라 선택 — 체크박스로 고르는 일반 보기 칸 전용. 걸 수 있는 칸인지는 응답 화면과 같은 함수로,
+  // 이 칸의 편집 중 값(그룹 · 단독 선택)을 넣어 판정한다. 테이블 유형은 체크박스 그룹의 칸만, 체크박스·
+  // 라디오 문항의 내장 표는 체크박스 그룹의 칸과 (체크박스 문항이면) 그룹 없는 칸이다.
   // 죽은 짝(지워진 칸·자격을 잃은 칸)은 여기서 걸러 화면에도 저장에도 싣지 않는다.
-  const impliedSelectionGroup =
-    contentType === 'choice_opt' && parentQuestionType === 'table'
-      ? editChoiceGroups.find((group) => group.id === form.choiceGroupId)
-      : undefined;
+  const impliedSelectionScope = useMemo(
+    (): ImpliedSelectionScope => ({
+      groups: editChoiceGroups,
+      ungroupedSelectionType: resolveUngroupedSelectionType(parentQuestionType),
+    }),
+    [editChoiceGroups, parentQuestionType],
+  );
   const impliedSelectionEligible =
-    !!cell && impliedSelectionGroup?.type === 'checkbox' && !choiceExclusive;
+    !!cell &&
+    contentType === 'choice_opt' &&
+    canImplySelection(
+      {
+        id: cell.id,
+        type: 'choice_opt',
+        content: '',
+        ...(form.choiceGroupId ? { choiceGroupId: form.choiceGroupId } : {}),
+        ...(choiceExclusive ? { exclusiveChoice: true } : {}),
+      },
+      impliedSelectionScope,
+    );
   const impliedSelectionFields = useMemo((): ImpliedSelectionFields | undefined => {
-    if (!cell || contentType !== 'choice_opt' || parentQuestionType !== 'table') return undefined;
+    if (!cell || !impliedSelectionEligible) return undefined;
     const labels = labelImpliedSelectionCells({
       rows: gatingRows,
       columns: getLatestColumns?.() ?? ownQuestion.tableColumns ?? [],
@@ -421,31 +442,30 @@ export function CellContentModal({
     const selected = pruneImpliedCellIds(choiceImpliedCellIds, {
       rows: gatingRows,
       ownCellId: cell.id,
-      groups: editChoiceGroups,
+      ...impliedSelectionScope,
     });
     return {
       selected: selected.map(named),
-      candidates: listImpliedSelectionCandidates(gatingRows, cell.id, editChoiceGroups)
+      candidates: listImpliedSelectionCandidates(gatingRows, cell.id, impliedSelectionScope)
         .filter((cellId) => !selected.includes(cellId))
         .map(named),
       onAdd: (cellId) => setChoiceImpliedCellIds([...selected, cellId]),
       onRemove: (cellId) => setChoiceImpliedCellIds(selected.filter((id) => id !== cellId)),
       applyToColumn: impliedSelectionColumnWide,
       onApplyToColumnChange: setImpliedSelectionColumnWide,
-      columnApplyCount: countColumnImpliedSelectionTargets(gatingRows, cell.id, editChoiceGroups),
+      columnApplyCount: countColumnImpliedSelectionTargets(gatingRows, cell.id, impliedSelectionScope),
     };
   }, [
     cell,
     choiceImpliedCellIds,
-    contentType,
-    editChoiceGroups,
     gatingRows,
     getLatestColumns,
     getLatestHeaderGrid,
     impliedSelectionColumnWide,
+    impliedSelectionEligible,
+    impliedSelectionScope,
     ownQuestion.tableColumns,
     ownQuestion.tableHeaderGrid,
-    parentQuestionType,
     setChoiceImpliedCellIds,
   ]);
 
@@ -541,12 +561,11 @@ export function CellContentModal({
     await runAsyncAction(
       () =>
         commitCellEdit({
-          // 따라 선택 짝은 살아 있는 것만, 걸 수 없는 칸이면(라디오 그룹·보기 소스 표) 비워서 저장한다
+          // 따라 선택 짝은 살아 있는 것만, 걸 수 없는 칸이면(라디오·테이블 유형의 그룹 없는 칸) 비워서 저장한다
           form: {
             ...form,
-            choiceImpliedCellIds: impliedSelectionEligible
-              ? (impliedSelectionFields?.selected.map((target) => target.cellId) ?? [])
-              : [],
+            choiceImpliedCellIds:
+              impliedSelectionFields?.selected.map((target) => target.cellId) ?? [],
           },
           cell,
           questionCode,

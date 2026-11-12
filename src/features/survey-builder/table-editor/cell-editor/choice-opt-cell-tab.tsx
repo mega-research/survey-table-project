@@ -67,8 +67,8 @@ interface ChoiceOptCellTabProps {
   exclusiveScope: 'group' | 'table';
   onExclusiveScopeChange: (v: 'group' | 'table') => void;
   /**
-   * 따라 선택 (CONTEXT.md) — 이 보기를 고르면 함께 골라질 칸. 테이블 유형 문항에서만 공급되고,
-   * 체크박스 그룹의 일반 보기 칸(단독 선택 보기 아님)일 때만 구역을 그린다.
+   * 따라 선택 (CONTEXT.md) — 이 보기를 고르면 함께 골라질 칸. 이 칸이 체크박스로 고르는 일반 보기 칸
+   * (단독 선택 보기 아님)일 때만 공급되고, 공급되면 구역을 그린다.
    */
   impliedSelection?: ImpliedSelectionFields | undefined;
   /** 평균에서 제외 (CONTEXT.md 「척도 평균」) — 라디오로 그려지는 보기 칸에서만 노출 */
@@ -397,8 +397,9 @@ export function ChoiceOptCellTab({
         </div>
       )}
 
-      {/* 따라 선택 — 체크박스 그룹의 일반 보기 칸에서만. 단독 선택 보기는 「그것 하나만 남는다」라 배타다 */}
-      {impliedSelection && currentGroup?.type === 'checkbox' && !exclusiveChoice && (
+      {/* 따라 선택 — 체크박스로 고르는 일반 보기 칸에서만. 걸 수 있는 칸인지는 모달이 응답 화면과 같은
+          함수로 판정해, 걸 수 있을 때만 이 값을 넘긴다(단독 선택 보기 · 라디오는 넘어오지 않는다). */}
+      {impliedSelection && (
         <div className="space-y-1.5">
           <Label htmlFor="choice-opt-implied-add" className="text-sm font-medium">
             따라 선택
