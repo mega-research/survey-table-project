@@ -83,15 +83,33 @@ export type ReplyForwardLedgerOutcome = keyof typeof REPLY_FORWARD_EVENT_TYPE;
  */
 export const REPLY_FORWARD_SLOT_EVENT_TYPE = 'email.received:slot';
 
-/** 자리 줄의 id — 알림 id 에서 파생한다. 같은 알림의 재시도는 같은 자리를 다시 쓴다. */
-export function replyForwardSlotId(eventId: string): string {
-  return `${eventId}:reply-forward-slot`;
+/**
+ * 자리 줄의 id — 알림 id 에서 파생한다. 같은 알림의 재시도는 같은 자리를 다시 쓴다.
+ * 자리는 **나가는 메일마다** 하나다. 한 받은 메일에서 여러 통이 나가면(답장 중계 — 응답자마다 한 통) 대상 조각
+ * (`relayTargetKey` — 주소가 아니라 주소에서 뽑은 값)을 붙여 통마다 다른 자리를 잡는다. 같은 대상은 재시도에서도 같은 자리다.
+ */
+export function replyForwardSlotId(eventId: string, target?: string): string {
+  return target === undefined ? `${eventId}:reply-forward-slot` : `${eventId}:reply-forward-slot:to-${target}`;
+}
+
+/**
+ * 답장 중계의 「발송 기록」 줄 — 한 받은 메일에서 여러 통이 나갈 때 **대상마다** 나간 직후에 적는다.
+ * 재시도는 발송 전에 이 줄을 보고 이미 나간 대상을 건너뛴다(발송 서비스를 부르지 않는다). 발송 멱등 키는 하루만 보관되는데
+ * 알림 재시도는 그보다 길게 이어져, 한 대상이 계속 실패하면 키가 만료된 뒤의 재시도가 이미 나간 대상에게 또 보낸다.
+ * 결과 줄·자리 줄과 종류도 id 도 다르다 — 「이미 처리한 알림」 판정에도, 시간당 상한에도 세지 않는다. 주소를 적지 않는다.
+ */
+export const REPLY_RELAY_DELIVERY_EVENT_TYPE = 'email.received:relay-sent';
+
+/** 발송 기록 줄의 id — 알림 id 와 대상 조각에서 파생한다. */
+export function replyRelayDeliveryId(eventId: string, target: string): string {
+  return `${eventId}:reply-relay-sent:to-${target}`;
 }
 
 /**
  * 시간당 상한 — 최근 한 시간에 잡힌 자리가 이만큼이면 더 넘기지 않는다.
  * 회신 전달은 설문 발송과 같은 발송 한도를 쓴다. 보낸 사람 주소로 메일을 쏟아부어도 설문 발송이 막히지 않게 한다.
  * 자리는 발송이 실패해도 한 시간 동안 센다(보수적) — 상한은 「나간 메일」이 아니라 「발송을 시도한 메일」의 수다.
+ * 세는 단위는 받은 메일이 아니라 나가는 메일이다 — 답장 중계는 응답자마다 자리 하나를 쓴다.
  */
 export const REPLY_FORWARD_HOURLY_CAP = 200;
 export const REPLY_FORWARD_CAP_WINDOW_MS = 60 * 60 * 1000;

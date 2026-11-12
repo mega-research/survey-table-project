@@ -5,6 +5,11 @@ import { MAX_RECIPIENTS_PER_MAIL } from '@/lib/mail/split-email-addresses';
 import {
   FORWARD_SIZE_BUDGET_BYTES,
   MAX_SENDER_ACCOUNTS,
+  REPLY_FORWARD_EVENT_TYPE,
+  REPLY_FORWARD_SLOT_EVENT_TYPE,
+  REPLY_RELAY_DELIVERY_EVENT_TYPE,
+  replyForwardSlotId,
+  replyRelayDeliveryId,
   buildForwardMail,
   buildOmittedAttachmentsNotice,
   buildReplyGuideNotice,
@@ -729,5 +734,50 @@ describe('buildForwardMail — 보낸 사람 주소의 모양', () => {
     });
 
     expect(mail.text).toBe(`${buildReplyGuideNotice('kim@corp.co.kr').text}(본문 없음)`);
+  });
+});
+
+describe('웹훅 장부의 줄 — 자리 줄·발송 기록 줄·결과 줄', () => {
+  const EVENT_ID = 'msg_2abc';
+  const TARGET = '84c37c0a92';
+
+  it('자리 줄의 id 는 알림 id 에서 파생한다 — 대상 조각이 없으면 지금까지와 같은 값이다', () => {
+    expect(replyForwardSlotId(EVENT_ID)).toBe('msg_2abc:reply-forward-slot');
+  });
+
+  it('한 받은 메일에서 여러 통이 나가면 자리 줄의 id 에 대상 조각이 붙는다 — 같은 대상은 같은 자리, 다른 대상은 다른 자리다', () => {
+    expect(replyForwardSlotId(EVENT_ID, TARGET)).toBe('msg_2abc:reply-forward-slot:to-84c37c0a92');
+    expect(replyForwardSlotId(EVENT_ID, TARGET)).toBe(replyForwardSlotId(EVENT_ID, TARGET));
+    expect(replyForwardSlotId(EVENT_ID, '4158e183fe')).not.toBe(replyForwardSlotId(EVENT_ID, TARGET));
+    expect(replyForwardSlotId('msg_other', TARGET)).not.toBe(replyForwardSlotId(EVENT_ID, TARGET));
+  });
+
+  it('발송 기록 줄의 id 는 알림 id 와 대상 조각에서 파생한다', () => {
+    expect(replyRelayDeliveryId(EVENT_ID, TARGET)).toBe('msg_2abc:reply-relay-sent:to-84c37c0a92');
+  });
+
+  it('자리 줄·발송 기록 줄은 결과 줄과 id 도 종류도 다르다 — 「이미 처리한 알림」 판정을 속이지 않는다', () => {
+    const ids = [
+      EVENT_ID,
+      replyForwardSlotId(EVENT_ID),
+      replyForwardSlotId(EVENT_ID, TARGET),
+      replyRelayDeliveryId(EVENT_ID, TARGET),
+    ];
+    expect(new Set(ids).size).toBe(ids.length);
+
+    const types = [
+      ...Object.values(REPLY_FORWARD_EVENT_TYPE),
+      REPLY_FORWARD_SLOT_EVENT_TYPE,
+      REPLY_RELAY_DELIVERY_EVENT_TYPE,
+    ];
+    expect(new Set(types).size).toBe(types.length);
+    // 이 글자들은 장부에 그대로 저장된다 — 바꾸면 이미 적힌 줄을 알아보지 못한다.
+    expect(types).toEqual([
+      'email.received:forwarded',
+      'email.received:relayed',
+      'email.received:skipped',
+      'email.received:slot',
+      'email.received:relay-sent',
+    ]);
   });
 });

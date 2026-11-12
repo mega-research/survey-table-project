@@ -22,6 +22,8 @@ import { computeCycleBreakdown } from '@/server/mail/services/billing-cycle-summ
 import { ReplyForwardCapExceeded, forwardReceivedReply } from '@/server/mail/services/reply-forward';
 import {
   isWebhookEventRecorded,
+  loadDeliveredRelayTargets,
+  recordRelayDelivery,
   reserveForwardSlot,
 } from '@/server/mail/services/reply-forward-ledger';
 import { processResendWebhookEvent } from '@/server/mail/services/resend-webhook';
@@ -163,6 +165,8 @@ describe.skipIf(!isLocalDb)('회신 전달 안전장치 (real local DB)', () => 
         message_id: '<m1@corp.co.kr>',
         raw: { download_url: 'https://inbound.example/raw', expires_at: '2026-11-12T02:00:00Z' },
         attachments: [],
+        // 받는 메일 서버가 계산한 발신 인증 결과 — 회사 메일에서 온 실제 메일의 값이다.
+        authentication: { spf: 'pass', dkim: 'gray', dmarc: 'pass' },
       },
       error: null,
       headers: null,
@@ -294,6 +298,71 @@ describe.skipIf(!isLocalDb)('회신 전달 안전장치 (real local DB)', () => 
         if (!result.reserved) expect(result.slotsInWindow).toBe(REPLY_FORWARD_HOURLY_CAP);
       }
     });
+
+    it('한 알림에서 여러 통이 나가면 대상마다 자리를 따로 센다 — 같은 대상의 재시도는 자기 자리를 다시 쓴다', async () => {
+      await seedLedger(slots(REPLY_FORWARD_HOURLY_CAP - 2, minutesAgo(30)));
+      const eventId = newEventId();
+
+      // 대상 둘이 남은 자리 둘을 쓴다. 같은 대상이 다시 와도 그 자리 그대로다.
+      expect(await reserveForwardSlot(eventId, { now: NOW, target: 'aaaaaaaaaa' })).toEqual({ reserved: true });
+      expect(await reserveForwardSlot(eventId, { now: NOW, target: 'bbbbbbbbbb' })).toEqual({ reserved: true });
+      expect(await reserveForwardSlot(eventId, { now: NOW, target: 'aaaaaaaaaa' })).toEqual({ reserved: true });
+      expect(await reserveForwardSlot(eventId, { now: NOW, target: 'bbbbbbbbbb' })).toEqual({ reserved: true });
+
+      // 같은 알림의 셋째 대상은 201번째다 — 받은 메일 한 통이 자리 하나로 여러 통을 내보내지 못한다.
+      expect(await reserveForwardSlot(eventId, { now: NOW, target: 'cccccccccc' })).toEqual({
+        reserved: false,
+        slotsInWindow: REPLY_FORWARD_HOURLY_CAP,
+      });
+      // 대상 조각 없는 자리(회신 전달)도 같은 상한을 나눠 쓴다.
+      expect(await reserveForwardSlot(newEventId(), { now: NOW })).toEqual({
+        reserved: false,
+        slotsInWindow: REPLY_FORWARD_HOURLY_CAP,
+      });
+      expect(await isWebhookEventRecorded(eventId)).toBe(false);
+    });
+  });
+
+  describe('답장 중계의 발송 기록 줄', () => {
+    it('적은 대상만 「이미 나간 대상」으로 돌아온다 — 알림이 다르면 섞이지 않고, 두 번 적어도 한 줄이다', async () => {
+      const eventId = newEventId();
+      const otherEventId = newEventId();
+      expect(await loadDeliveredRelayTargets(eventId, ['aaaaaaaaaa', 'bbbbbbbbbb'])).toEqual(new Set());
+
+      await recordRelayDelivery(eventId, 'aaaaaaaaaa');
+      await recordRelayDelivery(eventId, 'aaaaaaaaaa');
+      await recordRelayDelivery(otherEventId, 'bbbbbbbbbb');
+
+      expect(await loadDeliveredRelayTargets(eventId, ['aaaaaaaaaa', 'bbbbbbbbbb'])).toEqual(new Set(['aaaaaaaaaa']));
+      expect(await loadDeliveredRelayTargets(otherEventId, ['aaaaaaaaaa', 'bbbbbbbbbb'])).toEqual(
+        new Set(['bbbbbbbbbb']),
+      );
+      expect(await loadDeliveredRelayTargets(eventId, [])).toEqual(new Set());
+      const rows = await db
+        .select({ id: webhookEvents.id, eventType: webhookEvents.eventType })
+        .from(webhookEvents)
+        .where(like(webhookEvents.id, `${eventId}%`));
+      expect(rows).toEqual([{ id: `${eventId}:reply-relay-sent:to-aaaaaaaaaa`, eventType: 'email.received:relay-sent' }]);
+    });
+
+    it('발송 기록 줄은 「이미 처리한 알림」 판정도, 시간당 상한도 속이지 않는다', async () => {
+      const NOW = new Date();
+      const eventId = newEventId();
+      // 발송 기록 줄이 상한만큼 쌓여 있어도 자리는 그대로 남아 있다.
+      for (let index = 0; index < REPLY_FORWARD_HOURLY_CAP; index += 1) {
+        await recordRelayDelivery(eventId, `t${String(index).padStart(9, '0')}`);
+      }
+
+      expect(await isWebhookEventRecorded(eventId)).toBe(false);
+      expect(await reserveForwardSlot(newEventId(), { now: NOW })).toEqual({ reserved: true });
+    });
+
+    it('자리 줄은 발송 기록으로 읽히지 않는다 — 자리만 잡고 실패한 대상은 아직 나가지 않은 대상이다', async () => {
+      const eventId = newEventId();
+      expect(await reserveForwardSlot(eventId, { target: 'aaaaaaaaaa' })).toEqual({ reserved: true });
+
+      expect(await loadDeliveredRelayTargets(eventId, ['aaaaaaaaaa'])).toEqual(new Set());
+    });
   });
 
   describe('시간당 상한 — 진입점부터 장부까지', () => {
@@ -411,7 +480,7 @@ describe.skipIf(!isLocalDb)('회신 전달 안전장치 (real local DB)', () => 
     });
   });
 
-  describe('답장 중계 — 판정 재료와 응답자마다 한 통', () => {
+  describe('답장 중계 — 판정 재료 · 발신 인증 · 나가는 메일마다 자리와 발송 기록', () => {
     const ledgerTypes = async () =>
       (
         await db
@@ -529,7 +598,17 @@ describe.skipIf(!isLocalDb)('회신 전달 안전장치 (real local DB)', () => 
       });
     });
 
-    it('중계 대상이 여럿이면 응답자마다 한 통씩 나가고, 일부만 나간 채 실패한 알림의 재시도는 같은 키로 이어 간다 — 자리와 결과 줄은 하나다', async () => {
+    const SENT_OK = () => ({ data: { id: `out-${randomUUID()}` }, error: null, headers: null });
+    const UNAVAILABLE = {
+      data: null,
+      error: { name: 'application_error', statusCode: 503, message: 'unavailable' },
+      headers: null,
+    };
+    const recipientsOfSends = () =>
+      (sendMock.mock.calls as Array<[{ to: string[] }, { idempotencyKey: string }]>).map((call) => call[0].to[0]);
+
+    /** kim · park 두 응답자의 전달 메일이 낸 중계 주소로 담당자가 한 통을 보낸다 — 장부와 발송 기록은 비운 채로 시작한다. */
+    async function staffRepliesToKimAndPark() {
       const account = newAccount();
       await seedSentCampaign(account);
       const relayToKim = await forwardAndTakeRelayAddress(account, '김응답 <kim@corp.co.kr>');
@@ -540,42 +619,150 @@ describe.skipIf(!isLocalDb)('회신 전달 안전장치 (real local DB)', () => 
       const relayEvent = { eventId: newEventId(), receivedEmailId: `recv-${randomUUID()}` };
       getMock.mockResolvedValue(staffReplyTo([relayToKim, relayToPark], relayEvent.receivedEmailId));
       stubStaffRaw();
+      return relayEvent;
+    }
+
+    it('중계 대상이 여럿이면 응답자마다 한 통씩 나가고 자리도 통마다 하나다 — 일부만 나간 채 실패한 알림의 재시도는 이미 나간 대상을 건너뛴다', async () => {
+      const relayEvent = await staffRepliesToKimAndPark();
 
       // 첫 시도: kim 에게는 나가고 park 에서 일시 장애.
-      sendMock
-        .mockResolvedValueOnce({ data: { id: `out-${randomUUID()}` }, error: null, headers: null })
-        .mockResolvedValueOnce({
-          data: null,
-          error: { name: 'application_error', statusCode: 503, message: 'unavailable' },
-          headers: null,
-        });
+      sendMock.mockResolvedValueOnce(SENT_OK()).mockResolvedValueOnce(UNAVAILABLE);
       await expect(forwardReceivedReply(relayEvent)).rejects.toThrow('답장 중계 발송 실패');
-      expect(sendMock).toHaveBeenCalledTimes(2);
-      // 결과 줄이 없다 — 재시도가 「이미 처리한 알림」으로 끝나지 않는다. 자리는 하나다.
+      expect(recipientsOfSends()).toEqual(['kim@corp.co.kr', 'park@other.co.kr']);
+      // 결과 줄이 없다 — 재시도가 「이미 처리한 알림」으로 끝나지 않는다. 자리는 통마다 하나(둘), kim 의 발송 기록이 남았다.
       expect(await isWebhookEventRecorded(relayEvent.eventId)).toBe(false);
-      expect(await ledgerTypes()).toEqual(['email.received:slot']);
-
-      // 재시도: 둘 다 다시 보내되 같은 대상에는 같은 키·같은 내용이다(발송 서비스가 kim 에게 두 번 보내지 않는다).
-      sendMock.mockResolvedValue({ data: { id: `out-${randomUUID()}` }, error: null, headers: null });
-      expect(await forwardReceivedReply(relayEvent)).toEqual({ outcome: 'relayed', relayCount: 2, alreadySent: false });
-      expect(sendMock).toHaveBeenCalledTimes(4);
-      const calls = sendMock.mock.calls as Array<[{ to: string[] }, { idempotencyKey: string }]>;
-      expect(calls.map((call) => call[0].to)).toEqual([
-        ['kim@corp.co.kr'],
-        ['park@other.co.kr'],
-        ['kim@corp.co.kr'],
-        ['park@other.co.kr'],
+      expect(await ledgerTypes()).toEqual([
+        'email.received:relay-sent',
+        'email.received:slot',
+        'email.received:slot',
       ]);
-      expect(calls[2]).toEqual(calls[0]);
-      expect(calls[3]).toEqual(calls[1]);
+
+      // 재시도: kim 은 발송 기록이 있어 발송 서비스를 부르지 않고, park 만 같은 키로 다시 보낸다.
+      sendMock.mockImplementation(async () => SENT_OK());
+      expect(await forwardReceivedReply(relayEvent)).toEqual({ outcome: 'relayed', relayCount: 2, alreadySent: false });
+      expect(recipientsOfSends()).toEqual(['kim@corp.co.kr', 'park@other.co.kr', 'park@other.co.kr']);
+      const calls = sendMock.mock.calls as Array<[{ to: string[] }, { idempotencyKey: string }]>;
+      expect(calls[2]).toEqual(calls[1]);
       const [kimKey, parkKey] = [calls[0]![1].idempotencyKey, calls[1]![1].idempotencyKey];
       expect(kimKey).toMatch(new RegExp(`^reply-relay/${relayEvent.receivedEmailId}/to-[0-9a-f]{10}$`));
       expect(parkKey).toMatch(new RegExp(`^reply-relay/${relayEvent.receivedEmailId}/to-[0-9a-f]{10}$`));
       expect(kimKey).not.toBe(parkKey);
-      // 자리 줄도 결과 줄도 받은 메일 한 통에 하나 — 통마다 늘지 않는다.
-      expect(await ledgerTypes()).toEqual(['email.received:relayed', 'email.received:slot']);
+      // 자리 줄·발송 기록 줄은 나가는 메일마다 하나(재시도가 늘리지 않는다), 결과 줄은 받은 메일 한 통에 하나다.
+      expect(await ledgerTypes()).toEqual([
+        'email.received:relay-sent',
+        'email.received:relay-sent',
+        'email.received:relayed',
+        'email.received:slot',
+        'email.received:slot',
+      ]);
       expect(await forwardReceivedReply(relayEvent)).toEqual({ outcome: 'deduped' });
-      expect(sendMock).toHaveBeenCalledTimes(4);
+      expect(sendMock).toHaveBeenCalledTimes(3);
+      // 장부에 주소를 적지 않는다 — 대상은 주소에서 뽑은 조각으로만 가리킨다.
+      const ledgerIds = (
+        await db.select({ id: webhookEvents.id }).from(webhookEvents).where(like(webhookEvents.id, `${EVENT_PREFIX}%`))
+      ).map((row) => row.id);
+      expect(ledgerIds).toHaveLength(5);
+      for (const fragment of ['kim', 'park', 'corp.co.kr', 'other.co.kr', '@']) {
+        expect(ledgerIds.join(' ')).not.toContain(fragment);
+      }
+    });
+
+    it('첫 대상 성공 → 둘째 대상 계속 실패 → 발송 서비스의 멱등 키가 만료된 뒤의 재시도에서도 첫 대상에게 두 통째가 나가지 않는다', async () => {
+      const relayEvent = await staffRepliesToKimAndPark();
+      // 멱등 키가 만료된 발송 서비스 — 같은 키로 다시 오면 또 보낸다. park 에게는 계속 일시 장애다.
+      sendMock.mockImplementation(async (mail: { to: string[] }) =>
+        mail.to[0] === 'park@other.co.kr' ? UNAVAILABLE : SENT_OK(),
+      );
+
+      // 첫 시도와 재시도들 — 마지막 재시도(첫 시도 뒤 약 27시간 35분)는 멱등 키 보관 기간(24시간) 밖이다.
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        await expect(forwardReceivedReply(relayEvent)).rejects.toThrow('답장 중계 발송 실패');
+      }
+
+      expect(recipientsOfSends().filter((to) => to === 'kim@corp.co.kr')).toHaveLength(1);
+      expect(recipientsOfSends().filter((to) => to === 'park@other.co.kr')).toHaveLength(8);
+      expect(await isWebhookEventRecorded(relayEvent.eventId)).toBe(false);
+      // 재시도가 자리를 더 잡지도, 발송 기록을 더 적지도 않았다.
+      expect(await ledgerTypes()).toEqual([
+        'email.received:relay-sent',
+        'email.received:slot',
+        'email.received:slot',
+      ]);
+
+      // park 이 풀리면 남은 한 통만 나간다.
+      sendMock.mockImplementation(async () => SENT_OK());
+      expect(await forwardReceivedReply(relayEvent)).toEqual({ outcome: 'relayed', relayCount: 2, alreadySent: false });
+      expect(recipientsOfSends().filter((to) => to === 'kim@corp.co.kr')).toHaveLength(1);
+    });
+
+    it('상한 근처에서도 나가는 메일 수가 상한을 넘지 않는다 — 자리를 못 잡은 대상에서 멈추고, 자리가 나면 남은 대상만 보낸다', async () => {
+      const relayEvent = await staffRepliesToKimAndPark();
+      sendMock.mockImplementation(async () => SENT_OK());
+      // 남은 자리는 하나다 — 받은 메일은 한 통이지만 나갈 메일은 둘이다.
+      const recent = new Date(Date.now() - 10 * MINUTE_MS);
+      const seeded = Array.from({ length: REPLY_FORWARD_HOURLY_CAP - 1 }, () => ({
+        id: newEventId(),
+        source: 'resend',
+        eventType: 'email.received:slot',
+        receivedAt: recent,
+      }));
+      await db.insert(webhookEvents).values(seeded);
+
+      // kim 이 200번째 자리로 나가고, park 은 자리가 없어 멈춘다.
+      await expect(forwardReceivedReply(relayEvent)).rejects.toBeInstanceOf(ReplyForwardCapExceeded);
+      expect(recipientsOfSends()).toEqual(['kim@corp.co.kr']);
+      expect(await isWebhookEventRecorded(relayEvent.eventId)).toBe(false);
+      expect(sentryMessageMock.mock.calls.map((call) => call[0])).toEqual(['회신 전달 시간당 상한 초과']);
+
+      // 상한이 찬 동안의 재시도 — kim 에게 다시 보내지 않고, park 은 여전히 막힌다. 다른 메일도 못 나간다.
+      await expect(forwardReceivedReply(relayEvent)).rejects.toBeInstanceOf(ReplyForwardCapExceeded);
+      expect(recipientsOfSends()).toEqual(['kim@corp.co.kr']);
+      const slotsNow = (await ledgerTypes()).filter((type) => type === 'email.received:slot');
+      expect(slotsNow).toHaveLength(REPLY_FORWARD_HOURLY_CAP);
+
+      // 자리가 나면(앞선 자리들이 한 시간을 넘겼다) 재시도가 park 에게만 보내고 끝낸다.
+      await db.delete(webhookEvents).where(inArray(webhookEvents.id, seeded.map((row) => row.id)));
+      expect(await forwardReceivedReply(relayEvent)).toEqual({ outcome: 'relayed', relayCount: 2, alreadySent: false });
+      expect(recipientsOfSends()).toEqual(['kim@corp.co.kr', 'park@other.co.kr']);
+      expect(await ledgerTypes()).toEqual([
+        'email.received:relay-sent',
+        'email.received:relay-sent',
+        'email.received:relayed',
+        'email.received:slot',
+        'email.received:slot',
+      ]);
+    });
+
+    it('보낸 사람을 회사 주소로 꾸민 메일(발신 인증 실패)은 서명이 맞는 중계 주소로 와도 응답자에게도 회신 주소에도 가지 않는다', async () => {
+      const account = newAccount();
+      await seedSentCampaign(account);
+      const relayAddress = await forwardAndTakeRelayAddress(account, '김응답 <kim@corp.co.kr>');
+      await clearLedger();
+      sendMock.mockClear();
+      sentryMessageMock.mockClear();
+
+      const spoofEvent = { eventId: newEventId(), receivedEmailId: `recv-${randomUUID()}` };
+      const spoofed = staffReplyTo([relayAddress], spoofEvent.receivedEmailId);
+      getMock.mockResolvedValue({
+        ...spoofed,
+        data: { ...spoofed.data, authentication: { spf: 'fail', dkim: 'fail', dmarc: 'fail' } },
+      });
+      stubStaffRaw();
+
+      const result = await forwardReceivedReply({
+        ...spoofEvent,
+        receivedFor: [relayAddress],
+        from: '이담당 <lee@example.co.kr>',
+      });
+
+      expect(result).toEqual({ outcome: 'skipped', reason: 'relay_unauthenticated' });
+      expect(sendMock).not.toHaveBeenCalled();
+      // 자리를 잡지 않았고 「넘기지 않음」 결과 줄만 남는다 — 같은 알림이 다시 와도 끝난 알림이다.
+      expect(await ledgerTypes()).toEqual(['email.received:skipped']);
+      expect(await forwardReceivedReply(spoofEvent)).toEqual({ outcome: 'deduped' });
+      expect(sentryMessageMock.mock.calls.map((call) => [call[0], call[1]?.tags])).toEqual([
+        ['답장 중계 발신 인증 실패 — 넘기지 않음', { operation: 'reply_relay_unauthenticated', dmarc: 'fail' }],
+      ]);
     });
   });
 
