@@ -10,7 +10,7 @@ import { isSentryCaptured } from '@/server/rpc-error-policy';
 
 import { REPLY_FORWARD_HOURLY_CAP } from '../domain/reply-forward';
 import { ReplyForwardCapExceeded, forwardReceivedReply } from './reply-forward';
-import { loadAccountReplyAddresses } from './reply-address-lookup';
+import { findReplyAddressByRespondent, loadAccountReplyAddresses } from './reply-address-lookup';
 import {
   countForwardedRepliesSince,
   isWebhookEventRecorded,
@@ -27,7 +27,10 @@ const { getMock, sendMock, logMock, sentryMessageMock } = vi.hoisted(() => ({
 vi.mock('./resend-client', () => ({
   getResend: () => ({ emails: { receiving: { get: getMock }, send: sendMock } }),
 }));
-vi.mock('./reply-address-lookup', () => ({ loadAccountReplyAddresses: vi.fn() }));
+vi.mock('./reply-address-lookup', () => ({
+  findReplyAddressByRespondent: vi.fn(),
+  loadAccountReplyAddresses: vi.fn(),
+}));
 vi.mock('./reply-forward-ledger', () => ({
   isWebhookEventRecorded: vi.fn(),
   recordReplyForwardEvent: vi.fn(),
@@ -145,6 +148,8 @@ beforeEach(() => {
   vi.mocked(isWebhookEventRecorded).mockResolvedValue(false);
   vi.mocked(recordReplyForwardEvent).mockResolvedValue(undefined);
   vi.mocked(countForwardedRepliesSince).mockResolvedValue(0);
+  // 기본은 「응답자 주소가 수신자 기록에 없다」 — 계정 기준으로 물러난다.
+  vi.mocked(findReplyAddressByRespondent).mockResolvedValue({ source: null, addresses: [] });
   vi.mocked(loadAccountReplyAddresses).mockResolvedValue({
     source: 'campaign',
     addresses: ['help@example.co.kr'],
@@ -330,6 +335,142 @@ describe('forwardReceivedReply — 넘기는 메일', () => {
       order(vi.mocked(recordReplyForwardEvent)),
     ];
     expect(sequence).toEqual([...sequence].sort((a, b) => a - b));
+  });
+});
+
+describe('forwardReceivedReply — 응답자 주소로 회신 주소 찾기', () => {
+  it('답장 보낸 주소가 수신자 기록에 있으면 그 발송 회차의 회신 주소 한 곳으로만 넘긴다', async () => {
+    vi.mocked(findReplyAddressByRespondent).mockResolvedValue({
+      source: 'respondent',
+      addresses: ['abc@example.co.kr'],
+    });
+    // 계정 기준이라면 이 계정이 쓴 회신 주소 전부에게 갔을 것이다.
+    vi.mocked(loadAccountReplyAddresses).mockResolvedValue({
+      source: 'campaign',
+      addresses: ['abc@example.co.kr', 'cba@example.co.kr'],
+    });
+
+    const result = await forwardReceivedReply(EVENT);
+
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(sentRequest().mail['to']).toEqual(['abc@example.co.kr']);
+    expect(result).toEqual({
+      outcome: 'forwarded',
+      forwardCount: 1,
+      sources: ['respondent'],
+      alreadySent: false,
+    });
+    expect(loadAccountReplyAddresses).not.toHaveBeenCalled();
+  });
+
+  it('수신자 기록에 없는 주소로 답장하면 그 계정의 회신 주소 전부에게 넘긴다', async () => {
+    vi.mocked(loadAccountReplyAddresses).mockResolvedValue({
+      source: 'campaign',
+      addresses: ['abc@example.co.kr', 'cba@example.co.kr'],
+    });
+
+    const result = await forwardReceivedReply(EVENT);
+
+    expect(sentRequest().mail['to']).toEqual(['abc@example.co.kr', 'cba@example.co.kr']);
+    expect(result).toMatchObject({ outcome: 'forwarded', forwardCount: 2, sources: ['campaign'] });
+  });
+
+  it('찾는 재료는 보낸이 계정과 답장을 보낸 주소다 — 받은 메일이 따로 적은 답장 주소가 아니다', async () => {
+    getMock.mockResolvedValue(
+      receivedEmail({
+        from: '김응답 <Kim@Corp.co.kr>',
+        reply_to: ['team@corp.co.kr'],
+        received_for: ['Survey@SEND.example.co.kr'],
+      }),
+    );
+
+    await forwardReceivedReply(EVENT);
+
+    expect(findReplyAddressByRespondent).toHaveBeenCalledTimes(1);
+    expect(findReplyAddressByRespondent).toHaveBeenCalledWith('survey', 'Kim@Corp.co.kr', {
+      sendDomain: SEND_DOMAIN,
+    });
+  });
+
+  it('응답자 주소로 찾아도 전달 메일의 모양은 같다 — 보낸 사람·답장 주소·태그·멱등 키', async () => {
+    vi.mocked(findReplyAddressByRespondent).mockResolvedValue({
+      source: 'respondent',
+      addresses: ['abc@example.co.kr'],
+    });
+
+    await forwardReceivedReply(EVENT);
+
+    const { mail, options } = sentRequest();
+    expect(mail).toMatchObject({
+      from: '김응답 <survey@send.example.co.kr>',
+      to: ['abc@example.co.kr'],
+      replyTo: ['kim@corp.co.kr'],
+      subject: '설문지 회신',
+      tags: [{ name: 'kind', value: 'reply-forward' }],
+    });
+    expect(options).toEqual({ idempotencyKey: 'reply-forward/recv-1' });
+  });
+
+  it('보낸이 계정이 여럿이면 계정마다 따로 찾는다 — 한 계정은 응답자 주소로, 다른 계정은 계정 기준으로', async () => {
+    getMock.mockResolvedValue(
+      receivedEmail({ received_for: ['survey@send.example.co.kr', 'panel@send.example.co.kr'] }),
+    );
+    vi.mocked(findReplyAddressByRespondent).mockImplementation(async (account) =>
+      account === 'survey'
+        ? { source: 'respondent', addresses: ['abc@example.co.kr'] }
+        : { source: null, addresses: [] },
+    );
+    vi.mocked(loadAccountReplyAddresses).mockImplementation(async (account) =>
+      account === 'panel'
+        ? { source: 'campaign', addresses: ['panel@example.co.kr'] }
+        : { source: 'campaign', addresses: ['abc@example.co.kr', 'cba@example.co.kr'] },
+    );
+
+    const result = await forwardReceivedReply(EVENT);
+
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(sentRequest().mail['to']).toEqual(['abc@example.co.kr', 'panel@example.co.kr']);
+    expect(result).toMatchObject({ forwardCount: 2, sources: ['respondent', 'campaign'] });
+    expect(loadAccountReplyAddresses).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(loadAccountReplyAddresses).mock.calls[0]?.[0]).toBe('panel');
+  });
+
+  it('응답자 주소로 찾은 회신 주소가 보낸 사람과 같은 도메인이면 넘기지 않는다 — 회사 메일함 자동응답의 고리', async () => {
+    getMock.mockResolvedValue(receivedEmail({ from: '자동응답 <help@example.co.kr>' }));
+    vi.mocked(findReplyAddressByRespondent).mockResolvedValue({
+      source: 'respondent',
+      addresses: ['abc@example.co.kr'],
+    });
+    // 계정 기준이었다면 다른 도메인이라 넘겼을 것이다 — 판정은 실제로 넘길 전달 주소로 한다.
+    vi.mocked(loadAccountReplyAddresses).mockResolvedValue({
+      source: 'campaign',
+      addresses: ['manager@other.co.kr'],
+    });
+
+    const result = await forwardReceivedReply(EVENT);
+
+    expect(result).toEqual({ outcome: 'skipped', reason: 'company_domain' });
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(recordReplyForwardEvent).toHaveBeenCalledWith('svix-1', 'skipped');
+  });
+
+  it('응답자 주소로도 계정으로도 못 찾으면 쓴 적 없는 보낸이 계정이다', async () => {
+    vi.mocked(loadAccountReplyAddresses).mockResolvedValue({ source: null, addresses: [] });
+
+    const result = await forwardReceivedReply(EVENT);
+
+    expect(result).toEqual({ outcome: 'skipped', reason: 'unused_sender_account' });
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it('응답자 주소 조회 실패는 실패다 — 계정 기준으로 조용히 넘어가지 않는다', async () => {
+    vi.mocked(findReplyAddressByRespondent).mockRejectedValue(new Error('db down'));
+
+    await expect(forwardReceivedReply(EVENT)).rejects.toThrow();
+
+    expect(loadAccountReplyAddresses).not.toHaveBeenCalled();
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(recordReplyForwardEvent).not.toHaveBeenCalled();
   });
 });
 
@@ -644,6 +785,26 @@ describe('forwardReceivedReply — 건별 로그', () => {
       forwardCount: 1,
     });
     for (const fragment of PRIVATE_FRAGMENTS) expect(allLogText()).not.toContain(fragment);
+  });
+
+  it('응답자 주소로 찾아 넘긴 건: 주소를 찾은 방법이 계정 기준과 갈린다', async () => {
+    vi.mocked(findReplyAddressByRespondent).mockResolvedValue({
+      source: 'respondent',
+      addresses: ['abc@example.co.kr'],
+    });
+
+    await forwardReceivedReply(EVENT);
+
+    expect(logMock.info).toHaveBeenCalledTimes(1);
+    expect(logMock.info.mock.calls[0]?.[0]).toEqual({
+      receivedEmailId: 'recv-1',
+      outcome: 'forwarded',
+      lookup: 'respondent',
+      forwardCount: 1,
+    });
+    for (const fragment of [...PRIVATE_FRAGMENTS, 'abc@example.co.kr']) {
+      expect(allLogText()).not.toContain(fragment);
+    }
   });
 
   it('넘기지 않은 건: 이유를 남긴다', async () => {
