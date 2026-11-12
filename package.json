@@ -23,6 +23,7 @@
     "db:isolated": "bash scripts/test-db-isolated.sh",
     "deploy:wait": "bash scripts/wait-deploy.sh",
     "sentry:issues": "node scripts/sentry-issues.mjs",
+    "review:codex": "bash scripts/codex-review.sh",
     "worktree:new": "bash scripts/worktree-bootstrap.sh",
     "db:drift": "node scripts/db-drift.mjs",
     "db:size": "node scripts/db-size-report.mjs",

@@ -240,6 +240,7 @@ pnpm db:size          # 실 DB 테이블·인덱스 크기와 인덱스 사용 �
 pnpm inngest          # Inngest 로컬 dev 서버
 pnpm deploy:wait [sha] # main 에 푸시한 커밋의 Vercel 배포가 끝날 때까지 기다렸다가 결과 한 줄 (에이전트는 백그라운드로)
 pnpm sentry:issues [id | --query 검색어] # Sentry 미해결 이슈·최근 이벤트 태그 조회 (읽기 전용, .env.local 의 SENTRY_READ_TOKEN)
+pnpm review:codex <base> [--spec PRD] [초점] # Codex 적대적 리뷰 — 체크리스트·한국어 출력을 붙여 부른다 (에이전트는 백그라운드로)
 pnpm db:migrate       # 마이그레이션 실행 (_journal.json 기준 — 0019에서 동결, 주의사항 7 참조)
 pnpm db:studio        # Drizzle Studio
 pnpm survey:backup    # 설문 백업
