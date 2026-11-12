@@ -12,11 +12,13 @@ import {
   REPLY_FORWARD_CAP_WINDOW_MS,
   REPLY_FORWARD_HOURLY_CAP,
   buildForwardMail,
+  exceedsForwardSizeBudget,
   extractSenderAccounts,
   findCompanyDomainMatch,
   mergeForwardAddresses,
   parseMailbox,
   type ForwardMail,
+  type ForwardMailInput,
   type ReceivedAttachment,
 } from '../domain/reply-forward';
 import {
@@ -37,6 +39,7 @@ import { getResend } from './resend-client';
  * 처리 순서: ① 웹훅 장부에 이미 있으면 끝 → ② 받은 메일 조회·판정 → ③ 원본 내려받기·발송 → ④ 장부 기록.
  * ②·③의 실패는 던진다 — 라우트가 500 으로 답해 Resend 가 다시 보내고, 장부에 적지 않았으므로 처음부터 다시 한다.
  * ③은 됐는데 ④가 실패해도 발송 멱등 키(받은 메일 id)가 두 번째 발송을 막는다.
+ * 첨부가 발송 한도를 넘으면 ③에서 첨부 없이 본문과 안내만 보낸다(`deliverForwardMail`).
  * 넘기지 않는 것은 실패가 아니라 정상 처리다(장부에 「넘기지 않음」으로 적고 끝).
  * 넘기기로 한 메일은 ③ 직전에 시간당 상한을 본다 — 넘었으면 던져서(500) Resend 재시도가 뒤로 미루게 한다.
  *
@@ -71,11 +74,25 @@ export type ReplyForwardResult =
       sources: ReplyAddressSource[];
       /** 멱등 키 내용 불일치 거절을 「이미 보냄」으로 처리했다. */
       alreadySent: boolean;
+      /** 첨부가 발송 한도를 넘어 본문과 안내만 보냈다. 그대로 넘긴 건에는 이 칸이 없다. */
+      attachmentsOmitted?: true;
     };
 
-/** 발송 멱등 키 — 받은 메일 한 통에 전달 메일 한 통. */
-export function replyForwardIdempotencyKey(receivedEmailId: string): string {
-  return `reply-forward/${receivedEmailId}`;
+/** 전달 메일의 두 모양 — 받은 그대로(`full`), 첨부를 빼고 안내를 붙인 것(`no_attachments`). */
+export type ForwardMailVariant = 'full' | 'no_attachments';
+
+/**
+ * 발송 멱등 키 — 받은 메일 한 통에 전달 메일 한 통.
+ * 모양마다 키가 다르다: 같은 키로 내용이 다른 요청은 발송 서비스가 거절하므로, 크기 초과로 거절된 뒤
+ * 첨부를 빼고 다시 보낼 때 같은 키를 쓸 수 없다. 받은 그대로 보낸 것이 성공하면 첨부 뺀 것은 보내지 않으니
+ * 키가 둘이어도 나가는 메일은 한 통이다.
+ */
+export function replyForwardIdempotencyKey(
+  receivedEmailId: string,
+  variant: ForwardMailVariant = 'full',
+): string {
+  const base = `reply-forward/${receivedEmailId}`;
+  return variant === 'no_attachments' ? `${base}/no-attachments` : base;
 }
 
 function requireSendDomain(): string {
@@ -173,24 +190,82 @@ export async function loadReceivedContent(downloadUrl: string): Promise<Received
   };
 }
 
+/** 검증 계열 거절 가운데 문구가 크기를 말하는 것만 크기 초과로 본다. */
+const SIZE_REJECTION_NAMES: ReadonlySet<string> = new Set([
+  'validation_error',
+  'invalid_attachment',
+  'invalid_parameter',
+]);
+const SIZE_REJECTION_MESSAGE = /too large|too big|size|exceed|40\s?mb|payload/i;
+
+/**
+ * 발송 API 의 거절이 「메일이 너무 크다」인가.
+ * 발송 서비스 문서에 크기 초과의 오류 이름이 없어 두 모양을 본다: HTTP 413(앞단이 본문을 받지 않을 때 —
+ * SDK 가 `application_error` 로 옮긴다), 그리고 검증 계열 거절 가운데 문구가 크기를 말하는 것.
+ * 문구는 판정에만 쓰고 어디에도 옮기지 않는다(주소를 담을 수 있다).
+ */
+function isSizeRejection(error: { name: string; statusCode: number | null; message?: string }): boolean {
+  if (error.statusCode === 413) return true;
+  return SIZE_REJECTION_NAMES.has(error.name) && SIZE_REJECTION_MESSAGE.test(error.message ?? '');
+}
+
 /**
  * 전달 메일을 보낸다. 받은 메일 id 로 만든 멱등 키를 걸어, 같은 알림이 다시 와도 한 통만 나간다.
  * 「같은 멱등 키인데 내용이 다르다」는 거절(재시도 사이 전달 주소가 바뀜)은 이미 보낸 것이다.
+ * 크기 초과 거절은 `too_large` 로 돌려준다 — 첨부를 빼고 다시 보낼지는 호출부(`deliverForwardMail`)가 정한다.
  * 그 밖의 거절·오류는 던진다 — 오류 문구에는 분류값만 싣는다(발송 서비스의 문구는 주소를 담을 수 있다).
  */
 export async function sendForwardMail(
   mail: ForwardMail,
   receivedEmailId: string,
-): Promise<'sent' | 'already_sent'> {
+  variant: ForwardMailVariant = 'full',
+): Promise<'sent' | 'already_sent' | 'too_large'> {
   const { data, error } = await getResend().emails.send(mail, {
-    idempotencyKey: replyForwardIdempotencyKey(receivedEmailId),
+    idempotencyKey: replyForwardIdempotencyKey(receivedEmailId, variant),
   });
   if (error) {
     if (error.name === 'invalid_idempotent_request') return 'already_sent';
+    if (isSizeRejection(error)) return 'too_large';
     throw new InternalFailure(`회신 전달 발송 실패 — ${error.name} (${error.statusCode ?? '-'})`);
   }
   if (!data?.id) throw new InternalFailure('회신 전달 발송 실패 — 응답에 id 가 없습니다');
   return 'sent';
+}
+
+export interface ForwardDelivery {
+  sent: 'sent' | 'already_sent';
+  /** 첨부를 빼고 본문과 안내만 보냈다. */
+  attachmentsOmitted: boolean;
+}
+
+/**
+ * 전달 메일을 조립해 보낸다 — 첨부가 발송 한도를 넘으면 첨부 없이 본문과 안내만.
+ *
+ * - 인코딩한 첨부와 본문이 한도(여유를 둔 값)를 넘으면 처음부터 첨부 없이 보낸다. 거절될 것을 올려 보지 않는다.
+ * - 한도 안쪽인데 발송 API 가 크기 초과로 거절하면 같은 방식으로 **한 번** 더 보낸다. 그것도 실패하면 던진다.
+ * - 첨부가 없는 메일은 뺄 것이 없으니 크기 초과 거절이 곧 실패다.
+ */
+export async function deliverForwardMail(
+  input: Omit<ForwardMailInput, 'omitAttachments'>,
+  receivedEmailId: string,
+): Promise<ForwardDelivery> {
+  const sendWithoutAttachments = async (): Promise<ForwardDelivery> => {
+    const mail = buildForwardMail({ ...input, omitAttachments: true });
+    const sent = await sendForwardMail(mail, receivedEmailId, 'no_attachments');
+    if (sent === 'too_large') {
+      throw new InternalFailure('회신 전달 발송 실패 — 첨부를 빼도 크기 초과입니다');
+    }
+    return { sent, attachmentsOmitted: true };
+  };
+
+  if (exceedsForwardSizeBudget(input.reply)) return sendWithoutAttachments();
+
+  const sent = await sendForwardMail(buildForwardMail(input), receivedEmailId);
+  if (sent !== 'too_large') return { sent, attachmentsOmitted: false };
+  if (input.reply.attachments.length === 0) {
+    throw new InternalFailure('회신 전달 발송 실패 — 크기 초과인데 뺄 첨부가 없습니다');
+  }
+  return sendWithoutAttachments();
 }
 
 async function fetchReceivedEmail(receivedEmailId: string): Promise<GetReceivingEmailResponseSuccess> {
@@ -297,21 +372,23 @@ export async function forwardReceivedReply(event: ReplyForwardEvent): Promise<Re
     throw new InternalFailure('받은 메일 원본이 아직 준비되지 않았습니다');
   }
   const content = await loadReceivedContent(received.raw.download_url);
-  const mail = buildForwardMail({
-    reply: {
-      senderAddress: sender.address,
-      senderName: content.senderName ?? (sender.name || null),
-      replyTo: (received.reply_to ?? []).flatMap((value) => parseMailbox(value)?.address ?? []),
-      subject: received.subject,
-      html: content.html,
-      text: content.text,
-      attachments: content.attachments,
+  const { sent, attachmentsOmitted } = await deliverForwardMail(
+    {
+      reply: {
+        senderAddress: sender.address,
+        senderName: content.senderName ?? (sender.name || null),
+        replyTo: (received.reply_to ?? []).flatMap((value) => parseMailbox(value)?.address ?? []),
+        subject: received.subject,
+        html: content.html,
+        text: content.text,
+        attachments: content.attachments,
+      },
+      senderAccount: resolution.senderAccount,
+      sendDomain,
+      forwardAddresses: resolution.addresses,
     },
-    senderAccount: resolution.senderAccount,
-    sendDomain,
-    forwardAddresses: resolution.addresses,
-  });
-  const sent = await sendForwardMail(mail, event.receivedEmailId);
+    event.receivedEmailId,
+  );
 
   // ④ 장부 기록
   await recordReplyForwardEvent(event.eventId, 'forwarded');
@@ -320,9 +397,13 @@ export async function forwardReceivedReply(event: ReplyForwardEvent): Promise<Re
     outcome: 'forwarded',
     lookup: resolution.sources.join('+'),
     forwardCount: resolution.addresses.length,
+    // 「첨부 제외」 — 뺀 건에만 싣는다. 파일 이름·크기는 싣지 않는다.
+    ...(attachmentsOmitted ? { attachmentsOmitted: true as const } : {}),
   };
   if (sent === 'already_sent') {
     logger.warn({ ...line, alreadySent: true }, '[reply-forward] 멱등 키 내용 불일치 — 이미 보낸 것으로 처리');
+  } else if (attachmentsOmitted) {
+    logger.info(line, '[reply-forward] 첨부를 빼고 넘김');
   } else {
     logger.info(line, '[reply-forward] 넘김');
   }
@@ -331,5 +412,6 @@ export async function forwardReceivedReply(event: ReplyForwardEvent): Promise<Re
     forwardCount: resolution.addresses.length,
     sources: resolution.sources,
     alreadySent: sent === 'already_sent',
+    ...(attachmentsOmitted ? { attachmentsOmitted: true as const } : {}),
   };
 }
