@@ -83,7 +83,10 @@ describe.skipIf(!isLocalDb)('회신 전달 안전장치 (real local DB)', () => 
   }
 
   /** 보낸이 계정 하나로 보낸 발송 회차(회신 주소 있음)와 발송된 수신자 둘. */
-  async function seedSentCampaign(account: string) {
+  async function seedSentCampaign(
+    account: string,
+    options: { replyTo?: string; recipientEmails?: [string, string] } = {},
+  ) {
     const [survey] = await db
       .insert(surveysTable)
       .values({ title: '회신 전달 안전장치 테스트 설문' })
@@ -102,7 +105,7 @@ describe.skipIf(!isLocalDb)('회신 전달 안전장치 (real local DB)', () => 
       bodyHtmlSnapshot: '<p>본문</p>',
       fromLocalSnapshot: account,
       fromNameSnapshot: '설문팀',
-      replyToSnapshot: 'help@example.co.kr',
+      replyToSnapshot: options.replyTo ?? 'help@example.co.kr',
       status: 'sending',
       recipientCount: 2,
       sentCount: 2,
@@ -114,7 +117,7 @@ describe.skipIf(!isLocalDb)('회신 전달 안전장치 (real local DB)', () => 
       messageIds.map((messageId, index) => ({
         id: recipientIds[index]!,
         campaignId,
-        emailSnapshot: `target${index}@corp.co.kr`,
+        emailSnapshot: options.recipientEmails?.[index] ?? `target${index}@corp.co.kr`,
         status: 'sent' as const,
         resendMessageId: messageId,
         sentAt: new Date(),
@@ -405,6 +408,174 @@ describe.skipIf(!isLocalDb)('회신 전달 안전장치 (real local DB)', () => 
       // 실패한 알림이 마지막 자리를 쥐고 있다 — 다른 알림은 못 잡는다.
       await expect(forwardReceivedReply(newEvent())).rejects.toBeInstanceOf(ReplyForwardCapExceeded);
       expect(sendMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('답장 중계 — 판정 재료와 응답자마다 한 통', () => {
+    const ledgerTypes = async () =>
+      (
+        await db
+          .select({ eventType: webhookEvents.eventType })
+          .from(webhookEvents)
+          .where(like(webhookEvents.id, `${EVENT_PREFIX}%`))
+      )
+        .map((row) => row.eventType)
+        .sort();
+
+    /** 응답자의 답장 한 통을 넘기고, 그 전달 메일이 실제로 낸 보낸 사람 주소(중계 주소)를 돌려준다. */
+    async function forwardAndTakeRelayAddress(account: string, respondent: string): Promise<string> {
+      const event = { eventId: newEventId(), receivedEmailId: `recv-${randomUUID()}` };
+      const received = receivedFor(account, event.receivedEmailId);
+      getMock.mockResolvedValue({ ...received, data: { ...received.data, from: respondent } });
+      expect(await forwardReceivedReply(event)).toMatchObject({ outcome: 'forwarded' });
+      const from = String((sendMock.mock.calls.at(-1)?.[0] as { from: string }).from);
+      const relayAddress = /<([^>]+)>$/.exec(from)?.[1];
+      if (!relayAddress) throw new Error('전달 메일의 보낸 사람 주소를 읽지 못했다');
+      return relayAddress;
+    }
+
+    /** 담당자가 중계 주소들로 보낸 답장. */
+    function staffReplyTo(relayAddresses: string[], receivedEmailId: string) {
+      const base = receivedFor('unused', receivedEmailId);
+      return {
+        ...base,
+        data: {
+          ...base.data,
+          from: '이담당 <lee@example.co.kr>',
+          to: relayAddresses,
+          received_for: relayAddresses,
+          subject: 'RE: 설문지 회신',
+        },
+      };
+    }
+
+    function stubStaffRaw() {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(
+          async () =>
+            new Response(
+              new Uint8Array(
+                Buffer.from(
+                  [
+                    'From: =?UTF-8?B?7J2064u064u5?= <lee@example.co.kr>',
+                    'To: undisclosed-recipients:;',
+                    'Subject: RE: reply',
+                    'MIME-Version: 1.0',
+                    'Content-Type: text/plain; charset=utf-8',
+                    '',
+                    'confirmed',
+                    '',
+                  ].join('\r\n'),
+                  'utf8',
+                ),
+              ),
+              { status: 200 },
+            ),
+        ),
+      );
+    }
+
+    it('담당자가 그 계정 회차의 수신자였고 그 회차의 회신 주소가 외부 도메인이어도, 담당자의 답장은 응답자에게 간다 — 그 회신 주소로 회신 전달되지 않는다', async () => {
+      const account = newAccount();
+      // 실제 설문 회차 — 회신 주소는 회사 도메인.
+      await seedSentCampaign(account);
+      // 같은 계정의 다른 회차(테스트 회차 등) — 담당자가 수신자였고 회신 주소는 외부 업체다. 담당자에게는 이쪽이 더 최근이다.
+      await seedSentCampaign(account, {
+        replyTo: 'vendor@partner.co.kr',
+        recipientEmails: ['lee@example.co.kr', 'other-staff@example.co.kr'],
+      });
+
+      const relayAddress = await forwardAndTakeRelayAddress(account, '김응답 <kim@corp.co.kr>');
+      sendMock.mockClear();
+
+      const relayEvent = { eventId: newEventId(), receivedEmailId: `recv-${randomUUID()}` };
+      getMock.mockResolvedValue(staffReplyTo([relayAddress], relayEvent.receivedEmailId));
+      stubStaffRaw();
+
+      // 알림에 받는 주소·보낸 사람이 실려 온다(운영의 모양) — 미리 거르기까지 거친다.
+      const result = await forwardReceivedReply({
+        ...relayEvent,
+        receivedFor: [relayAddress],
+        from: '이담당 <lee@example.co.kr>',
+      });
+
+      expect(result).toEqual({ outcome: 'relayed', relayCount: 1, alreadySent: false });
+      expect(sendMock).toHaveBeenCalledTimes(1);
+      expect(sendMock.mock.calls[0]?.[0]).toMatchObject({
+        to: ['kim@corp.co.kr'],
+        tags: [{ name: 'kind', value: 'reply-relay' }],
+      });
+      expect(JSON.stringify(sendMock.mock.calls)).not.toContain('vendor@partner.co.kr');
+      expect(sendMock.mock.calls[0]?.[1]).toEqual({ idempotencyKey: `reply-relay/${relayEvent.receivedEmailId}` });
+    });
+
+    it('중계 주소 없이 계정 주소로 온 같은 담당자의 메일은 지금 그대로다 — 응답자 주소로 찾은 회신 주소로 회신 전달한다', async () => {
+      const account = newAccount();
+      await seedSentCampaign(account);
+      await seedSentCampaign(account, {
+        replyTo: 'vendor@partner.co.kr',
+        recipientEmails: ['lee@example.co.kr', 'other-staff@example.co.kr'],
+      });
+
+      const event = { eventId: newEventId(), receivedEmailId: `recv-${randomUUID()}` };
+      const received = receivedFor(account, event.receivedEmailId);
+      getMock.mockResolvedValue({ ...received, data: { ...received.data, from: '이담당 <lee@example.co.kr>' } });
+
+      expect(await forwardReceivedReply(event)).toMatchObject({ outcome: 'forwarded', sources: ['respondent'] });
+      expect(sendMock.mock.calls[0]?.[0]).toMatchObject({
+        to: ['vendor@partner.co.kr'],
+        tags: [{ name: 'kind', value: 'reply-forward' }],
+      });
+    });
+
+    it('중계 대상이 여럿이면 응답자마다 한 통씩 나가고, 일부만 나간 채 실패한 알림의 재시도는 같은 키로 이어 간다 — 자리와 결과 줄은 하나다', async () => {
+      const account = newAccount();
+      await seedSentCampaign(account);
+      const relayToKim = await forwardAndTakeRelayAddress(account, '김응답 <kim@corp.co.kr>');
+      const relayToPark = await forwardAndTakeRelayAddress(account, '박응답 <park@other.co.kr>');
+      await clearLedger();
+      sendMock.mockReset();
+
+      const relayEvent = { eventId: newEventId(), receivedEmailId: `recv-${randomUUID()}` };
+      getMock.mockResolvedValue(staffReplyTo([relayToKim, relayToPark], relayEvent.receivedEmailId));
+      stubStaffRaw();
+
+      // 첫 시도: kim 에게는 나가고 park 에서 일시 장애.
+      sendMock
+        .mockResolvedValueOnce({ data: { id: `out-${randomUUID()}` }, error: null, headers: null })
+        .mockResolvedValueOnce({
+          data: null,
+          error: { name: 'application_error', statusCode: 503, message: 'unavailable' },
+          headers: null,
+        });
+      await expect(forwardReceivedReply(relayEvent)).rejects.toThrow('답장 중계 발송 실패');
+      expect(sendMock).toHaveBeenCalledTimes(2);
+      // 결과 줄이 없다 — 재시도가 「이미 처리한 알림」으로 끝나지 않는다. 자리는 하나다.
+      expect(await isWebhookEventRecorded(relayEvent.eventId)).toBe(false);
+      expect(await ledgerTypes()).toEqual(['email.received:slot']);
+
+      // 재시도: 둘 다 다시 보내되 같은 대상에는 같은 키·같은 내용이다(발송 서비스가 kim 에게 두 번 보내지 않는다).
+      sendMock.mockResolvedValue({ data: { id: `out-${randomUUID()}` }, error: null, headers: null });
+      expect(await forwardReceivedReply(relayEvent)).toEqual({ outcome: 'relayed', relayCount: 2, alreadySent: false });
+      expect(sendMock).toHaveBeenCalledTimes(4);
+      const calls = sendMock.mock.calls as Array<[{ to: string[] }, { idempotencyKey: string }]>;
+      expect(calls.map((call) => call[0].to)).toEqual([
+        ['kim@corp.co.kr'],
+        ['park@other.co.kr'],
+        ['kim@corp.co.kr'],
+        ['park@other.co.kr'],
+      ]);
+      expect(calls[2]).toEqual(calls[0]);
+      expect(calls[3]).toEqual(calls[1]);
+      const [kimKey, parkKey] = [calls[0]![1].idempotencyKey, calls[1]![1].idempotencyKey];
+      expect(kimKey).toMatch(new RegExp(`^reply-relay/${relayEvent.receivedEmailId}/to-[0-9a-f]{10}$`));
+      expect(parkKey).toMatch(new RegExp(`^reply-relay/${relayEvent.receivedEmailId}/to-[0-9a-f]{10}$`));
+      expect(kimKey).not.toBe(parkKey);
+      // 자리 줄도 결과 줄도 받은 메일 한 통에 하나 — 통마다 늘지 않는다.
+      expect(await ledgerTypes()).toEqual(['email.received:relayed', 'email.received:slot']);
+      expect(await forwardReceivedReply(relayEvent)).toEqual({ outcome: 'deduped' });
+      expect(sendMock).toHaveBeenCalledTimes(4);
     });
   });
 

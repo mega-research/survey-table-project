@@ -164,6 +164,17 @@ export function extractRelayTargets(
 }
 
 /**
+ * 중계 메일의 발송 멱등 키에 붙는 대상 조각 — 한 메일의 중계 대상이 여럿이면 응답자마다 한 통씩 나가고 통마다 키가 달라야 한다.
+ *
+ * 응답자 주소(소문자)에서 뽑는다. 순번이 아니라서 받는 주소의 순서가 바뀌거나 대상이 줄어도 같은 응답자는 같은 조각이고,
+ * 재시도가 이미 나간 대상을 같은 키로 만난다. 주소를 그대로 싣지 않는다 — 키는 발송 서비스의 기록에 남는다.
+ * 재료의 접두가 달라 중계 주소의 서명과 같은 값이 나오지 않는다(키에서 서명을 읽을 수 없다).
+ */
+export function relayTargetKey(target: Pick<RelayTarget, 'respondentAddress'>, signer: RelaySigner): string {
+  return signer.sign(`reply-relay-target:v1:${target.respondentAddress.toLowerCase()}`);
+}
+
+/**
  * 전달 메일의 「답장」이 가야 할 응답자 주소 — 전달 메일의 답장 주소로 쓰는 바로 그 주소의 첫 번째
  * (받은 메일이 따로 지정한 답장 주소, 없으면 보낸 사람 주소). 중계 주소에 담는 것이 이것이다.
  */
@@ -215,8 +226,11 @@ export interface RelayMailInput {
   /** 보낸 사람 주소에 쓰는 보낸이 계정 — 중계 주소에 담겨 있던 계정. */
   senderAccount: string;
   sendDomain: string;
-  /** 받는 사람 — 서명이 맞는 중계 주소가 가리킨 응답자 주소뿐이다. */
-  respondentAddresses: readonly string[];
+  /**
+   * 받는 사람 — 서명이 맞는 중계 주소가 가리킨 응답자 주소 **하나**.
+   * 중계 대상이 여럿이어도 한 통에 한 명이다: 한 통에 모으면 응답자끼리 서로의 주소를 본다(담당자가 숨은 참조로 넣었어도).
+   */
+  respondentAddress: string;
   /** 첨부를 싣지 않고 본문 맨 위에 안내를 붙인다 — 회신 전달과 같다. */
   omitAttachments?: boolean;
   omitReason?: OmitAttachmentsReason;
@@ -224,7 +238,7 @@ export interface RelayMailInput {
 
 /**
  * 담당자의 답장을 응답자에게 넘기는 메일의 모양.
- * 받는 사람은 응답자뿐이고(원본의 참조·다른 받는 사람은 옮기지 않는다), 보낸 사람은 담당자가 쓴 이름에
+ * 받는 사람은 응답자 한 명뿐이고(원본의 참조·다른 받는 사람은 옮기지 않는다), 보낸 사람은 담당자가 쓴 이름에
  * 보낸이 계정 주소(중계 꼬리 없음), 답장 주소는 담당자의 주소다. 제목·본문·첨부는 받은 그대로다.
  */
 export function buildRelayMail(input: RelayMailInput): ForwardMail {
@@ -238,7 +252,7 @@ export function buildRelayMail(input: RelayMailInput): ForwardMail {
         senderAccount: input.senderAccount,
         sendDomain: input.sendDomain,
       }),
-      to: input.respondentAddresses,
+      to: [input.respondentAddress],
       replyTo: forwardReplyTo(reply),
       headers: REPLY_RELAY_HEADERS,
       tags: [REPLY_RELAY_TAG],
