@@ -8,7 +8,7 @@
  * 체크박스 문항의 선택 목록)과 빌더의 후보·정리(survey-builder)가 같은 자격 판정을 쓴다.
  */
 import type { ChoiceGroup, TableCell } from '@/types/survey';
-import { DEFAULT_GROUP_KEY } from '@/utils/choice-group-helpers';
+import { resolveChoiceCellGroup } from '@/utils/choice-group-helpers';
 
 import {
   type GroupSelectionMap,
@@ -31,20 +31,17 @@ export interface ImpliedSelectionScope {
 
 /**
  * 이 칸이 속한 **체크박스** 묶음의 응답 키 — 체크박스로 고르는 보기 칸이 아니면 null.
- *
- * 그룹에 속하면 그 그룹의 종류를 따른다(체크박스면 그룹 키, 라디오면 null). 그룹이 없거나 없어진
- * 그룹·순위 그룹을 가리키면 문항 유형의 기본 묶음이다 — 보기 소스 표의 getGroupKeyOfCell ·
- * getGroupTypeOfCell 과 같은 규칙이고, 테이블 유형은 기본 묶음이 없어 null 이다.
+ * 묶음 판정은 화면이 읽고 쓰는 것과 같은 함수(resolveChoiceCellGroup)다 — 따로 판정하면 따라 골라진
+ * 값이 화면이 보지 않는 키에 남는다(순위 그룹을 가리키는 칸에서 실제로 갈렸다).
  */
 function checkboxGroupKeyOf(cell: TableCell, scope: ImpliedSelectionScope): string | null {
   if (cell.type !== 'choice_opt') return null;
-  const group =
-    cell.choiceGroupId !== undefined
-      ? scope.groups.find((candidate) => candidate.id === cell.choiceGroupId)
-      : undefined;
-  if (group?.type === 'checkbox') return group.groupKey;
-  if (group?.type === 'radio') return null;
-  return scope.ungroupedSelectionType === 'checkbox' ? DEFAULT_GROUP_KEY : null;
+  const { groupKey, type } = resolveChoiceCellGroup(
+    cell,
+    scope.groups,
+    scope.ungroupedSelectionType ?? null,
+  );
+  return type === 'checkbox' ? groupKey : null;
 }
 
 /**
@@ -166,7 +163,12 @@ export function applyImpliedSelectionToList(
   const implied = resolveImpliedCells(picked, context);
   if (implied.length === 0) return current;
 
-  const exclusiveIds = exclusiveIdsInGroup(DEFAULT_GROUP_KEY, context);
+  // 목록 하나가 문항 전체의 선택이라 묶음 키를 가리지 않는다 — 체크박스로 고르는 단독 선택 보기 전부
+  const exclusiveIds = new Set(
+    context.tableCells
+      .filter((cell) => isExclusiveChoiceCell(cell) && checkboxGroupKeyOf(cell, context) !== null)
+      .map((cell) => cell.id),
+  );
   let next: readonly string[] = current;
   for (const cell of implied) {
     if (next.includes(cell.id)) continue;

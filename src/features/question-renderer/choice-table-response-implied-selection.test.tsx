@@ -216,3 +216,38 @@ describe('보기 소스 표 — 그룹 문항의 따라 선택', () => {
     expect(readValue()).toEqual({ cb1: ['know-a'] });
   });
 });
+
+describe('보기 소스 표 — 화면이 읽는 응답 키와 같은 키에 쓴다', () => {
+  // 보기 칸이 순위 그룹을 가리키는 어긋난 문항 — 화면은 그 그룹의 키로 읽고 쓴다(getGroupKeyOfCell).
+  // 따라 선택이 다른 키에 쓰면 체크가 보이지 않고, 직접 누르면 같은 칸이 두 키에 남는다.
+  function rankingRefQuestion(): Question {
+    const base = groupedQuestion();
+    return {
+      ...base,
+      choiceGroups: [
+        ...(base.choiceGroups ?? []),
+        { id: 'g-rank', groupKey: 'rnk1', type: 'ranking', label: '순위' },
+      ],
+      tableRowsData: [
+        row(
+          'r1',
+          '제도 A',
+          opt('know-a', { choiceGroupId: 'g-rank' }),
+          opt('use-a', { choiceGroupId: 'g-use', impliedCellIds: ['know-a'] }),
+        ),
+      ],
+    } as Question;
+  }
+
+  it('따라 골라진 칸이 화면에 체크되고, 그 칸을 풀면 키가 남지 않는다', async () => {
+    const user = userEvent.setup();
+    render(<Harness question={rankingRefQuestion()} />);
+    // 순서: know-a, use-a
+    await user.click(boxAt(1));
+    expect(readValue()).toEqual({ cb2: ['use-a'], rnk1: ['know-a'] });
+    expect(boxAt(0)).toBeChecked();
+
+    await user.click(boxAt(0));
+    expect(readValue()).toEqual({ cb2: ['use-a'] });
+  });
+});

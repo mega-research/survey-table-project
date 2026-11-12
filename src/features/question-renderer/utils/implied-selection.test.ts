@@ -248,7 +248,7 @@ describe('보기 소스 표 — 그룹 없는 보기 칸은 문항 유형을 따
     expect(canImplySelection(bare('a'), { groups: [], ungroupedSelectionType })).toBe(false);
   });
 
-  it('그룹 문항에서 그룹 없는 칸·없어진 그룹·순위 그룹의 칸은 문항 유형의 기본 묶음에 든다', () => {
+  it('그룹 문항에서 그룹 없는 칸·없어진 그룹·순위 그룹의 칸은 문항 유형의 선택 방식을 따른다', () => {
     const scope = {
       groups: [...groups, { id: 'g-rank', groupKey: 'rnk1', type: 'ranking' as const, label: '' }],
       ungroupedSelectionType: 'checkbox' as const,
@@ -258,6 +258,17 @@ describe('보기 소스 표 — 그룹 없는 보기 칸은 문항 유형을 따
     }
     // 라디오 그룹에 속한 칸은 문항이 체크박스여도 라디오다
     expect(canImplySelection(opt('d', 'g-radio'), scope)).toBe(false);
+  });
+
+  it('순위 그룹을 가리키는 칸은 그 그룹의 키 아래에 따라 골라진다 — 화면이 읽는 키(getGroupKeyOfCell)와 같아야 한다', () => {
+    const scope = {
+      groups: [...groups, { id: 'g-rank', groupKey: 'rnk1', type: 'ranking' as const, label: '' }],
+      ungroupedSelectionType: 'checkbox' as const,
+    };
+    const cells = [opt('a', 'g-know', { impliedCellIds: ['b'] }), opt('b', 'g-rank')];
+    expect(
+      applyImpliedSelection({ chk01: ['a'] }, cells[0]!, { tableCells: cells, ...scope }),
+    ).toEqual({ chk01: ['a'], rnk1: ['b'] });
   });
 
   it('그룹 문항의 기본 묶음 칸은 응답 맵의 기본 키 아래에 따라 골라진다', () => {
@@ -303,6 +314,12 @@ describe('applyImpliedSelectionToList — 그룹 없는 체크박스 문항의 �
     expect(applyImpliedSelectionToList(list, cells[2]!, { tableCells: cells, ...scope })).toBe(
       list,
     );
+  });
+
+  it('목록에 남아 있던 단독 선택 보기는 따라 골라진 칸이 푼다', () => {
+    expect(
+      applyImpliedSelectionToList(['none', 'a'], cells[0]!, { tableCells: cells, ...scope }),
+    ).toEqual(['a', 'b', 'c']);
   });
 
   it('보이지 않는 칸은 건너뛴다', () => {
