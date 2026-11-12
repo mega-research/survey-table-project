@@ -238,7 +238,7 @@ export function SurveyCard({
               </DropdownMenuItem>
               <DropdownMenuItem disabled={!canEdit} onClick={() => setCardTitleOpen(true)}>
                 <TextCursorInput className="h-3.5 w-3.5" />
-                카드 제목 변경
+                제목 변경
               </DropdownMenuItem>
               {/* 내 태그 — 볼 수 있으면 붙일 수 있다(관문 survey.view). 카드 태그 줄과 같은 창을 연다. */}
               <DropdownMenuItem onClick={() => (openTagsAfterMenu.current = true)}>

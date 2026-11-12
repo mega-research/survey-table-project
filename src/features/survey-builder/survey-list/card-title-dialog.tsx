@@ -52,7 +52,7 @@ export function CardTitleDialog({ surveyId, surveyTitle, cardTitle, onClose, onS
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>카드 제목 변경</DialogTitle>
+          <DialogTitle>제목 변경</DialogTitle>
           <DialogDescription>
             설문 목록과 운영 화면에 보이는 이름입니다. 응답자에게 보이는 설문지 제목은 바뀌지
             않습니다. 비워 두면 설문지 제목을 그대로 씁니다.
