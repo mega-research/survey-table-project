@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseCompletionTarget } from './completion-target-control';
+import { parseCompletionTarget } from './completion-target-card';
 
 describe('parseCompletionTarget — 완료 목표 입력', () => {
   it('정수 글자를 목표로 읽는다 — 천 단위 쉼표와 앞뒤 공백은 정돈한다', () => {

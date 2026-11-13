@@ -26,4 +26,15 @@ describe('survey-save — 콘솔 소유 컬럼', () => {
     expect(source).not.toMatch(/\bisPaused\s*:/);
     expect(source).not.toMatch(/\bquotaConfig\s*:/);
   });
+
+  it('설문 수정(surveys.update)도 실려 온 maxResponses 를 버린다 — 입력을 통째로 펼쳐 쓰는 경로다', () => {
+    const surveysSource = readFileSync(resolve(__dirname, 'surveys.ts'), 'utf8');
+    const updateSurvey = surveysSource.slice(
+      surveysSource.indexOf('export async function updateSurvey'),
+      surveysSource.indexOf('export async function', surveysSource.indexOf('export async function updateSurvey') + 1),
+    );
+    expect(updateSurvey).toMatch(/\{\s*maxResponses: _consoleOwned,\s*\.\.\.data\s*\}/);
+    // 펼쳐 쓰는 것은 걸러 낸 data 에서 나온 것뿐이다.
+    expect(updateSurvey).not.toMatch(/\.\.\.input\.data/);
+  });
 });

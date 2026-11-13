@@ -75,7 +75,6 @@ export const UpdateSurveyDataSchema = z.custom<
     shuffleQuestions: boolean;
     requireLogin: boolean;
     endDate: Date | null;
-    maxResponses: number | null;
     thankYouMessage: string;
     screenedOutMessage?: string | null;
     localizedMessages?: NonNullable<SurveyType['settings']['localizedMessages']> | null;

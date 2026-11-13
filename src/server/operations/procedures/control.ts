@@ -14,8 +14,6 @@ const ControlStateSchema = z.object({
   testResponseCount: z.number().int(),
   testTargetCount: z.number().int(),
   firstTestInviteCode: z.string().nullable(),
-  completionTarget: z.number().int().nullable(),
-  completedResponseCount: z.number().int(),
 });
 
 const get = authed

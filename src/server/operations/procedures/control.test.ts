@@ -35,8 +35,6 @@ describe('operations.control procedures', () => {
       testResponseCount: 0,
       testTargetCount: 1,
       firstTestInviteCode: 'invite-first',
-      completionTarget: null,
-      completedResponseCount: 0,
     });
     const client = createRouterClient({ control }, { context: authedContext() });
     const res = await client.control.get({ surveyId: SURVEY_ID });
@@ -51,8 +49,6 @@ describe('operations.control procedures', () => {
       testResponseCount: 0,
       testTargetCount: 1,
       firstTestInviteCode: 'invite-first',
-      completionTarget: null,
-      completedResponseCount: 0,
     });
   });
 
@@ -83,8 +79,6 @@ describe('operations.control procedures', () => {
       testResponseCount: 2,
       testTargetCount: 1,
       firstTestInviteCode: 'invite-first',
-      completionTarget: null,
-      completedResponseCount: 0,
     });
     const client = createRouterClient({ control }, { context: authedContext() });
     const res = await client.control.setTestMode({ surveyId: SURVEY_ID, enabled: true });
@@ -99,8 +93,6 @@ describe('operations.control procedures', () => {
       testResponseCount: 2,
       testTargetCount: 1,
       firstTestInviteCode: 'invite-first',
-      completionTarget: null,
-      completedResponseCount: 0,
     });
   });
 
