@@ -1,6 +1,6 @@
 ---
 name: survey-ops
-description: 운영 설문 작업 도구. 운영(prod) 설문의 문항·문구·표 구조를 스크립트로 고칠 때, SPSS 변수명을 설명·인용할 때, 응답자 화면에 무엇이 보이는지(명단 값·토큰 치환·이월 프리필·「다음」이 막히는 이유) 확인할 때 쓴다.
+description: 운영 설문 작업 도구. 한글 조사표에서 설문을 새로 조립할 때, 운영(prod) 설문의 문항·문구·표 구조를 스크립트로 고칠 때, SPSS 변수명을 설명·인용할 때, 응답자 화면에 무엇이 보이는지(명단 값·토큰 치환·이월 프리필·「다음」이 막히는 이유) 확인할 때 쓴다.
 ---
 
 # 운영 설문 작업 도구
@@ -27,10 +27,11 @@ pnpm survey:vars <surveyId> --env prod --grep '^Q2_'
 
 ## 설문을 조립하거나 구조를 고치기 전에 규칙 문서 둘을 읽는다
 
-- 변수명·값·라벨: `docs/superpowers/specs/2026-10-08-export-variable-rules-design.md`
-- 웹 화면(문항 유형·분기·필수·검증)과 모바일 표시 방식: `docs/superpowers/specs/2026-11-13-survey-screen-rules-design.md`
+- 변수명·값·라벨: `docs/agents/survey-variable-rules.md`
+- 웹 화면(문항 유형·분기·필수·검증)과 모바일 표시 방식: `docs/agents/survey-screen-rules.md`
 
-둘 다 `docs/` 아래라 git 에 없다(이 기기에만 있다). 설문 하나를 끝내며 새로 정한 것은 그 문서에 절로 더한다.
+둘 다 gitignore 된 `docs/` 아래라 내용 검색에 잡히지 않는다 — 위 경로로 바로 연다. 설문 하나를 끝내며 새로
+정한 것은 그 문서의 해당 절에 더하고, 왜 그렇게 정했는가는 ADR 0039·0040·0041 에서 본다.
 
 ## 응답자 화면은 그려서 확인한다
 
