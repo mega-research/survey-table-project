@@ -26,6 +26,11 @@ interface UseResponseTelemetryArgs {
    * ref 로 미러링하므로 호출자가 매 렌더 새 함수를 넘겨도 effect 재발사는 없다.
    */
   onPausedDetected?: ((pausedMessage: string | null) => void) | undefined;
+  /**
+   * stepVisit 응답이 전체 완료 목표 도달(completion_target_reached)을 알렸을 때 호출 —
+   * 끝까지 채운 뒤 제출에서야 막히지 않게 모집 완료 화면으로 바꾼다(CONTEXT.md 「전체 완료 목표」).
+   */
+  onCompletionTargetReached?: (() => void) | undefined;
 }
 
 /**
@@ -50,11 +55,13 @@ export function useResponseTelemetry({
   visibleProgressRef,
   testIdentity = null,
   onPausedDetected,
+  onCompletionTargetReached,
 }: UseResponseTelemetryArgs): void {
   // 렌더 분기상 blocked 화면이 완료 화면보다 앞이라, 완료 직후 늦게 도착한 중단 판정이
   // 완료 화면을 덮을 수 있다. 최신값을 ref 로 읽어 그 경우를 버린다.
   const isCompletedRef = useLatestRef(isCompleted);
   const onPausedDetectedRef = useLatestRef(onPausedDetected);
+  const onCompletionTargetReachedRef = useLatestRef(onCompletionTargetReached);
   // 운영 현황 콘솔(T5): 스텝 전환 추적.
   // - currentResponseId가 set된 이후(첫 답변 후)에만 동작
   // - 동일 stepId면 서버에서 no-op (멱등)
@@ -77,9 +84,13 @@ export function useResponseTelemetry({
       .then((res) => {
         // 세션 도중 중단 감지 — 저장할 답변이 없어 flush 가 no-op 인 전환도 여기서 잡힌다.
         // 구 서버는 denial 이 undefined → 아무 것도 하지 않는다(배포 스큐 fail-open).
-        if (res?.denial !== 'survey_paused') return;
-        if (isCompletedRef.current) return;
-        onPausedDetectedRef.current?.(res.pausedMessage ?? null);
+        // 완료 직후 늦게 도착한 판정은 버린다 — 그 사람은 완료자다.
+        if (!res?.denial || isCompletedRef.current) return;
+        if (res.denial === 'survey_paused') {
+          onPausedDetectedRef.current?.(res.pausedMessage ?? null);
+        } else if (res.denial === 'completion_target_reached') {
+          onCompletionTargetReachedRef.current?.();
+        }
       })
       .catch((err) => {
         console.error('recordStepVisit 실패:', err);
@@ -96,6 +107,7 @@ export function useResponseTelemetry({
     visibleProgressRef,
     isCompletedRef,
     onPausedDetectedRef,
+    onCompletionTargetReachedRef,
   ]);
 
   // 운영 현황 콘솔: Page Visibility 세그먼트.

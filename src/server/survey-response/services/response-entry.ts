@@ -31,6 +31,7 @@ import {
 } from './response-answer-write';
 import {
   assertSurveyAcceptingResponses,
+  countCompletedResponses,
   loadSurveyGateRow,
   loadValidatedVersionGateRow,
   toGateBlockedResult,
@@ -359,14 +360,18 @@ async function admitAndCreateResponseInner(
 
   // #24 버전 무결성: 클라 제공 versionId 검증(타 설문 거부) + 무중단 갈아타기(티켓 04) —
   // 배포 전 열린 탭의 구버전 versionId 는 거부 대신 현재 버전으로 재핀된다(effectiveVersionId).
-  // create 시점 정원은 soft(completedCount 미전달) — 잔여 race window 는 complete 하드체크가 보강.
   const { version, effectiveVersionId } = await loadValidatedVersionGateRow(
     surveyId,
     versionId,
     survey,
     { isTest },
   );
-  assertSurveyAcceptingResponses(survey, version, { contactTargetId, isTest });
+  // 전체 완료 목표 — 목표가 있는 설문만 완료 수를 세어 넘긴다(목표 없는 설문은 질의가 늘지 않는다).
+  // 잠금 없는 셈이라 마지막 자리에 동시에 들어온 응답자는 통과할 수 있고, 그 초과는 제출 시점의
+  // 잠금 아래 재확인이 막는다. 테스트 응답은 게이트가 전 검사를 면제하므로 세지 않는다.
+  const completedCount =
+    survey.maxResponses != null && !isTest ? await countCompletedResponses(surveyId) : null;
+  assertSurveyAcceptingResponses(survey, version, { contactTargetId, completedCount, isTest });
 
   // PII 문항이면 INSERT 전에 암호화 — 평문이 순간이라도 DB(WAL 포함)에 닿지 않게 한다.
   // 이후 updateQuestionResponse 재호출은 이미 암호문이라 이중 암호화되지 않는다.
