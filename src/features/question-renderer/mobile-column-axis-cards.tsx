@@ -164,6 +164,31 @@ export const MobileColumnAxisCards = React.memo(function MobileColumnAxisCards({
                   />
                 </div>
               ));
+              // 상위 구분(대분류)이 바뀌는 자리의 소제목 — 입력 칸 항목과 보기 타일 항목이 같이 쓴다
+              const groupHeading = (
+                <>
+                {groupChanged && groupKey && (
+                  <p
+                    data-testid="column-axis-card-group"
+                    className={cn(
+                      'text-[13px] font-bold text-blue-700',
+                      index > 0 && 'border-t border-gray-200 pt-3',
+                    )}
+                  >
+                    {groupCells.map((group, groupIndex) => (
+                      <React.Fragment key={group.id}>
+                        {groupIndex > 0 && ' · '}
+                        <CellText
+                          text={substituteTokens(group.content.trim(), attrs, quotes)}
+                          html={resolveCellTextHtml(group, attrs, quotes)}
+                        />
+                      </React.Fragment>
+                    ))}
+                  </p>
+                )}
+                {groupChanged && !groupKey && <div className="border-t border-gray-200" />}
+                </>
+              );
               // 보기 그룹 칸 — 타일 하나가 통째로 탭 영역이고 글자는 행 제목(보기 라벨은 데이터용 짧은 이름이다).
               // 설명은 타일 안 라벨 아래, 이 보기가 여는 상세 입력은 고른 타일 아래에만 선다
               if (sourceCell.type === 'choice_opt') {
@@ -172,48 +197,31 @@ export const MobileColumnAxisCards = React.memo(function MobileColumnAxisCards({
                   : undefined;
                 if (!choiceGroup) return null;
                 return (
-                  <div
-                    key={sourceCell.id}
-                    data-cell-id={sourceCell.id}
-                    className={cn(invalid && 'rounded-lg ring-2 ring-red-300')}
-                  >
-                    <ChoiceOptCell
-                      cell={label ? { ...sourceCell, choiceLabel: label } : sourceCell}
-                      questionId={questionId}
-                      group={choiceGroup}
-                      value={value}
-                      onChange={onChange}
-                      inputIdScope={card.key}
-                      ariaInvalid={invalid}
-                      variant="tile"
-                      description={description}
-                      detail={detailNodes.length > 0 ? detailNodes : undefined}
-                    />
-                  </div>
+                  <React.Fragment key={sourceCell.id}>
+                    {groupHeading}
+                    <div
+                      data-cell-id={sourceCell.id}
+                      className={cn(invalid && 'rounded-lg ring-2 ring-red-300')}
+                    >
+                      <ChoiceOptCell
+                        cell={label ? { ...sourceCell, choiceLabel: label } : sourceCell}
+                        questionId={questionId}
+                        group={choiceGroup}
+                        value={value}
+                        onChange={onChange}
+                        inputIdScope={card.key}
+                        ariaInvalid={invalid}
+                        variant="tile"
+                        description={description}
+                        detail={detailNodes.length > 0 ? detailNodes : undefined}
+                      />
+                    </div>
+                  </React.Fragment>
                 );
               }
               return (
                 <React.Fragment key={cell.id}>
-                  {groupChanged && groupKey && (
-                    <p
-                      data-testid="column-axis-card-group"
-                      className={cn(
-                        'text-[13px] font-bold text-blue-700',
-                        index > 0 && 'border-t border-gray-200 pt-3',
-                      )}
-                    >
-                      {groupCells.map((group, groupIndex) => (
-                        <React.Fragment key={group.id}>
-                          {groupIndex > 0 && ' · '}
-                          <CellText
-                            text={substituteTokens(group.content.trim(), attrs, quotes)}
-                            html={resolveCellTextHtml(group, attrs, quotes)}
-                          />
-                        </React.Fragment>
-                      ))}
-                    </p>
-                  )}
-                  {groupChanged && !groupKey && <div className="border-t border-gray-200" />}
+                  {groupHeading}
                   <div data-cell-id={cell.id} className="space-y-1">
                     {label && !checkWithTitle && (
                       <p className="text-sm font-medium text-gray-900">

@@ -21,6 +21,7 @@ import { buildTableRowspanCoverage } from './table-rowspan-coverage';
  * 저작자가 거는 두 가지(2026-11-13, PRD `.scratch/axis-card-choice-rows/PRD.md`):
  * - 글자 셀을 「바로 표시」로 두면 행 제목이 아니라 행 제목 아래 **설명**이 된다(「항목 | 판단 예시 | 체크」).
  * - 같은 행 보기 칸만으로 열리는 입력 칸은 그 **보기 타일 아래**에 딸린다(「⑭ 기타」 체크 → 기타 내용).
+ * - 설명 열이 축마다 따로면 열에 `describesColumnId` 를 적어 그 축 카드에만 붙인다(「공급 설명 | 활용 설명」).
  */
 
 export interface ColumnAxisCardItem {
@@ -265,6 +266,17 @@ export function buildColumnAxisCards(input: {
     ]),
   );
   const detailsByRow = new Map(input.displayRows.map((row) => [row.id, detailControllerOf(row)]));
+  // 설명 열이 가리키는 축(`describesColumnId`) — 가리킨 열의 카드에만 그 설명을 붙인다. 안 가리키면 모든 축에 붙는다
+  const describedColumnByIndex = input.columns.map((column) => column.describesColumnId);
+  const labelFor = (row: TableRow, columnId: string) => {
+    const base = labels.get(row.id)!;
+    if (base.descriptionCells.length === 0) return base;
+    const descriptionCells = base.descriptionCells.filter((descriptionCell) => {
+      const target = describedColumnByIndex[row.cells.indexOf(descriptionCell)];
+      return target === undefined || target === columnId;
+    });
+    return descriptionCells.length === base.descriptionCells.length ? base : { ...base, descriptionCells };
+  };
   const cards: ColumnAxisCard[] = [];
   for (const [columnIndex, column] of input.columns.entries()) {
     const items: ColumnAxisCardItem[] = [];
@@ -275,7 +287,7 @@ export function buildColumnAxisCards(input: {
       if (isGroupChoiceCell(cell)) {
         if (input.includeChoiceOptCells) {
           const details = row.cells.filter((other) => choiceDetailOf.get(other.id)?.includes(cell.id));
-          items.push({ cell, row, ...labels.get(row.id)!, details });
+          items.push({ cell, row, ...labelFor(row, column.id), details });
         }
         continue;
       }
@@ -287,7 +299,7 @@ export function buildColumnAxisCards(input: {
       const bundledUnder = detailOf.get(cell.id);
       if (bundledUnder !== undefined && !choiceDetailOf.has(bundledUnder)) continue;
       const details = row.cells.filter((other) => detailOf.get(other.id) === cell.id);
-      items.push({ cell, row, ...labels.get(row.id)!, details });
+      items.push({ cell, row, ...labelFor(row, column.id), details });
     }
     if (items.length === 0) continue;
     const path = headerPath(input.columns, input.headerGrid, columnIndex);

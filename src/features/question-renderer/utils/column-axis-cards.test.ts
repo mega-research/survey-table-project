@@ -535,3 +535,82 @@ describe('buildColumnAxisCards — 설명 셀과 보기 칸이 여는 상세 입
     );
   });
 });
+
+// 피지컬 AI 실태조사 B1 모양 — 대분류 | 세부 유형 | 공급 설명 | 활용 설명 | 공급(S) | 활용(U).
+// 설명 열이 축마다 따로 있다: 열에 「이 열은 저 열의 설명」을 적으면 그 축 카드에만 붙는다.
+describe('buildColumnAxisCards — 축마다 다른 설명 열(describesColumnId)', () => {
+  const choice = (id: string, group: string): TableCell => ({ id, type: 'choice_opt', content: '', choiceGroupId: group });
+  const desc = (id: string, content: string): TableCell => text(id, content, { mobileDisplay: 'inline' });
+  const productColumns: TableColumn[] = [
+    { id: 'cat', label: '대분류' },
+    { id: 'kind', label: '세부 유형' },
+    { id: 'sdesc', label: '공급(S)\n(외부제공하는 대상)', describesColumnId: 'supply' },
+    { id: 'udesc', label: '활용(U)\n(자사에서 이용하는 대상)', describesColumnId: 'use' },
+    { id: 'supply', label: '공급(S)' },
+    { id: 'use', label: '활용(U)' },
+  ];
+  const productRows: TableRow[] = [
+    {
+      id: 'r1',
+      label: '',
+      cells: [
+        text('cat-a', 'A. 부품·모듈', { rowspan: 2 }),
+        text('k1', '1) AI반도체'),
+        desc('sd1', 'AI 반도체, 엣지컴퓨터'),
+        desc('ud1', '별도로 확보한 반도체'),
+        choice('s1', 'gs'),
+        choice('u1', 'gu'),
+      ],
+    },
+    {
+      id: 'r2',
+      label: '',
+      cells: [
+        text('cat-a-c', '', { isHidden: true }),
+        text('k2', '2) 센서'),
+        desc('sd2', '카메라·라이다'),
+        desc('ud2', '사용할 센서'),
+        choice('s2', 'gs'),
+        choice('u2', 'gu'),
+      ],
+    },
+  ];
+  const build = (columnsIn: TableColumn[]) =>
+    buildColumnAxisCards({
+      columns: columnsIn,
+      displayRows: productRows,
+      includeChoiceOptCells: true,
+      inlineTextAsDescription: true,
+    });
+
+  it('설명 열이 가리키는 축 카드에만 그 설명이 붙는다 — 행 제목과 상위 구분은 그대로', () => {
+    const [supply, use] = build(productColumns);
+    expect(supply!.items.map((item) => [item.label, item.descriptionCells.map((c) => c.id)])).toEqual([
+      ['1) AI반도체', ['sd1']],
+      ['2) 센서', ['sd2']],
+    ]);
+    expect(use!.items.map((item) => item.descriptionCells.map((c) => c.id))).toEqual([['ud1'], ['ud2']]);
+    // 세로 병합된 대분류는 두 행 모두의 상위 구분이다
+    expect(supply!.items.map((item) => item.groupCells.map((c) => c.id))).toEqual([['cat-a'], ['cat-a']]);
+  });
+
+  it('가리키는 열을 적지 않은 설명 열은 모든 축 카드에 붙는다', () => {
+    const shared = productColumns.map((column) => (column.id === 'udesc' ? { id: 'udesc', label: column.label } : column));
+    const [supply, use] = build(shared);
+    expect(supply!.items[0]!.descriptionCells.map((c) => c.id)).toEqual(['sd1', 'ud1']);
+    expect(use!.items[0]!.descriptionCells.map((c) => c.id)).toEqual(['ud1']);
+  });
+
+  it('가리키는 열이 지금 표에 없으면(조건으로 숨었거나 지워짐) 그 설명은 어느 카드에도 붙지 않는다', () => {
+    const withoutUse = productColumns.filter((column) => column.id !== 'use');
+    const rowsWithoutUse = productRows.map((row) => ({ ...row, cells: row.cells.filter((_, i) => i !== 5) }));
+    const cards = buildColumnAxisCards({
+      columns: withoutUse,
+      displayRows: rowsWithoutUse,
+      includeChoiceOptCells: true,
+      inlineTextAsDescription: true,
+    });
+    expect(cards.map((card) => card.key)).toEqual(['supply']);
+    expect(cards[0]!.items[0]!.descriptionCells.map((c) => c.id)).toEqual(['sd1']);
+  });
+});

@@ -163,3 +163,54 @@ describe('축 단위 카드 — 설명 셀과 보기 칸이 여는 상세 입력
     expect(new Set(ids).size).toBe(2);
   });
 });
+
+// B1 모양 — 대분류(세로 병합) | 세부 유형 | 공급 설명 | 활용 설명 | 공급(S) | 활용(U)
+describe('축 단위 카드 — 보기 타일의 상위 구분 소제목과 축마다 다른 설명', () => {
+  const productColumns: TableColumn[] = [
+    { id: 'cat', label: '대분류', width: 150 },
+    { id: 'kind', label: '세부 유형', width: 240 },
+    { id: 'sdesc', label: '공급(S)\n(외부제공하는 대상)', width: 250, describesColumnId: 'supply' },
+    { id: 'udesc', label: '활용(U)\n(자사에서 이용하는 대상)', width: 258, describesColumnId: 'use' },
+    { id: 'supply', label: '공급(S)', width: 100 },
+    { id: 'use', label: '활용(U)', width: 100 },
+  ];
+  const row = (n: number, cat: TableRow['cells'][number], kind: string): TableRow => ({
+    id: `r${n}`,
+    label: kind,
+    cells: [
+      cat,
+      { id: `k${n}`, type: 'text', content: kind },
+      { id: `sd${n}`, type: 'text', content: `공급 설명 ${n}`, mobileDisplay: 'inline' },
+      { id: `ud${n}`, type: 'text', content: `활용 설명 ${n}`, mobileDisplay: 'inline' },
+      { id: `s${n}`, type: 'choice_opt', content: '', choiceGroupId: 'gs', choiceLabel: kind },
+      { id: `u${n}`, type: 'choice_opt', content: '', choiceGroupId: 'gu', choiceLabel: kind },
+    ],
+  });
+  const productRows: TableRow[] = [
+    row(1, { id: 'cat-a', type: 'text', content: 'A. 부품·모듈', rowspan: 2 }, '1) AI반도체'),
+    row(2, { id: 'cat-a-c', type: 'text', content: '', isHidden: true }, '2) 센서'),
+    row(3, { id: 'cat-b', type: 'text', content: 'B. AI 모델' }, '3) 지각SW'),
+  ];
+
+  it('구분이 바뀌는 타일 앞에 소제목이 서고, 타일 설명은 그 축의 설명 열 것만이다', () => {
+    const { container } = render(
+      <InteractiveTableResponse
+        questionId="q2"
+        columns={productColumns}
+        rows={productRows}
+        choiceGroups={groups}
+        value={{}}
+        onChange={() => {}}
+        mobileTableDisplayMode="axis-cards"
+      />,
+    );
+    // 카드 둘(공급·활용)마다 소제목 둘(A·B) — 같은 구분이 이어지는 2) 앞에는 없다
+    const headings = [...container.querySelectorAll('[data-testid="column-axis-card-group"]')].map((el) => el.textContent);
+    expect(headings).toEqual(['A. 부품·모듈', 'B. AI 모델', 'A. 부품·모듈', 'B. AI 모델']);
+    const description = (cellId: string) =>
+      within(container.querySelector<HTMLElement>(`[data-cell-id="${cellId}"]`)!).getByTestId('choice-tile-description').textContent;
+    expect(description('s1')).toBe('공급 설명 1');
+    expect(description('u1')).toBe('활용 설명 1');
+    expect(description('s3')).toBe('공급 설명 3');
+  });
+});
