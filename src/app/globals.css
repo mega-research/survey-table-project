@@ -824,6 +824,11 @@ html {
 .mobile-row-card .options-grid {
   grid-template-columns: var(--options-grid-cols, minmax(0, 1fr));
 }
+/* 항목 단위 카드·축 단위 카드: 저작자가 모바일 보기 열 수를 명시한 칸(표식 mobile-options-explicit —
+   utils/mobile-card-options)만 같은 식으로 푼다. 명시하지 않은 칸은 종전대로 1열이다. */
+.mobile-options-explicit .options-grid {
+  grid-template-columns: var(--options-grid-cols, minmax(0, 1fr));
+}
 
 /* ==========================================
    메일 템플릿 — 변수 토큰 (ProseMirror Decoration)

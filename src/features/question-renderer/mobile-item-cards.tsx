@@ -13,7 +13,10 @@ import {
   buildItemCards,
   itemCardTitleText,
 } from '@/features/question-renderer/utils/item-cards';
-import { overrideCellOptionsColumnsForCard } from '@/features/question-renderer/utils/mobile-card-options';
+import {
+  explicitMobileOptionsClass,
+  overrideCellOptionsColumnsForCard,
+} from '@/features/question-renderer/utils/mobile-card-options';
 import {
   buildRadioGroupBuckets,
   resolveRadioGroupProps,
@@ -108,7 +111,12 @@ export const MobileItemCards = React.memo(function MobileItemCards({
               {substituteTokens(label, attrs, quotes)}
             </p>
           )}
-          <div className={cn(invalid && 'rounded-lg ring-2 ring-red-300')}>
+          <div
+            className={cn(
+              invalid && 'rounded-lg ring-2 ring-red-300',
+              explicitMobileOptionsClass(sourceCell),
+            )}
+          >
             <InteractiveCell
               cell={cell}
               questionId={questionId}
