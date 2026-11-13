@@ -978,6 +978,14 @@ export interface TableColumn {
   revealStep?: number;
   /** 열 차례로 열기 버튼 문구 — 단계 열 중 처음 적힌 것을 쓴다(기본 「열 추가」). */
   revealAddLabel?: string;
+  /**
+   * 이 열이 설명하는 응답 열의 id — 모바일 「축 단위 카드」에서 이 열의 설명 셀(「바로 표시」 글자 셀)을
+   * 그 열의 카드에만 붙인다(「공급 설명 | 활용 설명 | 공급 ☐ | 활용 ☐」처럼 설명 열이 축마다 따로인 표).
+   * 미지정이면 그 행의 모든 축 카드에 붙고, 가리킨 열이 지금 보이지 않으면 어느 카드에도 붙지 않는다.
+   * 데스크톱 표·저장·내보내기는 무변경. 빌더 화면은 없고 스크립트로 적는다. 판정은
+   * `features/question-renderer/utils/column-axis-cards`.
+   */
+  describesColumnId?: string;
 }
 
 // 다단계 헤더 셀 (headerGrid용)
