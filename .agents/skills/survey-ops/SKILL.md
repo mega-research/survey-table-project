@@ -23,8 +23,14 @@ pnpm survey:vars <surveyId> --env prod --grep '^Q2_'
 ```
 
 내보내기와 같은 함수 사슬로 구조 전체 변수명을 낸다. 사용자에게 변수명을 말할 때는 이 출력을 그대로 옮긴다.
-응답에 따라 빠지는 열(안 쓴 벌·열)과 변동 확인 열은 이 목록에 없다. 변수명을 새로 짓는 규칙은
-`docs/superpowers/specs/2026-10-08-export-variable-rules-design.md`.
+응답에 따라 빠지는 열(안 쓴 벌·열)과 변동 확인 열은 이 목록에 없다.
+
+## 설문을 조립하거나 구조를 고치기 전에 규칙 문서 둘을 읽는다
+
+- 변수명·값·라벨: `docs/superpowers/specs/2026-10-08-export-variable-rules-design.md`
+- 웹 화면(문항 유형·분기·필수·검증)과 모바일 표시 방식: `docs/superpowers/specs/2026-11-13-survey-screen-rules-design.md`
+
+둘 다 `docs/` 아래라 git 에 없다(이 기기에만 있다). 설문 하나를 끝내며 새로 정한 것은 그 문서에 절로 더한다.
 
 ## 응답자 화면은 그려서 확인한다
 
