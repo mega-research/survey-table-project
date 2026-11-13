@@ -712,6 +712,21 @@ export function QuotaEditor({
               처리)가 목표에 닿으면 마감합니다. 아래 조건의 셀 목표와 함께 쓰면 둘 중 먼저 찬 쪽에서
               마감합니다.
             </p>
+            {/* 다른 조건과 같은 스위치를 따른다 — 꺼진 스위치가 이 조건에 뜻하는 바를 그 자리에서 알린다 */}
+            {!config.enabled ? (
+              <p role="alert" className="mt-2 rounded bg-amber-50 px-2 py-1.5 text-xs text-amber-700">
+                집행이 꺼져 있어 지금은 막지 않고 집계만 합니다. 목표에서 마감하려면 위의 「집행」을
+                켜세요.
+              </p>
+            ) : (
+              !config.midSurveyClose && (
+                <p role="alert" className="mt-2 rounded bg-amber-50 px-2 py-1.5 text-xs text-amber-700">
+                  「진행 중 마감」이 꺼져 있어 새로 들어오는 사람만 막습니다. 이미 응답 중이던 사람은
+                  끝까지 완료되어 목표를 넘을 수 있습니다. 완료 수를 목표에 정확히 맞춰야 하면(완료자
+                  전원 사례 지급) 「진행 중 마감」을 켜세요.
+                </p>
+              )
+            )}
           </div>
         )}
 

@@ -131,9 +131,10 @@ describe('QuotaEditor — 「완료」 조건', () => {
     await user.click(screen.getByRole('button', { name: '저장' }));
 
     expect(save).not.toHaveBeenCalled();
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      '「완료」 조건의 목표를 1 이상의 정수로 입력해 주세요.',
-    );
+    // 조건 카드의 스위치 안내도 alert 다 — 문구로 집는다.
+    expect(
+      screen.getByText('「완료」 조건의 목표를 1 이상의 정수로 입력해 주세요.'),
+    ).toHaveAttribute('role', 'alert');
   });
 
   it('조건을 지우고 저장하면 totalTarget 을 null 로 지운다', async () => {
@@ -169,5 +170,27 @@ describe('QuotaEditor — 「완료」 조건', () => {
     await user.click(screen.getByRole('button', { name: '저장' }));
 
     expect(savedConfig()).not.toHaveProperty('totalTarget');
+  });
+
+  // 다른 조건과 같은 스위치를 따른다 — 꺼진 스위치가 이 조건에 뜻하는 바를 조건 카드가 알린다.
+  it('집행이 꺼져 있으면 막지 않고 집계만 한다고 알린다', () => {
+    renderEditor({ ...empty, enabled: false, totalTarget: 1100 });
+
+    expect(screen.getByText(/집행이 꺼져 있어 지금은 막지 않고 집계만 합니다/)).toBeInTheDocument();
+  });
+
+  it('집행 중인데 진행 중 마감이 꺼져 있으면 목표를 넘을 수 있다고 알린다', () => {
+    renderEditor({ ...empty, totalTarget: 1100 });
+
+    expect(
+      screen.getByText(/「진행 중 마감」이 꺼져 있어 새로 들어오는 사람만 막습니다/),
+    ).toBeInTheDocument();
+  });
+
+  it('집행과 진행 중 마감이 모두 켜져 있으면 안내가 없다', () => {
+    renderEditor({ ...empty, totalTarget: 1100, midSurveyClose: true });
+
+    expect(screen.queryByText(/집행이 꺼져 있어/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/새로 들어오는 사람만 막습니다/)).not.toBeInTheDocument();
   });
 });
