@@ -38,17 +38,6 @@ const setPaused = authed
     }),
   );
 
-// 전체 완료 목표 — 1 이상 정수 또는 null(해제). 0 은 받지 않는다: 「아무도 못 들어온다」는 중단의 일이다.
-const setCompletionTarget = authed
-  .input(
-    z.object({
-      surveyId: z.string(),
-      completionTarget: z.number().int().min(1).max(10_000_000).nullable(),
-    }),
-  )
-  .output(z.object({ completionTarget: z.number().int().nullable() }))
-  .handler(({ input }) => svc.setCompletionTarget(input));
-
 const setTestMode = authed
   .input(z.object({ surveyId: z.string(), enabled: z.literal(true) }))
   .output(ControlStateSchema)
@@ -72,4 +61,4 @@ const disable = authed
   )
   .handler(({ input }) => svc.disableTestWorkspace(input));
 
-export const control = { get, setPaused, setCompletionTarget, setTestMode, disable };
+export const control = { get, setPaused, setTestMode, disable };

@@ -90,7 +90,7 @@ const MESSAGES: Record<NoticeReason, MessageDef> = {
     tone: 'error',
   },
   not_accepting: {
-    // 미배포·마감·버전 불일치를 하나로 접은 사유(전체 완료 목표 도달은 quota_closed). 응답자에게 내부 상태를 세분해
+    // 미배포·마감·버전 불일치를 하나로 접은 사유. 응답자에게 내부 상태를 세분해
     // 알리지 않는다 — 어느 쪽이든 지금 응답할 수 없다는 사실은 같다.
     title: 'notice.notAccepting.title',
     body: 'notice.notAccepting.body',

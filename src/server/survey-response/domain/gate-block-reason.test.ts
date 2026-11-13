@@ -14,12 +14,6 @@ describe('toGateBlockReason', () => {
     expect(toGateBlockReason('invite_required')).toBe('invalid_token');
   });
 
-  it('전체 완료 목표 도달은 모집 완료 화면(quota_closed)으로 보낸다', () => {
-    // not_accepting 의 「링크가 맞는지 확인」은 끝까지 채운 응답자에게 틀린 안내다. 쿼터 마감과
-    // 같은 종류의 사실(모집 완료)이고, 패널 설문의 종료 후 이동도 쿼터 마감 주소로 가야 한다.
-    expect(toGateBlockReason('max_responses_reached')).toBe('quota_closed');
-  });
-
   it('미배포·마감·버전 문제는 모두 not_accepting 으로 접는다', () => {
     // 응답자에게 내부 사유를 세분해 노출하지 않는다 — 화면 문구는 하나면 충분하다.
     expect(toGateBlockReason('status_not_published')).toBe('not_accepting');

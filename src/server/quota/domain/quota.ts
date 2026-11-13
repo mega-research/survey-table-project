@@ -1,5 +1,6 @@
 import * as z from 'zod';
 
+import { QUOTA_TOTAL_TARGET_MAX } from '@/lib/quota/normalize';
 import { QUOTA_DIMENSION_KINDS, type QuotaConfig } from '@/shared/contracts/quota';
 
 export const QuotaCategorySchema = z.object({
@@ -31,6 +32,8 @@ export const QuotaConfigSchema = z.object({
   enabled: z.boolean(),
   dimensions: z.array(QuotaDimensionSchema),
   cells: z.array(QuotaCellSchema),
+  // 「완료」 조건의 목표 — 1 이상 정수. 0 은 받지 않는다(아무도 못 들어오게 하는 것은 중단의 일이다).
+  totalTarget: z.number().int().min(1).max(QUOTA_TOTAL_TARGET_MAX).nullable().optional(),
   closedMessage: z.string().nullable(),
   midSurveyClose: z.boolean().optional(),
   midSurveyClosedMessage: z.string().nullable().optional(),

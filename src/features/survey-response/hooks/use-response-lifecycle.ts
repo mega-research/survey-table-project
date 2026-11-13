@@ -643,10 +643,6 @@ export function useResponseLifecycle({
           .then((result) => {
             if (result.kind === 'blocked') {
               if (result.reason === 'invalid_test_token') clearInvalidTargetTestSession();
-              // 전체 완료 목표로 막힌 입장 — 쿼터 화면의 마감 문구가 실려 오면 그 문구로 띄운다.
-              if (result.reason === 'quota_closed' && result.closedMessage) {
-                setQuotaClosedMessage?.(result.closedMessage);
-              }
               setDuplicateStatus({ kind: 'blocked', reason: result.reason });
               return null;
             }
@@ -948,9 +944,6 @@ export function useResponseLifecycle({
           });
           if (created.kind === 'blocked') {
             if (created.reason === 'invalid_test_token') clearInvalidTargetTestSession();
-            if (created.reason === 'quota_closed' && created.closedMessage) {
-              setQuotaClosedMessage?.(created.closedMessage);
-            }
             setDuplicateStatus({ kind: 'blocked', reason: created.reason });
             setIsSubmitting(false);
             return;

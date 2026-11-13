@@ -301,8 +301,7 @@ export async function saveSurveyDiff(
           piiRetentionUntil: metadata.settings.piiRetentionUntil
             ? retentionDateToTimestamp(metadata.settings.piiRetentionUntil)
             : null,
-          // maxResponses(전체 완료 목표)는 쓰지 않는다 — 운영 콘솔이 정하는 라이브 컬럼이라, 빌더가
-          // 열 때 읽은 값으로 덮으면 옛 탭 저장이 콘솔 값을 비운다(isPaused·quotaConfig 와 같은 취급).
+          // maxResponses 는 쓰지 않는다 — 쓰지 않는 컬럼이다(전체 완료 수의 목표는 쿼터 플랜의 「완료」 조건).
           thankYouMessage: metadata.settings.thankYouMessage,
           screenedOutMessage: metadata.settings.screenedOutMessage ?? null,
           localizedMessages: metadata.settings.localizedMessages ?? null,
@@ -526,7 +525,7 @@ export async function saveSurveyWithDetails(
         piiRetentionUntil: surveyData.settings.piiRetentionUntil
           ? retentionDateToTimestamp(surveyData.settings.piiRetentionUntil)
           : null,
-        // maxResponses(전체 완료 목표)는 쓰지 않는다 — 운영 콘솔 소유(위 metadata 저장 주석).
+        // maxResponses 는 쓰지 않는다 — 쓰지 않는 컬럼(위 metadata 저장 주석).
         thankYouMessage: surveyData.settings.thankYouMessage,
         screenedOutMessage: surveyData.settings.screenedOutMessage ?? null,
         localizedMessages: surveyData.settings.localizedMessages ?? null,
@@ -573,7 +572,7 @@ export async function saveSurveyWithDetails(
         piiRetentionUntil: surveyData.settings.piiRetentionUntil
           ? retentionDateToTimestamp(surveyData.settings.piiRetentionUntil)
           : null,
-        // maxResponses(전체 완료 목표)는 쓰지 않는다 — 운영 콘솔 소유(위 metadata 저장 주석).
+        // maxResponses 는 쓰지 않는다 — 쓰지 않는 컬럼(위 metadata 저장 주석).
         thankYouMessage: surveyData.settings.thankYouMessage,
         screenedOutMessage: surveyData.settings.screenedOutMessage ?? null,
         localizedMessages: surveyData.settings.localizedMessages ?? null,

@@ -10,7 +10,6 @@ import { NewSurveyResponse, surveyResponses } from '@/db/schema';
 import { encryptAnswerForQuestion } from '@/lib/crypto/response-pii';
 import { parseBrowser, parsePlatform } from '@/lib/operations/parse-ua';
 import { normalizePassParamNames, pickEntryParams } from '@/lib/survey/end-redirect';
-import { loadQuotaPlan } from '@/server/read-models/quota-cell';
 import { isValidTestToken } from '@/server/read-models/survey-control';
 import type { PageVisit } from '@/shared/contracts/survey-response';
 import { InternalFailure } from '@/server/internal-failure';
@@ -32,10 +31,8 @@ import {
 } from './response-answer-write';
 import {
   assertSurveyAcceptingResponses,
-  countCompletedResponses,
   loadSurveyGateRow,
   loadValidatedVersionGateRow,
-  SurveyNotAcceptingResponsesError,
   toGateBlockedResult,
 } from './response-gate';
 import {
@@ -208,17 +205,8 @@ async function admitAndCreateResponse(
     return await admitAndCreateResponseInner(input, answer);
   } catch (err) {
     const blocked = toGateBlockedResult(err);
-    if (!blocked) throw err;
-    // 전체 완료 목표로 막힌 입장 — 쿼터 셀 마감의 입장 차단과 같은 문구(쿼터 화면의 마감 안내 문구)를
-    // 싣는다. 응답 행을 만들지 않았으므로 기록은 없다(첫 답도 받지 않은 방문이다).
-    if (
-      err instanceof SurveyNotAcceptingResponsesError &&
-      err.reason === 'max_responses_reached'
-    ) {
-      const plan = await loadQuotaPlan(input.surveyId);
-      return { ...blocked, closedMessage: plan?.closedMessage ?? null };
-    }
-    return blocked;
+    if (blocked) return blocked;
+    throw err;
   }
 }
 
@@ -377,12 +365,7 @@ async function admitAndCreateResponseInner(
     survey,
     { isTest },
   );
-  // 전체 완료 목표 — 목표가 있는 설문만 완료 수를 세어 넘긴다(목표 없는 설문은 질의가 늘지 않는다).
-  // 잠금 없는 셈이라 마지막 자리에 동시에 들어온 응답자는 통과할 수 있고, 그 초과는 제출 시점의
-  // 잠금 아래 재확인이 막는다. 테스트 응답은 게이트가 전 검사를 면제하므로 세지 않는다.
-  const completedCount =
-    survey.maxResponses != null && !isTest ? await countCompletedResponses(surveyId) : null;
-  assertSurveyAcceptingResponses(survey, version, { contactTargetId, completedCount, isTest });
+  assertSurveyAcceptingResponses(survey, version, { contactTargetId, isTest });
 
   // PII 문항이면 INSERT 전에 암호화 — 평문이 순간이라도 DB(WAL 포함)에 닿지 않게 한다.
   // 이후 updateQuestionResponse 재호출은 이미 암호문이라 이중 암호화되지 않는다.

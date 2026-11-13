@@ -132,13 +132,20 @@ function KpiCell({ label, value, delta, deltaTone, hint }: KpiCellProps) {
  * 쿼터 진행 카드 — 예전 "쿼터마감" 단일 카운트 셀을 대체한다.
  * 완료/목표 총합 대비 % + 마감된 셀 수(closedCells)를 함께 보여줘, 쿼터 전체
  * 진척을 한눈에 파악할 수 있게 한다. 셀 단위 상세는 QuotaStatusPanel 담당.
+ *
+ * 「완료」 조건이 있으면 그것이 설문 전체의 목표이므로 큰 숫자는 그 달성률이다(완료 + 실사 완료 처리 /
+ * 목표). 셀 목표가 함께 있으면 마감된 셀 수를 뒤에 붙인다.
  */
 function QuotaKpiCell({ quota }: { quota?: QuotaSummary | null }) {
   const hasQuota = quota != null;
-  const value = hasQuota ? `${quota.pct}%` : '-';
-  const detail = hasQuota
-    ? `${numberFormatter.format(quota.currentTotal)}/${numberFormatter.format(quota.targetTotal)} · ${quota.closedCells} 마감`
-    : '-';
+  const total = quota?.total ?? null;
+  const value = !hasQuota ? '-' : `${total ? total.pct : quota.pct}%`;
+  const detail = !hasQuota
+    ? '-'
+    : total
+      ? `완료 ${numberFormatter.format(total.current)}/${numberFormatter.format(total.target)}` +
+        (quota.totalCells > 0 ? ` · 셀 ${quota.closedCells} 마감` : '')
+      : `${numberFormatter.format(quota.currentTotal)}/${numberFormatter.format(quota.targetTotal)} · ${quota.closedCells} 마감`;
 
   return (
     <Card>

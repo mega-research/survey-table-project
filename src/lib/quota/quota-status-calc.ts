@@ -1,5 +1,5 @@
 import { type QuotaSubject, cellKeyOf, deriveCategoryIds, tallyAll } from '@/lib/quota/matching';
-import type { NormalizedQuotaConfig } from '@/lib/quota/normalize';
+import { type NormalizedQuotaConfig, quotaTotalTarget } from '@/lib/quota/normalize';
 
 export type QuotaCellTone = 'done' | 'good' | 'warn' | 'low';
 
@@ -20,6 +20,14 @@ export interface QuotaStatusDimension {
   categories: { id: string; label: string }[];
 }
 
+/** 「완료」 조건의 현황 — 설문 전체 완료 수(완료 + 실사 완료 처리) 대 목표. */
+export interface QuotaTotalStatus {
+  target: number;
+  current: number;
+  pct: number;
+  tone: QuotaCellTone;
+}
+
 export interface QuotaSummary {
   targetTotal: number;
   /** 분류되어 목표 셀에 속한 완료 수 합 */
@@ -32,6 +40,8 @@ export interface QuotaSummary {
    * 키워드·값 누락의 유일한 신호다. 목표 없는(sparse) 셀에 분류된 응답은 여기 세지 않는다.
    */
   unclassified: number;
+  /** 「완료」 조건의 현황. 조건이 없으면 null. */
+  total: QuotaTotalStatus | null;
 }
 
 export interface QuotaStatus {
@@ -58,10 +68,16 @@ function labelForCategory(config: NormalizedQuotaConfig, dimensionIndex: number,
   return cat?.label ?? categoryId;
 }
 
-/** 완료 응답(판정 대상) 목록 → 셀별 현황 + 요약. */
+/**
+ * 완료 응답(판정 대상) 목록 → 셀별 현황 + 요약.
+ *
+ * `totalCompleted` — 「완료」 조건이 세는 수(완료 + 실사 완료 처리). 실사 완료 처리는 응답이 없는 조사
+ * 대상이라 subjects 로는 셀 수 없어 서버가 세어 넘긴다(`countQuotaTotalCompleted`). 조건이 없으면 쓰지 않는다.
+ */
 export function buildQuotaStatus(
   config: NormalizedQuotaConfig,
   subjects: QuotaSubject[],
+  totalCompleted = 0,
 ): QuotaStatus {
   const counts = tallyAll(config, subjects);
   const unclassified = subjects.filter((s) => deriveCategoryIds(config, s) === null).length;
@@ -83,6 +99,16 @@ export function buildQuotaStatus(
   const targetTotal = cells.reduce((s, c) => s + c.target, 0);
   const currentTotal = cells.reduce((s, c) => s + c.current, 0);
   const closedCells = cells.filter((c) => c.current >= c.target && c.target > 0).length;
+  const totalTarget = quotaTotalTarget(config);
+  const total: QuotaTotalStatus | null =
+    totalTarget === null
+      ? null
+      : {
+          target: totalTarget,
+          current: totalCompleted,
+          pct: Math.round((totalCompleted / totalTarget) * 100),
+          tone: quotaTone(totalCompleted, totalTarget),
+        };
 
   return {
     enabled: config.enabled,
@@ -99,6 +125,7 @@ export function buildQuotaStatus(
       closedCells,
       totalCells: cells.length,
       unclassified,
+      total,
     },
   };
 }

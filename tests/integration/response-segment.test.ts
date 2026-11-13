@@ -4,13 +4,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { extractRawSql } from './_helpers/result-code-mock';
 
-const { selectLimitMock, setMock, whereMock, controlFlagsMock, completedCountMock, quotaPlanMock } = vi.hoisted(() => ({
+const { selectLimitMock, setMock, whereMock, controlFlagsMock } = vi.hoisted(() => ({
   selectLimitMock: vi.fn(),
   setMock: vi.fn(),
   whereMock: vi.fn(),
   controlFlagsMock: vi.fn(),
-  completedCountMock: vi.fn(),
-  quotaPlanMock: vi.fn(),
 }));
 
 vi.mock('@/db', () => {
@@ -24,8 +22,6 @@ vi.mock('@/db', () => {
     whereMock(arg);
     return chainable; // await 시 chainable 자신으로 resolve (no-op)
   });
-  // 전체 완료 목표의 쿼터마감 기록 — UPDATE … RETURNING
-  chainable['returning'] = vi.fn(async () => [{ id: 'r1' }]);
   const selectResult: Record<string, unknown> = {
     for: vi.fn(() => selectResult),
     limit: vi.fn(() => selectLimitMock()),
@@ -41,8 +37,6 @@ vi.mock('@/db', () => {
   return {
     db: {
       ...chainable,
-      // 전체 완료 목표의 면제 표식(metadata) 조회 — 트랜잭션 밖 select
-      select: vi.fn(() => selectChain),
       transaction: vi.fn(async (cb: (value: typeof tx) => Promise<unknown>) => cb(tx)),
     },
   };
@@ -53,17 +47,6 @@ vi.mock('@/db', () => {
 vi.mock('@/server/read-models/survey-control', () => ({
   getSurveyControlFlags: (...a: unknown[]) => controlFlagsMock(...a),
   isValidTestToken: vi.fn(),
-}));
-
-// 전체 완료 목표의 완료 수 — 셈 자체는 response-gate 소관이라 여기서는 값만 갈아 끼운다.
-// 쿼터 화면의 마감 문구 — 전체 완료 목표로 끊긴 응답자에게 실어 보낸다.
-vi.mock('@/server/read-models/quota-cell', () => ({
-  loadQuotaPlan: (...a: unknown[]) => quotaPlanMock(...a),
-}));
-
-vi.mock('@/server/survey-response/services/response-gate', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/server/survey-response/services/response-gate')>()),
-  countCompletedResponses: (...a: unknown[]) => completedCountMock(...a),
 }));
 
 describe('recordVisibilitySegment — SQL 분기', () => {
@@ -175,112 +158,6 @@ describe('recordStepVisit — missing row와 동일 step 구분', () => {
     expect(setMock).toHaveBeenCalled();
   });
 
-
-  // ── 전체 완료 목표 알림 (CONTEXT.md 「전체 완료 목표」) ──
-  describe('전체 완료 목표', () => {
-    const ROW = { id: 'r1', surveyId: 's1', isTest: false, contactTargetId: null };
-    beforeEach(() => {
-      completedCountMock.mockReset();
-      quotaPlanMock.mockReset();
-      quotaPlanMock.mockResolvedValue(null);
-    });
-
-    it('목표가 찼으면 이 응답을 쿼터마감으로 끝내고 completion_target_reached 를 알린다', async () => {
-      // 1) 트랜잭션의 응답 행 2) 면제 표식 조회(표식 없음)
-      selectLimitMock.mockResolvedValueOnce([ROW]).mockResolvedValueOnce([{ metadata: {} }]);
-      controlFlagsMock.mockResolvedValue({ isPaused: false, pausedMessage: null, maxResponses: 3 });
-      completedCountMock.mockResolvedValue(3);
-      const { recordStepVisit } = await import('@/server/survey-response/services/lifecycle');
-
-      await expect(
-        recordStepVisit({ responseId: 'r1', nextStepId: 'group:next' }),
-      ).resolves.toEqual({
-        denial: 'completion_target_reached',
-        pausedMessage: null,
-        closedMessage: null,
-      });
-      expect(completedCountMock).toHaveBeenCalledWith('s1');
-      // 페이지 방문 기록 다음에 쿼터마감 기록이 나간다 — 쿼터 셀 마감과 같은 상태값.
-      const sets = setMock.mock.calls.map((call) => call[0] as Record<string, unknown>);
-      expect(sets.at(-1)).toMatchObject({ status: 'quotaful_out' });
-    });
-
-    it('쿼터 화면에 적어 둔 진행 중 마감 문구를 실어 보낸다 — 비면 마감 문구', async () => {
-      selectLimitMock.mockResolvedValueOnce([ROW]).mockResolvedValueOnce([{ metadata: {} }]);
-      controlFlagsMock.mockResolvedValue({ isPaused: false, pausedMessage: null, maxResponses: 3 });
-      completedCountMock.mockResolvedValue(3);
-      quotaPlanMock.mockResolvedValue({ closedMessage: '모집이 끝났습니다.', midSurveyClosedMessage: '' });
-      const { recordStepVisit } = await import('@/server/survey-response/services/lifecycle');
-
-      await expect(
-        recordStepVisit({ responseId: 'r1', nextStepId: 'group:next' }),
-      ).resolves.toMatchObject({ closedMessage: '모집이 끝났습니다.' });
-    });
-
-    it('자리가 남았으면 알리지 않고, 면제 표식도 읽지 않는다', async () => {
-      selectLimitMock.mockResolvedValueOnce([ROW]);
-      controlFlagsMock.mockResolvedValue({ isPaused: false, pausedMessage: null, maxResponses: 3 });
-      completedCountMock.mockResolvedValue(2);
-      const { recordStepVisit } = await import('@/server/survey-response/services/lifecycle');
-
-      await expect(
-        recordStepVisit({ responseId: 'r1', nextStepId: 'group:next' }),
-      ).resolves.toEqual({ denial: null, pausedMessage: null });
-      expect(selectLimitMock).toHaveBeenCalledTimes(1);
-      // 자리가 남았으면 상태를 건드리지 않는다.
-      const sets = setMock.mock.calls.map((call) => call[0] as Record<string, unknown>);
-      expect(sets.some((set) => set['status'] === 'quotaful_out')).toBe(false);
-    });
-
-    it('목표가 없는 설문은 완료 수를 세지 않는다', async () => {
-      selectLimitMock.mockResolvedValueOnce([ROW]);
-      controlFlagsMock.mockResolvedValue({ isPaused: false, pausedMessage: null, maxResponses: null });
-      const { recordStepVisit } = await import('@/server/survey-response/services/lifecycle');
-
-      await expect(
-        recordStepVisit({ responseId: 'r1', nextStepId: 'group:next' }),
-      ).resolves.toEqual({ denial: null, pausedMessage: null });
-      expect(completedCountMock).not.toHaveBeenCalled();
-    });
-
-    it('재응답 허용으로 되돌려진 응답에는 알리지 않는다 — 그 재제출은 제출 판정도 면제한다', async () => {
-      selectLimitMock
-        .mockResolvedValueOnce([ROW])
-        .mockResolvedValueOnce([{ metadata: { reeditPendingSince: '2026-11-13T00:00:00.000Z' } }]);
-      controlFlagsMock.mockResolvedValue({ isPaused: false, pausedMessage: null, maxResponses: 3 });
-      completedCountMock.mockResolvedValue(5);
-      const { recordStepVisit } = await import('@/server/survey-response/services/lifecycle');
-
-      await expect(
-        recordStepVisit({ responseId: 'r1', nextStepId: 'group:next' }),
-      ).resolves.toEqual({ denial: null, pausedMessage: null });
-    });
-
-    it('중단이 먼저다 — 중단된 설문은 목표를 세지 않고 중단을 알린다', async () => {
-      selectLimitMock.mockResolvedValueOnce([ROW]);
-      controlFlagsMock.mockResolvedValue({ isPaused: true, pausedMessage: '점검', maxResponses: 3 });
-      completedCountMock.mockResolvedValue(5);
-      const { recordStepVisit } = await import('@/server/survey-response/services/lifecycle');
-
-      await expect(
-        recordStepVisit({ responseId: 'r1', nextStepId: 'group:next' }),
-      ).resolves.toEqual({ denial: 'survey_paused', pausedMessage: '점검' });
-      expect(completedCountMock).not.toHaveBeenCalled();
-    });
-
-    it('테스트 응답에는 알리지 않는다', async () => {
-      selectLimitMock.mockResolvedValue([{ ...ROW, isTest: true }]);
-      controlFlagsMock.mockResolvedValue({ isPaused: false, pausedMessage: null, maxResponses: 1 });
-      completedCountMock.mockResolvedValue(9);
-      const { recordStepVisit } = await import('@/server/survey-response/services/lifecycle');
-      // 테스트 응답의 소유권 검증은 이 스위트의 관심사가 아니다 — 판정 분기만 본다.
-      const result = await recordStepVisit({ responseId: 'r1', nextStepId: 'group:next' }).catch(
-        () => 'ownership-guard',
-      );
-      if (result !== 'ownership-guard') expect(result).toEqual({ denial: null, pausedMessage: null });
-      expect(completedCountMock).not.toHaveBeenCalled();
-    });
-  });
 
   it('제어 플래그를 못 읽으면 fail-open 한다', async () => {
     selectLimitMock.mockResolvedValue([

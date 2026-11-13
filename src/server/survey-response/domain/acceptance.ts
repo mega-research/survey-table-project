@@ -12,11 +12,14 @@ export type AcceptanceDenial =
   | 'status_not_published'
   | 'survey_paused'
   | 'end_date_passed'
-  | 'max_responses_reached'
   | 'invite_required';
 
+// 설문 전체 완료 수의 상한은 이 게이트가 아니라 쿼터 플랜의 「완료」 조건이 맡는다
+// (CONTEXT.md 「완료 조건」, server/read-models/quota-cell). 여기 있던 정원 검사(`max_responses_reached`)는
+// 설정 화면 없이 남아 있다가 2026-11-13 에 같은 일을 하는 두 번째 장치로 자라 걷어냈다 — 다시 만들지 말 것.
+
 /** 재응답 허용이 보는 부분집합 — ReeditUnavailableError 생성자 인자 union 과 정확히 동일. */
-export type ReeditDenial = Exclude<AcceptanceDenial, 'max_responses_reached'>;
+export type ReeditDenial = AcceptanceDenial;
 
 /** 완료 제출이 보는 부분집합 — 마감은 신규 접수만 막으므로 빠진다. */
 export type CompleteDenial = Exclude<AcceptanceDenial, 'end_date_passed'>;
@@ -30,7 +33,6 @@ export interface SurveyAcceptanceState {
   status: string;
   isPaused: boolean;
   endDate: Date | null;
-  maxResponses: number | null;
   isPublic: boolean;
   requireInviteToken: boolean;
 }
@@ -47,7 +49,7 @@ export type ReeditSurveyState = Pick<
  */
 export type CompleteSurveyState = Pick<
   SurveyAcceptanceState,
-  'status' | 'isPaused' | 'maxResponses' | 'isPublic' | 'requireInviteToken'
+  'status' | 'isPaused' | 'isPublic' | 'requireInviteToken'
 >;
 
 /** getSurveyControlFlags 반환(SurveyControlFlags)이 구조적으로 만족. */
@@ -62,7 +64,7 @@ export type VersionAcceptanceState = { status: string } | null;
 
 /**
  * 판정 순서. **외부 관측 가능한 계약이다** — 위반이 여럿일 때 첫 사유가
- * toGateBlockReason 을 거쳐 응답자 화면 문구를 정한다(status/endDate/max → not_accepting,
+ * toGateBlockReason 을 거쳐 응답자 화면 문구를 정한다(status/endDate → not_accepting,
  * paused → survey_paused, invite → invalid_token). 정렬·재배치 금지.
  * 서비스 어댑터(assertSurveyAcceptingResponses / assertResponseCompletable /
  * assertSurveyNotPaused / allowReeditResponse)가 모두 이 순서를 따른다.
@@ -71,7 +73,6 @@ const CHECK_ORDER = [
   'status_not_published',
   'survey_paused',
   'end_date_passed',
-  'max_responses_reached',
   'invite_required',
 ] as const satisfies readonly AcceptanceDenial[];
 
@@ -83,34 +84,17 @@ const CHECK_ORDER = [
 const CHECKS_FOR = {
   /**
    * 신규 진입 — 마감된 설문에 새로 들어오는 것은 막는다. endDate 의 본래 뜻이 여기다.
-   * 정원(전체 완료 목표)은 completedCount 를 넘긴 호출자만 검사한다 — 응답 진입
-   * (admitAndCreateResponseInner)은 목표가 있는 설문만 세어 넘긴다(2026-11-13 — 전에는 넘기지 않아
-   * 목표가 찬 뒤에도 입장이 열려 있었다). 입장은 잠금 없이 세므로 마지막 자리의 경합은
-   * 완료 게이트(잠금 아래 재확인)가 막는다.
    * createBlankResponse 도 이 행을 쓴다(수용된 갭): 답변을 하나도 쓰지 않은 진입이라
    * 마감으로 잘려도 잃는 노동이 정의상 0 이고, 완료 정책으로 옮기면 마감 후 신규 진입이
    * 그대로 뚫린다.
    */
-  newResponse: [
-    'status_not_published',
-    'survey_paused',
-    'end_date_passed',
-    'max_responses_reached',
-    'invite_required',
-  ],
+  newResponse: ['status_not_published', 'survey_paused', 'end_date_passed', 'invite_required'],
   /**
    * 제출 완료 — 마감(end_date_passed) 미검사(의도). endDate 는 새 응답 접수를 마감하는
    * 것이지 이미 진행 중인 응답을 몰수하는 것이 아니다. 마감 시각에 걸친 응답자는 끝까지
    * 진행해 저장된다(ongoingResponse 와 같은 결정).
-   * 정원·중단은 계속 차단한다 — 정원을 넘기면 표본이 망가지고, 중단은 운영자가 "지금
-   * 아무것도 들어오지 마라"고 건 라이브 스위치라 진행 중 응답에도 적용된다.
-   * 정원은 이 행에서 하드체크다(completedCount 필수 인자) — 제출 트랜잭션이 설문 잠금 아래에서
-   * 같은 판정을 한 번 더 한다(response-completion).
-   * 부수 효과: 지금까지는 CHECK_ORDER 상 마감이 정원보다 앞이라 마감 후 완료 시도가 항상
-   * 마감에서 먼저 잘려 정원 검사에 도달하지 않았다. 마감을 빼면 정원 검사가 처음으로
-   * 활성화되어 사유가 end_date_passed → max_responses_reached 로 승계된다. 어느 쪽도 차단이라
-   * 정책 회귀가 아니다. 다만 완료 경로는 blocked 폴딩을 타지 않으므로 두 사유 모두
-   * 응답자에게는 500 으로 나간다 — 사유 태그만 바뀐다.
+   * 중단은 계속 차단한다 — 운영자가 "지금 아무것도 들어오지 마라"고 건 라이브 스위치라 진행 중
+   * 응답에도 적용된다. 완료 경로의 위반은 blocked 로 접혀 응답자 화면 안내로 간다.
    *
    * 미배포(status_not_published)는 계속 차단하지만, **설문 종료(status='closed') 기능이
    * 생기면 이 검사를 종료에 한해 풀어야 한다** — 2026-08-21 사용자 결정: 종료는 마감과
@@ -121,26 +105,17 @@ const CHECKS_FOR = {
    * 이 행에서 status_not_published 를 빼는 대신 'draft 면 거부, closed 면 통과' 검사로
    * 갈아끼우면 된다 — newResponse·reedit 행은 그대로 published 만 통과시킨다.
    */
-  completeResponse: [
-    'status_not_published',
-    'survey_paused',
-    'max_responses_reached',
-    'invite_required',
-  ],
+  completeResponse: ['status_not_published', 'survey_paused', 'invite_required'],
   /**
    * 진행 중 응답 계속 — 중단만 본다.
    * status·endDate 미검사는 근거 있는 선택이다: 진행 중 응답은 몰수하지 않는다
    * (completeResponse 와 같은 결정). 첫 진입 게이트는 newResponse 소관이고, 종결 상태
    * 판정은 호출자 resumeOrCreateResponse 의 인라인 concludedStatuses 가 진다 —
    * 통합은 후속 티켓(A-3).
-   * 정원 미검사도 같은 이유 — 이 판정(답 저장·재진입)은 정원을 보지 않는다. 정원이 찬 응답은
-   * 페이지 이동 기록(recordStepVisit)이 쿼터마감으로 끝내고 알린다 — 끝까지 채운 뒤에야 막히는
-   * 것보다 낫고, 목표를 올리면 쿼터마감 다시 열기로 같은 링크에서 이어 간다.
    */
   ongoingResponse: ['survey_paused'],
   /**
    * 재응답 허용 — 관리자가 완료 응답을 되돌린다.
-   * 정원 미검사(의도) — 되돌리기 자체가 완료 슬롯 하나를 비우므로 재완료는 자기 슬롯 회수다.
    * invite 검사(의도) — 되돌리기의 목적은 응답자가 초대 링크로 재진입해 재제출하는 것이라,
    * 연결된 조사 대상이 없으면 강등만 되고 재제출 경로가 없는 고아 상태가 된다. 되돌리기는
    * 통과시키면서 재제출은 막는 비대칭을 없앤다.
@@ -162,8 +137,6 @@ interface AcceptanceFacts {
   versionStatus?: string | null;
   isPaused?: boolean;
   endDate?: Date | null;
-  maxResponses?: number | null;
-  completedCount?: number | null;
   isPublic?: boolean;
   requireInviteToken?: boolean;
   contactTargetId?: string | null;
@@ -176,9 +149,6 @@ const PREDICATES: Record<AcceptanceDenial, (f: AcceptanceFacts) => boolean> = {
   survey_paused: (f) => f.isPaused === true,
   // null = 무제한, 경계는 <= (endDate === now 는 거부).
   end_date_passed: (f) => f.endDate != null && f.endDate.getTime() <= f.now,
-  // completedCount 미전달 = 검사 생략(목표 없는 설문의 진입·테스트 전용 startResponse).
-  max_responses_reached: (f) =>
-    f.maxResponses != null && f.completedCount != null && f.completedCount >= f.maxResponses,
   // checkTrackA 가 inviteToken 유효성을 별도 검증하므로 여기서는 contactTargetId 매칭 유무만 본다.
   invite_required: (f) =>
     (f.isPublic === false || f.requireInviteToken === true) && f.contactTargetId == null,
@@ -209,15 +179,12 @@ function evaluate<D extends AcceptanceDenial>(
 
 /**
  * 신규 응답을 받는가 — startResponse / createResponseWithFirstAnswer / createBlankResponse.
- * completedCount 는 목표가 있는 설문의 응답 진입만 넘긴다(잠금 없는 셈). 완료 시점 하드체크는
- * completeResponseDenial 소관이다.
  */
 export function newResponseDenial(
   survey: SurveyAcceptanceState,
   version: VersionAcceptanceState,
   opts: {
     contactTargetId: string | null;
-    completedCount?: number | null;
     /** 응답 행 isTest 또는 유효 테스트 링크 세션이면 전 검사 면제. */
     isTest: boolean;
     now?: number;
@@ -231,8 +198,6 @@ export function newResponseDenial(
       versionStatus: version?.status ?? null,
       isPaused: survey.isPaused,
       endDate: survey.endDate,
-      maxResponses: survey.maxResponses,
-      completedCount: opts.completedCount ?? null,
       isPublic: survey.isPublic,
       requireInviteToken: survey.requireInviteToken,
       contactTargetId: opts.contactTargetId,
@@ -244,14 +209,12 @@ export function newResponseDenial(
 /**
  * 제출 완료를 받는가 — completeResponse.
  * newResponse 와 유일하게 갈리는 지점은 마감이다(CHECKS_FOR.completeResponse 주석 참조).
- * 정원은 여기서만 하드체크라 completedCount 가 선택이 아닌 필수 인자다.
  */
 export function completeResponseDenial(
   survey: CompleteSurveyState,
   version: VersionAcceptanceState,
   opts: {
     contactTargetId: string | null;
-    completedCount: number;
     /** 응답 행 isTest 면 전 검사 면제. */
     isTest: boolean;
     now?: number;
@@ -264,8 +227,6 @@ export function completeResponseDenial(
       status: survey.status,
       versionStatus: version?.status ?? null,
       isPaused: survey.isPaused,
-      maxResponses: survey.maxResponses,
-      completedCount: opts.completedCount,
       isPublic: survey.isPublic,
       requireInviteToken: survey.requireInviteToken,
       contactTargetId: opts.contactTargetId,

@@ -99,8 +99,8 @@ export async function createSurvey(data: CreateSurveyInput): Promise<SurveyRow> 
 // 설문 업데이트
 export async function updateSurvey(input: UpdateSurveyInput): Promise<SurveyRow> {
   const { surveyId } = input;
-  // 전체 완료 목표(max_responses)는 운영 콘솔 소유다 — 입력 타입에서 뺐지만 z.custom 은 런타임에
-  // 거르지 않으므로, 실려 와도 아래 spread 가 쓰지 않게 여기서 버린다(survey-save 와 같은 규칙).
+  // max_responses 는 쓰지 않는 컬럼이다 — 입력 타입에서 뺐지만 z.custom 은 런타임에 거르지 않으므로,
+  // 실려 와도 아래 spread 가 쓰지 않게 여기서 버린다(survey-save 와 같은 규칙).
   const { maxResponses: _consoleOwned, ...data } = input.data as typeof input.data & {
     maxResponses?: unknown;
   };
@@ -254,7 +254,7 @@ const _SURVEY_FIELDS_NOT_COPIED = [
   'isPaused',
   'pausedMessage',
   'testModeEnabled',
-  // 전체 완료 목표 — 원본의 운영 설정. 보이지 않는 목표를 물려받은 복제본이 어느 날 응답을 막는다
+  // 쓰지 않는 컬럼(전체 완료 수의 목표는 쿼터 플랜의 「완료」 조건 — quotaConfig 와 함께 옮기지 않는다)
   'maxResponses',
   // 추적조사 — 이월 응답 임포트에 딸린 설정
   'priorWaveLabel',

@@ -24,6 +24,7 @@ import {
   midSurveyClosedBody,
   resolveMidSurveyClosedMessage,
 } from '@/lib/quota/closed-message';
+import { parseQuotaTotalTarget } from '@/lib/quota/normalize';
 import { cn, generateId } from '@/lib/utils';
 import { client } from '@/shared/lib/rpc';
 import type { Question } from '@/types/survey';
@@ -64,6 +65,8 @@ const KIND_LABEL: Record<QuotaDimension['kind'], string> = {
 /** "+ 조건 추가" 셀렉트 값 접두 — 문항 id 와 섞이지 않게 새 유형만 접두를 붙인다. */
 const TEXT_PREFIX = 'text:';
 const ATTR_PREFIX = 'attr:';
+/** 「완료」 조건 — 문항·명단 열이 아니라 설문 전체 완료 수에 거는 조건(CONTEXT.md 「완료 조건」). */
+const TOTAL_VALUE = 'total:';
 
 interface TextCellOption {
   id: string;
@@ -314,6 +317,12 @@ export function QuotaEditor({
   // "+ 조건 추가" 셀렉트 자체의 UI 상태. 고르는 즉시 addDimensionFromQuestion 을 실행하고
   // 다시 placeholder 로 리셋 — QuotaConfig 에는 속하지 않는 순수 위젯 상태.
   const [addDimensionValue, setAddDimensionValue] = useState('');
+  // 「완료」 조건의 목표 입력 글자. null = 조건 없음, '' = 방금 추가해 아직 비어 있음.
+  // 타이핑 중인 글자를 그대로 들고 저장할 때 해석한다 — 플랜(config)에는 저장 시점에만 싣는다.
+  const [totalText, setTotalText] = useState<string | null>(
+    initialConfig?.totalTarget != null ? String(initialConfig.totalTarget) : null,
+  );
+  const totalTarget = totalText === null ? null : parseQuotaTotalTarget(totalText);
 
   // 조건으로 쓸 수 있는 문항만 (단일형/단답숫자)
   const eligibleQuestions = useMemo(
@@ -408,7 +417,9 @@ export function QuotaEditor({
   }
 
   function handleAddDimension(value: string) {
-    if (value.startsWith(ATTR_PREFIX)) addAttrDimension(value.slice(ATTR_PREFIX.length));
+    // 「완료」 조건은 셀 조합과 무관하다 — 셀 목표를 초기화하지 않는다.
+    if (value === TOTAL_VALUE) setTotalText('');
+    else if (value.startsWith(ATTR_PREFIX)) addAttrDimension(value.slice(ATTR_PREFIX.length));
     else if (value.startsWith(TEXT_PREFIX)) addTextDimension(value.slice(TEXT_PREFIX.length));
     else addDimensionFromQuestion(value);
     setAddDimensionValue('');
@@ -539,6 +550,9 @@ export function QuotaEditor({
   }
 
   function validate(): string | null {
+    if (totalText !== null && totalTarget === null) {
+      return '「완료」 조건의 목표를 1 이상의 정수로 입력해 주세요.';
+    }
     for (const d of config.dimensions) {
       if (d.categories.length === 0) return `조건 "${d.label}"에 카테고리가 없습니다.`;
       if (d.kind === 'text') {
@@ -572,9 +586,18 @@ export function QuotaEditor({
       return;
     }
     setError(null);
+    // 「완료」 조건은 있을 때만 싣는다. 있던 조건을 지웠으면 null 로 싣는다 — 지웠다는 뜻을 페이로드에 남긴다.
+    const next: QuotaConfig = {
+      ...config,
+      ...(totalText !== null
+        ? { totalTarget }
+        : 'totalTarget' in config
+          ? { totalTarget: null }
+          : {}),
+    };
     startTransition(async () => {
       try {
-        await client.quota.save({ surveyId, config });
+        await client.quota.save({ surveyId, config: next });
         router.refresh();
       } catch (e) {
         setError((e as Error).message);
@@ -648,6 +671,49 @@ export function QuotaEditor({
       {/* 2) 조건 카드 — eligibleQuestions Select 로 추가, choice=읽기전용 보기 목록 / numeric=구간 편집 */}
       <div className="space-y-3">
         <h3 className="text-xs font-bold tracking-wide text-slate-400 uppercase">조건</h3>
+
+        {totalText !== null && (
+          <div className="rounded-lg border bg-white p-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-bold text-slate-900">완료</span>
+                <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-bold text-slate-500">
+                  설문 전체
+                </span>
+                <span className="text-sm text-slate-700">완료 + 실사 완료 처리</span>
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-red-600"
+                onClick={() => setTotalText(null)}
+              >
+                조건 삭제
+              </Button>
+            </div>
+            <div className="flex items-center gap-2">
+              <label htmlFor="quota-total-target" className="text-sm text-slate-700">
+                목표
+              </label>
+              <Input
+                id="quota-total-target"
+                inputMode="numeric"
+                autoComplete="off"
+                placeholder="예: 1100"
+                value={totalText}
+                onChange={(e) => setTotalText(e.target.value)}
+                aria-invalid={totalText.trim() !== '' && totalTarget === null ? true : undefined}
+                className={cn(TARGET_INPUT_CLASS, 'h-8 w-28 px-2 text-center text-sm tabular-nums')}
+              />
+              <span className="text-sm text-slate-500">건</span>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              문항과 관계없이 모든 응답자에게 적용됩니다. 설문 전체의 완료 수(온라인 완료 + 실사 완료
+              처리)가 목표에 닿으면 마감합니다. 아래 조건의 셀 목표와 함께 쓰면 둘 중 먼저 찬 쪽에서
+              마감합니다.
+            </p>
+          </div>
+        )}
 
         {config.dimensions.map((dim, i) => (
           <div key={dim.id} className="rounded-lg border bg-white p-4">
@@ -786,6 +852,9 @@ export function QuotaEditor({
               <SelectValue placeholder="+ 조건 추가" />
             </SelectTrigger>
             <SelectContent>
+              {totalText === null && (
+                <SelectItem value={TOTAL_VALUE}>완료 (완료 + 실사 완료 처리)</SelectItem>
+              )}
               {addableQuestions.map((q) => (
                 <SelectItem key={q.id} value={q.id}>
                   {q.title}
@@ -812,8 +881,9 @@ export function QuotaEditor({
           )}
           {addableQuestions.length + addableAttrColumns.length + addableTextQuestions.length === 0 && (
             <p className="mt-2 text-xs text-slate-400">
-              추가할 수 있는 조건이 없습니다. 라디오·드롭다운 단일 선택, 단답형 문항, 입력 칸이 있는
-              표 문항, 또는 조사 대상 명단의 속성 열이 필요합니다.
+              문항·명단으로 추가할 수 있는 조건이 없습니다. 라디오·드롭다운 단일 선택, 단답형 문항,
+              입력 칸이 있는 표 문항, 또는 조사 대상 명단의 속성 열이 필요합니다.
+              {totalText === null && ' 설문 전체 완료 수에 거는 「완료」 조건은 추가할 수 있습니다.'}
             </p>
           )}
         </div>
@@ -825,7 +895,23 @@ export function QuotaEditor({
           조건 보기
         </h3>
 
-        {config.dimensions.length === 0 && (
+        {totalText !== null && (
+          <div
+            className={cn(
+              'flex max-w-sm items-center justify-between rounded-lg border px-3 py-2 text-sm',
+              config.dimensions.length > 0 && 'mb-3',
+            )}
+          >
+            <span className="text-slate-700">
+              완료 <span className="text-xs text-slate-400">완료 + 실사 완료 처리</span>
+            </span>
+            <span className="font-semibold text-slate-900 tabular-nums">
+              {totalTarget === null ? '목표 미입력' : `${numberFormatter.format(totalTarget)}건`}
+            </span>
+          </div>
+        )}
+
+        {config.dimensions.length === 0 && totalText === null && (
           <p className="text-sm text-slate-400">조건을 먼저 추가하세요.</p>
         )}
 

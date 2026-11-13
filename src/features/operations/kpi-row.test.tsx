@@ -69,4 +69,46 @@ describe('KpiRow', () => {
       '자격미달인 사람은 전체응답(분모), 완료(분자)에서 제외됩니다.',
     );
   });
+
+  it('쿼터에 완료 조건이 있으면 큰 숫자는 그 달성률이고 완료 수 대 목표를 함께 보인다', () => {
+    render(
+      <KpiRow
+        counts={counts}
+        quota={{
+          targetTotal: 0,
+          currentTotal: 0,
+          pct: 0,
+          closedCells: 0,
+          totalCells: 0,
+          unclassified: 0,
+          total: { target: 1100, current: 886, pct: 81, tone: 'good' },
+        }}
+      />,
+    );
+
+    const quotaCard = screen.getByText('쿼터').parentElement as HTMLElement;
+    expect(within(quotaCard).getByText('81%')).toBeInTheDocument();
+    expect(within(quotaCard).getByText('완료 886/1,100')).toBeInTheDocument();
+  });
+
+  it('완료 조건과 셀 목표가 함께 있으면 마감된 셀 수를 뒤에 붙인다', () => {
+    render(
+      <KpiRow
+        counts={counts}
+        quota={{
+          targetTotal: 60,
+          currentTotal: 30,
+          pct: 50,
+          closedCells: 2,
+          totalCells: 6,
+          unclassified: 0,
+          total: { target: 100, current: 40, pct: 40, tone: 'warn' },
+        }}
+      />,
+    );
+
+    const quotaCard = screen.getByText('쿼터').parentElement as HTMLElement;
+    expect(within(quotaCard).getByText('40%')).toBeInTheDocument();
+    expect(within(quotaCard).getByText('완료 40/100 · 셀 2 마감')).toBeInTheDocument();
+  });
 });

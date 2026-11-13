@@ -79,6 +79,8 @@ export const surveys = pgTable(
     endDate: timestamp('end_date', { withTimezone: true }),
     // 개인정보 보관기한 — 해당일 포함 보유, KST 익일 0시 timestamp 로 저장. 경과 시 pg_cron 파기 (ADR-0012)
     piiRetentionUntil: timestamp('pii_retention_until', { withTimezone: true }),
+    // 쓰지 않는 컬럼 — 아무 코드도 읽거나 쓰지 않는다. 설문 전체 완료 수의 목표는 쿼터 플랜의
+    // 「완료」 조건(quota_config.totalTarget, CONTEXT.md 「완료 조건」)이다. 컬럼 제거는 별도 마이그레이션.
     maxResponses: integer('max_responses'),
     thankYouMessage: text('thank_you_message').default('응답해주셔서 감사합니다!').notNull(),
     // 자격미달 종료 문구 — NULL/빈 값이면 thankYouMessage 로 폴백 (0110, CONTEXT.md 「자격미달 종료 문구」)

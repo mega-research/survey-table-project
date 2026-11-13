@@ -8,6 +8,7 @@ import { db } from '@/db';
 import { surveyResponses, surveys } from '@/db/schema/surveys';
 import {
   countQuotaCellCompleted,
+  isQuotaTotalFull,
   loadQuotaPlan,
   resolveQuotaTargetCell,
 } from '@/server/read-models/quota-cell';
@@ -51,7 +52,8 @@ function blockedOutcome(config: NormalizedQuotaConfig): QuotaCheckOutcome {
 
 /**
  * 쿼터 마감 판정(집행). 미설정/미집행/미분류/미등록 셀/여유 → blocked:false.
- * 해당 셀 완료 수 ≥ target 이면 응답을 quotaful_out 으로 마킹하고 blocked:true.
+ * 「완료」 조건(전체 완료 수 ≥ totalTarget)이나 해당 셀 완료 수 ≥ target 이면 응답을 quotaful_out 으로
+ * 마킹하고 blocked:true.
  * 카운트는 완료 응답을 로드해 lib/quota 순수 함수로 센다(checkQuota·현황판 동일 소스).
  *
  * 「진행 중 마감」(ADR 0025)이 켜진 설문은 페이지마다 다시 부르므로 **재호출에 멱등**이다 —
@@ -86,6 +88,13 @@ export async function checkQuota(input: {
   // 재호출 멱등 — 이미 쿼터마감이면 그대로 blocked, 그 밖의 종결 응답은 손대지 않는다.
   if (response.status === 'quotaful_out') return blockedOutcome(config);
   if (isConcludedResponseStatus(response.status)) return { blocked: false, closedMessage: null };
+
+  // 「완료」 조건 — 설문 전체 완료 수(완료 + 실사 완료 처리)가 목표에 닿았으면 셀을 볼 것 없이 마감이다.
+  // 답이 필요 없는 판정이라 미분류 응답도 걸린다.
+  if (await isQuotaTotalFull(db, input.surveyId, config)) {
+    await markQuotaFull(input.responseId, input.surveyId);
+    return blockedOutcome(config);
+  }
 
   // 조사 대상 attrs 는 응답 행의 연결로 서버가 읽는다 — 클라이언트가 보낸 값은 받지 않는다.
   // 미분류·목표 없는 셀은 null → 통과.

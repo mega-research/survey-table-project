@@ -9,7 +9,6 @@ import { control } from './control';
 vi.mock('../services/control', () => ({
   getControlState: vi.fn(),
   setPaused: vi.fn(),
-  setCompletionTarget: vi.fn(),
   setTestMode: vi.fn(),
   disableTestWorkspace: vi.fn(),
 }));
@@ -207,33 +206,5 @@ describe('operations.control procedures', () => {
       client.control.setPaused({ surveyId: SURVEY_ID, isPaused: true }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     expect(svc.setPaused).not.toHaveBeenCalled();
-  });
-  describe('setCompletionTarget — 전체 완료 목표', () => {
-    it('1 이상 정수와 null(해제)을 service 로 넘긴다', async () => {
-      vi.mocked(svc.setCompletionTarget).mockResolvedValue({ completionTarget: 1100 });
-      const client = createRouterClient({ control }, { context: authedContext() });
-
-      await expect(
-        client.control.setCompletionTarget({ surveyId: SURVEY_ID, completionTarget: 1100 }),
-      ).resolves.toEqual({ completionTarget: 1100 });
-      expect(svc.setCompletionTarget).toHaveBeenCalledWith({
-        surveyId: SURVEY_ID,
-        completionTarget: 1100,
-      });
-
-      vi.mocked(svc.setCompletionTarget).mockResolvedValue({ completionTarget: null });
-      await expect(
-        client.control.setCompletionTarget({ surveyId: SURVEY_ID, completionTarget: null }),
-      ).resolves.toEqual({ completionTarget: null });
-    });
-
-    it.each([0, -5, 1.5])('해석할 수 없는 목표 %s 는 거부하고 service 를 부르지 않는다', async (bad) => {
-      const client = createRouterClient({ control }, { context: authedContext() });
-
-      await expect(
-        client.control.setCompletionTarget({ surveyId: SURVEY_ID, completionTarget: bad }),
-      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
-      expect(svc.setCompletionTarget).not.toHaveBeenCalled();
-    });
   });
 });

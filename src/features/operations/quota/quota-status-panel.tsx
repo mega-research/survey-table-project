@@ -7,7 +7,12 @@ import { ChevronDown } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { numberFormatter } from '@/features/operations/format';
-import type { QuotaCellStatus, QuotaCellTone, QuotaStatus } from '@/lib/quota/quota-status-calc';
+import type {
+  QuotaCellStatus,
+  QuotaCellTone,
+  QuotaStatus,
+  QuotaTotalStatus,
+} from '@/lib/quota/quota-status-calc';
 import { cn } from '@/lib/utils';
 
 import { EmptyState } from '../empty-state';
@@ -68,6 +73,50 @@ function findCell(cells: QuotaCellStatus[], categoryIds: string[]): QuotaCellSta
 }
 
 /**
+ * 「완료」 조건 한 줄 — 설문 전체 완료 수(완료 + 실사 완료 처리) 대 목표. 부족 셀 순 목록의 행과 같은
+ * 칸 배치라 셀 목록 위에 놓아도 숫자·막대·남은 수가 세로로 맞는다.
+ */
+function TotalConditionRow({ total, bordered }: { total: QuotaTotalStatus; bordered: boolean }) {
+  const remaining = Math.max(0, total.target - total.current);
+  const achieved = remaining === 0;
+  return (
+    <div
+      className={cn(
+        'flex items-center gap-4',
+        bordered && 'mb-3 border-b border-slate-200 pb-3',
+      )}
+    >
+      <span className="w-5 shrink-0" />
+      <span
+        className="w-40 shrink-0 truncate text-sm font-semibold text-slate-900"
+        title="온라인 완료와 실사 완료 처리를 더한 수입니다."
+      >
+        완료 <span className="text-xs font-normal text-slate-400">완료 + 실사 완료 처리</span>
+      </span>
+      <span className="w-24 shrink-0 text-xs text-slate-500 tabular-nums">
+        {numberFormatter.format(total.current)} / {numberFormatter.format(total.target)}
+      </span>
+      <div className="h-2 max-w-xs flex-1 overflow-hidden rounded-full bg-slate-200">
+        <div
+          className={cn('h-full rounded-full', TONE_BAR[total.tone])}
+          style={{ width: `${Math.min(100, total.pct)}%` }}
+        />
+      </div>
+      {achieved ? (
+        <span className={cn('w-24 shrink-0 text-right text-sm font-bold', TONE_TEXT.done)}>
+          달성
+        </span>
+      ) : (
+        <span className="w-24 shrink-0 text-right text-sm font-bold text-amber-700 tabular-nums">
+          {numberFormatter.format(remaining)}{' '}
+          <span className="text-xs font-normal text-slate-400">남음</span>
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
  * 운영 현황 콘솔 — 쿼터 현황판.
  *
  * 매트릭스(히트맵) / 부족 셀 순(리스트) 두 뷰를 세그먼트 토글로 전환한다.
@@ -95,6 +144,7 @@ export function QuotaStatusPanel({ status, isTestScope = false }: Props) {
   // 목표가 설정된 셀이 없다 — 조건을 바꾸면 편집기가 셀 목표를 초기화하므로 흔히 이 상태가 된다.
   // 카드를 통째로 숨기면 담당자가 원인을 알 수 없어, 카드는 그리되 안내만 보인다.
   const hasCells = status.cells.length > 0;
+  const total = status.summary.total;
 
   return (
     <Card>
@@ -177,11 +227,15 @@ export function QuotaStatusPanel({ status, isTestScope = false }: Props) {
           </div>
 
           <CollapsibleContent className="mt-3">
+            {total && <TotalConditionRow total={total} bordered={hasCells} />}
             {!hasCells ? (
+              // 「완료」 조건만 있는 플랜은 셀이 없는 것이 정상이다 — 안내를 띄우지 않는다.
+              total ? null : (
               <EmptyState
                 message="목표가 설정된 셀이 없습니다"
                 description="조건을 추가하거나 지우면 셀 목표가 초기화됩니다. 쿼터 설정의 「조건 보기」 표에 목표를 입력하고 저장하면 여기에 현황이 나타납니다."
               />
+              )
             ) : showMatrix && pivot ? (
               <>
                 <MatrixLegend />

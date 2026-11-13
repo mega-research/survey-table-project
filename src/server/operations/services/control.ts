@@ -84,24 +84,6 @@ export async function getControlState(surveyId: string): Promise<SurveyControlSt
   };
 }
 
-/**
- * 전체 완료 목표 설정·해제 (CONTEXT.md 「전체 완료 목표」). 스냅샷 밖 라이브 컬럼이라 저장 즉시
- * 응답 게이트가 읽는다 — 재배포 없음. 지금 완료 수보다 낮게 잡는 것도 받는다: 그 순간부터 닫힌다
- * (이미 완료된 응답은 건드리지 않는다). null 이면 목표를 없앤다.
- */
-export async function setCompletionTarget(input: {
-  surveyId: string;
-  completionTarget: number | null;
-}): Promise<{ completionTarget: number | null }> {
-  const [updated] = await db
-    .update(surveys)
-    .set({ maxResponses: input.completionTarget, updatedAt: new Date() })
-    .where(and(eq(surveys.id, input.surveyId), isNull(surveys.deletedAt)))
-    .returning({ completionTarget: surveys.maxResponses });
-  if (!updated) throw new ORPCError('NOT_FOUND', { message: '완료 목표 저장에 실패했습니다.' });
-  return updated;
-}
-
 export async function setPaused(input: {
   surveyId: string;
   isPaused: boolean;

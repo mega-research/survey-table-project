@@ -1,9 +1,8 @@
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import 'server-only';
 
-import { db, type DbOrTx } from '@/db';
-import { surveyResponses, surveyVersions, surveys } from '@/db/schema';
-import { notTestResponse } from '@/server/response-filters';
+import { db } from '@/db';
+import { surveyVersions, surveys } from '@/db/schema';
 import {
   pinnedVersionId,
   type SurveyEndRedirects,
@@ -26,7 +25,6 @@ import { toGateBlockReason } from '../domain/gate-block-reason';
 export type SurveyGateRow = {
   status: string;
   endDate: Date | null;
-  maxResponses: number | null;
   isPublic: boolean;
   requireInviteToken: boolean;
   // 중복 응답 허용 — 켜면 초대 토큰 없는 응답의 기기 중복 검사(Track B)를 건너뛴다(조사원 대리 응답).
@@ -83,7 +81,7 @@ export class SurveyNotAcceptingResponsesError extends Error {
 export function assertSurveyAcceptingResponses(
   survey: SurveyGateRow,
   version: VersionGateRow,
-  opts: { contactTargetId: string | null; completedCount?: number | null; isTest: boolean },
+  opts: { contactTargetId: string | null; isTest: boolean },
 ): void {
   const denial = newResponseDenial(survey, version, opts);
   if (denial) {
@@ -95,44 +93,19 @@ export function assertSurveyAcceptingResponses(
  * 진행 중인 응답을 **완료로 확정**할 수 있는지 검증한다. 위반 시 throw.
  *
  * 신규 진입과 정책이 갈린다 — 마감(endDate)은 새 응답 접수를 닫는 것이지 이미 진행 중인
- * 응답을 몰수하는 것이 아니라서, 완료 게이트는 마감을 보지 않는다. 정원·중단·미배포·초대는
+ * 응답을 몰수하는 것이 아니라서, 완료 게이트는 마감을 보지 않는다. 중단·미배포·초대는
  * 그대로 차단한다. 검사 집합은 domain/acceptance 의 CHECKS_FOR.completeResponse 가 소유한다.
  * 던지는 에러 타입은 신규 게이트와 동일해 toGateBlockReason / rpc-error-policy 계약이 불변이다.
  */
 export function assertResponseCompletable(
   survey: SurveyGateRow,
   version: VersionGateRow,
-  opts: { contactTargetId: string | null; completedCount: number; isTest: boolean },
+  opts: { contactTargetId: string | null; isTest: boolean },
 ): void {
   const denial = completeResponseDenial(survey, version, opts);
   if (denial) {
     throw new SurveyNotAcceptingResponsesError(denial);
   }
-}
-
-/**
- * surveyId 의 완료 응답 수 (soft-delete 제외, 테스트 응답 제외) — 전체 완료 목표(`max_responses`)의 셈.
- *
- * 입장 차단·페이지 이동 알림·제출 하드 차단·콘솔 표시가 같은 셈을 써야 "콘솔은 1,100 인데 응답자는
- * 들어온다" 가 생기지 않는다. 자격미달·쿼터마감은 완료가 아니라 세지 않는다. 제출 하드 차단은
- * 설문 잠금을 잡은 트랜잭션을 executor 로 넘겨 잠금 아래에서 다시 센다.
- */
-export async function countCompletedResponses(
-  surveyId: string,
-  executor: DbOrTx = db,
-): Promise<number> {
-  const [row] = await executor
-    .select({ total: sql<number>`count(*)::int` })
-    .from(surveyResponses)
-    .where(
-      and(
-        eq(surveyResponses.surveyId, surveyId),
-        eq(surveyResponses.status, 'completed'),
-        isNull(surveyResponses.deletedAt),
-        notTestResponse,
-      ),
-    );
-  return row?.total ?? 0;
 }
 
 /** 가용성 게이트용 설문 행 조회. 없으면 throw. */
@@ -142,7 +115,6 @@ export async function loadSurveyGateRow(surveyId: string): Promise<SurveyGateRow
     columns: {
       status: true,
       endDate: true,
-      maxResponses: true,
       isPublic: true,
       requireInviteToken: true,
       allowMultipleResponses: true,

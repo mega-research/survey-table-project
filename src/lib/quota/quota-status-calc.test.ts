@@ -76,3 +76,37 @@ describe('buildQuotaStatus', () => {
     expect(summary.unclassified).toBe(1);
   });
 });
+
+describe('buildQuotaStatus — 「완료」 조건', () => {
+  const totalOnly = normalizeQuotaConfig({
+    enabled: true,
+    dimensions: [],
+    cells: [],
+    totalTarget: 1100,
+    closedMessage: null,
+  })!;
+
+  it('서버가 센 전체 완료 수(완료 + 실사 완료 처리)로 달성률을 낸다', () => {
+    const status = buildQuotaStatus(totalOnly, [], 886);
+    expect(status.summary.total).toEqual({ target: 1100, current: 886, pct: 81, tone: 'good' });
+    // 셀이 없는 플랜이다 — 셀 요약은 0 이다.
+    expect(status.cells).toEqual([]);
+    expect(status.summary.totalCells).toBe(0);
+  });
+
+  it('목표에 닿으면 마감 톤이다', () => {
+    expect(buildQuotaStatus(totalOnly, [], 1100).summary.total).toMatchObject({ pct: 100, tone: 'done' });
+    expect(buildQuotaStatus(totalOnly, [], 1103).summary.total).toMatchObject({ tone: 'done' });
+  });
+
+  it('조건이 없는 플랜은 total 이 null 이다 — 넘긴 수를 쓰지 않는다', () => {
+    expect(buildQuotaStatus(config, [], 500).summary.total).toBeNull();
+  });
+
+  it('셀 목표와 함께 있으면 둘 다 낸다', () => {
+    const both = normalizeQuotaConfig({ ...config, totalTarget: 10 })!;
+    const status = buildQuotaStatus(both, [{ answers: { 'q-g': 'male', 'q-a': '25' }, attrs: null }], 3);
+    expect(status.summary.total).toMatchObject({ target: 10, current: 3 });
+    expect(status.summary.currentTotal).toBe(1);
+  });
+});

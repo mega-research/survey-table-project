@@ -2,7 +2,7 @@ import 'server-only';
 
 import { inArray, sql, type SQL } from 'drizzle-orm';
 
-import { db } from '@/db';
+import { db, type DbOrTx } from '@/db';
 import { surveys } from '@/db/schema';
 import { extractResultCodeStatuses } from '@/lib/contacts/result-code-statuses-normalize';
 import type { ContactResultCode } from '@/shared/contracts/contacts';
@@ -21,11 +21,13 @@ import type { ContactResultCode } from '@/shared/contracts/contacts';
 export async function getFieldworkCompletedCounts(
   surveyIds: readonly string[],
   isTest: boolean,
+  /** 쿼터 「완료」 조건의 제출 판정이 잠금을 쥔 트랜잭션을 넘긴다 — 전역 db 로 새면 풀을 잡아먹는다. */
+  executor: DbOrTx = db,
 ): Promise<Map<string, number>> {
   const result = new Map<string, number>();
   if (surveyIds.length === 0) return result;
 
-  const codeRows = await db
+  const codeRows = await executor
     .select({ id: surveys.id, codes: surveys.contactResultCodes })
     .from(surveys)
     .where(inArray(surveys.id, [...surveyIds]));
@@ -39,7 +41,7 @@ export async function getFieldworkCompletedCounts(
     sql`, `,
   );
 
-  const rows = await db.execute<{ survey_id: string; count: number }>(sql`
+  const rows = await executor.execute<{ survey_id: string; count: number }>(sql`
     WITH positive_codes (survey_id, code) AS (VALUES ${pairValues})
     SELECT ct.survey_id, count(*)::int AS count
       FROM contact_targets ct
