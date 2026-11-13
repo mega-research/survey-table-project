@@ -34,7 +34,18 @@ export function duplicateQuestionTable(
   const rows = question.tableRowsData;
   if (!columns && !rows) return {};
 
-  const newColumns = columns?.map((col) => ({ ...col, id: makeId() }));
+  // 열 id 를 새로 발번하고, 열이 같은 표의 다른 열을 가리키는 참조(설명 열 → 응답 열 `describesColumnId`)를
+  // 함께 옮긴다. 이 표에 없는 열을 가리키던 참조는 버린다 — 남의 문항 열을 가리킨 채 두지 않는다.
+  const columnIdMap = new Map((columns ?? []).map((col) => [col.id, makeId()]));
+  const newColumns = columns?.map((col) => {
+    const { describesColumnId, ...rest } = col;
+    const described = describesColumnId ? columnIdMap.get(describesColumnId) : undefined;
+    return {
+      ...rest,
+      id: columnIdMap.get(col.id)!,
+      ...(described ? { describesColumnId: described } : {}),
+    };
+  });
 
   // 1단계: 새 id 를 정하고 대응표를 채운다.
   const rowIdMap = new Map<string, string>();
