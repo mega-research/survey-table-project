@@ -113,7 +113,7 @@ export const MobileColumnAxisCards = React.memo(function MobileColumnAxisCards({
           }
         >
           <div className="space-y-3 px-1 py-1">
-            {card.items.map(({ cell: sourceCell, row, label, labelCell, groupCells, details }, index) => {
+            {card.items.map(({ cell: sourceCell, row, label, labelCell, groupCells, details, descriptionCells }, index) => {
               // 글자 없는 체크박스 하나짜리 칸은 행 제목을 그 체크의 라벨로 옆에 붙인다(☐ 행 제목).
               const checkWithTitle = withRowTitleAsCheckLabel(sourceCell, label);
               const cell = overrideCellOptionsColumnsForCard(checkWithTitle ?? sourceCell);
@@ -124,7 +124,45 @@ export const MobileColumnAxisCards = React.memo(function MobileColumnAxisCards({
               const previous = card.items[index - 1];
               const previousKey = previous?.groupCells.map((group) => group.id).join('/') ?? '';
               const groupChanged = groupKey !== previousKey;
-              // 보기 그룹 칸 — 타일 하나가 통째로 탭 영역이고 글자는 행 제목(보기 라벨은 데이터용 짧은 이름이다)
+              // 행 설명(「바로 표시」 글자 셀) — 행 제목 아래 작은 글씨. 여러 칸이면 줄을 나눈다
+              const description =
+                descriptionCells.length > 0
+                  ? descriptionCells.map((descriptionCell) => (
+                      <span key={descriptionCell.id} className="block">
+                        <CellText
+                          text={substituteTokens(descriptionCell.content.trim(), attrs, quotes)}
+                          html={resolveCellTextHtml(descriptionCell, attrs, quotes)}
+                        />
+                      </span>
+                    ))
+                  : null;
+              // 이 칸이 여는 같은 행 상세 입력(「9) 기타비용」 기타 내용 · 「⑭ 기타」 체크의 기타 내용) — 칸 글자는
+              // 행 제목과 겹치니 지우고 모바일 라벨을 입력칸 안내로 쓴다. 닫혀 있으면 게이팅이 컨트롤째 숨긴다
+              const detailNodes = details.map((detail) => (
+                <div
+                  key={detail.id}
+                  data-detail-cell-id={detail.id}
+                  className={cn(errorCellIds?.has(detail.id) && 'rounded-lg ring-2 ring-red-300')}
+                >
+                  <InteractiveCell
+                    cell={asDetailCell(detail)}
+                    questionId={questionId}
+                    value={value}
+                    onChange={onChange}
+                    rowCells={row.cells}
+                    ariaInvalid={errorCellIds?.has(detail.id) === true}
+                    hintInFlow
+                    ignoreInputWidth
+                    {...resolveRadioGroupProps(
+                      detail,
+                      row.id,
+                      radioBucketsByRowId.get(row.id) ?? new Map(),
+                    )}
+                  />
+                </div>
+              ));
+              // 보기 그룹 칸 — 타일 하나가 통째로 탭 영역이고 글자는 행 제목(보기 라벨은 데이터용 짧은 이름이다).
+              // 설명은 타일 안 라벨 아래, 이 보기가 여는 상세 입력은 고른 타일 아래에만 선다
               if (sourceCell.type === 'choice_opt') {
                 const choiceGroup = sourceCell.choiceGroupId
                   ? groupById.get(sourceCell.choiceGroupId)
@@ -145,6 +183,8 @@ export const MobileColumnAxisCards = React.memo(function MobileColumnAxisCards({
                       inputIdScope={card.key}
                       ariaInvalid={invalid}
                       variant="tile"
+                      description={description}
+                      detail={detailNodes.length > 0 ? detailNodes : undefined}
                     />
                   </div>
                 );
@@ -182,6 +222,14 @@ export const MobileColumnAxisCards = React.memo(function MobileColumnAxisCards({
                         />
                       </p>
                     )}
+                    {description && (
+                      <p
+                        data-testid="column-axis-card-description"
+                        className="text-[13px] leading-snug text-gray-500"
+                      >
+                        {description}
+                      </p>
+                    )}
                     <div
                       className={cn(
                         invalid && 'rounded-lg ring-2 ring-red-300',
@@ -204,31 +252,7 @@ export const MobileColumnAxisCards = React.memo(function MobileColumnAxisCards({
                         )}
                       />
                     </div>
-                    {details.map((detail) => (
-                      // 이 칸이 여는 같은 행 상세 입력(「9) 기타비용」 기타 내용) — 칸 글자는 행 제목과 겹치니
-                      // 지우고 모바일 라벨을 입력칸 안내로 쓴다. 닫혀 있으면 게이팅이 컨트롤째 숨긴다
-                      <div
-                        key={detail.id}
-                        data-detail-cell-id={detail.id}
-                        className={cn(errorCellIds?.has(detail.id) && 'rounded-lg ring-2 ring-red-300')}
-                      >
-                        <InteractiveCell
-                          cell={asDetailCell(detail)}
-                          questionId={questionId}
-                          value={value}
-                          onChange={onChange}
-                          rowCells={row.cells}
-                          ariaInvalid={errorCellIds?.has(detail.id) === true}
-                          hintInFlow
-                          ignoreInputWidth
-                          {...resolveRadioGroupProps(
-                            detail,
-                            row.id,
-                            radioBucketsByRowId.get(row.id) ?? new Map(),
-                          )}
-                        />
-                      </div>
-                    ))}
+                    {detailNodes}
                   </div>
                 </React.Fragment>
               );
