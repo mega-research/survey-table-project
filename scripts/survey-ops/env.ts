@@ -36,9 +36,10 @@ export interface OpsArgs {
   flags: Map<string, string | true>;
 }
 
-const VALUE_FLAGS = new Set(['env', 'resid', 'next', 'grep', 'out', 'limit']);
+const VALUE_FLAGS = new Set(['env', 'resid', 'next', 'grep', 'out', 'limit', 'file', 'tsv']);
 
-export function parseOpsArgs(argv: readonly string[]): OpsArgs {
+/** 인자를 플래그와 나머지로만 가른다 — `--env` 를 요구하지 않는다(DB 에 붙지 않는 명령용). */
+export function parseOpsFlags(argv: readonly string[]): Pick<OpsArgs, 'flags' | 'positionals'> {
   const flags = new Map<string, string | true>();
   const positionals: string[] = [];
   for (let i = 0; i < argv.length; i++) {
@@ -61,6 +62,11 @@ export function parseOpsArgs(argv: readonly string[]): OpsArgs {
       flags.set(body, true);
     }
   }
+  return { flags, positionals };
+}
+
+export function parseOpsArgs(argv: readonly string[]): OpsArgs {
+  const { flags, positionals } = parseOpsFlags(argv);
   const env = flags.get('env');
   if (env !== 'prod' && env !== 'local') {
     throw new Error(

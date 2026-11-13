@@ -5,7 +5,7 @@ description: 운영 설문 작업 도구. 한글 조사표에서 설문을 새�
 
 # 운영 설문 작업 도구
 
-`scripts/survey-ops/` 의 명령 넷과 패치 도우미. 모두 `--env prod` 또는 `--env local` 을 꼭 적는다(기본값 없음). `--env local` 은 `.env.local`(로컬 supabase 54322) → `.env` 순으로 읽고, `pnpm db:isolated <이름>` 의 전용 DB 는 `SURVEY_OPS_DATABASE_URL=<그 URL>` 로 바꿔 끼운다(로컬 주소만 받는다).
+`scripts/survey-ops/` 의 명령 다섯과 패치 도우미. 모두 `--env prod` 또는 `--env local` 을 꼭 적는다(기본값 없음). `--env local` 은 `.env.local`(로컬 supabase 54322) → `.env` 순으로 읽고, `pnpm db:isolated <이름>` 의 전용 DB 는 `SURVEY_OPS_DATABASE_URL=<그 URL>` 로 바꿔 끼운다(로컬 주소만 받는다).
 
 ## 설문 id 를 모르면 문구로 찾는다
 
@@ -32,6 +32,22 @@ pnpm survey:vars <surveyId> --env prod --grep '^Q2_'
 
 둘 다 gitignore 된 `docs/` 아래라 내용 검색에 잡히지 않는다 — 위 경로로 바로 연다. 설문 하나를 끝내며 새로
 정한 것은 그 문서의 해당 절에 더하고, 왜 그렇게 정했는가는 ADR 0039·0040·0041 에서 본다.
+
+## 조립했거나 구조를 고쳤으면 점검을 돌린다
+
+```bash
+pnpm survey:check --file .scratch/<설문>/out.json [--tsv <경로>]   # 넣기 전 조립 산출물 { survey, groups, questions }
+pnpm survey:check <surveyId> --env prod                            # DB 의 저장본 (읽기만)
+```
+
+- **오류**는 내보내기·응답이 깨지는 것이다 — 끊긴 표시 조건(없는 문항·없는 보기 저장 키·뒤 문항), 없는 칸을 보는
+  수식·열림 조건, 보기 칸 없이 남은 보기 그룹 정의, 변수가 0개인 문항, 복수 선택 응답값 0, 발행 게이트와 같은
+  변수명 검증. 하나라도 있으면 종료 코드 1 이라 조립 스크립트가 넣기 전에 건다. 설문마다 `check.ts` 를 복사하지 않는다.
+- **알림**은 조립 규칙과 다른 곳이다 — 값 라벨 120바이트, 순위 전부 필수, 기타 내용 필수, 금액 칸 단위, 열 방향
+  그룹 필수, 저장 키 ≠ 응답값 등. 일부러 그랬으면 둔다. 사용자에게는 알림 목록을 그대로 보이고 어느 것을 둘지 묻는다.
+- 빌더에서 문항 유형을 바꿨거나 패치로 구조를 고친 뒤에도 돌린다 — 유형을 바꾸면 그 문항을 보던 조건이 끊긴다.
+- 점검을 더하거나 고칠 때는 `check-core.ts` 와 `tests/repo/survey-ops-check.test.ts` 를 같이 고친다. 규칙의 출처는
+  아래 두 문서다.
 
 ## 응답자 화면은 그려서 확인한다
 
