@@ -31,6 +31,9 @@
  * - 트랜잭션 **첫 문장으로** 설문 단위 advisory lock 을 잡고(순서: 설문 전체 → 쿼터 셀 → 응답 행), 잠금
  *   아래에서 플랜과 전체 완료 수를 **둘 다 다시 읽는다** — 마지막 자리에 동시에 도착한 제출이 함께 완료되지
  *   않고, 잠금을 기다리는 사이 운영자가 바꾼 목표(올림·내림·해제·집행 끔)도 그 제출에 적용된다.
+ * - 잠금 아래에서 다시 읽은 플랜은 **셀 판정에도 쓴다** — 대기 중 집행·진행 중 마감이 꺼졌으면 셀도 막지 않고,
+ *   셀 목표·조건이 바뀌었으면 최신 플랜으로 셀을 다시 분류해 그 셀의 잠금을 잡는다. (「완료」 조건이 없는
+ *   플랜은 설문 잠금을 잡지 않으므로 종전대로 잠금 전에 읽은 플랜으로 셀을 판정한다.)
  * - 목표 이상이면 셀 하드 차단과 같은 쓰기·같은 결과다(답변 저장, `quotaful_out`, `{ kind: 'quota_closed' }`).
  * - **이미 종결된 같은 응답의 재제출은 막지 않는다** — 마지막 자리를 채운 사람이 응답 유실로 다시 누르거나
  *   다른 탭이 늦게 제출하면 그 사람은 완료자다. 아래 멱등 처리(「이미 완료」)로 보낸다.
@@ -239,6 +242,9 @@ export async function completeResponse(
   // 「완료」 조건의 하드 차단 — 진행 중 마감이 켜진 플랜에 완료 조건이 있다(면제 응답 제외).
   // 값은 잠금 전에 읽은 플랜 기준이라, 판정에는 잠금 아래에서 다시 읽은 플랜을 쓴다.
   let hardCloseTotal = false;
+  // 페이로드 경로의 셀 분류 재료(평문) — 설문 잠금 아래에서 다시 읽은 플랜으로 셀을 다시 분류할 때 쓴다.
+  // 아래에서 validatedResponses 를 저장값(암호문)으로 갈아 끼우기 전에 잡아 둔다.
+  let plainForQuota: Record<string, unknown> | undefined;
   // 빈 complete 의 하드 차단 — 잠금 아래에서 저장분으로 다시 분류해야 한다는 표식.
   let hardCloseFromStored = false;
   if (gateRow && !gateRow.isTest) {
@@ -249,6 +255,7 @@ export async function completeResponse(
     hardCloseTotal = hardClosePlan !== null && quotaTotalTarget(hardClosePlan) !== null;
     if (validatedResponses) {
       if (hardClosePlan && !screenedOut) {
+        plainForQuota = validatedResponses;
         hardCloseCell = await resolveQuotaTargetCell(
           hardClosePlan,
           validatedResponses,
@@ -296,40 +303,60 @@ export async function completeResponse(
     // 같은 설문의 제출이 여기서 한 줄로 서고, 잠금은 commit 에 풀리므로 다음 대기자는 앞선 제출의
     // 완료 행을 보고 센다(READ COMMITTED — 잠금 뒤 새 문장).
     let totalFullUnderLock = false;
+    // 이 트랜잭션이 셀 판정에 쓸 플랜과 셀 — 기본은 잠금 전에 읽은 것이고, 설문 잠금을 잡은 제출은
+    // 잠금 아래에서 다시 읽은 것으로 갈아 끼운다. 전체만 최신 플랜으로 풀고 셀은 옛 플랜으로 막으면
+    // 운영자가 마감을 푼 뒤에도 대기하던 제출이 옛 설정으로 쿼터마감된다.
+    let activePlan: NormalizedQuotaConfig | null = quotaPlan;
+    let activeCell: QuotaTargetCell | null = hardCloseCell;
     if (hardCloseTotal && gateRow) {
       await tx.execute(
         sql`select pg_advisory_xact_lock(hashtext(${gateRow.surveyId}), hashtext(${QUOTA_TOTAL_LOCK_KEY}))`,
       );
       // 플랜도 잠금 아래에서 다시 읽는다 — 잠금을 기다리는 사이 운영자가 목표를 올렸거나 내렸거나
-      // 없앴거나 집행·진행 중 마감을 껐을 수 있다. 다시 읽은 플랜이 더는 하드 차단이 아니면 통과다.
+      // 없앴거나 집행·진행 중 마감을 껐을 수 있다.
       const livePlan = await loadQuotaPlan(gateRow.surveyId, tx);
-      if (
-        isMidSurveyCloseActive(livePlan) &&
-        (await isQuotaTotalFull(tx, gateRow.surveyId, livePlan))
-      ) {
-        // 이미 종결된 같은 응답의 재제출(다른 탭·응답 유실 재시도)은 막지 않는다 — 마지막 자리를
-        // 채운 그 사람이 마감 화면을 보면 안 된다. 아래 UPDATE 가 0행이 되어 기존 멱등 처리
-        // (이미 완료·쿼터마감 행의 늦은 제출)로 간다.
-        const [self] = await tx
-          .select({ status: surveyResponses.status })
-          .from(surveyResponses)
-          .where(eq(surveyResponses.id, responseId))
-          .limit(1);
-        totalFullUnderLock = !self || !isConcludedResponseStatus(self.status);
+      if (!isMidSurveyCloseActive(livePlan)) {
+        // 하드 차단이 풀렸다 — 전체도 셀도 막지 않는다.
+        activePlan = null;
+        activeCell = null;
+      } else {
+        activePlan = livePlan;
+        if (await isQuotaTotalFull(tx, gateRow.surveyId, livePlan)) {
+          // 이미 종결된 같은 응답의 재제출(다른 탭·응답 유실 재시도)은 막지 않는다 — 마지막 자리를
+          // 채운 그 사람이 마감 화면을 보면 안 된다. 아래 UPDATE 가 0행이 되어 기존 멱등 처리
+          // (이미 완료·쿼터마감 행의 늦은 제출)로 간다.
+          const [self] = await tx
+            .select({ status: surveyResponses.status })
+            .from(surveyResponses)
+            .where(eq(surveyResponses.id, responseId))
+            .limit(1);
+          totalFullUnderLock = !self || !isConcludedResponseStatus(self.status);
+        }
+        // 셀도 최신 플랜으로 다시 분류한다(셀 목표 변경·조건 삭제 반영). 아직 셀 잠금을 잡기 전이라
+        // 바뀐 셀의 잠금을 아래에서 그대로 잡으면 순서(설문 전체 → 셀)가 지켜진다. 빈 complete 는
+        // 응답 행 잠금 아래에서 저장분으로 다시 분류하므로 여기서는 플랜만 갈아 끼운다.
+        if (!totalFullUnderLock && plainForQuota) {
+          activeCell = await resolveQuotaTargetCell(
+            livePlan,
+            plainForQuota,
+            gateRow.contactTargetId,
+            tx,
+          );
+        }
       }
     }
     // 쿼터 하드 차단 — 설문+셀 키 트랜잭션 advisory lock 을 **응답 행 잠금보다 먼저** 잡아
     // 순서를 고정한다(교착 방지). 같은 셀의 제출은 여기서 직렬화되고, 잠금 아래에서 다시 센
     // 완료 수가 목표 이상이면 이 제출은 완료가 아니라 쿼터마감이 된다. 잠금은 commit 에 풀리므로
     // 다음 대기자는 이 제출의 완료 행을 보고 센다. 옵션이 꺼진 설문은 이 블록에 오지 않는다.
-    if (!totalFullUnderLock && hardCloseCell && gateRow && quotaPlan) {
+    if (!totalFullUnderLock && activeCell && gateRow && activePlan) {
       await tx.execute(
-        sql`select pg_advisory_xact_lock(hashtext(${gateRow.surveyId}), hashtext(${hardCloseCell.cellKey}))`,
+        sql`select pg_advisory_xact_lock(hashtext(${gateRow.surveyId}), hashtext(${activeCell.cellKey}))`,
       );
       // 빈 complete 는 잠금 아래에서 저장분을 읽은 뒤(아래) 다시 분류해 센다.
       if (!hardCloseFromStored) {
-        const current = await countQuotaCellCompleted(tx, gateRow.surveyId, quotaPlan, hardCloseCell);
-        quotaFull = current >= hardCloseCell.target;
+        const current = await countQuotaCellCompleted(tx, gateRow.surveyId, activePlan, activeCell);
+        quotaFull = current >= activeCell.target;
       }
     }
     if (gateRow?.isTest) {
@@ -369,18 +396,19 @@ export async function completeResponse(
       // 빈 complete 의 하드 차단 — 잠금 아래 최종 평문으로 셀을 다시 분류한다. 자격미달이면 셀을
       // 소비하지 않는다. 잠금 전에 고른 셀과 다르면 이 셀의 잠금을 쥐고 있지 않으므로 세지 않고
       // 되돌린다 — 바깥 재시도가 바뀐 셀의 잠금부터 다시 잡는다. 미분류가 됐으면 쿼터에 걸리지 않는다.
-      if (!totalFullUnderLock && hardCloseFromStored && gateRow && quotaPlan && !screenedOut) {
+      if (!totalFullUnderLock && hardCloseFromStored && gateRow && activePlan && !screenedOut) {
         const lockedCell = await resolveQuotaTargetCell(
-          quotaPlan,
+          activePlan,
           judgedResponses,
           gateRow.contactTargetId,
           tx,
         );
-        if (lockedCell && lockedCell.cellKey !== hardCloseCell?.cellKey) {
+        // 쥐고 있는 셀 잠금(activeCell)과 다른 셀이면 세지 않고 되돌린다.
+        if (lockedCell && lockedCell.cellKey !== activeCell?.cellKey) {
           throw new QuotaCellChangedError(lockedCell);
         }
         if (lockedCell) {
-          const current = await countQuotaCellCompleted(tx, gateRow.surveyId, quotaPlan, lockedCell);
+          const current = await countQuotaCellCompleted(tx, gateRow.surveyId, activePlan, lockedCell);
           quotaFull = current >= lockedCell.target;
         }
       }

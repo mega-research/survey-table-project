@@ -368,6 +368,87 @@ describe.skipIf(!isLocalDb)('쿼터 「완료」 조건 — 실DB', () => {
     });
   });
 
+  describe('셀 조건과 함께 있을 때 — 잠금 아래에서 다시 읽은 플랜이 셀 판정에도 쓰인다', () => {
+    /** 남 셀 목표 1(이미 찼다) + 완료 조건(넉넉함). 두 번째 제출은 셀에서 막힐 차례다. */
+    const mixedPlan = (over: Partial<QuotaConfig> = {}): QuotaConfig =>
+      totalPlan(10, {
+        dimensions: [
+          {
+            id: 'dim-gender',
+            questionId: QID,
+            label: '성별',
+            kind: 'choice',
+            categories: [{ id: 'cat-m', label: '남', values: ['남'] }],
+          },
+        ],
+        cells: [{ categoryIds: ['cat-m'], target: 1 }],
+        ...over,
+      });
+
+    async function seedWithFullCell() {
+      const { surveyId, responseIds } = await seed(mixedPlan(), 2);
+      const [a, b] = responseIds as [string, string];
+      await completeResponse({ responseId: a, ...answers() });
+      return { surveyId, responseIds, waiting: b };
+    }
+
+    it('플랜이 그대로면 찬 셀에서 쿼터마감으로 끝난다 — 대조군', async () => {
+      const { surveyId, responseIds, waiting } = await seedWithFullCell();
+
+      const results = await submitBehindLock(surveyId, [waiting], 1);
+
+      expect(results.filter(isClosed)).toHaveLength(1);
+      expect((await loadRows(responseIds)).map((r) => r.status)).toEqual([
+        'completed',
+        'quotaful_out',
+      ]);
+    });
+
+    it('대기 중 진행 중 마감을 끄면 셀도 막지 않는다 — 옛 플랜으로 쿼터마감하지 않는다', async () => {
+      const { surveyId, responseIds, waiting } = await seedWithFullCell();
+
+      const results = await submitBehindLock(surveyId, [waiting], 1, () =>
+        setPlan(surveyId, mixedPlan({ midSurveyClose: false })),
+      );
+
+      expect(results.filter(isClosed)).toHaveLength(0);
+      expect((await loadRows(responseIds)).map((r) => r.status)).toEqual(['completed', 'completed']);
+    });
+
+    it('대기 중 집행을 끄면 셀도 막지 않는다', async () => {
+      const { surveyId, responseIds, waiting } = await seedWithFullCell();
+
+      const results = await submitBehindLock(surveyId, [waiting], 1, () =>
+        setPlan(surveyId, mixedPlan({ enabled: false })),
+      );
+
+      expect(results.filter(isClosed)).toHaveLength(0);
+      expect((await loadRows(responseIds)).map((r) => r.status)).toEqual(['completed', 'completed']);
+    });
+
+    it('대기 중 셀 목표를 올리면 올린 목표로 판정한다', async () => {
+      const { surveyId, responseIds, waiting } = await seedWithFullCell();
+
+      const results = await submitBehindLock(surveyId, [waiting], 1, () =>
+        setPlan(surveyId, mixedPlan({ cells: [{ categoryIds: ['cat-m'], target: 2 }] })),
+      );
+
+      expect(results.filter(isClosed)).toHaveLength(0);
+      expect((await loadRows(responseIds)).map((r) => r.status)).toEqual(['completed', 'completed']);
+    });
+
+    it('대기 중 셀 조건을 지우면 그 셀로 막지 않는다', async () => {
+      const { surveyId, responseIds, waiting } = await seedWithFullCell();
+
+      const results = await submitBehindLock(surveyId, [waiting], 1, () =>
+        setPlan(surveyId, mixedPlan({ dimensions: [], cells: [] })),
+      );
+
+      expect(results.filter(isClosed)).toHaveLength(0);
+      expect((await loadRows(responseIds)).map((r) => r.status)).toEqual(['completed', 'completed']);
+    });
+  });
+
   describe('스위치를 따른다 — 다른 조건과 같은 규칙', () => {
     it('진행 중 마감이 꺼진 플랜은 제출을 막지 않고 초과 표식만 남긴다', async () => {
       const { responseIds } = await seed(totalPlan(1, { midSurveyClose: false }), 2);
