@@ -134,7 +134,6 @@ const VERSION_ID = 'v-pruned';
 const QID = 'q-1';
 
 // select 호출 순서(versionId 있음, contactTargetId 없음):
-//   0) 가용성 게이트 완료 카운트 (countCompletedResponses)
 //   1) [빈 유효 집합일 때만] 가드의 스냅샷 존재 확인
 // execute 호출 순서:
 //   0) 유효 questionId 집합 (loadValidQuestionIds — 스냅샷 경로)
@@ -157,7 +156,6 @@ describe('completeResponse — 프루닝 스냅샷 가드', () => {
 
   it('스냅샷이 프루닝된 버전의 완료는 {} 저장 대신 명시적 에러를 던지고 아무것도 저장하지 않는다', async () => {
     selectTerminalQueue.push(
-      [{ total: 0 }], // countCompletedResponses
       [{ questionsState: 'missing' }], // 가드: snapshot IS NULL (프루닝됨)
     );
     executeQueue.push([]); // loadValidQuestionIds: 스냅샷 없음 → 빈 집합
@@ -178,7 +176,6 @@ describe('completeResponse — 프루닝 스냅샷 가드', () => {
 
   it('버전 행 자체가 사라진 경우도 동일하게 에러로 막는다', async () => {
     selectTerminalQueue.push(
-      [{ total: 0 }], // countCompletedResponses
       [], // 가드: 버전 행 미존재
     );
     executeQueue.push([]); // loadValidQuestionIds: 빈 집합
@@ -197,7 +194,6 @@ describe('completeResponse — 프루닝 스냅샷 가드', () => {
 
   it('non-null 이지만 questions 가 훼손된 스냅샷도 에러로 막는다 (IS NOT NULL 우회 차단)', async () => {
     selectTerminalQueue.push(
-      [{ total: 0 }], // countCompletedResponses
       [{ questionsState: 'malformed' }], // 가드: snapshot {} / questions 비배열
     );
     executeQueue.push([]); // loadValidQuestionIds: 비배열 → 빈 배열 폴백 → 빈 집합
@@ -216,7 +212,6 @@ describe('completeResponse — 프루닝 스냅샷 가드', () => {
 
   it('검증된 빈 questions 배열(질문 0개 설문)은 가드를 통과한다 — 스냅샷 부재와 구분', async () => {
     selectTerminalQueue.push(
-      [{ total: 0 }], // countCompletedResponses
       [{ questionsState: 'empty' }], // 가드: 정상 스냅샷의 진짜 빈 배열
       // 이후 storedRecalc 스냅샷 로드 등은 빈 큐 폴백([])으로 무해
     );
@@ -236,7 +231,6 @@ describe('completeResponse — 프루닝 스냅샷 가드', () => {
 
   it('답변 없는 완료(notice-only 흐름)는 questionResponses 를 건드리지 않는다 — 프루닝 버전이어도 유실 없음', async () => {
     selectTerminalQueue.push(
-      [{ total: 0 }], // countCompletedResponses
       [{ snapshot: null }], // storedRecalc 스냅샷 로드 (프루닝됨 → calc 재계산 스킵)
     );
     // 페이로드가 없으므로 loadValidQuestionIds(execute)와 가드 select 는 실행되지 않는다
@@ -255,7 +249,6 @@ describe('completeResponse — 프루닝 스냅샷 가드', () => {
 
   it('스냅샷이 실존하면 기존 스냅샷 멤버십 경로 그대로 완료된다 (가드 무개입)', async () => {
     selectTerminalQueue.push(
-      [{ total: 0 }], // countCompletedResponses
       // 가드의 스냅샷 확인 select 없음 — 유효 집합이 비지 않으므로 실행되지 않아야 한다
     );
     executeQueue.push([{ id: QID }]); // loadValidQuestionIds: 스냅샷에 질문 존재

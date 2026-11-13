@@ -25,20 +25,26 @@
  *   것을 쓴다.
  *
  * ── 전체 완료 목표 (`surveys.max_responses`, CONTEXT.md 「전체 완료 목표」) ──
- * - 잠금 밖 사전 검사(`assertResponseCompletable`)가 이미 찬 설문의 제출을 빨리 돌려보내고, 제출 트랜잭션이
- *   **첫 문장으로** 설문 단위 advisory lock 을 잡고 잠금 아래에서 완료 수를 다시 센다 — 마지막 자리에
- *   동시에 도착한 제출이 함께 완료되지 않는다. 목표 이상이면 트랜잭션을 되돌리고 사전 검사와 같은
- *   blocked(모집 완료 화면)로 접는다. 응답은 열린 채 남는다 — 목표를 올리면 그대로 이어 간다.
+ * - **판정은 제출 트랜잭션 한 곳이다.** 첫 문장으로 설문 단위 advisory lock 을 잡고, 잠금 아래에서
+ *   목표와 완료 수를 **둘 다 다시 읽는다** — 마지막 자리에 동시에 도착한 제출이 함께 완료되지 않고,
+ *   잠금을 기다리는 사이 운영자가 바꾼 목표(올림·내림·해제)도 그 제출에 적용된다. 잠금 밖 사전 검사는
+ *   목표를 보지 않는다(막힌 제출의 답을 정제해 남기려면 정제 뒤에 판정해야 한다).
+ * - 목표 이상이면 완료로 만들지 않고 **제출한 답만 저장한다**(상태·완료 시각은 그대로 — 응답은 열린 채
+ *   남는다). 결과는 blocked(모집 완료 화면)다. 목표를 올리면 그 응답자는 마지막 페이지 답까지 그대로 이어 간다.
+ * - **이미 종결된 같은 응답의 재제출은 목표로 막지 않는다** — 마지막 자리를 채운 사람이 응답 유실로
+ *   다시 누르거나 다른 탭이 늦게 제출하면, 그 사람은 완료자다. 아래 멱등 처리(「이미 완료」)로 보낸다.
  * - 잠금 순서: 설문 전체 잠금 → 쿼터 셀 잠금 → 응답 행. 셀이 바뀌어 다시 할 때도 되돌린 뒤 같은 순서다.
  * - 면제 — 테스트 응답(게이트가 전 검사 면제)과 재응답 허용으로 되돌려진 응답(`reeditPendingSince`):
  *   되돌려 놓고 재제출이 막히는 고아를 만들지 않는다(쿼터 하드 차단과 같은 표식).
+ * - 수용한 틈 — 목표가 **없던** 설문에 목표를 거는 순간 이미 사전 검사를 지난 제출은 잠금 없이 완료된다
+ *   (그 순간 날고 있던 요청 몇 건). 목표 없는 설문의 모든 제출에 잠금·질의를 더하지 않으려는 선택이다.
  */
 
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import 'server-only';
 
 import { db } from '@/db';
-import { contactTargets, surveyResponses } from '@/db/schema';
+import { contactTargets, surveyResponses, surveys } from '@/db/schema';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { logger } from '@/lib/logger';
 import { sumActiveSeconds } from '@/lib/operations/active-seconds';
@@ -46,6 +52,7 @@ import { isMidSurveyCloseActive, resolveMidSurveyClosedMessage } from '@/lib/quo
 import type { NormalizedQuotaConfig } from '@/lib/quota/normalize';
 import { InternalFailure } from '@/server/internal-failure';
 import {
+  isConcludedResponseStatus,
   isOpenResponseStatus,
   openResponseStatusValues,
   type PageVisit,
@@ -100,6 +107,9 @@ class QuotaCellChangedError extends Error {
 /** 전체 완료 목표 잠금의 두 번째 키 — 쿼터 셀 키(카테고리 id 를 이은 글자)와 겹치지 않는 고정 글자 */
 const COMPLETION_TARGET_LOCK_KEY = 'completion-target';
 
+/** 제출 트랜잭션이 전체 완료 목표에 막혔다는 표식 — 완료 행 대신 돌려준다(답 저장은 커밋된다) */
+const COMPLETION_TARGET_FULL = Symbol('completion-target-full');
+
 export async function completeResponse(
   input: CompleteResponseInput,
 ): Promise<CompleteResponseResult> {
@@ -114,9 +124,8 @@ export async function completeResponse(
   // 위반은 던지지 않고 blocked 로 접어 돌려준다(진입 경로 admitAndCreateResponse 와 같은 규약).
   // 던지면 운영에서 마스킹돼 500 이 되고, 응답자는 설문을 다 채운 뒤 사유를 모른 채
   // 재시도 토스트만 반복해서 본다 — 빠져나갈 길이 없다.
-  // 응답 행에서 surveyId/versionId/contactTargetId 를 읽어 게이트 입력으로 사용한다. 여기 count 는
-  // 잠금 없는 사전 검사다 — count 와 완료 UPDATE 사이에 마지막 자리를 함께 채우는 동시 제출은
-  // 아래 트랜잭션이 설문 잠금 아래에서 다시 세어 막는다(completionTarget).
+  // 응답 행에서 surveyId/versionId/contactTargetId 를 읽어 게이트 입력으로 사용한다. 전체 완료
+  // 목표(정원)는 여기서 보지 않는다 — 아래 트랜잭션이 설문 잠금 아래에서 판정한다(completionTarget).
   const gateRow = await db.query.surveyResponses.findFirst({
     where: eq(surveyResponses.id, responseId),
     columns: {
@@ -130,7 +139,8 @@ export async function completeResponse(
       currentStepId: true,
     },
   });
-  // 전체 완료 목표 — 잠금 아래 재확인이 필요한 제출만 값이 있다(목표 없음·테스트·재응답 허용은 null).
+  // 전체 완료 목표 — 잠금 아래 판정이 필요한 제출만 값이 있다(목표 없음·테스트·재응답 허용은 null).
+  // 값 자체는 잠금 전에 읽은 것이라 판정에는 잠금 아래에서 다시 읽은 목표를 쓴다.
   let completionTarget: number | null = null;
   if (gateRow) {
     // 테스트 응답이면 테스트 버전을 지금 저장본에 맞춘다 — 바뀌었으면 아래 정제(페이로드)와 빈 complete
@@ -144,11 +154,11 @@ export async function completeResponse(
     if (survey.maxResponses != null && !gateRow.isTest && !reeditPending) {
       completionTarget = survey.maxResponses;
     }
-    const completedCount = await countCompletedResponses(gateRow.surveyId);
     try {
-      assertResponseCompletable(reeditPending ? { ...survey, maxResponses: null } : survey, version, {
+      // 목표는 트랜잭션이 판정하므로 여기서는 비워 넘긴다(미배포·중단·초대만 본다).
+      assertResponseCompletable({ ...survey, maxResponses: null }, version, {
         contactTargetId: gateRow.contactTargetId,
-        completedCount,
+        completedCount: 0,
         // 응답 행 자체의 isTest 컬럼이 권위 소스 — create 시점에 확정된 값을 그대로 신뢰한다
         // (여기서 재차 testToken 을 검증하지 않는다. complete 는 responseId 만 받는 pub 엔드포인트).
         isTest: gateRow.isTest,
@@ -294,16 +304,50 @@ export async function completeResponse(
   const completeInTransaction = () => db.transaction(async (tx) => {
     // 전체 완료 목표 — 설문 단위 잠금을 **가장 먼저** 잡는다(순서: 설문 전체 → 쿼터 셀 → 응답 행).
     // 같은 설문의 제출이 여기서 한 줄로 서고, 잠금은 commit 에 풀리므로 다음 대기자는 앞선 제출의
-    // 완료 행을 보고 센다(READ COMMITTED — 잠금 뒤 새 문장). 목표 이상이면 던져서 되돌린다 —
-    // 바깥이 사전 검사와 같은 blocked 로 접는다. 자격미달로 끝날 제출도 찬 설문에서는 받지 않는다
-    // (사전 검사와 같은 규칙 — 찬 설문은 닫힌 설문이다).
+    // 완료 행을 보고 센다(READ COMMITTED — 잠금 뒤 새 문장). 자격미달로 끝날 제출도 찬 설문에서는
+    // 받지 않는다(찬 설문은 닫힌 설문이다).
     if (completionTarget !== null && gateRow) {
       await tx.execute(
         sql`select pg_advisory_xact_lock(hashtext(${gateRow.surveyId}), hashtext(${COMPLETION_TARGET_LOCK_KEY}))`,
       );
-      const completedNow = await countCompletedResponses(gateRow.surveyId, tx);
-      if (completedNow >= completionTarget) {
-        throw new SurveyNotAcceptingResponsesError('max_responses_reached');
+      // 목표도 잠금 아래에서 다시 읽는다 — 잠금을 기다리는 사이 운영자가 올렸거나 내렸거나 없앴을 수
+      // 있다. 행을 못 읽으면(그 사이 설문 삭제) 잠금 전에 읽은 목표로 닫힌 쪽을 고른다.
+      const [liveSurvey] = await tx
+        .select({ maxResponses: surveys.maxResponses })
+        .from(surveys)
+        .where(eq(surveys.id, gateRow.surveyId))
+        .limit(1);
+      const liveTarget = liveSurvey ? liveSurvey.maxResponses : completionTarget;
+      if (
+        liveTarget != null &&
+        (await countCompletedResponses(gateRow.surveyId, tx)) >= liveTarget
+      ) {
+        // 이미 종결된 같은 응답의 재제출(다른 탭·응답 유실 재시도)은 목표로 막지 않는다 — 마지막
+        // 자리를 채운 그 사람이 「모집 완료」를 보면 안 된다. 아래 UPDATE 가 0행이 되어 기존 멱등
+        // 처리(이미 완료·쿼터마감 행의 늦은 제출)로 간다.
+        const [self] = await tx
+          .select({ status: surveyResponses.status })
+          .from(surveyResponses)
+          .where(eq(surveyResponses.id, responseId))
+          .limit(1);
+        if (!self || !isConcludedResponseStatus(self.status)) {
+          // 완료로 만들지 않되 제출한 답은 남긴다 — 상태·완료 시각은 그대로(열린 응답). 목표를 올리면
+          // 마지막 페이지 답까지 그대로 이어 간다. 값은 정제·확정·암호화를 마친 저장값이다
+          // (쿼터마감 행의 늦은 제출과 같은 쓰기). 빈 complete 는 남길 페이로드가 없다.
+          if (validatedResponses) {
+            await tx
+              .update(surveyResponses)
+              .set({ questionResponses: validatedResponses, lastActivityAt: completedAt })
+              .where(
+                and(
+                  eq(surveyResponses.id, responseId),
+                  isNull(surveyResponses.deletedAt),
+                  inArray(surveyResponses.status, openResponseStatusValues),
+                ),
+              );
+          }
+          return COMPLETION_TARGET_FULL;
+        }
       }
     }
     // 쿼터 하드 차단 — 설문+셀 키 트랜잭션 advisory lock 을 **응답 행 잠금보다 먼저** 잡아
@@ -528,18 +572,6 @@ export async function completeResponse(
     try {
       result = await completeInTransaction();
     } catch (err) {
-      // 잠금 아래에서 전체 완료 목표가 찼다 — 사전 검사를 통과한 뒤 마지막 자리를 놓친 제출.
-      // 되돌린 트랜잭션은 아무것도 남기지 않고, 응답은 열린 채 모집 완료 화면으로 간다.
-      if (err instanceof SurveyNotAcceptingResponsesError && err.reason === 'max_responses_reached') {
-        const blocked = toGateBlockedResult(err);
-        if (blocked) {
-          logger.warn(
-            { surveyId: gateRow?.surveyId, responseId, completionTarget },
-            '[completion-target] 제출이 잠금 아래에서 전체 완료 목표에 막혔다',
-          );
-          return blocked;
-        }
-      }
       if (!(err instanceof QuotaCellChangedError)) throw err;
       logger.warn(
         { surveyId: gateRow?.surveyId, responseId, attempt },
@@ -552,6 +584,18 @@ export async function completeResponse(
       }
       hardCloseCell = err.cell;
     }
+  }
+
+  // 전체 완료 목표가 찼다 — 완료가 아니다. 답은 저장됐고 응답은 열린 채다. 컨택 완료 링크·완료
+  // 후처리를 타지 않고 모집 완료 화면으로 접는다(사유 매핑은 toGateBlockReason 한 곳).
+  if (result === COMPLETION_TARGET_FULL) {
+    logger.info(
+      { surveyId: gateRow?.surveyId, responseId, completionTarget },
+      '[completion-target] 제출이 전체 완료 목표에 막혔다 — 답만 저장',
+    );
+    const blocked = toGateBlockedResult(new SurveyNotAcceptingResponsesError('max_responses_reached'));
+    if (!blocked) throw new InternalFailure('completeResponse: 전체 완료 목표 차단 사유를 접지 못했다');
+    return blocked;
   }
 
   // 실제 대상자 연결은 응답 완료 커밋 이후 best-effort로 유지한다. 이를 완료 트랜잭션에

@@ -132,6 +132,7 @@ async function loadStatuses(responseIds: string[]) {
       status: surveyResponses.status,
       isCompleted: surveyResponses.isCompleted,
       completedAt: surveyResponses.completedAt,
+      questionResponses: surveyResponses.questionResponses,
     })
     .from(surveyResponses)
     .where(inArray(surveyResponses.id, responseIds));
@@ -256,6 +257,141 @@ describe.skipIf(!isLocalDb)('전체 완료 목표 — 실DB 경합', () => {
     const rows = await loadStatuses(responseIds);
     expect(rows.filter((r) => r.status === 'completed')).toHaveLength(2);
     expect(rows.filter((r) => r.status === 'in_progress')).toHaveLength(2);
+  });
+
+  it('마지막 자리를 채운 응답이 다시 제출하면 모집 완료가 아니라 이미 완료로 받는다', async () => {
+    // 응답 유실로 다시 누르거나 다른 탭이 늦게 제출한 경우 — 그 사람은 완료자다. 목표가 찼다고
+    // 「모집 완료」를 돌려주면 완료자가 마감 화면을 보고, 패널 설문은 쿼터 마감 주소로 보낸다.
+    const { responseIds } = await seed({ maxResponses: 1, responseCount: 1 });
+    const [a] = responseIds as [string];
+
+    const first = await completeResponse({ responseId: a, ...answers() });
+    expect(isBlocked(first)).toBe(false);
+
+    const retried = await completeResponse({ responseId: a, ...answers() });
+    expect(isBlocked(retried)).toBe(false);
+    expect(retried).toMatchObject({ id: a, status: 'completed', alreadyCompleted: true });
+  });
+
+  it('같은 응답의 두 제출이 마지막 자리에 동시에 와도 하나는 완료, 하나는 이미 완료다', async () => {
+    const { surveyId, responseIds } = await seed({ maxResponses: 1, responseCount: 1 });
+    const [a] = responseIds as [string];
+
+    const blocker = createTargetLockBlocker(surveyId);
+    const holder = await blocker.locked;
+    const submissions = Promise.all([
+      completeResponse({ responseId: a, ...answers() }),
+      completeResponse({ responseId: a, ...answers() }),
+    ]);
+    let results: Awaited<typeof submissions>;
+    try {
+      await waitForLockWaitersBehind(holder, 2, '설문 잠금 대기자 2개를 관찰하지 못했습니다');
+    } finally {
+      blocker.release();
+      results = await submissions;
+      await blocker.done;
+    }
+
+    expect(results.filter(isBlocked)).toHaveLength(0);
+    expect(
+      results.filter((r) => 'alreadyCompleted' in r && r.alreadyCompleted === true),
+    ).toHaveLength(1);
+    const rows = await loadStatuses(responseIds);
+    expect(rows.map((r) => r.status)).toEqual(['completed']);
+  });
+
+  it('목표에 막힌 제출의 답은 저장된다 — 목표를 올리면 마지막 페이지 답까지 그대로 이어 간다', async () => {
+    const { surveyId, responseIds } = await seed({ maxResponses: 1, responseCount: 2 });
+    const [a, b] = responseIds as [string, string];
+
+    await completeResponse({ responseId: a, ...answers() });
+    // b 는 초안을 한 번도 저장하지 않은 채(저장분 {}) 마지막 페이지에서 제출했다.
+    await expect(
+      completeResponse({ responseId: b, data: { questionResponses: { [QID]: '여' } } }),
+    ).resolves.toEqual({ kind: 'blocked', reason: 'quota_closed' });
+
+    const [blockedRow] = (await loadStatuses([b])) as [Awaited<ReturnType<typeof loadStatuses>>[number]];
+    expect(blockedRow.status).toBe('in_progress');
+    expect(blockedRow.isCompleted).toBe(false);
+    expect(blockedRow.completedAt).toBeNull();
+    expect(blockedRow.questionResponses).toEqual({ [QID]: '여' });
+
+    // 목표를 올린 뒤 페이로드 없이 완료해도(저장분으로 확정) 그 답으로 완료된다.
+    await db.update(surveys).set({ maxResponses: 2 }).where(sql`${surveys.id} = ${surveyId}`);
+    const resumed = await completeResponse({ responseId: b });
+    expect(isBlocked(resumed)).toBe(false);
+    const [doneRow] = (await loadStatuses([b])) as [Awaited<ReturnType<typeof loadStatuses>>[number]];
+    expect(doneRow.status).toBe('completed');
+    expect(doneRow.questionResponses).toEqual({ [QID]: '여' });
+  });
+
+  describe('잠금을 기다리는 사이 바뀐 목표', () => {
+    /** 제출들이 설문 잠금 뒤에 줄 선 상태에서 `change` 를 커밋하고 잠금을 푼다. */
+    async function submitWhileTargetChanges(
+      surveyId: string,
+      responseIds: string[],
+      change: () => Promise<unknown>,
+    ) {
+      const blocker = createTargetLockBlocker(surveyId);
+      const holder = await blocker.locked;
+      const submissions = Promise.all(
+        responseIds.map((responseId) => completeResponse({ responseId, ...answers() })),
+      );
+      let results: Awaited<typeof submissions>;
+      try {
+        await waitForLockWaitersBehind(
+          holder,
+          responseIds.length,
+          '설문 잠금 대기자를 관찰하지 못했습니다 — 제출이 목표 잠금을 기다리지 않는다',
+        );
+        await change();
+      } finally {
+        blocker.release();
+        results = await submissions;
+        await blocker.done;
+      }
+      return results;
+    }
+    const setTarget = (surveyId: string, maxResponses: number | null) =>
+      db.update(surveys).set({ maxResponses }).where(sql`${surveys.id} = ${surveyId}`);
+
+    it('내린 목표가 대기하던 제출에 적용된다 — 옛 목표까지 완료되지 않는다', async () => {
+      const { surveyId, responseIds } = await seed({ maxResponses: 5, responseCount: 2 });
+
+      const results = await submitWhileTargetChanges(surveyId, responseIds, () =>
+        setTarget(surveyId, 1),
+      );
+
+      expect(results.filter(isBlocked)).toHaveLength(1);
+      const rows = await loadStatuses(responseIds);
+      expect(rows.map((r) => r.status).sort()).toEqual(['completed', 'in_progress']);
+    });
+
+    it('올린 목표가 대기하던 제출에 적용된다 — 옛 목표로 막히지 않는다', async () => {
+      const { surveyId, responseIds } = await seed({ maxResponses: 1, responseCount: 2 });
+      const [a, b] = responseIds as [string, string];
+      await completeResponse({ responseId: a, ...answers() });
+
+      const results = await submitWhileTargetChanges(surveyId, [b], () => setTarget(surveyId, 2));
+
+      expect(results.filter(isBlocked)).toHaveLength(0);
+      const rows = await loadStatuses(responseIds);
+      expect(rows.map((r) => r.status)).toEqual(['completed', 'completed']);
+    });
+
+    it('해제한 목표는 대기하던 제출을 막지 않는다', async () => {
+      const { surveyId, responseIds } = await seed({ maxResponses: 1, responseCount: 2 });
+      const [a, b] = responseIds as [string, string];
+      await completeResponse({ responseId: a, ...answers() });
+
+      const results = await submitWhileTargetChanges(surveyId, [b], () =>
+        setTarget(surveyId, null),
+      );
+
+      expect(results.filter(isBlocked)).toHaveLength(0);
+      const rows = await loadStatuses(responseIds);
+      expect(rows.map((r) => r.status)).toEqual(['completed', 'completed']);
+    });
   });
 
   it('목표가 없는 설문은 잠금 없이 전부 완료된다 — 종전 동작 회귀', async () => {

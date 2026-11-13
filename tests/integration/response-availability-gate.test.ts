@@ -319,11 +319,10 @@ describe('assertResponseCompletable — completeResponse 완료 게이트', () =
   });
 
   // ── 전체 완료 목표: 잠금 아래 재확인 (CONTEXT.md 「전체 완료 목표」) ──
-  it('사전 검사를 통과해도 잠금 아래에서 목표가 찼으면 완료로 만들지 않고 모집 완료로 접는다', async () => {
-    // 잠금 밖 셈은 1(자리 있음), 잠금을 잡고 다시 세니 2 — 마지막 자리를 앞선 제출이 채웠다.
-    countResultMock
-      .mockResolvedValueOnce([{ total: 1 }])
-      .mockResolvedValue([{ total: 2 }]);
+  it('목표 판정은 설문 잠금 아래에서 한다 — 찼으면 완료로 만들지 않고 모집 완료로 접는다', async () => {
+    // 판정은 트랜잭션 한 곳이다(잠금 밖 사전 검사는 목표를 보지 않는다). 경합·목표 변경·답 저장은
+    // completion-target.realdb.test.ts 가 실 Postgres 로 본다.
+    countResultMock.mockResolvedValue([{ total: 2 }]);
     txExecuteMock.mockClear();
     const { completeResponse } =
       await import('@/server/survey-response/services/response-completion');
@@ -931,27 +930,21 @@ describe('countCompletedResponses — isTest 제외 (Task 6)', () => {
   });
 
   it('countCompletedResponses 는 isTest 완료를 세지 않는다 (where 절에 is_test=false 조건 포함)', async () => {
-    surveyFindFirstMock.mockResolvedValue(publishedSurvey({ maxResponses: 2 }));
-    responseFindFirstMock.mockResolvedValue({
-      surveyId: SURVEY_ID,
-      versionId: null,
-      contactTargetId: null,
-      isTest: false,
-    });
     countResultMock.mockResolvedValue([{ total: 1 }]);
 
-    const { completeResponse } =
-      await import('@/server/survey-response/services/response-completion');
-    await completeResponse({ responseId: 'r1' });
+    const { countCompletedResponses } =
+      await import('@/server/survey-response/services/response-gate');
+    await expect(countCompletedResponses(SURVEY_ID)).resolves.toBe(1);
 
-    // completeResponse 의 첫 db.select(...).where(...) 는 정원 count 쿼리다(그 뒤는 응답 확정
-    // 재료의 PII 대상 조회) — 그 조건에 notTestResponse(is_test=false) 가 실제로 포함됐는지
-    // SQL 문자열/파라미터로 검증한다(mock 은 조건을 해석하지 않으므로 결과값 비교만으로는
-    // 누락을 잡지 못한다).
+    // 전체 완료 목표의 셈 — 그 조건에 notTestResponse(is_test=false)·completed·비삭제가 실제로
+    // 포함됐는지 SQL 문자열/파라미터로 검증한다(mock 은 조건을 해석하지 않으므로 결과값 비교만으로는
+    // 누락을 잡지 못한다). 입장·페이지 알림·제출·콘솔 표시가 이 셈 하나를 쓴다.
     const whereArg = selectWhereLogMock.mock.calls[0]![0];
     const query = dialect.sqlToQuery(whereArg);
     expect(query.sql).toContain('is_test');
     expect(query.params).toContain(false);
+    expect(query.params).toContain('completed');
+    expect(query.sql).toContain('deleted_at');
   });
 });
 
