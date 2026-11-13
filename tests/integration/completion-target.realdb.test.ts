@@ -2,8 +2,8 @@
  * 전체 완료 목표(`surveys.max_responses`) 제출 시점 하드 차단 — 실DB 경합 테스트.
  *
  * mock DB 는 직렬화를 검증하지 못한다. 목표의 마지막 자리에 서로 다른 응답의 제출을 동시에 보내
- * 완료가 정확히 목표 수에서 멈추는지, 막힌 응답이 열린 채 남는지를 실 Postgres 의 advisory lock
- * 으로 확인한다. 잠금이 코드에서 빠지면 제출들이 대기하지 않아 빨간불이 난다.
+ * 완료가 정확히 목표 수에서 멈추는지, 막힌 응답이 쿼터마감으로 끝나고 자리가 나면 다시 열리는지를
+ * 실 Postgres 의 advisory lock 으로 확인한다. 잠금이 코드에서 빠지면 제출들이 대기하지 않아 빨간불이 난다.
  *
  * 실행: RUN_REALDB=1 DATABASE_URL=<pnpm db:isolated 가 준 주소> pnpm exec vitest run <이 파일>
  */
@@ -14,6 +14,7 @@ import { db } from '@/db';
 import { surveys, surveyVersions, surveyResponses } from '@/db/schema';
 import type { QuotaConfig } from '@/shared/contracts/quota';
 import type { QuestionData, SurveyVersionSnapshot } from '@/shared/contracts/survey';
+import { reopenQuotaClosedResponse } from '@/server/survey-response/services/quota-reopen';
 import { completeResponse } from '@/server/survey-response/services/response-completion';
 
 import { backendPid, waitForLockWaitersBehind } from '../helpers/lock-waiters';
@@ -163,8 +164,13 @@ function createTargetLockBlocker(surveyId: string) {
 }
 
 const answers = () => ({ data: { questionResponses: { [QID]: '남' } } });
+/** 완료가 아니라 쿼터마감으로 끝난 제출 — 전체 완료 목표에 막힌 결과는 쿼터 셀 마감과 같은 모양이다. */
 const isBlocked = (r: unknown) =>
-  typeof r === 'object' && r !== null && 'kind' in r && (r as { kind: string }).kind === 'blocked';
+  typeof r === 'object' &&
+  r !== null &&
+  'kind' in r &&
+  (r as { kind: string }).kind === 'quota_closed';
+const QUOTA_CLOSED = { kind: 'quota_closed', closedMessage: null };
 
 describe.skipIf(!isLocalDb)('전체 완료 목표 — 실DB 경합', () => {
   afterAll(async () => {
@@ -175,7 +181,7 @@ describe.skipIf(!isLocalDb)('전체 완료 목표 — 실DB 경합', () => {
     }
   });
 
-  it('목표 1 에 두 제출이 동시에 오면 정확히 하나만 완료되고 다른 하나는 열린 채 모집 완료로 접힌다', async () => {
+  it('목표 1 에 두 제출이 동시에 오면 정확히 하나만 완료되고 다른 하나는 쿼터마감으로 끝난다', async () => {
     const { surveyId, responseIds } = await seed({ maxResponses: 1, responseCount: 2 });
     const [a, b] = responseIds as [string, string];
 
@@ -199,27 +205,32 @@ describe.skipIf(!isLocalDb)('전체 완료 목표 — 실DB 경합', () => {
     }
 
     const blocked = results.filter(isBlocked);
-    expect(blocked).toEqual([{ kind: 'blocked', reason: 'quota_closed' }]);
+    expect(blocked).toEqual([QUOTA_CLOSED]);
 
     const rows = await loadStatuses(responseIds);
-    expect(rows.map((r) => r.status).sort()).toEqual(['completed', 'in_progress']);
-    const open = rows.find((r) => r.status === 'in_progress');
-    // 막힌 응답은 종결되지 않는다 — 목표를 올리면 그대로 이어 간다.
-    expect(open?.isCompleted).toBe(false);
-    expect(open?.completedAt).toBeNull();
+    expect(rows.map((r) => r.status).sort()).toEqual(['completed', 'quotaful_out']);
+    const closed = rows.find((r) => r.status === 'quotaful_out');
+    // 쿼터 셀 마감과 같은 기록 — 완료가 아니고 완료 시각이 없으며 답은 남는다.
+    expect(closed?.isCompleted).toBe(false);
+    expect(closed?.completedAt).toBeNull();
+    expect(closed?.questionResponses).toEqual({ [QID]: '남' });
   });
 
-  it('목표를 올리면 막혔던 응답이 다시 제출해 완료된다', async () => {
+  it('목표가 찬 동안은 쿼터마감 응답을 다시 열지 않고, 목표를 올리면 재진입에서 열려 완료된다', async () => {
     const { surveyId, responseIds } = await seed({ maxResponses: 1, responseCount: 2 });
     const [a, b] = responseIds as [string, string];
 
     await completeResponse({ responseId: a, ...answers() });
-    await expect(completeResponse({ responseId: b, ...answers() })).resolves.toEqual({
-      kind: 'blocked',
-      reason: 'quota_closed',
-    });
+    await expect(completeResponse({ responseId: b, ...answers() })).resolves.toEqual(QUOTA_CLOSED);
+
+    // 쿼터 플랜이 없는 설문이다 — 전체 목표를 보지 않으면 「자리 있음」으로 열렸다가 다음 페이지에서
+    // 다시 쿼터마감으로 떨어져 상태만 오간다.
+    await expect(reopenQuotaClosedResponse(b)).resolves.toBe(false);
+    // 쿼터마감 행의 늦은 제출은 여전히 쿼터마감 결과다.
+    await expect(completeResponse({ responseId: b, ...answers() })).resolves.toEqual(QUOTA_CLOSED);
 
     await db.update(surveys).set({ maxResponses: 2 }).where(sql`${surveys.id} = ${surveyId}`);
+    await expect(reopenQuotaClosedResponse(b)).resolves.toBe(true);
     const retried = await completeResponse({ responseId: b, ...answers() });
     expect(isBlocked(retried)).toBe(false);
 
@@ -256,7 +267,7 @@ describe.skipIf(!isLocalDb)('전체 완료 목표 — 실DB 경합', () => {
     expect(results.filter(isBlocked)).toHaveLength(2);
     const rows = await loadStatuses(responseIds);
     expect(rows.filter((r) => r.status === 'completed')).toHaveLength(2);
-    expect(rows.filter((r) => r.status === 'in_progress')).toHaveLength(2);
+    expect(rows.filter((r) => r.status === 'quotaful_out')).toHaveLength(2);
   });
 
   it('마지막 자리를 채운 응답이 다시 제출하면 모집 완료가 아니라 이미 완료로 받는다', async () => {
@@ -300,7 +311,7 @@ describe.skipIf(!isLocalDb)('전체 완료 목표 — 실DB 경합', () => {
     expect(rows.map((r) => r.status)).toEqual(['completed']);
   });
 
-  it('목표에 막힌 제출의 답은 저장된다 — 목표를 올리면 마지막 페이지 답까지 그대로 이어 간다', async () => {
+  it('목표에 막힌 제출의 답은 저장된다 — 목표를 올리면 다시 열려 마지막 페이지 답까지 이어 간다', async () => {
     const { surveyId, responseIds } = await seed({ maxResponses: 1, responseCount: 2 });
     const [a, b] = responseIds as [string, string];
 
@@ -308,16 +319,17 @@ describe.skipIf(!isLocalDb)('전체 완료 목표 — 실DB 경합', () => {
     // b 는 초안을 한 번도 저장하지 않은 채(저장분 {}) 마지막 페이지에서 제출했다.
     await expect(
       completeResponse({ responseId: b, data: { questionResponses: { [QID]: '여' } } }),
-    ).resolves.toEqual({ kind: 'blocked', reason: 'quota_closed' });
+    ).resolves.toEqual(QUOTA_CLOSED);
 
     const [blockedRow] = (await loadStatuses([b])) as [Awaited<ReturnType<typeof loadStatuses>>[number]];
-    expect(blockedRow.status).toBe('in_progress');
+    expect(blockedRow.status).toBe('quotaful_out');
     expect(blockedRow.isCompleted).toBe(false);
     expect(blockedRow.completedAt).toBeNull();
     expect(blockedRow.questionResponses).toEqual({ [QID]: '여' });
 
-    // 목표를 올린 뒤 페이로드 없이 완료해도(저장분으로 확정) 그 답으로 완료된다.
+    // 목표를 올리면 재진입에서 다시 열리고, 페이로드 없이 완료해도(저장분으로 확정) 그 답으로 완료된다.
     await db.update(surveys).set({ maxResponses: 2 }).where(sql`${surveys.id} = ${surveyId}`);
+    await expect(reopenQuotaClosedResponse(b)).resolves.toBe(true);
     const resumed = await completeResponse({ responseId: b });
     expect(isBlocked(resumed)).toBe(false);
     const [doneRow] = (await loadStatuses([b])) as [Awaited<ReturnType<typeof loadStatuses>>[number]];
@@ -364,7 +376,7 @@ describe.skipIf(!isLocalDb)('전체 완료 목표 — 실DB 경합', () => {
 
       expect(results.filter(isBlocked)).toHaveLength(1);
       const rows = await loadStatuses(responseIds);
-      expect(rows.map((r) => r.status).sort()).toEqual(['completed', 'in_progress']);
+      expect(rows.map((r) => r.status).sort()).toEqual(['completed', 'quotaful_out']);
     });
 
     it('올린 목표가 대기하던 제출에 적용된다 — 옛 목표로 막히지 않는다', async () => {

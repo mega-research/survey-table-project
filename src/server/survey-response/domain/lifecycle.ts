@@ -36,15 +36,20 @@ export type RecordStepVisitInput = z.infer<typeof RecordStepVisitInput>;
  * 구 서버(필드 없음)를 만난 신 클라이언트는 denial 이 undefined 가 되어 아무 것도 하지
  * 않는다 — 배포 스큐에서 fail-open.
  *
- * `completion_target_reached` — 전체 완료 목표가 찼다(CONTEXT.md 「전체 완료 목표」). 중단과 달리
- * 답 저장·재진입은 막지 않는 알림이다: 끝까지 채운 뒤 제출에서야 막히지 않게 다음 페이지에서
- * 모집 완료 화면으로 바꾼다. 강제는 제출 시점 판정이다. 구 클라이언트는 이 값을 무시한다.
+ * `completion_target_reached` — 전체 완료 목표가 찼다(CONTEXT.md 「전체 완료 목표」). 서버가 이 응답을
+ * 쿼터마감으로 끝낸 뒤 알린다: 끝까지 채운 뒤 제출에서야 막히지 않게 다음 페이지에서 쿼터 마감
+ * 화면으로 바꾼다. 구 클라이언트는 이 값을 무시하고, 그 응답자의 다음 저장·제출이 쿼터마감 결과를 받는다.
  */
 export const RecordStepVisitOutput = z.object({
   ok: z.literal(true),
   denial: z.enum(['survey_paused', 'completion_target_reached']).nullable(),
   /** 중단일 때만 채워지는 운영자 최신 문구. 화면 폴백 체인의 최우선 값. */
   pausedMessage: z.string().nullable(),
+  /**
+   * 전체 완료 목표로 끊겼을 때의 쿼터 마감 문구(진행 중 마감 문구, 비면 마감 문구).
+   * 없으면 화면이 사과 톤 기본 문구를 쓴다.
+   */
+  closedMessage: z.string().nullable().optional(),
 });
 export type RecordStepVisitOutput = z.infer<typeof RecordStepVisitOutput>;
 
