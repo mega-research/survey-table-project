@@ -1,5 +1,5 @@
 import { ORPCError } from '@orpc/server';
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import 'server-only';
 
 import { db } from '@/db';
@@ -24,7 +24,10 @@ import {
 import {
   isConcludedResponseStatus,
   isOpenResponseStatus,
+  openResponseStatusValues,
 } from '@/shared/contracts/survey-response';
+import { resolveMidSurveyClosedMessage } from '@/lib/quota/closed-message';
+import { loadQuotaPlan } from '@/server/read-models/quota-cell';
 import { pinnedVersionId } from '@/shared/contracts/survey';
 
 import { ongoingResponseDenial } from '../domain/acceptance';
@@ -214,7 +217,7 @@ async function reopenQuotaClosedOnResume(
  */
 export async function recordStepVisit(
   input: RecordStepVisitInput,
-): Promise<Pick<RecordStepVisitOutput, 'denial' | 'pausedMessage'>> {
+): Promise<Pick<RecordStepVisitOutput, 'denial' | 'pausedMessage' | 'closedMessage'>> {
   const { responseId, nextStepId, visibleStepIndex, visibleStepTotal } = input;
 
   // 단일 UPDATE: WHERE 절에서 currentStepId !== nextStepId 조건으로 멱등성 보장
@@ -272,11 +275,45 @@ export async function recordStepVisit(
   const flags = await getSurveyControlFlags(row.surveyId);
   const denial = flags ? ongoingResponseDenial(flags, { isTest: row.isTest }) : null;
   if (denial) return { denial, pausedMessage: flags?.pausedMessage ?? null };
-  // 전체 완료 목표 — 찼으면 알린다(강제는 제출 시점). 목표가 있는 설문만 센다.
+  // 전체 완료 목표 — 찼으면 이 응답을 쿼터마감으로 끝내고 알린다. 목표가 있는 설문만 센다.
   if (flags?.maxResponses != null && (await isCompletionTargetClosedFor(row, flags.maxResponses))) {
-    return { denial: 'completion_target_reached', pausedMessage: null };
+    await markClosedByCompletionTarget(row);
+    // 입장 뒤에 끊긴 응답자 — 쿼터 화면에 적어 둔 진행 중 마감 문구(비면 마감 문구)를 쓴다.
+    const plan = await loadQuotaPlan(row.surveyId);
+    return {
+      denial: 'completion_target_reached',
+      pausedMessage: null,
+      closedMessage: plan ? resolveMidSurveyClosedMessage(plan) : null,
+    };
   }
   return { denial: null, pausedMessage: null };
+}
+
+/**
+ * 전체 완료 목표에 막힌 열린 응답을 쿼터마감으로 끝낸다 — 쿼터 셀 마감(quota 도메인의 markQuotaFull)과
+ * 같은 쓰기다. 전체 완료 목표는 조건 없는 셀 하나와 같은 개념이라 기록도 같게 둔다(2026-11-13).
+ * 열린 상태(진행중·이탈)·비삭제 행에만 적용해 종결 상태를 덮지 않는다. 답은 그대로 남고,
+ * 자리가 나면 같은 링크로 다시 열린다(quota-reopen).
+ */
+async function markClosedByCompletionTarget(row: { id: string; surveyId: string }): Promise<void> {
+  const marked = await db
+    .update(surveyResponses)
+    .set({ status: 'quotaful_out', lastActivityAt: new Date() })
+    .where(
+      and(
+        eq(surveyResponses.id, row.id),
+        eq(surveyResponses.surveyId, row.surveyId),
+        isNull(surveyResponses.deletedAt),
+        inArray(surveyResponses.status, [...openResponseStatusValues]),
+      ),
+    )
+    .returning({ id: surveyResponses.id });
+  if (marked.length > 0) {
+    logger.info(
+      { surveyId: row.surveyId, responseId: row.id },
+      '[completion-target] 응답 중 전체 완료 목표가 차서 쿼터마감으로 끝냈다',
+    );
+  }
 }
 
 /**

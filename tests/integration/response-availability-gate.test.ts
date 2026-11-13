@@ -276,10 +276,10 @@ describe('assertResponseCompletable — completeResponse 완료 게이트', () =
     countResultMock.mockResolvedValue([{ total: 2 }]);
     const { completeResponse } =
       await import('@/server/survey-response/services/response-completion');
-    // 차단은 던지지 않고 blocked 로 접어 돌려준다 — 던지면 운영에서 마스킹돼 500 이 되고
-    // 응답자가 사유를 모른 채 재시도만 반복한다(진입 경로와 같은 규약).
+    // 던지지 않고 쿼터마감 결과로 돌려준다 — 던지면 운영에서 마스킹돼 500 이 되고 응답자가 사유를
+    // 모른 채 재시도만 반복한다. 전체 완료 목표에 막힌 제출은 쿼터 셀 마감과 같은 결과다.
     await expect(completeResponse({ responseId: 'r1' })).resolves.toMatchObject({
-      kind: 'blocked',
+      kind: 'quota_closed',
     });
   });
 
@@ -309,17 +309,15 @@ describe('assertResponseCompletable — completeResponse 완료 게이트', () =
     countResultMock.mockResolvedValue([{ total: 2 }]);
     const { completeResponse } =
       await import('@/server/survey-response/services/response-completion');
-    // 종전에는 마감이 먼저 잘려 정원 검사에 도달하지 않았다. 차단은 그대로다.
-    // 응답자에게 나가는 사유는 모집 완료(quota_closed) — 전체 완료 목표 도달은 「링크 확인」
-    // 안내가 아니라 모집 완료 화면으로 보낸다(toGateBlockReason).
+    // 종전에는 마감이 먼저 잘려 정원 검사에 도달하지 않았다. 완료로 만들지 않는 것은 그대로이고,
+    // 결과는 쿼터마감이다 — 전체 완료 목표 도달은 「링크 확인」 안내가 아니라 쿼터 마감 화면으로 간다.
     await expect(completeResponse({ responseId: 'r1' })).resolves.toMatchObject({
-      kind: 'blocked',
-      reason: 'quota_closed',
+      kind: 'quota_closed',
     });
   });
 
   // ── 전체 완료 목표: 잠금 아래 재확인 (CONTEXT.md 「전체 완료 목표」) ──
-  it('목표 판정은 설문 잠금 아래에서 한다 — 찼으면 완료로 만들지 않고 모집 완료로 접는다', async () => {
+  it('목표 판정은 설문 잠금 아래에서 한다 — 찼으면 완료로 만들지 않고 쿼터마감으로 끝낸다', async () => {
     // 판정은 트랜잭션 한 곳이다(잠금 밖 사전 검사는 목표를 보지 않는다). 경합·목표 변경·답 저장은
     // completion-target.realdb.test.ts 가 실 Postgres 로 본다.
     countResultMock.mockResolvedValue([{ total: 2 }]);
@@ -327,8 +325,8 @@ describe('assertResponseCompletable — completeResponse 완료 게이트', () =
     const { completeResponse } =
       await import('@/server/survey-response/services/response-completion');
     await expect(completeResponse({ responseId: 'r1' })).resolves.toEqual({
-      kind: 'blocked',
-      reason: 'quota_closed',
+      kind: 'quota_closed',
+      closedMessage: null,
     });
     expect(txExecuteMock).toHaveBeenCalledTimes(1);
   });
@@ -1141,8 +1139,32 @@ describe('A-1 사전 박제 — 우선순위·부분집합·fail-open', () => {
         currentStepId: 'step1',
         clientSignals: VALID_SIGNALS,
       }),
-    ).toEqual({ kind: 'blocked', reason: 'quota_closed' });
+    ).toEqual({ kind: 'blocked', reason: 'quota_closed', closedMessage: null });
     expect(insertChain.values).not.toHaveBeenCalled();
+  });
+
+  it('신규 수용: 전체 완료 목표로 막힌 입장에 쿼터 화면의 마감 안내 문구를 싣는다', async () => {
+    // 쿼터 셀 마감의 입장 차단과 같은 문구 — 집행이 꺼져 있어도 적어 둔 문구는 쓴다.
+    surveyFindFirstMock.mockResolvedValue(
+      publishedSurvey({
+        maxResponses: 1,
+        quotaConfig: { enabled: false, dimensions: [], cells: [], closedMessage: '모집이 끝났습니다.' },
+      }),
+    );
+    countResultMock.mockResolvedValue([{ total: 1 }]);
+    responseFindFirstMock.mockResolvedValue(undefined);
+
+    const { createBlankResponse } =
+      await import('@/server/survey-response/services/response-entry');
+    expect(
+      await createBlankResponse({
+        surveyId: SURVEY_ID,
+        sessionId: 'a1-capacity-full-message',
+        versionId: null,
+        currentStepId: 'step1',
+        clientSignals: VALID_SIGNALS,
+      }),
+    ).toEqual({ kind: 'blocked', reason: 'quota_closed', closedMessage: '모집이 끝났습니다.' });
   });
 
   it('신규 수용: 전체 완료 목표에 자리가 남았으면 생성은 성공한다', async () => {

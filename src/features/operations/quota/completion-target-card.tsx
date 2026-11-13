@@ -87,8 +87,8 @@ export function CompletionTargetCard({ surveyId, initialTarget, completedCount }
           </h3>
           <p className="mt-0.5 text-xs text-slate-500">
             조건과 관계없이 설문 전체의 완료 응답이 이 수에 닿으면 응답을 닫습니다. 새 응답자는
-            들어오지 못하고, 응답 중이던 사람은 다음 페이지에서 모집 완료 안내를 봅니다. 저장하는
-            즉시 적용됩니다.
+            들어오지 못하고, 응답 중이던 사람은 쿼터마감으로 끝납니다(답변은 저장). 안내는 아래
+            마감 안내 문구를 씁니다. 저장하는 즉시 적용됩니다.
           </p>
           <p className="mt-2 text-xs text-slate-600 tabular-nums">
             현재 완료 {completedCount.toLocaleString()}건

@@ -27,10 +27,10 @@ interface UseResponseTelemetryArgs {
    */
   onPausedDetected?: ((pausedMessage: string | null) => void) | undefined;
   /**
-   * stepVisit 응답이 전체 완료 목표 도달(completion_target_reached)을 알렸을 때 호출 —
-   * 끝까지 채운 뒤 제출에서야 막히지 않게 모집 완료 화면으로 바꾼다(CONTEXT.md 「전체 완료 목표」).
+   * stepVisit 응답이 전체 완료 목표 도달(completion_target_reached)을 알렸을 때 호출 — 서버가 이
+   * 응답을 쿼터마감으로 끝냈다. 인자는 쿼터 화면의 마감 문구(없으면 null — 기본 문구).
    */
-  onCompletionTargetReached?: (() => void) | undefined;
+  onCompletionTargetReached?: ((closedMessage: string | null) => void) | undefined;
 }
 
 /**
@@ -89,7 +89,7 @@ export function useResponseTelemetry({
         if (res.denial === 'survey_paused') {
           onPausedDetectedRef.current?.(res.pausedMessage ?? null);
         } else if (res.denial === 'completion_target_reached') {
-          onCompletionTargetReachedRef.current?.();
+          onCompletionTargetReachedRef.current?.(res.closedMessage ?? null);
         }
       })
       .catch((err) => {

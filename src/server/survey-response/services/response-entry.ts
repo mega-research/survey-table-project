@@ -10,6 +10,7 @@ import { NewSurveyResponse, surveyResponses } from '@/db/schema';
 import { encryptAnswerForQuestion } from '@/lib/crypto/response-pii';
 import { parseBrowser, parsePlatform } from '@/lib/operations/parse-ua';
 import { normalizePassParamNames, pickEntryParams } from '@/lib/survey/end-redirect';
+import { loadQuotaPlan } from '@/server/read-models/quota-cell';
 import { isValidTestToken } from '@/server/read-models/survey-control';
 import type { PageVisit } from '@/shared/contracts/survey-response';
 import { InternalFailure } from '@/server/internal-failure';
@@ -34,6 +35,7 @@ import {
   countCompletedResponses,
   loadSurveyGateRow,
   loadValidatedVersionGateRow,
+  SurveyNotAcceptingResponsesError,
   toGateBlockedResult,
 } from './response-gate';
 import {
@@ -206,8 +208,17 @@ async function admitAndCreateResponse(
     return await admitAndCreateResponseInner(input, answer);
   } catch (err) {
     const blocked = toGateBlockedResult(err);
-    if (blocked) return blocked;
-    throw err;
+    if (!blocked) throw err;
+    // 전체 완료 목표로 막힌 입장 — 쿼터 셀 마감의 입장 차단과 같은 문구(쿼터 화면의 마감 안내 문구)를
+    // 싣는다. 응답 행을 만들지 않았으므로 기록은 없다(첫 답도 받지 않은 방문이다).
+    if (
+      err instanceof SurveyNotAcceptingResponsesError &&
+      err.reason === 'max_responses_reached'
+    ) {
+      const plan = await loadQuotaPlan(input.surveyId);
+      return { ...blocked, closedMessage: plan?.closedMessage ?? null };
+    }
+    return blocked;
   }
 }
 

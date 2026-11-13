@@ -4,12 +4,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { extractRawSql } from './_helpers/result-code-mock';
 
-const { selectLimitMock, setMock, whereMock, controlFlagsMock, completedCountMock } = vi.hoisted(() => ({
+const { selectLimitMock, setMock, whereMock, controlFlagsMock, completedCountMock, quotaPlanMock } = vi.hoisted(() => ({
   selectLimitMock: vi.fn(),
   setMock: vi.fn(),
   whereMock: vi.fn(),
   controlFlagsMock: vi.fn(),
   completedCountMock: vi.fn(),
+  quotaPlanMock: vi.fn(),
 }));
 
 vi.mock('@/db', () => {
@@ -23,6 +24,8 @@ vi.mock('@/db', () => {
     whereMock(arg);
     return chainable; // await 시 chainable 자신으로 resolve (no-op)
   });
+  // 전체 완료 목표의 쿼터마감 기록 — UPDATE … RETURNING
+  chainable['returning'] = vi.fn(async () => [{ id: 'r1' }]);
   const selectResult: Record<string, unknown> = {
     for: vi.fn(() => selectResult),
     limit: vi.fn(() => selectLimitMock()),
@@ -53,6 +56,11 @@ vi.mock('@/server/read-models/survey-control', () => ({
 }));
 
 // 전체 완료 목표의 완료 수 — 셈 자체는 response-gate 소관이라 여기서는 값만 갈아 끼운다.
+// 쿼터 화면의 마감 문구 — 전체 완료 목표로 끊긴 응답자에게 실어 보낸다.
+vi.mock('@/server/read-models/quota-cell', () => ({
+  loadQuotaPlan: (...a: unknown[]) => quotaPlanMock(...a),
+}));
+
 vi.mock('@/server/survey-response/services/response-gate', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/server/survey-response/services/response-gate')>()),
   countCompletedResponses: (...a: unknown[]) => completedCountMock(...a),
@@ -173,9 +181,11 @@ describe('recordStepVisit — missing row와 동일 step 구분', () => {
     const ROW = { id: 'r1', surveyId: 's1', isTest: false, contactTargetId: null };
     beforeEach(() => {
       completedCountMock.mockReset();
+      quotaPlanMock.mockReset();
+      quotaPlanMock.mockResolvedValue(null);
     });
 
-    it('목표가 찼으면 completion_target_reached 를 알리되 기록은 그대로 남긴다', async () => {
+    it('목표가 찼으면 이 응답을 쿼터마감으로 끝내고 completion_target_reached 를 알린다', async () => {
       // 1) 트랜잭션의 응답 행 2) 면제 표식 조회(표식 없음)
       selectLimitMock.mockResolvedValueOnce([ROW]).mockResolvedValueOnce([{ metadata: {} }]);
       controlFlagsMock.mockResolvedValue({ isPaused: false, pausedMessage: null, maxResponses: 3 });
@@ -184,9 +194,27 @@ describe('recordStepVisit — missing row와 동일 step 구분', () => {
 
       await expect(
         recordStepVisit({ responseId: 'r1', nextStepId: 'group:next' }),
-      ).resolves.toEqual({ denial: 'completion_target_reached', pausedMessage: null });
-      expect(setMock).toHaveBeenCalled();
+      ).resolves.toEqual({
+        denial: 'completion_target_reached',
+        pausedMessage: null,
+        closedMessage: null,
+      });
       expect(completedCountMock).toHaveBeenCalledWith('s1');
+      // 페이지 방문 기록 다음에 쿼터마감 기록이 나간다 — 쿼터 셀 마감과 같은 상태값.
+      const sets = setMock.mock.calls.map((call) => call[0] as Record<string, unknown>);
+      expect(sets.at(-1)).toMatchObject({ status: 'quotaful_out' });
+    });
+
+    it('쿼터 화면에 적어 둔 진행 중 마감 문구를 실어 보낸다 — 비면 마감 문구', async () => {
+      selectLimitMock.mockResolvedValueOnce([ROW]).mockResolvedValueOnce([{ metadata: {} }]);
+      controlFlagsMock.mockResolvedValue({ isPaused: false, pausedMessage: null, maxResponses: 3 });
+      completedCountMock.mockResolvedValue(3);
+      quotaPlanMock.mockResolvedValue({ closedMessage: '모집이 끝났습니다.', midSurveyClosedMessage: '' });
+      const { recordStepVisit } = await import('@/server/survey-response/services/lifecycle');
+
+      await expect(
+        recordStepVisit({ responseId: 'r1', nextStepId: 'group:next' }),
+      ).resolves.toMatchObject({ closedMessage: '모집이 끝났습니다.' });
     });
 
     it('자리가 남았으면 알리지 않고, 면제 표식도 읽지 않는다', async () => {
@@ -199,6 +227,9 @@ describe('recordStepVisit — missing row와 동일 step 구분', () => {
         recordStepVisit({ responseId: 'r1', nextStepId: 'group:next' }),
       ).resolves.toEqual({ denial: null, pausedMessage: null });
       expect(selectLimitMock).toHaveBeenCalledTimes(1);
+      // 자리가 남았으면 상태를 건드리지 않는다.
+      const sets = setMock.mock.calls.map((call) => call[0] as Record<string, unknown>);
+      expect(sets.some((set) => set['status'] === 'quotaful_out')).toBe(false);
     });
 
     it('목표가 없는 설문은 완료 수를 세지 않는다', async () => {

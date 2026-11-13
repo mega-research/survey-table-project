@@ -1099,12 +1099,13 @@ function SurveyResponseFlowActive({
         prev.kind === 'blocked' ? prev : { kind: 'blocked', reason: 'survey_paused' },
       );
     },
-    onCompletionTargetReached: () => {
-      // 전체 완료 목표가 응답 도중 찼다 — 입장 뒤에 끊긴 응답자라 사과 톤 기본 문구로 모집 완료
-      // 화면을 띄운다(쿼터 진행 중 마감과 같은 화면). 이미 다른 사유로 차단됐다면 그 사유를 유지한다.
-      // 문구는 비어 있을 때만 채운다 — 쿼터 마감이 먼저 띄운 운영자 문구를 덮지 않는다.
+    onCompletionTargetReached: (closedMessage) => {
+      // 전체 완료 목표가 응답 도중 찼다 — 서버가 이 응답을 쿼터마감으로 끝냈다. 입장 뒤에 끊긴
+      // 응답자라 진행 중 마감 문구(서버가 폴백 적용, 없으면 사과 톤 기본 문구)로 쿼터 마감 화면을
+      // 띄운다. 이미 다른 사유로 차단됐다면 그 사유를 유지한다.
+      // 문구는 비어 있을 때만 채운다 — 쿼터 마감이 먼저 띄운 문구를 덮지 않는다.
       setQuotaClosedMessage(
-        (prev) => prev ?? midSurveyClosedBody(null, systemLocaleRef.current),
+        (prev) => prev ?? midSurveyClosedBody(closedMessage, systemLocaleRef.current),
       );
       setDuplicateStatus((prev) =>
         prev.kind === 'blocked' ? prev : { kind: 'blocked', reason: 'quota_closed' },

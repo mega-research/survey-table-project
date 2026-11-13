@@ -133,9 +133,9 @@ const CHECKS_FOR = {
    * (completeResponse 와 같은 결정). 첫 진입 게이트는 newResponse 소관이고, 종결 상태
    * 판정은 호출자 resumeOrCreateResponse 의 인라인 concludedStatuses 가 진다 —
    * 통합은 후속 티켓(A-3).
-   * 정원 미검사도 같은 이유 — 답 저장·재진입을 막지 않고 완료 시점에 판정한다. 다만 목표가 찬
-   * 사실은 페이지 이동 때 알린다(recordStepVisit 의 completion_target_reached) — 끝까지 채운
-   * 뒤에야 막히는 것보다 낫고, 응답은 열린 채 남아 목표를 올리면 그대로 이어 간다.
+   * 정원 미검사도 같은 이유 — 이 판정(답 저장·재진입)은 정원을 보지 않는다. 정원이 찬 응답은
+   * 페이지 이동 기록(recordStepVisit)이 쿼터마감으로 끝내고 알린다 — 끝까지 채운 뒤에야 막히는
+   * 것보다 낫고, 목표를 올리면 쿼터마감 다시 열기로 같은 링크에서 이어 간다.
    */
   ongoingResponse: ['survey_paused'],
   /**
