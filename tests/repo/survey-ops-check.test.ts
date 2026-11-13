@@ -287,6 +287,111 @@ describe('조건·수식이 가리키는 곳', () => {
   });
 });
 
+describe('리뷰에서 나온 자리 (2026-11-13 Codex)', () => {
+  it('꺼 둔 조건(enabled: false)은 평가되지 않는다 — 옛 참조가 남아 있어도 오류가 아니다', () => {
+    const off = (group: Loose): Loose => ({
+      ...group,
+      conditions: (group['conditions'] as Loose[]).map((c) => ({ ...c, enabled: false })),
+    });
+    const table = numberTable('c1', 2, {
+      displayCondition: off(when('gone', ['1'])),
+      tableColumns: [
+        col(1, { tag: 'c1' }),
+        col(2, { tag: 'c1', displayCondition: off(when('a2', ['없는 값'])) }),
+      ],
+      sumConstraints: [
+        { id: 'sc1', target: 1, cellIds: ['c1-i1'], operator: 'gte', aggregate: 'count', whenQuestion: off(when('gone', ['1'])) },
+      ],
+    });
+    expect(codes(check([a2(), table]).findings, 'error')).toEqual([]);
+  });
+
+  it('칸 열림 조건은 같은 문항의 칸만 읽는다 — 다른 문항의 칸을 가리키면 오류다', () => {
+    const other = numberTable('f1', 1);
+    const gated = numberTable('f2', 2, {
+      tableRowsData: [
+        row(1, [
+          text('f2-t1', '전체'),
+          numberInput('f2-i1', {
+            required: true,
+            enabledWhen: { kind: 'filled', controllerCellId: 'f1-i1' },
+          }),
+        ]),
+      ],
+    });
+    expect(codes(check([other, gated]).findings, 'error')).toEqual(['gate-ref:F2']);
+  });
+
+  it('그룹 없는 복수 선택 보기 표의 응답값 0 도 오류다 — 단일 선택 보기 표는 괜찮다', () => {
+    const embedded = (id: string, type: string, order: number) =>
+      question({
+        id,
+        type,
+        order,
+        options: [],
+        tableColumns: [col(1, { tag: id }), col(2, { tag: id })],
+        tableRowsData: [0, 1].map((n) =>
+          row(n + 1, [
+            text(`${id}-t${n}`, `보기 ${n}`),
+            { id: `${id}-c${n}`, type: 'choice_opt', content: '', choiceLabel: `보기 ${n}`, spssNumericCode: n },
+          ]),
+        ),
+      });
+    const found = check([embedded('b2', 'checkbox', 1), embedded('c2', 'radio', 2)]).findings;
+    expect(codes(found, 'error').filter((c) => c.startsWith('multi-zero'))).toEqual(['multi-zero:B2']);
+  });
+
+  it('수식 조건이 보는 칸이 그 문항에 없거나 뒤 문항이면 오류다 — 명단 값만 쓰는 식은 통과', () => {
+    const expr = (left: Loose): Loose => ({
+      logicType: 'AND',
+      conditions: [
+        {
+          id: 'cond-expr',
+          enabled: true,
+          conditionType: 'expression',
+          sourceQuestionId: '',
+          expressionConfig: {
+            clauses: [
+              {
+                kind: 'group',
+                group: {
+                  clauses: [
+                    {
+                      kind: 'comparison',
+                      comparison: {
+                        left: { kind: 'binop', op: '+', left, right: { kind: 'literal', value: 0 } },
+                        op: '>',
+                        right: { kind: 'literal', value: 0 },
+                      },
+                    },
+                  ],
+                  joinOps: [],
+                },
+              },
+            ],
+            joinOps: [],
+          },
+        },
+      ],
+    });
+    const follow = (left: Loose, order = 2) =>
+      question({
+        id: 'c2',
+        type: 'radio',
+        order,
+        options: [opt(1, '예'), opt(2, '아니오')],
+        displayCondition: expr(left),
+      });
+    const errorsOf = (qs: RawQuestion[]) => codes(check(qs).findings, 'error');
+
+    expect(errorsOf([numberTable('c1', 1), follow({ kind: 'cell', questionId: 'c1', cellId: 'c1-i1' })])).toEqual([]);
+    expect(errorsOf([numberTable('c1', 1), follow({ kind: 'attr', attrsKey: '종사자수' })])).toEqual([]);
+    expect(errorsOf([numberTable('c1', 1), follow({ kind: 'cell', questionId: 'c1', cellId: '지운 칸' })])).toEqual(['cond-ref:C2']);
+    expect(errorsOf([numberTable('c1', 3), follow({ kind: 'cell', questionId: 'c1', cellId: 'c1-i1' })])).toEqual(['cond-ref:C2']);
+    expect(errorsOf([numberTable('c1', 3), follow({ kind: 'question', questionId: 'c1' })])).toEqual(['cond-ref:C2']);
+  });
+});
+
 describe('변수가 사라지는 구조', () => {
   it('보기 칸이 하나도 없는 보기 그룹 정의가 남으면 오류 — 내장 표를 끈 뒤 그 문항 변수가 내보내기에서 빠졌다', () => {
     const stale = a2({

@@ -16,7 +16,9 @@ import { normalizeQuestions, QuestionVariantSchema, type QuestionVariant } from 
 import { hydrateQuestionsForSpss } from '@/lib/spss/hydrate-questions';
 import { assertValidSpssVarNames, isSpssVarNameError } from '@/lib/spss/variable-name-guard';
 import { supportsChangeConfirmation } from '@/lib/survey/change-confirmation';
-import type { QuestionGroup } from '@/types/survey';
+import type { CellEnableCondition, ChoiceGroup, QuestionGroup } from '@/types/survey';
+import { collectGateControllerIds } from '@/utils/cell-gate-tree';
+import { resolveChoiceCellGroup } from '@/utils/choice-group-helpers';
 import { resolveLanguageSetLocales } from '@/utils/survey-language';
 
 import { parseOpsFlags, type OpsEnv } from './env';
@@ -59,9 +61,26 @@ interface RawCell {
 }
 
 interface RawCondition {
+  enabled?: boolean;
   sourceQuestionId?: string;
   conditionType?: string;
   requiredValues?: string[];
+  expressionConfig?: RawExpressionConfig;
+}
+/** `ExpressionConditionConfig`(types/survey) 의 느슨한 모양 — 저장본을 그대로 걷는다 */
+interface RawExpressionConfig {
+  clauses?: Array<{
+    kind?: string;
+    comparison?: { left?: RawOperand; right?: RawOperand };
+    group?: RawExpressionConfig;
+  }>;
+}
+interface RawOperand {
+  kind?: string;
+  questionId?: string;
+  cellId?: string;
+  left?: RawOperand;
+  right?: RawOperand;
 }
 interface RawConditionGroup {
   conditions?: RawCondition[];
@@ -187,10 +206,10 @@ function questionLabel(q: RawQuestion): string {
   return title ? clip(title, 20) : q.id;
 }
 
-/** 조건식 어디에 있든 `controllerCellId` 를 전부 모은다 — 중첩 그룹(op·terms)을 따로 풀지 않는다. */
+/** 열림 조건이 보는 칸 — 묶음(중첩)까지 푸는 것은 앱의 순회 모듈(`utils/cell-gate-tree`)에 맡긴다. */
 function controllerCellIds(gate: unknown): string[] {
-  if (gate == null) return [];
-  return [...JSON.stringify(gate).matchAll(/"controllerCellId":"([^"]+)"/g)].map((m) => m[1]!);
+  if (gate == null || typeof gate !== 'object') return [];
+  return collectGateControllerIds(gate as CellEnableCondition);
 }
 
 const ANSWER_CELL_TYPES = new Set([...INTERACTIVE_CELL_TYPES, 'choice_opt', 'ranking_opt', 'calc']);
@@ -337,13 +356,24 @@ export function checkSurveyStructure(input: CheckInput): CheckReport {
     ).length;
     if (orphanChoice > 0) add('error', 'group-orphan-cell', q, `보기 칸 ${orphanChoice}개`);
 
-    // 열림 조건이 가리키는 칸 — 같은 표가 보통이지만 설문 어디에든 있으면 통과
+    // 열림 조건이 가리키는 칸 — 평가기(`lib/survey/cell-gating`)는 그 문항의 칸 값만 읽는다.
+    // 다른 문항의 칸을 가리키면 조건이 영영 충족되지 않아 칸이 닫힌 채 남는다.
     const gateRefs = cells.flatMap((c) => [
       ...controllerCellIds(c.enabledWhen),
       ...cellOptionLists(c).flatMap((l) => l.options.flatMap((o) => controllerCellIds(o.enabledWhen))),
     ]);
-    const missingGate = new Set(gateRefs.filter((id) => !allCellIds.has(id)));
-    if (missingGate.size > 0) add('error', 'gate-ref', q, `없는 칸 ${missingGate.size}개`);
+    const missingGate = new Set(gateRefs.filter((id) => !ownCellIds.has(id)));
+    if (missingGate.size > 0) {
+      const elsewhere = [...missingGate].filter((id) => allCellIds.has(id)).length;
+      add(
+        'error',
+        'gate-ref',
+        q,
+        elsewhere > 0
+          ? `이 문항에 없는 칸 ${missingGate.size}개 (그중 ${elsewhere}개는 다른 문항의 칸 — 열림 조건은 같은 문항만 읽는다)`
+          : `이 문항에 없는 칸 ${missingGate.size}개`,
+      );
+    }
 
     // 수식·검증의 칸 참조 — 같은 문항이면 이 표의 칸, questionId 가 있으면 앞 문항의 칸
     const checkExpr = (expr: unknown, where: string) => {
@@ -380,15 +410,41 @@ export function checkSurveyStructure(input: CheckInput): CheckReport {
     // 표시 조건 — 문항·열·행·검증 적용 조건
     const checkCond = (group: RawConditionGroup | null | undefined, where: string) => {
       for (const cond of group?.conditions ?? []) {
+        // 꺼 둔 조건은 평가기(`utils/branch-logic`)가 건너뛴다 — 옛 참조가 남아 있어도 응답에 영향이 없다
+        if (cond.enabled === false) continue;
         const conditionType = cond.conditionType ?? 'value-match';
-        if (conditionType === 'expression' || conditionType === 'custom') {
-          // 원천 문항 칸을 비워 두고 식 안에서 문항을 가리킨다
-          const refs = [...JSON.stringify(cond).matchAll(/"questionId":"([^"]+)"/g)].map((m) => m[1]!);
-          const missingRefs = new Set(refs.filter((id) => !byId.has(id)));
-          if (missingRefs.size > 0)
-            add('error', 'cond-ref', q, `${where}: 식이 없는 문항 ${missingRefs.size}개를 본다`);
+        if (conditionType === 'expression') {
+          // 원천 문항 칸을 비워 두고 식의 피연산자가 문항·칸을 가리킨다. 못 푸는 참조는 평가기가 거짓으로 본다.
+          const problems = new Set<string>();
+          const operand = (o: RawOperand | undefined) => {
+            if (!o) return;
+            if (o.kind === 'binop') {
+              operand(o.left);
+              operand(o.right);
+            } else if (o.kind === 'cell' || o.kind === 'question') {
+              const src = o.questionId ? byId.get(o.questionId) : undefined;
+              if (!src) problems.add('식이 없는 문항을 본다');
+              else if (src.order > q.order) problems.add(`식이 뒤 문항 ${questionLabel(src)} 를 본다`);
+              else if (
+                o.kind === 'cell' &&
+                !(src.tableRowsData ?? []).some((r) => r.cells.some((c) => c.id === o.cellId))
+              )
+                problems.add(`식이 ${questionLabel(src)} 에 없는 칸을 본다`);
+            }
+          };
+          const walkConfig = (config: RawExpressionConfig | undefined) => {
+            for (const clause of config?.clauses ?? []) {
+              operand(clause.comparison?.left);
+              operand(clause.comparison?.right);
+              walkConfig(clause.group);
+            }
+          };
+          walkConfig(cond.expressionConfig);
+          for (const problem of problems) add('error', 'cond-ref', q, `${where}: ${problem}`);
           continue;
         }
+        // custom 은 뜻을 모른다 — 건드리지 않는다
+        if (conditionType === 'custom') continue;
         const src = cond.sourceQuestionId ? byId.get(cond.sourceQuestionId) : undefined;
         if (!src) {
           add('error', 'cond-ref', q, `${where}: 원천 문항이 없다`);
@@ -597,13 +653,14 @@ export function checkSurveyStructure(input: CheckInput): CheckReport {
         if (bytes > VALUE_LABEL_BYTE_LIMIT) longLabels.push(`「${clip(label, 14)}」 ${bytes}바이트`);
       }
     }
-    const checkboxGroupIds = new Set(
-      (h.choiceGroups ?? []).filter((g) => g.type === 'checkbox').map((g) => g.id),
-    );
+    // 보기 칸의 선택 방식은 앱의 판정 한 곳에 묻는다 — 그룹에 속하면 그 종류, 그룹 없는 보기 소스 표는
+    // 문항 유형을 따른다(테이블 유형의 그룹 없는 보기 칸은 답할 수 없는 칸이라 null).
+    const defaultChoiceType = h.type === 'table' ? null : h.type === 'checkbox' ? 'checkbox' : 'radio';
+    const choiceGroups = (h.choiceGroups ?? []) as unknown as ChoiceGroup[];
     for (const c of cells) {
       if (c.type !== 'choice_opt') continue;
-      if (c.choiceGroupId && checkboxGroupIds.has(c.choiceGroupId) && c.spssNumericCode === 0)
-        flags.add('multi-zero');
+      const { type: choiceType } = resolveChoiceCellGroup(c, choiceGroups, defaultChoiceType);
+      if (choiceType === 'checkbox' && c.spssNumericCode === 0) flags.add('multi-zero');
       const label = stripHtml(c.choiceLabel ?? '');
       const bytes = Buffer.byteLength(label);
       if (bytes > VALUE_LABEL_BYTE_LIMIT) longLabels.push(`「${clip(label, 14)}」 ${bytes}바이트`);
