@@ -135,6 +135,98 @@ describe('summarizeStructure — 문항당 한 줄', () => {
   });
 });
 
+describe('리뷰에서 나온 자리 (2026-11-13 Codex)', () => {
+  const yesNo = (id: string, order: number, extra: Loose = {}) =>
+    question({ id, type: 'radio', order, options: [opt(1, '예'), opt(2, '아니오')], ...extra });
+
+  it('NOT 묶음은 NOT(…) 으로 적는다 — 평가기는 「하나도 참이 아닐 때」 보인다', () => {
+    const not = (values: string[][]): Loose => ({
+      logicType: 'NOT',
+      conditions: values.map((v) => (when('a2', v)['conditions'] as Loose[])[0]),
+    });
+    const lines = summarizeStructure(
+      {
+        questions: [
+          a2(),
+          yesNo('b1', 2, { displayCondition: not([['1']]) }),
+          yesNo('b2', 3, { displayCondition: not([['1'], ['2']]) }),
+        ],
+      },
+      '시험',
+    );
+    expect(lines.find((l) => l.includes(' B1 '))).toContain('조건 NOT(A2=1)');
+    expect(lines.find((l) => l.includes(' B2 '))).toContain('조건 NOT(A2=1 OR A2=2)');
+  });
+
+  it('문항 순서와 쪽은 응답 화면과 같은 순서로 센다 — 그룹 순서가 문항 order 와 달라도', () => {
+    const lines = summarizeStructure(
+      {
+        questions: [
+          yesNo('q1', 1, { groupId: 'late' }),
+          yesNo('q2', 2, { groupId: 'early', pageBreakBefore: true }),
+          yesNo('q3', 3, { groupId: 'early-sub' }),
+        ],
+        groups: [
+          { id: 'late', name: '뒤 그룹', order: 2 },
+          { id: 'early', name: '앞 그룹', order: 1 },
+          { id: 'early-sub', name: '하위', order: 1, parentGroupId: 'early' },
+        ],
+      },
+      '시험',
+    );
+    // 화면 순서: 앞 그룹(q2, 하위 q3) → 뒤 그룹(q1). q2 가 전체 첫 문항이라 쪽 나눔 표시는 무시된다.
+    expect(lines[0]).toContain('쪽 1');
+    expect(lines.slice(1)).toEqual([
+      '# 앞 그룹',
+      expect.stringMatching(/^p1 Q2 /),
+      '# 앞 그룹 › 하위',
+      expect.stringMatching(/^p1 Q3 /),
+      '# 뒤 그룹',
+      expect.stringMatching(/^p1 Q1 /),
+    ]);
+  });
+
+  it('빈 설문도 머리 줄은 낸다', () => {
+    expect(summarizeStructure({ questions: [] }, '빈 설문')).toEqual([
+      '빈 설문 — 문항 0 · 그룹 0 · 쪽 0 · 변수 0',
+    ]);
+  });
+
+  it('열림 조건의 기대값이 다른 줄은 접지 않고, 같은 줄 안의 칸을 보는 같은 조건은 접는다', () => {
+    const gatedRow = (n: number, gate: (controllerId: string) => Loose) =>
+      row(n, [
+        {
+          id: `t-s${n}`,
+          type: 'select',
+          content: '',
+          selectOptions: [
+            { id: `t-s${n}-o1`, label: '가', value: '1', spssNumericCode: 1 },
+            { id: `t-s${n}-o2`, label: '나', value: '2', spssNumericCode: 2 },
+          ],
+        },
+        numberInput(`t-i${n}`, { enabledWhen: gate(`t-s${n}`) }),
+      ]);
+    const tableWith = (gates: Array<(id: string) => Loose>) =>
+      question({
+        id: 't1',
+        type: 'table',
+        order: 1,
+        tableColumns: [col(1, { tag: 't1' }), col(2, { tag: 't1' })],
+        tableRowsData: gates.map((g, i) => gatedRow(i + 1, g)),
+      });
+    const pick = (value: string) => (controllerCellId: string) => ({
+      kind: 'option',
+      controllerCellId,
+      values: [value],
+    });
+    const rowLines = (q: ReturnType<typeof tableWith>) =>
+      describeQuestion({ questions: [q] }, 'T1').filter((l) => /^r\d/.test(l));
+
+    expect(rowLines(tableWith([pick('1'), pick('1')]))).toHaveLength(1);
+    expect(rowLines(tableWith([pick('1'), pick('2')]))).toHaveLength(2);
+  });
+});
+
 describe('describeQuestion — 문항 하나를 편다', () => {
   const questions = () => [
     a2(),

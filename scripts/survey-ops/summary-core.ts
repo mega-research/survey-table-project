@@ -8,8 +8,9 @@
  * 줄 모양이 곧 계약이다(`tests/repo/survey-ops-summary.test.ts`). 모바일 표시 방식은 한글 이름이 아니라
  * 패치가 쓰는 코드값을 찍는다. 꺼 둔 조건은 평가기처럼 건너뛴다.
  */
-import type { CellEnableCondition } from '@/types/survey';
+import type { CellEnableCondition, Question, QuestionGroup } from '@/types/survey';
 import { collectGateControllerIds } from '@/utils/cell-gate-tree';
+import { buildRenderSteps } from '@/utils/group-ordering';
 
 import {
   buildStructureColumns,
@@ -79,7 +80,9 @@ function describeConditions(
   group: RawConditionGroup | null | undefined,
   byId: Map<string, SummaryQuestion>,
 ): string {
-  const logic = (group as { logicType?: string } | null | undefined)?.logicType === 'OR' ? 'OR' : 'AND';
+  // 묶음 결합은 평가기(`utils/branch-logic` evaluateQuestionConditionGroup)와 같다 —
+  // AND 전부 참 · OR 하나라도 참 · NOT 하나도 참이 아님.
+  const logicType = (group as { logicType?: string } | null | undefined)?.logicType;
   const parts: string[] = [];
   for (const cond of group?.conditions ?? []) {
     if (cond.enabled === false) continue;
@@ -106,7 +109,9 @@ function describeConditions(
     );
     parts.push(`${name}=${values.join('|')}`);
   }
-  return parts.join(` ${logic} `);
+  if (parts.length === 0) return '';
+  if (logicType === 'NOT') return `NOT(${parts.join(' OR ')})`;
+  return parts.join(logicType === 'OR' ? ' OR ' : ' AND ');
 }
 
 function typeAndShape(q: SummaryQuestion): string {
@@ -221,37 +226,47 @@ export function summarizeStructure(
 ): string[] {
   const questions = sorted(input);
   const byId = new Map(questions.map((q) => [q.id, q]));
-  const groupNames = new Map(
-    (input.groups ?? []).map((g) => {
-      const group = g as { id: string; name?: string };
-      return [group.id, group.name ?? group.id];
-    }),
-  );
+  const groups = (input.groups ?? []).map((g) =>
+    Object.fromEntries(Object.entries(g as object).filter(([, v]) => v !== null)),
+  ) as unknown as QuestionGroup[];
   const { columns, countByQuestion } = buildStructureColumns(questions, input.groups ?? []);
 
-  let page = 1;
-  const pages = new Map<string, number>();
-  questions.forEach((q, i) => {
-    if (i > 0 && q.pageBreakBefore) page += 1;
-    pages.set(q.id, page);
+  // 문항 순서·쪽·그룹 이름은 응답 화면과 같은 함수로 낸다 — 그룹 순서가 문항 order 와 다를 수 있다
+  const steps = buildRenderSteps(questions as unknown as Question[], groups);
+  const placed: Array<{ q: SummaryQuestion; page: string; group: string | null }> = [];
+  steps.forEach((step, pageIndex) => {
+    for (const item of step.items) {
+      const q = byId.get(item.question.id);
+      if (!q) continue;
+      // 이름을 숨긴 그룹(안내·동의)도 요약에는 이름을 적는다 — 화면에 안 보일 뿐 구조에는 있다
+      const rootName = item.rootGroupId
+        ? (groups.find((g) => g.id === item.rootGroupId)?.name ?? item.rootGroupName)
+        : null;
+      const group = rootName
+        ? `${rootName}${item.subgroupName ? ` › ${item.subgroupName}` : ''}`
+        : null;
+      placed.push({ q, page: `p${pageIndex + 1}`, group });
+    }
   });
+  // 없는 그룹을 가리켜 화면에 놓이지 않는 문항 — 빠뜨리지 않고 끝에 적는다
+  const placedIds = new Set(placed.map((p) => p.q.id));
+  for (const q of questions)
+    if (!placedIds.has(q.id)) placed.push({ q, page: 'p?', group: '(화면에 놓이지 않는 문항)' });
 
   const lines = [
-    `${title} — 문항 ${questions.length} · 그룹 ${groupNames.size} · 쪽 ${page} · 변수 ${columns.length}`,
+    `${title} — 문항 ${questions.length} · 그룹 ${groups.length} · 쪽 ${steps.length} · 변수 ${columns.length}`,
   ];
-  let currentGroup: string | null | undefined;
-  for (const q of questions) {
+  let currentGroup: string | null = null;
+  for (const { q, page, group } of placed) {
     if (options.grep && !options.grep.test(q.questionCode ?? '')) continue;
-    if (q.groupId !== currentGroup) {
-      currentGroup = q.groupId;
-      if (q.groupId && groupNames.has(q.groupId)) lines.push(`# ${groupNames.get(q.groupId)}`);
+    if (group !== currentGroup) {
+      currentGroup = group;
+      if (group) lines.push(`# ${group}`);
     }
     const parts = summaryParts(q, byId);
     const variables = countByQuestion.get(q.id) ?? 0;
     if (variables > 0) parts.push(`변수 ${variables}`);
-    lines.push(
-      `p${pages.get(q.id)} ${codeOf(q).padEnd(6)} ${parts.join(' · ')} — ${clip(oneLine(q.title), 40)}`,
-    );
+    lines.push(`${page} ${codeOf(q).padEnd(6)} ${parts.join(' · ')} — ${clip(oneLine(q.title), 40)}`);
   }
   return lines;
 }
@@ -266,11 +281,55 @@ function spanSuffix(c: RawCell): string {
   return spans ? ` ${spans}` : '';
 }
 
-/** 줄을 접을 때의 모양 비교용 — 칸 이름(모바일 라벨)만 다른 줄은 같은 모양으로 본다 */
-function withoutMobileLabel(c: SummaryCell): SummaryCell {
-  const { mobileLabel: _dropped, ...rest } = c;
-  void _dropped;
-  return rest;
+/**
+ * 줄을 접을 때의 모양 비교 — 표시 글자가 아니라 **칸 설정 전체**를 본다. 표시가 생략하는 것(열림 조건의
+ * 기대값·결합, 수식, 보기 목록)이 다른 줄을 같은 모양으로 접으면 그 차이를 볼 길이 없다.
+ *
+ * 줄마다 달라지는 것이 당연한 것만 뺀다: id, 글자(content·라벨·셀코드), 보기 칸의 번호. 같은 표의 칸을
+ * 가리키는 참조(열림 조건의 컨트롤러, 수식의 칸)는 「몇 줄 위/아래의 몇째 열」로 바꿔 견준다 — 줄마다
+ * 제 줄의 체크 칸을 보는 조건은 같은 모양이다.
+ */
+const PER_ROW_FIELDS = new Set([
+  'id',
+  'content',
+  'contentHtml',
+  'mobileLabel',
+  'exportLabel',
+  'isCustomExportLabel',
+  'cellCode',
+  'isCustomCellCode',
+  'choiceLabel',
+  'requiredMessage',
+  'placeholder',
+]);
+function cellSignature(q: SummaryQuestion, rowIndex: number, c: SummaryCell): string {
+  const rows = q.tableRowsData ?? [];
+  const relative = (cellId: unknown): unknown => {
+    if (typeof cellId !== 'string') return cellId;
+    for (const [ri, r] of rows.entries()) {
+      const ci = r.cells.findIndex((x) => x.id === cellId);
+      if (ci >= 0) return `@${ri - rowIndex}:${ci}`;
+    }
+    return cellId;
+  };
+  const normalize = (value: unknown, key?: string): unknown => {
+    if (key === 'controllerCellId' || key === 'cellId') return relative(value);
+    if (Array.isArray(value)) return value.map((v) => normalize(v));
+    if (value && typeof value === 'object')
+      return Object.fromEntries(
+        Object.entries(value)
+          .filter(([k]) => !PER_ROW_FIELDS.has(k))
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([k, v]) => [k, normalize(v, k)]),
+      );
+    return value;
+  };
+  const { spssNumericCode: _code, optionCode: _number, ...rest } = c as SummaryCell & {
+    optionCode?: unknown;
+  };
+  void _number;
+  // 보기 칸의 번호는 줄마다 다른 것이 당연하다(범위로 적는다). 다른 칸의 응답값 설정은 비교한다.
+  return JSON.stringify(normalize(c.type === 'choice_opt' ? rest : { ...rest, spssNumericCode: _code }));
 }
 
 /** 칸 하나의 글자 — `choiceCode` 는 줄을 접을 때 범위(1…3)로 바꿔 끼운다 */
@@ -401,7 +460,7 @@ export function describeQuestion(input: SummaryInput, questionCode: string): str
       code: r.rowCode ?? `r${ri + 1}`,
       title: clip(leading || rowLabel || oneLine(anyText?.content), 16),
       condition,
-      signature: [condition, ...cells.map((c) => describeCell(q, withoutMobileLabel(c), 'N'))].join('|'),
+      signature: [condition, ...cells.map((c) => cellSignature(q, ri, c))].join('|'),
       cells,
     };
   });
