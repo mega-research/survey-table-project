@@ -10,7 +10,10 @@ import {
   buildColumnAxisCards,
   withRowTitleAsCheckLabel,
 } from '@/features/question-renderer/utils/column-axis-cards';
-import { overrideCellOptionsColumnsForCard } from '@/features/question-renderer/utils/mobile-card-options';
+import {
+  explicitMobileOptionsClass,
+  overrideCellOptionsColumnsForCard,
+} from '@/features/question-renderer/utils/mobile-card-options';
 import {
   buildRadioGroupBuckets,
   resolveRadioGroupProps,
@@ -179,7 +182,12 @@ export const MobileColumnAxisCards = React.memo(function MobileColumnAxisCards({
                         />
                       </p>
                     )}
-                    <div className={cn(invalid && 'rounded-lg ring-2 ring-red-300')}>
+                    <div
+                      className={cn(
+                        invalid && 'rounded-lg ring-2 ring-red-300',
+                        explicitMobileOptionsClass(sourceCell),
+                      )}
+                    >
                       <InteractiveCell
                         cell={cell}
                         questionId={questionId}
