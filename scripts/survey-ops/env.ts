@@ -36,7 +36,7 @@ export interface OpsArgs {
   flags: Map<string, string | true>;
 }
 
-const VALUE_FLAGS = new Set(['env', 'resid', 'next', 'grep', 'out', 'limit', 'file', 'tsv']);
+const VALUE_FLAGS = new Set(['env', 'resid', 'next', 'grep', 'out', 'limit', 'file', 'tsv', 'detail']);
 
 /** 인자를 플래그와 나머지로만 가른다 — `--env` 를 요구하지 않는다(DB 에 붙지 않는 명령용). */
 export function parseOpsFlags(argv: readonly string[]): Pick<OpsArgs, 'flags' | 'positionals'> {

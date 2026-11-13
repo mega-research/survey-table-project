@@ -104,6 +104,22 @@ export function formatVariableDiff(diff: VariableDiff, limit = 40): string {
   return lines.length > 0 ? lines.join('\n') : '변수명 변화 없음';
 }
 
+/**
+ * `survey:vars --names` — 문항별 한 줄에 변수 이름만. 줄마다 문항 제목을 되풀이하지 않는다.
+ * 문항코드가 없는 문항은 문항 id 앞머리로 묶는다.
+ */
+export function formatVariableNames(
+  vars: readonly StructureVariable[],
+  codeByQuestionId: ReadonlyMap<string, string>,
+): string[] {
+  const byQuestion = new Map<string, string[]>();
+  for (const v of vars) byQuestion.set(v.questionId, [...(byQuestion.get(v.questionId) ?? []), v.name]);
+  return [...byQuestion].map(
+    ([questionId, names]) =>
+      `${codeByQuestionId.get(questionId) ?? `(${questionId.slice(0, 8)})`}: ${names.join(' ')}`,
+  );
+}
+
 function stripHtml(s: string): string {
   return s
     .replace(/<[^>]+>/g, ' ')

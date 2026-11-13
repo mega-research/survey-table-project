@@ -5,7 +5,7 @@ description: 운영 설문 작업 도구. 한글 조사표에서 설문을 새�
 
 # 운영 설문 작업 도구
 
-`scripts/survey-ops/` 의 명령 다섯과 패치 도우미. 모두 `--env prod` 또는 `--env local` 을 꼭 적는다(기본값 없음). `--env local` 은 `.env.local`(로컬 supabase 54322) → `.env` 순으로 읽고, `pnpm db:isolated <이름>` 의 전용 DB 는 `SURVEY_OPS_DATABASE_URL=<그 URL>` 로 바꿔 끼운다(로컬 주소만 받는다).
+`scripts/survey-ops/` 의 명령 여섯과 패치 도우미. 모두 `--env prod` 또는 `--env local` 을 꼭 적는다(기본값 없음). `--env local` 은 `.env.local`(로컬 supabase 54322) → `.env` 순으로 읽고, `pnpm db:isolated <이름>` 의 전용 DB 는 `SURVEY_OPS_DATABASE_URL=<그 URL>` 로 바꿔 끼운다(로컬 주소만 받는다).
 
 ## 설문 id 를 모르면 문구로 찾는다
 
@@ -16,10 +16,26 @@ pnpm survey:find '<문구>' --env prod [--limit 20]
 문항 제목·설명·코드·보기·표 칸 글자에서 부분 일치로 찾아 설문 id · 문항 id · 코드 · 유형 · 발행 여부 · 응답 수를 낸다.
 읽기 전용 트랜잭션이다 — `.env.production` 을 직접 읽어 붙는 임시 스크립트를 쓰지 않는다.
 
+## 구조는 요약으로 본다
+
+```bash
+pnpm survey:summary <surveyId> --env prod [--grep '^B']     # 문항당 한 줄
+pnpm survey:summary <surveyId> --env prod --detail A3       # 그 문항 하나를 편다
+pnpm survey:summary --file .scratch/<설문>/out.json          # 넣기 전 조립 산출물
+```
+
+- 한 줄에 쪽 · 문항코드 · 유형과 크기 · 필수 · 칸 유형 수 · 보기 그룹 · 모바일 표시 방식 · 표시 조건(문항·열·행) ·
+  열림 조건 수 · 검증 수 · 변수 수 · 제목이 나온다. 설문 하나가 수 KB 다.
+- `--detail` 은 열(코드·머리·조건) · 보기 그룹 · 줄마다 칸(유형·필수·열림 조건·단위·계산·모바일 칸 이름) · 제약을 낸다.
+  같은 모양이 이어지는 줄은 한 줄로 접는다.
+- **구조를 알아보려고 dump JSON 에 임시 스크립트를 쓰지 않는다.** 요약에 없는 것(칸 글자 원문·서식·설문 설정)이
+  필요할 때만 dump 를 연다. 요약에 자주 찾는 항목이 없으면 `summary-core.ts` 에 더한다.
+
 ## 변수명은 계산해서 인용한다
 
 ```bash
 pnpm survey:vars <surveyId> --env prod --grep '^Q2_'
+pnpm survey:vars <surveyId> --env prod --names              # 문항별 한 줄에 이름만 — 라벨이 필요 없으면 이것
 ```
 
 내보내기와 같은 함수 사슬로 구조 전체 변수명을 낸다. 사용자에게 변수명을 말할 때는 이 출력을 그대로 옮긴다.

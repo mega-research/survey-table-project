@@ -25,7 +25,7 @@ import { parseOpsFlags, type OpsEnv } from './env';
 
 // ── 입력 모양 — 조립 산출물(out.json)과 DB 행이 같은 필드 이름을 쓴다 ─────────────────────────
 
-interface RawOption {
+export interface RawOption {
   id?: string;
   label?: string;
   value?: string;
@@ -35,7 +35,7 @@ interface RawOption {
   enabledWhen?: unknown;
 }
 
-interface RawCell {
+export interface RawCell {
   id: string;
   type: string;
   content?: string;
@@ -60,7 +60,7 @@ interface RawCell {
   rankingOptions?: RawOption[];
 }
 
-interface RawCondition {
+export interface RawCondition {
   enabled?: boolean;
   sourceQuestionId?: string;
   conditionType?: string;
@@ -82,27 +82,27 @@ interface RawOperand {
   left?: RawOperand;
   right?: RawOperand;
 }
-interface RawConditionGroup {
+export interface RawConditionGroup {
   conditions?: RawCondition[];
 }
-interface RawRow {
+export interface RawRow {
   id: string;
   rowCode?: string;
   cells: RawCell[];
   displayCondition?: RawConditionGroup | null;
 }
-interface RawColumn {
+export interface RawColumn {
   id: string;
   columnCode?: string;
   displayCondition?: RawConditionGroup | null;
 }
-interface RawChoiceGroup {
+export interface RawChoiceGroup {
   id: string;
   groupKey?: string;
   type?: string;
   required?: boolean;
 }
-interface RawSumConstraint {
+export interface RawSumConstraint {
   id?: string;
   cellIds?: string[];
   leftExpr?: unknown;
@@ -191,16 +191,16 @@ const VALUE_LABEL_BYTE_LIMIT = 120;
 const INTERACTIVE_CELL_TYPES = new Set(['input', 'select', 'radio', 'checkbox', 'ranking']);
 const AMOUNT_UNIT_TEXT = /(백만|천만|억|천|만)\s*원/;
 
-const stripHtml = (s: string) =>
+export const stripHtml = (s: string) =>
   s
     .replace(/<[^>]+>/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+export const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 const pad = (n: number, width: number) => String(n).padStart(width, '0');
 const stripNulls = (o: object) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== null));
 
-function questionLabel(q: RawQuestion): string {
+export function questionLabel(q: RawQuestion): string {
   if (q.questionCode) return q.questionCode;
   const title = stripHtml(q.title ?? '');
   return title ? clip(title, 20) : q.id;
@@ -226,6 +226,41 @@ function cellOptionLists(cell: RawCell): Array<{ kind: string; options: RawOptio
   if (cell.selectOptions) lists.push({ kind: 'select', options: cell.selectOptions });
   if (cell.rankingOptions) lists.push({ kind: 'ranking', options: cell.rankingOptions });
   return lists;
+}
+
+export interface StructureColumns {
+  hydrated: QuestionVariant[];
+  /** 내보내기에 나가는 열 — 언어 묶음의 공유 변수명은 하나로 합친 뒤 */
+  columns: SPSSExportColumn[];
+  /** 발행 게이트가 검사하는 최악의 집합 — 변동 확인 열까지 */
+  gateColumns: SPSSExportColumn[];
+  /**
+   * 문항별 열 수 — 언어 묶음을 합치기 **전**으로 센다. 합치면 둘째 언어 문항의 열이 첫 언어 문항 것이 되어
+   * 그 문항이 0개로 보인다.
+   */
+  countByQuestion: Map<string, number>;
+}
+
+/** 내보내기와 같은 사슬(normalize → hydrate → generateSPSSColumns)로 구조의 열을 낸다. */
+export function buildStructureColumns(
+  questions: readonly RawQuestion[],
+  groups: readonly unknown[],
+): StructureColumns {
+  const hydrated = hydrateQuestionsForSpss(normalizeQuestions(questions.map(stripNulls)));
+  const surveyGroups = groups.map((g) => stripNulls(g as object)) as unknown as QuestionGroup[];
+  const languageSetLocales = resolveLanguageSetLocales(hydrated, surveyGroups);
+  const countByQuestion = new Map<string, number>();
+  for (const c of generateSPSSColumns(hydrated))
+    countByQuestion.set(c.questionId, (countByQuestion.get(c.questionId) ?? 0) + 1);
+  return {
+    hydrated,
+    columns: generateSPSSColumns(hydrated, { languageSetLocales }),
+    gateColumns: generateSPSSColumns(hydrated, {
+      changeConfirmQuestionIds: new Set(hydrated.filter(supportsChangeConfirmation).map((q) => q.id)),
+      languageSetLocales,
+    }),
+    countByQuestion,
+  };
 }
 
 export function checkSurveyStructure(input: CheckInput): CheckReport {
@@ -571,15 +606,8 @@ export function checkSurveyStructure(input: CheckInput): CheckReport {
   }
 
   // ── 변수명 — 발행 게이트와 같은 사슬·같은 인자 ──
-  const hydrated = hydrateQuestionsForSpss(normalizeQuestions(questions.map(stripNulls)));
-  const surveyGroups = (input.groups ?? []).map((g) => stripNulls(g as object)) as unknown as QuestionGroup[];
-  const columns = generateSPSSColumns(hydrated, {
-    changeConfirmQuestionIds: new Set(hydrated.filter(supportsChangeConfirmation).map((q) => q.id)),
-    languageSetLocales: resolveLanguageSetLocales(hydrated, surveyGroups),
-  });
-  const structureColumns = generateSPSSColumns(hydrated, {
-    languageSetLocales: resolveLanguageSetLocales(hydrated, surveyGroups),
-  });
+  const { hydrated, gateColumns: columns, columns: structureColumns, countByQuestion } =
+    buildStructureColumns(questions, input.groups ?? []);
   try {
     assertValidSpssVarNames(columns);
   } catch (err) {
@@ -593,10 +621,7 @@ export function checkSurveyStructure(input: CheckInput): CheckReport {
       });
   }
 
-  // 문항별 열 수는 언어 묶음을 합치기 전으로 센다 — 합치면 둘째 언어 문항의 열이 첫 언어 문항 것이 된다
-  const variableCounts = new Map<string, number>();
-  for (const c of generateSPSSColumns(hydrated))
-    variableCounts.set(c.questionId, (variableCounts.get(c.questionId) ?? 0) + 1);
+  const variableCounts = countByQuestion;
   for (const q of questions) {
     if (q.type === 'notice' || variableCounts.get(q.id)) continue;
     // 응답 칸이 하나도 없는 표는 보여 주기만 하는 표다(코드표 등) — 변수도 문항코드도 없는 것이 맞다

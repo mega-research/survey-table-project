@@ -33,6 +33,7 @@
     "survey:vars":"tsx --tsconfig tsconfig.scripts.json scripts/survey-ops/vars.ts",
     "survey:dump": "tsx --tsconfig tsconfig.scripts.json scripts/survey-ops/dump.ts",
     "survey:check": "tsx --tsconfig tsconfig.scripts.json scripts/survey-ops/check.ts",
+    "survey:summary": "tsx --tsconfig tsconfig.scripts.json scripts/survey-ops/summary.ts",
     "survey:render": "tsx scripts/survey-ops/render.ts",
     "spss:migrate": "tsx scripts/migrate-spss-fields.ts",
     "spss:migrate:live": "DRY_RUN=false tsx scripts/migrate-spss-fields.ts",
