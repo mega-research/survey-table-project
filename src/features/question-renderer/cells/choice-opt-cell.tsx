@@ -75,6 +75,9 @@ export const ChoiceOptCell = React.memo(function ChoiceOptCell({
   // 「전혀 기대 안함」으로 둔 척도 표가 세 화면에서 같은 얼굴이다. 비어 있으면 컨트롤만 그린다.
   const visibleText = substituteTokens((cell.content ?? '').trim(), attrs, quotes);
   const inputId = `${inputIdScope ? `${inputIdScope}-` : ''}${questionId}-${cell.id}`;
+  // 컨트롤의 접근성 이름은 aria-label(옵션 라벨)이라 label 안 설명은 읽히지 않는다 — 설명은 describedby 로 잇는다
+  const descriptionId = description ? `${inputId}-description` : undefined;
+  const describedBy = [ariaDescribedBy, descriptionId].filter(Boolean).join(' ') || undefined;
   const textInputStack = (
     <OptionTextInputStack
       questionId={questionId}
@@ -105,7 +108,7 @@ export const ChoiceOptCell = React.memo(function ChoiceOptCell({
       type="checkbox"
       id={inputId}
       aria-invalid={ariaInvalid || undefined}
-      aria-describedby={ariaDescribedBy}
+      aria-describedby={describedBy}
       aria-label={label}
       checked={checked}
       onChange={toggle}
@@ -117,7 +120,7 @@ export const ChoiceOptCell = React.memo(function ChoiceOptCell({
       id={inputId}
       name={`${questionId}-${groupKey}`}
       aria-invalid={ariaInvalid || undefined}
-      aria-describedby={ariaDescribedBy}
+      aria-describedby={describedBy}
       aria-label={label}
       checked={checked}
       onChange={() => {}}
@@ -146,6 +149,7 @@ export const ChoiceOptCell = React.memo(function ChoiceOptCell({
               {label}
               {description && (
                 <span
+                  id={descriptionId}
                   data-testid="choice-tile-description"
                   className="mt-0.5 block text-[13px] leading-snug font-normal text-gray-500"
                 >
