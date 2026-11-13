@@ -40,11 +40,11 @@ pii 는 암호문이라 대조하려면 blind index 경로를 타야 한다.
 
 ## 컨택원 배정
 
-**컨택원 배정** (0136): 조사 대상을 이름 붙은 배정 묶음(계정 아님)에 나눠 맡긴다. procedure 는 전부 `authed` 이고 게스트 화면은 컨택원 열·값·필터·칩을 전부 받지 않는다. 교체 적용은 들어옴·빠짐을 한 UPDATE 문장으로 하고 충돌이면 `retryAssignmentWrite` 로 다시 돈다. 상세는 CONTEXT.md 「컨택원」.
+**컨택원 배정** (0136): 조사 대상을 이름 붙은 배정 묶음(계정 아님)에 나눠 맡긴다. procedure 는 전부 `authed` 이고 게스트 화면은 컨택원 열·값·필터·칩을 전부 받지 않는다. 교체 적용은 들어옴·빠짐을 한 UPDATE 문장으로 하고 충돌이면 `retryAssignmentWrite` 로 다시 돈다. 상세는 `services/contact-assignments.ts` 머리 주석(용어는 CONTEXT.md 「컨택원」).
 
 ## 조사 대상 필터 해석 · 필터 확장
 
-**조사 대상 필터 해석 · 필터 확장**: 목록 주소·캠페인 스냅샷·조건 줄은 `server/read-models/contact-filter-resolution.ts` 한 곳으로 읽는다(하위 파서 `contacts-filter-parse` 직접 import 는 ESLint 가 막는다). 대상을 고르거나 쓰는 쪽은 `mode: 'write'` 로 해석해 해석 안 되는 조건을 거부한다 — 읽기 해석은 버려서 명단이 넓어진다. 「현재 컨택원」·`짝수`/`홀수`·조건 줄 여러 값 포함 상세는 CONTEXT.md 「조사 대상 필터 해석」. 테스트는 `tests/helpers/resolved-contact-filter.ts` 의 `resolvedFilterForTest`.
+**조사 대상 필터 해석 · 필터 확장**: 목록 주소·캠페인 스냅샷·조건 줄은 `server/read-models/contact-filter-resolution.ts` 한 곳으로 읽는다(하위 파서 `contacts-filter-parse` 직접 import 는 ESLint 가 막는다). 대상을 고르거나 쓰는 쪽은 `mode: 'write'` 로 해석해 해석 안 되는 조건을 거부한다 — 읽기 해석은 버려서 명단이 넓어진다. 「현재 컨택원」·`짝수`/`홀수`·조건 줄 여러 값 포함 상세는 `server/read-models/contact-filter-resolution.ts` 머리 주석(용어는 CONTEXT.md 「조사 대상 필터 해석」). 테스트는 `tests/helpers/resolved-contact-filter.ts` 의 `resolvedFilterForTest`.
 
 ## ID 목록 검색
 
@@ -52,4 +52,4 @@ pii 는 암호문이라 대조하려면 blind index 경로를 타야 한다.
 
 ## 대상 정보 수정 현황
 
-**대상 정보 수정 현황** (0152): 조사 대상 상세에서 손으로 바꾼 명단 값·개인정보 열(값 없이 입력·변경·삭제)·메모·컨택 방법·컨택원·회차 수정/삭제를 `contact_target_edit_logs` 에 남긴다. 조사 대상을 한 명씩 바꾸는 쓰기 경로를 새로 만들면 대상 행 잠금 아래에서 지금 값을 읽고 같은 트랜잭션에서 `recordContactTargetEdit` 를 부를 것 — 일괄 쓰기(업로드·교체 적용·이월 임포트)는 남기지 않는 것이 정해진 범위다. 기존 「수정 / 편집 현황」 칸은 「응답 수정 / 편집 현황」으로 이름만 바뀌었다. 상세는 CONTEXT.md 「조사 대상 수정 기록」.
+**대상 정보 수정 현황** (0152): 조사 대상 상세에서 손으로 바꾼 명단 값·개인정보 열(값 없이 입력·변경·삭제)·메모·컨택 방법·컨택원·회차 수정/삭제를 `contact_target_edit_logs` 에 남긴다. 조사 대상을 한 명씩 바꾸는 쓰기 경로를 새로 만들면 대상 행 잠금 아래에서 지금 값을 읽고 같은 트랜잭션에서 `recordContactTargetEdit` 를 부를 것 — 일괄 쓰기(업로드·교체 적용·이월 임포트)는 남기지 않는 것이 정해진 범위다. 기존 「수정 / 편집 현황」 칸은 「응답 수정 / 편집 현황」으로 이름만 바뀌었다. 상세는 `services/contact-target-edit-log.ts` 머리 주석(용어는 CONTEXT.md 「조사 대상 수정 기록」).

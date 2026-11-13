@@ -43,6 +43,37 @@ import { ensureContactOwnerColumn } from './scheme-helpers';
  *   파티션에서만 하고, 대상과 컨택원의 is_test 가 같아야 한다.
  * - 한 대상은 컨택원 하나에만 속한다(contact_targets.assignment_id). 마지막 배정이 이긴다.
  * - 게스트는 procedure 베이스(authed)에서 막힌다 — 서비스는 게스트를 받지 않는다.
+ *
+ * ── 배선과 규칙 ──
+ * - **컨택원 배정** (2026-10-19, 0136): 컨택원은 계정이 아니라 이름 붙은 배정 묶음이고 한 대상은 지금 컨택원
+ *   하나에만 속한다(마지막 배정이 이긴다, 응답 상태 무관).
+ * - procedure 는 `contacts.assignments.*` 이고 **베이스가 전부 `authed`** 라 게스트는 기존 grant-first 판정으로
+ *   FORBIDDEN 이다.
+ * - 게스트 화면은 목록 「컨택원」 열·값(`listContactsForSurvey` 의 `includeAssignment:false` +
+ *   `withoutContactOwnerColumn`)·필터 후보·정렬·상세 드롭다운·진척 보고 칩·관리 메뉴를 전부 받지 않는다.
+ * - 쓰기는 `lockWriteScope` 파티션 아래서 하고 대상과 컨택원의 `is_test` 가 같아야 한다.
+ * - 서비스는 `server/contacts/services/contact-assignments.ts`(만들기·이름·순서·지우기·한 명 바꾸기·관리 목록
+ *   통계 — 응답 상태는 목록 web 열과 같은 `matchedResponseSubquery`) · `contact-assignment-apply.ts`(교체
+ *   적용·미리보기·오른쪽 대상 목록) · `contact-assignment-facets.ts`(오른쪽 값 목록).
+ * - **교체 적용**은 컨택원 행 `FOR UPDATE` 로 같은 컨택원 동시 적용을 직렬화하고 조건을 적용 시점에 다시
+ *   평가한다 — 조건 줄 0개 거부, 결과 0명 허용, **해석이 안 되는 절이나 읽지 못한 `list:` 토큰은 거부**(목록
+ *   검색처럼 조용히 버리면 조건이 넓어져 남의 배정을 끌어온다).
+ * - 조건 밖 판정은 `COALESCE(filter, FALSE)` 로 감싼다(3값 논리로 빠지는 행이 없게).
+ * - **들어옴·빠짐은 한 UPDATE 문장**(`CASE WHEN match THEN 이 컨택원 ELSE NULL`)이다 — 두 문장으로 나누면
+ *   조건이 「현재 컨택원」·「배정 없음」일 때 뒤 문장이 앞 문장이 바꾼 값을 다시 읽어 방금 옮긴 대상을 도로
+ *   푼다.
+ * - 교체 적용·지우기는 서로 다른 컨택원끼리 겹치는 대상을 다른 순서로 잠가 교착(40P01)이 날 수 있어, 충돌이면
+ *   처음부터 다시 실행한다(`retryAssignmentWrite` → `lib/pg-error` 의 `retryOnTxConflict`, 3번까지 — 다시 돌 때
+ *   조건도 새로 계산하므로 나중에 끝난 쪽이 이긴다).
+ * - 조사 대상 목록 위의 「검색 결과 N명을 컨택원에 배정」(목록에서 배정)은 2026-10-19 에 걷어냈다 — 배정은 교체
+ *   적용과 상세 한 명 바꾸기로만 한다.
+ * - 목록 주소·스냅샷·조건 줄을 서버에서 읽는 자리는 아래 「조사 대상 필터 해석」을 거친다 — 그 결과로 대상을
+ *   고르거나 쓴다면 `mode: 'write'` 로 해석해 해석되지 않는 조건을 거부한다.
+ * - 스킴에 `system.contact_owner` 열이 없는 옛 설문은 컨택원을 처음 만들 때 그 파티션 스킴 끝에
+ *   붙인다(`ensureContactOwnerColumn`).
+ * - 교체 업로드 경고는 풀릴 배정 수(`countAssignedTargets`)를 보이고, 테스트 모드를 삭제로
+ *   끄면(`disableTestWorkspace`) 테스트 컨택원도 지운다.
+ * - 컨택원 열은 엑셀 내려받기 제외 목록에 그대로 있다(이번 범위 밖).
  */
 
 /**

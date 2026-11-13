@@ -3,6 +3,35 @@
  *
  * 화면의 회색 비활성과 차단형 검증이 이 모듈 하나의 판정을 쓴다 — 갈리면 "회색인데 검증은 통과"
  * 하거나 "고를 수 있었는데 다음에서 막힘"이 생긴다 (CONTEXT.md "중복 불가 묶음").
+ *
+ * ── 배선과 규칙 ──
+ * - **중복 불가 묶음** (`cell.distinctGroup`, select 셀 전용, 2026-10-06): 같은 묶음 이름을 가진 선택 칸끼리는
+ *   같은 보기를 두 번 고를 수 없다.
+ * - 묶음은 열·행 배치와 무관하게 **이름으로만** 정해지고(셀 편집 모달의 「중복 불가 묶음 이름」 + 「같은 열의
+ *   다른 선택 칸에도 적용」), 비교는 보기 값(`option.value ?? option.id`)이다 — 칸마다 보기 값이 다르면
+ *   아무것도 막지 않으므로 모달이 경고한다(`survey-builder/lib/distinct-group-diagnostics`).
+ * - 다른 칸이 고른 보기는 목록에 남되 `disabled` 다(순위형 드롭다운과 같은 얼굴 — 목록에서 빼지 않는다).
+ * - 이미 들어온 중복은 `NumericIssue.kind: 'distinct'`(클라이언트 전용, 고정 문구, 관리자 수정에서도 완화하지
+ *   않는다)가 막는다.
+ * - 화면 비활성과 검증이 `features/question-renderer/utils/distinct-select-group.ts` 하나의 판정을 쓰고,
+ *   게이팅으로 닫힌 칸·병합에 가려진 칸(`isHidden` — 병합 저장이 덮인 칸에 내용을 통째 복사한다)은 구성원에서
+ *   뺀다.
+ * - 행·열 표시 조건이나 동적 행 선택으로 지금 보이지 않는 칸도 뺀다(2026-10-12 — 숨은 칸의 값은 제출 때까지
+ *   응답에 남아 있어, 세면 보이지 않는 칸이 보기를 차지하고 「다음」을 막는다).
+ * - 범위는 화면과 검증이 같아야 한다: 검증은 `collectVisibleTableCells` 의 칸 id 를, 화면은
+ *   `GatingTableCellsProvider` 의 `visibleCellIds`(응답자가 볼 수 있는 행의 칸 — 본문 격자의 행에 응답자가 고른
+ *   동적 행을 더한 `selectionVisibleRows`. 데스크톱은 동적 행을 본문이 아니라 선택 줄 아래에 그려 본문 행
+ *   목록에는 없다, 2026-11-12)를 판정 함수의 `visibleCellIds` 로 넘긴다.
+ * - 게이팅 평가용 셀 정의(`tableCells`)는 좁히지 않는다.
+ * - 「닫혔는가」는 셀 게이팅 평가기에 **보기 선택 집합까지 넘겨** 판정한다(`collectTableChoiceSelection` —
+ *   빠뜨리면 choice-selected 로 열린 칸이 늘 닫힌 것으로 빠져 중복이 통과한다).
+ * - 응답 화면은 묶음 구성원의 값과 그 게이팅이 읽는 키만 구독한다(`createKeyedValueSelector` +
+ *   `gateSubscriptionKeys` — 컨트롤러의 컨트롤러·보기 선택 예약 키 포함).
+ * - **테이블 유형 문항에서만 동작한다** — 보기·순위 문항의 내장 표(레거시 보기 소스 표)의 선택 칸은
+ *   `ChoiceTableCellControl` 로 그려지고 값이 `__optTexts__` 사이드카에 있어 비활성도 검증도 걸리지 않는다.
+ * - 셀 필드 정책(`utils/table-cell-field-policy.ts`)에 폼 소유·보관함 제외(표 위치에 종속)로 적혀 있고, 셀
+ *   직렬화(`serialize-cell.ts`)는 폼 상태 · hydrate · select 조건부 spread 에서 다룬다.
+ * - CONTEXT.md "중복 불가 묶음".
  */
 import { gateSubscriptionKeys } from '@/features/question-renderer/cells/gate-value-selector';
 import { isCellEnabled } from '@/lib/survey/cell-gating';

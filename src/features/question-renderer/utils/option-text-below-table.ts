@@ -19,6 +19,28 @@ import { buildColumnAxisCards, headerPath } from './column-axis-cards';
  *
  * 어느 칸의 입력인지는 라벨로 가린다 — 행 제목 · 열 제목 (· 보기 라벨). 행 제목·열 제목은
  * 「축 단위 카드」가 쓰는 규칙 그대로다(행의 응답 칸 앞 마지막 글자 셀, 열을 덮는 가장 아래 헤더).
+ *
+ * ── 배선과 규칙 ──
+ * - **상세 기재 입력칸을 표 아래에** (`cell.optionTextBelowTable`, checkbox·radio·select 셀, 2026-10-13): 켠
+ *   칸은 「기타」처럼 상세 기재를 받는 보기를 골랐을 때 입력칸을 칸 안이 아니라 **표 아래 한 줄**(`행 제목 · 열
+ *   제목 | 입력칸`)로 그린다 — 연도 열처럼 칸이 좁으면 칸 안 입력칸은 라벨 칩과 안내 문구가 다 잘린다.
+ * - 기본은 꺼짐(종전대로 칸 안).
+ * - 옮기는 것은 그리는 자리뿐이고 값은 같은 `__optTexts__[보기 id]` 에 산다 — 저장·검증·내보내기 무변경.
+ * - **격자 표(데스크톱·모바일 원본 표)에서만 옮긴다**: `InteractiveTableResponse` 가 격자 표를
+ *   `OptionTextBelowTableHost` 로 두르고 그 아래에 `OptionTextBelowTable`(가로 스크롤 컨테이너 밖)을 그리며,
+ *   칸은 `useOptionTextMovedBelowTable` 이 참일 때만 제 입력칸을 접는다.
+ * - 호스트 없이 그려지는 모바일 카드·드릴다운·빌더 행 카드는 종전대로 칸 안이다 — 칸 옵션만 보고 접으면
+ *   입력칸이 어디에도 없게 된다.
+ * - 라벨의 행 제목·열 제목은 「축 단위 카드」 투영(`buildColumnAxisCards`)을 그대로 쓰고, 보기 라벨이 있으면
+ *   뒤에 붙인다.
+ * - 표 컴포넌트는 칸 값마다 다시 그려지지 않으므로 표 아래 줄이 선택된 (칸, 보기) 쌍을 글자
+ *   하나(`belowTableSelectionKey`)로 접어 따로 구독한다.
+ * - 판정은 `features/question-renderer/utils/option-text-below-table.ts`.
+ * - **테이블 유형 문항 전용** — 보기·순위 문항의 내장 표는 원래부터 표 아래 스택을 쓴다(`choice-table-response`
+ *   의 `tableBelowEntries`).
+ * - 셀 필드 정책에 폼 소유로 적혀 있고 셀 직렬화는 폼 상태 · hydrate · 선택형 조건부 spread 에서 다루며, 모달
+ *   스위치는 상세 기재 보기가 있는 선택형 칸에서만 나온다.
+ * - CONTEXT.md "표 아래 상세 기재".
  */
 
 type TextOption = CheckboxOption | RadioOption | QuestionOption;

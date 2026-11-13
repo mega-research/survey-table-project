@@ -3,6 +3,16 @@
  *
  * 카드 제목은 설문 관리·설문 분석 목록의 카드에만 쓰는 담당자용 이름이고, 설문 제목(응답자가 보는 제목)과
  * 따로 저장한다(`surveys.list_title`). 비어 있으면 설문 제목을 그대로 보인다 — 설문 제목을 바꾸면 카드도 따라 바뀐다.
+ *
+ * ── 배선과 규칙 ──
+ * - (2026-11-11, 0167): `surveys.list_title`(NULL = 설문 제목을 따라감).
+ * - 규칙은 `utils/survey-card-title`(`surveyCardTitle` · `normalizeSurveyListTitle` — 빈 값 · 설문 제목과 같은
+ *   값은 NULL 로 지운다 · `matchesSurveyListSearch` · `compareSurveyCardTitle`), 쓰기는
+ *   `surveyBuilder.surveys.setListTitle`(`setSurveyListTitle`) 하나다.
+ * - **빌더의 설문 저장은 이 열을 쓰지 않는다**(저장이 필드를 명시해 쓰므로 지워지지 않는다).
+ * - 묶음 안의 카드는 카드 제목순(숫자를 수로 읽는다)이다.
+ * - 바꾸는 자리는 설문 관리 목록 카드 메뉴의 「카드 제목 바꾸기」.
+ * - 잘린 제목은 마우스를 올리면 전체가 뜬다(`components/ui/truncated-text`).
  */
 
 /** 카드 제목 길이 상한(글자 수) */

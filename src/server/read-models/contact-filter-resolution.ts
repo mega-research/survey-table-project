@@ -39,6 +39,54 @@ import {
  *
  * 두 단계다. `loadContactFilterContext` 가 재료(스킴·결과코드·컨택원·후보)를 읽고 — 페이지는 같은
  * 컨텍스트를 UI props 에도 쓴다 — `resolveContactFilter` 가 입력에 따라 ID 목록만 더 읽어 해석한다.
+ *
+ * ── 배선과 규칙 ──
+ * - **조사 대상 필터 해석** (2026-10-19): 조사 대상 목록 · 단체 메일 위저드 · `fetchCandidateIds` · 교체
+ *   적용(미리보기·오른쪽 목록 포함) · 컨택원 수정 화면이 `server/read-models/contact-filter-resolution.ts` 한
+ *   곳으로 조건을 읽는다.
+ * - `loadContactFilterContext(surveyId, scope, { isGuest, surface: 'contacts' | 'mail', executor? })` 가
+ *   스킴(게스트면 컨택원 열 제거)·결과코드·컨택원 선택지(게스트면 빈 배열)·검색바 후보·열 머리 후보(`mail` 이면
+ *   미리보기 고정 열 `CAMPAIGN_HEADER_FILTER_COLUMNS` 를 덧붙임)를 읽고 — 페이지는 같은 컨텍스트를 UI props
+ *   에도 쓴다 — `resolveContactFilter(ctx, input, { mode })` 가 ID 목록을 읽어 해석한다.
+ * - 입력은 캠페인 스냅샷 모양(`{ clauses: {source,value,op}[]; headerClauses?: {source,mode,hv}[] }`)이고
+ *   주소는 `contactFilterInputFromUrl(sp)` 로 바꾼다.
+ * - 결과 `ResolvedContactFilter<'read'|'write'>` 는 이 모듈만 만드는 브랜드 타입이고 `{ clauses,
+ *   builderClauses, headerClauses, unresolved }` 다.
+ * - `listContactsForSurvey`·`previewCampaignCandidates`·`countCampaignCandidates` 는 이 결과(`filter`)만 받고,
+ *   교체 적용 같은 **쓰기 서비스는 `ResolvedContactFilter<'write'>` 만 받는다** — write 해석은 해석 안 되는
+ *   조건이 하나라도 있으면 `ORPCError BAD_REQUEST`(문구는 모듈 소유: 「조건 N을(를) 지금 적용할 수 없습니다…」
+ *   · 「저장된 ID 목록을 찾을 수 없습니다…」).
+ * - 하위 파서는 `read-models/contacts-filter-parse.ts` 로 이름을 바꿨고 ESLint 가 해석 모듈 · 응답
+ *   내역(`profiles-filters`, 응답 행 위 다른 열을 보는 표면이라 하위 파서 + 훅을 직접 쓴다) · 서버 트리 테스트
+ *   밖의 import 를 막는다(`eslint.config.mjs` 의 `CONTACT_FILTER_PARSE_PATTERN`).
+ * - `listAssignmentOptions` 는 `read-models/contact-assignment-options.ts` 로 내렸다.
+ * - `buildContactsFilterSql` 은 lib 공용이라 `FilterClause[]` 를 그대로 받는다.
+ * - 테스트에서 해석이 관심사가 아니면 `tests/helpers/resolved-contact-filter.ts` 의 `resolvedFilterForTest` 를
+ *   쓴다.
+ *
+ * ── 배선과 규칙 ──
+ * - **필터 확장** (컨택원 배정과 함께): ① 「현재 컨택원」 `FILTER_SOURCE.CONTACT_OWNER`(`system.contact_owner`)
+ *   — 값은 컨택원 id, 배정 없음은 `FILTER_NONE_VALUE`.
+ * - 해석 모듈이 이 설문·세션 파티션 컨택원 id 로 검증하고(하위 파서의 `ParseExtraHooks.assignmentIds`, 게스트
+ *   컨텍스트는 넘기지 않아 절이 만들어지지 않는다) 다른 설문·파티션 id 는 0건이 아니라 조건 미적용.
+ * - 열 후보는 `buildColumnCandidates(scheme, { includeContactOwner: true })` 로 켠 표면만 받는다 — 조사 대상
+ *   목록·컨택원 수정·**단체 메일 위저드**(2026-10-19, 「이메일 갱신」처럼 컨택원으로 묶은 명단에 보내기) 셋이고
+ *   셋 다 게스트에게는 끈다(위저드의 「필터 결과 전체 선택」 `fetchCandidateIds` 도 procedure 가 넘긴 `isGuest`
+ *   로 같다).
+ * - **주소·스냅샷의 절이 지금 해석되지 않으면**(지워진 컨택원·빠진 열·읽지 못한 `list:` 토큰) 읽기 해석은 버려
+ *   명단이 넓어지므로 결과의 `unresolved` 로 알린다 — 위저드는 경고를 띄우고 「미응답자 재발송」 자동 전체
+ *   선택을 하지 않으며, `fetchCandidateIds` 는 write 해석이라 `BAD_REQUEST` 로 거부한다.
+ * - 컨택원 열에도 「메일 표시」 스위치가 있다(2026-10-19) — 켜면 위저드 미리보기·캠페인 상세 수신자 표·수신거부
+ *   명단에 지금 컨택원 이름이 나오고, 게스트 화면은 켜 두어도 싣지 않는다(`resolveMailDisplayColumns(scheme, {
+ *   includeContactOwner: !isGuest })` → 로더 `includeAssignment`).
+ * - 열 정렬 키 `owner`(컨택원 순서 → 이름, 배정 없음 끝).
+ * - ② `짝수`/`홀수` — 시스템ID·attrs ID 목록 입력이 **그 한 단어일 때만** 키워드(`parseParityKeyword`,
+ *   `FilterCondition.parity`).
+ * - attrs 는 값 전체가 숫자인 행만(앞자리 0 허용) 나머지 연산, 숫자 아닌 값·빈 값은 어느 쪽에도 안 걸린다 —
+ *   상태줄의 「숫자가 아닌 값 N명 제외」는 `contacts.attrValues.nonNumericCount`.
+ * - 진척 보고 필터(`progress-filters` 의 `mode:'parity'`)도 같다.
+ * - ③ 조건 줄 값 하나에 여러 값 — `encodeMultiClauseValue`(양끝까지 `\u001f` 구분자, trim 이 값 앞뒤 공백을 못
+ *   지우게)로 담으면 파서가 헤더 체크박스와 같은 in 절로 읽는다(컨택원 수정 화면 오른쪽 값 목록이 만든다).
  */
 
 export type ContactFilterSurface = 'contacts' | 'mail';

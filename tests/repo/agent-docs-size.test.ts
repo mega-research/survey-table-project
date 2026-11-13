@@ -18,10 +18,8 @@ const ROOT_LIMIT = 45_000;
 const AREA_LIMIT = 30_000;
 const CAUTION_ITEM_LIMIT = 1_500;
 // 용어집(CONTEXT.md)은 상한이 없어, 상한이 걸린 문서들에서 밀려난 구현 사실이 여기로 쌓였다 —
-// 2026-11-13 에 122,754자 중 「구현 메모」 22덩이가 49,952자(41%)였다.
-const GLOSSARY_LIMIT = 125_000;
-/** 남은 「구현 메모」 덩이 수 — 옮길 때마다 줄인다. 늘릴 수 없다. */
-const GLOSSARY_IMPL_MEMOS = 21;
+// 2026-11-13 에 122,754자 중 「구현 메모」 22덩이가 28,070자(23%)였고, 전부 그 모듈의 문서 주석으로 옮겼다.
+const GLOSSARY_LIMIT = 100_000;
 
 function areaDocs(dir = path.join(ROOT, 'src')): string[] {
   const found: string[] = [];
@@ -89,20 +87,22 @@ describe('용어집은 뜻만 적는다', () => {
     const size = [...glossary].length;
     expect(
       size,
-      `CONTEXT.md 가 ${size}자다. 용어 정의를 줄이기 전에 남은 「구현 메모」를 그 모듈의 머리 주석으로 옮길 것`,
+      `CONTEXT.md 가 ${size}자다. 용어 정의에 섞인 구현 사실(파일·함수·배선)을 그 모듈의 문서 주석으로 옮길 것`,
     ).toBeLessThanOrEqual(GLOSSARY_LIMIT);
   });
 
-  it('「구현 메모」는 늘지 않는다 — 옮기면 기준 숫자를 줄인다', () => {
+  it('「구현 메모」를 적지 않는다', () => {
     // 용어집의 한 덩이는 한 줄짜리 문단이라 grep 한 번에 수천 자가 돌아오고, 같은 사실이 모듈 주석·영역 문서와
     // 세 곳에 적힌다(2026-11-12 따라 선택). 구현 사실의 정본은 코드 옆이다.
-    const memos = glossary.split('\n').filter((line) => line.startsWith('**구현 메모**')).length;
+    const memos = glossary
+      .split('\n')
+      .map((line, i) => ({ line, no: i + 1 }))
+      .filter(({ line }) => line.includes('**구현 메모**'))
+      .map(({ line, no }) => `${no}: ${line.slice(0, 60)}`);
     expect(
       memos,
-      memos > GLOSSARY_IMPL_MEMOS
-        ? 'CONTEXT.md 에 「구현 메모」를 새로 적었다. 용어집에는 뜻·경계·피할 말만 적는다 — 파일·함수·배선은 그 모듈의 머리 주석에, 여러 모듈에 걸친 규칙은 영역 AGENTS.md 에 적을 것'
-        : '「구현 메모」를 옮겼다 — GLOSSARY_IMPL_MEMOS 를 지금 개수로 줄일 것(다시 늘지 않게)',
-    ).toBe(GLOSSARY_IMPL_MEMOS);
+      'CONTEXT.md 에 「구현 메모」를 적었다. 용어집에는 뜻·경계·피할 말만 적는다 — 파일·함수·배선은 그 모듈의 문서 주석(「배선과 규칙」)에, 여러 모듈에 걸친 규칙은 영역 AGENTS.md 에 적을 것',
+    ).toEqual([]);
   });
 });
 

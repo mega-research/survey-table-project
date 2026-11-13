@@ -36,6 +36,39 @@ import { InternalFailure } from '@/server/internal-failure';
  *
  * 스냅샷은 배포와 같은 `buildSurveySnapshot` 으로 만든다 — 테스트 결과가 배포 뒤와 같아야 한다.
  * 배포 번호(max+1)와 겹치지 않게 version_number 는 음수로 내려간다.
+ *
+ * ── 배선과 규칙 ──
+ * - **테스트 버전**(2026-10-23, 0141): 테스트 링크 · 테스트 대상자 링크 · 관리자
+ *   미리보기(`/admin/surveys/[id]/preview`)는 배포본이 아니라 **저장본으로 만든 스냅샷**을 본다 — 저장만으로
+ *   응답 확정 · 자격미달 · 종료 이동 · Raw 내보내기까지 테스트하고, 실응답 링크와 공개 미리보기는 배포본
+ *   그대로다.
+ * - 한 번도 배포하지 않은 설문도 테스트 버전이 생긴다.
+ * - `server/workflows/test-version.ts` 의 `ensureTestVersion` 이 테스트 화면에 들어올 때(`getSurveyForResponse`
+ *   의 유효 테스트 세션 · `useTestVersion` · 테스트 응답의 관리자 수정 화면)와 **테스트 응답을 저장할
+ *   때마다**(`syncTestVersionBeforeWrite` — 답 저장 · 임시 저장 · 제출, 실응답은 건너뜀) 저장본 스냅샷(배포와
+ *   같은 `buildSurveySnapshot`)의 리비전을 지금 테스트 버전과 비교해, 다르면 `survey_versions` 에
+ *   `status='test'`·음수 번호 행을 **새로 만들고** `surveys.test_version_id` 를 옮기고 직전 테스트 버전의
+ *   snapshot 을 비운다(`pruneVersionSnapshots`, 설문당 advisory lock 으로 한 줄 세움).
+ * - 행은 배포 스냅샷처럼 불변이라 R2 참조는 만들 때 한 번 기록한다.
+ * - 빌더 저장 경로마다 장치를 달지 않고 테스트 쪽에서 본다 — 그래서 빌더에서 저장만 해도 진행 중인 테스터의
+ *   다음 저장이 멈춘다(배포와 같다).
+ * - 빌더·응답 두 도메인이 부르므로 workflows 에 있다.
+ * - 비용은 테스트 응답 저장마다 저장본 스냅샷을 한 번 만드는 것이다(실응답 무관).
+ * - 테스트 응답이 보는 버전은 `testVersionId ?? currentVersionId` 다(`shared/contracts/survey` 의
+ *   `pinnedVersionId` — **테스트는 테스트 버전에만 있다**) — 생성(`loadValidatedVersionGateRow` 의 `{ isTest }`
+ *   — 실응답이 테스트 버전 id 를 보내도 배포본으로 재핀) · 테스트 대상자(`acquireTestTargetResponse`) · 재개
+ *   이관(`lifecycle.ts` 의 `resumeTargetVersionId`) · 관리자 응답 수정(렌더 버전과 `saveAdminEdit` 의 낙관 버전
+ *   가드) · 테스트 대상자에게 보내는 개인정보 열(`lookupContactAttrs`) · 테스트 파티션 집계(이탈 퍼널 · 페이지
+ *   체류 · 수요 집계 — `read-models/version-snapshot` 의 `loadPinnedVersionSnapshot`).
+ * - 버전 id 가 바뀌는 것만으로 기존 장치가 돈다: 테스트 중 저장본이 바뀌면 옛 테스트 버전 위의 답 저장 · 임시
+ *   저장 · 제출(빈 complete 포함)이 `TEST_VERSION_REPUBLISHED`(「설문이 수정되었습니다 — 새로고침하면 바뀐
+ *   곳부터 이어집니다」)로 멈추고, 새로고침하면 재개 이관이 구조 생존 판정으로 답을 거르고 **바뀐 문항**(지문
+ *   비교 `lib/survey/test-version-fingerprint` 의 `changedQuestionIds` — 문구·조건 포함, 새 문항, 설정이 바뀐
+ *   그룹과 하위 그룹의 문항, 순서만 바뀐 것은 제외)과 지운 문항 중 가장 앞 페이지로 데려간다.
+ * - 실응답 이관은 지문이 없어 종전과 같다.
+ * - 배포 번호(`Math.max(최신, 0) + 1`) · 버전 목록(`getSurveyVersions` 두 벌) · 보존
+ *   정리(`findPrunableVersionIds` — 지금 테스트 버전 제외)는 테스트 버전을 뺀다.
+ * - 테스트 응답으로 쿼터를 확인하는 것은 여전히 안 된다(테스트 응답은 쿼터 계산에서 빠진다).
  */
 
 export interface TestVersion {

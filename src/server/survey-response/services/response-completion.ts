@@ -1,3 +1,30 @@
+/**
+ * 응답 완료(제출) — 아래는 제출 시점 쿼터 하드 차단의 규칙이다 (CONTEXT.md 「진행 중 마감」, ADR 0025).
+ *
+ * ── 배선과 규칙 ──
+ * - **제출 시점 하드 차단(유일한 강제 지점)** — `completeResponse` 가 트랜잭션 첫 문장으로
+ *   `pg_advisory_xact_lock(hashtext(surveyId), hashtext(cellKey))` 를 잡고(응답 행 잠금보다 **먼저**, 교착
+ *   방지) 잠금 아래에서 셀 완료 수를 다시 센다(`countQuotaCellCompleted` — 모수 로더에 tx 를 `executor` 로
+ *   넘긴다).
+ * - 목표 이상이면 답변은 저장하되 `status='quotaful_out'`·`is_completed=false`·`completed_at` 없음·컨택 완료
+ *   링크 없음이고, 결과는 `{ kind: 'quota_closed', closedMessage }` 다.
+ * - 이미 `quotaful_out` 인 행의 늦은 제출도 같은 결과(「이미 완료」가 아니다).
+ * - 판정 재료는 평문 답(PII 암호화 전) + 서버가 읽은 조사 대상 attrs 이고 입장 판정과 같은 `deriveCategoryIds`
+ *   를 쓴다.
+ * - 자격미달로 끝나는 제출은 셀을 소비하지 않아 판정하지 않는다.
+ * - **빈 complete(페이로드 없음)도 판정한다** — draft 로 저장한 답을 페이로드 없이 완료해 우회하는 길을 막는다.
+ * - 잠금 순서(advisory → 응답 행)를 지키려 잠금 전 저장분으로 셀 키를 고르고, 잠금 아래 저장분으로 다시
+ *   분류한다.
+ * - 그 사이 draft 가 셀을 바꿨으면(미분류였다가 분류된 경우 포함) 트랜잭션을 되돌리고 바뀐 셀의 잠금부터 다시
+ *   잡아 처음부터 판정한다 — 잠금을 쥔 채 두 번째 셀을 잠그면 순서가 깨진다.
+ * - 3회째도 바뀌면 완료로 만들지 않고 거부한다(fail-closed, 2026-09-30 — 정상 응답 화면은 늘 페이로드를 보내 이
+ *   경로에 오지 않으므로 조작된 동시 요청만 해당).
+ * - 잠금 아래에서 미분류가 됐으면 쿼터에 걸리지 않는다.
+ * - 경합은 `complete-response-quota-hard-close.realdb.test.ts` 가 실 Postgres 로 지킨다.
+ * - 플랜 읽기·셀 분류·셀 완료 수는 `server/read-models/quota-cell.ts` 한 곳이고 입장 판정 `checkQuota` 도 같은
+ *   것을 쓴다.
+ */
+
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import 'server-only';
 
