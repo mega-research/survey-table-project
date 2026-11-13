@@ -77,6 +77,7 @@ export const MobileColumnAxisCards = React.memo(function MobileColumnAxisCards({
         headerGrid: visibleHeaderGrid,
         displayRows,
         includeChoiceOptCells: (choiceGroups?.length ?? 0) > 0,
+        inlineTextAsDescription: true,
       }),
     [choiceGroups, displayRows, visibleColumns, visibleHeaderGrid],
   );
@@ -139,8 +140,10 @@ export const MobileColumnAxisCards = React.memo(function MobileColumnAxisCards({
               // 이 칸이 여는 같은 행 상세 입력(「9) 기타비용」 기타 내용 · 「⑭ 기타」 체크의 기타 내용) — 칸 글자는
               // 행 제목과 겹치니 지우고 모바일 라벨을 입력칸 안내로 쓴다. 닫혀 있으면 게이팅이 컨트롤째 숨긴다
               const detailNodes = details.map((detail) => (
+                // data-cell-id 는 「위치로 이동」(scroll-to-issue)이 칸을 찾는 표식이다 — 딸린 칸도 가져야 오류에서 이 칸으로 온다
                 <div
                   key={detail.id}
+                  data-cell-id={detail.id}
                   data-detail-cell-id={detail.id}
                   className={cn(errorCellIds?.has(detail.id) && 'rounded-lg ring-2 ring-red-300')}
                 >

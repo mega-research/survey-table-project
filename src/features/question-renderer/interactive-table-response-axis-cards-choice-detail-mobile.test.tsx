@@ -137,4 +137,29 @@ describe('축 단위 카드 — 설명 셀과 보기 칸이 여는 상세 입력
     const second = useOther.querySelector<HTMLElement>('[data-detail-cell-id="other-name"]')!;
     expect((within(second).getByPlaceholderText('기타 산업명 직접 기입') as HTMLInputElement).value).toBe('우주');
   });
+
+  // Codex 리뷰(2026-11-13): 「위치로 이동」은 data-cell-id 로 칸을 찾는다 — 타일 아래로 옮긴 입력 칸도 그 표식이 있어야 한다
+  it('타일 아래 기타 내용 칸은 오류 위치 이동이 찾는 표식(data-cell-id)을 갖는다', () => {
+    const { container } = render(<Harness />);
+    const supplyOther = container.querySelector<HTMLElement>('[data-cell-id="s14"]')!;
+    fireEvent.click(within(supplyOther).getByRole('checkbox'));
+    const target = container.querySelector<HTMLElement>('[data-cell-id="other-name"]');
+    expect(target).not.toBeNull();
+    expect(target!.querySelector('input')).not.toBeNull();
+  });
+
+  // Codex 리뷰(2026-11-13): 컨트롤의 aria-label 이 접근성 이름이라 label 안 설명은 읽히지 않는다 — aria-describedby 로 잇는다
+  it('타일의 체크 컨트롤은 설명을 aria-describedby 로 가리킨다(카드마다 다른 id)', () => {
+    const { container } = render(<Harness />);
+    const ids = ['s1', 'u1'].map((cellId) => {
+      const tile = container.querySelector<HTMLElement>(`[data-cell-id="${cellId}"]`)!;
+      const control = within(tile).getByRole('checkbox');
+      expect(control.getAttribute('aria-label')).toBe('① 제조 – 자동차·운송장비');
+      const describedBy = control.getAttribute('aria-describedby');
+      expect(describedBy).toBeTruthy();
+      expect(container.ownerDocument.getElementById(describedBy!)?.textContent).toBe('차량조립공정로봇');
+      return describedBy;
+    });
+    expect(new Set(ids).size).toBe(2);
+  });
 });

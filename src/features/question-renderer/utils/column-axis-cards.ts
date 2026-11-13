@@ -1,5 +1,11 @@
-import type { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
-import { collectGateControllerIds } from '@/utils/cell-gate-tree';
+import type {
+  CellEnableCondition,
+  HeaderCell,
+  TableCell,
+  TableColumn,
+  TableRow,
+} from '@/types/survey';
+import { collectGateControllerIds, isGateGroup } from '@/utils/cell-gate-tree';
 
 import { expandHeaderGrid } from './expand-header-grid';
 import { buildTableRowspanCoverage } from './table-rowspan-coverage';
@@ -115,22 +121,25 @@ const isDescriptionText = (cell: TableCell): boolean =>
  * 셀은 상위 구분이다. 상위 구분은 세로 병합으로 위 행에서 내려온 셀도 센다 — 아래 행이 제 구분을
  * 잃지 않는다. 행 제목은 그 행 자신의 셀만 된다(내려온 셀은 여러 행의 것이라 행을 구분하지 못한다).
  *
- * 「바로 표시」 글자 셀은 제목·구분이 아니라 설명이다. 다만 제목이 될 다른 글자 셀도 행 이름도 없으면
- * 종전대로 마지막 글자 셀이 제목이다(제목 없는 항목이 생기지 않게 — 그때는 설명을 내지 않는다).
+ * `inlineTextAsDescription` 을 켜면 「바로 표시」 글자 셀은 제목·구분이 아니라 설명이다. 다만 제목이 될 다른
+ * 글자 셀도 행 이름도 없으면 종전대로 마지막 글자 셀이 제목이다(제목 없는 항목이 생기지 않게 — 그때는 설명을 내지 않는다).
  * `choiceDetailIds` = 보기 칸이 여는 상세 입력(타일 아래에 딸리는 칸)은 응답 칸으로 세지 않는다 —
  * 첫 열이 「기타 [입력]」인 행에서도 뒤의 글자 셀이 제목 구역에 든다.
  */
 function rowLabel(
   row: TableRow,
   covered: ReadonlyArray<TableCell | undefined>,
-  choiceDetailIds: ReadonlySet<string>,
+  options: { choiceDetailIds?: ReadonlySet<string>; inlineTextAsDescription?: boolean } = {},
 ): Pick<ColumnAxisCardItem, 'label' | 'labelCell' | 'groupCells' | 'descriptionCells'> {
   const firstAnswer = row.cells.findIndex(
-    (cell) => isAnswerCell(cell) && !choiceDetailIds.has(cell.id),
+    (cell) => isAnswerCell(cell) && !options.choiceDetailIds?.has(cell.id),
   );
   const end = firstAnswer < 0 ? row.cells.length : firstAnswer;
   const zone = row.cells.slice(0, end);
-  const ownDescriptions = zone.filter((cell) => isVisible(cell) && isDescriptionText(cell));
+  // 설명 셀 규칙은 축 카드를 그리는 호출만 켠다 — 같은 행 제목을 쓰는 표 아래 상세 기재 라벨·이미지 머리 줄은 종전 그대로
+  const ownDescriptions = options.inlineTextAsDescription
+    ? zone.filter((cell) => isVisible(cell) && isDescriptionText(cell))
+    : [];
   const lastIndexOf = (accept: (cell: TableCell) => boolean): number => {
     for (let index = end - 1; index >= 0; index -= 1) {
       const cell = row.cells[index]!;
@@ -138,7 +147,7 @@ function rowLabel(
     }
     return -1;
   };
-  let labelIndex = lastIndexOf((cell) => isLabelText(cell) && !isDescriptionText(cell));
+  let labelIndex = lastIndexOf((cell) => isLabelText(cell) && !ownDescriptions.includes(cell));
   let descriptionCells = ownDescriptions;
   if (labelIndex < 0 && ownDescriptions.length > 0 && (row.label ?? '').trim() === '') {
     labelIndex = lastIndexOf(isLabelText);
@@ -181,9 +190,27 @@ function detailControllerOf(row: TableRow): Map<string, string> {
 }
 
 /**
- * 보기 칸이 여는 상세 입력 칸 → 그 칸을 여는 같은 행 보기 그룹 칸 id 들. 게이팅 컨트롤러가 하나 이상이고
- * **전부** 같은 행의 보기 그룹 칸일 때만이다(「공급 ⑭ 기타 또는 활용 ⑭ 기타를 체크하면 열리는 기타 내용」).
- * 응답 칸이 섞였거나 다른 행 칸이 여는 칸은 종전대로 제 열 카드다.
+ * 조건이 「같은 행 보기 칸 중 하나 이상을 골랐을 때만 참」인가 — 잎이 전부 그 행 보기 칸의 choice-selected 이고
+ * 묶음은 AND·OR 뿐일 때다. NOT 이 끼면 아무 타일도 고르지 않았는데 칸이 열릴 수 있어(그릴 타일이 없다) 아니다.
+ * 빈 묶음(조건 없음 = 늘 참)도 아니다.
+ */
+function opensOnlyBySelectedChoices(
+  condition: CellEnableCondition | undefined,
+  choiceIds: ReadonlySet<string>,
+): boolean {
+  if (!condition) return false;
+  if (!isGateGroup(condition)) {
+    return condition.kind === 'choice-selected' && choiceIds.has(condition.controllerCellId);
+  }
+  if (condition.op === 'NOT' || condition.terms.length === 0) return false;
+  return condition.terms.every((term) => opensOnlyBySelectedChoices(term, choiceIds));
+}
+
+/**
+ * 보기 칸이 여는 상세 입력 칸 → 그 칸을 여는 같은 행 보기 그룹 칸 id 들. 열림 조건이 같은 행 보기 칸을
+ * **골랐을 때만** 참일 때다(「공급 ⑭ 기타 또는 활용 ⑭ 기타를 체크하면 열리는 기타 내용」) — 타일을 고른
+ * 카드에서만 그리므로, 조건이 참이면 고른 타일이 반드시 하나는 있어야 칸이 화면에 선다.
+ * 응답 칸이 섞였거나 NOT 으로 본 칸, 다른 행 칸이 여는 칸은 종전대로 제 열 카드다.
  */
 function choiceDetailControllersOf(row: TableRow): Map<string, string[]> {
   const choiceIds = new Set(row.cells.filter(isGroupChoiceCell).map((cell) => cell.id));
@@ -191,9 +218,8 @@ function choiceDetailControllersOf(row: TableRow): Map<string, string[]> {
   if (choiceIds.size === 0) return result;
   for (const cell of row.cells) {
     if (!isAnswerCell(cell)) continue;
-    const controllers = [...new Set(collectGateControllerIds(cell.enabledWhen))];
-    if (controllers.length === 0 || !controllers.every((id) => choiceIds.has(id))) continue;
-    result.set(cell.id, controllers);
+    if (!opensOnlyBySelectedChoices(cell.enabledWhen, choiceIds)) continue;
+    result.set(cell.id, [...new Set(collectGateControllerIds(cell.enabledWhen))]);
   }
   return result;
 }
@@ -215,6 +241,11 @@ export function buildColumnAxisCards(input: {
    * 글자 셀(부서 이름)도 행 제목이 된다.
    */
   includeChoiceOptCells?: boolean | undefined;
+  /**
+   * 「바로 표시」 글자 셀을 행 제목이 아니라 설명(`descriptionCells`)으로 낸다 — 응답 화면 축 카드만 켠다.
+   * 끄면 종전대로 그 셀도 행 제목 후보다(표 아래 상세 기재 라벨이 이 투영의 행 제목을 그대로 쓴다).
+   */
+  inlineTextAsDescription?: boolean | undefined;
 }): ColumnAxisCard[] {
   const coverage = buildTableRowspanCoverage(input.displayRows);
   // 보기 칸이 여는 상세 입력은 보기 칸이 카드 항목일 때만 묶는다 — 아니면 딸릴 타일이 없어 어느 카드에도 안 그려진다
@@ -227,11 +258,10 @@ export function buildColumnAxisCards(input: {
   const labels = new Map(
     input.displayRows.map((row) => [
       row.id,
-      rowLabel(
-        row,
-        coverage.get(row.id) ?? row.cells,
-        new Set(choiceDetailsByRow.get(row.id)!.keys()),
-      ),
+      rowLabel(row, coverage.get(row.id) ?? row.cells, {
+        choiceDetailIds: new Set(choiceDetailsByRow.get(row.id)!.keys()),
+        inlineTextAsDescription: input.inlineTextAsDescription === true,
+      }),
     ]),
   );
   const detailsByRow = new Map(input.displayRows.map((row) => [row.id, detailControllerOf(row)]));
@@ -252,7 +282,10 @@ export function buildColumnAxisCards(input: {
       if (!isAnswerCell(cell)) continue;
       if (choiceDetailOf.has(cell.id)) continue;
       const detailOf = detailsByRow.get(row.id)!;
-      if (detailOf.has(cell.id)) continue;
+      // 타일 아래로 간 칸(보기 상세)이 다시 여는 칸은 묶지 않는다 — 타일 아래 칸은 제 상세를 그리지 않아
+      // 묶으면 어느 카드에도 안 그려진다. 그런 칸은 제 열 카드에 남긴다
+      const bundledUnder = detailOf.get(cell.id);
+      if (bundledUnder !== undefined && !choiceDetailOf.has(bundledUnder)) continue;
       const details = row.cells.filter((other) => detailOf.get(other.id) === cell.id);
       items.push({ cell, row, ...labels.get(row.id)!, details });
     }
@@ -267,8 +300,6 @@ export function buildColumnAxisCards(input: {
   }
   return cards;
 }
-
-const NO_CHOICE_DETAILS: ReadonlySet<string> = new Set();
 
 /**
  * 셀마다 「행 제목 · 열 제목」 — 축 단위 카드와 같은 행 제목·열 제목 규칙으로, 응답 칸이 아닌 셀
@@ -286,7 +317,7 @@ export function buildCellPositionLabels(input: {
   );
   const labels = new Map<string, string>();
   for (const row of input.displayRows) {
-    const rowTitle = normalize(rowLabel(row, coverage.get(row.id) ?? row.cells, NO_CHOICE_DETAILS).label);
+    const rowTitle = normalize(rowLabel(row, coverage.get(row.id) ?? row.cells).label);
     for (const [columnIndex, cell] of row.cells.entries()) {
       if (!isVisible(cell)) continue;
       const parts: string[] = [];

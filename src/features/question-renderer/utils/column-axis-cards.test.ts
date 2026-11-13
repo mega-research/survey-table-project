@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import type { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 
-import { buildColumnAxisCards, withRowTitleAsCheckLabel } from './column-axis-cards';
+import {
+  buildCellPositionLabels,
+  buildColumnAxisCards,
+  withRowTitleAsCheckLabel,
+} from './column-axis-cards';
 
 // AI 실태조사 Q22 모양 — 구분 열(들여쓰기 칸 포함) + 연도 열 둘, 칸마다 「명」 단위가 붙은 입력칸.
 const columns: TableColumn[] = [
@@ -378,7 +382,12 @@ describe('buildColumnAxisCards — 설명 셀과 보기 칸이 여는 상세 입
     },
   ];
   const build = (rowsIn: TableRow[], includeChoiceOptCells = true) =>
-    buildColumnAxisCards({ columns: industryColumns, displayRows: rowsIn, includeChoiceOptCells });
+    buildColumnAxisCards({
+      columns: industryColumns,
+      displayRows: rowsIn,
+      includeChoiceOptCells,
+      inlineTextAsDescription: true,
+    });
 
   it('「바로 표시」 글자 셀은 행 제목이 아니라 설명이 되고, 행 제목은 그 앞 글자 셀이다', () => {
     const [supply, use] = build(industryRows);
@@ -456,5 +465,73 @@ describe('buildColumnAxisCards — 설명 셀과 보기 칸이 여는 상세 입
     const cards = build(industryRows, false);
     expect(cards.map((card) => card.key)).toEqual(['name']);
     expect(cards[0]!.items.map((item) => item.cell.id)).toEqual(['other-name']);
+  });
+
+  // Codex 리뷰(2026-11-13): 조건이 참이어도 고른 타일이 없을 수 있으면 타일 아래로 옮기면 안 된다 —
+  // 「기타를 고르지 않았을 때 열리는 칸」은 타일을 고르면 닫히고 안 고르면 그릴 자리가 없어 영영 못 쓴다
+  it('보기 칸을 NOT 으로 본 입력 칸은 묶지 않는다 — 종전대로 제 열 카드', () => {
+    const negated: TableRow[] = [
+      {
+        id: 'r1',
+        label: '기타',
+        cells: [
+          {
+            ...otherInput,
+            enabledWhen: {
+              kind: 'group',
+              op: 'NOT',
+              terms: [{ kind: 'choice-selected', controllerCellId: 's14' }],
+            },
+          },
+          example('e14', '우주, 해양등'),
+          choice('s14', 'gs'),
+          choice('u14', 'gu'),
+        ],
+      },
+    ];
+    const cards = build(negated);
+    expect(cards.map((card) => card.key)).toEqual(['name', 'supply', 'use']);
+    expect(cards[0]!.items.map((item) => item.cell.id)).toEqual(['other-name']);
+    expect(cards[1]!.items[0]!.details).toEqual([]);
+  });
+
+  it('보기 칸이 여는 입력 칸이 다시 여는 칸(사슬)은 묶지 않고 제 열 카드에 남는다 — 어느 카드에도 안 그려지는 칸이 없게', () => {
+    const chainColumns: TableColumn[] = [
+      { id: 'name', label: '적용 산업' },
+      { id: 'memo', label: '비고' },
+      { id: 'supply', label: '공급(S)' },
+      { id: 'use', label: '활용(U)' },
+    ];
+    const chained: TableRow[] = [
+      {
+        id: 'r1',
+        label: '기타',
+        cells: [
+          { ...otherInput, enabledWhen: { kind: 'choice-selected', controllerCellId: 's14' } },
+          input('memo', { content: '', enabledWhen: { kind: 'filled', controllerCellId: 'other-name' } }),
+          choice('s14', 'gs'),
+          choice('u14', 'gu'),
+        ],
+      },
+    ];
+    const cards = buildColumnAxisCards({ columns: chainColumns, displayRows: chained, includeChoiceOptCells: true });
+    expect(cards.map((card) => card.key)).toEqual(['memo', 'supply', 'use']);
+    expect(cards[0]!.items.map((item) => item.cell.id)).toEqual(['memo']);
+    expect(cards[1]!.items[0]!.details.map((cell) => cell.id)).toEqual(['other-name']);
+    // 그려진 칸 전부: 보기 둘 + 기타 내용(타일 아래) + 비고(제 열 카드)
+    const drawn = new Set(cards.flatMap((card) => card.items.flatMap((item) => [item.cell.id, ...item.details.map((d) => d.id)])));
+    expect([...drawn].sort()).toEqual(['memo', 'other-name', 's14', 'u14']);
+  });
+
+  // Codex 리뷰(2026-11-13): 행 제목 규칙은 표 아래 상세 기재 라벨·이미지 머리 줄도 쓴다 — 설명 셀 규칙은 축 카드 호출만 켠다
+  it('설명 셀 규칙을 켜지 않은 호출은 「바로 표시」 셀도 종전대로 행 제목 후보다', () => {
+    const cards = buildColumnAxisCards({ columns: industryColumns, displayRows: industryRows, includeChoiceOptCells: true });
+    const first = cards.find((card) => card.key === 'supply')!.items[0]!;
+    expect(first.label).toBe('차량조립공정로봇');
+    expect(first.groupCells.map((cell) => cell.id)).toEqual(['n1']);
+    expect(first.descriptionCells).toEqual([]);
+    expect(buildCellPositionLabels({ columns: industryColumns, displayRows: industryRows }).get('s1')).toBe(
+      '차량조립공정로봇 · 공급(S)',
+    );
   });
 });
