@@ -37,7 +37,7 @@ import type {
 } from '../domain/lifecycle';
 import { extractDraftSeq } from '../domain/draft-seq';
 import { reopenQuotaClosedResponse } from './quota-reopen';
-import { SurveyNotAcceptingResponsesError } from './response-gate';
+import { countCompletedResponses, SurveyNotAcceptingResponsesError } from './response-gate';
 
 // ========================
 // 응답 라이프사이클 service (pub)
@@ -271,7 +271,30 @@ export async function recordStepVisit(
   if (row.isTest) return { denial: null, pausedMessage: null };
   const flags = await getSurveyControlFlags(row.surveyId);
   const denial = flags ? ongoingResponseDenial(flags, { isTest: row.isTest }) : null;
-  return { denial, pausedMessage: denial ? (flags?.pausedMessage ?? null) : null };
+  if (denial) return { denial, pausedMessage: flags?.pausedMessage ?? null };
+  // 전체 완료 목표 — 찼으면 알린다(강제는 제출 시점). 목표가 있는 설문만 센다.
+  if (flags?.maxResponses != null && (await isCompletionTargetClosedFor(row, flags.maxResponses))) {
+    return { denial: 'completion_target_reached', pausedMessage: null };
+  }
+  return { denial: null, pausedMessage: null };
+}
+
+/**
+ * 이 응답에게 전체 완료 목표가 닫혔는가 — 완료 수가 목표 이상이고, 재응답 허용으로 되돌려진 응답이
+ * 아니다(그 응답의 재제출은 제출 판정도 면제한다 — 알림만 막으면 화면이 갈린다). 면제 표식은
+ * 목표가 찼을 때만 읽는다(평소 페이지 이동에 질의를 늘리지 않는다).
+ */
+async function isCompletionTargetClosedFor(
+  row: { id: string; surveyId: string },
+  maxResponses: number,
+): Promise<boolean> {
+  if ((await countCompletedResponses(row.surveyId)) < maxResponses) return false;
+  const [response] = await db
+    .select({ metadata: surveyResponses.metadata })
+    .from(surveyResponses)
+    .where(eq(surveyResponses.id, row.id))
+    .limit(1);
+  return !response?.metadata?.['reeditPendingSince'];
 }
 
 /**

@@ -248,6 +248,8 @@ const _SURVEY_FIELDS_NOT_COPIED = [
   'isPaused',
   'pausedMessage',
   'testModeEnabled',
+  // 전체 완료 목표 — 원본의 운영 설정. 보이지 않는 목표를 물려받은 복제본이 어느 날 응답을 막는다
+  'maxResponses',
   // 추적조사 — 이월 응답 임포트에 딸린 설정
   'priorWaveLabel',
   'changeConfirmEnabled',
@@ -299,7 +301,6 @@ export async function duplicateSurvey(
         requireLogin: original.requireLogin,
         endDate: original.endDate,
         piiRetentionUntil: original.piiRetentionUntil,
-        maxResponses: original.maxResponses,
         thankYouMessage: original.thankYouMessage,
         screenedOutMessage: original.screenedOutMessage,
         localizedMessages: original.localizedMessages ?? null,

@@ -25,6 +25,8 @@ interface Props {
     testResponseCount: number;
     testTargetCount: number;
     firstTestInviteCode: string | null;
+    completionTarget: number | null;
+    completedResponseCount: number;
   };
 }
 

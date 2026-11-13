@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { getControlState, setPaused } from './control';
+import { getControlState, setCompletionTarget, setPaused } from './control';
 
 // db.update().set().where().returning() 체인의 set 페이로드와 where 조건을 캡처하도록 stub.
 const capturedSets: Array<Record<string, unknown>> = [];
@@ -83,5 +83,34 @@ describe('getControlState 설문 부재', () => {
   it('미저장/삭제 설문이면 throw 대신 null — 편집 헤더의 테스트 모드 버튼이 폴링마다 500 을 쌓지 않는다', async () => {
     selectRows = [];
     await expect(getControlState(SURVEY_ID)).resolves.toBeNull();
+  });
+});
+
+describe('setCompletionTarget — 전체 완료 목표', () => {
+  it('목표를 max_responses 컬럼에 쓴다', async () => {
+    returningRows = [{ completionTarget: 1100 }];
+
+    const res = await setCompletionTarget({ surveyId: SURVEY_ID, completionTarget: 1100 });
+
+    expect(capturedSets).toHaveLength(1);
+    expect(capturedSets[0]!).toMatchObject({ maxResponses: 1100 });
+    expect(res).toEqual({ completionTarget: 1100 });
+  });
+
+  it('null 이면 목표를 없앤다 — 키를 빼는 것이 아니라 null 을 쓴다', async () => {
+    returningRows = [{ completionTarget: null }];
+
+    const res = await setCompletionTarget({ surveyId: SURVEY_ID, completionTarget: null });
+
+    expect(capturedSets[0]!).toHaveProperty('maxResponses', null);
+    expect(res).toEqual({ completionTarget: null });
+  });
+
+  it('없는 설문이면 NOT_FOUND 로 거부한다', async () => {
+    returningRows = [];
+
+    await expect(
+      setCompletionTarget({ surveyId: SURVEY_ID, completionTarget: 10 }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });

@@ -24,6 +24,7 @@ const {
   headersMock,
   selectWhereLogMock,
   inviteLookupMock,
+  txExecuteMock,
 } = vi.hoisted(() => ({
   surveyFindFirstMock: vi.fn(),
   versionFindFirstMock: vi.fn(),
@@ -38,6 +39,8 @@ const {
   selectWhereLogMock: vi.fn(),
   // resumeOrCreateResponse 의 컨택 분기(inviteToken → findContactByInviteToken) 검증용.
   inviteLookupMock: vi.fn(),
+  // 제출 트랜잭션의 advisory lock(전체 완료 목표) — 호출 여부·순서를 본다.
+  txExecuteMock: vi.fn(async (..._args: unknown[]) => [] as unknown[]),
 }));
 
 const insertChain = {
@@ -83,6 +86,7 @@ vi.mock('@/db', () => {
     update: vi.fn(() => makeUpdateChain()),
     transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => {
       const tx = {
+        execute: (...a: unknown[]) => txExecuteMock(...a),
         update: vi.fn(() => makeUpdateChain()),
         insert: vi.fn(() => insertChain),
         delete: vi.fn(() => makeUpdateChain()),
@@ -306,12 +310,62 @@ describe('assertResponseCompletable — completeResponse 완료 게이트', () =
     const { completeResponse } =
       await import('@/server/survey-response/services/response-completion');
     // 종전에는 마감이 먼저 잘려 정원 검사에 도달하지 않았다. 차단은 그대로다.
-    // 응답자에게 나가는 사유는 not_accepting 으로 뭉갠다 — pub 표면이라 설문 상태를
-    // 추측할 수 있는 정보를 줄인다(toGateBlockReason).
+    // 응답자에게 나가는 사유는 모집 완료(quota_closed) — 전체 완료 목표 도달은 「링크 확인」
+    // 안내가 아니라 모집 완료 화면으로 보낸다(toGateBlockReason).
     await expect(completeResponse({ responseId: 'r1' })).resolves.toMatchObject({
       kind: 'blocked',
-      reason: 'not_accepting',
+      reason: 'quota_closed',
     });
+  });
+
+  // ── 전체 완료 목표: 잠금 아래 재확인 (CONTEXT.md 「전체 완료 목표」) ──
+  it('사전 검사를 통과해도 잠금 아래에서 목표가 찼으면 완료로 만들지 않고 모집 완료로 접는다', async () => {
+    // 잠금 밖 셈은 1(자리 있음), 잠금을 잡고 다시 세니 2 — 마지막 자리를 앞선 제출이 채웠다.
+    countResultMock
+      .mockResolvedValueOnce([{ total: 1 }])
+      .mockResolvedValue([{ total: 2 }]);
+    txExecuteMock.mockClear();
+    const { completeResponse } =
+      await import('@/server/survey-response/services/response-completion');
+    await expect(completeResponse({ responseId: 'r1' })).resolves.toEqual({
+      kind: 'blocked',
+      reason: 'quota_closed',
+    });
+    expect(txExecuteMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('목표가 있는 설문의 제출은 설문 잠금을 잡고, 목표가 없는 설문은 잡지 않는다', async () => {
+    countResultMock.mockResolvedValue([{ total: 1 }]);
+    const { completeResponse } =
+      await import('@/server/survey-response/services/response-completion');
+
+    txExecuteMock.mockClear();
+    await completeResponse({ responseId: 'r1' });
+    expect(txExecuteMock).toHaveBeenCalledTimes(1);
+    const lockSql = dialect.sqlToQuery(txExecuteMock.mock.calls[0]![0] as never);
+    expect(lockSql.sql).toContain('pg_advisory_xact_lock');
+    expect(lockSql.params).toEqual([SURVEY_ID, 'completion-target']);
+
+    surveyFindFirstMock.mockResolvedValue(publishedSurvey({ maxResponses: null }));
+    txExecuteMock.mockClear();
+    await completeResponse({ responseId: 'r1' });
+    expect(txExecuteMock).not.toHaveBeenCalled();
+  });
+
+  it('재응답 허용으로 되돌려진 응답의 재제출은 목표가 찼어도 받는다 — 잠금도 잡지 않는다', async () => {
+    responseFindFirstMock.mockResolvedValue({
+      surveyId: SURVEY_ID,
+      versionId: null,
+      contactTargetId: null,
+      metadata: { reeditPendingSince: '2026-11-13T00:00:00.000Z' },
+    });
+    countResultMock.mockResolvedValue([{ total: 5 }]);
+    txExecuteMock.mockClear();
+    const { completeResponse } =
+      await import('@/server/survey-response/services/response-completion');
+    const res = await completeResponse({ responseId: 'r1' });
+    expect(res).toMatchObject({ id: 'r1' });
+    expect(txExecuteMock).not.toHaveBeenCalled();
   });
 
   it('마감 + 중단은 계속 차단한다 (survey_paused)', async () => {
@@ -1075,9 +1129,31 @@ describe('A-1 사전 박제 — 우선순위·부분집합·fail-open', () => {
     ).toEqual({ kind: 'blocked', reason: 'invalid_token' });
   });
 
-  it('신규 수용: create 는 정원을 soft 로 둔다 — 정원이 찼어도 생성은 성공한다 (의도)', async () => {
-    // 정원 하드체크는 completedCount 를 넘기는 complete 시점 전용이다.
+  it('신규 수용: 전체 완료 목표가 찼으면 응답 행을 만들지 않고 모집 완료로 접는다', async () => {
+    // 2026-11-13 전에는 create 가 정원을 보지 않아 목표가 찬 뒤에도 입장이 열려 있었다.
     surveyFindFirstMock.mockResolvedValue(publishedSurvey({ maxResponses: 1 }));
+    countResultMock.mockResolvedValue([{ total: 1 }]);
+    responseFindFirstMock.mockResolvedValue(undefined);
+    insertChain.values.mockClear();
+
+    const { createResponseWithFirstAnswer } =
+      await import('@/server/survey-response/services/response-entry');
+    expect(
+      await createResponseWithFirstAnswer({
+        surveyId: SURVEY_ID,
+        sessionId: 'a1-capacity-full',
+        versionId: null,
+        questionId: 'q1',
+        value: 'a',
+        currentStepId: 'step1',
+        clientSignals: VALID_SIGNALS,
+      }),
+    ).toEqual({ kind: 'blocked', reason: 'quota_closed' });
+    expect(insertChain.values).not.toHaveBeenCalled();
+  });
+
+  it('신규 수용: 전체 완료 목표에 자리가 남았으면 생성은 성공한다', async () => {
+    surveyFindFirstMock.mockResolvedValue(publishedSurvey({ maxResponses: 6 }));
     countResultMock.mockResolvedValue([{ total: 5 }]);
     // INSERT 후 updateQuestionResponse 가 응답 행을 다시 읽는다 — 첫 undefined 는 중복검사
     // Track B 통과용이고, 두 번째부터 실제 행을 준다. 기존 성공 케이스와 같은 2단 mock.
@@ -1094,7 +1170,7 @@ describe('A-1 사전 박제 — 우선순위·부분집합·fail-open', () => {
     expect(
       await createResponseWithFirstAnswer({
         surveyId: SURVEY_ID,
-        sessionId: 'a1-capacity-soft',
+        sessionId: 'a1-capacity-open',
         versionId: null,
         questionId: 'q1',
         value: 'a',

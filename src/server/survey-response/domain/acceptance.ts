@@ -83,8 +83,10 @@ const CHECK_ORDER = [
 const CHECKS_FOR = {
   /**
    * 신규 진입 — 마감된 설문에 새로 들어오는 것은 막는다. endDate 의 본래 뜻이 여기다.
-   * 정원은 completedCount 를 넘긴 호출자만 하드체크한다 — create 시점은 넘기지 않아
-   * soft(검사 생략)이고 잔여 race window 는 완료 게이트가 보강한다.
+   * 정원(전체 완료 목표)은 completedCount 를 넘긴 호출자만 검사한다 — 응답 진입
+   * (admitAndCreateResponseInner)은 목표가 있는 설문만 세어 넘긴다(2026-11-13 — 전에는 넘기지 않아
+   * 목표가 찬 뒤에도 입장이 열려 있었다). 입장은 잠금 없이 세므로 마지막 자리의 경합은
+   * 완료 게이트(잠금 아래 재확인)가 막는다.
    * createBlankResponse 도 이 행을 쓴다(수용된 갭): 답변을 하나도 쓰지 않은 진입이라
    * 마감으로 잘려도 잃는 노동이 정의상 0 이고, 완료 정책으로 옮기면 마감 후 신규 진입이
    * 그대로 뚫린다.
@@ -102,7 +104,8 @@ const CHECKS_FOR = {
    * 진행해 저장된다(ongoingResponse 와 같은 결정).
    * 정원·중단은 계속 차단한다 — 정원을 넘기면 표본이 망가지고, 중단은 운영자가 "지금
    * 아무것도 들어오지 마라"고 건 라이브 스위치라 진행 중 응답에도 적용된다.
-   * 정원은 이 행에서만 하드체크다(completedCount 필수 인자).
+   * 정원은 이 행에서 하드체크다(completedCount 필수 인자) — 제출 트랜잭션이 설문 잠금 아래에서
+   * 같은 판정을 한 번 더 한다(response-completion).
    * 부수 효과: 지금까지는 CHECK_ORDER 상 마감이 정원보다 앞이라 마감 후 완료 시도가 항상
    * 마감에서 먼저 잘려 정원 검사에 도달하지 않았다. 마감을 빼면 정원 검사가 처음으로
    * 활성화되어 사유가 end_date_passed → max_responses_reached 로 승계된다. 어느 쪽도 차단이라
@@ -130,7 +133,9 @@ const CHECKS_FOR = {
    * (completeResponse 와 같은 결정). 첫 진입 게이트는 newResponse 소관이고, 종결 상태
    * 판정은 호출자 resumeOrCreateResponse 의 인라인 concludedStatuses 가 진다 —
    * 통합은 후속 티켓(A-3).
-   * 정원 미검사도 같은 이유 — 진행 중인 응답을 중간에 잘라내지 않고 완료 시점에 판정한다.
+   * 정원 미검사도 같은 이유 — 답 저장·재진입을 막지 않고 완료 시점에 판정한다. 다만 목표가 찬
+   * 사실은 페이지 이동 때 알린다(recordStepVisit 의 completion_target_reached) — 끝까지 채운
+   * 뒤에야 막히는 것보다 낫고, 응답은 열린 채 남아 목표를 올리면 그대로 이어 간다.
    */
   ongoingResponse: ['survey_paused'],
   /**
@@ -171,7 +176,7 @@ const PREDICATES: Record<AcceptanceDenial, (f: AcceptanceFacts) => boolean> = {
   survey_paused: (f) => f.isPaused === true,
   // null = 무제한, 경계는 <= (endDate === now 는 거부).
   end_date_passed: (f) => f.endDate != null && f.endDate.getTime() <= f.now,
-  // completedCount 미전달(create 시점) = soft — 검사 생략.
+  // completedCount 미전달 = 검사 생략(목표 없는 설문의 진입·테스트 전용 startResponse).
   max_responses_reached: (f) =>
     f.maxResponses != null && f.completedCount != null && f.completedCount >= f.maxResponses,
   // checkTrackA 가 inviteToken 유효성을 별도 검증하므로 여기서는 contactTargetId 매칭 유무만 본다.
@@ -204,7 +209,7 @@ function evaluate<D extends AcceptanceDenial>(
 
 /**
  * 신규 응답을 받는가 — startResponse / createResponseWithFirstAnswer / createBlankResponse.
- * completedCount 는 넘기지 않는다(create 시점 정원은 soft). 완료 시점 하드체크는
+ * completedCount 는 목표가 있는 설문의 응답 진입만 넘긴다(잠금 없는 셈). 완료 시점 하드체크는
  * completeResponseDenial 소관이다.
  */
 export function newResponseDenial(

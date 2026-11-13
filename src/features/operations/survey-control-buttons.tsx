@@ -31,6 +31,7 @@ import { getErrorMessage } from '@/lib/get-error-message';
 import { client } from '@/shared/lib/rpc';
 import { DEFAULT_PAUSED_MESSAGE } from '@/shared/lib/survey-control';
 
+import { CompletionTargetControl } from './completion-target-control';
 import { TestModeControl } from './test-mode-control';
 
 interface Props {
@@ -45,12 +46,15 @@ interface Props {
     testResponseCount: number;
     testTargetCount: number;
     firstTestInviteCode: string | null;
+    completionTarget: number | null;
+    completedResponseCount: number;
   };
 }
 
 /**
  * 운영 헤더의 설문 중단·테스트 모드 토글 버튼.
  *
+ * - 완료 목표: CompletionTargetControl 에 위임 — 설문 전체 완료 수가 목표에 닿으면 응답을 닫는다.
  * - 테스트 모드: TestModeControl (설문 편집 헤더와 공용) 에 위임.
  * - 중단: 응답자 화면에 안내 문구만 노출하고 신규 응답 접수를 막는다. ON 이면 rose 톤으로
  *   "중단 중" 을 표시하고 클릭 시 재개 확인을 받는다.
@@ -101,6 +105,14 @@ export function SurveyControlButtons({ surveyId, initial }: Props) {
   return (
     <>
       <TestModeControl surveyId={surveyId} initial={initial} />
+
+      {/* key — 다른 관리자가 바꾼 목표가 새로 고침으로 내려오면 버튼이 그 값으로 다시 선다 */}
+      <CompletionTargetControl
+        key={initial.completionTarget ?? 'none'}
+        surveyId={surveyId}
+        initialTarget={initial.completionTarget}
+        completedCount={initial.completedResponseCount}
+      />
 
       {state.isPaused ? (
         <Button

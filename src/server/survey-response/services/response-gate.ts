@@ -1,8 +1,9 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import 'server-only';
 
-import { db } from '@/db';
-import { surveyVersions, surveys } from '@/db/schema';
+import { db, type DbOrTx } from '@/db';
+import { surveyResponses, surveyVersions, surveys } from '@/db/schema';
+import { notTestResponse } from '@/server/response-filters';
 import {
   pinnedVersionId,
   type SurveyEndRedirects,
@@ -107,6 +108,31 @@ export function assertResponseCompletable(
   if (denial) {
     throw new SurveyNotAcceptingResponsesError(denial);
   }
+}
+
+/**
+ * surveyId 의 완료 응답 수 (soft-delete 제외, 테스트 응답 제외) — 전체 완료 목표(`max_responses`)의 셈.
+ *
+ * 입장 차단·페이지 이동 알림·제출 하드 차단·콘솔 표시가 같은 셈을 써야 "콘솔은 1,100 인데 응답자는
+ * 들어온다" 가 생기지 않는다. 자격미달·쿼터마감은 완료가 아니라 세지 않는다. 제출 하드 차단은
+ * 설문 잠금을 잡은 트랜잭션을 executor 로 넘겨 잠금 아래에서 다시 센다.
+ */
+export async function countCompletedResponses(
+  surveyId: string,
+  executor: DbOrTx = db,
+): Promise<number> {
+  const [row] = await executor
+    .select({ total: sql<number>`count(*)::int` })
+    .from(surveyResponses)
+    .where(
+      and(
+        eq(surveyResponses.surveyId, surveyId),
+        eq(surveyResponses.status, 'completed'),
+        isNull(surveyResponses.deletedAt),
+        notTestResponse,
+      ),
+    );
+  return row?.total ?? 0;
 }
 
 /** 가용성 게이트용 설문 행 조회. 없으면 throw. */
