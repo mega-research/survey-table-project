@@ -26,10 +26,6 @@ export interface SurveyControlState {
   testResponseCount: number;
   testTargetCount: number;
   firstTestInviteCode: string | null;
-  /** 전체 완료 목표(`surveys.max_responses`) — null 이면 없음. */
-  completionTarget: number | null;
-  /** 실응답 완료 수 — 목표 판정과 같은 셈(completed · 비삭제 · 테스트 제외). */
-  completedResponseCount: number;
 }
 
 export async function getControlState(surveyId: string): Promise<SurveyControlState | null> {
@@ -42,16 +38,6 @@ export async function getControlState(surveyId: string): Promise<SurveyControlSt
       pausedMessage: surveys.pausedMessage,
       testModeEnabled: surveys.testModeEnabled,
       testToken: surveys.testToken,
-      completionTarget: surveys.maxResponses,
-      // 응답 게이트의 countCompletedResponses 와 같은 조건 — 콘솔 숫자와 차단 판정이 갈리지 않게.
-      completedResponseCount: sql<number>`(
-        SELECT count(*)::int
-        FROM survey_responses AS completed_scope
-        WHERE completed_scope.survey_id = surveys.id
-          AND completed_scope.status = 'completed'
-          AND completed_scope.is_test = false
-          AND completed_scope.deleted_at IS NULL
-      )`.mapWith(Number),
       id: surveys.id,
       slug: surveys.slug,
       privateToken: surveys.privateToken,
@@ -95,8 +81,6 @@ export async function getControlState(surveyId: string): Promise<SurveyControlSt
     testResponseCount: row.testResponseCount,
     testTargetCount: row.testTargetCount,
     firstTestInviteCode: row.firstTestInviteCode,
-    completionTarget: row.completionTarget,
-    completedResponseCount: row.completedResponseCount,
   };
 }
 
