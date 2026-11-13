@@ -16,7 +16,7 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 | ------------------------------------------------------------------------------------------- | ------------------------------------------------ |
 | 운영 콘솔 라우트 트리 · 응답 진입 경로(초대 링크·짧은 링크) · API 엔드포인트                | `src/app/AGENTS.md`                              |
 | 운영 집계·파티션 · 진척 보고 분류 키                                                        | `src/server/operations/AGENTS.md`                |
-| 메일 발송 주소·대체 발송                                                                    | `src/server/mail/AGENTS.md`                      |
+| 메일 발송 주소·대체 발송 · 회신 전달(받은 메일 넘기기)                                      | `src/server/mail/AGENTS.md`                      |
 | procedure 베이스·인증과 권한(게스트·보기 전용 게스트) · 테스트 모드·테스트 버전             | `src/server/AGENTS.md`                           |
 | 쿼터                                                                                        | `src/server/quota/AGENTS.md`                     |
 | 문항 수요조사 (조사표·영역 앵커·분할 레이아웃)                                              | `src/server/survey-document/AGENTS.md`           |
@@ -64,6 +64,7 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 | HTML sanitize  | sanitize-html                               |
 | 이메일 발송    | Resend + React Email                        |
 | 이메일 webhook | svix                                        |
+| 받은 메일 풀기 | postal-mime (회신 전달)                     |
 | 백그라운드 잡  | Inngest                                     |
 | 레이트리밋     | @upstash/ratelimit + @upstash/redis         |
 | 로깅           | pino + @axiomhq/js                          |

@@ -93,3 +93,54 @@ describe('scrubSentryEvent — DrizzleQueryError 바인딩 값 스트립', () =>
     expect(out).toEqual(event);
   });
 });
+
+describe('scrubSentryEvent — 요청 본문', () => {
+  /** 웹훅 원문(주소·제목)과 RPC 본문(응답·명단 값)이 SDK 의 요청 데이터 수집으로 붙은 모양. */
+  function eventWithRequestBody(data: unknown): ErrorEvent {
+    return {
+      type: undefined,
+      exception: { values: [{ type: 'Error', value: 'boom' }] },
+      request: {
+        url: 'https://app.example.co.kr/api/webhooks/resend',
+        method: 'POST',
+        query_string: 'a=1',
+        headers: { 'content-type': 'application/json' },
+        data,
+      },
+    };
+  }
+
+  it.each<[string, unknown]>([
+    ['글자로 붙은 본문', '{"type":"email.received","data":{"from":"kim@corp.co.kr","subject":"설문지 회신"}}'],
+    ['객체로 붙은 본문', { json: { answers: { q1: '김철수 010-1234-5678' } } }],
+  ])('%s 은 Sentry 로 보내지 않는다 — URL·메서드는 그대로 둔다', (_label, data) => {
+    const out = scrubSentryEvent(eventWithRequestBody(data), { originalException: new Error('boom') });
+
+    expect(out.request).toEqual({
+      url: 'https://app.example.co.kr/api/webhooks/resend',
+      method: 'POST',
+      query_string: 'a=1',
+      headers: { 'content-type': 'application/json' },
+    });
+    const json = JSON.stringify(out);
+    for (const secret of ['kim@corp.co.kr', '설문지 회신', '김철수', '010-1234-5678']) {
+      expect(json).not.toContain(secret);
+    }
+  });
+
+  it('DB 오류 이벤트에 붙은 요청 본문도 지운다', () => {
+    const err = makeDrizzleError();
+    const event = { ...makeEvent(err), request: { url: 'https://app.example.co.kr/api/rpc/x', method: 'POST', data: 'resp-secret-id' } };
+
+    const out = scrubSentryEvent(event, { originalException: err });
+
+    expect(out.request).toEqual({ url: 'https://app.example.co.kr/api/rpc/x', method: 'POST' });
+    expect(out.tags?.['pg_code']).toBe('22007');
+  });
+
+  it('요청 정보가 없는 이벤트는 그대로 둔다', () => {
+    const event: ErrorEvent = { type: undefined, exception: { values: [{ type: 'Error', value: 'boom' }] } };
+
+    expect(scrubSentryEvent(structuredClone(event), { originalException: new Error('boom') })).toEqual(event);
+  });
+});

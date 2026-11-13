@@ -14,6 +14,10 @@ import { scrubQueryParams, stripParamsInterpolation } from './query-params-scrub
  * 지운 뒤에도 원인은 바로 보여야 한다 — SQL 문장(`$n` 포함)·바인딩 개수·원인 PostgresError 의
  * 타입·메시지·스택은 그대로 두고, 이벤트에 원래 없던 SQLSTATE 를 `pg_code` 태그와 `postgres`
  * 컨텍스트로 더한다.
+ *
+ * 요청 본문(`event.request.data`)은 모든 이벤트에서 지운다 — `sendDefaultPii:false` 는 본문을 막지 않고
+ * SDK 기본값은 본문을 모으는 쪽이다(`httpServerIntegration` 의 `maxRequestBodySize`, `requestDataIntegration` 의
+ * `include.data`). 웹훅 원문(주소·제목)과 RPC 본문(응답·명단 값)이 그 자리에 실린다. URL·메서드는 원인 파악 재료라 남긴다.
  */
 
 /**
@@ -43,6 +47,8 @@ function pickPgContext(pg: Record<string, unknown>): Record<string, string> {
 
 export function scrubSentryEvent(event: ErrorEvent, hint: EventHint): ErrorEvent {
   const source = hint.originalException;
+  // 요청 본문은 Sentry 로 보내지 않는다 — 경로를 가리지 않는다.
+  if (event.request) delete event.request.data;
   for (const ex of event.exception?.values ?? []) {
     if (typeof ex.value === 'string') ex.value = stripParamsInterpolation(ex.value, source);
   }

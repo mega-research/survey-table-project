@@ -23,4 +23,10 @@ Sentry.init({
   // sendDefaultPii 로 막히지 않는다. pino err 직렬화와 같은 규칙으로 지우고, SQL·SQLSTATE 는 남긴다.
   // edge·client 는 DB 를 부르지 않아 걸지 않는다.
   beforeSend: scrubSentryEvent,
+
+  // 성능(트랜잭션) 이벤트는 beforeSend 를 지나지 않는데 같은 요청 정보를 싣는다 — 요청 본문은 여기서도 보내지 않는다.
+  beforeSendTransaction(event) {
+    if (event.request) delete event.request.data;
+    return event;
+  },
 });
