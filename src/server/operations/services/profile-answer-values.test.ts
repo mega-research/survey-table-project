@@ -64,6 +64,30 @@ describe('loadProfileAnswerValues', () => {
     });
   });
 
+  it('저장값이 암호문이던 칸을 알려 준다 — 문항 단위와 표 칸 단위, 평문 칸은 부르지 않는다', async () => {
+    const textKey = answerColumnKey('q-text');
+    const nameKey = answerColumnKey('q-table', 'cell-name');
+    const deptKey = answerColumnKey('q-table', 'cell-dept');
+    selectRows.rows = [
+      {
+        id: 'r1',
+        q0: encryptAnswerValue('홍길동'),
+        q1: { 'cell-name': encryptAnswerValue('김영희'), 'cell-dept': '연구소' },
+      },
+      { id: 'r2', q0: '평문으로 받은 답', q1: null },
+    ];
+    const seen: string[] = [];
+    const out = await loadProfileAnswerValues(
+      ['r1', 'r2'],
+      [textKey, nameKey, deptKey],
+      new Map(),
+      (responseId, key) => seen.push(`${responseId} ${key}`),
+    );
+    expect(seen).toEqual([`r1 ${textKey}`, `r1 ${nameKey}`]);
+    // 값은 종전대로 복호화해 돌려준다
+    expect(out['r1']).toEqual({ [textKey]: '홍길동', [nameKey]: '김영희', [deptKey]: '연구소' });
+  });
+
   it('보기 열은 보기 글자로 — 복수는 「, 」, 상세 기재는 괄호, 표 선택 칸도 같다', async () => {
     const radioKey = answerColumnKey('q-radio');
     const checkKey = answerColumnKey('q-check');

@@ -32,6 +32,42 @@ import { triggersFallback } from './recipient-status-transition';
  * 다시 보내지 않는 경우: 그사이 응답을 마쳤거나, 수신거부·스팸 신고(신고는 수신거부로 수렴)했거나, 연락 금지
  * 결과코드가 붙었거나, 회차가 취소·보관됐거나, 다음 순위 주소가 없을 때. 같은 수신자로 여러 번 불려도
  * 대체 회차에 한 줄만 생긴다(유일 제약 + ON CONFLICT) — webhook 재전송·dispatch 재시도에 안전하다.
+ *
+ * ── 배선과 규칙 ──
+ * - **메일 대체 발송** (2026-10-16, 0135): 수신자가 **반송**(webhook·reconcile)되거나 메일 서비스가 주소를
+ *   **거부**(발송 시 영구 실패)하면, 발송 주소 순서의 **다음 이메일 열**로 자동으로 한 통을 더 보낸다.
+ * - 원래 회차 아래 `kind='fallback'` 회차를 하나 붙여 그 수신자로 넣고 `mail/campaign.queued` 를 다시 낸다 —
+ *   발송·lease·webhook·집계는 기존 장치 그대로(새 Inngest 함수 없음).
+ * - 대체 발송이 또 반송되면 그 대체 회차의 자식 회차(「· 대체 발송 2차」)로 3순위 ….
+ * - 수신자 한 줄 = (회차, 조사 대상) 유일 제약 때문에 같은 회차에 쌓지 않는다.
+ * - 다음 주소 판정은 `lib/mail/fallback-address.ts` 의 `pickFallbackAddress`(쓴 열의 다음 열 · 사슬에서 보낸
+ *   주소와 이 설문 반송 주소는 건너뜀 · 쓴 열을 모르면 값으로 찾음), 서비스는
+ *   `server/mail/services/campaign-fallback.ts` 의 `requestRecipientFallbacks` 이고 **상태 전이가 커밋된 뒤**
+ *   webhook·reconcile·dispatch(영구 실패 settle 직후) 세 곳이 부른다.
+ * - 응답 완료·수신거부·스팸 신고(complained — 수신거부로 수렴)·연락 금지 결과코드·회차 취소/보관이면 보내지
+ *   않는다.
+ * - 끝난 대체 회차에 늦은 반송이 오면 회차를 `queued` 로 다시 연다.
+ * - 단건 발송도 같다.
+ * - 대기 중에 응답을 마치면 발송 직전 확인(claim)이 대체 회차에 한해 건너뛴다(`skipped_unsubscribed` + 사유
+ *   「응답 완료로 대체 발송 생략」 — 단체·단건은 응답자에게 일부러 보내는 경우가 있어 거르지 않는다).
+ * - **대체 발송 등록 자체가 빠지는 경우**(전이 커밋 뒤 DB 오류·프로세스 종료 — webhook 은 중복 제거로 다시 오지
+ *   않는다)는 0137 `fallback_pending_at` 이 막는다: 반송·거부 전이(`applyRecipientTransition`·dispatch 영구
+ *   실패 settle)와 **같은 트랜잭션**에서 표식을 찍고, `queueRecipientFallback` 이 대체 회차에 넣거나 보내지
+ *   않기로 판정하면서 같은 트랜잭션에서 지운다(표식이 없으면 아무것도 안 한다 — 즉시 경로와 점검이 겹쳐도 한
+ *   번).
+ * - 표식이 2분 넘게 남은 수신자는 `mailFallbackSweeper` 가 `retryPendingRecipientFallbacks` 로 다시 처리하고,
+ *   3일이 넘은 표식은 늦은 발송이 되므로 건너뛴다.
+ * - 대체 수신자를 커밋한 뒤 큐 발행이 실패해도 Inngest cron `mailFallbackSweeper`(10분마다)가 대기 수신자가 2분
+ *   넘게 그대로인 대체 회차를 다시 큐에 올린다 — **새 함수라 배포 뒤 Inngest 대시보드 수동 Resync 필요**.
+ * - 반송·이미 보낸 주소 비교는 칸이 아니라 **주소 하나하나**로 한다(`lib/mail/send-address` 의
+ *   `remainingSendValue`) — 「a / b」 칸이면 반송된 a 만 빼고 b 로 보낸다.
+ * - 반송 주소로 확정하는 것은 주소 하나로 보낸 메일의 반송뿐이다(여러 주소 한 통의 반송은 어느 주소인지 몰라 칸
+ *   값 통째로만 막는다).
+ * - 한 통에 담기는 주소는 `lib/mail/split-email-addresses.ts` 가 칸 하나의 여러 주소(`/` `,` `;` 줄바꿈)를 나눈
+ *   것이다.
+ * - 같은 날 **반송 제외 규칙**도 바꿨다 — `listBouncedContactIds` 는 후보 이메일 열이 **전부** 반송 주소인
+ *   컨택만 빼고, `createCampaign`(bulk)은 반송된 열을 건너뛰고 다음 순위 열을 쓴다(전에는 1순위 열이 반송이면
+ *   컨택을 통째로 뺐다).
  */
 
 /** 대체 발송 사슬을 거슬러 올라가는 깊이 상한 — 이메일 열 수보다 넉넉하게. */

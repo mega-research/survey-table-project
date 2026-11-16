@@ -1,3 +1,18 @@
+/**
+ * 메일 템플릿 미리보기·테스트 발송 (CONTEXT.md 「테스트 발송」).
+ *
+ * ── 배선과 규칙 ──
+ * - 2026-11-11.
+ * - 샘플 `server/read-models/contact-sample` 의 `getFirstTestTargetSample`(테스트 모드가 꺼져 있으면 null),
+ *   미리보기·발송 `server/mail/services/preview`(`getMailPreviewSample` · `sendTestTemplateMail`, 게스트 여부는
+ *   procedure 가 넘긴다).
+ * - 결과의 `inviteLink`(`live`·`sandbox`)와 샘플의 `isTest` 를 다이얼로그가 글자로
+ *   옮긴다(`mail-template/test-send-invite-note`).
+ * - 같은 날 먼저 넣었던 「샘플을 복사한 테스트 사본 대상자 만들기」는 사용자 결정으로 걷어냈다 — 이미 만들어 둔
+ *   테스트 대상자를 쓰는 편이 단순하고 쓰기가 없다.
+ * - PRD `.scratch/mail-test-send-live-link/PRD.md`.
+ */
+
 import 'server-only';
 
 import { createElement } from 'react';

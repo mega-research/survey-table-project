@@ -66,6 +66,15 @@ export interface RawExportContextOptions {
 }
 
 export interface RawExportLoadOptions extends RawExportContextOptions {
+  /**
+   * 내보내는 답을 가린다 — 게스트가 받는 파일용(`lib/crypto/export-pii-mask`). 행마다 마지막에 한 번
+   * 부른다: 숨은 문항 strip·이월 병합을 평문으로 끝낸 `plain` 과, 그 응답의 저장된 모양 `stored`
+   * (복호화 전 — 암호문이던 자리를 가리는 근거, 미응답 행은 null). 없으면 평문 그대로 나간다.
+   */
+  maskAnswers?: (
+    plain: Record<string, unknown>,
+    stored: Record<string, unknown> | null,
+  ) => Record<string, unknown>;
   /** 「조사 대상 중 미응답자 포함」 — 응답이 없는 스코프 파티션 조사 대상을 미응답 행으로 넣는다 */
   includeNonRespondents: boolean;
   /**
@@ -520,8 +529,25 @@ export async function loadRawExportRows(
       )
     : strippedRows;
 
+  // 게스트용 가리기 — 여기까지의 판정(strip·이월 병합)은 평문으로 끝났다. 저장된 모양은 응답 id 로 찾는다.
+  const maskAnswers = options.maskAnswers;
+  const storedById = maskAnswers
+    ? new Map(
+        rawResponses.map((r) => [r.id, (r.questionResponses ?? {}) as Record<string, unknown>]),
+      )
+    : null;
+  const maskRow = (row: RawExportResponseRow): RawExportResponseRow =>
+    maskAnswers
+      ? {
+          ...row,
+          questionResponses: maskAnswers(row.questionResponses, storedById?.get(row.id) ?? null),
+        }
+      : row;
+
   // 미응답 행을 하나도 넣지 않는 경우만 응답 순서 그대로 — 넣으면(실사완료 코드 대상뿐이어도) 시스템ID 순
-  if (nonRespondentScope === null) return { kind: 'ok', rows: mergedRows, ...population };
+  if (nonRespondentScope === null) {
+    return { kind: 'ok', rows: maskAnswers ? mergedRows.map(maskRow) : mergedRows, ...population };
+  }
 
   // 미응답 행은 이번 회차 답이 없으므로 이월값이 통째로 실린다.
   const nonRespondentRows = nonRespondents.map((t) => {
@@ -532,7 +558,7 @@ export async function loadRawExportRows(
     return attachContactValues(withPrior, contactValues?.get(t.id), t.id, marks);
   });
   const rows = sortRowsForContactPopulation([...mergedRows, ...nonRespondentRows]);
-  return { kind: 'ok', rows, ...population };
+  return { kind: 'ok', rows: maskAnswers ? rows.map(maskRow) : rows, ...population };
 }
 
 /**

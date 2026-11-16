@@ -40,6 +40,11 @@ import { useEnsureSurveyInDb } from '@/features/survey-builder/hooks/use-ensure-
 import { useSurveySync } from '@/features/survey-builder/hooks/use-survey-sync';
 import { NumberFormatFields } from '@/features/survey-builder/number-format-fields';
 import { OptionsLayoutSelector } from '@/features/survey-builder/options-layout-selector';
+import {
+  type ImpliedSelectionScope,
+  canImplySelection,
+} from '@/features/question-renderer/utils/implied-selection';
+import { resolveUngroupedSelectionType } from '@/features/question-renderer/utils/row-scale-bars';
 import { diagnoseChoiceGroupScaleBar } from '@/features/survey-builder/lib/scale-bar-diagnostics';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
@@ -75,10 +80,16 @@ import {
 
 import { CellChoiceEditor } from './cell-choice-editor';
 import { CellGatingEditor } from './cell-gating-editor';
-import { ChoiceOptCellTab } from './choice-opt-cell-tab';
+import { ChoiceOptCellTab, type ImpliedSelectionFields } from './choice-opt-cell-tab';
 import { useCellForm } from './hooks/use-cell-form';
 import { CellAlignFields } from './cell-align-fields';
 import { countColumnDistinctGroupTargets } from '../utils/column-distinct-group';
+import {
+  countColumnImpliedSelectionTargets,
+  labelImpliedSelectionCells,
+  listImpliedSelectionCandidates,
+  pruneImpliedCellIds,
+} from '../utils/column-implied-selection';
 import {
   type CellSaveOptions,
   countColumnMobileDisplayTargets,
@@ -225,6 +236,7 @@ export function CellContentModal({
     choiceAllowTextInput,
     choiceExclusive,
     choiceExclusiveScope,
+    choiceImpliedCellIds,
     excludeFromMean,
     choiceTextInputType,
     choiceTextInputNumberFormat,
@@ -307,6 +319,7 @@ export function CellContentModal({
     setChoiceAllowTextInput,
     setChoiceExclusive,
     setChoiceExclusiveScope,
+    setChoiceImpliedCellIds,
     setExcludeFromMean,
     setChoiceTextInputType,
     setChoiceTextInputNumberFormat,
@@ -350,12 +363,15 @@ export function CellContentModal({
   const [mobileDisplayColumnWide, setMobileDisplayColumnWide] = useState(false);
   // 「같은 열의 다른 선택 칸에도 적용」(중복 불가 묶음) — 같은 이유로 폼 밖에 둔다.
   const [distinctGroupColumnWide, setDistinctGroupColumnWide] = useState(false);
+  // 「같은 열의 다른 보기 칸에도 같은 위치 관계로 적용」(따라 선택) — 같은 이유로 폼 밖에 둔다.
+  const [impliedSelectionColumnWide, setImpliedSelectionColumnWide] = useState(false);
   const choiceGroupsResetKey = isOpen ? (cell?.id ?? '') : null;
   const [prevChoiceGroupsResetKey, setPrevChoiceGroupsResetKey] = useState<string | null>(null);
   if (prevChoiceGroupsResetKey !== choiceGroupsResetKey) {
     setPrevChoiceGroupsResetKey(choiceGroupsResetKey);
     setMobileDisplayColumnWide(false);
     setDistinctGroupColumnWide(false);
+    setImpliedSelectionColumnWide(false);
     if (isOpen) {
       const storeQuestion = readBuilderState().currentSurvey.questions.find(
         (q) => q.id === currentQuestionId,
@@ -391,6 +407,68 @@ export function CellContentModal({
           applyToColumn: distinctGroupColumnWide,
         })
       : null;
+  // 따라 선택 — 체크박스로 고르는 일반 보기 칸 전용. 걸 수 있는 칸인지는 응답 화면과 같은 함수로,
+  // 이 칸의 편집 중 값(그룹 · 단독 선택)을 넣어 판정한다. 테이블 유형은 체크박스 그룹의 칸만, 체크박스·
+  // 라디오 문항의 내장 표는 체크박스 그룹의 칸과 (체크박스 문항이면) 그룹 없는 칸이다.
+  // 죽은 짝(지워진 칸·자격을 잃은 칸)은 여기서 걸러 화면에도 저장에도 싣지 않는다.
+  const impliedSelectionScope = useMemo(
+    (): ImpliedSelectionScope => ({
+      groups: editChoiceGroups,
+      ungroupedSelectionType: resolveUngroupedSelectionType(parentQuestionType),
+    }),
+    [editChoiceGroups, parentQuestionType],
+  );
+  const impliedSelectionEligible =
+    !!cell &&
+    contentType === 'choice_opt' &&
+    canImplySelection(
+      {
+        id: cell.id,
+        type: 'choice_opt',
+        content: '',
+        ...(form.choiceGroupId ? { choiceGroupId: form.choiceGroupId } : {}),
+        ...(choiceExclusive ? { exclusiveChoice: true } : {}),
+      },
+      impliedSelectionScope,
+    );
+  const impliedSelectionFields = useMemo((): ImpliedSelectionFields | undefined => {
+    if (!cell || !impliedSelectionEligible) return undefined;
+    const labels = labelImpliedSelectionCells({
+      rows: gatingRows,
+      columns: getLatestColumns?.() ?? ownQuestion.tableColumns ?? [],
+      headerGrid: getLatestHeaderGrid?.() ?? ownQuestion.tableHeaderGrid ?? undefined,
+    });
+    const named = (cellId: string) => ({ cellId, label: labels.get(cellId) ?? cellId });
+    const selected = pruneImpliedCellIds(choiceImpliedCellIds, {
+      rows: gatingRows,
+      ownCellId: cell.id,
+      ...impliedSelectionScope,
+    });
+    return {
+      selected: selected.map(named),
+      candidates: listImpliedSelectionCandidates(gatingRows, cell.id, impliedSelectionScope)
+        .filter((cellId) => !selected.includes(cellId))
+        .map(named),
+      onAdd: (cellId) => setChoiceImpliedCellIds([...selected, cellId]),
+      onRemove: (cellId) => setChoiceImpliedCellIds(selected.filter((id) => id !== cellId)),
+      applyToColumn: impliedSelectionColumnWide,
+      onApplyToColumnChange: setImpliedSelectionColumnWide,
+      columnApplyCount: countColumnImpliedSelectionTargets(gatingRows, cell.id, impliedSelectionScope),
+    };
+  }, [
+    cell,
+    choiceImpliedCellIds,
+    gatingRows,
+    getLatestColumns,
+    getLatestHeaderGrid,
+    impliedSelectionColumnWide,
+    impliedSelectionEligible,
+    impliedSelectionScope,
+    ownQuestion.tableColumns,
+    ownQuestion.tableHeaderGrid,
+    setChoiceImpliedCellIds,
+  ]);
+
   // 보기 소스 표인가 — 보기 옵션 셀이 하나라도 있으면. (문항 type 으로 판정하면 안 된다: 표
   // 편집기가 넘기는 ownQuestion 은 type 이 늘 'table' 이다.)
   const isChoiceSourceTable = useMemo(
@@ -483,7 +561,12 @@ export function CellContentModal({
     await runAsyncAction(
       () =>
         commitCellEdit({
-          form,
+          // 따라 선택 짝은 살아 있는 것만, 걸 수 없는 칸이면(라디오·테이블 유형의 그룹 없는 칸) 비워서 저장한다
+          form: {
+            ...form,
+            choiceImpliedCellIds:
+              impliedSelectionFields?.selected.map((target) => target.cellId) ?? [],
+          },
           cell,
           questionCode,
           currentQuestionId,
@@ -500,6 +583,8 @@ export function CellContentModal({
           mobileDisplayColumnWide: mobileDisplayColumnWide && contentType === cell.type,
           // 묶음 이름은 선택 칸 전용 — 체크한 뒤 유형을 바꿨으면 적용하지 않는다
           distinctGroupColumnWide: distinctGroupColumnWide && contentType === 'select',
+          // 체크한 뒤 단독 선택 보기를 켜거나 그룹을 바꿔 구역이 사라졌으면 적용하지 않는다
+          impliedSelectionColumnWide: impliedSelectionColumnWide && impliedSelectionEligible,
         }),
       {
         onError: (error) => {
@@ -914,6 +999,7 @@ export function CellContentModal({
               onExclusiveChoiceChange={setChoiceExclusive}
               exclusiveScope={choiceExclusiveScope}
               onExclusiveScopeChange={setChoiceExclusiveScope}
+              impliedSelection={impliedSelectionFields}
               excludeFromMean={excludeFromMean}
               onExcludeFromMeanChange={setExcludeFromMean}
               parentQuestionType={parentQuestionType}

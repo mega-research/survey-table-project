@@ -388,7 +388,7 @@ export async function saveSurveyDiff(
           piiRetentionUntil: metadata.settings.piiRetentionUntil
             ? retentionDateToTimestamp(metadata.settings.piiRetentionUntil)
             : null,
-          maxResponses: metadata.settings.maxResponses ?? null,
+          // maxResponses 는 쓰지 않는다 — 쓰지 않는 컬럼이다(전체 완료 수의 목표는 쿼터 플랜의 「완료」 조건).
           thankYouMessage: metadata.settings.thankYouMessage,
           screenedOutMessage: metadata.settings.screenedOutMessage ?? null,
           localizedMessages: metadata.settings.localizedMessages ?? null,
@@ -687,7 +687,7 @@ export async function saveSurveyWithDetails(
         piiRetentionUntil: surveyData.settings.piiRetentionUntil
           ? retentionDateToTimestamp(surveyData.settings.piiRetentionUntil)
           : null,
-        maxResponses: surveyData.settings.maxResponses ?? null,
+        // maxResponses 는 쓰지 않는다 — 쓰지 않는 컬럼(위 metadata 저장 주석).
         thankYouMessage: surveyData.settings.thankYouMessage,
         screenedOutMessage: surveyData.settings.screenedOutMessage ?? null,
         localizedMessages: surveyData.settings.localizedMessages ?? null,
@@ -739,7 +739,7 @@ export async function saveSurveyWithDetails(
         piiRetentionUntil: surveyData.settings.piiRetentionUntil
           ? retentionDateToTimestamp(surveyData.settings.piiRetentionUntil)
           : null,
-        maxResponses: surveyData.settings.maxResponses ?? null,
+        // maxResponses 는 쓰지 않는다 — 쓰지 않는 컬럼(위 metadata 저장 주석).
         thankYouMessage: surveyData.settings.thankYouMessage,
         screenedOutMessage: surveyData.settings.screenedOutMessage ?? null,
         localizedMessages: surveyData.settings.localizedMessages ?? null,

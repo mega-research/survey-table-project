@@ -944,6 +944,28 @@ export function generateSPSSColumns(
  * 합친 열이 하나도 없어도 문항 변수명(직접 지정)이 한국어판 문항과 같으면 같은 자리로 옮긴다
  * (문6-1 한국어 「만 원」 칸 · 중·영 외화 칸). 문항 제목(Raw 1행·변수 라벨 앞머리)도 대표 문항 것으로 단다.
  * 문항이 통째로 한 언어판에만 있으면 그대로다.
+ *
+ * ── 배선과 규칙 ──
+ * - **공유 변수명 열 합치기**: 서로 다른 언어 묶음의 문항·칸·보기가 같은 변수명(대소문자 무시)이고 **구성원
+ *   문항이 모두 `isCustomSpssVarName`(직접 지정)** 이면 `generateSPSSColumns` 끝에서 한 열로 접는다 — 옵션
+ *   `SpssColumnOptions.languageSetLocales`(문항 id → locale, 서버 로더 `export/raw-export-load.ts` 의
+ *   `loadLanguageSetLocales`), 접힌 열의 구성원은 `SPSSExportColumn.languageMembers`.
+ * - 칸·보기·`_CHG` 이름은 문항 지정을 따른다.
+ * - 옵션이 없으면 지금과 깊은 동치의 열이다.
+ * - 하나라도 같은 묶음·묶음 밖·자동 발번이면 합치지 않고 기존 `assertValidSpssVarNames` 가 배포를 막는다.
+ * - 모든 소비자 —
+ *   Raw(`raw-workbook`)·분할(`split-export`·`split-preview`·`detectSplitCandidates`)·.sav·.sps(같은 이름 MRSETS
+ *   세트도 합친다, `lib/spss/mrsets-syntax`)·배포 게이트(`survey-publish`) — 가 같은 옵션을 넘긴다.
+ * - 합쳐진 문항에 남은 그 언어판만의 열(칸 수가 달라 짝이 없는 칸·보기)은 언어판 묶음 자리(파일 맨 뒤)가 아니라
+ *   그 문항을 합쳐 간 대표 문항 열 바로 뒤에 서고 문항 제목도 대표 것이다(2026-10-28).
+ * - 합친 열이 하나도 없어도 문항 변수명(직접 지정)이 한국어판 문항과 같으면 그 문항 열 뒤에 선다 — 원화·외화
+ *   칸을 일부러 다른 변수로 가른 금액 표(문6-1 `Q6_1_r01_c01` 만 원 · `Q6_1_r01_c02` 외화, 2026-10-29).
+ * - 대표 = 한국어 구성원(없으면 첫 구성원)이고 **값 라벨·코드북·MRSETS·Raw 1~2행 제목·.sav 변수 유형은 대표
+ *   것**이다(대표 칸이 숫자인데 다른 언어판 칸이 글자면 값이 맞지 않는다 — 언어판끼리 유형을 맞출 것).
+ * - 데이터 행은 구성원마다 기존 해석으로 값을 내고 비어 있지 않은 첫 값을 쓴다(숨은 문항 strip 으로 한 응답에
+ *   값 있는 구성원은 하나).
+ * - 분할 시트는 시트마다 합친다.
+ * - 구성원끼리 보기 수·코드 불일치는 막지도 로그하지도 않는다(의미가 섞여도 된다는 결정).
  */
 function mergeLanguageSetColumns(
   columns: SPSSExportColumn[],

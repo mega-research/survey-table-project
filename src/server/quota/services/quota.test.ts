@@ -275,3 +275,117 @@ describe('checkQuota', () => {
     });
   });
 });
+
+// ── 「완료」 조건 (CONTEXT.md 「완료 조건」) — 설문 전체 완료 수(완료 + 실사 완료 처리)의 목표 ──
+describe('checkQuota — 「완료」 조건', () => {
+  const totalPlan: QuotaConfig = {
+    enabled: true,
+    dimensions: [],
+    cells: [],
+    totalTarget: 3,
+    closedMessage: '모집이 끝났습니다.',
+    midSurveyClosedMessage: '응답 중 마감되었습니다.',
+  };
+
+  /** db.select 종단 순서: 1) 온라인 완료 수 2) 실사 완료 처리용 결과코드 행(없음 → 0건) */
+  function queueTotal(completed: number) {
+    mockWhere.mockReset();
+    mockWhere.mockResolvedValueOnce([{ total: completed }]).mockResolvedValue([]);
+  }
+
+  beforeEach(() => {
+    mockSurveyFindFirst.mockReset();
+    mockResponseFindFirst.mockReset();
+    mockUpdateWhere.mockReset();
+    mockResponseFindFirst.mockResolvedValue({ isTest: false, status: 'in_progress' });
+    mockSurveyFindFirst.mockResolvedValue({ quotaConfig: totalPlan });
+  });
+
+  it('전체 완료 수가 목표에 닿았으면 답과 무관하게 쿼터마감으로 끝낸다', async () => {
+    queueTotal(3);
+    const { checkQuota } = await import('./quota');
+
+    // 문항에 묶이지 않은 조건이라 답이 비어 있어도 판정한다.
+    await expect(checkQuota({ responseId: 'r1', surveyId: 's1', answers: {} })).resolves.toEqual({
+      blocked: true,
+      closedMessage: '모집이 끝났습니다.',
+      midSurveyClosedMessage: '응답 중 마감되었습니다.',
+    });
+    expect(mockUpdateWhere).toHaveBeenCalledTimes(1);
+  });
+
+  it('자리가 남았으면 통과하고 상태를 건드리지 않는다', async () => {
+    queueTotal(2);
+    const { checkQuota } = await import('./quota');
+
+    await expect(checkQuota({ responseId: 'r1', surveyId: 's1', answers: {} })).resolves.toEqual({
+      blocked: false,
+      closedMessage: null,
+    });
+    expect(mockUpdateWhere).not.toHaveBeenCalled();
+  });
+
+  it('온라인 완료만 센다 — where 절에 completed·비삭제·실응답 조건이 들어간다', async () => {
+    queueTotal(0);
+    const { checkQuota } = await import('./quota');
+    await checkQuota({ responseId: 'r1', surveyId: 's1', answers: {} });
+
+    const query = dialect.sqlToQuery(mockWhere.mock.calls[0]![0] as never);
+    expect(query.params).toContain('completed');
+    expect(query.sql).toContain('deleted_at');
+    expect(query.sql).toContain('is_test');
+    expect(query.params).toContain(false);
+  });
+
+  it('집행이 꺼진 플랜은 「완료」 조건이 있어도 세지도 막지도 않는다 — 다른 조건과 같은 스위치', async () => {
+    mockSurveyFindFirst.mockResolvedValue({ quotaConfig: { ...totalPlan, enabled: false } });
+    queueTotal(99);
+    const { checkQuota } = await import('./quota');
+
+    await expect(checkQuota({ responseId: 'r1', surveyId: 's1', answers: {} })).resolves.toEqual({
+      blocked: false,
+      closedMessage: null,
+    });
+    expect(mockWhere).not.toHaveBeenCalled();
+  });
+
+  it('재응답 허용으로 되돌려진 응답은 「완료」 조건도 면제한다', async () => {
+    mockResponseFindFirst.mockResolvedValue({
+      isTest: false,
+      status: 'in_progress',
+      metadata: { reeditPendingSince: '2026-11-13T00:00:00.000Z' },
+    });
+    queueTotal(99);
+    const { checkQuota } = await import('./quota');
+
+    await expect(checkQuota({ responseId: 'r1', surveyId: 's1', answers: {} })).resolves.toEqual({
+      blocked: false,
+      closedMessage: null,
+    });
+    expect(mockWhere).not.toHaveBeenCalled();
+  });
+
+  it('「완료」 조건이 없는 플랜은 전체 완료 수를 세지 않는다 — 종전 질의 수 그대로', async () => {
+    mockSurveyFindFirst.mockResolvedValue({ quotaConfig: config });
+    mockWhere.mockReset();
+    mockWhere.mockResolvedValue([]);
+    const { checkQuota } = await import('./quota');
+
+    await checkQuota({ responseId: 'r1', surveyId: 's1', answers: { q1: 'female' } });
+    // 셀 완료 응답 조회 한 번뿐이다.
+    expect(mockWhere).toHaveBeenCalledTimes(1);
+  });
+
+  it('셀 목표와 함께 있으면 전체가 먼저다 — 셀에 자리가 있어도 전체가 찼으면 마감이다', async () => {
+    mockSurveyFindFirst.mockResolvedValue({ quotaConfig: { ...config, totalTarget: 3 } });
+    queueTotal(3);
+    const { checkQuota } = await import('./quota');
+
+    await expect(
+      checkQuota({ responseId: 'r1', surveyId: 's1', answers: { q1: 'female' } }),
+    ).resolves.toMatchObject({ blocked: true });
+    // 전체 완료 수(1) + 결과코드 행(2) 만 읽고 셀 완료 응답은 읽지 않는다.
+    expect(mockWhere).toHaveBeenCalledTimes(2);
+  });
+});
+

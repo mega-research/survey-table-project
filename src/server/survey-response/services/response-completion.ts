@@ -1,3 +1,50 @@
+/**
+ * 응답 완료(제출) — 아래는 제출 시점 쿼터 하드 차단의 규칙이다 (CONTEXT.md 「진행 중 마감」, ADR 0025).
+ *
+ * ── 배선과 규칙 ──
+ * - **제출 시점 하드 차단(유일한 강제 지점)** — `completeResponse` 가 트랜잭션 첫 문장으로
+ *   `pg_advisory_xact_lock(hashtext(surveyId), hashtext(cellKey))` 를 잡고(응답 행 잠금보다 **먼저**, 교착
+ *   방지) 잠금 아래에서 셀 완료 수를 다시 센다(`countQuotaCellCompleted` — 모수 로더에 tx 를 `executor` 로
+ *   넘긴다).
+ * - 목표 이상이면 답변은 저장하되 `status='quotaful_out'`·`is_completed=false`·`completed_at` 없음·컨택 완료
+ *   링크 없음이고, 결과는 `{ kind: 'quota_closed', closedMessage }` 다.
+ * - 이미 `quotaful_out` 인 행의 늦은 제출도 같은 결과(「이미 완료」가 아니다).
+ * - 판정 재료는 평문 답(PII 암호화 전) + 서버가 읽은 조사 대상 attrs 이고 입장 판정과 같은 `deriveCategoryIds`
+ *   를 쓴다.
+ * - 자격미달로 끝나는 제출은 셀을 소비하지 않아 판정하지 않는다.
+ * - **빈 complete(페이로드 없음)도 판정한다** — draft 로 저장한 답을 페이로드 없이 완료해 우회하는 길을 막는다.
+ * - 잠금 순서(advisory → 응답 행)를 지키려 잠금 전 저장분으로 셀 키를 고르고, 잠금 아래 저장분으로 다시
+ *   분류한다.
+ * - 그 사이 draft 가 셀을 바꿨으면(미분류였다가 분류된 경우 포함) 트랜잭션을 되돌리고 바뀐 셀의 잠금부터 다시
+ *   잡아 처음부터 판정한다 — 잠금을 쥔 채 두 번째 셀을 잠그면 순서가 깨진다.
+ * - 3회째도 바뀌면 완료로 만들지 않고 거부한다(fail-closed, 2026-09-30 — 정상 응답 화면은 늘 페이로드를 보내 이
+ *   경로에 오지 않으므로 조작된 동시 요청만 해당).
+ * - 잠금 아래에서 미분류가 됐으면 쿼터에 걸리지 않는다.
+ * - 경합은 `complete-response-quota-hard-close.realdb.test.ts` 가 실 Postgres 로 지킨다.
+ * - 플랜 읽기·셀 분류·셀 완료 수는 `server/read-models/quota-cell.ts` 한 곳이고 입장 판정 `checkQuota` 도 같은
+ *   것을 쓴다.
+ *
+ * ── 「완료」 조건 (`quota_config.totalTarget`, CONTEXT.md 「완료 조건」) ──
+ * 설문 전체 완료 수(온라인 완료 + 실사 완료 처리)의 목표다. 문항에 묶이지 않을 뿐 다른 조건과 같은 쿼터
+ * 플랜의 일부라 집행 스위치와 「진행 중 마감」 옵션을 그대로 따른다 — 아래는 「진행 중 마감」이 켜진
+ * 플랜의 제출 시점 하드 차단이고, 꺼진 플랜은 셀과 같이 초과 표식만 남긴다(`detectQuotaOverflow`).
+ * - 트랜잭션 **첫 문장으로** 설문 단위 advisory lock 을 잡고(순서: 설문 전체 → 쿼터 셀 → 응답 행), 잠금
+ *   아래에서 플랜과 전체 완료 수를 **둘 다 다시 읽는다** — 마지막 자리에 동시에 도착한 제출이 함께 완료되지
+ *   않고, 잠금을 기다리는 사이 운영자가 바꾼 목표(올림·내림·해제·집행 끔)도 그 제출에 적용된다.
+ * - 잠금 아래에서 다시 읽은 플랜은 **셀 판정에도 쓴다** — 대기 중 집행·진행 중 마감이 꺼졌으면 셀도 막지 않고,
+ *   셀 목표·조건이 바뀌었으면 최신 플랜으로 셀을 다시 분류해 그 셀의 잠금을 잡는다. (「완료」 조건이 없는
+ *   플랜은 설문 잠금을 잡지 않으므로 종전대로 잠금 전에 읽은 플랜으로 셀을 판정한다.)
+ * - 목표 이상이면 셀 하드 차단과 같은 쓰기·같은 결과다(답변 저장, `quotaful_out`, `{ kind: 'quota_closed' }`).
+ * - **이미 종결된 같은 응답의 재제출은 막지 않는다** — 마지막 자리를 채운 사람이 응답 유실로 다시 누르거나
+ *   다른 탭이 늦게 제출하면 그 사람은 완료자다. 아래 멱등 처리(「이미 완료」)로 보낸다.
+ * - 자격미달로 끝나는 제출은 전체 완료 수에 들지 않으므로 막지 않는다(셀과 같은 규칙).
+ * - 면제도 셀과 같다 — 테스트 응답, 재응답 허용으로 되돌려진 응답(`reeditPendingSince`), 관리자 응답 수정.
+ *   담당자가 기록하는 실사 완료 처리도 잠금에 참여하지 않는다(운영자가 만드는 완료).
+ * - 수용한 틈 — 「완료」 조건이나 「진행 중 마감」이 **없던** 플랜에 그것을 켜는 순간 이미 플랜을 읽고 지나간
+ *   제출은 잠금 없이 완료된다(그 순간 날고 있던 요청 몇 건). 조건 없는 설문의 모든 제출에 잠금·질의를
+ *   더하지 않으려는 선택이다.
+ */
+
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import 'server-only';
 
@@ -7,10 +54,10 @@ import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { logger } from '@/lib/logger';
 import { sumActiveSeconds } from '@/lib/operations/active-seconds';
 import { isMidSurveyCloseActive, resolveMidSurveyClosedMessage } from '@/lib/quota/closed-message';
-import type { NormalizedQuotaConfig } from '@/lib/quota/normalize';
-import { notTestResponse } from '@/server/response-filters';
+import { type NormalizedQuotaConfig, quotaTotalTarget } from '@/lib/quota/normalize';
 import { InternalFailure } from '@/server/internal-failure';
 import {
+  isConcludedResponseStatus,
   isOpenResponseStatus,
   openResponseStatusValues,
   type PageVisit,
@@ -25,6 +72,7 @@ import {
 } from './response-gate';
 import {
   countQuotaCellCompleted,
+  isQuotaTotalFull,
   loadQuotaPlan,
   type QuotaTargetCell,
   resolveQuotaTargetCell,
@@ -60,42 +108,22 @@ class QuotaCellChangedError extends Error {
  * 갈라내기 전 실측에서 나가는 의존 0 · 들어오는 참조 0 인 리프였다.
  */
 
-/**
- * surveyId 의 완료 응답 수 (soft-delete 제외, 테스트 모드 응답 제외). complete 시점 정원
- * 하드체크용 — isTest 완료는 통계·쿼터 모수에서 제외되므로(스펙 4절) 정원 카운트에도 포함하지 않는다.
- */
-async function countCompletedResponses(surveyId: string): Promise<number> {
-  const [row] = await db
-    .select({ total: sql<number>`count(*)::int` })
-    .from(surveyResponses)
-    .where(
-      and(
-        eq(surveyResponses.surveyId, surveyId),
-        eq(surveyResponses.status, 'completed'),
-        isNull(surveyResponses.deletedAt),
-        notTestResponse,
-      ),
-    );
-  return row?.total ?? 0;
-}
+/** 「완료」 조건 잠금의 두 번째 키 — 쿼터 셀 키(카테고리 id 를 이은 글자)와 겹치지 않는 고정 글자 */
+const QUOTA_TOTAL_LOCK_KEY = 'quota-total';
 
 export async function completeResponse(
   input: CompleteResponseInput,
 ): Promise<CompleteResponseResult> {
   const { responseId, data } = input;
 
-  // 완료 게이트(하드체크): 폐쇄/draft/중단/비공개 설문 완료를 차단하고, maxResponses 정원을
-  // 완료 카운트로 하드 검사한다. **마감(endDate)은 보지 않는다** — 마감은 새 응답 접수를 닫는
-  // 것이지 이미 진행 중인 응답을 몰수하는 것이 아니라서, 마감 시각에 걸친 응답자는 끝까지
-  // 진행해 저장된다(CHECKS_FOR.completeResponse 주석 참조).
-  // 그 결과 마감 후 완료 시도가 정원 검사에 처음으로 도달한다 — 정원이 찬 설문이면 사유가
-  // end_date_passed 대신 max_responses_reached 로 나온다. 어느 쪽도 차단이다.
+  // 완료 게이트(하드체크): 폐쇄/draft/중단/비공개 설문 완료를 차단한다. **마감(endDate)은 보지
+  // 않는다** — 마감은 새 응답 접수를 닫는 것이지 이미 진행 중인 응답을 몰수하는 것이 아니라서, 마감
+  // 시각에 걸친 응답자는 끝까지 진행해 저장된다(CHECKS_FOR.completeResponse 주석 참조).
+  // 전체 완료 수의 상한은 이 게이트가 아니라 쿼터 플랜의 「완료」 조건이 맡는다(아래 쿼터 판정).
   // 위반은 던지지 않고 blocked 로 접어 돌려준다(진입 경로 admitAndCreateResponse 와 같은 규약).
   // 던지면 운영에서 마스킹돼 500 이 되고, 응답자는 설문을 다 채운 뒤 사유를 모른 채
   // 재시도 토스트만 반복해서 본다 — 빠져나갈 길이 없다.
-  // 응답 행에서 surveyId/versionId/contactTargetId 를 읽어 게이트 입력으로 사용한다. count
-  // 쿼리와 실제 완료 UPDATE 사이의 동시성 갭(동시 완료가 마지막 정원을 함께 채우는 경우)은
-  // DB 락 없이 허용하는 잔여 window 다.
+  // 응답 행에서 surveyId/versionId/contactTargetId 를 읽어 게이트 입력으로 사용한다.
   const gateRow = await db.query.surveyResponses.findFirst({
     where: eq(surveyResponses.id, responseId),
     columns: {
@@ -115,11 +143,9 @@ export async function completeResponse(
     await syncTestVersionBeforeWrite({ id: responseId, ...gateRow });
     const survey = await loadSurveyGateRow(gateRow.surveyId);
     const version = await loadVersionGateRow(gateRow.versionId);
-    const completedCount = await countCompletedResponses(gateRow.surveyId);
     try {
       assertResponseCompletable(survey, version, {
         contactTargetId: gateRow.contactTargetId,
-        completedCount,
         // 응답 행 자체의 isTest 컬럼이 권위 소스 — create 시점에 확정된 값을 그대로 신뢰한다
         // (여기서 재차 testToken 을 검증하지 않는다. complete 는 responseId 만 받는 pub 엔드포인트).
         isTest: gateRow.isTest,
@@ -213,6 +239,12 @@ export async function completeResponse(
   let quotaOverflow = false;
   let quotaPlan: NormalizedQuotaConfig | null = null;
   let hardCloseCell: QuotaTargetCell | null = null;
+  // 「완료」 조건의 하드 차단 — 진행 중 마감이 켜진 플랜에 완료 조건이 있다(면제 응답 제외).
+  // 값은 잠금 전에 읽은 플랜 기준이라, 판정에는 잠금 아래에서 다시 읽은 플랜을 쓴다.
+  let hardCloseTotal = false;
+  // 페이로드 경로의 셀 분류 재료(평문) — 설문 잠금 아래에서 다시 읽은 플랜으로 셀을 다시 분류할 때 쓴다.
+  // 아래에서 validatedResponses 를 저장값(암호문)으로 갈아 끼우기 전에 잡아 둔다.
+  let plainForQuota: Record<string, unknown> | undefined;
   // 빈 complete 의 하드 차단 — 잠금 아래에서 저장분으로 다시 분류해야 한다는 표식.
   let hardCloseFromStored = false;
   if (gateRow && !gateRow.isTest) {
@@ -220,8 +252,10 @@ export async function completeResponse(
     const reeditPending = Boolean(gateRow.metadata?.['reeditPendingSince']);
     // 타입 가드를 살리려 불리언이 아니라 플랜 자체를 들고 간다.
     const hardClosePlan = isMidSurveyCloseActive(quotaPlan) && !reeditPending ? quotaPlan : null;
+    hardCloseTotal = hardClosePlan !== null && quotaTotalTarget(hardClosePlan) !== null;
     if (validatedResponses) {
       if (hardClosePlan && !screenedOut) {
+        plainForQuota = validatedResponses;
         hardCloseCell = await resolveQuotaTargetCell(
           hardClosePlan,
           validatedResponses,
@@ -262,19 +296,67 @@ export async function completeResponse(
   let quotaFull = false;
   // 이미 quotaful_out 인 행에 늦게 도착한 complete(페이지 재확인이 먼저 마킹한 경우).
   let lateQuotaClosed = false;
+  // 「완료」 조건으로 끝난 쿼터마감인가 — 로그 구분용(tx 안에서 정해진다).
+  let closedByTotal = false;
   const completeInTransaction = () => db.transaction(async (tx) => {
+    // 「완료」 조건 — 설문 단위 잠금을 **가장 먼저** 잡는다(순서: 설문 전체 → 쿼터 셀 → 응답 행).
+    // 같은 설문의 제출이 여기서 한 줄로 서고, 잠금은 commit 에 풀리므로 다음 대기자는 앞선 제출의
+    // 완료 행을 보고 센다(READ COMMITTED — 잠금 뒤 새 문장).
+    let totalFullUnderLock = false;
+    // 이 트랜잭션이 셀 판정에 쓸 플랜과 셀 — 기본은 잠금 전에 읽은 것이고, 설문 잠금을 잡은 제출은
+    // 잠금 아래에서 다시 읽은 것으로 갈아 끼운다. 전체만 최신 플랜으로 풀고 셀은 옛 플랜으로 막으면
+    // 운영자가 마감을 푼 뒤에도 대기하던 제출이 옛 설정으로 쿼터마감된다.
+    let activePlan: NormalizedQuotaConfig | null = quotaPlan;
+    let activeCell: QuotaTargetCell | null = hardCloseCell;
+    if (hardCloseTotal && gateRow) {
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtext(${gateRow.surveyId}), hashtext(${QUOTA_TOTAL_LOCK_KEY}))`,
+      );
+      // 플랜도 잠금 아래에서 다시 읽는다 — 잠금을 기다리는 사이 운영자가 목표를 올렸거나 내렸거나
+      // 없앴거나 집행·진행 중 마감을 껐을 수 있다.
+      const livePlan = await loadQuotaPlan(gateRow.surveyId, tx);
+      if (!isMidSurveyCloseActive(livePlan)) {
+        // 하드 차단이 풀렸다 — 전체도 셀도 막지 않는다.
+        activePlan = null;
+        activeCell = null;
+      } else {
+        activePlan = livePlan;
+        if (await isQuotaTotalFull(tx, gateRow.surveyId, livePlan)) {
+          // 이미 종결된 같은 응답의 재제출(다른 탭·응답 유실 재시도)은 막지 않는다 — 마지막 자리를
+          // 채운 그 사람이 마감 화면을 보면 안 된다. 아래 UPDATE 가 0행이 되어 기존 멱등 처리
+          // (이미 완료·쿼터마감 행의 늦은 제출)로 간다.
+          const [self] = await tx
+            .select({ status: surveyResponses.status })
+            .from(surveyResponses)
+            .where(eq(surveyResponses.id, responseId))
+            .limit(1);
+          totalFullUnderLock = !self || !isConcludedResponseStatus(self.status);
+        }
+        // 셀도 최신 플랜으로 다시 분류한다(셀 목표 변경·조건 삭제 반영). 아직 셀 잠금을 잡기 전이라
+        // 바뀐 셀의 잠금을 아래에서 그대로 잡으면 순서(설문 전체 → 셀)가 지켜진다. 빈 complete 는
+        // 응답 행 잠금 아래에서 저장분으로 다시 분류하므로 여기서는 플랜만 갈아 끼운다.
+        if (!totalFullUnderLock && plainForQuota) {
+          activeCell = await resolveQuotaTargetCell(
+            livePlan,
+            plainForQuota,
+            gateRow.contactTargetId,
+            tx,
+          );
+        }
+      }
+    }
     // 쿼터 하드 차단 — 설문+셀 키 트랜잭션 advisory lock 을 **응답 행 잠금보다 먼저** 잡아
     // 순서를 고정한다(교착 방지). 같은 셀의 제출은 여기서 직렬화되고, 잠금 아래에서 다시 센
     // 완료 수가 목표 이상이면 이 제출은 완료가 아니라 쿼터마감이 된다. 잠금은 commit 에 풀리므로
     // 다음 대기자는 이 제출의 완료 행을 보고 센다. 옵션이 꺼진 설문은 이 블록에 오지 않는다.
-    if (hardCloseCell && gateRow && quotaPlan) {
+    if (!totalFullUnderLock && activeCell && gateRow && activePlan) {
       await tx.execute(
-        sql`select pg_advisory_xact_lock(hashtext(${gateRow.surveyId}), hashtext(${hardCloseCell.cellKey}))`,
+        sql`select pg_advisory_xact_lock(hashtext(${gateRow.surveyId}), hashtext(${activeCell.cellKey}))`,
       );
       // 빈 complete 는 잠금 아래에서 저장분을 읽은 뒤(아래) 다시 분류해 센다.
       if (!hardCloseFromStored) {
-        const current = await countQuotaCellCompleted(tx, gateRow.surveyId, quotaPlan, hardCloseCell);
-        quotaFull = current >= hardCloseCell.target;
+        const current = await countQuotaCellCompleted(tx, gateRow.surveyId, activePlan, activeCell);
+        quotaFull = current >= activeCell.target;
       }
     }
     if (gateRow?.isTest) {
@@ -314,21 +396,29 @@ export async function completeResponse(
       // 빈 complete 의 하드 차단 — 잠금 아래 최종 평문으로 셀을 다시 분류한다. 자격미달이면 셀을
       // 소비하지 않는다. 잠금 전에 고른 셀과 다르면 이 셀의 잠금을 쥐고 있지 않으므로 세지 않고
       // 되돌린다 — 바깥 재시도가 바뀐 셀의 잠금부터 다시 잡는다. 미분류가 됐으면 쿼터에 걸리지 않는다.
-      if (hardCloseFromStored && gateRow && quotaPlan && !screenedOut) {
+      if (!totalFullUnderLock && hardCloseFromStored && gateRow && activePlan && !screenedOut) {
         const lockedCell = await resolveQuotaTargetCell(
-          quotaPlan,
+          activePlan,
           judgedResponses,
           gateRow.contactTargetId,
           tx,
         );
-        if (lockedCell && lockedCell.cellKey !== hardCloseCell?.cellKey) {
+        // 쥐고 있는 셀 잠금(activeCell)과 다른 셀이면 세지 않고 되돌린다.
+        if (lockedCell && lockedCell.cellKey !== activeCell?.cellKey) {
           throw new QuotaCellChangedError(lockedCell);
         }
         if (lockedCell) {
-          const current = await countQuotaCellCompleted(tx, gateRow.surveyId, quotaPlan, lockedCell);
+          const current = await countQuotaCellCompleted(tx, gateRow.surveyId, activePlan, lockedCell);
           quotaFull = current >= lockedCell.target;
         }
       }
+    }
+    // 「완료」 조건에 막힌 제출도 쿼터마감이다 — 여기서부터는 셀 하드 차단과 같은 길을 간다.
+    // 자격미달로 끝나는 제출은 전체 완료 수에 들지 않으므로 막지 않는다(셀과 같은 규칙) — 빈 complete 의
+    // 자격미달 판정은 위 응답 행 잠금 아래에서 정해지므로 여기서 본다.
+    if (totalFullUnderLock && !screenedOut) {
+      quotaFull = true;
+      closedByTotal = true;
     }
     // metadata 에 이번 완료로 새로 얹을 키만 모은다 (exposedQuestionIds/exposedRowIds/quotaOverflow).
     // 아래 UPDATE 는 이 값을 객체 리터럴로 통째 대입하지 않고 jsonb `||` 병합으로 반영한다 —
@@ -482,6 +572,7 @@ export async function completeResponse(
   for (let attempt = 1; result === undefined; attempt += 1) {
     quotaFull = false;
     lateQuotaClosed = false;
+    closedByTotal = false;
     try {
       result = await completeInTransaction();
     } catch (err) {
@@ -497,6 +588,13 @@ export async function completeResponse(
       }
       hardCloseCell = err.cell;
     }
+  }
+
+  if (closedByTotal && quotaFull) {
+    logger.info(
+      { surveyId: gateRow?.surveyId, responseId },
+      '[quota] 제출이 「완료」 조건에 막혀 쿼터마감으로 끝났다',
+    );
   }
 
   // 실제 대상자 연결은 응답 완료 커밋 이후 best-effort로 유지한다. 이를 완료 트랜잭션에

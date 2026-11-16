@@ -35,6 +35,7 @@ import {
   resolvePastedGating,
 } from '../utils/drag-copy-utils';
 import { applyDistinctGroupToColumn } from '../utils/column-distinct-group';
+import { applyImpliedSelectionPlan } from '../utils/column-implied-selection';
 import { type CellSaveOptions, applyMobileDisplayToColumn } from '../utils/column-mobile-display';
 import { checkCanMerge, executeMerge, executeUnmerge } from '../utils/table-cell-merge';
 import { useDragCopy } from './use-drag-copy';
@@ -917,6 +918,12 @@ export function useTableEditor({
               return remapped ? { ...leaf, controllerCellId: remapped } : leaf;
             });
           }
+          // 따라 선택 짝도 같은 규약 — 같은 행을 가리키면 복제 행의 칸으로, 행 밖 참조는 그대로
+          if (cloned.impliedCellIds) {
+            cloned.impliedCellIds = cloned.impliedCellIds.map(
+              (id) => clonedCellIdByOld.get(id) ?? id,
+            );
+          }
           // 응답 인용 이름은 설문 전역 식별자다. 그대로 복제하면 6행 표가 사실은
           // 6개의 질문이라는 의도가 깨지고, 같은 이름을 가진 셀들이 응답 페이지에서
           // 조용히 하나의 문구로 합쳐진다(동일 이름 병합은 의도된 동작이라 경고도 없다).
@@ -1223,6 +1230,10 @@ export function useTableEditor({
         }
       }
 
+      // 따라 선택 짝은 따라가지 않는다 — 원본의 짝(대개 원본 행의 옆 칸)을 끌고 가면 이 칸을
+      // 고를 때 남의 행이 체크된다. 붙인 뒤 이 칸에서 다시 건다(열 일괄 적용).
+      delete pastedCell.impliedCellIds;
+
       let updatedRows = rows.map((row, rIndex) =>
         rIndex === rowIndex
           ? { ...row, cells: row.cells.map((c, cIndex) => (cIndex === cellIndex ? pastedCell : c)) }
@@ -1305,6 +1316,9 @@ export function useTableEditor({
           cell.id,
           options.columnDistinctGroup.value,
         );
+      }
+      if (options?.columnImpliedSelection) {
+        updatedRows = applyImpliedSelectionPlan(updatedRows, options.columnImpliedSelection.plan);
       }
 
       const rowspan = cell.rowspan || 1;

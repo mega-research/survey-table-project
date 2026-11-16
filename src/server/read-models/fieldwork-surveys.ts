@@ -12,6 +12,7 @@ import {
   teams,
   users,
 } from '@/db/schema';
+import { quotaTotalTarget } from '@/lib/quota/normalize';
 import { sumQuotaTargets } from '@/lib/quota/quota-status-calc';
 import type { QuotaConfig } from '@/shared/contracts/quota';
 import type { FieldworkHomeSurveyItem } from '@/shared/contracts/workspace-io';
@@ -112,7 +113,6 @@ async function selectFieldworkSurveys(
       teamName: teams.name,
       ownerName: owner.name,
       quotaConfig: surveys.quotaConfig,
-      maxResponses: surveys.maxResponses,
       completedCount: sql<number>`coalesce(${progress.completed}, 0)::int`,
       lastActivityAt: progress.lastActivityAt,
       // 내가 초대된 줄인가 — 업체 시야 목록에서만 의미가 있다. 없으면 전부 'invited'.
@@ -150,7 +150,6 @@ async function selectFieldworkSurveys(
       teams.name,
       owner.name,
       surveys.quotaConfig,
-      surveys.maxResponses,
       progress.completed,
       progress.lastActivityAt,
     )
@@ -167,31 +166,32 @@ async function selectFieldworkSurveys(
     reason: (row.mine ? 'invited' : defaultReason) as Reason,
     invitedColleagueName: row.mine ? null : row.colleagueName,
     completedCount: row.completedCount,
-    targetCount: targetOf(row.quotaConfig, row.maxResponses),
+    targetCount: targetOf(row.quotaConfig),
     lastActivityAt: row.lastActivityAt,
   }));
 }
 
 /**
- * 진척의 분모 (.pen 「117 / 150」) — 쿼터 목표 합, 없으면 최대 응답 수.
+ * 진척의 분모 (.pen 「117 / 150」) — 쿼터 플랜의 「완료」 조건, 없으면 셀 목표의 합.
  *
- * 두 축을 순서대로 보는 이유는 설문마다 목표를 적는 자리가 다르기 때문이다. 쿼터를 쓰는
- * 조사는 셀 목표의 합이 곧 표본 수이고, 안 쓰는 조사는 `maxResponses` 가 그 자리다 —
- * 쿼터만 보면 후자가 영영 「117 / —」로 남는다.
+ * 「완료」 조건(`quota_config.totalTarget`, CONTEXT.md 「완료 조건」)이 있으면 그것이 설문 전체의
+ * 목표다 — 응답 현황의 쿼터 카드도 같은 순서로 본다. 조건이 없는 조사는 셀 목표의 합이 곧 표본 수다.
+ * 예전에 쿼터 없는 조사의 분모로 읽던 `surveys.max_responses` 는 쓰지 않는 컬럼이 됐다 — 전체 완료 수
+ * 목표를 적는 자리는 「완료」 조건 하나다.
  *
  * `enabled=false` 는 「정의·집계만 하고 응답자를 막지 않는다」라 분모로 세우지 않는다.
  * 목표가 집행되지 않는데 분모에 놓으면 화면이 있지도 않은 마감을 향해 달리는 것처럼 보인다.
  *
- * 둘 다 없으면 null 이고 화면이 「117 / —」로 그린다. 0 으로 접지 않는 것은 「목표가 0」과
+ * 목표가 없으면 null 이고 화면이 「117 / —」로 그린다. 0 으로 접지 않는 것은 「목표가 0」과
  * 「목표가 없다」가 다른 말이기 때문이다 — 앞은 달성률 100%, 뒤는 표시 없음이다.
  */
-function targetOf(config: QuotaConfig | null, maxResponses: number | null): number | null {
-  if (config?.enabled) {
-    // 계산의 집은 lib/quota 다 — 요약 화면과 같은 셈을 봐야 목표가 화면마다 갈리지 않는다.
-    const total = sumQuotaTargets(config.cells ?? []);
-    if (total > 0) return total;
-  }
-  return maxResponses && maxResponses > 0 ? maxResponses : null;
+function targetOf(config: QuotaConfig | null): number | null {
+  if (!config?.enabled) return null;
+  // 계산의 집은 lib/quota 다 — 요약 화면과 같은 셈을 봐야 목표가 화면마다 갈리지 않는다.
+  const totalTarget = quotaTotalTarget(config);
+  if (totalTarget !== null) return totalTarget;
+  const cellSum = sumQuotaTargets(config.cells ?? []);
+  return cellSum > 0 ? cellSum : null;
 }
 
 /**

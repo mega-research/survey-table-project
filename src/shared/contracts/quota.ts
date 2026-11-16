@@ -55,6 +55,12 @@ export interface QuotaConfig {
   dimensions: QuotaDimension[];
   /** sparse — 목표가 있는 셀만 */
   cells: QuotaCell[];
+  /**
+   * 「완료」 조건의 목표 — 설문 전체 완료 수(온라인 완료 + 실사 완료 처리)의 상한
+   * (CONTEXT.md 「완료 조건」). 문항·명단 열에 묶인 조건(dimensions)과 독립이라 단독으로도, 셀 목표와
+   * 함께도 건다. null·부재 = 없음. 다른 조건과 똑같이 집행 스위치와 「진행 중 마감」 옵션을 따른다.
+   */
+  totalTarget?: number | null | undefined;
   /** 마감 종료 화면 문구. null이면 기본 폴백. */
   closedMessage: string | null;
   /**
@@ -79,7 +85,7 @@ export interface QuotaGate {
    * 1회뿐인 확인이 소진된다. 여기 등재된 문항은 대상 칸 중 하나라도 값이 있어야 답변으로 본다.
    */
   cellIdsByQuestion?: Record<string, string[]>;
-  /** 문항 기반 차원이 하나도 없는 플랜(조사 대상 속성형만) — 첫 페이지 전환에서 확인한다. */
+  /** 문항 기반 차원이 하나도 없는 플랜(조사 대상 속성형·「완료」 조건만) — 첫 페이지 전환에서 확인한다. */
   checkWithoutQuestions?: boolean;
   /**
    * 「진행 중 마감」 — 첫 판정 이후의 모든 「다음」에서 확인 RPC 를 백그라운드로 다시 보낸다.

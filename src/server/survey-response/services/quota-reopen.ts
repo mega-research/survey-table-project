@@ -7,6 +7,7 @@ import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { logger } from '@/lib/logger';
 import {
   countQuotaCellCompleted,
+  isQuotaTotalFull,
   loadQuotaPlan,
   resolveQuotaTargetCell,
 } from '@/server/read-models/quota-cell';
@@ -25,7 +26,10 @@ import {
  *
  * 판정은 입장 판정(checkQuota)과 같은 사슬이다 — 쿼터가 꺼졌거나, 미분류이거나, 목표 없는
  * 셀이면 자리가 있는 것으로 본다. 테스트 응답은 손대지 않는다(테스트 재시작 경로가 따로 있다).
- * 되살리기는 status='quotaful_out' 조건부 UPDATE 라 동시 재진입에도 한 번만 바뀐다.
+ *
+ * 「완료」 조건(설문 전체 완료 수의 목표)도 같은 플랜의 일부라 함께 본다 — 전체가 찬 동안은 셀에 자리가
+ * 있어도 열지 않는다. 열어 봐야 다음 확인에서 다시 쿼터마감으로 떨어지고 상태만 오간다. 목표를 올리거나
+ * 없애거나 집행을 끄면 다음 재진입에서 열린다.
  *
  * @returns 이 호출이 drop 으로 되돌렸으면 true
  */
@@ -45,6 +49,7 @@ export async function reopenQuotaClosedResponse(responseId: string): Promise<boo
 
   const plan = await loadQuotaPlan(row.surveyId);
   if (plan?.enabled) {
+    if (await isQuotaTotalFull(db, row.surveyId, plan)) return false;
     // 셀 분류는 평문 답으로 한다 — 저장분은 PII 문항이 암호문이다.
     const plain = decryptQuestionResponses(
       (row.questionResponses ?? {}) as Record<string, unknown>,

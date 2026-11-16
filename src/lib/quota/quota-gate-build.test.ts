@@ -69,4 +69,32 @@ describe('buildQuotaGate', () => {
       expect(buildQuotaGate({ ...plan([choiceDim], false), midSurveyClose: true })).toBeNull();
     });
   });
+  // ── 「완료」 조건 (CONTEXT.md 「완료 조건」) ──
+  it('「완료」 조건만 있는 플랜은 기다릴 문항이 없어 첫 전환에서 확인한다', () => {
+    expect(buildQuotaGate({ ...plan([]), totalTarget: 1100 })).toEqual({
+      questionIds: [],
+      checkWithoutQuestions: true,
+    });
+  });
+
+  it('조건이 하나도 없는 집행 플랜은 확인을 발동하지 않는다 — 「완료」 조건이 없으면 종전과 같다', () => {
+    expect(buildQuotaGate(plan([]))).toEqual({ questionIds: [] });
+    expect(buildQuotaGate({ ...plan([]), totalTarget: null })).toEqual({ questionIds: [] });
+  });
+
+  it('문항 조건과 함께 있으면 그 문항에 답했을 때 함께 판정한다', () => {
+    const gate = buildQuotaGate({ ...plan([choiceDim]), totalTarget: 1100 });
+    expect(gate?.questionIds).toEqual(['q-gender']);
+    expect(gate?.checkWithoutQuestions).toBeUndefined();
+  });
+
+  it('진행 중 마감이 켜지면 「완료」 조건만 있는 플랜도 페이지마다 재확인한다', () => {
+    expect(
+      buildQuotaGate({ ...plan([]), totalTarget: 1100, midSurveyClose: true }),
+    ).toMatchObject({ checkWithoutQuestions: true, recheckOnEachStep: true });
+  });
+
+  it('집행이 꺼진 플랜은 「완료」 조건이 있어도 게이트가 없다 — 다른 조건과 같은 스위치를 따른다', () => {
+    expect(buildQuotaGate({ ...plan([], false), totalTarget: 1100 })).toBeNull();
+  });
 });

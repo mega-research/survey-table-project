@@ -19,7 +19,8 @@ import {
   buildShareQuotaStatus,
 } from '@/lib/quota/quota-status-calc';
 import { needsContactAttrs } from '@/lib/quota/matching';
-import { normalizeQuotaConfig } from '@/lib/quota/normalize';
+import { normalizeQuotaConfig, quotaTotalTarget } from '@/lib/quota/normalize';
+import { countQuotaTotalCompleted } from '@/server/read-models/quota-cell';
 
 /**
  * 설문 쿼터 현황(셀별 + 요약). 쿼터 미설정이면 null.
@@ -37,10 +38,12 @@ export async function getQuotaStatus(
   const config = normalizeQuotaConfig(surveyRow?.quotaConfig ?? null);
   if (!config) return null;
 
-  const subjects = await loadCompletedQuotaSubjects(surveyId, scope, {
-    withAttrs: needsContactAttrs(config),
-  });
-  return buildQuotaStatus(config, subjects);
+  const [subjects, totalCompleted] = await Promise.all([
+    loadCompletedQuotaSubjects(surveyId, scope, { withAttrs: needsContactAttrs(config) }),
+    // 「완료」 조건이 있을 때만 센다 — 집행 판정(checkQuota·제출 하드 차단)과 같은 셈.
+    quotaTotalTarget(config) !== null ? countQuotaTotalCompleted(db, surveyId, scope) : 0,
+  ]);
+  return buildQuotaStatus(config, subjects, totalCompleted);
 }
 
 /**

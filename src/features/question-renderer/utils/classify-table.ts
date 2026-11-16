@@ -9,6 +9,27 @@ import { buildTableRowspanCoverage } from '@/features/question-renderer/utils/ta
  *
  * 입력은 displayCondition·동적행 필터링과 colspan/rowspan 재계산을 이미 거친
  * visibleColumns / displayRows / visibleHeaderGrid 를 받는다.
+ *
+ * ── 배선과 규칙 ──
+ * - **드릴다운이 읽는 「모바일 카드 표시」** (2026-10-02): 입력 드릴다운(자동 드릴다운·선택 행 원본 보기의
+ *   목차)은 셀의 `mobileDisplay` 를 분류에 쓴다 — `classifyTable` 의 `readMobileDisplay`.
+ * - ① 목차 열의 내용 빈 글자 셀이 숨기기(미지정 포함)면 **들여쓰기 표시 셀**: 덮인 행이 각자 섹션이 되고, 바로
+ *   윗행이 계산 셀만 있는 한 행짜리 섹션이면 **묶음 머리**(소계 값 + 하위 카드, 누르지 않음)가 된다.
+ * - 판정은 저작 행 기준이라 하위가 전부 숨으면 머리도 빠진다.
+ * - ② `inline`·`collapsed` 표시 셀은 **설명 셀**: 행 제목 후보에서 빠지고 목차 카드(자세히=첫 줄)·상세
+ *   화면(전문)에 설명으로 나온다.
+ * - ③ 머리가 아닌 계산 전용 섹션은 값이 바로 보이는 요약 블록.
+ * - 이전·다음 섹션 이동은 머리·요약을 건너뛴다.
+ * - ④ 상세 화면(legacy matrix)의 **계산 칸은 제 열 자리에** 선다 — 열 묶음(`colGroups`)은 입력 열만 다루므로
+ *   `matrixDetailGroups`(mobile-table-drilldown)가 계산 칸을 제 열 앞의 마지막 입력 열이 속한 묶음에 열
+ *   순서대로 끼우고, 라벨은 입력 칸과 같은 규칙(모바일 라벨 → 엑셀 라벨 → 열 헤더)으로 읽는다.
+ * - 전에는 묶음 뒤에 라벨 없이 몰려 「상용 · 임시」 아래에 와야 할 「합계」가 맨 끝에 이름 없이 나왔다.
+ * - 쪼갠 섹션은 목차 열 출처 셀을 공유하므로 식별자는 `section.identity`(행 id)다 — `getSectionIdentity` 를
+ *   거치지 않고 `labelSourceCellId` 로 섹션을 찾으면 충돌한다.
+ * - 보기 소스 표 드릴다운은 이 옵션을 켜지 않는다.
+ * - 열 일괄 지정은 `survey-builder/table-editor/utils/column-mobile-display` 이고 셀 저장과 같은
+ *   커밋(`updateCell` 의 options)에 실린다.
+ * - CONTEXT.md "들여쓰기 표시 셀"·"묶음 머리"·"설명 셀".
  */
 export interface ClassifyInput {
   tableColumns: TableColumn[];

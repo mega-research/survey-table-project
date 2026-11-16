@@ -189,3 +189,42 @@ describe('중복 불가 묶음 — 표시 조건으로 숨은 칸', () => {
     expect(optionOf('a1', 'us')).toBeDisabled();
   });
 });
+
+describe('중복 불가 묶음 — 응답자가 고른 동적 행', () => {
+  // 데스크톱은 동적 행을 본문 격자가 아니라 선택 줄 아래 펼친 자리에 그린다. 고른 행의 칸도
+  // 묶음 구성원이어야 화면 비활성이 차단 검증(collectVisibleTableCells)과 같은 범위를 본다.
+  const dynamicRows: TableRow[] = rows.map((row) => ({ ...row, dynamicGroupId: 'dg1' }));
+
+  function DynamicHarness({ selected }: { selected: string[] }) {
+    const [value, setValue] = useState<Record<string, unknown>>({
+      __selectedRowIds: selected,
+      a2: 'us',
+    });
+    return (
+      <InteractiveTableResponse
+        questionId="q1"
+        columns={columns}
+        rows={dynamicRows}
+        dynamicRowConfigs={[{ groupId: 'dg1', enabled: true }]}
+        value={value}
+        onChange={setValue}
+        enableSticky={false}
+      />
+    );
+  }
+
+  it('고른 행끼리는 같은 보기를 두 번 고를 수 없다', async () => {
+    const user = userEvent.setup();
+    const { getByRole } = render(<DynamicHarness selected={['r1', 'r2']} />);
+    await user.click(getByRole('button', { name: '펼치기' }));
+    expect(optionOf('a1', 'us')).toBeDisabled();
+    expect(optionOf('a1', 'jp')).toBeEnabled();
+  });
+
+  it('고르지 않은 행에 남은 값은 보기를 차지하지 않는다', async () => {
+    const user = userEvent.setup();
+    const { getByRole } = render(<DynamicHarness selected={['r1']} />);
+    await user.click(getByRole('button', { name: '펼치기' }));
+    expect(optionOf('a1', 'us')).toBeEnabled();
+  });
+});

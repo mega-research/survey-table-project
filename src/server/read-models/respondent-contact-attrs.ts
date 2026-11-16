@@ -76,10 +76,15 @@ function mergePiiRows(
   return mergeRespondentAttrs(attrs, pii);
 }
 
-/** 조사 대상 id 로 명단 값을 읽는다(서버 재평가·관리자 화면용 — 개인정보 열 전부). 대상이 없으면 빈 객체. */
+/**
+ * 조사 대상 id 로 명단 값을 읽는다(서버 재평가·관리자 화면용 — 개인정보 열 전부). 대상이 없으면 빈 객체.
+ * `allowedKeys` 를 주면 개인정보는 그 열만 합친다 — 값이 브라우저로 나가는데 보는 사람이 담당자가
+ * 아닌 화면(응답 조회)용이다. 응답자 브라우저로 가는 조회와 같은 규칙이다(`appendContactPii`).
+ */
 export async function loadRespondentContactAttrs(
   contactTargetId: string,
   executor: DbOrTx = db,
+  options: { allowedKeys?: () => Promise<ReadonlySet<string>> } = {},
 ): Promise<Record<string, string>> {
   const [row] = await executor
     .select({ id: contactTargets.id, attrs: contactTargets.attrs })
@@ -87,7 +92,7 @@ export async function loadRespondentContactAttrs(
     .where(eq(contactTargets.id, contactTargetId))
     .limit(1);
   if (!row) return {};
-  return appendContactPii(row, {}, executor);
+  return appendContactPii(row, options, executor);
 }
 
 /** 한 번에 묶어 읽는 대상 수 — `inArray` 바인드 파라미터 한계 안쪽(contacts-export 와 같은 크기). */

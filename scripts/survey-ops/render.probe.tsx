@@ -3,7 +3,7 @@
  * (`SurveyResponseFlow mode="preview"` + previewContext). 테스트가 아니라 출력기라 단언하지 않는다.
  *
  * 입력은 env 로 받는다: SURVEY_OPS_DUMP(dump 파일) · SURVEY_OPS_OUT(결과 파일) · SURVEY_OPS_MOBILE · SURVEY_OPS_NEXT ·
- * SURVEY_OPS_ANSWERS(깔아 둘 응답 JSON — 키는 문항 코드 또는 문항 id).
+ * SURVEY_OPS_ANSWERS(깔아 둘 응답 JSON — 키는 문항 코드 또는 문항 id) · SURVEY_OPS_CLICK(누를 표 칸 id, 쉼표로 여럿).
  */
 import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -84,6 +84,63 @@ function findNextButton(root: HTMLElement): HTMLButtonElement | null {
   );
 }
 
+const CELL_CONTROL = 'input[type="checkbox"], input[type="radio"], [role="checkbox"], [role="radio"]';
+
+/**
+ * 컨트롤이 어느 표 칸의 것인가. 격자 표는 칸을 `data-cell-id` 로 감싸고, 모바일 카드의 보기 타일은 감싸는 표식 없이
+ * 입력 요소 id 가 `…-<칸 id>` 로 끝난다(choice-opt-cell 의 inputId). 둘 다 아니면 표 칸의 컨트롤이 아니다.
+ */
+function cellIdOfControl(control: Element, knownCellIds: ReadonlySet<string>): string | null {
+  const host = control.closest('[data-cell-id]')?.getAttribute('data-cell-id');
+  if (host) return host;
+  const id = control.getAttribute('id') ?? '';
+  for (const cellId of knownCellIds) if (id.endsWith(`-${cellId}`)) return cellId;
+  return null;
+}
+
+const isChecked = (el: Element) =>
+  (el as HTMLInputElement).checked === true ||
+  el.getAttribute('aria-checked') === 'true' ||
+  el.getAttribute('data-state') === 'checked';
+
+/** 이 쪽에 그려진 선택 칸의 컨트롤 — 칸 id → 컨트롤들(같은 칸을 여러 호스트가 그릴 수 있다). */
+function cellControls(
+  root: HTMLElement,
+  knownCellIds: ReadonlySet<string>,
+): Map<string, HTMLElement[]> {
+  const controls = new Map<string, HTMLElement[]>();
+  for (const control of Array.from(root.querySelectorAll(CELL_CONTROL))) {
+    const cellId = cellIdOfControl(control, knownCellIds);
+    if (cellId) controls.set(cellId, [...(controls.get(cellId) ?? []), control as HTMLElement]);
+  }
+  return controls;
+}
+
+/** 칸 id → 골라졌는가. 하나라도 골라졌으면 참. */
+function cellStates(root: HTMLElement, knownCellIds: ReadonlySet<string>): Map<string, boolean> {
+  return new Map(
+    [...cellControls(root, knownCellIds)].map(([id, list]) => [id, list.some(isChecked)]),
+  );
+}
+
+/** 칸 id → 「행 이름 · 열 이름」. 행 이름은 그 행의 첫 글자 칸, 없으면 행 라벨이다. */
+function cellNames(survey: Survey): Map<string, string> {
+  const names = new Map<string, string>();
+  const plain = (text: string | undefined) => (text ?? '').replace(/\s+/g, ' ').trim();
+  for (const q of survey.questions ?? []) {
+    for (const row of q.tableRowsData ?? []) {
+      const rowName =
+        plain(row.cells.find((c) => c.type === 'text' && plain(c.content))?.content) ||
+        plain(row.label);
+      row.cells.forEach((cell, idx) => {
+        const colName = plain(q.tableColumns?.[idx]?.label);
+        names.set(cell.id, [q.questionCode, rowName, colName].filter(Boolean).join(' · '));
+      });
+    }
+  }
+  return names;
+}
+
 afterAll(() => cleanup());
 
 it('render', async () => {
@@ -153,6 +210,41 @@ it('render', async () => {
       break;
     }
     sections.push(`## 「다음」 ${i}번 뒤\n${text}`);
+  }
+
+  const clickIds = (process.env['SURVEY_OPS_CLICK'] ?? '')
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean);
+  const names = cellNames(dump.survey);
+  const knownCellIds = new Set(names.keys());
+  for (const cellId of clickIds) {
+    const controls = cellControls(container, knownCellIds).get(cellId);
+    if (!controls) {
+      sections.push(
+        `## 칸 ${cellId} — 이 쪽에 그 칸의 체크박스·라디오가 없어 멈춤 (--next·--answers 로 그 칸이 있는 쪽까지 가야 한다. 선택 칸이 아니어도 이렇게 나온다)`,
+      );
+      break;
+    }
+    const control = controls.find((el) => !(el as HTMLInputElement).disabled);
+    if (!control) {
+      sections.push(`## 칸 ${names.get(cellId) ?? cellId} — 잠긴 칸이라 누를 수 없어 멈춤`);
+      break;
+    }
+    const before = cellStates(container, knownCellIds);
+    fireEvent.click(control);
+    await settle(container);
+    const after = cellStates(container, knownCellIds);
+    const mark = (on: boolean | undefined) => (on ? '[✓]' : '[ ]');
+    const changed = [...after]
+      .filter(([id, on]) => before.get(id) !== on)
+      .map(
+        ([id, on]) =>
+          `${id === cellId ? '누른 칸' : '따라 바뀐 칸'} ${mark(before.get(id))} → ${mark(on)}  ${names.get(id) ?? '(이름 없음)'}  ${id}`,
+      );
+    sections.push(
+      `## 칸 ${names.get(cellId) ?? cellId} 누른 뒤 — 상태가 바뀐 선택 칸 ${changed.length}개\n${changed.length > 0 ? changed.join('\n') : '(바뀐 칸 없음)'}`,
+    );
   }
 
   writeFileSync(outPath, `${sections.join('\n\n')}\n`);

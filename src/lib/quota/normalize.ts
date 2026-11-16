@@ -37,5 +37,36 @@ export function normalizeQuotaConfig(raw: unknown): NormalizedQuotaConfig | null
   );
 
   // 브랜드는 런타임에 존재하지 않는 표식이므로 이 한 곳에서만 단언한다.
-  return { ...config, dimensions, cells } as unknown as NormalizedQuotaConfig;
+  return {
+    ...config,
+    dimensions,
+    cells,
+    // 키가 있을 때만 정돈한다 — 「완료」 조건을 쓴 적 없는 플랜의 모양은 그대로 둔다.
+    ...('totalTarget' in config ? { totalTarget: quotaTotalTarget(config) } : {}),
+  } as unknown as NormalizedQuotaConfig;
+}
+
+/**
+ * 「완료」 조건의 목표 — 1 이상 정수일 때만 값, 그 밖(부재·null·JSONB 드리프트)은 null.
+ * 판정·게이트·현황·편집 화면이 "완료 조건이 있는가"를 이 함수 하나로 묻는다.
+ */
+export function quotaTotalTarget(
+  config: Pick<QuotaConfig, 'totalTarget'> | null | undefined,
+): number | null {
+  const value: unknown = config?.totalTarget;
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 ? value : null;
+}
+
+/** 「완료」 조건의 목표로 받는 상한 — 서버 검증(QuotaConfigSchema)과 같은 값. */
+export const QUOTA_TOTAL_TARGET_MAX = 10_000_000;
+
+/**
+ * 편집 화면의 입력 글자 → 「완료」 조건의 목표. 빈 칸·1 미만·정수가 아닌 값·상한 초과는 null(저장 불가).
+ * 해석 못 한 입력을 0 이나 「조건 없음」으로 조용히 바꾸지 않는다.
+ */
+export function parseQuotaTotalTarget(text: string): number | null {
+  const trimmed = text.replace(/,/g, '').trim();
+  if (!/^\d+$/.test(trimmed)) return null;
+  const value = Number(trimmed);
+  return Number.isSafeInteger(value) && value >= 1 && value <= QUOTA_TOTAL_TARGET_MAX ? value : null;
 }

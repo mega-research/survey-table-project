@@ -32,7 +32,7 @@ describe('KpiRow 쿼터 칸 — 외주 링크 투영', () => {
         counts={counts}
         quota={{
           kind: 'full',
-          summary: { targetTotal: 40, currentTotal: 10, pct: 25, closedCells: 1, totalCells: 4, unclassified: 0 },
+          summary: { targetTotal: 40, currentTotal: 10, pct: 25, closedCells: 1, totalCells: 4, unclassified: 0, total: null },
         }}
       />,
     );

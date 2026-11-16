@@ -82,6 +82,27 @@ export function resolvePastedGating(
   });
 }
 
+/**
+ * 붙여넣은 칸의 따라 선택 짝(impliedCellIds) 재해석 (CONTEXT.md "따라 선택").
+ *
+ * - `remapTarget(id)` 가 값을 주면(대상이 복사 영역 안) → 붙여넣은 자리의 같은 위치 칸 id 로 치환
+ * - 그 외 → 뺀다. 게이팅과 달리 「같은 표에 있으면 유지」가 아니다 — 짝은 대개 같은 행의 옆 칸이라,
+ *   유지하면 2행에 붙인 칸이 1행의 칸을 함께 고르게 된다.
+ *
+ * 남은 짝이 없으면 빈 배열이다 — 부르는 쪽이 키를 지운다.
+ */
+export function resolvePastedImpliedCellIds(
+  impliedCellIds: readonly string[],
+  remapTarget: ((targetCellId: string) => string | undefined) | undefined,
+): string[] {
+  const resolved: string[] = [];
+  for (const id of impliedCellIds) {
+    const remapped = remapTarget?.(id);
+    if (remapped && !resolved.includes(remapped)) resolved.push(remapped);
+  }
+  return resolved;
+}
+
 /** 병합 스팬이 덮어 숨겨질 셀 id 집합 (앵커 자신 제외). recalculateHiddenCells 와 같은
  *  근거를 스팬만으로 선계산한다 — isHidden 플래그 재계산 전(draft)에도 판정 가능. */
 function collectSpanCoveredCellIds(rows: readonly TableRow[]): Set<string> {

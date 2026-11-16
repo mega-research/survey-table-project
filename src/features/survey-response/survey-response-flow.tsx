@@ -46,6 +46,7 @@ import {
   type LanguageAdvance,
   useLanguagePage,
 } from '@/features/survey-response/hooks/use-language-page';
+import { useReadOnlyInputs } from '@/features/survey-response/hooks/use-read-only-inputs';
 import { useResponseLifecycle } from '@/features/survey-response/hooks/use-response-lifecycle';
 import { useResponseTelemetry } from '@/features/survey-response/hooks/use-response-telemetry';
 import { useSessionRecovery } from '@/features/survey-response/hooks/use-session-recovery';
@@ -206,6 +207,11 @@ export interface SurveyResponseFlowProps {
      */
     migratedFromOldVersion: boolean;
     onSubmit: (payload: SaveAdminEditPayload) => Promise<void>;
+    /**
+     * 조회 전용(응답 조회 화면) — 값 쓰기를 받지 않고, 「다음」은 검증 없이 넘기며, 마지막 쪽의
+     * 버튼은 `closeLabel` 글자로 `onClose` 를 부른다. `onSubmit` 은 불리지 않는다.
+     */
+    readOnlyView?: { closeLabel: string; onClose: () => void };
   };
   previewContext?: {
     survey: Survey;
@@ -1471,7 +1477,7 @@ function SurveyResponseFlowActive({
 
   // 첫 답변 INSERT 가드는 훅 내부 동기 ref 전용이라 컴포넌트가 볼 값이 없다(반환하지 않는다).
   const {
-    handleResponse,
+    handleResponse: writeResponse,
     discardPendingAnswers,
     rebasePendingAnswers,
     flushPendingAnswersInBackground,
@@ -1530,6 +1536,19 @@ function SurveyResponseFlowActive({
     buildOptTextsPayload: buildSubmissionPayload,
     setNumericErrorStepIndex,
   });
+
+  // 조회 전용(응답 조회 화면) — 화면에서 오는 값 쓰기를 여기 한 곳에서 받지 않는다. 아래의 쓰기 창구가
+  // 전부 이 함수를 지나므로 보이는 답은 늘 저장된 답 그대로다. 입력칸 자체는 훅이 readOnly 로 잠근다.
+  const readOnlyView = isAdminEdit ? adminContext?.readOnlyView : undefined;
+  const isReadOnlyView = readOnlyView !== undefined;
+  useReadOnlyInputs(isReadOnlyView);
+  const handleResponse = useCallback(
+    (questionId: string, value: unknown) => {
+      if (isReadOnlyView) return;
+      writeResponse(questionId, value);
+    },
+    [isReadOnlyView, writeResponse],
+  );
 
   // 변동 확인은 문항 id 가 아니라 사이드카 키로 들어오므로, handleResponse 안의
   // "답하면 하이라이트를 푼다" 처리가 문항을 찾지 못한다. 확인이 채워진 문항의
@@ -1701,6 +1720,17 @@ function SurveyResponseFlowActive({
    */
   const runNext = async (languageAdvance: LanguageAdvance | null) => {
     blurActiveInput();
+    // 조회 전용 — 검증·쿼터·저장 없이 쪽만 넘긴다. 덜 채운 응답(이탈)도 끝까지 넘겨 볼 수 있어야 한다.
+    if (readOnlyView) {
+      const nextIndex = resolveNextStepIndex();
+      if (nextIndex === -1) {
+        readOnlyView.onClose();
+        return;
+      }
+      setStepHistory((prev) => [...prev, currentStepIndex]);
+      setCurrentStepIndex(nextIndex);
+      return;
+    }
     const unansweredCurrent = currentStepQuestions.filter(
       (q) => !awaitingConfirmationIds.has(q.id) && isQuestionRequired(q) && !isQuestionAnswered(q),
     );
@@ -2134,6 +2164,8 @@ function SurveyResponseFlowActive({
   const inlineLocale = toInlineLocale(systemLocale);
   const submitLabel = systemText('nav.next', inlineLocale);
   const submittingLabel = systemText('nav.submitting', inlineLocale);
+  // 조회 전용의 마지막 쪽은 제출이 아니라 닫기다 — 글자는 화면(관리자 쪽)이 넘긴다.
+  const lastStepLabel = readOnlyView?.closeLabel ?? submitLabel;
 
   const languageSwitchLink = showLanguageSwitch ? (
     <button
@@ -2283,7 +2315,7 @@ function SurveyResponseFlowActive({
                       hasPrevious={hasPreviousDisplayable}
                       isLastStep={isLastVisibleStep}
                       isSubmitting={isSubmitting}
-                      submitLabel={submitLabel}
+                      submitLabel={lastStepLabel}
                       submittingLabel={submittingLabel}
                       onPrevious={handlePrevious}
                       onNext={handleNext}
@@ -2418,7 +2450,7 @@ function SurveyResponseFlowActive({
 
                   {isLanguagePage ? null : isLastVisibleStep ? (
                     <Button onClick={handleNext} disabled={isSubmitting}>
-                      {isSubmitting ? submittingLabel : submitLabel}
+                      {isSubmitting ? submittingLabel : lastStepLabel}
                       {!isSubmitting && <ArrowRight className="ml-2 h-4 w-4" />}
                     </Button>
                   ) : (

@@ -11,6 +11,7 @@ import { isPersistedRootSidecarKey, sanitizeRootSidecar } from '@/lib/survey/res
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import {
   countQuotaCellCompleted,
+  isQuotaTotalFull,
   loadQuotaPlan,
   resolveQuotaTargetCell,
 } from '@/server/read-models/quota-cell';
@@ -243,6 +244,9 @@ export async function detectQuotaOverflow(
   try {
     const config = preloadedPlan === undefined ? await loadQuotaPlan(surveyId) : preloadedPlan;
     if (!config?.enabled) return false;
+
+    // 「완료」 조건 — 전체 완료 수가 이미 목표에 닿은 뒤의 완료도 초과분이다(셀과 같은 표식).
+    if (await isQuotaTotalFull(db, surveyId, config)) return true;
 
     const cell = await resolveQuotaTargetCell(config, plainAnswers, contactTargetId);
     if (!cell) return false;

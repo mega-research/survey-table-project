@@ -182,12 +182,12 @@ describe('surveyBuilder.surveys — update 는 allowlist 다 (Codex 리뷰)', ()
 
     await client.surveys.update({
       surveyId: SURVEY_ID,
-      data: { title: '바뀐 제목', isPublic: true, maxResponses: null },
+      data: { title: '바뀐 제목', isPublic: true, endDate: null },
     });
 
     expect(svc.updateSurvey).toHaveBeenCalledWith({
       surveyId: SURVEY_ID,
-      data: { title: '바뀐 제목', isPublic: true, maxResponses: null },
+      data: { title: '바뀐 제목', isPublic: true, endDate: null },
     });
   });
 });

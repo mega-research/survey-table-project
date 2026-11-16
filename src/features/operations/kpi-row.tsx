@@ -135,20 +135,28 @@ function KpiCell({ label, value, delta, deltaTone, hint }: KpiCellProps) {
  * 쿼터 진행 카드 — 예전 "쿼터마감" 단일 카운트 셀을 대체한다.
  * 완료/목표 총합 대비 % + 마감된 셀 수(closedCells)를 함께 보여줘, 쿼터 전체
  * 진척을 한눈에 파악할 수 있게 한다. 셀 단위 상세는 QuotaStatusPanel 담당.
+ *
+ * 「완료」 조건이 있으면 그것이 설문 전체의 목표이므로 큰 숫자는 그 달성률이다(완료 + 실사 완료 처리 /
+ * 목표). 셀 목표가 함께 있으면 마감된 셀 수를 뒤에 붙인다.
  */
 function QuotaKpiCell({ quota }: { quota: QuotaKpi | null }) {
   const hasQuota = quota != null;
   // 외주 투영에는 목표가 없다 — 달성률 대신 내 완료 수를 크게, 마감 셀 수를 아래에 둔다.
+  // 「완료」 조건(전체 완료 수 목표)도 목표라 외주 투영에는 싣지 않는다.
+  const total = quota?.kind === 'full' ? quota.summary.total : null;
   const value = !hasQuota
     ? '-'
     : quota.kind === 'share'
       ? numberFormatter.format(quota.mine.mineTotal)
-      : `${quota.summary.pct}%`;
+      : `${total ? total.pct : quota.summary.pct}%`;
   const detail = !hasQuota
     ? '-'
     : quota.kind === 'share'
       ? `내 완료 · ${quota.mine.totalCells}셀 중 ${quota.mine.closedCells} 마감`
-      : `${numberFormatter.format(quota.summary.currentTotal)}/${numberFormatter.format(quota.summary.targetTotal)} · ${quota.summary.closedCells} 마감`;
+      : total
+        ? `완료 ${numberFormatter.format(total.current)}/${numberFormatter.format(total.target)}` +
+          (quota.summary.totalCells > 0 ? ` · 셀 ${quota.summary.closedCells} 마감` : '')
+        : `${numberFormatter.format(quota.summary.currentTotal)}/${numberFormatter.format(quota.summary.targetTotal)} · ${quota.summary.closedCells} 마감`;
 
   return (
     <Card>

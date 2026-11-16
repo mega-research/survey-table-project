@@ -157,6 +157,33 @@ describe('duplicateQuestionTable', () => {
     ]);
   });
 
+  // Codex 리뷰(2026-11-13): 설명 열이 가리키는 응답 열(`describesColumnId`)은 같은 문항 안의 열 id 다 —
+  // 옮기지 않으면 복제본에서 축 단위 카드의 설명이 어느 카드에도 붙지 않는다
+  it('설명 열이 가리키는 열은 복제본의 열을 가리킨다 — 가리키지 않는 열에는 키가 생기지 않는다', () => {
+    const question = tableQuestion({
+      tableColumns: [
+        { id: 'col1', label: '공급 설명', describesColumnId: 'col2' },
+        { id: 'col2', label: '공급' },
+      ],
+    });
+    const { tableColumns } = duplicateQuestionTable(question);
+    expect(tableColumns).toHaveLength(2);
+    expect(tableColumns![0]!.describesColumnId).toBe(tableColumns![1]!.id);
+    expect(tableColumns![1]!.id).not.toBe('col2');
+    expect('describesColumnId' in tableColumns![1]!).toBe(false);
+  });
+
+  it('설명 열이 이 표에 없는 열을 가리키면 그 연결은 버린다 — 남의 문항 열을 가리킨 채 두지 않는다', () => {
+    const question = tableQuestion({
+      tableColumns: [
+        { id: 'col1', label: '공급 설명', describesColumnId: 'gone' },
+        { id: 'col2', label: '공급' },
+      ],
+    });
+    const { tableColumns } = duplicateQuestionTable(question);
+    expect('describesColumnId' in tableColumns![0]!).toBe(false);
+  });
+
   it('행 차례로 열기를 쓰지 않는 표의 복제본에는 설정 키가 없다', () => {
     expect('stagedRowsConfig' in duplicateQuestionTable(tableQuestion())).toBe(false);
   });

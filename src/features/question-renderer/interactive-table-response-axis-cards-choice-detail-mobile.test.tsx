@@ -1,0 +1,216 @@
+import { useState } from 'react';
+
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
+
+import type { ChoiceGroup, TableColumn, TableRow } from '@/types/survey';
+
+import { InteractiveTableResponse } from './interactive-table-response';
+
+/**
+ * 축 단위 카드 — 설명 셀과 보기 칸이 여는 상세 입력(피지컬 AI 실태조사 A3: 적용 산업 | 판단 예시 | 공급(S) | 활용(U)).
+ * 판단 예시(「바로 표시」)는 타일 글자 아래 설명으로, 「⑭ 기타」 내용 칸은 기타를 고른 타일 바로 아래에 선다.
+ * 묶음 규칙은 utils/column-axis-cards.test.ts.
+ */
+
+vi.mock('@/hooks/use-media-query', () => ({
+  useMobileView: () => true,
+  useMediaQuery: () => true,
+}));
+vi.mock('@/features/question-renderer/contact-attrs-context', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/features/question-renderer/contact-attrs-context')>()),
+  useContactAttrs: () => ({}),
+  useAnswerQuotes: () => ({}),
+}));
+
+beforeAll(() => {
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+});
+
+const columns: TableColumn[] = [
+  { id: 'name', label: '적용 산업', width: 330 },
+  { id: 'example', label: '판단 예시', width: 468 },
+  { id: 'supply', label: '공급(S)', width: 150 },
+  { id: 'use', label: '활용(U)', width: 150 },
+];
+const groups: ChoiceGroup[] = [
+  { id: 'gs', type: 'checkbox', label: '공급(S)', groupKey: 'chk01', required: false },
+  { id: 'gu', type: 'checkbox', label: '활용(U)', groupKey: 'chk02', required: false },
+];
+const rows: TableRow[] = [
+  {
+    id: 'r1',
+    label: '제조 – 자동차·운송장비',
+    cells: [
+      { id: 'n1', type: 'text', content: '① 제조 – 자동차·운송장비' },
+      { id: 'e1', type: 'text', content: '차량조립공정로봇', mobileDisplay: 'inline' },
+      { id: 's1', type: 'choice_opt', content: '', choiceGroupId: 'gs', choiceLabel: '제조' },
+      { id: 'u1', type: 'choice_opt', content: '', choiceGroupId: 'gu', choiceLabel: '제조' },
+    ],
+  },
+  {
+    id: 'r14',
+    label: '⑭ 기타',
+    cells: [
+      {
+        id: 'other-name',
+        type: 'input',
+        content: '⑭ 기타',
+        textPosition: 'left',
+        mobileLabel: '기타 산업명 직접 기입',
+        enabledWhen: {
+          kind: 'group',
+          op: 'OR',
+          terms: [
+            { kind: 'choice-selected', controllerCellId: 's14' },
+            { kind: 'choice-selected', controllerCellId: 'u14' },
+          ],
+        },
+        requiredWhenEnabled: true,
+      },
+      { id: 'e14', type: 'text', content: '우주, 해양등', mobileDisplay: 'inline' },
+      { id: 's14', type: 'choice_opt', content: '', choiceGroupId: 'gs', choiceLabel: '기타' },
+      { id: 'u14', type: 'choice_opt', content: '', choiceGroupId: 'gu', choiceLabel: '기타' },
+    ],
+  },
+];
+
+function Harness({ onValue }: { onValue?: (value: Record<string, unknown>) => void }) {
+  const [value, setValue] = useState<Record<string, unknown>>({});
+  return (
+    <InteractiveTableResponse
+      questionId="q1"
+      columns={columns}
+      rows={rows}
+      choiceGroups={groups}
+      value={value}
+      onChange={(next) => {
+        setValue(next);
+        onValue?.(next);
+      }}
+      mobileTableDisplayMode="axis-cards"
+    />
+  );
+}
+
+describe('축 단위 카드 — 설명 셀과 보기 칸이 여는 상세 입력', () => {
+  it('열마다 카드가 서고, 타일 글자는 산업명·그 아래 설명은 판단 예시다. 첫 열 카드는 서지 않는다', () => {
+    const { container } = render(<Harness />);
+    const tiles = container.querySelectorAll('[data-cell-id="s1"], [data-cell-id="u1"]');
+    expect(tiles).toHaveLength(2);
+    for (const tile of tiles) {
+      expect(within(tile as HTMLElement).getByText('① 제조 – 자동차·운송장비')).toBeTruthy();
+      expect(within(tile as HTMLElement).getByTestId('choice-tile-description').textContent).toBe('차량조립공정로봇');
+    }
+    // 「⑭ 기타」 타일 — 제목은 행 이름, 설명은 판단 예시
+    const other = container.querySelector<HTMLElement>('[data-cell-id="s14"]')!;
+    expect(within(other).getByText('⑭ 기타')).toBeTruthy();
+    expect(within(other).getByTestId('choice-tile-description').textContent).toBe('우주, 해양등');
+    // 기타 내용 칸은 아무 것도 고르지 않았으면 어디에도 없다(첫 열 카드도 없다)
+    expect(container.querySelector('[data-detail-cell-id="other-name"]')).toBeNull();
+    expect(container.querySelector('[data-cell-id="other-name"]')).toBeNull();
+    expect(screen.queryByPlaceholderText('기타 산업명 직접 기입')).toBeNull();
+  });
+
+  it('공급(S)의 기타를 고르면 그 타일 아래에만 기타 내용 칸이 열리고, 적은 값은 그 칸 id 로 써진다', () => {
+    let last: Record<string, unknown> = {};
+    const { container } = render(<Harness onValue={(v) => (last = v)} />);
+    const supplyOther = container.querySelector<HTMLElement>('[data-cell-id="s14"]')!;
+    const useOther = container.querySelector<HTMLElement>('[data-cell-id="u14"]')!;
+    fireEvent.click(within(supplyOther).getByRole('checkbox'));
+    const detail = supplyOther.querySelector<HTMLElement>('[data-detail-cell-id="other-name"]');
+    expect(detail).not.toBeNull();
+    expect(useOther.querySelector('[data-detail-cell-id="other-name"]')).toBeNull();
+    const field = within(detail!).getByPlaceholderText('기타 산업명 직접 기입');
+    fireEvent.change(field, { target: { value: '우주' } });
+    fireEvent.blur(field);
+    expect(last['other-name']).toBe('우주');
+    // 활용(U)의 기타도 고르면 그 타일 아래에도 같은 값으로 보인다
+    fireEvent.click(within(useOther).getByRole('checkbox'));
+    const second = useOther.querySelector<HTMLElement>('[data-detail-cell-id="other-name"]')!;
+    expect((within(second).getByPlaceholderText('기타 산업명 직접 기입') as HTMLInputElement).value).toBe('우주');
+  });
+
+  // Codex 리뷰(2026-11-13): 「위치로 이동」은 data-cell-id 로 칸을 찾는다 — 타일 아래로 옮긴 입력 칸도 그 표식이 있어야 한다
+  it('타일 아래 기타 내용 칸은 오류 위치 이동이 찾는 표식(data-cell-id)을 갖는다', () => {
+    const { container } = render(<Harness />);
+    const supplyOther = container.querySelector<HTMLElement>('[data-cell-id="s14"]')!;
+    fireEvent.click(within(supplyOther).getByRole('checkbox'));
+    const target = container.querySelector<HTMLElement>('[data-cell-id="other-name"]');
+    expect(target).not.toBeNull();
+    expect(target!.querySelector('input')).not.toBeNull();
+  });
+
+  // Codex 리뷰(2026-11-13): 컨트롤의 aria-label 이 접근성 이름이라 label 안 설명은 읽히지 않는다 — aria-describedby 로 잇는다
+  it('타일의 체크 컨트롤은 설명을 aria-describedby 로 가리킨다(카드마다 다른 id)', () => {
+    const { container } = render(<Harness />);
+    const ids = ['s1', 'u1'].map((cellId) => {
+      const tile = container.querySelector<HTMLElement>(`[data-cell-id="${cellId}"]`)!;
+      const control = within(tile).getByRole('checkbox');
+      expect(control.getAttribute('aria-label')).toBe('① 제조 – 자동차·운송장비');
+      const describedBy = control.getAttribute('aria-describedby');
+      expect(describedBy).toBeTruthy();
+      expect(container.ownerDocument.getElementById(describedBy!)?.textContent).toBe('차량조립공정로봇');
+      return describedBy;
+    });
+    expect(new Set(ids).size).toBe(2);
+  });
+});
+
+// B1 모양 — 대분류(세로 병합) | 세부 유형 | 공급 설명 | 활용 설명 | 공급(S) | 활용(U)
+describe('축 단위 카드 — 보기 타일의 상위 구분 소제목과 축마다 다른 설명', () => {
+  const productColumns: TableColumn[] = [
+    { id: 'cat', label: '대분류', width: 150 },
+    { id: 'kind', label: '세부 유형', width: 240 },
+    { id: 'sdesc', label: '공급(S)\n(외부제공하는 대상)', width: 250, describesColumnId: 'supply' },
+    { id: 'udesc', label: '활용(U)\n(자사에서 이용하는 대상)', width: 258, describesColumnId: 'use' },
+    { id: 'supply', label: '공급(S)', width: 100 },
+    { id: 'use', label: '활용(U)', width: 100 },
+  ];
+  const row = (n: number, cat: TableRow['cells'][number], kind: string): TableRow => ({
+    id: `r${n}`,
+    label: kind,
+    cells: [
+      cat,
+      { id: `k${n}`, type: 'text', content: kind },
+      { id: `sd${n}`, type: 'text', content: `공급 설명 ${n}`, mobileDisplay: 'inline' },
+      { id: `ud${n}`, type: 'text', content: `활용 설명 ${n}`, mobileDisplay: 'inline' },
+      { id: `s${n}`, type: 'choice_opt', content: '', choiceGroupId: 'gs', choiceLabel: kind },
+      { id: `u${n}`, type: 'choice_opt', content: '', choiceGroupId: 'gu', choiceLabel: kind },
+    ],
+  });
+  const productRows: TableRow[] = [
+    row(1, { id: 'cat-a', type: 'text', content: 'A. 부품·모듈', rowspan: 2 }, '1) AI반도체'),
+    row(2, { id: 'cat-a-c', type: 'text', content: '', isHidden: true }, '2) 센서'),
+    row(3, { id: 'cat-b', type: 'text', content: 'B. AI 모델' }, '3) 지각SW'),
+  ];
+
+  it('구분이 바뀌는 타일 앞에 소제목이 서고, 타일 설명은 그 축의 설명 열 것만이다', () => {
+    const { container } = render(
+      <InteractiveTableResponse
+        questionId="q2"
+        columns={productColumns}
+        rows={productRows}
+        choiceGroups={groups}
+        value={{}}
+        onChange={() => {}}
+        mobileTableDisplayMode="axis-cards"
+      />,
+    );
+    // 카드 둘(공급·활용)마다 소제목 둘(A·B) — 같은 구분이 이어지는 2) 앞에는 없다
+    const headings = [...container.querySelectorAll('[data-testid="column-axis-card-group"]')].map((el) => el.textContent);
+    expect(headings).toEqual(['A. 부품·모듈', 'B. AI 모델', 'A. 부품·모듈', 'B. AI 모델']);
+    const description = (cellId: string) =>
+      within(container.querySelector<HTMLElement>(`[data-cell-id="${cellId}"]`)!).getByTestId('choice-tile-description').textContent;
+    expect(description('s1')).toBe('공급 설명 1');
+    expect(description('u1')).toBe('활용 설명 1');
+    expect(description('s3')).toBe('공급 설명 3');
+  });
+});

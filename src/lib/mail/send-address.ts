@@ -12,6 +12,25 @@ import { splitEmailAddresses } from './split-email-addresses';
  *
  * 발송(createCampaign) · 사전 점검 · 대체 발송 · 단건 선검증 · 표시가 모두 이 규칙을 탄다 — DB 쪽 얼굴은
  * `server/read-models/send-address.ts`.
+ *
+ * ── 배선과 규칙 ──
+ * - **발송 주소 모듈** (2026-10-19): 「이 대상에게 어느 주소로 보내는가」 — 이메일 열 · 발송 주소 순서 · 복호화
+ *   실패 · 칸 안 여러 주소 · 반송 주소 — 를 한 곳이 소유한다.
+ * - 규칙(순수)은 `lib/mail/send-address.ts`(`resolveSendAddress` → `send`/`bounced`/`missing`,
+ *   `pickSendAddress`, `sendableValue`, `remainingSendValue`)이고 DB 얼굴은
+ *   `server/read-models/send-address.ts` 다 — 순서 로더(`loadMailEmailOrder(s)`) · 반송
+ *   주소(`loadBouncedAddresses` → `BouncedAddresses`, 칸 값 그대로 + 주소 하나로 보낸 메일의 주소) · 행
+ *   얼굴(`selectEmailPiiRows`·`decryptSendAddressCells`·`resolveSendAddresses`·`loadSendAddressCells`·`loadSendEmailForTarget`)
+ *   · SQL 얼굴(`emailCandidateSql`·`emailOrderSql`·`hasEmailCandidateSql`·`allCandidatesBouncedSql`).
+ * - **행 얼굴은 정확하고 SQL 얼굴은 칸 단위 근사다** — 암호문은 SQL 이 나눌 수 없어, 칸 안 주소가 하나씩 따로
+ *   반송된 대상은 마법사 목록 위 「반송 이력 제외」 예고에서 빠진다(2026-10-19 결정 — 예고는 근사, 발송 직전
+ *   사전 점검은 발송과 같은 판정으로 정확).
+ * - 발송 · 사전 점검 · 대체 발송이 같은 `resolveSendAddress`/`pickSendAddress` 를 써서, 칸째 반송된 칸(여러
+ *   주소 한 통의 반송)은 대체 발송도 건너뛴다(전에는 대체 발송만 그 칸으로 다시 보냈다).
+ * - 단건 발송·미리보기 샘플·수신거부 화면·마법사 목록 마스킹은 반송을 보지 않는다 — 순서상 첫 주소를
+ *   보인다(같은 날 결정, 단건이 실제로 쓰는 주소).
+ * - **새로 "이 대상의 이메일"을 읽는 자리를 만들면 `field_type='email'` 을 직접 거르지 말고 이 모듈을 쓸 것.**
+ *   `lib/crypto/contact-pii-repo.ts` 는 PII 저장·복호화만 남았다.
  */
 
 /** 발송 주소 후보 칸 하나 — 발송 주소 순서대로 넘긴다. */

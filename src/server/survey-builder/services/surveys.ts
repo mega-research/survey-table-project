@@ -195,7 +195,13 @@ export async function createSurvey(
  * 스키마와 이 픽업을 함께 늘려야 한다 — 한쪽만 늘리면 통과는 하는데 저장이 안 된다.
  */
 export async function updateSurvey(input: UpdateSurveyInput): Promise<SurveyRow> {
-  const { surveyId, data } = input;
+  const { surveyId } = input;
+  // max_responses 는 쓰지 않는 컬럼이다 — 도메인 스키마(allowlist)가 이미 받지 않지만, 서비스를 직접
+  // 부르는 자리에서 실려 와도 아래 픽업이 쓰지 않게 여기서 버린다(survey-save 와 같은 규칙).
+  const { maxResponses: _consoleOwned, ...data } = input.data as typeof input.data & {
+    maxResponses?: unknown;
+  };
+  void _consoleOwned;
 
   const picked: Partial<SurveyRow> = {};
   if (data.title !== undefined) picked.title = data.title;
@@ -209,7 +215,6 @@ export async function updateSurvey(input: UpdateSurveyInput): Promise<SurveyRow>
   if (data.shuffleQuestions !== undefined) picked.shuffleQuestions = data.shuffleQuestions;
   if (data.requireLogin !== undefined) picked.requireLogin = data.requireLogin;
   if (data.endDate !== undefined) picked.endDate = data.endDate;
-  if (data.maxResponses !== undefined) picked.maxResponses = data.maxResponses;
   if (data.thankYouMessage !== undefined) picked.thankYouMessage = data.thankYouMessage;
   if (data.screenedOutMessage !== undefined) picked.screenedOutMessage = data.screenedOutMessage;
   if (data.localizedMessages !== undefined) picked.localizedMessages = data.localizedMessages;
@@ -423,6 +428,8 @@ const _SURVEY_FIELDS_NOT_COPIED = [
   'isPaused',
   'pausedMessage',
   'testModeEnabled',
+  // 쓰지 않는 컬럼(전체 완료 수의 목표는 쿼터 플랜의 「완료」 조건 — quotaConfig 와 함께 옮기지 않는다)
+  'maxResponses',
   // 추적조사 — 이월 응답 임포트에 딸린 설정
   'priorWaveLabel',
   'changeConfirmEnabled',
@@ -522,7 +529,6 @@ export async function duplicateSurvey(
         requireLogin: original.requireLogin,
         endDate: original.endDate,
         piiRetentionUntil: original.piiRetentionUntil,
-        maxResponses: original.maxResponses,
         thankYouMessage: original.thankYouMessage,
         screenedOutMessage: original.screenedOutMessage,
         localizedMessages: original.localizedMessages ?? null,

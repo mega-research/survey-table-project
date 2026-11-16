@@ -12,6 +12,13 @@ import type { SurveyEndRedirects } from '@/shared/contracts/survey';
  * 이어 넘길 값(passParams): 패널이 링크에 붙여 보낸 회원 식별값(리멤버 `?euid=`)을 종료 주소에
  * 그대로 돌려주고 응답 행에도 남긴다. 어떤 이름을 받을지는 설정이 정하고, 응답 화면(주소 붙이기)과
  * 서버(응답 행 기록)가 같은 pickEntryParams 로 고른다.
+ *
+ * ── 배선과 규칙 ──
+ * - 종료 후 이동 주소 {completed, screenedOut, quotaClosed, passParams} — 패널 연동, 라이브 컬럼(0138).
+ * - http(s) 만, 판정 lib/survey/end-redirect.
+ * - 테스트·미리보기는 이동 안 함.
+ * - passParams(이어 넘길 값, 리멤버 `euid`)는 들어온 링크의 그 이름 값을 종료 주소에 붙이고 응답 행
+ *   metadata.entryParams 에 남긴다(Raw Data 열) — 마이그레이션 없음
  */
 
 /** 응답이 끝난 결과 — 쿼터 마감은 입장·진행 중·제출 시점 어느 쪽이든 하나로 본다. */

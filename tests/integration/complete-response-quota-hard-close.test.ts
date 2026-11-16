@@ -136,7 +136,6 @@ const HARD_CLOSE_PLAN = {
 };
 
 // select 호출 순서(versionId=null, contactTargetId=null):
-//   0) 가용성 게이트 완료 카운트 (countCompletedResponses)
 //   1) 유효 questionId 집합 (loadValidQuestionIds)
 //   2·3) 응답 확정 재료의 loadPiiTargets — 질문 단위·셀 단위 (레거시 폴백, 둘 다 빈 결과)
 //   4) 하드 차단: 트랜잭션 안 셀 완료 수 재집계 / 표식 경로: 트랜잭션 밖 detectQuotaOverflow
@@ -144,7 +143,7 @@ const HARD_CLOSE_PLAN = {
 function queueSelects(completedAnswersRows: Record<string, unknown>[]) {
   selectTerminalQueue.length = 0;
   const completedRows = completedAnswersRows.map((answers) => ({ questionResponses: answers }));
-  selectTerminalQueue.push([{ total: 0 }], [{ id: GATE_QID }], [], [], completedRows);
+  selectTerminalQueue.push([{ id: GATE_QID }], [], [], completedRows);
 }
 
 function mainSet(): Record<string, unknown> {
@@ -330,7 +329,6 @@ describe('completeResponse — 쿼터 진행 중 마감 하드 차단', () => {
     // 4) 잠금 아래 저장분 5) 셀 완료 수 재집계
     selectTerminalQueue.length = 0;
     selectTerminalQueue.push(
-      [{ total: 0 }],
       [],
       [],
       [{ questionResponses: { [GATE_QID]: '남' } }],
@@ -354,7 +352,6 @@ describe('completeResponse — 쿼터 진행 중 마감 하드 차단', () => {
   it('빈 complete 의 저장분 셀에 여유가 있으면 종전대로 완료된다', async () => {
     selectTerminalQueue.length = 0;
     selectTerminalQueue.push(
-      [{ total: 0 }],
       [],
       [],
       [{ questionResponses: { [GATE_QID]: '남' } }],
@@ -449,7 +446,7 @@ describe('completeResponse — 쿼터 진행 중 마감 하드 차단', () => {
       // 0) 가용성 카운트 1·2) 응답 확정 재료의 PII 대상 3) 잠금 전 저장분 — 남
       // [1차 tx] 4) 잠금 아래 저장분 — 여 → 셀이 바뀌어 되돌린다
       // [2차 tx, 여 잠금] 5) 잠금 아래 저장분 — 여 6) 여 셀 완료 수(목표 1 을 이미 채움)
-      selectTerminalQueue.push([{ total: 0 }], [], [], stored('남'), stored('여'), stored('여'), stored('여'));
+      selectTerminalQueue.push([], [], stored('남'), stored('여'), stored('여'), stored('여'));
 
       const { completeResponse } =
         await import('@/server/survey-response/services/response-completion');
@@ -464,7 +461,7 @@ describe('completeResponse — 쿼터 진행 중 마감 하드 차단', () => {
     });
 
     it('잠금 전에는 미분류였다가 잠금 아래에서 마감된 셀로 분류돼도 다시 세어 쿼터마감한다', async () => {
-      selectTerminalQueue.push([{ total: 0 }], [], [], stored('기타'), stored('여'), stored('여'), stored('여'));
+      selectTerminalQueue.push([], [], stored('기타'), stored('여'), stored('여'), stored('여'));
 
       const { completeResponse } =
         await import('@/server/survey-response/services/response-completion');
@@ -478,7 +475,7 @@ describe('completeResponse — 쿼터 진행 중 마감 하드 차단', () => {
 
     it('바뀐 셀에 여유가 있으면 완료된다', async () => {
       // 2차 tx 의 남 셀 완료 수 — 1명(목표 2)
-      selectTerminalQueue.push([{ total: 0 }], [], [], stored('여'), stored('남'), stored('남'), stored('남'));
+      selectTerminalQueue.push([], [], stored('여'), stored('남'), stored('남'), stored('남'));
 
       const { completeResponse } =
         await import('@/server/survey-response/services/response-completion');
@@ -490,7 +487,7 @@ describe('completeResponse — 쿼터 진행 중 마감 하드 차단', () => {
     });
 
     it('잠금 아래에서 미분류가 됐으면 쿼터에 걸리지 않고 완료된다', async () => {
-      selectTerminalQueue.push([{ total: 0 }], [], [], stored('여'), stored('기타'));
+      selectTerminalQueue.push([], [], stored('여'), stored('기타'));
 
       const { completeResponse } =
         await import('@/server/survey-response/services/response-completion');
@@ -504,7 +501,6 @@ describe('completeResponse — 쿼터 진행 중 마감 하드 차단', () => {
     it('셀이 계속 바뀌면 완료로 만들지 않고 거부한다', async () => {
       // 잠금 아래 저장분이 시도마다 다른 셀 — 남·여를 번갈아 돈다
       selectTerminalQueue.push(
-        [{ total: 0 }],
         [],
         [],
         stored('남'),

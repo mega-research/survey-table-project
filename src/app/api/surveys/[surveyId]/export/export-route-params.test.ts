@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // export·split-preview 라우트가 includeNonRespondents 파라미터를 로더에 그대로 넘기는지,
@@ -11,7 +11,9 @@ const {
   countRawExportPopulationMock,
   getContactColumnSchemeMock,
   loadFieldCompletedCodesMock,
+  loadResponseListTableMock,
 } = vi.hoisted(() => ({
+  loadResponseListTableMock: vi.fn(),
   authState: { user: { id: 'admin' } as null | { id: string } },
   surveyFindFirstMock: vi.fn(),
   loadRawExportRowsMock: vi.fn(),
@@ -90,6 +92,9 @@ vi.mock('./raw-export-load', () => ({
   })),
 }));
 
+// 응답 내역 목록의 재료 조립은 response-list-load.test.ts 몫 — 여기서는 권한과 부르는 모양만 본다.
+vi.mock('./response-list-load', () => ({ loadResponseListTable: loadResponseListTableMock }));
+
 vi.mock('@/lib/analytics/raw-workbook', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/analytics/raw-workbook')>();
   return {
@@ -114,6 +119,7 @@ import { GET as exportGet } from '@/app/api/surveys/[surveyId]/export/route';
 import { GET as splitPreviewGet } from '@/app/api/surveys/[surveyId]/export/split-preview/route';
 import { buildRawExportContext } from './raw-export-load';
 import { normalizeContactColumnScheme } from '@/lib/operations/contacts-format';
+import { checkScopedSurveyCapabilityRest } from '@/server/rest-survey-access';
 
 const surveyId = 'survey-params';
 const params = { params: Promise.resolve({ surveyId }) };
@@ -409,5 +415,85 @@ describe('GET /export — 조사 대상 명단 열 (응답 내역 컬럼 설정 
     expect(res.status).toBe(200);
     expect(loaderOptions()['contactColumns']).toEqual([]);
     expect(res.headers.get('Cache-Control')).toBeNull();
+  });
+});
+
+/**
+ * 응답 내역 목록(`type=response-list`) — 응답 내역 화면의 열 그대로 한 시트, 답은 없다.
+ *
+ * 운영(main)에서는 보기 전용 게스트 grant(`allowExport`)에게 여는 파일이다. 이 브랜치에는 그 grant 모델이
+ * 없어 다른 형식과 같은 관문(`export.download` — 내부 계정)만 지난다. 그래서 개인정보 가리기는 켜지지
+ * 않는다(외부 주체에게 열 때 라우트가 켠다).
+ */
+describe('GET /export — 응답 내역 목록', () => {
+  const paramsOf = (id: string) => ({ params: Promise.resolve({ surveyId: id }) });
+  const requestOf = (id: string, query: string) =>
+    new NextRequest(`http://localhost/api/surveys/${id}/export?${query}`);
+  const LIST_SURVEY_ID = '253534a5-913a-4891-a019-f9643ccea0a7';
+
+  beforeEach(() => {
+    authState.user = { id: 'admin' };
+    surveyFindFirstMock.mockResolvedValue({ ...SURVEY_FIXTURE, id: LIST_SURVEY_ID });
+    loadResponseListTableMock.mockReset();
+    loadResponseListTableMock.mockResolvedValue({
+      kind: 'ok',
+      headers: ['순번', '유저ID'],
+      rows: [[2, 'panel-77']],
+    });
+  });
+
+  it('관문이 막으면 목록도 받지 못한다 — 다른 형식과 같은 문이다', async () => {
+    vi.mocked(checkScopedSurveyCapabilityRest).mockResolvedValueOnce(
+      NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 }),
+    );
+    const res = await exportGet(
+      requestOf(LIST_SURVEY_ID, 'type=response-list'),
+      paramsOf(LIST_SURVEY_ID),
+    );
+    expect(res.status).toBe(403);
+    expect(vi.mocked(checkScopedSurveyCapabilityRest).mock.lastCall?.slice(1)).toEqual([
+      LIST_SURVEY_ID,
+      'export.download',
+    ]);
+    expect(loadResponseListTableMock).not.toHaveBeenCalled();
+  });
+
+  it('목록 엑셀은 시트 하나이고 캐시에 남기지 않는다 — 내부 계정이라 가리지 않는다', async () => {
+    const res = await exportGet(
+      requestOf(LIST_SURVEY_ID, 'type=response-list'),
+      paramsOf(LIST_SURVEY_ID),
+    );
+    expect(res.status).toBe(200);
+    expect(loadResponseListTableMock).toHaveBeenCalledWith(LIST_SURVEY_ID, 'real', {
+      maskPii: false,
+    });
+    expect(res.headers.get('Cache-Control')).toBe('no-store');
+    expect(res.headers.get('Content-Disposition')).toContain(encodeURIComponent('응답내역'));
+    // 답이 든 로더는 부르지 않는다
+    expect(loadRawExportRowsMock).not.toHaveBeenCalled();
+
+    // 받은 파일은 시트 하나 — 머리 줄과 값 줄이 로더가 준 그대로다
+    const ExcelJS = (await import('exceljs')).default;
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(await res.arrayBuffer());
+    expect(workbook.worksheets.map((w) => w.name)).toEqual(['응답 내역']);
+    const sheet = workbook.worksheets[0]!;
+    expect((sheet.getRow(1).values as unknown[]).slice(1)).toEqual(['순번', '유저ID']);
+    expect((sheet.getRow(2).values as unknown[]).slice(1)).toEqual([2, 'panel-77']);
+  });
+
+  it('내부 계정의 Raw 는 평문 그대로다 — 가리기 옵션을 싣지 않는다', async () => {
+    const raw = await exportGet(requestOf(LIST_SURVEY_ID, 'type=raw'), paramsOf(LIST_SURVEY_ID));
+    expect(raw.status).toBe(200);
+    expect(loaderOptions()).not.toHaveProperty('maskAnswers');
+  });
+
+  it('목록이 한도를 넘으면 413 이다', async () => {
+    loadResponseListTableMock.mockResolvedValue({ kind: 'too_many', total: 10001 });
+    const res = await exportGet(
+      requestOf(LIST_SURVEY_ID, 'type=response-list'),
+      paramsOf(LIST_SURVEY_ID),
+    );
+    expect(res.status).toBe(413);
   });
 });

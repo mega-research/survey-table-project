@@ -1,11 +1,10 @@
-import { PgDialect } from 'drizzle-orm/pg-core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ========================
 // 모듈 모킹
 // ========================
 // 응답 가용성 게이트(assertSurveyAcceptingResponses)를 검증한다.
-// 설문이 마감/draft/closed/정원초과/비공개+토큰없음이면 응답 mutation 이 거부되고,
+// 설문이 마감/draft/closed/비공개+토큰없음이면 응답 mutation 이 거부되고,
 // 정상 published 설문은 통과해야 한다.
 //
 // 게이트는 startResponse / createResponseWithFirstAnswer / createBlankResponse /
@@ -140,7 +139,6 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 // 판정 게이트 테스트에서만 필요 — startResponse/completeResponse 는 호출하지 않는다).
 vi.mock('next/headers', () => ({ headers: headersMock }));
 
-const dialect = new PgDialect();
 
 const SURVEY_ID = '00000000-0000-4000-8000-000000000001';
 
@@ -149,7 +147,6 @@ function publishedSurvey(over: Record<string, unknown> = {}) {
     id: SURVEY_ID,
     status: 'published',
     endDate: null,
-    maxResponses: null,
     isPublic: true,
     requireInviteToken: false,
     // 설문 중단·테스트 모드 (Task 5) — 기본은 off.
@@ -258,7 +255,7 @@ describe('assertResponseCompletable — completeResponse 완료 게이트', () =
     contactFindFirstMock.mockReset();
     selectLimitMock.mockReset();
     countResultMock.mockReset();
-    surveyFindFirstMock.mockResolvedValue(publishedSurvey({ maxResponses: 2 }));
+    surveyFindFirstMock.mockResolvedValue(publishedSurvey());
     // completeResponse 진입부에서 응답 행(surveyId/versionId/contactTargetId)을 조회한다.
     responseFindFirstMock.mockResolvedValue({
       surveyId: SURVEY_ID,
@@ -266,25 +263,6 @@ describe('assertResponseCompletable — completeResponse 완료 게이트', () =
       contactTargetId: null,
     });
     selectLimitMock.mockResolvedValue([]);
-  });
-
-  it('완료 카운트가 maxResponses 이상이면 완료를 거부한다', async () => {
-    countResultMock.mockResolvedValue([{ total: 2 }]);
-    const { completeResponse } =
-      await import('@/server/survey-response/services/response-completion');
-    // 차단은 던지지 않고 blocked 로 접어 돌려준다 — 던지면 운영에서 마스킹돼 500 이 되고
-    // 응답자가 사유를 모른 채 재시도만 반복한다(진입 경로와 같은 규약).
-    await expect(completeResponse({ responseId: 'r1' })).resolves.toMatchObject({
-      kind: 'blocked',
-    });
-  });
-
-  it('완료 카운트가 maxResponses 미만이면 완료를 통과시킨다', async () => {
-    countResultMock.mockResolvedValue([{ total: 1 }]);
-    const { completeResponse } =
-      await import('@/server/survey-response/services/response-completion');
-    const res = await completeResponse({ responseId: 'r1' });
-    expect(res).toMatchObject({ id: 'r1' });
   });
 
   it('마감이 지나도 완료는 통과한다 — endDate 는 신규 접수만 막는다 (B-b)', async () => {
@@ -296,22 +274,6 @@ describe('assertResponseCompletable — completeResponse 완료 게이트', () =
       await import('@/server/survey-response/services/response-completion');
     const res = await completeResponse({ responseId: 'r1' });
     expect(res).toMatchObject({ id: 'r1' });
-  });
-
-  it('마감 + 정원초과는 계속 차단한다 — 사유가 max_responses_reached 로 승계된다', async () => {
-    surveyFindFirstMock.mockResolvedValue(
-      publishedSurvey({ maxResponses: 2, endDate: new Date(Date.now() - 60_000) }),
-    );
-    countResultMock.mockResolvedValue([{ total: 2 }]);
-    const { completeResponse } =
-      await import('@/server/survey-response/services/response-completion');
-    // 종전에는 마감이 먼저 잘려 정원 검사에 도달하지 않았다. 차단은 그대로다.
-    // 응답자에게 나가는 사유는 not_accepting 으로 뭉갠다 — pub 표면이라 설문 상태를
-    // 추측할 수 있는 정보를 줄인다(toGateBlockReason).
-    await expect(completeResponse({ responseId: 'r1' })).resolves.toMatchObject({
-      kind: 'blocked',
-      reason: 'not_accepting',
-    });
   });
 
   it('마감 + 중단은 계속 차단한다 (survey_paused)', async () => {
@@ -493,7 +455,6 @@ describe('assertSurveyAcceptingResponses — createResponseWithFirstAnswer 테�
         status: 'closed',
         isPaused: true,
         endDate: new Date(Date.now() - 60_000),
-        maxResponses: 0,
         isPublic: false,
         requireInviteToken: true,
         testModeEnabled: true,
@@ -911,41 +872,6 @@ describe('updateQuestionResponse — 중단 게이트 (Task 6)', () => {
   });
 });
 
-describe('countCompletedResponses — isTest 제외 (Task 6)', () => {
-  beforeEach(() => {
-    surveyFindFirstMock.mockReset();
-    versionFindFirstMock.mockReset();
-    responseFindFirstMock.mockReset();
-    selectLimitMock.mockReset();
-    countResultMock.mockReset();
-    selectWhereLogMock.mockReset();
-  });
-
-  it('countCompletedResponses 는 isTest 완료를 세지 않는다 (where 절에 is_test=false 조건 포함)', async () => {
-    surveyFindFirstMock.mockResolvedValue(publishedSurvey({ maxResponses: 2 }));
-    responseFindFirstMock.mockResolvedValue({
-      surveyId: SURVEY_ID,
-      versionId: null,
-      contactTargetId: null,
-      isTest: false,
-    });
-    countResultMock.mockResolvedValue([{ total: 1 }]);
-
-    const { completeResponse } =
-      await import('@/server/survey-response/services/response-completion');
-    await completeResponse({ responseId: 'r1' });
-
-    // completeResponse 의 첫 db.select(...).where(...) 는 정원 count 쿼리다(그 뒤는 응답 확정
-    // 재료의 PII 대상 조회) — 그 조건에 notTestResponse(is_test=false) 가 실제로 포함됐는지
-    // SQL 문자열/파라미터로 검증한다(mock 은 조건을 해석하지 않으므로 결과값 비교만으로는
-    // 누락을 잡지 못한다).
-    const whereArg = selectWhereLogMock.mock.calls[0]![0];
-    const query = dialect.sqlToQuery(whereArg);
-    expect(query.sql).toContain('is_test');
-    expect(query.params).toContain(false);
-  });
-});
-
 describe('회귀: 비공개 설문 + 유효 테스트 세션 create→complete 왕복 (Task 6)', () => {
   const VALID_SIGNALS = {
     deviceId: 'dev-roundtrip-1',
@@ -1118,35 +1044,6 @@ describe('A-1 사전 박제 — 우선순위·부분집합·fail-open', () => {
         clientSignals: VALID_SIGNALS,
       }),
     ).toEqual({ kind: 'blocked', reason: 'invalid_token' });
-  });
-
-  it('신규 수용: create 는 정원을 soft 로 둔다 — 정원이 찼어도 생성은 성공한다 (의도)', async () => {
-    // 정원 하드체크는 completedCount 를 넘기는 complete 시점 전용이다.
-    surveyFindFirstMock.mockResolvedValue(publishedSurvey({ maxResponses: 1 }));
-    countResultMock.mockResolvedValue([{ total: 5 }]);
-    // INSERT 후 updateQuestionResponse 가 응답 행을 다시 읽는다 — 첫 undefined 는 중복검사
-    // Track B 통과용이고, 두 번째부터 실제 행을 준다. 기존 성공 케이스와 같은 2단 mock.
-    responseFindFirstMock.mockResolvedValueOnce(undefined).mockResolvedValue({
-      id: 'r1',
-      surveyId: SURVEY_ID,
-      versionId: null,
-      isTest: false,
-      contactTargetId: null,
-    });
-
-    const { createResponseWithFirstAnswer } =
-      await import('@/server/survey-response/services/response-entry');
-    expect(
-      await createResponseWithFirstAnswer({
-        surveyId: SURVEY_ID,
-        sessionId: 'a1-capacity-soft',
-        versionId: null,
-        questionId: 'q1',
-        value: 'a',
-        currentStepId: 'step1',
-        clientSignals: VALID_SIGNALS,
-      }),
-    ).toMatchObject({ kind: 'created', id: 'r1' });
   });
 
   it('답변 저장: 설문 행이 없으면(제어 플래그 null) 던지지 않고 저장한다 (fail-open)', async () => {

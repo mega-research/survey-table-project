@@ -1,3 +1,4 @@
+import ExcelJS from 'exceljs';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { and, count, eq } from 'drizzle-orm';
@@ -15,8 +16,19 @@ import { normalizeQuestions } from '@/lib/question';
 import { normalizePassParamNames } from '@/lib/survey/end-redirect';
 import { requireAuth } from '@/lib/auth';
 import { checkScopedSurveyCapabilityRest } from '@/server/rest-survey-access';
+import {
+  collectPiiAnswerFormats,
+  maskContactPiiValues,
+  maskPiiAnswers,
+} from '@/lib/crypto/export-pii-mask';
+import type { PiiFieldType } from '@/lib/crypto/pii-fields';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
-import { generateRawDataWorkbook, toSpssColumnOptions } from '@/lib/analytics/raw-workbook';
+import {
+  autoFitRawColumns,
+  generateRawDataWorkbook,
+  styleHeaderRows,
+  toSpssColumnOptions,
+} from '@/lib/analytics/raw-workbook';
 import { applyExportRowExclusions } from '@/lib/analytics/export-exclusions';
 import {
   MAX_EXPORT_RESPONSES,
@@ -29,6 +41,7 @@ import {
   type RawExportLoadOptions,
   type RawExportLoadResult,
 } from './raw-export-load';
+import { loadResponseListTable } from './response-list-load';
 import { selectRawExportContactColumns } from '@/lib/operations/profile-columns-format';
 import { getContactColumnScheme } from '@/server/read-models/contacts';
 import { buildSplitWorkbook } from '@/lib/analytics/split-workbook';
@@ -41,7 +54,7 @@ import { SurveySubmission } from '@/types/survey';
 // Vercel serverless 최대 실행시간 30초 (기본 10초)
 export const maxDuration = 30;
 
-const ALLOWED_EXPORT_TYPES = ['sav', 'raw', 'raw-split', 'sps'] as const;
+const ALLOWED_EXPORT_TYPES = ['sav', 'raw', 'raw-split', 'sps', 'response-list'] as const;
 type ExportType = (typeof ALLOWED_EXPORT_TYPES)[number];
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -83,6 +96,10 @@ async function handleExport(
     });
     const denied = await checkScopedSurveyCapabilityRest(user, surveyId, 'export.download');
     if (denied) return denied;
+    // 개인정보 가리기(lib/crypto/export-pii-mask)는 외부 주체가 받는 파일용 장치다. 이 문을 지나는 사람은
+    // 언제나 내부 계정이라(위 주석) 지금은 켜지는 길이 없다 — 운영(main)에서는 보기 전용 게스트의 응답 내역
+    // 목록이 이 장치로 가려져 나간다. 외부 주체(클라이언트 링크)에게 이 주소를 열게 되면 여기서 켠다.
+    const maskPii = false as boolean;
 
     const type = request.nextUrl.searchParams.get('type') as ExportType | null;
     if (type) ctx.bind({ exportType: type });
@@ -118,18 +135,54 @@ async function handleExport(
     const scope = await loadOperationsDataScope(surveyId);
     ctx.bind({ scope });
 
+    // 0. 응답 내역 목록 xlsx — 응답 내역 화면의 열 그대로 한 시트. 답은 싣지 않는다(response-list-load).
+    if (type === 'response-list') {
+      const loaded = await loadResponseListTable(surveyId, scope, { maskPii });
+      if (loaded.kind === 'too_many') {
+        return NextResponse.json(
+          { error: `응답이 ${MAX_EXPORT_RESPONSES.toLocaleString()}건을 초과하여 내보내기할 수 없습니다. (현재 ${loaded.total.toLocaleString()}건)` },
+          { status: 413 },
+        );
+      }
+      ctx.bind({ rowCount: loaded.rows.length, columnCount: loaded.headers.length });
+      const workbook = new ExcelJS.Workbook();
+      const ws = workbook.addWorksheet('응답 내역');
+      ws.addRow(loaded.headers);
+      for (const row of loaded.rows) ws.addRow(row);
+      styleHeaderRows(ws, [1], loaded.headers.length);
+      autoFitRawColumns(ws, loaded.headers.length);
+      const buffer = await workbook.xlsx.writeBuffer();
+      const listDate = new Date().toISOString().slice(0, 10);
+      const listFilename = `${encodeURIComponent(surveyData.title)}_${encodeURIComponent('응답내역')}_${listDate}.xlsx`;
+      return new NextResponse(buffer as ArrayBuffer, {
+        headers: {
+          'Content-Disposition': `attachment; filename="${listFilename}"`,
+          'Content-Type': XLSX_MIME,
+          // 화면의 열 설정에 명단 값이 들어갈 수 있다 — 캐시에 남기지 않는다.
+          'Cache-Control': 'no-store',
+        },
+      });
+    }
+
     // 조사 대상 명단 열 — Raw Data 계열(raw/raw-split)에 항상 붙는다. 열은 응답 내역 컬럼 설정에서
     // 표시 중인 attrs·pii 열이라 토글이 없고, 설정이 없거나 명단 미업로드면 열 0개로 정상 진행한다.
     // 조사 대상 명단 열은 PII 평문이 나가는 경로다: 인증·게스트 가드는 contacts/export 와 같고
     // (requireAuth + canAccessSurvey, 위), 복호화도 같은 decryptPiiForExport 를 로더가 탄다.
     // 로그에는 열 수만 싣는다 — 라벨·값·컨택 id 금지.
     const isRawExport = type === 'raw' || type === 'raw-split';
+    const contactScheme = isRawExport ? await getContactColumnScheme(surveyId, scope) : null;
     const contactColumns = isRawExport
-      ? selectRawExportContactColumns(
-          await getContactColumnScheme(surveyId, scope),
-          surveyData.profileColumns ?? null,
-        )
+      ? selectRawExportContactColumns(contactScheme, surveyData.profileColumns ?? null)
       : [];
+    // 가릴 명단 열 — 내보내는 개인정보 열과 그 종류(스킴의 piiType). 종류가 없으면 마지막 글자 가리기.
+    const piiTypeBySource = new Map<string, PiiFieldType | undefined>(
+      contactColumns
+        .filter((c) => c.kind === 'pii')
+        .map((c) => [
+          c.source,
+          contactScheme?.columns.find((col) => col.source === c.source)?.piiType,
+        ]),
+    );
     const piiColumnCount = contactColumns.filter((c) => c.kind === 'pii').length;
     ctx.bind({ contactColumnCount: contactColumns.length, piiColumnCount });
     // PII 평문 응답 캐시 방지 — 조사 대상 엑셀과 같은 이유. pii 열이 없으면 기존 헤더 그대로.
@@ -141,6 +194,20 @@ async function handleExport(
       surveyId,
       hydrateQuestionsForSpss(normalizeQuestions(surveyData.questions)),
     );
+
+    // 게스트용 가리기 재료 — 개인정보 표시가 붙은 문항·표 입력 칸(현재 빌더 구조 기준).
+    const piiAnswerFormats = collectPiiAnswerFormats(hydratedQuestions);
+    // Raw 행의 명단 값을 가린다. 답은 로더가 가린다(`maskAnswers` — 저장된 모양을 아는 자리가 거기다).
+    const maskRawRows = <T extends { contactValues?: Readonly<Record<string, string>> }>(
+      rows: T[],
+    ): T[] =>
+      maskPii
+        ? rows.map((row) =>
+            row.contactValues
+              ? { ...row, contactValues: maskContactPiiValues(row.contactValues, piiTypeBySource) }
+              : row,
+          )
+        : rows;
 
     // 공유 변수명(ADR 0034) — 언어 묶음끼리 같은 변수명을 한 열로. 모든 형식이 같은 맵을 쓴다.
     const languageSetLocales = await loadLanguageSetLocales(surveyId, hydratedQuestions);
@@ -161,6 +228,13 @@ async function handleExport(
       ...(entryParamNames.length > 0 ? { entryParamNames } : {}),
       // 다국어 설문만 키를 싣는다 — 그 밖의 설문은 옵션 모양이 도입 전과 같다.
       ...(languageSetLocales.size > 0 ? { languageSetLocales } : {}),
+      // 게스트만 — 관리자는 키 자체가 없어 옵션 모양이 도입 전과 같다.
+      ...(maskPii
+        ? {
+            maskAnswers: (plain: Record<string, unknown>, stored: Record<string, unknown> | null) =>
+              maskPiiAnswers(plain, piiAnswerFormats, stored),
+          }
+        : {}),
     };
 
     // 2. 응답 데이터 조회 (sav 전용 공용 블록)
@@ -197,13 +271,22 @@ async function handleExport(
         ),
         orderBy: (responses, { desc }) => [desc(responses.createdAt)],
       });
-      responses = rawFetched.map((r) => ({
-        ...r,
-        questionResponses: decryptQuestionResponses(
+      responses = rawFetched.map((r) => {
+        const plain = decryptQuestionResponses(
           (r.questionResponses ?? {}) as Record<string, unknown>,
           { responseId: r.id },
-        ),
-      }));
+        );
+        return {
+          ...r,
+          questionResponses: maskPii
+            ? maskPiiAnswers(
+                plain,
+                piiAnswerFormats,
+                (r.questionResponses ?? {}) as Record<string, unknown>,
+              )
+            : plain,
+        };
+      });
       ctx.bind({ rowCount: responses.length });
     }
 
@@ -255,7 +338,7 @@ async function handleExport(
     if (type === 'raw') {
       const loaded = await loadRawExportRows(surveyId, scope, rawOptions);
       if (loaded.kind === 'too_many') return tooManyRowsResponse(loaded, includeNonRespondents);
-      const { rows } = loaded;
+      const rows = maskRawRows(loaded.rows);
       ctx.bind({ rowCount: rows.length, nonRespondentCount: loaded.nonRespondentCount });
       const exportCtx = await buildRawExportContext(
         surveyId,
@@ -291,7 +374,7 @@ async function handleExport(
 
       const loaded = await loadRawExportRows(surveyId, scope, rawOptions);
       if (loaded.kind === 'too_many') return tooManyRowsResponse(loaded, includeNonRespondents);
-      const { rows } = loaded;
+      const rows = maskRawRows(loaded.rows);
 
       const exportCtx = await buildRawExportContext(
         surveyId,

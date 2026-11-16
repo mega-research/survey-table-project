@@ -45,27 +45,56 @@ export function isGroupedRankingQuestion(question: Question): boolean {
   );
 }
 
+/**
+ * 보기 칸 하나가 드는 선택 묶음 — 응답 키와 선택 방식. **이 판정은 여기 한 곳이다**: 화면이 읽고 쓰는
+ * 키(getGroupKeyOfCell)와 따라 선택이 쓰는 키(question-renderer/utils/implied-selection)가 갈리면
+ * 체크가 보이지 않는 키에 값이 남는다.
+ *
+ * - 키: 그룹에 속하면 그 그룹의 키(순위 그룹이어도), 미소속·깨진 참조는 default.
+ * - 방식: radio·checkbox 그룹이면 그 종류, 미소속·깨진 참조·순위 그룹은 `defaultType`.
+ *   보기 소스 표는 문항 유형, 테이블 유형은 null(그룹 없는 보기 칸은 답할 수 없는 글자 칸).
+ */
+export function resolveChoiceCellGroup<D extends 'radio' | 'checkbox' | null>(
+  cell: Pick<TableCell, 'choiceGroupId'> | undefined,
+  groups: readonly ChoiceGroup[],
+  defaultType: D,
+): { groupKey: string; type: 'radio' | 'checkbox' | D } {
+  const group = cell?.choiceGroupId
+    ? groups.find((candidate) => candidate.id === cell.choiceGroupId)
+    : undefined;
+  return {
+    groupKey: group?.groupKey ?? DEFAULT_GROUP_KEY,
+    type: group && group.type !== 'ranking' ? group.type : defaultType,
+  };
+}
+
+function defaultChoiceType(question: Question): 'radio' | 'checkbox' {
+  return question.type === 'checkbox' ? 'checkbox' : 'radio';
+}
+
+function findChoiceOptCell(question: Question, cellId: string): TableCell | undefined {
+  return collectChoiceOptCells(question.tableRowsData).find((c) => c.id === cellId);
+}
+
 /** 셀이 속한 그룹의 groupKey. 미소속/깨진 참조는 default로 폴백. */
 export function getGroupKeyOfCell(question: Question, cellId: string): string {
-  const cell = collectChoiceOptCells(question.tableRowsData).find((c) => c.id === cellId);
-  if (!cell?.choiceGroupId) return DEFAULT_GROUP_KEY;
-  const group = (question.choiceGroups ?? []).find((g) => g.id === cell.choiceGroupId);
-  return group?.groupKey ?? DEFAULT_GROUP_KEY;
+  return resolveChoiceCellGroup(
+    findChoiceOptCell(question, cellId),
+    question.choiceGroups ?? [],
+    defaultChoiceType(question),
+  ).groupKey;
 }
 
 /**
  * 셀이 속한 그룹의 type. 미소속/깨진 참조는 질문 type 기반 default 규칙:
- * 질문 type이 'checkbox'이면 'checkbox', 그 외는 'radio'.
+ * 질문 type이 'checkbox'이면 'checkbox', 그 외는 'radio'. ranking 그룹에 소속된 셀도 default 규칙이다.
  */
 export function getGroupTypeOfCell(question: Question, cellId: string): 'radio' | 'checkbox' {
-  const defaultType = question.type === 'checkbox' ? 'checkbox' : 'radio';
-  const cell = collectChoiceOptCells(question.tableRowsData).find((c) => c.id === cellId);
-  if (!cell?.choiceGroupId) return defaultType;
-  const group = (question.choiceGroups ?? []).find((g) => g.id === cell.choiceGroupId);
-  if (!group) return defaultType;
-  // ranking 그룹에 소속된 셀도 default 규칙으로 폴백
-  if (group.type === 'ranking') return defaultType;
-  return group.type;
+  return resolveChoiceCellGroup(
+    findChoiceOptCell(question, cellId),
+    question.choiceGroups ?? [],
+    defaultChoiceType(question),
+  ).type;
 }
 
 export interface ChoiceGroupWithCells {

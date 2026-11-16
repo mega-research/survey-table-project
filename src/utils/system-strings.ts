@@ -9,6 +9,28 @@
  * 일시중지·쿼터 마감 기본 문구(`shared/lib`·`lib/quota`)가 이 사전을 읽는다.
  *
  * 자리표시자는 `{이름}`(영문) — `systemText` 의 `values` 로 채운다.
+ *
+ * ── 배선과 규칙 ──
+ * - **시스템 글자 사전**: 응답 화면의 버튼·진행·필수/형식/범위/합계/품질 검증·입력칸 안내·순위형·표
+ *   셀·드릴다운·스테퍼·이미지 크게 보기·조사표·완료/안내 화면 글자는 `src/utils/system-strings.ts` 의 ko·zh·en
+ *   사전에서 나온다(`systemText(key, locale = 'ko', values?)`, 자리표시자 영문 `{name}`, 한국어 문장은 옮기기
+ *   전 글자 그대로).
+ * - 문구를 만드는 순수
+ *   함수(`resolveRequiredMessage`·`collectNumericIssues`·`formatFailureMessage`·`textQualityViolation`·`midSurveyClosedBody`
+ *   등)는 `locale` 인자(기본 `'ko'`)를 받는다.
+ * - 저작자 문구(`requiredMessage`·합계 `errorMessage` 등)는 번역하지 않는다.
+ * - **한 줄 글자(버튼·진행·필수 안내·토스트·입력칸 안내)는 미정이면 한국어**이고, 세 언어
+ *   쌓기(`systemTextLines` → `features/survey-response/system-text.tsx` 의 `SystemText`)는 언어가 정해지기 전
+ *   전체 화면 안내(초대 필요·이미 응답함·일시중지·PC 안내 등)에만 쓴다 — 언어 페이지에는 버튼이 없기 때문이다.
+ * - 이어가기·완료 후 재진입처럼 답을 읽을 수 있으면 그 언어 하나.
+ * - 설문을 읽기 전 화면(`loading.tsx`·`/i/<code>` 무효·429·불러오기 오류)은 한국어 그대로다.
+ * - 빌더용 한국어 상수(`DEFAULT_REQUIRED_MESSAGE`·`INPUT_FORMAT_LABEL`·`DEFAULT_PAUSED_MESSAGE` 등)는 사전의
+ *   한국어에서 만든다(값 복제 없음).
+ * - 한국어 조사(은/는)가 붙는 문장은 자리표시자로 조사를 끼우지 않고 형식마다 키를
+ *   둔다(`format.notANumber.<형식>`).
+ * - 한 줄 글자의 미정 → 한국어 규칙은 `types/survey-locale` 의 `toInlineLocale` 하나다.
+ * - 화면 분기에 한국어 글자를 쓰지 않는다(드릴다운 진행 단위는 코드 `cells`·`items`·`selections`, 이어가기·버전
+ *   이관 안내는 켜짐 여부).
  */
 import { DEFAULT_SURVEY_LOCALE, SURVEY_LOCALES, type SurveyLocale } from '@/types/survey-locale';
 
@@ -143,6 +165,8 @@ const KO = {
   'choice.selectedCount': '{count}개 선택됨',
   'choice.minSelections': '최소 {min}개 이상 선택해주세요',
   'choice.maxReached': '최대 선택 개수에 도달했습니다',
+  'choice.impliedOverMax':
+    '이 보기는 다른 보기와 함께 선택되어 최대 {max}개를 넘습니다. 선택한 보기를 먼저 풀어 주세요.',
 
   'a11y.requiredQuestion': '필수 질문',
 
@@ -420,6 +444,7 @@ const ZH: Dictionary = {
   'choice.selectedCount': '已选 {count} 项',
   'choice.minSelections': '请至少选择{min}项',
   'choice.maxReached': '已达到最多可选数量',
+  'choice.impliedOverMax': '该选项会与其他选项一并选中，将超过最多{max}项。请先取消已选的选项。',
 
   'a11y.requiredQuestion': '必答题',
 
@@ -706,6 +731,8 @@ const EN: Dictionary = {
   'choice.selectedCount': '{count} selected',
   'choice.minSelections': 'Please select at least {min}',
   'choice.maxReached': 'You have reached the maximum number of selections',
+  'choice.impliedOverMax':
+    'This option is selected together with other options and would exceed the maximum of {max}. Please clear a selection first.',
 
   'a11y.requiredQuestion': 'Required question',
 

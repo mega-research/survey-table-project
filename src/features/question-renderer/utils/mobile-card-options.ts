@@ -73,6 +73,17 @@ export function overrideCellOptionsColumnsForCard<T extends TableCell>(cell: T):
 }
 
 /**
+ * 저작자가 모바일 보기 열 수를 명시한 칸을 감싸는 표식 — globals.css 가 이 표식 아래의 `.options-grid` 를
+ * 화면 폭과 무관하게 N열로 그린다. `.options-grid` 는 640px 미만에서 1열로 강제되고 그것을 푸는 규칙은
+ * 행 단위 카드(`.mobile-row-card`)에만 있어, 항목 단위 카드·축 단위 카드에서는 「모바일 2열」을 골라도 1열이었다.
+ * 명시한 칸에만 붙인다 — 명시하지 않은 칸은 두 카드에서 종전대로 1열이다(라벨 길이 휴리스틱을 새로 켜지 않는다).
+ */
+export const MOBILE_EXPLICIT_OPTIONS_CLASS = 'mobile-options-explicit';
+export function explicitMobileOptionsClass(cell: TableCell): string | undefined {
+  return cell.mobileOptionsColumns != null ? MOBILE_EXPLICIT_OPTIONS_CLASS : undefined;
+}
+
+/**
  * 열 라벨이 "_단위" 또는 "단위" 로 끝나는 셀쌍(수량 셀 + 단위 셀)을 한 줄로 묶기 위한 감지 헬퍼.
  * 다음 셀의 열 라벨을 받아 묶을지 여부와, 현재 셀이 이미 묶인 단위 셀인지 반환.
  */

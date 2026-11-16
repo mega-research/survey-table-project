@@ -91,7 +91,6 @@ export const UpdateSurveyDataSchema = z
     requireLogin: z.boolean().optional(),
     // Date 와 ISO 문자열이 모두 들어온다 — 컬럼이 Date 를 원하므로 여기서 접는다.
     endDate: z.coerce.date().nullable().optional(),
-    maxResponses: z.number().int().nullable().optional(),
     thankYouMessage: z.string().optional(),
     screenedOutMessage: z.string().nullable().optional(),
     localizedMessages: z

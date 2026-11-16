@@ -26,7 +26,7 @@ function statusOf(cells: QuotaCellStatus[]): QuotaStatus {
       },
     ],
     cells,
-    summary: { targetTotal: 0, currentTotal: 0, pct: 0, closedCells: 0, totalCells: 0, unclassified: 0 },
+    summary: { targetTotal: 0, currentTotal: 0, pct: 0, closedCells: 0, totalCells: 0, unclassified: 0, total: null },
   };
 }
 
@@ -62,5 +62,36 @@ describe('QuotaStatusPanel 부족 셀 순', () => {
     const rows = within(screen.getByRole('list')).getAllByRole('listitem');
     expect(rows).toHaveLength(2);
     expect(rows[1]).toHaveTextContent('27 / 25');
+  });
+
+  // ── 「완료」 조건 ──
+  it('완료 조건만 있는 플랜은 그 한 줄을 보이고 「목표가 설정된 셀이 없습니다」를 띄우지 않는다', async () => {
+    const status = statusOf([]);
+    await renderOpened({
+      ...status,
+      summary: {
+        ...status.summary,
+        total: { target: 1100, current: 886, pct: 81, tone: 'good' },
+      },
+    });
+
+    expect(screen.getByText('완료 + 실사 완료 처리')).toBeInTheDocument();
+    expect(screen.getByText('886 / 1,100')).toBeInTheDocument();
+    expect(screen.getByText('214')).toBeInTheDocument();
+    expect(screen.queryByText('목표가 설정된 셀이 없습니다')).not.toBeInTheDocument();
+  });
+
+  it('완료 조건이 목표에 닿으면 달성으로 보인다', async () => {
+    const status = statusOf([]);
+    await renderOpened({
+      ...status,
+      summary: {
+        ...status.summary,
+        total: { target: 1100, current: 1100, pct: 100, tone: 'done' },
+      },
+    });
+
+    expect(screen.getByText('1,100 / 1,100')).toBeInTheDocument();
+    expect(screen.getByText('달성')).toBeInTheDocument();
   });
 });

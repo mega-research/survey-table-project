@@ -10,6 +10,7 @@ import { pinnedVersionId } from '@/shared/contracts/survey';
 import { ensureTestVersion } from '@/server/workflows/test-version';
 import { getResponseById } from '@/server/read-models/responses';
 import { loadRespondentContactAttrs } from '@/server/read-models/respondent-contact-attrs';
+import { collectReferencedContactKeys } from '@/lib/contacts/respondent-pii';
 import { isResponseExcluded } from '@/server/operations/services/profiles';
 import { testFlagForScope, type OperationsDataScope } from '@/server/data-scope';
 import type { FieldworkShare } from '@/server/fieldwork-share-scope';
@@ -31,7 +32,7 @@ import { AdminResponseEditor } from './admin-response-editor';
  * 저장도 같은 범위로 다시 막힌다(`saveAdminEdit` procedure).
  *
  * - getResponseById 로 응답 조회 (soft delete 포함).
- *   - 삭제된 응답이면 안내 화면 (복원 안내).
+ *   - 삭제된 응답이면 안내 화면 (복원 안내). 조회 전용은 없는 응답으로 다룬다.
  *   - 응답 surveyId 가 path 와 다르면 notFound.
  * - 렌더 버전은 이 응답이 볼 버전 — 실응답은 현재 배포본, 테스트 응답은 지금 테스트 버전(저장본,
  *   CONTEXT.md 「테스트 버전」 — 테스트는 테스트 버전에만 있다). 그 버전이 없으면 응답 자신의 버전으로
@@ -49,6 +50,12 @@ interface Props {
   share: FieldworkShare;
   /** 응답 내역의 순번(배너 표시용). 없으면 null. */
   idx: number | null;
+  /**
+   * 조회 전용 — 값을 바꿀 수 없고 저장도 없다(운영 main 의 응답 조회 화면 본문). 아무것도 쓰지 않고
+   * (테스트 버전 맞추기 생략), 브라우저로 보내는 명단 개인정보도 설문이 실제로 읽는 열로 줄인다.
+   * 지금 이 값을 켜는 라우트는 없다 — 외부 주체에게 응답 조회를 열 때 그 라우트가 켠다.
+   */
+  readOnly?: boolean;
 }
 
 export async function ResponseEditScreen({
@@ -58,6 +65,7 @@ export async function ResponseEditScreen({
   scope,
   share,
   idx,
+  readOnly = false,
 }: Props) {
   // surveyId 는 read-model 의 WHERE 로 내려간다 — 사후 비교로 두면 타 팀 응답 원문이
   // 이미 복호화된 뒤에 접히게 된다(티켓 15).
@@ -67,6 +75,7 @@ export async function ResponseEditScreen({
   }
 
   if (response.deletedAt !== null) {
+    if (readOnly) notFound();
     return (
       <main className="mx-auto max-w-xl px-6 py-12">
         <h1 className="text-xl font-bold">삭제된 응답입니다</h1>
@@ -78,7 +87,8 @@ export async function ResponseEditScreen({
   }
 
   // 테스트 응답은 테스트 버전을 지금 저장본에 맞춘 뒤 그것으로 그린다 — 테스트 화면과 같은 구조.
-  if (response.isTest) await ensureTestVersion(surveyId);
+  // 조회 전용은 아무것도 쓰지 않는다(맞추기는 쓰기다) — 있는 테스트 버전 그대로 그린다.
+  if (response.isTest && !readOnly) await ensureTestVersion(surveyId);
 
   // 렌더 버전 결정 (스펙 결정 1): 이 응답이 볼 버전(실응답 = 현재 배포본, 테스트 응답 = 지금 테스트
   // 버전). 그 버전이 없을 때만 응답 자신의 버전으로 폴백(기존 동작). 레거시 versionId null 응답도
@@ -120,7 +130,16 @@ export async function ResponseEditScreen({
   ]);
   // contactTargetId 가 없으면 익명 응답이므로 빈 객체. 응답 화면과 같은 명단 값 —
   // 개인정보 열까지 합친 것(서버 재평가도 같은 값을 본다).
-  const contactAttrs = contactRow ? await loadRespondentContactAttrs(contactRow.id) : {};
+  // 조회 전용은 그리는 설문이 토큰·조건으로 실제로 읽는 개인정보 열만 싣는다 — 이 값은 브라우저로
+  // 나가고(RSC props) 보는 사람이 내부 직원이 아닐 수 있다. 화면에 안 쓰는 연락처까지 실으면 안 된다
+  // (응답자 브라우저로 가는 조회와 같은 규칙, 2026-11-16 Codex 리뷰).
+  const contactAttrs = !contactRow
+    ? {}
+    : readOnly
+      ? await loadRespondentContactAttrs(contactRow.id, db, {
+          allowedKeys: async () => collectReferencedContactKeys(version?.snapshot ?? null),
+        })
+      : await loadRespondentContactAttrs(contactRow.id);
 
   // 구버전 응답을 최신 형식으로 열 때: 같은 구조만 프리필, 다른 구조는 비움 (스펙 결정 2).
   // 렌더만으로는 DB 를 바꾸지 않는다 — 저장 시점에 service 가 이관한다.
@@ -170,6 +189,7 @@ export async function ResponseEditScreen({
         idx={idx}
         renderedVersionId={pinnedId}
         migratedFromOldVersion={migratedFromOldVersion}
+        readOnly={readOnly}
       />
     </>
   );

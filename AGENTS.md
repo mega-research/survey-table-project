@@ -28,6 +28,7 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 | 조사 대상 — 이월 응답 임포트 · 컨택원 배정 · 외주 담당 범위(업체별로 볼 대상) · 필터 해석 · ID 목록 검색 · 목록 기본 정렬·행 표시·개인정보 열 · 대상 정보 수정 현황 | `src/server/contacts/AGENTS.md`                  |
 | 운영 콘솔 필터 바 구조                                                                                                                    | `src/features/operations/AGENTS.md`              |
 | DB 스키마 (테이블·컬럼·관계)                                                                                                              | `src/db/schema/AGENTS.md`                        |
+| 마이그레이션 번호 고르기·배열 순서·배포 전후 · DB 드리프트 점검                                                                           | `supabase/AGENTS.md`                             |
 | 프론트 기능 묶음 트리 · 질문 유형·셀 타입·테이블 검증 규칙 · 행 반복·차례로 열기 · 다국어 설문                                            | `src/features/AGENTS.md`                         |
 | 설문 편집기 하위 폴더 지도 (설문 목록·공유·질문 편집·표 편집기 …)                                                                         | `src/features/survey-builder/AGENTS.md`          |
 | 숨은 답 지우기 — 저장 경계 순서·조건 평가 컨텍스트·경로 밖 문항·표의 숨은 칸                                                              | `src/lib/survey/AGENTS.md`                       |
@@ -200,12 +201,13 @@ pnpm db:setup-test    # 공유 테스트 DB 를 통째로 다시 만든다 — �
 pnpm db:isolated <이름> # 내 브랜치 전용 테스트 DB(같은 컨테이너, 마이그레이션 전량 재생 = 재생 검증). 실행은 출력된 URL 로
                       #   RUN_REALDB=1 DATABASE_URL=<URL> pnpm exec vitest run <realdb 파일> · 지우기 `--drop`
 pnpm worktree:new <브랜치> [시작점] # .claude/worktrees 에 워크트리 생성 + env·공유 자료 링크 + 설치 (아래 Worktree bootstrap)
-pnpm db:drift         # 실 DB ↔ 레포 객체 대조 (아래 "DB 드리프트 점검")
+pnpm db:drift         # 실 DB ↔ 레포 객체 대조 (supabase/AGENTS.md 「DB 드리프트 점검」)
 pnpm db:size          # 실 DB 테이블·인덱스 크기·사용 횟수 (읽기 전용 — 부풀었으면 손으로 REINDEX)
 pnpm deploy:wait [sha] # main 에 푸시한 커밋의 Vercel 배포가 끝날 때까지 기다렸다가 결과 한 줄 (에이전트는 백그라운드로)
 pnpm sentry:issues [id | --query 검색어] # Sentry 미해결 이슈·최근 이벤트 태그 조회 (읽기 전용, .env.local 의 SENTRY_READ_TOKEN)
+pnpm review:codex <base> [--spec PRD] [초점] # Codex 적대적 리뷰 — 체크리스트·한국어 출력을 붙여 부른다 (에이전트는 백그라운드로)
 pnpm db:migrate       # 마이그레이션 실행 (_journal.json 기준 — 0019에서 동결, 주의사항 7 참조)
-pnpm survey:vars · survey:dump · survey:render  # 운영 설문 변수명 계산 · 응답 화면 그려 보기 (survey-ops 스킬 — 설문 고치기 도우미 포함)
+pnpm survey:find · survey:vars · survey:dump · survey:render  # 운영 설문 문구로 찾기 · 변수명 계산 · 응답 화면 그려 보기 (survey-ops 스킬 — 설문 고치기 도우미 포함)
 pnpm versions:prune · spss:migrate · spss:rollback  # DRY_RUN 기본, `:live` 를 붙여야 실행
 pnpm auth:seed        # 슈퍼어드민 발급/승격 — <email> <name> <password> (기존 계정이면 승격만)
 pnpm workspace:seed   # 실전 시드 계획 출력(DRY_RUN) — `workspace:seed:live` 가 적용, 재실행 안전
@@ -340,7 +342,7 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 
 ## 디자인 시스템
 
-디자인 언어 참조는 [DESIGN.md](DESIGN.md). Apple 웹 디자인 시스템 기반이며, **폰트는 SF Pro 대신 Wanted Sans Variable로 통일**한다.
+디자인 언어 참조는 [DESIGN.md](DESIGN.md), 제품 사실(누가 쓰는가·원칙)은 [PRODUCT.md](PRODUCT.md) — impeccable 이 UI 작업 때 둘을 읽는다. Apple 웹 디자인 시스템 기반이며, **폰트는 SF Pro 대신 Wanted Sans Variable로 통일**한다.
 
 - **코드 SoT**: 디자인 토큰의 실제 source of truth는 [globals.css](src/app/globals.css)의 `:root` CSS 변수 + `@theme inline` 매핑. DESIGN.md는 목표 명세, globals.css가 현재 구현.
 - **적용 범위 주의**: DESIGN.md 명세는 Apple 마케팅/쇼케이스 사이트 기준(17px body, 80px 섹션, 저밀도 tile). **설문 빌더·운영 콘솔은 고밀도 도구 UI**라 토큰(색·radius·그림자 절제·weight ladder)만 참조하고 마케팅 스케일/밀도는 적용하지 않는다. Apple 정통 스케일은 랜딩·공개 응답 페이지(`/survey`)에 적합.
@@ -354,6 +356,8 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 `write-change-checklist` 스킬(`.agents/skills/write-change-checklist/SKILL.md`)을 거친다 — 축은 셋(백엔드 · 프론트엔드 ·
 개인정보·컴플라이언스)이고, 변경 종류를 정한 뒤 항목마다 「지킨다(어떻게) / 해당 없음(이유) / 일부러 안 지킨다(이유)」를
 이 레포의 기존 장치로 답한다. 스펙에 적히지 않은 성질은 TDD 가 테스트를 만들지 않고, 리뷰도 눈에 띄는 버그에서 멈춘다.
+
+**코드를 쓰기 전에 있는 것부터 찾는다** (그 스킬의 0번) — 같은 일을 하는 procedure·화면·컴포넌트·판정·스위치가 있으면 그것을 넓혀 쓰고, 새로 만드는 것마다 「기존 것으로 안 되는 이유」를 적는다. 급한 작업도 건너뛰지 않는다.
 
 **완료를 보고할 때도** 고른 변경 종류의 항목마다 한 줄씩 답을 붙인다 — 「지킨다」는 그것을 지키는 테스트 이름, 나머지는 이유. 화면 확인이 필요한 항목은 사용자가 어느 화면·기기에서 무엇을 볼지 적는다. 요청이 없어도 한다.
 
@@ -377,9 +381,9 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 
 6. **export 라벨**: `cell.exportLabel || generateExportLabel(questionCode_열_행)` 폴백 필수 (빌더는 placeholder만 표시, DB null 흔함).
 
-7. **마이그레이션 — 수동 SQL 관행**: drizzle `_journal.json`은 **0019에서 동결**됐고 0020 이후는 전부 손으로 쓴 `.sql`을 `supabase/migrations/`에 두고 Supabase MCP `apply_migration` 또는 직접 SQL로 적용한다. 새 파일을 추가하면 **반드시 `supabase/migrations/manual-migrations.json`의 `migrations`에 tag(확장자 제외 파일명)를 등재**해야 한다 — 미등재는 추적 불가 drift로 보고 CI(`.github/migration-journal-gate.ts`)가 차단한다. `pnpm db:generate`/`db:push`는 이 관행과 충돌하므로 쓰지 않는다. `TRUNCATE CASCADE` 금지 (ON DELETE SET NULL 무시).
+7. **마이그레이션 — 수동 SQL 관행**: drizzle `_journal.json`은 **0019에서 동결**됐고 0020 이후는 전부 손으로 쓴 `.sql`을 `supabase/migrations/`에 두고 Supabase MCP `apply_migration` 또는 직접 SQL로 적용한다. 새 파일을 추가하면 **반드시 `supabase/migrations/manual-migrations.json`의 `migrations`에 tag(확장자 제외 파일명)를 등재**해야 한다 — 미등재는 추적 불가 drift로 보고 CI(`.github/migration-journal-gate.ts`)가 차단한다. `pnpm db:generate`/`db:push`는 이 관행과 충돌하므로 쓰지 않는다. `TRUNCATE CASCADE` 금지 (ON DELETE SET NULL 무시). **번호를 고르기 전에 `supabase/AGENTS.md` 를 읽을 것** — staging 이 쓰고 있어 비워 둔 번호, 배열 순서, 배포 전·뒤 적용 구분이 거기 있다.
 
-   **새 마이그레이션은 빈 DB에서 재생 가능해야 한다.** 2026-08-19부터 테스트 DB는 `drizzle-kit push`가 아니라 마이그레이션 전량 재생으로 만들어진다(`scripts/setup-test-db.sh`). 즉 `pnpm db:setup-test`(공유 DB)·`pnpm db:isolated <이름>`(전용 DB)이 곧 재생 검증이며, 기존 상태를 전제한 문장을 넣으면 거기서 깨진다. 실 DB에만 있고 레포에 없는 객체는 `pnpm db:drift`가 잡는다 — 자세한 내용은 아래 "DB 드리프트 점검" 참조.
+   **새 마이그레이션은 빈 DB에서 재생 가능해야 한다.** 2026-08-19부터 테스트 DB는 `drizzle-kit push`가 아니라 마이그레이션 전량 재생으로 만들어진다(`scripts/setup-test-db.sh`). 즉 `pnpm db:setup-test`(공유 DB)·`pnpm db:isolated <이름>`(전용 DB)이 곧 재생 검증이며, 기존 상태를 전제한 문장을 넣으면 거기서 깨진다. 실 DB에만 있고 레포에 없는 객체는 `pnpm db:drift`가 잡는다 — 자세한 내용은 `supabase/AGENTS.md`.
 
 8. **앱 생성값 NOT NULL 컬럼은 2단계 배포**: nullable 추가 + 백필(배포 전) → 앱 배포 → `SET NOT NULL`(라이브 후). 한 번에 걸면 구버전 앱 INSERT가 깨진다.
 
@@ -422,34 +426,6 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 | 마이그레이션 드리프트 | `.github/migration-journal-gate.ts` | 미등재 `.sql` + 접두 번호 중복 차단           |
 
 통합/E2E 잡은 로컬 supabase를 띄워 `pnpm test:integration` + `pnpm test:e2e`(Playwright chromium)를 돌린다.
-
----
-
-## 마이그레이션 번호
-
-파일명 접두는 재생 순서가 **아니다**. 순서는 `manual-migrations.json` 배열이 쥐고 있고 `scripts/migration-order.mjs`가 그대로 따른다 (`0003`·`0009`·`0019`는 이미 접두가 중복된다). 그래도 새 중복은 CI가 막는다 — 번호로 최신을 읽을 수 없게 되고 순서를 눈으로 확인할 수 없기 때문이다. 여러 브랜치가 같은 DB를 만지는 동안 각자 다음 번호를 집으면 이 상태가 재생산된다.
-
-- 새 마이그레이션은 **디스크에 없는 다음 번호**를 쓴다. 다른 브랜치가 이미 쓴 번호도 피한다
-- **나중에 병합하는 쪽은 `manual-migrations.json` 배열 끝에 append 한다.** 번호순으로 끼워 넣지 않는다 — 그 배열이 곧 빈 DB 재생 순서다
-- 그래서 번호와 배열 순서가 어긋나 보일 수 있다. 만지는 객체가 서로소면 정상이다
-- **배열 순서를 지켜야 하는 쌍**: 0128 과 0129 는 같은 CHECK(`mobile_table_display_mode`)를 차례로 갈아끼운다 — 0128 을 뒤에 재생하면 `item-cards` 가 빠진다. **0152 는 0121 앞**(운영 순서 — 0121 이 같은 FK 를 다시 건다). **0156 도 0121 앞** — 운영 이력 칸의 옛 Supabase 계정 id 를 앱 users 로 잇지 않으면 0121 의 FK 가 실패한다(2026-11-09 운영 데이터 리허설)
-- **배포 전후가 갈리는 쌍**: 0142(이관 이력 표)는 앱 배포 **전**, 0143(`response_answers` 삭제 등)은 배포 **뒤** — 거꾸로 하면 구버전 앱의 완료 제출이 실패한다. 0145(언어별 설문 글자 `surveys.localized_messages`)도 배포 **전**이다(새 앱이 읽는다, nullable 이라 2단계 불필요)
-- **승격 때 프로덕션에 적용할 번호와 순서**는 `docs/agents/promotion.md` 에 있다(staging 에만 있는 번호·묶음·배포 전후). 새 마이그레이션을 staging 에 넣으면 그 문서에 한 줄 더한다
-- 번호를 옮긴 이력은 문서에 두지 않는다 — 역할 v2 의 옛 번호 매핑(0101→0111 …)은 병합 커밋 `c7197701` 의 `AGENTS.md`, 외주 링크 0128→0133 은 0133 파일 머리에 있다. 이미 적용한 DB 는 번호와 무관하다(적용 이력 표가 없다)
-
----
-
-## DB 드리프트 점검
-
-`pnpm db:drift [prod|staging]` — 실 DB와 레포가 만들어내는 DB(로컬 테스트 DB)의 객체 목록을 대조한다. 테이블·컬럼·enum·함수·인덱스·RLS·정책·anon 권한·이벤트 트리거(public 함수 연결 — 활성 상태·연결 함수 본문 해시·SECDEF·search_path·소유자 포함)를 보고, 이름이 같은데 정의가 다른 인덱스도 잡는다. 모든 조회는 READ ONLY 트랜잭션이다.
-
-`migration-journal-gate`는 디렉터리에 있는 `.sql`이 등재됐는지만 본다. **파일로 쓰지 않고 실 DB에 직접 적용한 SQL은 그 검사에 걸리지 않는다** — 실제로 `lookup_contact_by_invite_token` 함수와 컬럼 6개가 그렇게 들어와 몇 달간 방치됐다(2026-08-19 발견·복구). 이 스크립트가 그 반대 방향을 본다.
-
-- 전제: 기준이 되는 로컬 DB 가 이 레포 상태로 재생돼 있어야 한다. **`pnpm db:isolated <이름>` 으로 만들고 `pnpm db:drift staging --local-db <이름>`** 으로 대조하면 형제 워크트리를 건드리지 않는다. `--local-db` 없이는 공유 DB 가 기준이라 `pnpm db:setup-test` 가 먼저다(형제의 DB 를 덮는다). 두 스크립트가 `_repo_meta.migration_stamp` 에 재생 지문을 찍고 `db:drift` 가 대조해, 남의 DB 나 낡은 DB 와 대조하려 하면 exit 2로 멈춘다
-- staging 주소는 `STAGING_DATABASE_URL`(환경 변수 또는 `.env.local`), 없으면 `.env.local` 의 `DATABASE_URL` 줄(주석 포함) 중 로컬도 prod 도 아닌 첫 줄이다. 호스트가 로컬이면 멈춘다 — 예전에는 `.env.local` 의 활성 줄(로컬)을 읽어 로컬끼리 대조하고 차이 0건을 냈다
-- 알려진 차이는 `supabase/drift-allowlist.json`에 **사유와 함께** 등재한다. 사유가 `미결`로 시작하면 결정이 남은 항목이며 매 실행 노출된다
-- 비-UNIQUE 성능 인덱스는 동작 무관이라 참고 카운트로만 센다
-- **배포 전에 돌릴 것.** 도구를 만든 것보다 정기적으로 돌리는 것이 값어치다
 
 ---
 

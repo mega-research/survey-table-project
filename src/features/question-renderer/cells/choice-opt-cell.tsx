@@ -32,6 +32,10 @@ interface ChoiceOptCellProps {
    * 칠한다(보기 소스 표의 같은 모드와 같은 얼굴). 선택 읽기·쓰기는 두 모양이 같다.
    */
   variant?: 'cell' | 'tile' | undefined;
+  /** 타일 전용 — 라벨 아래 작은 글씨 설명(축 단위 카드의 설명 셀). 탭 영역(label) 안에 든다 */
+  description?: React.ReactNode;
+  /** 타일 전용 — 이 보기를 골랐을 때만 타일 아래에 그리는 것(이 보기 칸이 여는 상세 입력 칸) */
+  detail?: React.ReactNode;
 }
 
 /**
@@ -54,6 +58,8 @@ export const ChoiceOptCell = React.memo(function ChoiceOptCell({
   ariaInvalid,
   ariaDescribedBy,
   variant = 'cell',
+  description,
+  detail,
 }: ChoiceOptCellProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
@@ -69,6 +75,9 @@ export const ChoiceOptCell = React.memo(function ChoiceOptCell({
   // 「전혀 기대 안함」으로 둔 척도 표가 세 화면에서 같은 얼굴이다. 비어 있으면 컨트롤만 그린다.
   const visibleText = substituteTokens((cell.content ?? '').trim(), attrs, quotes);
   const inputId = `${inputIdScope ? `${inputIdScope}-` : ''}${questionId}-${cell.id}`;
+  // 컨트롤의 접근성 이름은 aria-label(옵션 라벨)이라 label 안 설명은 읽히지 않는다 — 설명은 describedby 로 잇는다
+  const descriptionId = description ? `${inputId}-description` : undefined;
+  const describedBy = [ariaDescribedBy, descriptionId].filter(Boolean).join(' ') || undefined;
   const textInputStack = (
     <OptionTextInputStack
       questionId={questionId}
@@ -99,7 +108,7 @@ export const ChoiceOptCell = React.memo(function ChoiceOptCell({
       type="checkbox"
       id={inputId}
       aria-invalid={ariaInvalid || undefined}
-      aria-describedby={ariaDescribedBy}
+      aria-describedby={describedBy}
       aria-label={label}
       checked={checked}
       onChange={toggle}
@@ -111,7 +120,7 @@ export const ChoiceOptCell = React.memo(function ChoiceOptCell({
       id={inputId}
       name={`${questionId}-${groupKey}`}
       aria-invalid={ariaInvalid || undefined}
-      aria-describedby={ariaDescribedBy}
+      aria-describedby={describedBy}
       aria-label={label}
       checked={checked}
       onChange={() => {}}
@@ -126,16 +135,32 @@ export const ChoiceOptCell = React.memo(function ChoiceOptCell({
         <label
           htmlFor={inputId}
           className={cn(
-            'flex min-h-10 min-w-0 cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-1.5 text-[15px] transition-colors',
+            'flex min-h-10 min-w-0 cursor-pointer gap-2.5 rounded-lg border px-3 py-1.5 text-[15px] transition-colors',
+            // 설명이 붙어 두 줄 이상이면 컨트롤을 첫 줄에 맞춘다
+            description ? 'items-start [&>input]:mt-0.5' : 'items-center',
             checked
               ? 'border-blue-300 bg-blue-50 text-blue-900'
               : 'border-gray-200 bg-white text-gray-800',
           )}
         >
           {control}
-          {label && <span className="leading-snug">{label}</span>}
+          {(label || description) && (
+            <span className="min-w-0 leading-snug">
+              {label}
+              {description && (
+                <span
+                  id={descriptionId}
+                  data-testid="choice-tile-description"
+                  className="mt-0.5 block text-[13px] leading-snug font-normal text-gray-500"
+                >
+                  {description}
+                </span>
+              )}
+            </span>
+          )}
         </label>
         {checked && cell.allowTextInput && textInputStack}
+        {checked && detail}
       </div>
     );
   }

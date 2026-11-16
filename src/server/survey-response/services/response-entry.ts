@@ -359,7 +359,6 @@ async function admitAndCreateResponseInner(
 
   // #24 버전 무결성: 클라 제공 versionId 검증(타 설문 거부) + 무중단 갈아타기(티켓 04) —
   // 배포 전 열린 탭의 구버전 versionId 는 거부 대신 현재 버전으로 재핀된다(effectiveVersionId).
-  // create 시점 정원은 soft(completedCount 미전달) — 잔여 race window 는 complete 하드체크가 보강.
   const { version, effectiveVersionId } = await loadValidatedVersionGateRow(
     surveyId,
     versionId,

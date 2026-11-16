@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import type { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 
-import { buildColumnAxisCards, withRowTitleAsCheckLabel } from './column-axis-cards';
+import {
+  buildCellPositionLabels,
+  buildColumnAxisCards,
+  withRowTitleAsCheckLabel,
+} from './column-axis-cards';
 
 // AI 실태조사 Q22 모양 — 구분 열(들여쓰기 칸 포함) + 연도 열 둘, 칸마다 「명」 단위가 붙은 입력칸.
 const columns: TableColumn[] = [
@@ -332,5 +336,281 @@ describe('buildColumnAxisCards — 보기 그룹 칸(표 유형 문항의 choice
       includeChoiceOptCells: true,
     });
     expect(cards).toEqual([]);
+  });
+});
+
+// 피지컬 AI 실태조사 A3 모양 — 적용 산업 | 판단 예시 | 공급(S) | 활용(U), 열마다 복수 선택 그룹.
+// 판단 예시는 「바로 표시」, 마지막 행은 첫 칸이 「⑭ 기타」 입력(두 보기 칸 중 하나라도 고르면 열린다).
+describe('buildColumnAxisCards — 설명 셀과 보기 칸이 여는 상세 입력', () => {
+  const industryColumns: TableColumn[] = [
+    { id: 'name', label: '적용 산업' },
+    { id: 'example', label: '판단 예시' },
+    { id: 'supply', label: '공급(S)' },
+    { id: 'use', label: '활용(U)' },
+  ];
+  const choice = (id: string, group: string): TableCell => ({
+    id,
+    type: 'choice_opt',
+    content: '',
+    choiceGroupId: group,
+  });
+  const example = (id: string, content: string, extra: Partial<TableCell> = {}): TableCell =>
+    text(id, content, { mobileDisplay: 'inline', ...extra });
+  const otherInput: TableCell = {
+    id: 'other-name',
+    type: 'input',
+    content: '⑭ 기타',
+    enabledWhen: {
+      kind: 'group',
+      op: 'OR',
+      terms: [
+        { kind: 'choice-selected', controllerCellId: 's14' },
+        { kind: 'choice-selected', controllerCellId: 'u14' },
+      ],
+    },
+  };
+  const industryRows: TableRow[] = [
+    {
+      id: 'r1',
+      label: '제조 – 자동차·운송장비',
+      cells: [text('n1', '① 제조 – 자동차·운송장비'), example('e1', '차량조립공정로봇'), choice('s1', 'gs'), choice('u1', 'gu')],
+    },
+    {
+      id: 'r14',
+      label: '⑭ 기타',
+      cells: [otherInput, example('e14', '우주, 해양등'), choice('s14', 'gs'), choice('u14', 'gu')],
+    },
+  ];
+  const build = (rowsIn: TableRow[], includeChoiceOptCells = true) =>
+    buildColumnAxisCards({
+      columns: industryColumns,
+      displayRows: rowsIn,
+      includeChoiceOptCells,
+      inlineTextAsDescription: true,
+    });
+
+  it('「바로 표시」 글자 셀은 행 제목이 아니라 설명이 되고, 행 제목은 그 앞 글자 셀이다', () => {
+    const [supply, use] = build(industryRows);
+    expect([supply!.key, use!.key]).toEqual(['supply', 'use']);
+    const first = supply!.items[0]!;
+    expect(first.label).toBe('① 제조 – 자동차·운송장비');
+    expect(first.descriptionCells.map((cell) => cell.id)).toEqual(['e1']);
+    // 설명 셀은 상위 구분으로도 올라가지 않는다
+    expect(first.groupCells).toEqual([]);
+  });
+
+  it('「바로 표시」가 아닌 글자 셀이 둘이면 종전대로 뒤 칸이 행 제목, 앞 칸이 상위 구분이다', () => {
+    const plain: TableRow[] = [
+      { id: 'r1', label: '', cells: [text('n1', '① 제조'), text('e1', '차량조립공정로봇'), choice('s1', 'gs'), choice('u1', 'gu')] },
+    ];
+    const item = build(plain)[0]!.items[0]!;
+    expect(item.label).toBe('차량조립공정로봇');
+    expect(item.groupCells.map((cell) => cell.id)).toEqual(['n1']);
+    expect(item.descriptionCells).toEqual([]);
+  });
+
+  it('행 제목이 될 다른 글자 셀도 행 이름도 없으면 「바로 표시」 셀이 종전대로 행 제목이다', () => {
+    const only: TableRow[] = [
+      { id: 'r1', label: '', cells: [text('n1', ''), example('e1', '차량조립공정로봇'), choice('s1', 'gs'), choice('u1', 'gu')] },
+    ];
+    const item = build(only)[0]!.items[0]!;
+    expect(item.label).toBe('차량조립공정로봇');
+    expect(item.descriptionCells).toEqual([]);
+  });
+
+  it('보기 칸만으로 열리는 입력 칸은 제 열 카드가 서지 않고 컨트롤러 보기 타일마다 딸린다', () => {
+    const cards = build(industryRows);
+    // 「적용 산업」 열에는 다른 응답 칸이 없어 카드가 서지 않는다
+    expect(cards.map((card) => card.key)).toEqual(['supply', 'use']);
+    const [supplyOther, useOther] = cards.map((card) => card.items[1]!);
+    expect(supplyOther!.cell.id).toBe('s14');
+    expect(supplyOther!.details.map((cell) => cell.id)).toEqual(['other-name']);
+    expect(useOther!.details.map((cell) => cell.id)).toEqual(['other-name']);
+    // 입력 칸이 첫 칸이어도 뒤의 설명 셀이 제목 구역에 든다 — 제목은 행 이름, 설명은 판단 예시
+    expect(supplyOther!.label).toBe('⑭ 기타');
+    expect(supplyOther!.descriptionCells.map((cell) => cell.id)).toEqual(['e14']);
+    // 다른 행 타일에는 딸리지 않는다
+    expect(cards[0]!.items[0]!.details).toEqual([]);
+  });
+
+  it('컨트롤러에 응답 칸이 섞이면 묶지 않는다 — 종전대로 제 열 카드', () => {
+    const mixed: TableRow[] = [
+      {
+        id: 'r1',
+        label: '기타',
+        cells: [
+          {
+            ...otherInput,
+            enabledWhen: {
+              kind: 'group',
+              op: 'OR',
+              terms: [
+                { kind: 'choice-selected', controllerCellId: 's14' },
+                { kind: 'filled', controllerCellId: 'memo' },
+              ],
+            },
+          },
+          input('memo', { content: '' }),
+          choice('s14', 'gs'),
+          choice('u14', 'gu'),
+        ],
+      },
+    ];
+    const cards = build(mixed);
+    expect(cards.map((card) => card.key)).toEqual(['name', 'example', 'supply', 'use']);
+    expect(cards[2]!.items[0]!.details).toEqual([]);
+  });
+
+  it('보기 칸을 카드 항목으로 넣지 않는 호출에서는 입력 칸이 종전대로 제 열 카드다', () => {
+    const cards = build(industryRows, false);
+    expect(cards.map((card) => card.key)).toEqual(['name']);
+    expect(cards[0]!.items.map((item) => item.cell.id)).toEqual(['other-name']);
+  });
+
+  // Codex 리뷰(2026-11-13): 조건이 참이어도 고른 타일이 없을 수 있으면 타일 아래로 옮기면 안 된다 —
+  // 「기타를 고르지 않았을 때 열리는 칸」은 타일을 고르면 닫히고 안 고르면 그릴 자리가 없어 영영 못 쓴다
+  it('보기 칸을 NOT 으로 본 입력 칸은 묶지 않는다 — 종전대로 제 열 카드', () => {
+    const negated: TableRow[] = [
+      {
+        id: 'r1',
+        label: '기타',
+        cells: [
+          {
+            ...otherInput,
+            enabledWhen: {
+              kind: 'group',
+              op: 'NOT',
+              terms: [{ kind: 'choice-selected', controllerCellId: 's14' }],
+            },
+          },
+          example('e14', '우주, 해양등'),
+          choice('s14', 'gs'),
+          choice('u14', 'gu'),
+        ],
+      },
+    ];
+    const cards = build(negated);
+    expect(cards.map((card) => card.key)).toEqual(['name', 'supply', 'use']);
+    expect(cards[0]!.items.map((item) => item.cell.id)).toEqual(['other-name']);
+    expect(cards[1]!.items[0]!.details).toEqual([]);
+  });
+
+  it('보기 칸이 여는 입력 칸이 다시 여는 칸(사슬)은 묶지 않고 제 열 카드에 남는다 — 어느 카드에도 안 그려지는 칸이 없게', () => {
+    const chainColumns: TableColumn[] = [
+      { id: 'name', label: '적용 산업' },
+      { id: 'memo', label: '비고' },
+      { id: 'supply', label: '공급(S)' },
+      { id: 'use', label: '활용(U)' },
+    ];
+    const chained: TableRow[] = [
+      {
+        id: 'r1',
+        label: '기타',
+        cells: [
+          { ...otherInput, enabledWhen: { kind: 'choice-selected', controllerCellId: 's14' } },
+          input('memo', { content: '', enabledWhen: { kind: 'filled', controllerCellId: 'other-name' } }),
+          choice('s14', 'gs'),
+          choice('u14', 'gu'),
+        ],
+      },
+    ];
+    const cards = buildColumnAxisCards({ columns: chainColumns, displayRows: chained, includeChoiceOptCells: true });
+    expect(cards.map((card) => card.key)).toEqual(['memo', 'supply', 'use']);
+    expect(cards[0]!.items.map((item) => item.cell.id)).toEqual(['memo']);
+    expect(cards[1]!.items[0]!.details.map((cell) => cell.id)).toEqual(['other-name']);
+    // 그려진 칸 전부: 보기 둘 + 기타 내용(타일 아래) + 비고(제 열 카드)
+    const drawn = new Set(cards.flatMap((card) => card.items.flatMap((item) => [item.cell.id, ...item.details.map((d) => d.id)])));
+    expect([...drawn].sort()).toEqual(['memo', 'other-name', 's14', 'u14']);
+  });
+
+  // Codex 리뷰(2026-11-13): 행 제목 규칙은 표 아래 상세 기재 라벨·이미지 머리 줄도 쓴다 — 설명 셀 규칙은 축 카드 호출만 켠다
+  it('설명 셀 규칙을 켜지 않은 호출은 「바로 표시」 셀도 종전대로 행 제목 후보다', () => {
+    const cards = buildColumnAxisCards({ columns: industryColumns, displayRows: industryRows, includeChoiceOptCells: true });
+    const first = cards.find((card) => card.key === 'supply')!.items[0]!;
+    expect(first.label).toBe('차량조립공정로봇');
+    expect(first.groupCells.map((cell) => cell.id)).toEqual(['n1']);
+    expect(first.descriptionCells).toEqual([]);
+    expect(buildCellPositionLabels({ columns: industryColumns, displayRows: industryRows }).get('s1')).toBe(
+      '차량조립공정로봇 · 공급(S)',
+    );
+  });
+});
+
+// 피지컬 AI 실태조사 B1 모양 — 대분류 | 세부 유형 | 공급 설명 | 활용 설명 | 공급(S) | 활용(U).
+// 설명 열이 축마다 따로 있다: 열에 「이 열은 저 열의 설명」을 적으면 그 축 카드에만 붙는다.
+describe('buildColumnAxisCards — 축마다 다른 설명 열(describesColumnId)', () => {
+  const choice = (id: string, group: string): TableCell => ({ id, type: 'choice_opt', content: '', choiceGroupId: group });
+  const desc = (id: string, content: string): TableCell => text(id, content, { mobileDisplay: 'inline' });
+  const productColumns: TableColumn[] = [
+    { id: 'cat', label: '대분류' },
+    { id: 'kind', label: '세부 유형' },
+    { id: 'sdesc', label: '공급(S)\n(외부제공하는 대상)', describesColumnId: 'supply' },
+    { id: 'udesc', label: '활용(U)\n(자사에서 이용하는 대상)', describesColumnId: 'use' },
+    { id: 'supply', label: '공급(S)' },
+    { id: 'use', label: '활용(U)' },
+  ];
+  const productRows: TableRow[] = [
+    {
+      id: 'r1',
+      label: '',
+      cells: [
+        text('cat-a', 'A. 부품·모듈', { rowspan: 2 }),
+        text('k1', '1) AI반도체'),
+        desc('sd1', 'AI 반도체, 엣지컴퓨터'),
+        desc('ud1', '별도로 확보한 반도체'),
+        choice('s1', 'gs'),
+        choice('u1', 'gu'),
+      ],
+    },
+    {
+      id: 'r2',
+      label: '',
+      cells: [
+        text('cat-a-c', '', { isHidden: true }),
+        text('k2', '2) 센서'),
+        desc('sd2', '카메라·라이다'),
+        desc('ud2', '사용할 센서'),
+        choice('s2', 'gs'),
+        choice('u2', 'gu'),
+      ],
+    },
+  ];
+  const build = (columnsIn: TableColumn[]) =>
+    buildColumnAxisCards({
+      columns: columnsIn,
+      displayRows: productRows,
+      includeChoiceOptCells: true,
+      inlineTextAsDescription: true,
+    });
+
+  it('설명 열이 가리키는 축 카드에만 그 설명이 붙는다 — 행 제목과 상위 구분은 그대로', () => {
+    const [supply, use] = build(productColumns);
+    expect(supply!.items.map((item) => [item.label, item.descriptionCells.map((c) => c.id)])).toEqual([
+      ['1) AI반도체', ['sd1']],
+      ['2) 센서', ['sd2']],
+    ]);
+    expect(use!.items.map((item) => item.descriptionCells.map((c) => c.id))).toEqual([['ud1'], ['ud2']]);
+    // 세로 병합된 대분류는 두 행 모두의 상위 구분이다
+    expect(supply!.items.map((item) => item.groupCells.map((c) => c.id))).toEqual([['cat-a'], ['cat-a']]);
+  });
+
+  it('가리키는 열을 적지 않은 설명 열은 모든 축 카드에 붙는다', () => {
+    const shared = productColumns.map((column) => (column.id === 'udesc' ? { id: 'udesc', label: column.label } : column));
+    const [supply, use] = build(shared);
+    expect(supply!.items[0]!.descriptionCells.map((c) => c.id)).toEqual(['sd1', 'ud1']);
+    expect(use!.items[0]!.descriptionCells.map((c) => c.id)).toEqual(['ud1']);
+  });
+
+  it('가리키는 열이 지금 표에 없으면(조건으로 숨었거나 지워짐) 그 설명은 어느 카드에도 붙지 않는다', () => {
+    const withoutUse = productColumns.filter((column) => column.id !== 'use');
+    const rowsWithoutUse = productRows.map((row) => ({ ...row, cells: row.cells.filter((_, i) => i !== 5) }));
+    const cards = buildColumnAxisCards({
+      columns: withoutUse,
+      displayRows: rowsWithoutUse,
+      includeChoiceOptCells: true,
+      inlineTextAsDescription: true,
+    });
+    expect(cards.map((card) => card.key)).toEqual(['supply']);
+    expect(cards[0]!.items[0]!.descriptionCells.map((c) => c.id)).toEqual(['sd1']);
   });
 });
