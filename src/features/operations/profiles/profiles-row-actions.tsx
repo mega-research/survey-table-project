@@ -38,6 +38,11 @@ interface Props {
   isGuest?: boolean;
   /** 응답 status — 이탈(drop) 응답의 수정 다이얼로그에 완료 전환 안내를 띄운다. */
   status?: string;
+  /**
+   * 보기만 하는 게스트(응답 조회 허용 grant) — 같은 메뉴에 「조회」 하나만 둔다. 새 탭으로 응답 조회
+   * 화면을 연다. 수정·삭제·초기화·복원은 내지 않는다.
+   */
+  viewOnly?: boolean;
 }
 
 type Dialog = null | 'edit' | 'delete' | 'reset';
@@ -49,6 +54,7 @@ export function ProfilesRowActions({
   view,
   isGuest = false,
   status,
+  viewOnly = false,
 }: Props) {
   const router = useRouter();
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -81,6 +87,26 @@ export function ProfilesRowActions({
 
   // 게스트: 휴지통 뷰의 유일한 액션(복원)이 authed 전용이라 메뉴 자체를 감춘다.
   if (isGuest && view !== 'active') return null;
+
+  // 보기만 하는 게스트 — 수정 메뉴와 같은 자리·같은 모양에 「조회」 하나.
+  if (viewOnly) {
+    if (view !== 'active') return null;
+    const viewHref = `/admin/surveys/${surveyId}/operations/profiles/${responseId}/view?idx=${idx}`;
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="sm" aria-label={`응답 #${idx} 액션`}>
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onSelect={() => window.open(viewHref, '_blank', 'noopener,noreferrer')}>
+            조회
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  }
 
   return (
     <>
