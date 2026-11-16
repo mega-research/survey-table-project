@@ -121,12 +121,21 @@ export async function loadResponseListTable(
 
   const answerColumnKeys = columns.map((c) => c.key).filter((k) => answerKeyOf(k) !== null);
   const answerValues: Record<string, Record<string, string>> = {};
+  // 저장값이 암호문이던 칸(응답 id → 열 key) — 지금은 개인정보 표시가 꺼진 열이라도 게스트 파일에서 가린다.
+  const storedEncrypted = new Map<string, Set<string>>();
   if (answerColumnKeys.length > 0) {
     for (const ids of chunks(
       rows.map((r) => r.id),
       ID_CHUNK,
     )) {
-      Object.assign(answerValues, await loadProfileAnswerValues(ids, answerColumnKeys, answerChoices));
+      Object.assign(
+        answerValues,
+        await loadProfileAnswerValues(ids, answerColumnKeys, answerChoices, (responseId, key) => {
+          const keys = storedEncrypted.get(responseId) ?? new Set<string>();
+          keys.add(key);
+          storedEncrypted.set(responseId, keys);
+        }),
+      );
     }
   }
 
@@ -142,11 +151,15 @@ export async function loadResponseListTable(
         values[key] = maskExportValue(values[key] ?? '', piiTypeByKey.get(key));
       }
     }
-    // 암호화 저장 응답값 열 — 형식을 모르는 글자라 마지막 글자 가리기.
+    // 응답값 열 — 지금 개인정보로 표시된 열이거나, 그 응답의 저장값이 암호문이던 칸(표시를 켠 채 받은
+    // 답은 표시를 끈 뒤에도 암호문으로 남아 풀려 나온다). 형식을 모르는 글자라 마지막 글자 가리기.
     const encryptedAnswerKeys = new Set(answerSources.filter((s) => s.encrypted).map((s) => s.key));
-    for (const values of Object.values(answerValues)) {
+    for (const [responseId, values] of Object.entries(answerValues)) {
+      const stored = storedEncrypted.get(responseId);
       for (const key of Object.keys(values)) {
-        if (encryptedAnswerKeys.has(key)) values[key] = maskExportValue(values[key] ?? '', undefined);
+        if (encryptedAnswerKeys.has(key) || stored?.has(key)) {
+          values[key] = maskExportValue(values[key] ?? '', undefined);
+        }
       }
     }
   }

@@ -110,7 +110,12 @@ describe('loadResponseListTable', () => {
       }),
     );
     // 응답값은 표시 중인 응답값 열만, 개인정보는 표시 중인 개인정보 열만 읽는다
-    expect(answerValuesMock).toHaveBeenCalledWith(['r1'], ['answer.q1', 'answer.q2'], expect.anything());
+    expect(answerValuesMock).toHaveBeenCalledWith(
+      ['r1'],
+      ['answer.q1', 'answer.q2'],
+      expect.anything(),
+      expect.any(Function),
+    );
     expect(decryptPiiMock).toHaveBeenCalledWith(['t1'], ['담당자', '연락처']);
   });
 
@@ -143,6 +148,35 @@ describe('loadResponseListTable', () => {
       연락처: '010-22...',
       상태: '완료',
     });
+  });
+
+  it('지금은 개인정보 표시가 꺼진 열이라도 저장값이 암호문이던 칸은 게스트 파일에서 가린다', async () => {
+    // 기업명 열(answer.q1)은 지금 구조에서 암호화 표시가 없다 — 표시를 켠 채 받은 응답만 암호문이다.
+    listMock.mockResolvedValue({
+      rows: [ROW, { ...ROW, id: 'r2', idx: 6 }],
+      total: 2,
+      page: 1,
+    });
+    answerValuesMock.mockImplementation(
+      async (
+        _ids: string[],
+        _keys: string[],
+        _choices: unknown,
+        onEncryptedValue?: (responseId: string, key: string) => void,
+      ) => {
+        onEncryptedValue?.('r1', 'answer.q1');
+        return { r1: { 'answer.q1': '홍길동상회' }, r2: { 'answer.q1': '메가유업' } };
+      },
+    );
+    const guest = await loadResponseListTable('s1', 'real', { maskPii: true });
+    if (guest.kind !== 'ok') throw new Error('ok 가 아니다');
+    const at = guest.headers.indexOf('기업명');
+    expect(guest.rows.map((r) => r[at])).toEqual(['홍길동상*', '메가유업']);
+
+    // 관리자는 종전대로 평문
+    const admin = await loadResponseListTable('s1', 'real', { maskPii: false });
+    if (admin.kind !== 'ok') throw new Error('ok 가 아니다');
+    expect(admin.rows.map((r) => r[at])).toEqual(['홍길동상회', '메가유업']);
   });
 
   it('응답이 한도를 넘으면 읽지 않고 알린다', async () => {
