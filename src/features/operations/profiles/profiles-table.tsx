@@ -5,7 +5,6 @@ import { useMemo } from 'react';
 import { type ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { LocalDateTime } from '@/components/ui/local-date-time';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useSearchParamsMutator } from '@/features/operations/hooks/use-search-params-mutator';
@@ -356,25 +355,23 @@ export function ProfilesTable({
       .map(buildColumn)
       .filter((c): c is ColumnDef<DisplayRow> => c !== null);
     if (viewOnly) {
-      // 응답 조회를 허용한 보기 전용 grant — 수정 메뉴 자리에 조회 화면 링크 하나만 둔다.
-      // 수정 화면처럼 새 탭으로 연다(목록의 필터·쪽이 그대로 남는다). 휴지통 뷰에는 두지 않는다.
+      // 응답 조회를 허용한 보기 전용 grant — 수정 메뉴와 같은 열·같은 ⋯ 메뉴에 「조회」 하나만 둔다
+      // (따로 만든 버튼은 기존 편집 열과 어울리지 않았다 — 2026-11-16 사용자). 휴지통 뷰에는 두지 않는다.
       if (!canViewResponse || view !== 'active') return dataColumns;
       return [
         ...dataColumns,
         {
-          id: 'view',
+          id: 'actions',
           header: '조회',
           cell: ({ row }) => (
-            <Button asChild variant="outline" size="sm" className="h-7 px-2.5">
-              <a
-                href={`/admin/surveys/${surveyId}/operations/profiles/${row.original.id}/view?idx=${row.original.idx}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label={`응답 #${row.original.idx} 조회`}
-              >
-                조회
-              </a>
-            </Button>
+            <ProfilesRowActions
+              surveyId={surveyId}
+              responseId={row.original.id}
+              idx={row.original.idx}
+              view={view}
+              isGuest={isGuest}
+              viewOnly
+            />
           ),
           meta: meta('center', false),
         },
