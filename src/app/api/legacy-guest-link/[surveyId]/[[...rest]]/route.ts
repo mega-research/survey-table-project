@@ -20,14 +20,21 @@ import { listAccessLinks } from '@/server/workspace/services/access-links';
  *  - **직원**(세션 쿠키가 있다) → `/surveys/<id>/operations/…` — 접두만 걷은 종전의 답.
  *  - **옛 게스트**(세션이 없고, 옛 grant 에 오른 설문이고, 열린 외주 링크가 있다) → 링크가 하나면
  *    `/fw/<token>`, 여럿이면 이 브라우저의 세션이 고른 링크 또는 다리 비밀번호 화면(아래).
+ *  - **보기 전용이던 옛 게스트**(고객사 — 같은 조건인데 열린 외주 링크가 없고 클라이언트 링크가 있다)
+ *    → `/client/<token>`. 그 자리는 클라이언트 링크가 이어받았다(ADR-0029).
  *  - 그 밖 → 직원과 같은 주소. 세션이 없으면 1차 게이트가 로그인으로 보낸다.
+ *
+ * **외주 링크가 하나라도 열려 있으면 클라이언트 링크는 보지 않는다.** 한 설문에 외주와 고객사가 함께
+ * 있던 경우(같은 옛 주소를 둘이 썼다) 주소만으로는 누구인지 알 수 없고, 외주 쪽이 종전 동작이다 —
+ * 그 설문의 고객사는 새 주소를 따로 받아야 한다. 이때 **두 링크의 비밀번호가 같으면 고객사가 외주
+ * 입구에서 그 비밀번호로 외주 콘솔에 들어간다** — 그런 설문은 비밀번호를 다르게 발급한다.
  *
  * 주소 하나를 직원과 외주가 함께 쓰던 것이 판정이 필요한 이유다. 가르는 것은 세션 쿠키의
  * **존재**뿐이고(1차 게이트와 같은 함수·같은 깊이), 유효성은 도착한 화면이 다시 본다.
  *
  * ## 무엇을 내주는가
  *
- * 인증 없이 열리는 라우트이고, 허용된 설문에 대해서는 **링크의 토큰**을 내준다. 토큰은 주소일
+ * 인증 없이 열리는 라우트이고, 허용된 설문에 대해서는 **링크의 토큰**(외주, 없으면 클라이언트)을 내준다. 토큰은 주소일
  * 뿐 자격이 아니다 — 그 뒤에 비밀번호 화면이 선다. 그래도 설문 id 만으로 토큰이 나오는 것은
  * 사실이라 대상을 옛 grant 목록으로 좁힌다: 목록 밖의 설문은 링크가 있어도 조회하지 않는다.
  * **이 다리가 서 있는 동안 그 설문들의 링크는 비밀번호 하나로 지켜진다.**
@@ -52,7 +59,16 @@ async function handleLegacyGuestLink(
   if (!isLegacyBridgeSurvey(normalizedId)) return redirectTo(ctx, staffUrl, 'not_granted');
 
   const links = await listAccessLinks(normalizedId, 'fieldwork');
-  if (links.length === 0) return redirectTo(ctx, staffUrl, 'no_link');
+  if (links.length === 0) {
+    // 열린 클라이언트 링크는 설문당 하나뿐이다(부분 UNIQUE) — 고를 것이 없다.
+    const [clientLink] = await listAccessLinks(normalizedId, 'client');
+    if (!clientLink) return redirectTo(ctx, staffUrl, 'no_link');
+    return redirectTo(
+      ctx,
+      new URL(`/client/${clientLink.token}`, request.nextUrl.origin),
+      'client_link',
+    );
+  }
   const linkEntry = (token: string) => new URL(`/fw/${token}`, request.nextUrl.origin);
   if (links.length === 1) return redirectTo(ctx, linkEntry(links[0]!.token), 'link');
 

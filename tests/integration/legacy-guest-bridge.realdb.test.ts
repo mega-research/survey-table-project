@@ -144,7 +144,14 @@ async function submitBridgePassword(password: string, target = surveyId) {
   return client.accessLinkSession.authenticateLegacyBridge({ surveyId: target, password });
 }
 
+/** 클라이언트 링크를 발급한다 — 보기 전용이던 옛 게스트 계정(고객사)의 자리. */
+async function issueClientLink(password: string) {
+  const { link } = await admin.accessLinks.issue({ surveyId, kind: 'client', password });
+  return { token: link.token, linkId: link.id };
+}
+
 const fwEntry = (token: string) => `${ORIGIN}/fw/${token}`;
+const clientEntry = (token: string) => `${ORIGIN}/client/${token}`;
 const bridgePasswordPage = () => `${ORIGIN}/fw/legacy/${surveyId}`;
 
 describe.skipIf(!isLocalDb)('옛 주소 다리 — 외주 링크 여럿 (real local DB)', () => {
@@ -286,6 +293,55 @@ describe.skipIf(!isLocalDb)('옛 주소 다리 — 외주 링크 여럿 (real lo
       expect((await visitBridge([from.cookie])).location).toBe(
         `${ORIGIN}/surveys/${surveyId}/operations`,
       );
+    });
+  });
+
+  describe('클라이언트 링크', () => {
+    it('외주 링크 없이 클라이언트 링크만 열려 있으면 그 링크의 입구로 보낸다', async () => {
+      const client = await issueClientLink('ClientPass2026');
+
+      const visit = await visitBridge();
+
+      expect(visit.status).toBe(307);
+      expect(visit.location).toBe(clientEntry(client.token));
+      expect(visit.cache).toBe('no-store');
+    });
+
+    it('외주 링크와 클라이언트 링크가 함께 열려 있으면 외주 링크로 보낸다', async () => {
+      await issueClientLink('ClientPass2026');
+      const fieldwork = await issueAndSignIn('FieldPass2026');
+
+      expect((await visitBridge()).location).toBe(fwEntry(fieldwork.token));
+    });
+
+    it('외주 링크가 종료되고 클라이언트 링크만 남으면 클라이언트 링크로 보낸다', async () => {
+      const client = await issueClientLink('ClientPass2026');
+      const fieldwork = await issueAndSignIn('FieldPass2026');
+      await admin.accessLinks.close({ surveyId, linkId: fieldwork.linkId });
+
+      expect((await visitBridge([fieldwork.cookie])).location).toBe(clientEntry(client.token));
+    });
+
+    it('종료된 클라이언트 링크로는 보내지 않는다 — 내부 콘솔 주소다', async () => {
+      const client = await issueClientLink('ClientPass2026');
+      await admin.accessLinks.close({ surveyId, linkId: client.linkId });
+
+      expect((await visitBridge()).location).toBe(`${ORIGIN}/surveys/${surveyId}/operations`);
+    });
+
+    it('허용 목록 밖의 설문은 클라이언트 링크가 있어도 내부 콘솔 주소로 보낸다', async () => {
+      await issueClientLink('ClientPass2026');
+      vi.stubEnv('GUEST_SURVEY_GRANTS', `${GUEST_USER}:${crypto.randomUUID()}`);
+
+      expect((await visitBridge()).location).toBe(`${ORIGIN}/surveys/${surveyId}/operations`);
+    });
+
+    it('직원 세션 쿠키가 있으면 클라이언트 링크가 있어도 내부 콘솔 주소로 보낸다', async () => {
+      await issueClientLink('ClientPass2026');
+
+      const visit = await visitBridge([{ name: 'better-auth.session_token', value: 'abc.def' }]);
+
+      expect(visit.location).toBe(`${ORIGIN}/surveys/${surveyId}/operations`);
     });
   });
 

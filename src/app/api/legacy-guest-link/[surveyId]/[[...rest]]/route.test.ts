@@ -4,6 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // 링크 조회만 모킹한다 — 세션 쿠키 판정은 1차 게이트(proxy)와 같은 실제 함수를 태운다.
 const { listAccessLinksMock } = vi.hoisted(() => ({ listAccessLinksMock: vi.fn() }));
 
+/** 그 설문의 열린 링크를 종류별로 정한다 — 라우트가 종류를 인자로 넘겨 따로 묻는다. */
+function openLinks(links: { fieldwork?: unknown[]; client?: unknown[] }) {
+  listAccessLinksMock.mockImplementation(async (_surveyId: string, kind: 'fieldwork' | 'client') =>
+    kind === 'fieldwork' ? (links.fieldwork ?? []) : (links.client ?? []),
+  );
+}
+
 vi.mock('@/server/workspace/services/access-links', () => ({
   listAccessLinks: listAccessLinksMock,
 }));
@@ -14,6 +21,7 @@ const GRANTED = '9f550d8b-24d2-4b19-b5d7-00684e0d8644';
 const OTHER = '11111111-2222-4333-8444-555555555555';
 const GUEST = '7ea4b5f9-a128-474c-bf87-270498629281';
 const TOKEN = '_c8lYtPtU5bf4HAq';
+const CLIENT_TOKEN = 'cL1entTokenAbcd01';
 const ORIGIN = 'https://survey.example.com';
 
 function call(
@@ -30,7 +38,7 @@ const locationOf = (res: Response) => res.headers.get('location');
 describe('GET /api/legacy-guest-link/[surveyId]', () => {
   beforeEach(() => {
     listAccessLinksMock.mockReset();
-    listAccessLinksMock.mockResolvedValue([{ token: TOKEN }]);
+    openLinks({ fieldwork: [{ token: TOKEN }] });
     vi.stubEnv('GUEST_SURVEY_GRANTS', `${GUEST}:${GRANTED}`);
     vi.spyOn(console, 'info').mockImplementation(() => {});
   });
@@ -79,12 +87,49 @@ describe('GET /api/legacy-guest-link/[surveyId]', () => {
     expect(listAccessLinksMock).not.toHaveBeenCalled();
   });
 
-  it('열린 외주 링크가 없으면 내부 콘솔 주소로 보낸다(그 뒤는 로그인 게이트가 받는다)', async () => {
-    listAccessLinksMock.mockResolvedValue([]);
+  it('열린 링크가 하나도 없으면 내부 콘솔 주소로 보낸다(그 뒤는 로그인 게이트가 받는다)', async () => {
+    openLinks({});
 
     const res = await call(GRANTED, { rest: ['overview'] });
 
     expect(locationOf(res)).toBe(`${ORIGIN}/surveys/${GRANTED}/operations/overview`);
+  });
+
+  /**
+   * 보기 전용이던 옛 게스트 계정(고객사)의 자리는 클라이언트 링크가 이어받았다. 그 설문에 외주 링크가
+   * 없으면 옛 주소의 주인은 고객사뿐이라 클라이언트 링크의 입구로 보낸다.
+   */
+  it('열린 외주 링크가 없고 클라이언트 링크가 있으면 그 링크의 입구로 보낸다', async () => {
+    openLinks({ client: [{ token: CLIENT_TOKEN }] });
+
+    const res = await call(GRANTED, { rest: ['profiles'], search: '?page=2' });
+
+    expect(res.status).toBe(307);
+    expect(locationOf(res)).toBe(`${ORIGIN}/client/${CLIENT_TOKEN}`);
+    expect(res.headers.get('cache-control')).toBe('no-store');
+  });
+
+  it('외주 링크와 클라이언트 링크가 함께 서 있으면 외주 링크로 보낸다 — 클라이언트 링크는 묻지 않는다', async () => {
+    openLinks({ fieldwork: [{ token: TOKEN }], client: [{ token: CLIENT_TOKEN }] });
+
+    const res = await call(GRANTED);
+
+    expect(locationOf(res)).toBe(`${ORIGIN}/fw/${TOKEN}`);
+    expect(listAccessLinksMock).not.toHaveBeenCalledWith(GRANTED, 'client');
+  });
+
+  it('외주 링크가 둘 이상이면 클라이언트 링크가 있어도 다리 비밀번호 화면이다', async () => {
+    openLinks({
+      fieldwork: [
+        { id: crypto.randomUUID(), token: TOKEN },
+        { id: crypto.randomUUID(), token: 'sEcondTokenAbcd0' },
+      ],
+      client: [{ token: CLIENT_TOKEN }],
+    });
+
+    const res = await call(GRANTED);
+
+    expect(locationOf(res)).toBe(`${ORIGIN}/fw/legacy/${GRANTED}`);
   });
 
   /**
@@ -94,10 +139,12 @@ describe('GET /api/legacy-guest-link/[surveyId]', () => {
    * 세션」이 링크 행과의 대조라 목으로는 증명되지 않는다.
    */
   it('열린 외주 링크가 둘 이상이고 쿠키가 없으면 다리 비밀번호 화면으로 보낸다 — 어느 링크 주소도 내주지 않는다', async () => {
-    listAccessLinksMock.mockResolvedValue([
-      { id: crypto.randomUUID(), token: TOKEN },
-      { id: crypto.randomUUID(), token: 'sEcondTokenAbcd0' },
-    ]);
+    openLinks({
+      fieldwork: [
+        { id: crypto.randomUUID(), token: TOKEN },
+        { id: crypto.randomUUID(), token: 'sEcondTokenAbcd0' },
+      ],
+    });
 
     const res = await call(GRANTED, { rest: ['contacts'], search: '?page=2' });
 
@@ -107,10 +154,12 @@ describe('GET /api/legacy-guest-link/[surveyId]', () => {
   });
 
   it('허용 목록의 설문 id 가 대문자로 와도 다리 비밀번호 화면 주소는 소문자 id 다', async () => {
-    listAccessLinksMock.mockResolvedValue([
-      { id: crypto.randomUUID(), token: TOKEN },
-      { id: crypto.randomUUID(), token: 'sEcondTokenAbcd0' },
-    ]);
+    openLinks({
+      fieldwork: [
+        { id: crypto.randomUUID(), token: TOKEN },
+        { id: crypto.randomUUID(), token: 'sEcondTokenAbcd0' },
+      ],
+    });
 
     const res = await call(GRANTED.toUpperCase());
 
