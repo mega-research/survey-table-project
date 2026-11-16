@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { SaveDraftResponseInput } from '@/server/survey-response/domain/response';
 import { saveDraftResponseIfActive } from '@/server/survey-response/services/response-draft';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
+import { loggableUuid } from '@/lib/logger/request-log-scope';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
 import {
   isRateLimitedFineTier,
@@ -52,9 +53,11 @@ async function handleDraft(req: NextRequest, ctx: RouteLogContext) {
   if (!parsed.success || parsed.data.responseId.trim() === '') {
     return NextResponse.json({ error: 'invalid payload' }, { status: 400 });
   }
-  // 로그에는 응답값(answers) 자체를 싣지 않는다 — 식별자·건수만 (allowlist 관례)
+  // 로그에는 응답값(answers) 자체를 싣지 않는다 — 식별자·건수만 (allowlist 관례).
+  // responseId 는 길이만 검증된 문자열이라 UUID 모양일 때만 적는다(무인증 경로).
+  const loggedResponseId = loggableUuid(parsed.data.responseId);
   ctx.bind({
-    responseId: parsed.data.responseId,
+    ...(loggedResponseId !== undefined ? { responseId: loggedResponseId } : {}),
     answerCount: Object.keys(parsed.data.answers).length,
   });
 

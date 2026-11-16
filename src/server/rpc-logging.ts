@@ -4,7 +4,11 @@ import * as Sentry from '@sentry/nextjs';
 import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
 import { isGuestUser } from '@/lib/auth/guest-grants';
 import { logger, type LogContext } from '@/lib/logger';
-import { readContentLength, runWithRequestLogScope } from '@/lib/logger/request-log-scope';
+import {
+  loggableUuid,
+  readContentLength,
+  runWithRequestLogScope,
+} from '@/lib/logger/request-log-scope';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
 
 import type { ORPCContext } from './context';
@@ -45,34 +49,17 @@ function resolveLogRole(userId: string | undefined): string {
 }
 
 /**
- * 입력에서 surveyId 만 안전 추출한다.
+ * 입력 최상위의 id 키 하나만 안전 추출한다 (surveyId · responseId).
  *
- * 최상위 객체의 surveyId string 키 외에는 접근하지 않는다 — input 본문에는
- * attrs·questionResponses 등 JSONB/PII 가 통째로 실릴 수 있어 로그 반입 금지.
+ * 그 키 외에는 접근하지 않는다 — input 본문에는 attrs·questionResponses 등 JSONB/PII 가
+ * 통째로 실릴 수 있어 로그 반입 금지. 이 미들웨어는 zod 검증보다 앞이라 값도 믿을 수 없다
+ * — UUID 모양이 아니면 적지 않는다(`loggableUuid`). 거부된 요청의 실패 로그에도 같은 규칙이다.
  */
-function extractSurveyIdOrUndefined(input: unknown): string | undefined {
+function extractIdOrUndefined(input: unknown, key: 'surveyId' | 'responseId'): string | undefined {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) {
     return undefined;
   }
-  const value = (input as Record<string, unknown>)['surveyId'];
-  return typeof value === 'string' ? value : undefined;
-}
-
-/** responseId 로 받아 줄 길이 상한 — 실값은 UUID 36자, 입력 스키마(SaveDraftResponseInput)와 같은 값. */
-const MAX_LOGGED_RESPONSE_ID_LENGTH = 128;
-
-/**
- * 입력에서 responseId 만 안전 추출한다 — 최상위 string 키 하나만 본다(surveyId 와 같은 규칙).
- *
- * 이 미들웨어는 zod 검증보다 앞이라 값이 임의 길이일 수 있다. 상한을 넘으면 싣지 않는다.
- */
-function extractResponseIdOrUndefined(input: unknown): string | undefined {
-  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
-    return undefined;
-  }
-  const value = (input as Record<string, unknown>)['responseId'];
-  if (typeof value !== 'string' || value === '') return undefined;
-  return value.length <= MAX_LOGGED_RESPONSE_ID_LENGTH ? value : undefined;
+  return loggableUuid((input as Record<string, unknown>)[key]);
 }
 
 export const rpcLoggingMiddleware = os
@@ -85,8 +72,8 @@ export const rpcLoggingMiddleware = os
       userId: context.user?.id,
       role: resolveLogRole(context.user?.id),
       ip: getTrustedClientIpOrNull(context.headers ?? new Headers()) ?? undefined,
-      surveyId: extractSurveyIdOrUndefined(input),
-      responseId: extractResponseIdOrUndefined(input),
+      surveyId: extractIdOrUndefined(input, 'surveyId'),
+      responseId: extractIdOrUndefined(input, 'responseId'),
       // 요청 본문 크기 — 저장 한 건이 얼마나 큰지(응답 저장 원장 설계의 실측 재료)
       reqBytes: readContentLength(context.headers),
     };

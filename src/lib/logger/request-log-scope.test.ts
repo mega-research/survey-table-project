@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   bindRequestLog,
+  loggableUuid,
   readContentLength,
   runWithRequestLogScope,
 } from '@/lib/logger/request-log-scope';
@@ -53,5 +54,33 @@ describe('readContentLength', () => {
     expect(readContentLength(new Headers({ 'content-length': '-1' }))).toBeUndefined();
     expect(readContentLength(new Headers({ 'content-length': '12.5' }))).toBeUndefined();
     expect(readContentLength(undefined)).toBeUndefined();
+  });
+});
+
+describe('loggableUuid', () => {
+  it('UUID 모양이면 그대로 돌려준다 (대소문자 무관)', () => {
+    expect(loggableUuid('11111111-2222-4333-8444-555555555555')).toBe(
+      '11111111-2222-4333-8444-555555555555',
+    );
+    expect(loggableUuid('AAAAAAAA-2222-4333-8444-555555555555')).toBe(
+      'AAAAAAAA-2222-4333-8444-555555555555',
+    );
+  });
+
+  it('이메일·전화번호·빈 값·문자열이 아닌 값·앞뒤에 덧붙인 값은 undefined', () => {
+    for (const planted of [
+      'person@example.com',
+      '010-1234-5678',
+      '',
+      'x'.repeat(129),
+      '11111111-2222-4333-8444-555555555555 person@example.com',
+      'person@example.com\n11111111-2222-4333-8444-555555555555',
+      123,
+      null,
+      undefined,
+      { id: '11111111-2222-4333-8444-555555555555' },
+    ]) {
+      expect(loggableUuid(planted)).toBeUndefined();
+    }
   });
 });
