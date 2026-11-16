@@ -17,7 +17,7 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
 | 라우트 트리 · API 엔드포인트 · 운영 콘솔·게스트·링크 콘솔 주소 · 응답 진입 경로(초대 링크·짧은 링크)                                                       | `src/app/AGENTS.md`                              |
 | 운영 집계·파티션 · 진척 보고 분류 키                                                                                                      | `src/server/operations/AGENTS.md`                |
-| 메일 발송 주소·대체 발송                                                                                                                  | `src/server/mail/AGENTS.md`                      |
+| 메일 발송 주소·대체 발송 · 회신 전달(받은 메일 넘기기)                                                                                    | `src/server/mail/AGENTS.md`                      |
 | 서버 트리 · 설문 관문·procedure 베이스·capability 코어 · soft delete · 테스트 모드·테스트 버전 · 설문 목록 조회                           | `src/server/AGENTS.md`                           |
 | 팀·소유권·참여자·공개 범위·그룹·재배치 · 외주 링크(업체별 여럿·이름표)/클라이언트 링크 · 설문 종료 · 대리 응답 · 옛 게스트/실사 계정 모델 | `src/server/workspace/AGENTS.md`                 |
 | 계정 수명주기 · 프로필 · 계정 발급 입구                                                                                                   | `src/server/auth/AGENTS.md`                      |
@@ -47,7 +47,7 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 
 버전의 정본은 `package.json` 이다. 뼈대만 적는다 — Next.js 16(App Router·Turbopack) · React 19(React Compiler) ·
 TailwindCSS 4 · shadcn/ui(Base UI) · Zustand + Immer · TanStack Query·Table · oRPC · Zod 4 · Better Auth ·
-Drizzle ORM + postgres-js(Supabase PostgreSQL) · Cloudflare R2 · Resend + React Email · Inngest · Upstash 레이트리밋 ·
+Drizzle ORM + postgres-js(Supabase PostgreSQL) · Cloudflare R2 · Resend + React Email · postal-mime(회신 전달 — 받은 메일 풀기) · Inngest · Upstash 레이트리밋 ·
 pino + Axiom · Sentry · TipTap · ExcelJS · sav-writer · pdfjs-dist · Vitest + Testing Library + MSW + Playwright.
 
 > 참고: `xlsx`, `jszip` 의존성은 제거됨(2026-06-05). 엑셀 생성은 ExcelJS, SPSS는 sav-writer 사용.
@@ -185,7 +185,7 @@ RSC (서버 컴포넌트)
 | `r2KeyRefAudit`       | cron `TZ=Asia/Seoul 0 3 1 * *`    | R2 참조 인덱스 전량 재추출 (월 1회)                       |
 | `mailFallbackSweeper` | cron `TZ=Asia/Seoul */10 * * * *` | 대체 발송 누락·큐 미발행 복구 (10분마다)                  |
 
-로컬 dev: `pnpm inngest`. **Inngest 자동 sync가 끊겨 있어 함수 변경 배포 후 대시보드에서 수동 Resync 필요.**
+로컬 dev: `pnpm inngest`. **Inngest 는 자동으로 sync 하지 않는다 — 함수를 더하거나 빼거나 트리거·예약·재시도 설정을 바꿔 배포했으면 대시보드에서 수동 Resync.** 함수 본문만 고친 배포는 Resync 없이 새 코드가 돈다. 대시보드에는 6개로 보인다 — `campaignDispatcher` 의 `onFailure` 가 `campaign-dispatcher (failure)` 로 따로 등록된다.
 
 ---
 
@@ -207,7 +207,7 @@ pnpm deploy:wait [sha] # main 에 푸시한 커밋의 Vercel 배포가 끝날 �
 pnpm sentry:issues [id | --query 검색어] # Sentry 미해결 이슈·최근 이벤트 태그 조회 (읽기 전용, .env.local 의 SENTRY_READ_TOKEN)
 pnpm review:codex <base> [--spec PRD] [초점] # Codex 적대적 리뷰 — 체크리스트·한국어 출력을 붙여 부른다 (에이전트는 백그라운드로)
 pnpm db:migrate       # 마이그레이션 실행 (_journal.json 기준 — 0019에서 동결, 주의사항 7 참조)
-pnpm survey:find · survey:vars · survey:dump · survey:render  # 운영 설문 문구로 찾기 · 변수명 계산 · 응답 화면 그려 보기 (survey-ops 스킬 — 설문 고치기 도우미 포함)
+pnpm survey:find · survey:summary · survey:vars · survey:check · survey:dump · survey:render  # 운영 설문 문구로 찾기 · 구조 요약 · 변수명 계산 · 구조 점검 · 응답 화면 그려 보기 (survey-ops 스킬 — 설문 고치기 도우미 포함)
 pnpm versions:prune · spss:migrate · spss:rollback  # DRY_RUN 기본, `:live` 를 붙여야 실행
 pnpm auth:seed        # 슈퍼어드민 발급/승격 — <email> <name> <password> (기존 계정이면 승격만)
 pnpm workspace:seed   # 실전 시드 계획 출력(DRY_RUN) — `workspace:seed:live` 가 적용, 재실행 안전

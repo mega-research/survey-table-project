@@ -1,5 +1,6 @@
 import { ORPCError } from '@orpc/server';
 
+import { bindRequestLog } from '@/lib/logger/request-log-scope';
 import { stampFieldworkAttribution } from '@/server/fieldwork-proxy';
 import { pub, withRateLimit } from '@/server/orpc';
 import { resolveProxyForResponseRpc } from '@/server/rpc-fieldwork-proxy';
@@ -9,6 +10,7 @@ import {
   CompleteResponseOutput,
   CreateBlankResponseInput,
   CreateResponseWithFirstAnswerInput,
+  type FirstAnswerResult,
   FirstAnswerResultSchema,
   SaveDraftResponseInput,
   SaveDraftResponseOutput,
@@ -38,6 +40,16 @@ function mapTestVersionPruned(err: unknown): never {
     throw new ORPCError(TEST_VERSION_REPUBLISHED_CODE, { status: 409, message: err.message });
   }
   throw err;
+}
+
+/**
+ * 만든 응답의 id 를 요청 로그 한 줄에 싣는다. 생성 요청은 입력에 responseId 가 없어 로깅
+ * 미들웨어가 꺼낼 수 없다 — 이 줄이 빠지면 응답 id 로 로그를 훑을 때 「만든 순간」이 비어 보인다.
+ * 중복 감지로 막힌 결과(blocked 등)는 만든 행이 없으므로 싣지 않는다.
+ */
+function bindCreatedResponseId(result: FirstAnswerResult): FirstAnswerResult {
+  if (result.kind === 'created') bindRequestLog({ responseId: result.id });
+  return result;
 }
 
 // 주의: response.start 는 제거됨(봇 방어). clientSignals/honeypot 을 받지 않는 무인증 빈 행
@@ -104,7 +116,10 @@ const createWithFirstAnswer = rateLimited
   .output(FirstAnswerResultSchema)
   .handler(({ context, input }) =>
     withProxyAttribution(context, input, () =>
-      entry.createResponseWithFirstAnswer(input).catch(mapTestVersionPruned),
+      entry
+        .createResponseWithFirstAnswer(input)
+        .then(bindCreatedResponseId)
+        .catch(mapTestVersionPruned),
     ),
   );
 
@@ -116,7 +131,7 @@ const createBlank = rateLimited
   .output(FirstAnswerResultSchema)
   .handler(({ context, input }) =>
     withProxyAttribution(context, input, () =>
-      entry.createBlankResponse(input).catch(mapTestVersionPruned),
+      entry.createBlankResponse(input).then(bindCreatedResponseId).catch(mapTestVersionPruned),
     ),
   );
 

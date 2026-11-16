@@ -164,6 +164,11 @@ src/
   진다. **게스트·실사에게 export 는 항상 차단**이다(티켓 21) — `requireAuth` 가 비내부 계정을
   들이지 않고, 설령 들어와도 게스트 열에 `export.download` 가 없다. 업로드 REST 3종은 surveyId 없는 tmp 네임스페이스 전용이라 의도된 면제
   (`lib/upload/route-guard.ts` 주석) — 영구 승격 경로(설문 저장·템플릿 저장·media.*)가 관문을 진다.
+  **운영(main)에서 옮겨 둔 본문 셋 — 지금 외부 주체에게 여는 길은 없다**: 응답 내역 목록 엑셀
+  (`export?type=response-list`, `export/response-list-load.ts` · `lib/operations/response-list-sheet` — 다른 형식과
+  같은 `export.download` 관문) · 내보내기 개인정보 가리기(`lib/crypto/export-pii-mask`, 라우트의 `maskPii` 는 꺼져
+  있다) · 응답 수정 본문의 조회 전용 모드(`_operations/response-edit-screen` 의 `readOnly`). 운영에서는 보기 전용
+  게스트 grant 스위치(`allowExport`·`allowResponseView`)가 여는 장치다 — 그 grant 모델은 옮기지 않았다.
 - **관문 배선의 검증은 라우터 열거가 진다**(티켓 15, B 검증 게이트). 손으로 적은 목록만 도는
   음성 스위트는 새로 붙은 표면을 영원히 초록으로 두므로, `tests/helpers/rpc-surface.ts` 가
   `@/server/router` 를 런타임에 훑어 표면 목록을 만든다 — 베이스는 **미들웨어 동일성**으로

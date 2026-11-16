@@ -80,7 +80,7 @@ GET    /api/surveys/[surveyId]/demand-summary  # 문항 수요 집계표 엑셀 
 POST   /api/response/segment                   # 구간 응답 저장 (sendBeacon — REST 유지)
 POST   /api/response/draft                     # 이탈 시점 임시 저장 (sendBeacon — REST 유지)
 *      /api/inngest                            # Inngest 핸들러
-POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
+POST   /api/webhooks/resend                    # Resend webhook (svix 검증) — 상태 알림은 수신자 전이, `email.received` 는 회신 전달(`src/server/mail/AGENTS.md`)
 GET    /api/legacy-guest-link/[surveyId]/[[...rest]]  # 옛 게스트 주소 다리 — 옛 운영 콘솔 주소를 직원은 내부 콘솔로, 옛 게스트는 외주 링크(/fw/<token>)로 — 링크가 여럿이면 브라우저 세션 또는 비밀번호 화면(/fw/legacy/<surveyId>)이 고른다 (307, 전환기 장치)
 *      /api/auth/[...all]                      # Better Auth 핸들러 (민감 POST 경로는 auth-sensitive IP rate limit 선적용)
 ```

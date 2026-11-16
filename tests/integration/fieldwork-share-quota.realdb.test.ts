@@ -363,6 +363,8 @@ run('쿼터 현황 — 외주 링크 투영 (real DB)', () => {
         closedCells: 1,
         totalCells: 2,
         unclassified: 0,
+        // 「완료」 조건이 없는 플랜이다
+        total: null,
       });
     });
 

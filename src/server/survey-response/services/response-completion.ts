@@ -52,6 +52,7 @@ import { db } from '@/db';
 import { contactTargets, surveyResponses } from '@/db/schema';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { logger } from '@/lib/logger';
+import { bindRequestLog } from '@/lib/logger/request-log-scope';
 import { sumActiveSeconds } from '@/lib/operations/active-seconds';
 import { isMidSurveyCloseActive, resolveMidSurveyClosedMessage } from '@/lib/quota/closed-message';
 import { type NormalizedQuotaConfig, quotaTotalTarget } from '@/lib/quota/normalize';
@@ -137,6 +138,8 @@ export async function completeResponse(
       currentStepId: true,
     },
   });
+  // 제출 입력에는 responseId 만 있다 — 요청 로그 한 줄이 어느 설문의 제출인지 여기서 싣는다.
+  if (gateRow) bindRequestLog({ surveyId: gateRow.surveyId });
   if (gateRow) {
     // 테스트 응답이면 테스트 버전을 지금 저장본에 맞춘다 — 바뀌었으면 아래 정제(페이로드)와 빈 complete
     // 확인이 안내로 접는다.

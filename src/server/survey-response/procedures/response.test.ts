@@ -1,6 +1,7 @@
 import { createRouterClient } from '@orpc/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { logger } from '@/lib/logger';
 import type { ORPCContext } from '@/server/context';
 
 import * as completion from '../services/response-completion';
@@ -203,6 +204,53 @@ describe('surveyResponse.response procedures', () => {
         questionId: QUESTION_ID,
       }),
     );
+  });
+
+  it('만든 응답의 id 를 요청 로그 한 줄에 싣는다 — 막힌 결과는 싣지 않는다', async () => {
+    const info = vi.spyOn(logger, 'info').mockImplementation(() => undefined);
+    const client = createRouterClient({ response }, { context: anonContext() });
+    const input = {
+      surveyId: SURVEY_ID,
+      sessionId: 'sess-1',
+      versionId: VERSION_ID,
+      questionId: QUESTION_ID,
+      value: 'answer',
+      currentStepId: 'group:abc',
+      inviteToken: undefined,
+      clientSignals: CLIENT_SIGNALS,
+    };
+
+    vi.mocked(entry.createResponseWithFirstAnswer).mockResolvedValue({
+      kind: 'created',
+      id: RESPONSE_ID,
+      contactTargetId: CONTACT_ID,
+    } as never);
+    await client.response.createWithFirstAnswer(input);
+    vi.mocked(entry.createBlankResponse).mockResolvedValue({
+      kind: 'created',
+      id: RESPONSE_ID,
+      contactTargetId: null,
+    } as never);
+    await client.response.createBlank({
+      surveyId: SURVEY_ID,
+      sessionId: 'sess-1',
+      versionId: VERSION_ID,
+      currentStepId: 'group:abc',
+      clientSignals: null,
+    } as never);
+    vi.mocked(entry.createResponseWithFirstAnswer).mockResolvedValue({
+      kind: 'blocked',
+      reason: 'token_already_used',
+    } as never);
+    await client.response.createWithFirstAnswer(input);
+
+    const lines = info.mock.calls.map(([fields]) => fields as unknown as Record<string, unknown>);
+    info.mockRestore();
+    expect(lines.map((l) => [l['rpc'], l['surveyId'], l['responseId']])).toEqual([
+      ['response.createWithFirstAnswer', SURVEY_ID, RESPONSE_ID],
+      ['response.createBlank', SURVEY_ID, RESPONSE_ID],
+      ['response.createWithFirstAnswer', SURVEY_ID, undefined],
+    ]);
   });
 
   it('createWithFirstAnswer(pub)는 테스트 attemptId를 위임한다', async () => {

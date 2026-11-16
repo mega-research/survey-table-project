@@ -166,8 +166,8 @@ async function handleExport(
 
     // 조사 대상 명단 열 — Raw Data 계열(raw/raw-split)에 항상 붙는다. 열은 응답 내역 컬럼 설정에서
     // 표시 중인 attrs·pii 열이라 토글이 없고, 설정이 없거나 명단 미업로드면 열 0개로 정상 진행한다.
-    // 조사 대상 명단 열은 PII 평문이 나가는 경로다: 인증·게스트 가드는 contacts/export 와 같고
-    // (requireAuth + canAccessSurvey, 위), 복호화도 같은 decryptPiiForExport 를 로더가 탄다.
+    // 조사 대상 명단 열은 PII 평문이 나가는 경로다: 인증·관문은 contacts/export 와 같고
+    // (requireAuth + export.download 관문, 위), 복호화도 같은 decryptPiiForExport 를 로더가 탄다.
     // 로그에는 열 수만 싣는다 — 라벨·값·컨택 id 금지.
     const isRawExport = type === 'raw' || type === 'raw-split';
     const contactScheme = isRawExport ? await getContactColumnScheme(surveyId, scope) : null;

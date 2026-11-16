@@ -215,6 +215,8 @@ export const mailRecipientsRelations = relations(mailRecipients, ({ one }) => ({
 
 // ─────────────────────────────────────────────────────────────────────────────
 // webhook_events — Resend webhook idempotency dedupe. id = svix-id (header).
+// event_type 은 알림 종류 그대로다. 회신 전달(email.received)만 결과를 갈라 적는다 —
+// REPLY_FORWARD_EVENT_TYPE (server/mail/domain/reply-forward).
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const webhookEvents = pgTable('webhook_events', {

@@ -496,7 +496,26 @@ describe.skipIf(!isLocalDb)('실사 초대 · 실사 홈 (real local DB)', () =>
   // ───────────────────────────────────────────────────────────────────────────
 
   describe('홈 목록의 진척·정렬', () => {
-    it('쿼터가 없으면 최대 응답 수가 분모다 — 「117 / —」로 남지 않는다', async () => {
+    it('쿼터의 「완료」 조건이 분모다 — 셀 목표가 없는 조사도 「117 / —」로 남지 않는다', async () => {
+      await db
+        .update(surveysTable)
+        .set({
+          quotaConfig: {
+            enabled: true,
+            dimensions: [],
+            cells: [],
+            totalTarget: 150,
+            closedMessage: null,
+          },
+        })
+        .where(eq(surveysTable.id, greenSurveyId));
+      await invite(greenSurveyId, GREEN_WORKER);
+
+      const [row] = await listInvitedFieldworkSurveys(GREEN_WORKER);
+      expect(row?.targetCount).toBe(150);
+    });
+
+    it('쓰지 않는 컬럼 max_responses 는 분모가 아니다 — 목표를 적는 자리는 「완료」 조건 하나다', async () => {
       await db
         .update(surveysTable)
         .set({ maxResponses: 150 })
@@ -504,7 +523,7 @@ describe.skipIf(!isLocalDb)('실사 초대 · 실사 홈 (real local DB)', () =>
       await invite(greenSurveyId, GREEN_WORKER);
 
       const [row] = await listInvitedFieldworkSurveys(GREEN_WORKER);
-      expect(row?.targetCount).toBe(150);
+      expect(row?.targetCount).toBeNull();
     });
 
     it('활동이 없는 설문은 맨 아래로 간다 — DESC 기본값(NULLS FIRST)이 아니다', async () => {
