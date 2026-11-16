@@ -2,6 +2,7 @@ import type { Question } from '@/types/survey';
 
 import { maskHint } from './mask-hint';
 import { type PiiFieldType, isPiiFieldType } from './pii-fields';
+import { isEncryptedAnswerValue } from './response-pii';
 
 /**
  * 게스트 계정이 내려받는 파일의 개인정보 가리기 (2026-11-16).
@@ -15,6 +16,11 @@ import { type PiiFieldType, isPiiFieldType } from './pii-fields';
  * 사용자 결정 — 화면의 `홍**` 과 다르다), 종류를 모르는 글자도 같은 규칙이다.
  *
  * 가리기는 내보내는 값에만 건다. 숨은 문항 판정·계산 같은 서버 재평가는 평문으로 끝낸 뒤다.
+ *
+ * 가릴 자리는 둘의 합집합이다 — **지금 구조의 개인정보 표시**와 **저장된 값이 암호문이던 자리**.
+ * 표시만 보면, 표시를 켠 채 받은 답이 나중에 표시를 끈 뒤 복호화돼 평문으로 나간다(저장 암호화는
+ * 수집 버전 ∪ 현재 표시로 걸리고 복호화는 표시와 무관하게 푼다 — 2026-11-16 Codex 리뷰).
+ * 암호문만 보면, 표시를 켜기 전에 평문으로 받은 답과 이월 응답이 빠진다.
  */
 
 /** 내려받는 파일에서 마지막 글자만 가리는 종류 — 화면의 마스킹 힌트(`김**`)를 쓰지 않는다. */
@@ -69,18 +75,41 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** 응답 한 건의 답에서 개인정보로 표시된 자리만 가린 새 객체 (원본 불변). 대상이 없으면 원본 그대로. */
+/**
+ * 응답 한 건의 답에서 개인정보 자리만 가린 새 객체 (원본 불변). 대상이 없으면 원본 그대로.
+ *
+ * `stored` 는 그 응답의 **저장된 모양**(복호화 전) — 주면 암호문이던 문항·표 칸도 가린다(지금 구조에
+ * 표시가 없어도). 미응답 행처럼 저장된 답이 없으면 생략한다. 한 자리는 한 번만 가린다.
+ */
 export function maskPiiAnswers(
   responses: Record<string, unknown>,
   formats: PiiAnswerFormats,
+  stored?: Readonly<Record<string, unknown>> | null,
 ): Record<string, unknown> {
-  if (formats.questions.size === 0 && formats.cells.size === 0) return responses;
+  // 가릴 자리 — 문항 단위(값 전체)와 칸 단위. 값은 입력 형식(모르면 undefined).
+  const questionTargets = new Map(formats.questions);
+  const cellTargets = new Map<string, Map<string, string | undefined>>();
+  for (const [questionId, byCell] of formats.cells) cellTargets.set(questionId, new Map(byCell));
+  for (const [questionId, storedValue] of Object.entries(stored ?? {})) {
+    if (isEncryptedAnswerValue(storedValue)) {
+      if (!questionTargets.has(questionId)) questionTargets.set(questionId, undefined);
+    } else if (isPlainObject(storedValue)) {
+      for (const [cellId, storedCell] of Object.entries(storedValue)) {
+        if (!isEncryptedAnswerValue(storedCell)) continue;
+        const byCell = cellTargets.get(questionId) ?? new Map<string, string | undefined>();
+        if (!byCell.has(cellId)) byCell.set(cellId, undefined);
+        cellTargets.set(questionId, byCell);
+      }
+    }
+  }
+  if (questionTargets.size === 0 && cellTargets.size === 0) return responses;
+
   const out: Record<string, unknown> = { ...responses };
-  for (const [questionId, format] of formats.questions) {
+  for (const [questionId, format] of questionTargets) {
     const value = out[questionId];
     if (typeof value === 'string') out[questionId] = maskExportValue(value, format);
   }
-  for (const [questionId, byCell] of formats.cells) {
+  for (const [questionId, byCell] of cellTargets) {
     const value = out[questionId];
     if (!isPlainObject(value)) continue;
     const masked: Record<string, unknown> = { ...value };

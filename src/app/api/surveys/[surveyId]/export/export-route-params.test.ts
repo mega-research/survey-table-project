@@ -507,13 +507,23 @@ describe('GET /export — 게스트의 내려받기', () => {
     const res = await exportGet(requestOf(AI_2026_PUBLIC, 'type=raw'), paramsOf(AI_2026_PUBLIC));
     expect(res.status).toBe(200);
 
-    const [row] = workbookRows();
-    expect(row!.questionResponses['q-info']).toEqual({
+    // 답은 로더가 가린다 — 라우트는 가리는 함수를 넘긴다(저장된 모양까지 본다).
+    const maskAnswers = loaderOptions()['maskAnswers'] as (
+      plain: Record<string, unknown>,
+      stored: Record<string, unknown> | null,
+    ) => Record<string, unknown>;
+    expect(maskAnswers(ROW.questionResponses, null)['q-info']).toEqual({
       'c-dept': '연구소/책임',
       'c-name': '홍길*',
       'c-tel': '02-345...',
       'c-mail': 'asd...@nav...',
     });
+    // 지금은 표시가 꺼진 칸이라도 암호문으로 저장돼 있었으면 가린다
+    expect(
+      maskAnswers(ROW.questionResponses, { 'q-info': { 'c-dept': 'v1:aaaa' } })['q-info'],
+    ).toMatchObject({ 'c-dept': '연구소/책*' });
+
+    const [row] = workbookRows();
     // 명단 — 일반 열은 그대로, 개인정보 열(성명)은 마지막 글자만
     expect(row!.contactValues).toEqual({ 'attrs.기수': '3기', 'pii.성명': '김영*' });
     // 패널 회원 ID 는 그대로 나간다(사용자 결정)
@@ -525,8 +535,9 @@ describe('GET /export — 게스트의 내려받기', () => {
     const { buildSplitWorkbook } = await import('@/lib/analytics/split-workbook');
     vi.mocked(buildSplitWorkbook).mockClear();
     await exportGet(requestOf(AI_2026_PUBLIC, 'type=raw-split&basis=q-info'), paramsOf(AI_2026_PUBLIC));
+    expect(loaderOptions()['maskAnswers']).toEqual(expect.any(Function));
     const rows = vi.mocked(buildSplitWorkbook).mock.calls[0]?.[1] as unknown as (typeof ROW)[];
-    expect(rows?.[0]?.questionResponses['q-info']['c-name']).toBe('홍길*');
+    expect(rows?.[0]?.contactValues).toEqual({ 'attrs.기수': '3기', 'pii.성명': '김영*' });
   });
 
   it('관리자가 받는 파일은 평문 그대로다', async () => {
@@ -534,5 +545,6 @@ describe('GET /export — 게스트의 내려받기', () => {
     const res = await exportGet(requestOf(AI_2026_PUBLIC, 'type=raw'), paramsOf(AI_2026_PUBLIC));
     expect(res.status).toBe(200);
     expect(workbookRows()[0]).toBe(ROW);
+    expect(loaderOptions()).not.toHaveProperty('maskAnswers');
   });
 });
