@@ -105,6 +105,33 @@ describe('requireSurveyConsolePage', () => {
     await expect(guard(surveyId)).rejects.toThrow('NEXT_NOT_FOUND');
   });
 
+  it('응답 조회를 허용한 보기 전용 게스트만 responseViewGrant 화면을 연다', async () => {
+    const DAIRY = '75060289-51b4-44e7-8fd1-dabf73a0bfaf';
+    const DAIRY_2026 = '24b15972-36fe-400a-adfe-7d4c80438204';
+    // guest9 — 보기 전용이지만 allowResponseView 가 꺼져 있다.
+    const GUEST9 = 'c79af8a1-186a-4157-be4c-2bebfbde4a8d';
+    const AI_2026_PUBLIC = '253534a5-913a-4891-a019-f9643ccea0a7';
+    process.env['ADMIN_USER_IDS'] = 'admin-1';
+    process.env['GUEST_SURVEY_GRANTS'] = `${DAIRY}:${DAIRY_2026},${GUEST9}:${AI_2026_PUBLIC}`;
+
+    requireAuth.mockResolvedValue({ id: DAIRY });
+    const guard = await loadGuard();
+    await expect(guard(DAIRY_2026, { viewOnly: 'responseViewGrant' })).resolves.toEqual({
+      id: DAIRY,
+    });
+
+    requireAuth.mockResolvedValue({ id: GUEST9 });
+    await expect(guard(AI_2026_PUBLIC, { viewOnly: 'responseViewGrant' })).rejects.toThrow(
+      'NEXT_NOT_FOUND',
+    );
+
+    // 관리자·일반 게스트는 정책과 무관하게 연다.
+    requireAuth.mockResolvedValue({ id: 'admin-1' });
+    await expect(guard(DAIRY_2026, { viewOnly: 'responseViewGrant' })).resolves.toEqual({
+      id: 'admin-1',
+    });
+  });
+
   it('ADMIN_USER_IDS 미설정이면 grant 없는 세션은 fail-open — 기존 배포 동작을 바꾸지 않는다', async () => {
     requireAuth.mockResolvedValue({ id: 'anyone' });
 

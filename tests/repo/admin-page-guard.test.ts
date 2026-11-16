@@ -19,7 +19,7 @@ type Guard =
   /** 관리자 전용 — `await requireAdminPage()`. 게스트는 미들웨어도 막는다. */
   | { kind: 'admin' }
   /** 게스트에게도 여는 설문 화면 — `await requireSurveyConsolePage(surveyId[, { viewOnly }])`. */
-  | { kind: 'console'; viewOnly?: 'allow' | 'previewGrant' }
+  | { kind: 'console'; viewOnly?: 'allow' | 'previewGrant' | 'responseViewGrant' }
   /** 클라이언트 컴포넌트 — 서버가 렌더하는 데이터가 없고, 데이터는 procedure 로만 온다. */
   | { kind: 'client'; reason: string }
   /** 로그인 없이 여는 화면. */
@@ -74,6 +74,7 @@ const PAGES: Record<string, Guard> = {
   [`${OPS}/mail/templates/new`]: CONSOLE,
   [`${OPS}/mail/templates/[mid]/edit`]: CONSOLE,
   [`${OPS}/profiles/[responseId]/edit`]: CONSOLE,
+  [`${OPS}/profiles/[responseId]/view`]: { kind: 'console', viewOnly: 'responseViewGrant' },
   [`${OPS}/profiles/columns`]: CONSOLE,
   [`${OPS}/report`]: CONSOLE,
   [`${OPS}/report/columns`]: CONSOLE,
@@ -183,12 +184,17 @@ describe('관리자 화면 진입 가드', () => {
       const viewOnlyOpen = guestPathRedirect(path, [SURVEY_ID], [SURVEY_ID]) === null;
       const viewOnlyPreviewOpen =
         guestPathRedirect(path, [SURVEY_ID], [SURVEY_ID], [SURVEY_ID]) === null;
+      const viewOnlyResponseViewOpen =
+        guestPathRedirect(path, [SURVEY_ID], [SURVEY_ID], [], [SURVEY_ID]) === null;
 
       const expectGuestOpen = guard.kind === 'console';
       const expectViewOnlyOpen = guard.kind === 'console' && guard.viewOnly === 'allow';
       const expectViewOnlyPreviewOpen =
         guard.kind === 'console' &&
         (guard.viewOnly === 'allow' || guard.viewOnly === 'previewGrant');
+      const expectViewOnlyResponseViewOpen =
+        guard.kind === 'console' &&
+        (guard.viewOnly === 'allow' || guard.viewOnly === 'responseViewGrant');
 
       if (guestOpen !== expectGuestOpen) mismatches.push(`${route} — 게스트: 미들웨어 ${guestOpen}`);
       if (viewOnlyOpen !== expectViewOnlyOpen) {
@@ -196,6 +202,11 @@ describe('관리자 화면 진입 가드', () => {
       }
       if (viewOnlyPreviewOpen !== expectViewOnlyPreviewOpen) {
         mismatches.push(`${route} — 보기 전용(설문 보기 허용): 미들웨어 ${viewOnlyPreviewOpen}`);
+      }
+      if (viewOnlyResponseViewOpen !== expectViewOnlyResponseViewOpen) {
+        mismatches.push(
+          `${route} — 보기 전용(응답 조회 허용): 미들웨어 ${viewOnlyResponseViewOpen}`,
+        );
       }
     }
     expect(mismatches, mismatches.join('\n')).toEqual([]);

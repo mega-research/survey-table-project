@@ -5,6 +5,7 @@ import { useMemo } from 'react';
 import { type ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { LocalDateTime } from '@/components/ui/local-date-time';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useSearchParamsMutator } from '@/features/operations/hooks/use-search-params-mutator';
@@ -78,6 +79,8 @@ interface Props {
   isGuest: boolean;
   /** 보기만 하는 게스트 — 편집 열(수정·삭제·초기화 메뉴)을 통째로 뺀다. */
   viewOnly?: boolean;
+  /** 보기만 하는 게스트 중 응답 조회를 허용한 grant — 행마다 「조회」 링크를 둔다. */
+  canViewResponse?: boolean;
   /** 표시 컬럼 스킴 — visibleProfileColumns 결과 (order 순, hidden 제외). */
   columnScheme: ProfileColumnDef[];
   /** contactTargetId → columnKey → 복호화 평문. 표시 스킴의 pii.* 키만 채워진다. */
@@ -142,6 +145,7 @@ export function ProfilesTable({
   hasContacts,
   isGuest,
   viewOnly = false,
+  canViewResponse = false,
   columnScheme,
   piiByTarget,
   answerValues = EMPTY_ANSWER_VALUES,
@@ -351,7 +355,31 @@ export function ProfilesTable({
     const dataColumns = columnScheme
       .map(buildColumn)
       .filter((c): c is ColumnDef<DisplayRow> => c !== null);
-    if (viewOnly) return dataColumns;
+    if (viewOnly) {
+      // 응답 조회를 허용한 보기 전용 grant — 수정 메뉴 자리에 조회 화면 링크 하나만 둔다.
+      // 수정 화면처럼 새 탭으로 연다(목록의 필터·쪽이 그대로 남는다). 휴지통 뷰에는 두지 않는다.
+      if (!canViewResponse || view !== 'active') return dataColumns;
+      return [
+        ...dataColumns,
+        {
+          id: 'view',
+          header: '조회',
+          cell: ({ row }) => (
+            <Button asChild variant="outline" size="sm" className="h-7 px-2.5">
+              <a
+                href={`/admin/surveys/${surveyId}/operations/profiles/${row.original.id}/view?idx=${row.original.idx}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`응답 #${row.original.idx} 조회`}
+              >
+                조회
+              </a>
+            </Button>
+          ),
+          meta: meta('center', false),
+        },
+      ];
+    }
     return [
       ...dataColumns,
       {
@@ -376,6 +404,7 @@ export function ProfilesTable({
     hasContacts,
     isGuest,
     viewOnly,
+    canViewResponse,
     columnScheme,
     piiByTarget,
     answerValues,

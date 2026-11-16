@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation';
 import {
   getGuestSurveyIds,
   getViewOnlyPreviewSurveyIds,
+  getViewOnlyResponseViewSurveyIds,
   getViewOnlySurveyIds,
   guestPostLoginRedirect,
   isForeignSurveyConsolePath,
@@ -46,6 +47,9 @@ export async function login(formData: FormData) {
   const grantedSurveyIds = signIn.user ? getGuestSurveyIds(signIn.user.id) : [];
   const viewOnlySurveyIds = signIn.user ? getViewOnlySurveyIds(signIn.user.id) : [];
   const viewOnlyPreviewSurveyIds = signIn.user ? getViewOnlyPreviewSurveyIds(signIn.user.id) : [];
+  const viewOnlyResponseViewSurveyIds = signIn.user
+    ? getViewOnlyResponseViewSurveyIds(signIn.user.id)
+    : [];
 
   if (grantedSurveyIds.length > 0) {
     // 다른 설문 콘솔을 향한 게스트 로그인 — 자기 설문으로 몰래 보내면 착각을
@@ -61,7 +65,13 @@ export async function login(formData: FormData) {
     // 게스트는 기본 목적지(/admin/surveys)·무권한 경로가 강제 로그아웃 루프가
     // 되므로 자기 grant 설문으로 정착시킨다.
     redirect(
-      guestPostLoginRedirect(target, grantedSurveyIds, viewOnlySurveyIds, viewOnlyPreviewSurveyIds),
+      guestPostLoginRedirect(
+        target,
+        grantedSurveyIds,
+        viewOnlySurveyIds,
+        viewOnlyPreviewSurveyIds,
+        viewOnlyResponseViewSurveyIds,
+      ),
     );
   }
 

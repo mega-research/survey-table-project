@@ -6,6 +6,7 @@ import {
   GUEST_FORCE_LOGOUT_PATH,
   getGuestSurveyIds,
   getViewOnlyPreviewSurveyIds,
+  getViewOnlyResponseViewSurveyIds,
   getViewOnlySurveyIds,
   guestPathRedirect,
   sanitizeInternalPath,
@@ -77,6 +78,7 @@ export async function updateSession(request: NextRequest) {
           guestSurveyIds,
           getViewOnlySurveyIds(user.id),
           getViewOnlyPreviewSurveyIds(user.id),
+          getViewOnlyResponseViewSurveyIds(user.id),
         );
         if (dest) {
           const url = request.nextUrl.clone();
