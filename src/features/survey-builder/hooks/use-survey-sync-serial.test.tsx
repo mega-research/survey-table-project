@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const saveDiffMock = vi.hoisted(() => vi.fn());
 
@@ -29,9 +29,9 @@ function makeQuestion(id: string): Question {
   return { id, type: 'radio', title: id, required: false, order: 1 };
 }
 
-function makeSurvey(): Survey {
+function makeSurvey(id: string = SURVEY_ID): Survey {
   return {
-    id: SURVEY_ID,
+    id,
     title: 'test',
     description: '',
     slug: '',
@@ -199,5 +199,111 @@ describe('useSurveySync — 저장은 한 줄로 선다', () => {
     expect(saveDiffMock).toHaveBeenCalledTimes(2);
     expect(upsertedIds(1)).toEqual(['q-second']);
     await expect(scopedSave).resolves.toEqual({ surveyId: SURVEY_ID });
+  });
+
+  it('기다리는 사이 화면이 다른 설문으로 바뀌면 그 설문을 저장하지 않고 거부한다', async () => {
+    const first = deferredSave();
+    saveDiffMock.mockReturnValueOnce(first.promise).mockResolvedValue({ surveyId: SURVEY_ID });
+    const { result } = renderHook(() => useSurveySync(), { wrapper });
+
+    let firstSave!: Promise<unknown>;
+    let secondSave!: Promise<unknown>;
+    await act(async () => {
+      firstSave = result.current.saveSurvey();
+      await Promise.resolve();
+      markUpdated('q-second');
+      secondSave = result.current.saveSurvey();
+      secondSave.catch(() => undefined);
+      // 첫 저장이 서버에 가 있는 동안 다른 설문을 열어 고친다 — 아직 저장을 누르지 않았다
+      useSurveyBuilderStore.getState().setSurvey(makeSurvey('survey-other'));
+      markUpdated('q-first');
+      first.resolve();
+      await firstSave;
+      await secondSave.catch(() => undefined);
+    });
+
+    await expect(secondSave).rejects.toThrow('다른 설문');
+    // 다른 설문의 변경은 서버로 가지 않았고 changeset 도 그대로다
+    expect(saveDiffMock).toHaveBeenCalledTimes(1);
+    const state = useSurveyBuilderStore.getState();
+    expect(state.currentSurvey.id).toBe('survey-other');
+    expect(state.questionChanges.updated).toEqual({ 'q-first': true });
+    expect(state.isDirty).toBe(true);
+  });
+
+  it('저장이 서버에 가 있는 동안 설문이 바뀌면, 끝나든 실패하든 새 설문의 changeset 을 건드리지 않는다', async () => {
+    const first = deferredSave();
+    const second = deferredSave();
+    saveDiffMock.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const { result } = renderHook(() => useSurveySync(), { wrapper });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    // 성공으로 끝나는 경우 — 새 설문의 미저장 표시를 지우지 않는다
+    let save!: Promise<unknown>;
+    await act(async () => {
+      save = result.current.saveSurvey();
+      await Promise.resolve();
+      useSurveyBuilderStore.getState().setSurvey(makeSurvey('survey-other'));
+      markUpdated('q-second');
+      first.resolve();
+      await save;
+    });
+    expect(useSurveyBuilderStore.getState().isDirty).toBe(true);
+    expect(useSurveyBuilderStore.getState().questionChanges.updated).toEqual({ 'q-second': true });
+
+    // 실패로 끝나는 경우 — 옛 설문의 변경을 새 설문의 changeset 에 되돌려 넣지 않는다
+    await act(async () => {
+      useSurveyBuilderStore.getState().setSurvey(makeSurvey());
+      markUpdated('q-first');
+      save = result.current.saveSurvey();
+      save.catch(() => undefined);
+      await Promise.resolve();
+      useSurveyBuilderStore.getState().setSurvey(makeSurvey('survey-other'));
+      markUpdated('q-second');
+      second.reject(new Error('network'));
+      await save.catch(() => undefined);
+    });
+    await expect(save).rejects.toThrow('network');
+    expect(useSurveyBuilderStore.getState().questionChanges.updated).toEqual({ 'q-second': true });
+  });
+
+  describe('응답 없는 저장', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('기한이 지나면 실패로 끝내고 변경을 되돌려, 다음 저장이 이어서 저장한다', async () => {
+      // 끝나지 않는 요청 — 전에는 이것 하나가 뒤따르는 저장을 전부 세워 뒀다
+      saveDiffMock
+        .mockReturnValueOnce(new Promise(() => undefined))
+        .mockResolvedValue({ surveyId: SURVEY_ID });
+      const { result } = renderHook(() => useSurveySync(), { wrapper });
+      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+      let hung!: Promise<unknown>;
+      let next!: Promise<unknown>;
+      await act(async () => {
+        hung = result.current.saveSurvey();
+        hung.catch(() => undefined);
+        await Promise.resolve();
+        markUpdated('q-second');
+        next = result.current.saveSurvey();
+        await vi.advanceTimersByTimeAsync(60_000);
+        await hung.catch(() => undefined);
+        await next;
+      });
+
+      await expect(hung).rejects.toThrow('응답하지 않아');
+      expect(saveDiffMock).toHaveBeenCalledTimes(2);
+      // 끊긴 저장의 변경이 되돌려져 다음 저장에 함께 실린다
+      expect(upsertedIds(1).sort()).toEqual(['q-first', 'q-second']);
+      // 끊긴 요청에는 중단 신호가 갔다
+      const signal = saveDiffMock.mock.calls[0]![1].signal as AbortSignal;
+      expect(signal.aborted).toBe(true);
+      expect(useSurveyBuilderStore.getState().isDirty).toBe(false);
+    });
   });
 });
