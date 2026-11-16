@@ -100,6 +100,46 @@ describe('collectPiiAnswerFormats · maskPiiAnswers', () => {
   });
 });
 
+describe('maskPiiAnswers — 저장된 값이 암호문이던 자리', () => {
+  const formats = collectPiiAnswerFormats(questions);
+  // 접두사만 보면 된다 — 실제 암호문일 필요가 없다.
+  const CIPHER = 'v1:aaaa';
+
+  it('지금 구조에 표시가 없어도 암호문으로 저장돼 있던 문항·칸은 가린다', () => {
+    const plain = {
+      'q-plain': '박민수',
+      'q-table': { 'c-dept': '기획팀/대리', 'c-tel': '02-345-6789' },
+      'q-gone': '삭제된 문항의 답',
+    };
+    const stored = {
+      'q-plain': CIPHER,
+      'q-table': { 'c-dept': CIPHER, 'c-tel': CIPHER },
+      'q-gone': '삭제된 문항의 답',
+    };
+    expect(maskPiiAnswers(plain, formats, stored)).toEqual({
+      'q-plain': '박민*',
+      // 형식을 아는 칸은 그 규칙, 표시가 꺼진 칸은 마지막 글자 — 한 자리는 한 번만 가린다
+      'q-table': { 'c-dept': '기획팀/대*', 'c-tel': '02-345...' },
+      'q-gone': '삭제된 문항의 답',
+    });
+  });
+
+  it('구조에 표시가 하나도 없어도 저장된 암호문 자리만으로 가린다', () => {
+    const none = collectPiiAnswerFormats([]);
+    expect(maskPiiAnswers({ a: '홍길동', b: '그대로' }, none, { a: CIPHER, b: '그대로' })).toEqual({
+      a: '홍길*',
+      b: '그대로',
+    });
+  });
+
+  it('표시된 자리는 평문으로 저장돼 있었어도 가린다 — 표시를 켜기 전 응답·이월 응답', () => {
+    expect(
+      maskPiiAnswers({ 'q-name': '홍길동' }, formats, { 'q-name': '홍길동' })['q-name'],
+    ).toBe('홍길*');
+    expect(maskPiiAnswers({ 'q-name': '홍길동' }, formats, null)['q-name']).toBe('홍길*');
+  });
+});
+
 describe('maskContactPiiValues', () => {
   it('명단의 개인정보 열만 그 종류의 규칙으로 가린다 — 성명은 마지막 글자만', () => {
     const masked = maskContactPiiValues(

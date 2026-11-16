@@ -882,3 +882,52 @@ describe('loadUnusedColumnIds', () => {
     expect(result.size).toBe(0);
   });
 });
+
+describe('loadRawExportRows — 게스트용 가리기(maskAnswers)', () => {
+  it('행마다 마지막에 한 번, 평문 답과 그 응답의 저장된 모양을 넘겨 부르고 결과를 싣는다', async () => {
+    useCounts({ responses: 2, nonRespondents: 0 });
+    responseFindManyMock.mockResolvedValue([
+      responseRow({ id: 'r1', questionResponses: { q1: '홍길동' } }),
+      responseRow({ id: 'r2', questionResponses: { q1: '김영희' } }),
+    ]);
+    const maskAnswers = vi.fn((plain: Record<string, unknown>) => ({ ...plain, masked: true }));
+    const result = await loadRawExportRows(surveyId, 'real', {
+      includeNonRespondents: false,
+      maskAnswers,
+    });
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+    expect(maskAnswers.mock.calls).toEqual([
+      [{ q1: '홍길동' }, { q1: '홍길동' }],
+      [{ q1: '김영희' }, { q1: '김영희' }],
+    ]);
+    expect(result.rows.map((r) => r.questionResponses)).toEqual([
+      { q1: '홍길동', masked: true },
+      { q1: '김영희', masked: true },
+    ]);
+  });
+
+  it('미응답 행은 저장된 답이 없어 null 을 넘긴다', async () => {
+    useCounts({ responses: 0, nonRespondents: 2 });
+    const maskAnswers = vi.fn((plain: Record<string, unknown>) => plain);
+    const result = await loadRawExportRows(surveyId, 'real', {
+      includeNonRespondents: true,
+      maskAnswers,
+    });
+    expect(result.kind).toBe('ok');
+    expect(maskAnswers.mock.calls).toEqual([
+      [{}, null],
+      [{}, null],
+    ]);
+  });
+
+  it('주지 않으면 부르지 않고 행을 그대로 돌려준다', async () => {
+    useCounts({ responses: 1, nonRespondents: 0 });
+    responseFindManyMock.mockResolvedValue([
+      responseRow({ id: 'r1', questionResponses: { q1: '홍길동' } }),
+    ]);
+    const result = await loadRawExportRows(surveyId, 'real', { includeNonRespondents: false });
+    if (result.kind !== 'ok') throw new Error('ok 가 아니다');
+    expect(result.rows[0]?.questionResponses).toEqual({ q1: '홍길동' });
+  });
+});

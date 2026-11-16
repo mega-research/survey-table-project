@@ -163,18 +163,16 @@ async function handleExport(
 
     // 게스트용 가리기 재료 — 개인정보 표시가 붙은 문항·표 입력 칸(현재 빌더 구조 기준).
     const piiAnswerFormats = collectPiiAnswerFormats(hydratedQuestions);
-    // Raw 행의 답과 명단 값을 가린다. 숨은 문항 strip·이월 병합을 평문으로 끝낸 로더 결과에 건다.
-    const maskRawRows = <T extends { questionResponses: Record<string, unknown>; contactValues?: Readonly<Record<string, string>> }>(
+    // Raw 행의 명단 값을 가린다. 답은 로더가 가린다(`maskAnswers` — 저장된 모양을 아는 자리가 거기다).
+    const maskRawRows = <T extends { contactValues?: Readonly<Record<string, string>> }>(
       rows: T[],
     ): T[] =>
       maskPii
-        ? rows.map((row) => ({
-            ...row,
-            questionResponses: maskPiiAnswers(row.questionResponses, piiAnswerFormats),
-            ...(row.contactValues
-              ? { contactValues: maskContactPiiValues(row.contactValues, piiTypeBySource) }
-              : {}),
-          }))
+        ? rows.map((row) =>
+            row.contactValues
+              ? { ...row, contactValues: maskContactPiiValues(row.contactValues, piiTypeBySource) }
+              : row,
+          )
         : rows;
 
     // 공유 변수명(ADR 0034) — 언어 묶음끼리 같은 변수명을 한 열로. 모든 형식이 같은 맵을 쓴다.
@@ -196,6 +194,13 @@ async function handleExport(
       ...(entryParamNames.length > 0 ? { entryParamNames } : {}),
       // 다국어 설문만 키를 싣는다 — 그 밖의 설문은 옵션 모양이 도입 전과 같다.
       ...(languageSetLocales.size > 0 ? { languageSetLocales } : {}),
+      // 게스트만 — 관리자는 키 자체가 없어 옵션 모양이 도입 전과 같다.
+      ...(maskPii
+        ? {
+            maskAnswers: (plain: Record<string, unknown>, stored: Record<string, unknown> | null) =>
+              maskPiiAnswers(plain, piiAnswerFormats, stored),
+          }
+        : {}),
     };
 
     // 2. 응답 데이터 조회 (sav 전용 공용 블록)
@@ -239,7 +244,13 @@ async function handleExport(
         );
         return {
           ...r,
-          questionResponses: maskPii ? maskPiiAnswers(plain, piiAnswerFormats) : plain,
+          questionResponses: maskPii
+            ? maskPiiAnswers(
+                plain,
+                piiAnswerFormats,
+                (r.questionResponses ?? {}) as Record<string, unknown>,
+              )
+            : plain,
         };
       });
       ctx.bind({ rowCount: responses.length });
