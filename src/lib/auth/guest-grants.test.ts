@@ -3,8 +3,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   canAccessSurvey,
   canViewOnlyGuestPreview,
+  canViewOnlyGuestViewResponse,
   getGuestSurveyIds,
   getViewOnlyPreviewSurveyIds,
+  getViewOnlyResponseViewSurveyIds,
   getViewOnlySurveyIds,
   guestPathRedirect,
   guestPostLoginRedirect,
@@ -214,6 +216,54 @@ describe('보기만 하는 게스트 grant', () => {
     expect(guestPathRedirect(`${dairyBase}/profiles/r1/edit`, grants, only, previewOk)).toBe(
       `${dairyBase}/overview`,
     );
+  });
+
+  it('응답 조회를 허용한 보기 전용 grant 는 응답 조회 화면만 더 열린다(dairy@, 2026-11-16)', () => {
+    const DAIRY = '75060289-51b4-44e7-8fd1-dabf73a0bfaf';
+    const DAIRY_2026 = '24b15972-36fe-400a-adfe-7d4c80438204';
+    const dairyBase = `/admin/surveys/${DAIRY_2026}/operations`;
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `${DAIRY}:${DAIRY_2026}`);
+    const grants = getGuestSurveyIds(DAIRY);
+    const only = getViewOnlySurveyIds(DAIRY);
+    const previewOk = getViewOnlyPreviewSurveyIds(DAIRY);
+    const responseViewOk = getViewOnlyResponseViewSurveyIds(DAIRY);
+    expect(responseViewOk).toEqual([DAIRY_2026]);
+    expect(canViewOnlyGuestViewResponse(DAIRY, DAIRY_2026)).toBe(true);
+    const redirectOf = (path: string) =>
+      guestPathRedirect(path, grants, only, previewOk, responseViewOk);
+
+    expect(redirectOf(`${dairyBase}/profiles/r1/view`)).toBeNull();
+    expect(
+      guestPostLoginRedirect(
+        `${dairyBase}/profiles/r1/view?idx=3`,
+        grants,
+        only,
+        previewOk,
+        responseViewOk,
+      ),
+    ).toBe(`${dairyBase}/profiles/r1/view?idx=3`);
+    // 수정 화면·컬럼 설정·조회 밑의 다른 경로는 그대로 막힌다
+    for (const sub of [
+      '/profiles/r1/edit',
+      '/profiles/r1',
+      '/profiles/r1/view/extra',
+      '/profiles//view',
+      '/profiles/columns',
+      '/contacts/r1/view',
+      '/report',
+    ]) {
+      expect(redirectOf(`${dairyBase}${sub}`)).toBe(`${dairyBase}/overview`);
+    }
+    // 허용 목록을 넘기지 않으면(guest9·guest11 같은 grant) 조회 화면도 막힌다
+    expect(guestPathRedirect(`${dairyBase}/profiles/r1/view`, grants, only, previewOk)).toBe(
+      `${dairyBase}/overview`,
+    );
+  });
+
+  it('guest9 는 응답 조회를 열지 않는다', () => {
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `${GUEST9}:${AI_2026_PUBLIC}`);
+    expect(getViewOnlyResponseViewSurveyIds(GUEST9)).toEqual([]);
+    expect(canViewOnlyGuestViewResponse(GUEST9, AI_2026_PUBLIC)).toBe(false);
   });
 
   it('guest9 의 인공지능 실태조사는 협업 업체 사정으로 설문 보기가 계속 막힌다', () => {

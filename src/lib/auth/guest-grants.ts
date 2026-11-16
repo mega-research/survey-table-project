@@ -70,11 +70,16 @@ export function canAccessSurvey(userId: string, surveyId: string): boolean {
  *
  * `allowPreview` 를 켠 grant 는 설문 보기(preview)도 연다 — 설문 내용을 보여 줘도 되는 고객용이다.
  * 끈 grant(guest9)는 협업 업체와 함께 하는 조사라 설문 보기를 막아 둔다.
+ *
+ * `allowResponseView` 를 켠 grant 는 응답 내역의 행마다 「조회」가 생겨 응답 한 건의 답을 본다
+ * (`…/profiles/<응답>/view` — 응답 수정 화면을 잠가 그린 조회 전용 화면). 수정 화면 경로와 수정
+ * 저장은 그대로 막힌다. 답은 원문 그대로 보인다(응답자 정보 문항 포함 — 2026-11-16 사용자 결정).
  */
 const VIEW_ONLY_GUEST_GRANTS: ReadonlyArray<{
   userId: string;
   surveyId: string;
   allowPreview?: true;
+  allowResponseView?: true;
 }> = [
   // guest9 — 2026년 인공지능산업 실태조사 공개본(리멤버 패널용), 2026-10-22 요청
   {
@@ -87,6 +92,8 @@ const VIEW_ONLY_GUEST_GRANTS: ReadonlyArray<{
     surveyId: '24b15972-36fe-400a-adfe-7d4c80438204',
     // 설문을 보여 줘도 되는 고객이라 설문 보기를 연다(2026-11-05 요청)
     allowPreview: true,
+    // 응답 한 건의 답도 본다 — 조회만(2026-11-16 요청)
+    allowResponseView: true,
   },
   // guest11 — 여성기업 실태조사 신규문항(안) 사전 설문조사, 응답 현황·응답 내역만(2026-11-12 요청)
   {
@@ -119,6 +126,19 @@ export function getViewOnlyPreviewSurveyIds(userId: string): string[] {
 /** 보기 전용 게스트가 이 설문의 설문 보기를 열 수 있는가. */
 export function canViewOnlyGuestPreview(userId: string, surveyId: string): boolean {
   return getViewOnlyPreviewSurveyIds(userId).includes(surveyId);
+}
+
+/** 이 계정이 보기만 하면서도 응답 조회는 여는 grant 설문 목록 — `allowResponseView` 를 켠 보기 전용 grant. */
+export function getViewOnlyResponseViewSurveyIds(userId: string): string[] {
+  const viewOnly = getViewOnlySurveyIds(userId);
+  return VIEW_ONLY_GUEST_GRANTS.filter(
+    (g) => g.userId === userId && g.allowResponseView === true && viewOnly.includes(g.surveyId),
+  ).map((g) => g.surveyId);
+}
+
+/** 보기 전용 게스트가 이 설문의 응답 조회 화면을 열 수 있는가. */
+export function canViewOnlyGuestViewResponse(userId: string, surveyId: string): boolean {
+  return getViewOnlyResponseViewSurveyIds(userId).includes(surveyId);
 }
 
 /** 게스트가 무권한 설문 URL 을 눌렀을 때 보내는 강제 로그아웃 라우트. */
@@ -162,6 +182,13 @@ export function sanitizeInternalPath(raw: string | null | undefined): string | n
   return raw;
 }
 
+/** `<profiles 앞머리><응답 id>/view` 꼴인가 — 응답 id 자리는 한 구간이어야 한다. */
+function isResponseViewPath(pathname: string, profilesPrefix: string): boolean {
+  if (!pathname.startsWith(profilesPrefix)) return false;
+  const [responseId, leaf, ...rest] = pathname.slice(profilesPrefix.length).split('/');
+  return !!responseId && leaf === 'view' && rest.length === 0;
+}
+
 /**
  * 미들웨어용 게스트 경로 판정 (순수 함수).
  * 허용 경로면 null, 차단이면 리다이렉트 목적지 pathname 반환.
@@ -177,6 +204,7 @@ export function guestPathRedirect(
   grantedSurveyIds: readonly string[],
   viewOnlySurveyIds: readonly string[] = [],
   viewOnlyPreviewSurveyIds: readonly string[] = [],
+  viewOnlyResponseViewSurveyIds: readonly string[] = [],
 ): string | null {
   if (pathname === '/admin/login') return null;
   // 강제 로그아웃 라우트 자신은 통과 — 리다이렉트 루프 방지.
@@ -187,11 +215,18 @@ export function guestPathRedirect(
     const allowedPrefix = `/admin/surveys/${grantedSurveyId}/operations`;
     const overviewPath = `${allowedPrefix}/overview`;
     // 보기만 하는 grant — 응답 현황과 응답 내역 목록만 열고, 그 밖의 콘솔 화면(응답 수정
-    // 화면·컬럼 설정 포함)과 설문 보기는 응답 현황으로 돌려보낸다. 설문 보기를 허용한 grant 는 설문 보기만 연다.
+    // 화면·컬럼 설정 포함)과 설문 보기는 응답 현황으로 돌려보낸다. 설문 보기를 허용한 grant 는 설문 보기만,
+    // 응답 조회를 허용한 grant 는 응답 조회 화면(`profiles/<응답>/view`)만 더 연다 — 수정 화면은 열지 않는다.
     if (viewOnlySurveyIds.includes(grantedSurveyId)) {
       if (pathname === overviewPath || pathname.startsWith(`${overviewPath}/`)) return null;
       if (pathname === `${allowedPrefix}/profiles`) return null;
       if (pathname === previewPath && viewOnlyPreviewSurveyIds.includes(grantedSurveyId)) {
+        return null;
+      }
+      if (
+        viewOnlyResponseViewSurveyIds.includes(grantedSurveyId) &&
+        isResponseViewPath(pathname, `${allowedPrefix}/profiles/`)
+      ) {
         return null;
       }
       if (
@@ -246,6 +281,7 @@ export function guestPostLoginRedirect(
   grantedSurveyIds: readonly string[],
   viewOnlySurveyIds: readonly string[] = [],
   viewOnlyPreviewSurveyIds: readonly string[] = [],
+  viewOnlyResponseViewSurveyIds: readonly string[] = [],
 ): string {
   const path = target.split(/[?#]/)[0] ?? target;
   const dest = guestPathRedirect(
@@ -253,6 +289,7 @@ export function guestPostLoginRedirect(
     grantedSurveyIds,
     viewOnlySurveyIds,
     viewOnlyPreviewSurveyIds,
+    viewOnlyResponseViewSurveyIds,
   );
   // 허용 경로 — 단 로그인·로그아웃 라우트는 로그인 직후 목적지로 무의미
   if (dest === null && path !== '/admin/login' && path !== GUEST_FORCE_LOGOUT_PATH) {

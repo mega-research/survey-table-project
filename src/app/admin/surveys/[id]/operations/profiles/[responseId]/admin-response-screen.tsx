@@ -1,0 +1,166 @@
+import { notFound } from 'next/navigation';
+import { and, eq } from 'drizzle-orm';
+
+import { db } from '@/db';
+import { contactTargets, surveys, surveyVersions } from '@/db/schema';
+import type { SurveyAnchorSnapshot } from '@/shared/contracts/survey-document';
+import { buildDocumentView } from '@/server/survey-builder/services/survey-read';
+import { lookupPriorAnswersByContactTarget } from '@/server/read-models/contact-prior-answers';
+import { requireSurveyOwnership } from '@/lib/auth/require-survey-ownership';
+import { pinnedVersionId } from '@/shared/contracts/survey';
+import { ensureTestVersion } from '@/server/workflows/test-version';
+import { getResponseById } from '@/server/read-models/responses';
+import { loadRespondentContactAttrs } from '@/server/read-models/respondent-contact-attrs';
+import { isResponseExcluded } from '@/server/operations/services/profiles';
+import { getOperationsDataScope, testFlagForScope } from '@/server/data-scope';
+import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
+import { normalizeQuestions } from '@/lib/question/normalize';
+import { toFlatQuestion } from '@/lib/question/variants';
+
+import { AdminResponseEditor } from './edit/admin-response-editor';
+
+interface Props {
+  surveyId: string;
+  responseId: string;
+  /** 목록에서의 순번(#) — 머리 안내에만 쓴다. */
+  idx: number | null;
+  /** 조회 전용 — 값을 바꿀 수 없고 저장도 없다(응답 조회 화면). */
+  readOnly: boolean;
+}
+
+/**
+ * 응답 한 건 화면의 본문 — 응답 수정(`edit`)과 응답 조회(`view`) 두 라우트가 함께 쓴다.
+ * **진입 가드는 각 페이지가 먼저 부른다**(`requireSurveyConsolePage` — 정책이 라우트마다 다르다).
+ *
+ * - getResponseById 로 응답 조회 (soft delete 포함).
+ *   - 삭제된 응답이면 안내 화면 (복원 안내). 조회 전용은 없는 응답으로 다룬다.
+ *   - 응답 surveyId 가 path 와 다르면 notFound.
+ * - 렌더 버전은 이 응답이 볼 버전 — 실응답은 현재 배포본, 테스트 응답은 지금 테스트 버전(저장본,
+ *   CONTEXT.md 「테스트 버전」 — 테스트는 테스트 버전에만 있다). 그 버전이 없으면 응답 자신의 버전으로
+ *   폴백한다(스펙 결정 1). 응답 버전과 렌더 버전이 다르면
+ *   구조 생존 필터(applyStructuralSurvival)로 프리필하고 배너를 띄운다(스펙 결정 2·3).
+ *   렌더만으로는 DB 를 바꾸지 않는다 — 실제 이관은 저장 시점에 service 가 수행한다.
+ */
+export async function renderAdminResponseScreen({ surveyId, responseId, idx, readOnly }: Props) {
+  await requireSurveyOwnership(surveyId);
+  const scope = await getOperationsDataScope(surveyId);
+
+  const response = await getResponseById(responseId, { includeDeleted: true });
+  if (
+    !response ||
+    response.surveyId !== surveyId ||
+    response.isTest !== testFlagForScope(scope)
+  ) {
+    notFound();
+  }
+
+  if (response.deletedAt !== null) {
+    if (readOnly) notFound();
+    return (
+      <main className="mx-auto max-w-xl px-6 py-12">
+        <h1 className="text-xl font-bold">삭제된 응답입니다</h1>
+        <p className="mt-2 text-sm text-slate-500">
+          이 응답은 휴지통에 있습니다. 응답 내역에서 복원한 뒤 다시 시도하세요.
+        </p>
+      </main>
+    );
+  }
+
+  // 테스트 응답은 테스트 버전을 지금 저장본에 맞춘 뒤 그것으로 그린다 — 테스트 화면과 같은 구조.
+  // 조회 전용은 아무것도 쓰지 않는다(맞추기는 쓰기다) — 있는 테스트 버전 그대로 그린다.
+  if (response.isTest && !readOnly) await ensureTestVersion(surveyId);
+
+  // 렌더 버전 결정 (스펙 결정 1): 이 응답이 볼 버전(실응답 = 현재 배포본, 테스트 응답 = 지금 테스트
+  // 버전). 그 버전이 없을 때만 응답 자신의 버전으로 폴백(기존 동작). 레거시 versionId null 응답도
+  // 최신으로 렌더한다. 저장도 같은 버전을 요구한다(saveAdminEdit 의 낙관 버전 가드).
+  const surveyRow = await db.query.surveys.findFirst({
+    where: eq(surveys.id, surveyId),
+    columns: { currentVersionId: true, testVersionId: true },
+  });
+  const pinnedId = surveyRow ? pinnedVersionId(surveyRow, response.isTest) : null;
+  const renderVersionId = pinnedId ?? response.versionId ?? null;
+
+  // 렌더 버전 스냅샷과 contact attrs, negative 제외 여부, 이월 응답을 병렬로 조회.
+  const [version, contactRow, excluded, priorAnswers] = await Promise.all([
+    renderVersionId
+      ? db.query.surveyVersions.findFirst({
+          where: eq(surveyVersions.id, renderVersionId),
+        })
+      : Promise.resolve(null),
+    response.contactTargetId
+      ? db.query.contactTargets.findFirst({
+          where: and(
+            eq(contactTargets.id, response.contactTargetId),
+            eq(contactTargets.surveyId, surveyId),
+            eq(contactTargets.isTest, testFlagForScope(scope)),
+          ),
+          columns: { id: true },
+        })
+      : Promise.resolve(null),
+    isResponseExcluded(surveyId, responseId, scope),
+    // 이월 표시(빨강)용. 관리자 편집에는 프리필도 변동 확인도 걸리지 않고 색만 붙는다.
+    // 초대 토큰 경로를 쓸 수 없어(관리자는 링크로 들어오지 않는다) 조사 대상 id 로 읽는다.
+    response.contactTargetId
+      ? lookupPriorAnswersByContactTarget({
+          surveyId,
+          contactTargetId: response.contactTargetId,
+          isTest: testFlagForScope(scope),
+        })
+      : Promise.resolve(null),
+  ]);
+  // contactTargetId 가 없으면 익명 응답이므로 빈 객체. 응답 화면과 같은 명단 값 —
+  // 개인정보 열까지 합친 것(서버 재평가도 같은 값을 본다).
+  const contactAttrs = contactRow ? await loadRespondentContactAttrs(contactRow.id) : {};
+
+  // 구버전 응답을 최신 형식으로 열 때: 같은 구조만 프리필, 다른 구조는 비움 (스펙 결정 2).
+  // 렌더만으로는 DB 를 바꾸지 않는다 — 저장 시점에 service 가 이관한다.
+  const migratedFromOldVersion = pinnedId != null && response.versionId !== pinnedId;
+  let initialResponses = response.questionResponses as Record<string, unknown>;
+  if (migratedFromOldVersion) {
+    // SurveyVersionSnapshot.questions 는 타입상 필수지만 손상된 스냅샷 행은 방어적으로
+    // 읽는다(server/survey-response/services/response-edit.ts 의 같은 캐스팅 패턴).
+    const rawSnapshot = version?.snapshot as unknown as { questions?: unknown } | null;
+    if (Array.isArray(rawSnapshot?.questions)) {
+      const snapshotQuestions = normalizeQuestions(rawSnapshot.questions, 'preserve').map(
+        toFlatQuestion,
+      );
+      initialResponses = applyStructuralSurvival(
+        initialResponses,
+        snapshotQuestions,
+      ).survivingResponses;
+    }
+  }
+
+  // 관리자도 조사표를 보면서 고친다 — 문항 번호만 보고는 무엇을 고치는지 알 수 없다.
+  // 앵커는 렌더 버전 스냅샷의 얼린 좌표, 파일은 현재 것(라이브).
+  const documentView = await buildDocumentView(
+    surveyId,
+    ((version?.snapshot as { anchors?: SurveyAnchorSnapshot[] } | null | undefined)?.anchors ?? []),
+  );
+
+  return (
+    <>
+      {excluded && (
+        <div
+          role="status"
+          className="border-b border-amber-300 bg-amber-50 px-6 py-3 text-sm text-amber-900"
+        >
+          이 응답자는 부정 결과코드로 모집단에서 제외된 상태입니다. 응답률·메일·응답 페이지에서 가려져 있습니다.
+        </div>
+      )}
+      <AdminResponseEditor
+        surveyId={surveyId}
+        responseId={responseId}
+        initialResponses={initialResponses}
+        versionSnapshot={version?.snapshot ?? null}
+        initialContactAttrs={contactAttrs}
+        initialPriorAnswers={priorAnswers}
+        documentView={documentView}
+        idx={idx}
+        renderedVersionId={pinnedId}
+        migratedFromOldVersion={migratedFromOldVersion}
+        readOnly={readOnly}
+      />
+    </>
+  );
+}

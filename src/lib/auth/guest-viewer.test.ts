@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { requireAuth } from '@/lib/auth';
-import { canOpenSurveyPreview, isGuestViewer, isViewOnlyViewer } from '@/lib/auth/guest-viewer';
+import {
+  canOpenResponseView,
+  canOpenSurveyPreview,
+  isGuestViewer,
+  isViewOnlyViewer,
+} from '@/lib/auth/guest-viewer';
 
 vi.mock('@/lib/auth', () => ({ requireAuth: vi.fn() }));
 vi.mock('next/headers', () => ({
@@ -82,5 +87,19 @@ describe('canOpenSurveyPreview', () => {
     await expect(canOpenSurveyPreview(AI_2026_PUBLIC)).resolves.toBe(false);
     vi.mocked(requireAuth).mockResolvedValue({ id: DAIRY } as never);
     await expect(canOpenSurveyPreview(DAIRY_2026)).resolves.toBe(true);
+  });
+
+  it('응답 조회 열은 응답 조회를 허용한 보기 전용 grant 에만 생긴다', async () => {
+    vi.stubEnv(
+      'GUEST_SURVEY_GRANTS',
+      `${GUEST9}:${AI_2026_PUBLIC},${DAIRY}:${DAIRY_2026},guest-1:${SURVEY_ID}`,
+    );
+    vi.mocked(requireAuth).mockResolvedValue({ id: DAIRY } as never);
+    await expect(canOpenResponseView(DAIRY_2026)).resolves.toBe(true);
+    vi.mocked(requireAuth).mockResolvedValue({ id: GUEST9 } as never);
+    await expect(canOpenResponseView(AI_2026_PUBLIC)).resolves.toBe(false);
+    // 일반 게스트는 수정 메뉴가 그 자리를 맡는다
+    vi.mocked(requireAuth).mockResolvedValue({ id: 'guest-1' } as never);
+    await expect(canOpenResponseView(SURVEY_ID)).resolves.toBe(false);
   });
 });

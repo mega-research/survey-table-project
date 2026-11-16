@@ -43,7 +43,7 @@ import {
 import type { FilterClause } from '@/lib/operations/filter-shared';
 import { FILTER_SOURCE } from '@/lib/operations/filter-shared';
 import { getOperationsDataScope } from '@/server/data-scope';
-import { isGuestViewer, isViewOnlyViewer } from '@/lib/auth/guest-viewer';
+import { canOpenResponseView, isGuestViewer, isViewOnlyViewer } from '@/lib/auth/guest-viewer';
 
 export const metadata: Metadata = {
   title: '현황 - 응답 내역',
@@ -85,10 +85,11 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
     ...(sp.sort !== undefined ? { sort: sp.sort } : {}),
     ...(sp.dir !== undefined ? { dir: sp.dir } : {}),
   });
-  const [scope, isGuest, viewOnly] = await Promise.all([
+  const [scope, isGuest, viewOnly, canViewResponse] = await Promise.all([
     getOperationsDataScope(surveyId),
     isGuestViewer(),
     isViewOnlyViewer(surveyId),
+    canOpenResponseView(surveyId),
   ]);
 
   const [contactScheme, profileScheme, entryParamNames, answerSources, answerChoices] =
@@ -275,6 +276,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
               hasContacts={hasContacts}
               isGuest={isGuest}
               viewOnly={viewOnly}
+              canViewResponse={canViewResponse}
               columnScheme={displayColumns}
               piiByTarget={piiByTarget}
               answerValues={answerValues}

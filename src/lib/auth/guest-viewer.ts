@@ -1,6 +1,11 @@
 import { cache } from 'react';
 
-import { canViewOnlyGuestPreview, isGuestUser, isViewOnlyGuest } from '@/lib/auth/guest-grants';
+import {
+  canViewOnlyGuestPreview,
+  canViewOnlyGuestViewResponse,
+  isGuestUser,
+  isViewOnlyGuest,
+} from '@/lib/auth/guest-grants';
 import { requirePageUser } from '@/lib/auth/require-page-user';
 
 /**
@@ -48,3 +53,15 @@ async function loadCanOpenSurveyPreview(surveyId: string): Promise<boolean> {
 }
 
 export const canOpenSurveyPreview = cache(loadCanOpenSurveyPreview);
+
+/**
+ * 현재 세션이 보기 전용이면서 응답 조회(`allowResponseView`)를 여는 grant 인가 — 응답 내역의
+ * 「조회」 열 분기용이다. 보기 전용이 아닌 계정은 수정 메뉴가 그 자리를 맡으므로 false 다.
+ * 경로 차단은 미들웨어와 조회 화면의 가드가 맡는다.
+ */
+async function loadCanOpenResponseView(surveyId: string): Promise<boolean> {
+  const user = await requirePageUser();
+  return isViewOnlyGuest(user.id, surveyId) && canViewOnlyGuestViewResponse(user.id, surveyId);
+}
+
+export const canOpenResponseView = cache(loadCanOpenResponseView);
