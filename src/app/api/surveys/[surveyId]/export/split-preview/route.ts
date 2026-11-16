@@ -8,7 +8,7 @@ import { loadOperationsDataScope, testFlagForScope } from '@/server/data-scope';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { normalizeQuestions } from '@/lib/question';
 import { requireAuth } from '@/lib/auth';
-import { canAccessSurvey, isGuestUser } from '@/lib/auth/guest-grants';
+import { canAccessSurvey, canExportSurveyData, isGuestUser } from '@/lib/auth/guest-grants';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import {
   detectSplitCandidates,
@@ -46,6 +46,10 @@ async function handleSplitPreview(
     });
     if (!canAccessSurvey(user.id, surveyId)) {
       return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
+    }
+    // 내보내기와 같은 판정 — 게스트는 내보내기를 허용한 grant 만.
+    if (!canExportSurveyData(user.id, surveyId)) {
+      return NextResponse.json({ error: '이 계정은 데이터를 내려받을 수 없습니다.' }, { status: 403 });
     }
     const basis = request.nextUrl.searchParams.get('basis');
     if (basis) ctx.bind({ basis });
