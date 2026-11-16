@@ -74,17 +74,24 @@ export function canAccessSurvey(userId: string, surveyId: string): boolean {
  * `allowResponseView` 를 켠 grant 는 응답 내역의 행마다 「조회」가 생겨 응답 한 건의 답을 본다
  * (`…/profiles/<응답>/view` — 응답 수정 화면을 잠가 그린 조회 전용 화면). 수정 화면 경로와 수정
  * 저장은 그대로 막힌다. 답은 원문 그대로 보인다(응답자 정보 문항 포함 — 2026-11-16 사용자 결정).
+ *
+ * `allowExport` 를 켠 grant 는 응답 현황의 「데이터 내보내기」가 열린다. 게스트가 받는 파일은 개인정보로
+ * 표시된 값이 가려져 나간다(`lib/crypto/export-pii-mask`). **이 스위치가 없는 게스트 계정은 — 보기
+ * 전용이든 아니든 — 내보내기 주소를 직접 불러도 받지 못한다**(`canExportSurveyData`, 2026-11-16).
  */
 const VIEW_ONLY_GUEST_GRANTS: ReadonlyArray<{
   userId: string;
   surveyId: string;
   allowPreview?: true;
   allowResponseView?: true;
+  allowExport?: true;
 }> = [
   // guest9 — 2026년 인공지능산업 실태조사 공개본(리멤버 패널용), 2026-10-22 요청
   {
     userId: 'c79af8a1-186a-4157-be4c-2bebfbde4a8d',
     surveyId: '253534a5-913a-4891-a019-f9643ccea0a7',
+    // 데이터 내보내기를 연다 — 성명·연락처·이메일은 가려서(2026-11-16 요청)
+    allowExport: true,
   },
   // dairy@ (처음 client1@) — 2026 유가공업 실태조사 고객(클라이언트) 계정, 2026-11-05 요청
   {
@@ -139,6 +146,19 @@ export function getViewOnlyResponseViewSurveyIds(userId: string): string[] {
 /** 보기 전용 게스트가 이 설문의 응답 조회 화면을 열 수 있는가. */
 export function canViewOnlyGuestViewResponse(userId: string, surveyId: string): boolean {
   return getViewOnlyResponseViewSurveyIds(userId).includes(surveyId);
+}
+
+/**
+ * 이 계정이 이 설문의 응답 데이터를 내려받을 수 있는가 — 내보내기 주소(export·split-preview)의 판정.
+ * 관리자는 설문 접근 판정 그대로, 게스트는 `allowExport` 를 켠 grant 만 받는다. 버튼을 숨기는 것만으로는
+ * 주소를 직접 부르는 요청을 막지 못한다.
+ */
+export function canExportSurveyData(userId: string, surveyId: string): boolean {
+  if (!canAccessSurvey(userId, surveyId)) return false;
+  if (!isGuestUser(userId)) return true;
+  return VIEW_ONLY_GUEST_GRANTS.some(
+    (g) => g.userId === userId && g.surveyId === surveyId && g.allowExport === true,
+  );
 }
 
 /** 게스트가 무권한 설문 URL 을 눌렀을 때 보내는 강제 로그아웃 라우트. */

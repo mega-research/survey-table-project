@@ -1,6 +1,7 @@
 import { cache } from 'react';
 
 import {
+  canExportSurveyData,
   canViewOnlyGuestPreview,
   canViewOnlyGuestViewResponse,
   isGuestUser,
@@ -65,3 +66,14 @@ async function loadCanOpenResponseView(surveyId: string): Promise<boolean> {
 }
 
 export const canOpenResponseView = cache(loadCanOpenResponseView);
+
+/**
+ * 현재 세션에 「데이터 내보내기」 버튼을 보일 것인가 — 관리자와, 내보내기를 허용한 게스트 grant.
+ * 버튼 분기용이고 실제 차단은 내보내기 주소가 같은 판정(`canExportSurveyData`)으로 한다.
+ */
+async function loadCanOpenExport(surveyId: string): Promise<boolean> {
+  const user = await requirePageUser();
+  return canExportSurveyData(user.id, surveyId);
+}
+
+export const canOpenExport = cache(loadCanOpenExport);

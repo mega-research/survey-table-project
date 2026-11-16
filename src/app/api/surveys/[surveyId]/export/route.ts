@@ -14,7 +14,13 @@ import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { normalizeQuestions } from '@/lib/question';
 import { normalizePassParamNames } from '@/lib/survey/end-redirect';
 import { requireAuth } from '@/lib/auth';
-import { canAccessSurvey, isGuestUser } from '@/lib/auth/guest-grants';
+import { canAccessSurvey, canExportSurveyData, isGuestUser } from '@/lib/auth/guest-grants';
+import {
+  collectPiiAnswerFormats,
+  maskContactPiiValues,
+  maskPiiAnswers,
+} from '@/lib/crypto/export-pii-mask';
+import type { PiiFieldType } from '@/lib/crypto/pii-fields';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import { generateRawDataWorkbook, toSpssColumnOptions } from '@/lib/analytics/raw-workbook';
 import { applyExportRowExclusions } from '@/lib/analytics/export-exclusions';
@@ -82,6 +88,13 @@ async function handleExport(
     if (!canAccessSurvey(user.id, surveyId)) {
       return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
     }
+    // 게스트는 내보내기를 허용한 grant 만 받는다 — 버튼은 화면에서 숨기지만 이 주소는 직접 부를 수 있다.
+    if (!canExportSurveyData(user.id, surveyId)) {
+      return NextResponse.json({ error: '이 계정은 데이터를 내려받을 수 없습니다.' }, { status: 403 });
+    }
+    // 게스트가 받는 파일은 개인정보로 표시된 값을 가린다(lib/crypto/export-pii-mask). 관리자는 평문 그대로.
+    const maskPii = isGuestUser(user.id);
+    ctx.bind({ maskPii });
 
     const type = request.nextUrl.searchParams.get('type') as ExportType | null;
     if (type) ctx.bind({ exportType: type });
@@ -123,12 +136,19 @@ async function handleExport(
     // (requireAuth + canAccessSurvey, 위), 복호화도 같은 decryptPiiForExport 를 로더가 탄다.
     // 로그에는 열 수만 싣는다 — 라벨·값·컨택 id 금지.
     const isRawExport = type === 'raw' || type === 'raw-split';
+    const contactScheme = isRawExport ? await getContactColumnScheme(surveyId, scope) : null;
     const contactColumns = isRawExport
-      ? selectRawExportContactColumns(
-          await getContactColumnScheme(surveyId, scope),
-          surveyData.profileColumns ?? null,
-        )
+      ? selectRawExportContactColumns(contactScheme, surveyData.profileColumns ?? null)
       : [];
+    // 가릴 명단 열 — 내보내는 개인정보 열과 그 종류(스킴의 piiType). 종류가 없으면 마지막 글자 가리기.
+    const piiTypeBySource = new Map<string, PiiFieldType | undefined>(
+      contactColumns
+        .filter((c) => c.kind === 'pii')
+        .map((c) => [
+          c.source,
+          contactScheme?.columns.find((col) => col.source === c.source)?.piiType,
+        ]),
+    );
     const piiColumnCount = contactColumns.filter((c) => c.kind === 'pii').length;
     ctx.bind({ contactColumnCount: contactColumns.length, piiColumnCount });
     // PII 평문 응답 캐시 방지 — 조사 대상 엑셀과 같은 이유. pii 열이 없으면 기존 헤더 그대로.
@@ -140,6 +160,22 @@ async function handleExport(
       surveyId,
       hydrateQuestionsForSpss(normalizeQuestions(surveyData.questions)),
     );
+
+    // 게스트용 가리기 재료 — 개인정보 표시가 붙은 문항·표 입력 칸(현재 빌더 구조 기준).
+    const piiAnswerFormats = collectPiiAnswerFormats(hydratedQuestions);
+    // Raw 행의 답과 명단 값을 가린다. 숨은 문항 strip·이월 병합을 평문으로 끝낸 로더 결과에 건다.
+    const maskRawRows = <T extends { questionResponses: Record<string, unknown>; contactValues?: Readonly<Record<string, string>> }>(
+      rows: T[],
+    ): T[] =>
+      maskPii
+        ? rows.map((row) => ({
+            ...row,
+            questionResponses: maskPiiAnswers(row.questionResponses, piiAnswerFormats),
+            ...(row.contactValues
+              ? { contactValues: maskContactPiiValues(row.contactValues, piiTypeBySource) }
+              : {}),
+          }))
+        : rows;
 
     // 공유 변수명(ADR 0034) — 언어 묶음끼리 같은 변수명을 한 열로. 모든 형식이 같은 맵을 쓴다.
     const languageSetLocales = await loadLanguageSetLocales(surveyId, hydratedQuestions);
@@ -196,13 +232,16 @@ async function handleExport(
         ),
         orderBy: (responses, { desc }) => [desc(responses.createdAt)],
       });
-      responses = rawFetched.map((r) => ({
-        ...r,
-        questionResponses: decryptQuestionResponses(
+      responses = rawFetched.map((r) => {
+        const plain = decryptQuestionResponses(
           (r.questionResponses ?? {}) as Record<string, unknown>,
           { responseId: r.id },
-        ),
-      }));
+        );
+        return {
+          ...r,
+          questionResponses: maskPii ? maskPiiAnswers(plain, piiAnswerFormats) : plain,
+        };
+      });
       ctx.bind({ rowCount: responses.length });
     }
 
@@ -254,7 +293,7 @@ async function handleExport(
     if (type === 'raw') {
       const loaded = await loadRawExportRows(surveyId, scope, rawOptions);
       if (loaded.kind === 'too_many') return tooManyRowsResponse(loaded, includeNonRespondents);
-      const { rows } = loaded;
+      const rows = maskRawRows(loaded.rows);
       ctx.bind({ rowCount: rows.length, nonRespondentCount: loaded.nonRespondentCount });
       const exportCtx = await buildRawExportContext(
         surveyId,
@@ -290,7 +329,7 @@ async function handleExport(
 
       const loaded = await loadRawExportRows(surveyId, scope, rawOptions);
       if (loaded.kind === 'too_many') return tooManyRowsResponse(loaded, includeNonRespondents);
-      const { rows } = loaded;
+      const rows = maskRawRows(loaded.rows);
 
       const exportCtx = await buildRawExportContext(
         surveyId,

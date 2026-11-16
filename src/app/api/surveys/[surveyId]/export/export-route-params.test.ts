@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // export·split-preview 라우트가 includeNonRespondents 파라미터를 로더에 그대로 넘기는지,
 // 그리고 .sav 경로는 그 파라미터를 읽지 않는지 본다. 로더 자체는 raw-export-load.test.ts 몫.
@@ -103,6 +103,8 @@ import { GET as exportGet } from '@/app/api/surveys/[surveyId]/export/route';
 import { GET as splitPreviewGet } from '@/app/api/surveys/[surveyId]/export/split-preview/route';
 import { buildRawExportContext } from './raw-export-load';
 import { normalizeContactColumnScheme } from '@/lib/operations/contacts-format';
+import { generateRawDataWorkbook } from '@/lib/analytics/raw-workbook';
+import { generateSavBuffer } from '@/lib/spss/sav-builder';
 
 const surveyId = 'survey-params';
 const params = { params: Promise.resolve({ surveyId }) };
@@ -398,5 +400,139 @@ describe('GET /export — 조사 대상 명단 열 (응답 내역 컬럼 설정 
     expect(res.status).toBe(200);
     expect(loaderOptions()['contactColumns']).toEqual([]);
     expect(res.headers.get('Cache-Control')).toBeNull();
+  });
+});
+
+/**
+ * 게스트의 내려받기 (2026-11-16) — 내보내기를 허용한 grant 만 받고, 받는 파일은 개인정보로 표시된 값이
+ * 가려진다. 버튼은 화면에서 숨기지만 이 주소는 직접 부를 수 있어 여기서 막는다.
+ */
+describe('GET /export — 게스트의 내려받기', () => {
+  // guest9 — guest-grants.ts 의 VIEW_ONLY_GUEST_GRANTS 에서 allowExport 를 켠 실제 쌍.
+  const GUEST9 = 'c79af8a1-186a-4157-be4c-2bebfbde4a8d';
+  const AI_2026_PUBLIC = '253534a5-913a-4891-a019-f9643ccea0a7';
+  // dairy@ — 보기 전용이지만 allowExport 가 꺼져 있다.
+  const DAIRY = '75060289-51b4-44e7-8fd1-dabf73a0bfaf';
+  const DAIRY_2026 = '24b15972-36fe-400a-adfe-7d4c80438204';
+
+  const paramsOf = (id: string) => ({ params: Promise.resolve({ surveyId: id }) });
+  const requestOf = (id: string, query: string) =>
+    new NextRequest(`http://localhost/api/surveys/${id}/export?${query}`);
+  const previewOf = (id: string) =>
+    new NextRequest(`http://localhost/api/surveys/${id}/export/split-preview`);
+
+  const PII_SURVEY = {
+    ...SURVEY_FIXTURE,
+    id: AI_2026_PUBLIC,
+    profileColumns: PROFILE_SCHEME,
+    questions: [
+      {
+        id: 'q-info',
+        surveyId: AI_2026_PUBLIC,
+        type: 'table',
+        title: '기업 소개',
+        required: true,
+        order: 0,
+        tableColumns: [{ id: 'col-1', label: '값' }],
+        tableRowsData: [
+          {
+            id: 'r1',
+            label: '응답자',
+            cells: [
+              { id: 'c-dept', type: 'input', content: '' },
+              { id: 'c-name', type: 'input', content: '', piiEncrypted: true },
+              { id: 'c-tel', type: 'input', content: '', inputType: 'phone', piiEncrypted: true },
+              { id: 'c-mail', type: 'input', content: '', inputType: 'email', piiEncrypted: true },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const ROW = {
+    id: 'resp-1',
+    questionResponses: {
+      'q-info': {
+        'c-dept': '연구소/책임',
+        'c-name': '홍길동',
+        'c-tel': '02-345-6789',
+        'c-mail': 'asdf@naver.com',
+      },
+    },
+    contactValues: { 'attrs.기수': '3기', 'pii.성명': '김영희' },
+    entryParams: { euid: 'panel-77' },
+  };
+
+  beforeEach(() => {
+    process.env['ADMIN_USER_IDS'] = 'admin';
+    process.env['GUEST_SURVEY_GRANTS'] =
+      `${GUEST9}:${AI_2026_PUBLIC},${DAIRY}:${DAIRY_2026},field-1:${AI_2026_PUBLIC}`;
+    surveyFindFirstMock.mockResolvedValue(PII_SURVEY);
+    loadRawExportRowsMock.mockResolvedValue({
+      kind: 'ok',
+      rows: [ROW],
+      responseCount: 1,
+      nonRespondentCount: 0,
+    });
+    vi.mocked(generateRawDataWorkbook).mockClear();
+    vi.mocked(generateSavBuffer).mockClear();
+  });
+  afterEach(() => {
+    delete process.env['ADMIN_USER_IDS'];
+    delete process.env['GUEST_SURVEY_GRANTS'];
+  });
+
+  const workbookRows = () =>
+    vi.mocked(generateRawDataWorkbook).mock.calls[0]![1] as unknown as (typeof ROW)[];
+
+  it('내보내기를 허용하지 않은 게스트는 주소를 직접 불러도 받지 못한다 — 보기 전용이든 일반 게스트든', async () => {
+    for (const [userId, id] of [
+      [DAIRY, DAIRY_2026],
+      ['field-1', AI_2026_PUBLIC],
+    ] as const) {
+      authState.user = { id: userId };
+      for (const type of ['raw', 'raw-split', 'sav', 'sps']) {
+        const res = await exportGet(requestOf(id, `type=${type}&basis=q-info`), paramsOf(id));
+        expect(res.status, `${userId} ${type}`).toBe(403);
+      }
+      const preview = await splitPreviewGet(previewOf(id), paramsOf(id));
+      expect(preview.status, `${userId} split-preview`).toBe(403);
+    }
+    expect(loadRawExportRowsMock).not.toHaveBeenCalled();
+    expect(generateSavBuffer).not.toHaveBeenCalled();
+  });
+
+  it('허용한 게스트의 Raw 파일은 개인정보로 표시된 칸과 명단 개인정보 열만 가려서 나간다', async () => {
+    authState.user = { id: GUEST9 };
+    const res = await exportGet(requestOf(AI_2026_PUBLIC, 'type=raw'), paramsOf(AI_2026_PUBLIC));
+    expect(res.status).toBe(200);
+
+    const [row] = workbookRows();
+    expect(row!.questionResponses['q-info']).toEqual({
+      'c-dept': '연구소/책임',
+      'c-name': '홍길*',
+      'c-tel': '02-345...',
+      'c-mail': 'asd...@nav...',
+    });
+    // 명단 — 일반 열은 그대로, 개인정보 열(성명)은 마지막 글자만
+    expect(row!.contactValues).toEqual({ 'attrs.기수': '3기', 'pii.성명': '김영*' });
+    // 패널 회원 ID 는 그대로 나간다(사용자 결정)
+    expect(row!.entryParams).toEqual({ euid: 'panel-77' });
+  });
+
+  it('허용한 게스트의 분할 파일도 같은 가리기를 거친다', async () => {
+    authState.user = { id: GUEST9 };
+    const { buildSplitWorkbook } = await import('@/lib/analytics/split-workbook');
+    vi.mocked(buildSplitWorkbook).mockClear();
+    await exportGet(requestOf(AI_2026_PUBLIC, 'type=raw-split&basis=q-info'), paramsOf(AI_2026_PUBLIC));
+    const rows = vi.mocked(buildSplitWorkbook).mock.calls[0]?.[1] as unknown as (typeof ROW)[];
+    expect(rows?.[0]?.questionResponses['q-info']['c-name']).toBe('홍길*');
+  });
+
+  it('관리자가 받는 파일은 평문 그대로다', async () => {
+    authState.user = { id: 'admin' };
+    const res = await exportGet(requestOf(AI_2026_PUBLIC, 'type=raw'), paramsOf(AI_2026_PUBLIC));
+    expect(res.status).toBe(200);
+    expect(workbookRows()[0]).toBe(ROW);
   });
 });
