@@ -17,6 +17,8 @@
  * - 기본은 시험 실행이라 끝에서 되돌린다. `--commit` 일 때만 커밋한다.
  * - 없어지는 변수명이 하나라도 있으면 `--allow-var-changes` 없이는 되돌린다(새로 생기는 이름은 보여 주기만).
  * - 바뀐 행이 있으면 `surveys.updated_at` 을 올린다.
+ * - 커밋할 때는 고치기 전 문항·그룹 행을 `.scratch/survey-ops/patch-backups/` 에 파일로 남긴다.
+ *   파일을 쓰지 못하면 되돌린다(patch-backup.ts).
  * - 빌더 저장은 이 잠금을 잡지 않는다 — 빌더 탭이 열려 있으면 그 탭의 저장이 이 수정을 덮을 수 있다.
  */
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
@@ -58,6 +60,11 @@ export interface PatchOptions {
   commit: boolean;
   allowVarChanges: boolean;
   log?: (message: string) => void;
+  /**
+   * 커밋이 확정된 직후, 트랜잭션이 닫히기 전에 고치기 전 구조를 받는다. 던지면 되돌린다 —
+   * CLI 는 여기서 고치기 전 구조를 파일로 남긴다(patch-backup.ts). 시험 실행·거부·변경 없음에는 부르지 않는다.
+   */
+  beforeCommit?: (before: SurveyStructureRows) => Promise<void> | void;
 }
 
 export type PatchOutcome = 'committed' | 'dry-run' | 'rejected-var-change' | 'no-change';
@@ -163,6 +170,7 @@ export async function executeSurveyPatch(
         log('시험 실행 — 되돌렸습니다. 반영하려면 --commit 을 붙이세요.');
         throw new Rollback({ outcome: 'dry-run', ...base });
       }
+      await options.beforeCommit?.(before);
       return { outcome: 'committed' as const, ...base };
     });
   } catch (err) {

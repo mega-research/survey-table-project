@@ -5,6 +5,7 @@
  * 로 접속을 만들기 때문에, `loadOpsEnv` 로 env 를 채운 다음 동적 import 한다.
  */
 import { type OpsArgs, exitWithError, loadOpsEnv, parseOpsArgs } from './env';
+import { PATCH_BACKUP_DIR, writePatchBackup } from './patch-backup';
 import type { SurveyPatch } from './patch-core';
 
 export type { PatchContext, SurveyPatch } from './patch-core';
@@ -32,6 +33,17 @@ export function runSurveyPatch(
       const result = await executeSurveyPatch(db, patch, {
         commit: args.commit,
         allowVarChanges: args.allowVarChanges,
+        beforeCommit: (before) => {
+          const filePath = writePatchBackup({
+            dir: PATCH_BACKUP_DIR,
+            surveyId: patch.surveyId,
+            title: patch.title,
+            env: args.env,
+            before,
+            now: new Date(),
+          });
+          console.log(`고치기 전 구조를 남겼습니다: ${filePath}`);
+        },
       });
       if (result.outcome === 'committed') {
         console.log(
