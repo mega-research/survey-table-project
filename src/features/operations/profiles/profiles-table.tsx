@@ -13,7 +13,7 @@ import {
   ENTRY_PARAM_DISPLAY_LEN,
   answerKeyOf,
   entryKeyOf,
-  formatIpHash,
+  formatResponseSignal,
 } from '@/lib/operations/profile-columns-format';
 import {
   type ProfilesView,
@@ -110,8 +110,10 @@ interface DisplayRow {
   attrs: Record<string, string> | null;
   /** pii.* 컬럼의 piiByTarget 조인 키 */
   contactTargetId: string | null;
-  /** ipHash 앞 8자 표시값 (전체 해시는 렌더하지 않음) */
+  /** 접속 식별값 앞 8자 표시값 (전체 값은 렌더하지 않음) — IP 해시 · 브라우저 ID · 기기 사양 */
   ipHashText: string;
+  deviceIdText: string;
+  fpHashText: string;
   /** 들어온 링크의 이어 넘길 값 — 스킴의 entry.* 컬럼 표시용 */
   entryParams: Record<string, string> | null;
 }
@@ -187,7 +189,9 @@ export function ProfilesTable({
           isTest: r.isTest,
           attrs: r.attrs,
           contactTargetId: r.contactTargetId,
-          ipHashText: formatIpHash(r.ipHash),
+          ipHashText: formatResponseSignal(r.ipHash),
+          deviceIdText: formatResponseSignal(r.deviceId),
+          fpHashText: formatResponseSignal(r.fpHash),
           entryParams: r.entryParams,
         };
       }),
@@ -342,6 +346,20 @@ export function ProfilesTable({
           return {
             id: 'ipHash',
             accessorKey: 'ipHashText',
+            header: c.label,
+            meta: meta('left', false),
+          };
+        case 'sys.deviceId':
+          return {
+            id: 'deviceId',
+            accessorKey: 'deviceIdText',
+            header: c.label,
+            meta: meta('left', false),
+          };
+        case 'sys.fpHash':
+          return {
+            id: 'fpHash',
+            accessorKey: 'fpHashText',
             header: c.label,
             meta: meta('left', false),
           };

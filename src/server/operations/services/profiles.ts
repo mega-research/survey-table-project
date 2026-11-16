@@ -96,6 +96,8 @@ export async function listResponsesForProfiles(
       completedAt: surveyResponses.completedAt,
       totalSeconds: surveyResponses.totalSeconds,
       ipHash: surveyResponses.ipHash,
+      deviceId: surveyResponses.deviceId,
+      fpHash: surveyResponses.fpHash,
       // 이어 넘길 값(패널 회원 ID 등) — 표의 entry.* 열과 검색 절이 함께 본다.
       entryParams: sql<unknown>`${surveyResponses.metadata}->'entryParams'`.as('entry_params'),
       // 응답값 열(answer.*) 검색 절이 본다 — 목록 행 모양에는 싣지 않는다.
@@ -229,6 +231,8 @@ export async function listResponsesForProfiles(
       completedAt: numbered.completedAt,
       totalSeconds: numbered.totalSeconds,
       ipHash: numbered.ipHash,
+      deviceId: numbered.deviceId,
+      fpHash: numbered.fpHash,
       entryParams: numbered.entryParams,
       isTest: numbered.isTest,
       groupValue: numbered.groupValue,
@@ -261,6 +265,8 @@ export async function listResponsesForProfiles(
     attrs: (r.attrs ?? null) as Record<string, string> | null,
     contactTargetId: r.contactTargetId ?? null,
     ipHash: r.ipHash ?? null,
+    deviceId: r.deviceId ?? null,
+    fpHash: r.fpHash ?? null,
     entryParams: readStoredEntryParams(r.entryParams) ?? null,
   }));
 

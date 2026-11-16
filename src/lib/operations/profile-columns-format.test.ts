@@ -6,8 +6,9 @@ import {
   answerKeyOf,
   entryColumnKey,
   entryKeyOf,
-  formatIpHash,
+  formatResponseSignal,
   hydrateProfileColumns,
+  PROFILE_SYS_COLUMNS,
   selectRawExportContactColumns,
   visibleProfileColumns,
 } from '@/lib/operations/profile-columns-format';
@@ -40,14 +41,26 @@ describe('hydrateProfileColumns', () => {
       'sys.completedAt',
       'sys.totalSeconds',
       'sys.ipHash',
+      'sys.deviceId',
+      'sys.fpHash',
       'attrs.업체명',
       'attrs.지역',
       'pii.담당자',
     ]);
 
-    // 기본 표시: 기존 9컬럼은 보임, ipHash 와 attrs/pii 는 숨김
+    // 기본 표시: 기존 9컬럼은 보임, 접속 식별값 셋(IP 해시·브라우저 ID·기기 사양)과 attrs/pii 는 숨김
     const hiddenKeys = cols.filter((c) => c.hidden).map((c) => c.key);
-    expect(hiddenKeys).toEqual(['sys.ipHash', 'attrs.업체명', 'attrs.지역', 'pii.담당자']);
+    expect(hiddenKeys).toEqual([
+      'sys.ipHash',
+      'sys.deviceId',
+      'sys.fpHash',
+      'attrs.업체명',
+      'attrs.지역',
+      'pii.담당자',
+    ]);
+    // 화면 이름은 코드 이름(deviceId·fpHash)과 다르다 — 브라우저에 심은 번호와 기기·브라우저 사양
+    expect(cols.find((c) => c.key === 'sys.deviceId')?.label).toBe('브라우저 ID');
+    expect(cols.find((c) => c.key === 'sys.fpHash')?.label).toBe('기기 사양');
   });
 
   it('sys.resid 기본 라벨은 컨택 스킴의 system.resid 라벨을 따른다', () => {
@@ -87,11 +100,13 @@ describe('hydrateProfileColumns', () => {
   it('이어 넘길 값 이름마다 entry 열을 시스템 열 뒤에 보이는 채로 만든다', () => {
     const cols = hydrateProfileColumns(contactScheme, null, ['euid', 'pid']);
     const keys = cols.map((c) => c.key);
-    expect(keys.slice(10, 12)).toEqual(['entry.euid', 'entry.pid']);
+    // 시스템 열 수가 늘어도 「시스템 열 바로 뒤」가 유지되는지 본다
+    const sysCount = PROFILE_SYS_COLUMNS.length;
+    expect(keys.slice(sysCount, sysCount + 2)).toEqual(['entry.euid', 'entry.pid']);
     expect(cols.find((c) => c.key === 'entry.euid')).toEqual({
       key: 'entry.euid',
       label: 'euid',
-      order: 10,
+      order: sysCount,
     });
   });
 
@@ -176,14 +191,16 @@ describe('visibleProfileColumns', () => {
   });
 });
 
-describe('formatIpHash', () => {
+describe('formatResponseSignal', () => {
   it('앞 8자만 반환한다', () => {
-    expect(formatIpHash('abcdef1234567890')).toBe('abcdef12');
+    expect(formatResponseSignal('abcdef1234567890')).toBe('abcdef12');
+    // 브라우저 ID 는 UUID — 첫 마디만 보인다
+    expect(formatResponseSignal('dc9c7347-1111-4222-8333-444444444444')).toBe('dc9c7347');
   });
 
   it('null·빈 문자열은 — 로 표시한다', () => {
-    expect(formatIpHash(null)).toBe('—');
-    expect(formatIpHash('')).toBe('—');
+    expect(formatResponseSignal(null)).toBe('—');
+    expect(formatResponseSignal('')).toBe('—');
   });
 });
 

@@ -45,11 +45,18 @@ export function entryKeyOf(key: string): string | null {
 interface SysColumnDef {
   key: string;
   label: string;
-  /** 스킴 미저장 시 기본 숨김 (ipHash 는 opt-in) */
+  /** 스킴 미저장 시 기본 숨김 (접속 식별값 열은 opt-in) */
   defaultHidden?: boolean;
 }
 
-/** 시스템 컬럼 풀 — 기존 응답 내역 테이블 9컬럼 + ipHash(기본 숨김). 순서가 기본 순서. */
+/**
+ * 시스템 컬럼 풀 — 기존 응답 내역 테이블 9컬럼 + 접속 식별값 셋(기본 숨김). 순서가 기본 순서.
+ *
+ * 접속 식별값은 중복 응답 차단이 보는 세 값이다. 화면 이름은 코드·DB 이름과 다르다(2026-11-16):
+ * `deviceId`(device_id)는 기기 번호가 아니라 그 브라우저 저장소에 심은 무작위 번호라 「브라우저 ID」,
+ * `fpHash`(fp_hash)는 브라우저 종류·해상도·시간대·언어·OS 를 뭉친 값이라 「기기 사양」이다 —
+ * 사양이 같은 PC 끼리는 같은 값이 나온다. 같은 응답자인지는 브라우저 ID 가 같을 때만 확실하다.
+ */
 export const PROFILE_SYS_COLUMNS: readonly SysColumnDef[] = [
   { key: 'sys.idx', label: '순번' },
   { key: 'sys.resid', label: RESID_DEFAULT_LABEL },
@@ -61,6 +68,8 @@ export const PROFILE_SYS_COLUMNS: readonly SysColumnDef[] = [
   { key: 'sys.completedAt', label: '종료일시' },
   { key: 'sys.totalSeconds', label: '소요시간' },
   { key: 'sys.ipHash', label: 'IP 해시', defaultHidden: true },
+  { key: 'sys.deviceId', label: '브라우저 ID', defaultHidden: true },
+  { key: 'sys.fpHash', label: '기기 사양', defaultHidden: true },
 ];
 
 /**
@@ -131,12 +140,13 @@ export function visibleProfileColumns(columns: ProfileColumnDef[]): ProfileColum
     .sort((a, b) => a.order - b.order);
 }
 
-/** ipHash 표시 자릿수 — 전체 해시는 노출하지 않는다. */
-export const IP_HASH_DISPLAY_LEN = 8;
+/** 접속 식별값(IP 해시·브라우저 ID·기기 사양) 표시 자릿수 — 전체 값은 노출하지 않는다. */
+export const RESPONSE_SIGNAL_DISPLAY_LEN = 8;
 
-export function formatIpHash(hash: string | null): string {
-  if (!hash) return '—';
-  return hash.slice(0, IP_HASH_DISPLAY_LEN);
+/** 접속 식별값 표시 — 앞 8자만. 같은 값끼리 견주는 용도라 그만큼이면 충분하다. */
+export function formatResponseSignal(value: string | null): string {
+  if (!value) return '—';
+  return value.slice(0, RESPONSE_SIGNAL_DISPLAY_LEN);
 }
 
 /**

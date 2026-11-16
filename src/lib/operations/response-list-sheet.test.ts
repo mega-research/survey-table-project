@@ -26,6 +26,8 @@ function row(over: Partial<ProfilesRow>): ProfilesRow {
     attrs: null,
     contactTargetId: null,
     ipHash: null,
+    deviceId: null,
+    fpHash: null,
     entryParams: null,
     isTest: false,
     ...over,
@@ -143,5 +145,32 @@ describe('buildResponseListTable', () => {
       '업체명',
       '담당자',
     ]);
+  });
+
+  it('접속 식별값 열(IP 해시·브라우저 ID·기기 사양)은 화면처럼 앞 8자만 싣는다', () => {
+    const table = buildResponseListTable({
+      columns: [
+        col('sys.ipHash', 'IP 해시', 0),
+        col('sys.deviceId', '브라우저 ID', 1),
+        col('sys.fpHash', '기기 사양', 2),
+      ],
+      rows: [
+        row({
+          ipHash: '1b2f67f8aaaaaaaaaaaaaaaa',
+          deviceId: '5cce2545-1111-4222-8333-444444444444',
+          fpHash: 'ec7b3f35bbbbbbbbbbbbbbbb',
+        }),
+        row({ id: 'r2' }),
+      ],
+      stepLocations: {},
+      hasContacts: false,
+      piiByTarget: {},
+      answerValues: {},
+    });
+
+    expect(table.headers).toEqual(['IP 해시', '브라우저 ID', '기기 사양']);
+    expect(table.rows[0]).toEqual(['1b2f67f8', '5cce2545', 'ec7b3f35']);
+    // 값이 없는 응답(저장소가 막힌 브라우저 등)은 화면과 같은 빈 표시
+    expect(table.rows[1]).toEqual(['—', '—', '—']);
   });
 });
