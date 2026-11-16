@@ -197,7 +197,7 @@ RSC (서버 컴포넌트)
 | `r2KeyRefAudit`       | cron `TZ=Asia/Seoul 0 3 1 * *`    | R2 참조 인덱스 전량 재추출 (월 1회)                       |
 | `mailFallbackSweeper` | cron `TZ=Asia/Seoul */10 * * * *` | 대체 발송 누락·큐 미발행 복구 (10분마다)                  |
 
-로컬 dev: `pnpm inngest`. **Inngest 자동 sync가 끊겨 있어 함수 변경 배포 후 대시보드에서 수동 Resync 필요.**
+로컬 dev: `pnpm inngest`. **Inngest 는 자동으로 sync 하지 않는다 — 함수를 더하거나 빼거나 트리거·예약·재시도 설정을 바꿔 배포했으면 대시보드에서 수동 Resync.** 함수 본문만 고친 배포는 Resync 없이 새 코드가 돈다. 대시보드에는 6개로 보인다 — `campaignDispatcher` 의 `onFailure` 가 `campaign-dispatcher (failure)` 로 따로 등록된다.
 
 ---
 
