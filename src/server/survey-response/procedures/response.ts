@@ -1,11 +1,13 @@
 import { ORPCError } from '@orpc/server';
 
+import { bindRequestLog } from '@/lib/logger/request-log-scope';
 import { pub, withRateLimit } from '@/server/orpc';
 
 import {
   CompleteResponseInput,
   CreateBlankResponseInput,
   CreateResponseWithFirstAnswerInput,
+  type FirstAnswerResult,
   FirstAnswerResultSchema,
   SaveDraftResponseInput,
   SaveDraftResponseOutput,
@@ -37,6 +39,16 @@ function mapTestVersionPruned(err: unknown): never {
   throw err;
 }
 const draftRateLimited = pub.use(withRateLimit('response-draft'));
+
+/**
+ * 만든 응답의 id 를 요청 로그 한 줄에 싣는다. 생성 요청은 입력에 responseId 가 없어 로깅
+ * 미들웨어가 꺼낼 수 없다 — 이 줄이 빠지면 응답 id 로 로그를 훑을 때 「만든 순간」이 비어 보인다.
+ * 중복 감지로 막힌 결과(blocked 등)는 만든 행이 없으므로 싣지 않는다.
+ */
+function bindCreatedResponseId(result: FirstAnswerResult): FirstAnswerResult {
+  if (result.kind === 'created') bindRequestLog({ responseId: result.id });
+  return result;
+}
 
 // 주의: response.start 는 제거됨(봇 방어). clientSignals/honeypot 을 받지 않는 무인증 빈 행
 // 생성 경로라 봇 우회 표면이었고, 정상 클라이언트는 createWithFirstAnswer/createBlank 만 쓴다.
@@ -71,7 +83,12 @@ const saveDraft = draftRateLimited
 const createWithFirstAnswer = rateLimited
   .input(CreateResponseWithFirstAnswerInput)
   .output(FirstAnswerResultSchema)
-  .handler(({ input }) => entry.createResponseWithFirstAnswer(input).catch(mapTestVersionPruned));
+  .handler(({ input }) =>
+    entry
+      .createResponseWithFirstAnswer(input)
+      .then(bindCreatedResponseId)
+      .catch(mapTestVersionPruned),
+  );
 
 /**
  * 답변 없는 빈 응답 행 생성(pub). notice-only 등 silent data loss 방지 fallback.
@@ -79,7 +96,9 @@ const createWithFirstAnswer = rateLimited
 const createBlank = rateLimited
   .input(CreateBlankResponseInput)
   .output(FirstAnswerResultSchema)
-  .handler(({ input }) => entry.createBlankResponse(input).catch(mapTestVersionPruned));
+  .handler(({ input }) =>
+    entry.createBlankResponse(input).then(bindCreatedResponseId).catch(mapTestVersionPruned),
+  );
 
 /**
  * 응답 완료(pub). 응답 원본(JSONB) 저장, prefill 재검증, 컨택 매칭 후처리.

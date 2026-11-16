@@ -3,7 +3,8 @@ import * as Sentry from '@sentry/nextjs';
 
 import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
 import { isGuestUser } from '@/lib/auth/guest-grants';
-import { logger } from '@/lib/logger';
+import { logger, type LogContext } from '@/lib/logger';
+import { readContentLength, runWithRequestLogScope } from '@/lib/logger/request-log-scope';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
 
 import type { ORPCContext } from './context';
@@ -17,8 +18,12 @@ import { getSentryContext, isSentryWorthyRpcError, markSentryCaptured } from './
  * 컨텍스트에 접근할 수 있고, RPCHandler(/api/rpc)와 OpenAPIHandler(/api/v1) 양쪽을
  * 핸들러 수정 없이 동일하게 커버한다.
  *
- * allowlist 관례: 바인딩은 식별자(rpc·userId·role·ip·surveyId)와 durationMs 뿐이다.
- * input/output 본문·JSONB 컨테이너·PII 평문은 싣지 않는다 — redact 는 안전망일 뿐.
+ * allowlist 관례: 바인딩은 식별자(rpc·userId·role·ip·surveyId·responseId)와 크기·시간
+ * (reqBytes·durationMs)뿐이다. input/output 본문·JSONB 컨테이너·PII 평문은 싣지 않는다
+ * — redact 는 안전망일 뿐.
+ *
+ * 입력에 없는 식별자(응답 저장의 설문 id, 응답 생성의 responseId)는 서비스가 요청 로그 범위
+ * (`bindRequestLog`)로 싣고, 이 미들웨어가 같은 한 줄에 합친다.
  */
 
 /**
@@ -53,6 +58,23 @@ function extractSurveyIdOrUndefined(input: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
+/** responseId 로 받아 줄 길이 상한 — 실값은 UUID 36자, 입력 스키마(SaveDraftResponseInput)와 같은 값. */
+const MAX_LOGGED_RESPONSE_ID_LENGTH = 128;
+
+/**
+ * 입력에서 responseId 만 안전 추출한다 — 최상위 string 키 하나만 본다(surveyId 와 같은 규칙).
+ *
+ * 이 미들웨어는 zod 검증보다 앞이라 값이 임의 길이일 수 있다. 상한을 넘으면 싣지 않는다.
+ */
+function extractResponseIdOrUndefined(input: unknown): string | undefined {
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+    return undefined;
+  }
+  const value = (input as Record<string, unknown>)['responseId'];
+  if (typeof value !== 'string' || value === '') return undefined;
+  return value.length <= MAX_LOGGED_RESPONSE_ID_LENGTH ? value : undefined;
+}
+
 export const rpcLoggingMiddleware = os
   .$context<ORPCContext>()
   .middleware(async ({ context, path, next }, input: unknown) => {
@@ -64,18 +86,24 @@ export const rpcLoggingMiddleware = os
       role: resolveLogRole(context.user?.id),
       ip: getTrustedClientIpOrNull(context.headers ?? new Headers()) ?? undefined,
       surveyId: extractSurveyIdOrUndefined(input),
+      responseId: extractResponseIdOrUndefined(input),
+      // 요청 본문 크기 — 저장 한 건이 얼마나 큰지(응답 저장 원장 설계의 실측 재료)
+      reqBytes: readContentLength(context.headers),
     };
+    // 서비스가 도중에 알게 된 식별자가 쌓이는 묶음. 서버가 행을 읽어 확인한 값이라 입력에서
+    // 꺼낸 값보다 뒤에 펼쳐 우선한다.
+    const bound: LogContext = {};
 
     try {
-      const result = await next();
-      logger.info({ ...fields, durationMs: Date.now() - startedAt }, '[rpc] 완료');
+      const result = await runWithRequestLogScope(bound, () => next());
+      logger.info({ ...fields, ...bound, durationMs: Date.now() - startedAt }, '[rpc] 완료');
       return result;
     } catch (error) {
       // 비-ORPCError 는 wire 에서 INTERNAL_SERVER_ERROR 로 마스킹된다(rpc-error-policy)
       // — 로그 code 도 같은 값으로 맞춰 클라이언트 관측과 대조 가능하게 한다.
       const code = error instanceof ORPCError ? error.code : 'INTERNAL_SERVER_ERROR';
       logger.error(
-        { ...fields, durationMs: Date.now() - startedAt, code, err: error },
+        { ...fields, ...bound, durationMs: Date.now() - startedAt, code, err: error },
         '[rpc] 실패',
       );
       // 진짜 장애만 Sentry 로 — typed domain error 와 코드 있는 거부(인증·권한·한도)는 정상 경로다.
@@ -88,7 +116,8 @@ export const rpcLoggingMiddleware = os
           scope.setTag('rpc', fields.rpc);
           scope.setTag('code', code);
           scope.setTag('role', fields.role);
-          if (fields.surveyId) scope.setTag('surveyId', fields.surveyId);
+          const surveyId = bound.surveyId ?? fields.surveyId;
+          if (surveyId) scope.setTag('surveyId', surveyId);
           const detail = getSentryContext(error);
           if (detail) scope.setContext('detail', detail);
           Sentry.captureException(error);

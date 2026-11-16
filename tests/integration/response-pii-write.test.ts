@@ -634,6 +634,23 @@ describe('completeResponse — PII 문항만 선별 암호화', () => {
     expect(JSON.stringify(storedMap)).not.toContain(PII_PLAINTEXT);
   });
 
+  it('요청 로그에 그 응답의 설문 id 를 싣는다 — 제출 입력에는 responseId 만 있다', async () => {
+    const { completeResponse } = await import(
+      '@/server/survey-response/services/response-completion'
+    );
+    const { runWithRequestLogScope } = await import('@/lib/logger/request-log-scope');
+    const bound: Record<string, unknown> = {};
+    await runWithRequestLogScope(bound, () =>
+      completeResponse({
+        responseId: RESPONSE_ID,
+        data: { questionResponses: { [PLAIN_QUESTION_ID]: '평문 답변' } },
+      }),
+    );
+
+    // 식별자만 싣는다 — 답은 어떤 키로도 실리지 않는다
+    expect(bound).toEqual({ surveyId: SURVEY_ID });
+  });
+
   // 회귀 가드: loadPiiQuestionIds 가 보내는 쿼리 텍스트에 UNION + live pii_encrypted 조각이
   // 실수로 빠지지 않았는지만 확인한다. mock 은 SQL 을 실행하지 않으므로 "스냅샷에 없어도
   // 라이브 플래그로 잡힌다"는 실제 합집합 동작 자체는 이 테스트로 검증되지 않는다(실DB 영역).
@@ -834,6 +851,21 @@ describe('saveDraftResponse — 저장값(암호문) 기준 크기 가드', () =
     });
     expect(result.applied).toBe(true);
     expect(updateSetLogMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('요청 로그에 그 응답의 설문 id 를 싣는다 — 초안 저장 입력에는 responseId 만 있다', async () => {
+    executeMock.mockResolvedValue([{ id: QUESTION_ID, pii: false }]);
+    const { saveDraftResponse } = await import(
+      '@/server/survey-response/services/response-draft'
+    );
+    const { runWithRequestLogScope } = await import('@/lib/logger/request-log-scope');
+    const bound: Record<string, unknown> = {};
+    await runWithRequestLogScope(bound, () =>
+      saveDraftResponse({ responseId: RESPONSE_ID, answers: { [QUESTION_ID]: '답' } }),
+    );
+
+    // 식별자만 싣는다 — 답은 어떤 키로도 실리지 않는다
+    expect(bound).toEqual({ surveyId: SURVEY_ID });
   });
 
   it('beacon 래퍼는 같은 거부를 500 이 아니라 skipped 로 접는다', async () => {

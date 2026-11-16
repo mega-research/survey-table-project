@@ -40,6 +40,8 @@ vi.mock('@/lib/logger', () => ({
   REDACT_PATHS: [],
 }));
 
+import { bindRequestLog } from '@/lib/logger/request-log-scope';
+
 import { authed, base, pub } from './orpc';
 import { isSentryCaptured } from './rpc-error-policy';
 
@@ -71,6 +73,19 @@ const testRouter = {
       .handler(() => []),
   },
   boom: pub.handler(() => {
+    throw new Error('db down');
+  }),
+  // 응답 저장 표면의 모양 — 입력에는 responseId 만 있고 설문 id 는 서비스가 행을 읽어야 안다.
+  saveDraft: pub
+    .input(z.object({ responseId: z.string(), answers: z.record(z.string(), z.unknown()) }))
+    .handler(async ({ input }) => {
+      // 서비스가 응답 행을 읽은 뒤 그 행의 설문 id 를 요청 로그에 싣는 자리
+      await Promise.resolve();
+      bindRequestLog({ surveyId: `svy-of-${input.responseId}` });
+      return { ok: true };
+    }),
+  bindThenBoom: pub.handler(() => {
+    bindRequestLog({ surveyId: 'svy-9', responseId: 'resp-9' });
     throw new Error('db down');
   }),
   adminOnly: authed.handler(() => 'ok'),
@@ -198,5 +213,71 @@ describe('rpcLoggingMiddleware', () => {
     expect(logged.info).toHaveBeenCalledTimes(1);
     const [fields] = logged.info.mock.calls[0] as [Record<string, unknown>];
     expect(fields).toMatchObject({ rpc: 'health' });
+  });
+
+  it('입력의 responseId 를 꺼내 기록한다 — 답(answers)은 싣지 않는다', async () => {
+    const client = createRouterClient(testRouter, { context: ctx(null) });
+    await client.saveDraft({ responseId: 'resp-1', answers: { q1: '홍길동' } });
+
+    const [fields] = logged.info.mock.calls[0] as [Record<string, unknown>];
+    expect(fields).toMatchObject({ rpc: 'saveDraft', responseId: 'resp-1' });
+    expect(fields).not.toHaveProperty('answers');
+    expect(JSON.stringify(fields)).not.toContain('홍길동');
+  });
+
+  it('검증 전 입력이라 128자를 넘는 responseId 는 기록하지 않는다', async () => {
+    const client = createRouterClient(testRouter, { context: ctx(null) });
+    await client.saveDraft({ responseId: 'x'.repeat(129), answers: {} });
+
+    const [fields] = logged.info.mock.calls[0] as [Record<string, unknown>];
+    expect(fields['responseId']).toBeUndefined();
+  });
+
+  it('서비스가 요청 로그에 실은 식별자(설문 id)가 완료 로그 한 줄에 합쳐진다', async () => {
+    const client = createRouterClient(testRouter, { context: ctx(null) });
+    await client.saveDraft({ responseId: 'resp-1', answers: {} });
+
+    expect(logged.info).toHaveBeenCalledTimes(1);
+    const [fields] = logged.info.mock.calls[0] as [Record<string, unknown>];
+    expect(fields).toMatchObject({ responseId: 'resp-1', surveyId: 'svy-of-resp-1' });
+  });
+
+  it('동시에 도는 요청끼리 실은 식별자가 섞이지 않는다', async () => {
+    const client = createRouterClient(testRouter, { context: ctx(null) });
+    await Promise.all([
+      client.saveDraft({ responseId: 'resp-a', answers: {} }),
+      client.saveDraft({ responseId: 'resp-b', answers: {} }),
+    ]);
+
+    const pairs = logged.info.mock.calls.map(([fields]) => {
+      const f = fields as Record<string, unknown>;
+      return `${String(f['responseId'])}:${String(f['surveyId'])}`;
+    });
+    expect(pairs.sort()).toEqual(['resp-a:svy-of-resp-a', 'resp-b:svy-of-resp-b']);
+  });
+
+  it('실패해도 그때까지 실은 식별자가 실패 로그와 Sentry 태그에 남는다', async () => {
+    const client = createRouterClient(testRouter, { context: ctx(null) });
+    await client.bindThenBoom().catch(() => undefined);
+
+    const [fields] = logged.error.mock.calls[0] as [Record<string, unknown>];
+    expect(fields).toMatchObject({ rpc: 'bindThenBoom', surveyId: 'svy-9', responseId: 'resp-9' });
+    expect(sentry.tags[0]).toMatchObject({ surveyId: 'svy-9' });
+  });
+
+  it('요청 크기(Content-Length)를 reqBytes 로 기록하고, 숫자가 아니면 뺀다', async () => {
+    const sized = createRouterClient(testRouter, {
+      context: ctx(null, new Headers({ 'content-length': '2048' })),
+    });
+    await sized.ping();
+    const broken = createRouterClient(testRouter, {
+      context: ctx(null, new Headers({ 'content-length': 'abc' })),
+    });
+    await broken.ping();
+
+    const [first] = logged.info.mock.calls[0] as [Record<string, unknown>];
+    const [second] = logged.info.mock.calls[1] as [Record<string, unknown>];
+    expect(first['reqBytes']).toBe(2048);
+    expect(second['reqBytes']).toBeUndefined();
   });
 });

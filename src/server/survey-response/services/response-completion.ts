@@ -50,6 +50,7 @@ import { db } from '@/db';
 import { contactTargets, surveyResponses, surveys } from '@/db/schema';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { logger } from '@/lib/logger';
+import { bindRequestLog } from '@/lib/logger/request-log-scope';
 import { sumActiveSeconds } from '@/lib/operations/active-seconds';
 import { isMidSurveyCloseActive, resolveMidSurveyClosedMessage } from '@/lib/quota/closed-message';
 import type { NormalizedQuotaConfig } from '@/lib/quota/normalize';
@@ -138,6 +139,8 @@ export async function completeResponse(
       currentStepId: true,
     },
   });
+  // 제출 입력에는 responseId 만 있다 — 요청 로그 한 줄이 어느 설문의 제출인지 여기서 싣는다.
+  if (gateRow) bindRequestLog({ surveyId: gateRow.surveyId });
   // 전체 완료 목표 — 잠금 아래 판정이 필요한 제출만 값이 있다(목표 없음·테스트·재응답 허용은 null).
   // 값 자체는 잠금 전에 읽은 것이라 판정에는 잠금 아래에서 다시 읽은 목표를 쓴다.
   let completionTarget: number | null = null;
