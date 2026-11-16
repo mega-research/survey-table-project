@@ -47,8 +47,8 @@ async function handleSplitPreview(
     if (!canAccessSurvey(user.id, surveyId)) {
       return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
     }
-    // 내보내기와 같은 판정 — 게스트는 내보내기를 허용한 grant 만.
-    if (!canExportSurveyData(user.id, surveyId)) {
+    // 내보내기와 같은 판정 — 답이 든 파일의 미리보기라 게스트는 받지 못한다.
+    if (!canExportSurveyData(user.id, surveyId, 'data')) {
       return NextResponse.json({ error: '이 계정은 데이터를 내려받을 수 없습니다.' }, { status: 403 });
     }
     const basis = request.nextUrl.searchParams.get('basis');

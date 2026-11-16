@@ -11,7 +11,9 @@ const {
   countRawExportPopulationMock,
   getContactColumnSchemeMock,
   loadFieldCompletedCodesMock,
+  loadResponseListTableMock,
 } = vi.hoisted(() => ({
+  loadResponseListTableMock: vi.fn(),
   authState: { user: { id: 'admin' } as null | { id: string } },
   surveyFindFirstMock: vi.fn(),
   loadRawExportRowsMock: vi.fn(),
@@ -79,6 +81,9 @@ vi.mock('./raw-export-load', () => ({
   })),
 }));
 
+// 응답 내역 목록의 재료 조립은 response-list-load.test.ts 몫 — 여기서는 권한과 부르는 모양만 본다.
+vi.mock('./response-list-load', () => ({ loadResponseListTable: loadResponseListTableMock }));
+
 vi.mock('@/lib/analytics/raw-workbook', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/analytics/raw-workbook')>();
   return {
@@ -103,7 +108,6 @@ import { GET as exportGet } from '@/app/api/surveys/[surveyId]/export/route';
 import { GET as splitPreviewGet } from '@/app/api/surveys/[surveyId]/export/split-preview/route';
 import { buildRawExportContext } from './raw-export-load';
 import { normalizeContactColumnScheme } from '@/lib/operations/contacts-format';
-import { generateRawDataWorkbook } from '@/lib/analytics/raw-workbook';
 import { generateSavBuffer } from '@/lib/spss/sav-builder';
 
 const surveyId = 'survey-params';
@@ -404,16 +408,18 @@ describe('GET /export — 조사 대상 명단 열 (응답 내역 컬럼 설정 
 });
 
 /**
- * 게스트의 내려받기 (2026-11-16) — 내보내기를 허용한 grant 만 받고, 받는 파일은 개인정보로 표시된 값이
- * 가려진다. 버튼은 화면에서 숨기지만 이 주소는 직접 부를 수 있어 여기서 막는다.
+ * 게스트의 내려받기 (2026-11-16) — 게스트는 grant 가 허용한 종류만 받는다. 지금 허용하는 것은 응답 내역
+ * 목록(`response-list`)뿐이고 답이 든 파일(Raw·분할·SPSS)은 어느 게스트도 받지 못한다.
+ * 버튼은 화면에서 숨기지만 이 주소는 직접 부를 수 있어 여기서 막는다.
  */
 describe('GET /export — 게스트의 내려받기', () => {
-  // guest9 — guest-grants.ts 의 VIEW_ONLY_GUEST_GRANTS 에서 allowExport 를 켠 실제 쌍.
+  // guest9 — guest-grants.ts 의 VIEW_ONLY_GUEST_GRANTS 에서 allowExport: 'response-list' 인 실제 쌍.
   const GUEST9 = 'c79af8a1-186a-4157-be4c-2bebfbde4a8d';
   const AI_2026_PUBLIC = '253534a5-913a-4891-a019-f9643ccea0a7';
-  // dairy@ — 보기 전용이지만 allowExport 가 꺼져 있다.
+  // dairy@ — 보기 전용이지만 allowExport 가 없다.
   const DAIRY = '75060289-51b4-44e7-8fd1-dabf73a0bfaf';
   const DAIRY_2026 = '24b15972-36fe-400a-adfe-7d4c80438204';
+  const DATA_TYPES = ['raw', 'raw-split', 'sav', 'sps'];
 
   const paramsOf = (id: string) => ({ params: Promise.resolve({ surveyId: id }) });
   const requestOf = (id: string, query: string) =>
@@ -421,60 +427,17 @@ describe('GET /export — 게스트의 내려받기', () => {
   const previewOf = (id: string) =>
     new NextRequest(`http://localhost/api/surveys/${id}/export/split-preview`);
 
-  const PII_SURVEY = {
-    ...SURVEY_FIXTURE,
-    id: AI_2026_PUBLIC,
-    profileColumns: PROFILE_SCHEME,
-    questions: [
-      {
-        id: 'q-info',
-        surveyId: AI_2026_PUBLIC,
-        type: 'table',
-        title: '기업 소개',
-        required: true,
-        order: 0,
-        tableColumns: [{ id: 'col-1', label: '값' }],
-        tableRowsData: [
-          {
-            id: 'r1',
-            label: '응답자',
-            cells: [
-              { id: 'c-dept', type: 'input', content: '' },
-              { id: 'c-name', type: 'input', content: '', piiEncrypted: true },
-              { id: 'c-tel', type: 'input', content: '', inputType: 'phone', piiEncrypted: true },
-              { id: 'c-mail', type: 'input', content: '', inputType: 'email', piiEncrypted: true },
-            ],
-          },
-        ],
-      },
-    ],
-  };
-  const ROW = {
-    id: 'resp-1',
-    questionResponses: {
-      'q-info': {
-        'c-dept': '연구소/책임',
-        'c-name': '홍길동',
-        'c-tel': '02-345-6789',
-        'c-mail': 'asdf@naver.com',
-      },
-    },
-    contactValues: { 'attrs.기수': '3기', 'pii.성명': '김영희' },
-    entryParams: { euid: 'panel-77' },
-  };
-
   beforeEach(() => {
     process.env['ADMIN_USER_IDS'] = 'admin';
     process.env['GUEST_SURVEY_GRANTS'] =
       `${GUEST9}:${AI_2026_PUBLIC},${DAIRY}:${DAIRY_2026},field-1:${AI_2026_PUBLIC}`;
-    surveyFindFirstMock.mockResolvedValue(PII_SURVEY);
-    loadRawExportRowsMock.mockResolvedValue({
+    surveyFindFirstMock.mockResolvedValue({ ...SURVEY_FIXTURE, id: AI_2026_PUBLIC });
+    loadResponseListTableMock.mockReset();
+    loadResponseListTableMock.mockResolvedValue({
       kind: 'ok',
-      rows: [ROW],
-      responseCount: 1,
-      nonRespondentCount: 0,
+      headers: ['순번', '유저ID'],
+      rows: [[2, 'panel-77']],
     });
-    vi.mocked(generateRawDataWorkbook).mockClear();
     vi.mocked(generateSavBuffer).mockClear();
   });
   afterEach(() => {
@@ -482,69 +445,87 @@ describe('GET /export — 게스트의 내려받기', () => {
     delete process.env['GUEST_SURVEY_GRANTS'];
   });
 
-  const workbookRows = () =>
-    vi.mocked(generateRawDataWorkbook).mock.calls[0]![1] as unknown as (typeof ROW)[];
-
-  it('내보내기를 허용하지 않은 게스트는 주소를 직접 불러도 받지 못한다 — 보기 전용이든 일반 게스트든', async () => {
+  it('내려받기를 허용하지 않은 게스트는 어떤 형식도 받지 못한다 — 보기 전용이든 일반 게스트든', async () => {
     for (const [userId, id] of [
       [DAIRY, DAIRY_2026],
       ['field-1', AI_2026_PUBLIC],
     ] as const) {
       authState.user = { id: userId };
-      for (const type of ['raw', 'raw-split', 'sav', 'sps']) {
-        const res = await exportGet(requestOf(id, `type=${type}&basis=q-info`), paramsOf(id));
+      for (const type of [...DATA_TYPES, 'response-list', 'bogus']) {
+        const res = await exportGet(requestOf(id, `type=${type}&basis=basis`), paramsOf(id));
         expect(res.status, `${userId} ${type}`).toBe(403);
       }
       const preview = await splitPreviewGet(previewOf(id), paramsOf(id));
       expect(preview.status, `${userId} split-preview`).toBe(403);
     }
     expect(loadRawExportRowsMock).not.toHaveBeenCalled();
+    expect(loadResponseListTableMock).not.toHaveBeenCalled();
     expect(generateSavBuffer).not.toHaveBeenCalled();
   });
 
-  it('허용한 게스트의 Raw 파일은 개인정보로 표시된 칸과 명단 개인정보 열만 가려서 나간다', async () => {
+  it('응답 내역 목록만 허용한 게스트는 답이 든 파일(Raw·분할·SPSS)과 그 미리보기를 받지 못한다', async () => {
     authState.user = { id: GUEST9 };
-    const res = await exportGet(requestOf(AI_2026_PUBLIC, 'type=raw'), paramsOf(AI_2026_PUBLIC));
-    expect(res.status).toBe(200);
+    for (const type of DATA_TYPES) {
+      const res = await exportGet(
+        requestOf(AI_2026_PUBLIC, `type=${type}&basis=basis`),
+        paramsOf(AI_2026_PUBLIC),
+      );
+      expect(res.status, type).toBe(403);
+    }
+    const preview = await splitPreviewGet(previewOf(AI_2026_PUBLIC), paramsOf(AI_2026_PUBLIC));
+    expect(preview.status).toBe(403);
+    expect(loadRawExportRowsMock).not.toHaveBeenCalled();
+    expect(generateSavBuffer).not.toHaveBeenCalled();
+  });
 
-    // 답은 로더가 가린다 — 라우트는 가리는 함수를 넘긴다(저장된 모양까지 본다).
-    const maskAnswers = loaderOptions()['maskAnswers'] as (
-      plain: Record<string, unknown>,
-      stored: Record<string, unknown> | null,
-    ) => Record<string, unknown>;
-    expect(maskAnswers(ROW.questionResponses, null)['q-info']).toEqual({
-      'c-dept': '연구소/책임',
-      'c-name': '홍길*',
-      'c-tel': '02-345...',
-      'c-mail': 'asd...@nav...',
+  it('그 게스트는 응답 내역 목록 엑셀을 받는다 — 개인정보는 가리게 부르고 캐시에 남기지 않는다', async () => {
+    authState.user = { id: GUEST9 };
+    const res = await exportGet(
+      requestOf(AI_2026_PUBLIC, 'type=response-list'),
+      paramsOf(AI_2026_PUBLIC),
+    );
+    expect(res.status).toBe(200);
+    expect(loadResponseListTableMock).toHaveBeenCalledWith(AI_2026_PUBLIC, 'real', {
+      maskPii: true,
     });
-    // 지금은 표시가 꺼진 칸이라도 암호문으로 저장돼 있었으면 가린다
-    expect(
-      maskAnswers(ROW.questionResponses, { 'q-info': { 'c-dept': 'v1:aaaa' } })['q-info'],
-    ).toMatchObject({ 'c-dept': '연구소/책*' });
+    expect(res.headers.get('Cache-Control')).toBe('no-store');
+    expect(res.headers.get('Content-Disposition')).toContain(encodeURIComponent('응답내역'));
+    // 답이 든 로더는 부르지 않는다
+    expect(loadRawExportRowsMock).not.toHaveBeenCalled();
 
-    const [row] = workbookRows();
-    // 명단 — 일반 열은 그대로, 개인정보 열(성명)은 마지막 글자만
-    expect(row!.contactValues).toEqual({ 'attrs.기수': '3기', 'pii.성명': '김영*' });
-    // 패널 회원 ID 는 그대로 나간다(사용자 결정)
-    expect(row!.entryParams).toEqual({ euid: 'panel-77' });
+    // 받은 파일은 시트 하나 — 머리 줄과 값 줄이 로더가 준 그대로다
+    const ExcelJS = (await import('exceljs')).default;
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(await res.arrayBuffer());
+    expect(workbook.worksheets.map((w) => w.name)).toEqual(['응답 내역']);
+    const sheet = workbook.worksheets[0]!;
+    expect((sheet.getRow(1).values as unknown[]).slice(1)).toEqual(['순번', '유저ID']);
+    expect((sheet.getRow(2).values as unknown[]).slice(1)).toEqual([2, 'panel-77']);
   });
 
-  it('허용한 게스트의 분할 파일도 같은 가리기를 거친다', async () => {
-    authState.user = { id: GUEST9 };
-    const { buildSplitWorkbook } = await import('@/lib/analytics/split-workbook');
-    vi.mocked(buildSplitWorkbook).mockClear();
-    await exportGet(requestOf(AI_2026_PUBLIC, 'type=raw-split&basis=q-info'), paramsOf(AI_2026_PUBLIC));
-    expect(loaderOptions()['maskAnswers']).toEqual(expect.any(Function));
-    const rows = vi.mocked(buildSplitWorkbook).mock.calls[0]?.[1] as unknown as (typeof ROW)[];
-    expect(rows?.[0]?.contactValues).toEqual({ 'attrs.기수': '3기', 'pii.성명': '김영*' });
-  });
-
-  it('관리자가 받는 파일은 평문 그대로다', async () => {
+  it('관리자가 받는 목록은 가리지 않고, 관리자의 Raw 는 평문 그대로다', async () => {
     authState.user = { id: 'admin' };
-    const res = await exportGet(requestOf(AI_2026_PUBLIC, 'type=raw'), paramsOf(AI_2026_PUBLIC));
-    expect(res.status).toBe(200);
-    expect(workbookRows()[0]).toBe(ROW);
+    const list = await exportGet(
+      requestOf(AI_2026_PUBLIC, 'type=response-list'),
+      paramsOf(AI_2026_PUBLIC),
+    );
+    expect(list.status).toBe(200);
+    expect(loadResponseListTableMock).toHaveBeenCalledWith(AI_2026_PUBLIC, 'real', {
+      maskPii: false,
+    });
+
+    const raw = await exportGet(requestOf(AI_2026_PUBLIC, 'type=raw'), paramsOf(AI_2026_PUBLIC));
+    expect(raw.status).toBe(200);
     expect(loaderOptions()).not.toHaveProperty('maskAnswers');
+  });
+
+  it('목록이 한도를 넘으면 413 이다', async () => {
+    authState.user = { id: GUEST9 };
+    loadResponseListTableMock.mockResolvedValue({ kind: 'too_many', total: 10001 });
+    const res = await exportGet(
+      requestOf(AI_2026_PUBLIC, 'type=response-list'),
+      paramsOf(AI_2026_PUBLIC),
+    );
+    expect(res.status).toBe(413);
   });
 });

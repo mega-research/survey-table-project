@@ -1,7 +1,10 @@
 import { requireSurveyConsolePage } from '@/lib/auth/require-survey-console-page';
 import type { Metadata } from 'next';
 
-import { ExportDataModal } from '@/features/analytics/export-data-modal';
+import {
+  ExportDataModal,
+  ResponseListDownloadButton,
+} from '@/features/analytics/export-data-modal';
 import { DailyParticipationChart } from '@/features/operations/daily-participation-chart';
 import { DailyStatsTable } from '@/features/operations/daily-stats-table';
 import { DropFunnel } from '@/features/operations/drop-funnel';
@@ -10,7 +13,7 @@ import { KpiRow } from '@/features/operations/kpi-row';
 import { PageDwellDistribution } from '@/features/operations/page-dwell-distribution';
 import { QuotaStatusPanel } from '@/features/operations/quota/quota-status-panel';
 import { ResponseTimeStats } from '@/features/operations/response-time-stats';
-import { canOpenExport, isViewOnlyViewer } from '@/lib/auth/guest-viewer';
+import { exportMenuOf, isViewOnlyViewer } from '@/lib/auth/guest-viewer';
 import { getOperationsDataScope } from '@/server/data-scope';
 import {
   aggregateDaily,
@@ -98,10 +101,10 @@ export default async function OperationsOverviewPage({
 
   // hour 모드 진입 시 date 미지정이면 응답이 있는 가장 최근 일자, 응답 자체가 없으면 KST 오늘로
   // fallback. 어댑터가 effectiveDate 없는 hour 모드에서 throw 하지 않도록 보장.
-  const [scope, viewOnly, showExport] = await Promise.all([
+  const [scope, viewOnly, exportMenu] = await Promise.all([
     getOperationsDataScope(surveyId),
     isViewOnlyViewer(surveyId),
-    canOpenExport(surveyId),
+    exportMenuOf(surveyId),
   ]);
   const availableDates = await aggregateDailyAvailableDates(surveyId, scope);
   const latestAvailable =
@@ -146,9 +149,15 @@ export default async function OperationsOverviewPage({
               : '응답자 진행 현황 · 일자별 추이 · 응답시간 통계 · 이탈 위치 분석'}
           </p>
         </div>
-        {/* analytics 대시보드와 동일한 내보내기 모달 — RawData·SPSS·분할 다운로드. 게스트는 내보내기를
-            허용한 grant 만 보인다(그 파일은 개인정보가 가려져 나간다 — 내보내기 주소가 같은 판정으로 막는다) */}
-        {showExport && <ExportDataModal surveyId={surveyId} surveyTitle={survey?.title ?? '설문'} />}
+        {/* 「엑셀 다운로드」 — 관리자는 analytics 대시보드와 같은 내보내기 창(RawData·SPSS·분할), 응답 내역
+            목록만 허용한 게스트 grant 는 같은 자리의 버튼으로 그 목록을 바로 받는다. 그 밖의 게스트에게는
+            없다(내보내기 주소가 같은 판정으로 막는다) */}
+        {exportMenu === 'data' && (
+          <ExportDataModal surveyId={surveyId} surveyTitle={survey?.title ?? '설문'} />
+        )}
+        {exportMenu === 'response-list' && (
+          <ResponseListDownloadButton surveyId={surveyId} surveyTitle={survey?.title ?? '설문'} />
+        )}
       </div>
 
       <KpiRow counts={statusCounts} quota={quotaStatus?.summary ?? null} />

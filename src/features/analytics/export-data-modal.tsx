@@ -642,6 +642,45 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
   );
 }
 
+/**
+ * 응답 내역 목록만 받는 계정의 「엑셀 다운로드」 — 내보내기 창과 같은 자리·같은 모양의 버튼이고,
+ * 고를 것이 없어 창을 열지 않고 바로 받는다(응답 내역 화면의 열 그대로 한 시트, `type=response-list`).
+ */
+export function ResponseListDownloadButton({ surveyId, surveyTitle }: Props) {
+  const download = useMutation({
+    mutationFn: () =>
+      fetchExportFile(
+        `/api/surveys/${surveyId}/export?type=response-list`,
+        buildSafeFilename(surveyTitle, '응답내역', 'xlsx'),
+        '내보내기에 실패했습니다.',
+      ),
+    onSuccess: (result) => {
+      if (result.kind === 'file') downloadBlob(result.blob, result.filename);
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : '데이터 내보내기 중 오류가 발생했습니다.',
+      );
+    },
+  });
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      className="gap-2"
+      onClick={() => download.mutate()}
+      disabled={download.isPending}
+    >
+      {download.isPending ? (
+        <Loader2 className="h-4 w-4 animate-spin" />
+      ) : (
+        <FileSpreadsheet className="h-4 w-4" />
+      )}
+      엑셀 다운로드
+    </Button>
+  );
+}
+
 interface ExportCardProps {
   title: string;
   description: string;
