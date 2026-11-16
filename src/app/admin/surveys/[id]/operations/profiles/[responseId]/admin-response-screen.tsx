@@ -11,6 +11,7 @@ import { pinnedVersionId } from '@/shared/contracts/survey';
 import { ensureTestVersion } from '@/server/workflows/test-version';
 import { getResponseById } from '@/server/read-models/responses';
 import { loadRespondentContactAttrs } from '@/server/read-models/respondent-contact-attrs';
+import { collectReferencedContactKeys } from '@/lib/contacts/respondent-pii';
 import { isResponseExcluded } from '@/server/operations/services/profiles';
 import { getOperationsDataScope, testFlagForScope } from '@/server/data-scope';
 import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
@@ -110,7 +111,16 @@ export async function renderAdminResponseScreen({ surveyId, responseId, idx, rea
   ]);
   // contactTargetId 가 없으면 익명 응답이므로 빈 객체. 응답 화면과 같은 명단 값 —
   // 개인정보 열까지 합친 것(서버 재평가도 같은 값을 본다).
-  const contactAttrs = contactRow ? await loadRespondentContactAttrs(contactRow.id) : {};
+  // 조회 전용은 그리는 설문이 토큰·조건으로 실제로 읽는 개인정보 열만 싣는다 — 이 값은 브라우저로
+  // 나가고(RSC props) 보는 사람이 고객 계정일 수 있다. 화면에 안 쓰는 연락처까지 실으면 안 된다
+  // (응답자 브라우저로 가는 조회와 같은 규칙, 2026-11-16 Codex 리뷰).
+  const contactAttrs = !contactRow
+    ? {}
+    : readOnly
+      ? await loadRespondentContactAttrs(contactRow.id, db, {
+          allowedKeys: async () => collectReferencedContactKeys(version?.snapshot ?? null),
+        })
+      : await loadRespondentContactAttrs(contactRow.id);
 
   // 구버전 응답을 최신 형식으로 열 때: 같은 구조만 프리필, 다른 구조는 비움 (스펙 결정 2).
   // 렌더만으로는 DB 를 바꾸지 않는다 — 저장 시점에 service 가 이관한다.
