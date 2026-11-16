@@ -3,7 +3,7 @@ import 'server-only';
 
 import { db } from '@/db';
 import { surveyResponses } from '@/db/schema';
-import { decryptAnswerValue } from '@/lib/crypto/response-pii';
+import { decryptAnswerValue, isEncryptedAnswerValue } from '@/lib/crypto/response-pii';
 import { OPT_TEXTS_KEY, readOptTextsSidecar } from '@/lib/option-text-read';
 import { type AnswerChoiceMap, formatChoiceAnswer } from '@/lib/operations/profile-answer-choices';
 import { answerKeyOf } from '@/lib/operations/profile-columns-format';
@@ -32,11 +32,16 @@ export function formatProfileAnswerValue(value: unknown): string {
  * 복호화 판단은 질문 메타데이터 없이 값의 접두사로 한다(ADR-0012).
  * 보기 열(`choices` 에 있는 열)은 저장값 대신 보기 글자를 보인다 — 문항 수준 보기의 상세 기재는
  * 응답 루트 `__optTexts__` 에서 읽어 괄호로 붙인다.
+ *
+ * `onEncryptedValue` 는 **저장값이 암호문이던 칸**마다 부른다(복호화 전 판정). 값을 밖으로 내보내는
+ * 쪽(게스트가 받는 목록 엑셀)이 지금 구조의 개인정보 표시와 무관하게 그 칸을 가리는 근거다 — 표시를
+ * 나중에 끈 문항도 저장값은 암호문으로 남아 있고 여기서 풀린다.
  */
 export async function loadProfileAnswerValues(
   responseIds: readonly string[],
   columnKeys: readonly string[],
   choices: AnswerChoiceMap = new Map(),
+  onEncryptedValue?: (responseId: string, columnKey: string) => void,
 ): Promise<Record<string, Record<string, string>>> {
   const columns = columnKeys.flatMap((key) => {
     const ref = answerKeyOf(key);
@@ -62,7 +67,17 @@ export async function loadProfileAnswerValues(
     const values: Record<string, string> = {};
     const optTexts = needsOptTexts ? readOptTextsSidecar({ [OPT_TEXTS_KEY]: row['opt'] }) : {};
     for (const col of columns) {
-      const raw = decryptAnswerValue(row[`q${questionIds.indexOf(col.questionId)}`], {
+      const stored = row[`q${questionIds.indexOf(col.questionId)}`];
+      if (onEncryptedValue) {
+        const storedCell =
+          col.cellId === null
+            ? stored
+            : typeof stored === 'object' && stored !== null && !Array.isArray(stored)
+              ? (stored as Record<string, unknown>)[col.cellId]
+              : undefined;
+        if (isEncryptedAnswerValue(storedCell)) onEncryptedValue(row.id, col.key);
+      }
+      const raw = decryptAnswerValue(stored, {
         responseId: row.id,
         questionId: col.questionId,
       });
