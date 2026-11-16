@@ -2,7 +2,10 @@ import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // 링크 조회만 모킹한다 — 세션 쿠키 판정은 1차 게이트(proxy)와 같은 실제 함수를 태운다.
-const { listAccessLinksMock } = vi.hoisted(() => ({ listAccessLinksMock: vi.fn() }));
+const { listAccessLinksMock, hasEverIssuedAccessLinkMock } = vi.hoisted(() => ({
+  listAccessLinksMock: vi.fn(),
+  hasEverIssuedAccessLinkMock: vi.fn(),
+}));
 
 /** 그 설문의 열린 링크를 종류별로 정한다 — 라우트가 종류를 인자로 넘겨 따로 묻는다. */
 function openLinks(links: { fieldwork?: unknown[]; client?: unknown[] }) {
@@ -13,6 +16,7 @@ function openLinks(links: { fieldwork?: unknown[]; client?: unknown[] }) {
 
 vi.mock('@/server/workspace/services/access-links', () => ({
   listAccessLinks: listAccessLinksMock,
+  hasEverIssuedAccessLink: hasEverIssuedAccessLinkMock,
 }));
 
 import { GET } from '@/app/api/legacy-guest-link/[surveyId]/[[...rest]]/route';
@@ -38,6 +42,8 @@ const locationOf = (res: Response) => res.headers.get('location');
 describe('GET /api/legacy-guest-link/[surveyId]', () => {
   beforeEach(() => {
     listAccessLinksMock.mockReset();
+    hasEverIssuedAccessLinkMock.mockReset();
+    hasEverIssuedAccessLinkMock.mockResolvedValue(false);
     openLinks({ fieldwork: [{ token: TOKEN }] });
     vi.stubEnv('GUEST_SURVEY_GRANTS', `${GUEST}:${GRANTED}`);
     vi.spyOn(console, 'info').mockImplementation(() => {});
@@ -107,6 +113,17 @@ describe('GET /api/legacy-guest-link/[surveyId]', () => {
     expect(res.status).toBe(307);
     expect(locationOf(res)).toBe(`${ORIGIN}/client/${CLIENT_TOKEN}`);
     expect(res.headers.get('cache-control')).toBe('no-store');
+  });
+
+  it('외주 링크가 발급된 적이 있으면(지금은 전부 종료) 클라이언트 링크를 묻지도 내주지도 않는다', async () => {
+    openLinks({ client: [{ token: CLIENT_TOKEN }] });
+    hasEverIssuedAccessLinkMock.mockResolvedValue(true);
+
+    const res = await call(GRANTED, { rest: ['overview'] });
+
+    expect(locationOf(res)).toBe(`${ORIGIN}/surveys/${GRANTED}/operations/overview`);
+    expect(hasEverIssuedAccessLinkMock).toHaveBeenCalledWith(GRANTED, 'fieldwork');
+    expect(listAccessLinksMock).not.toHaveBeenCalledWith(GRANTED, 'client');
   });
 
   it('외주 링크와 클라이언트 링크가 함께 서 있으면 외주 링크로 보낸다 — 클라이언트 링크는 묻지 않는다', async () => {

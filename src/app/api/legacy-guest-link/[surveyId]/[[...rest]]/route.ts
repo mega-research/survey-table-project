@@ -10,7 +10,10 @@ import {
 } from '@/lib/auth/legacy-guest-link';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import { resolveLinkActorForSurvey } from '@/server/access-link';
-import { listAccessLinks } from '@/server/workspace/services/access-links';
+import {
+  hasEverIssuedAccessLink,
+  listAccessLinks,
+} from '@/server/workspace/services/access-links';
 
 /**
  * 옛 게스트 주소의 다리 — `/admin/surveys/<id>/operations[/…]` 로 온 요청을 받는다.
@@ -20,12 +23,14 @@ import { listAccessLinks } from '@/server/workspace/services/access-links';
  *  - **직원**(세션 쿠키가 있다) → `/surveys/<id>/operations/…` — 접두만 걷은 종전의 답.
  *  - **옛 게스트**(세션이 없고, 옛 grant 에 오른 설문이고, 열린 외주 링크가 있다) → 링크가 하나면
  *    `/fw/<token>`, 여럿이면 이 브라우저의 세션이 고른 링크 또는 다리 비밀번호 화면(아래).
- *  - **보기 전용이던 옛 게스트**(고객사 — 같은 조건인데 열린 외주 링크가 없고 클라이언트 링크가 있다)
- *    → `/client/<token>`. 그 자리는 클라이언트 링크가 이어받았다(ADR-0029).
+ *  - **보기 전용이던 옛 게스트**(고객사 — 같은 조건인데 그 설문에 외주 링크가 **발급된 적이 없고**
+ *    클라이언트 링크가 열려 있다) → `/client/<token>`. 그 자리는 클라이언트 링크가 이어받았다(ADR-0029).
  *  - 그 밖 → 직원과 같은 주소. 세션이 없으면 1차 게이트가 로그인으로 보낸다.
  *
- * **외주 링크가 하나라도 열려 있으면 클라이언트 링크는 보지 않는다.** 한 설문에 외주와 고객사가 함께
- * 있던 경우(같은 옛 주소를 둘이 썼다) 주소만으로는 누구인지 알 수 없고, 외주 쪽이 종전 동작이다 —
+ * **외주 링크가 한 번이라도 발급된 설문은 클라이언트 링크로 보내지 않는다 — 종료된 뒤에도.** 그 설문의
+ * 옛 주소는 외주 업체도 쓰던 주소라, 외주 링크를 종료한 뒤 이 주소가 클라이언트 링크를 내주면 종료된
+ * 업체가 고객 화면의 입구를 받는다(두 링크의 비밀번호가 같으면 그대로 들어간다 — 2026-11-16 적대적 리뷰).
+ * 한 설문에 외주와 고객사가 함께 있던 경우 주소만으로는 누구인지 알 수 없고 외주 쪽이 종전 동작이다 —
  * 그 설문의 고객사는 새 주소를 따로 받아야 한다. 이때 **두 링크의 비밀번호가 같으면 고객사가 외주
  * 입구에서 그 비밀번호로 외주 콘솔에 들어간다** — 그런 설문은 비밀번호를 다르게 발급한다.
  *
@@ -60,6 +65,10 @@ async function handleLegacyGuestLink(
 
   const links = await listAccessLinks(normalizedId, 'fieldwork');
   if (links.length === 0) {
+    // 외주 링크가 있었던 설문이면 여기서 끝난다 — 종료된 업체의 북마크에 클라이언트 링크를 내주지 않는다.
+    if (await hasEverIssuedAccessLink(normalizedId, 'fieldwork')) {
+      return redirectTo(ctx, staffUrl, 'no_link');
+    }
     // 열린 클라이언트 링크는 설문당 하나뿐이다(부분 UNIQUE) — 고를 것이 없다.
     const [clientLink] = await listAccessLinks(normalizedId, 'client');
     if (!clientLink) return redirectTo(ctx, staffUrl, 'no_link');

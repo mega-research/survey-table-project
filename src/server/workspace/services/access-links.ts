@@ -177,6 +177,21 @@ export async function listAccessLinks(
 }
 
 /**
+ * 이 설문에 그 종류 링크가 **발급된 적이 있는가** — 종료된 링크까지 센다.
+ *
+ * `listAccessLinks` 는 열린 링크만 돌려줘 「한때 있었다」를 답하지 못한다. 옛 주소 다리가 묻는다: 외주 링크가
+ * 있었던 설문의 옛 주소에는 종료된 업체의 북마크가 남아 있어, 그 주소로 클라이언트 링크를 내주면 안 된다
+ * (`app/api/legacy-guest-link`). 순번과 같은 쿼리(`selectAccessLinksInIssueOrder`)라 「발급」의 뜻이 갈리지 않는다.
+ */
+export async function hasEverIssuedAccessLink(
+  surveyId: string,
+  kind: AccessLinkKind,
+): Promise<boolean> {
+  const rows = await selectAccessLinksInIssueOrder({ id: surveyAccessLinks.id }, surveyId, kind);
+  return rows.length > 0;
+}
+
+/**
  * 링크 발급 — 비밀번호를 생략하면 읽어 주기 쉬운 값을 만들어 **평문으로 함께 돌려준다.**
  *
  * 평문을 응답에 싣는 유일한 자리가 여기와 재설정이다. 자동 생성을 골랐을 때 연구원이 그 값을

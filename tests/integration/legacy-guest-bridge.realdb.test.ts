@@ -314,12 +314,21 @@ describe.skipIf(!isLocalDb)('옛 주소 다리 — 외주 링크 여럿 (real lo
       expect((await visitBridge()).location).toBe(fwEntry(fieldwork.token));
     });
 
-    it('외주 링크가 종료되고 클라이언트 링크만 남으면 클라이언트 링크로 보낸다', async () => {
-      const client = await issueClientLink('ClientPass2026');
-      const fieldwork = await issueAndSignIn('FieldPass2026');
+    /**
+     * 외주 링크를 종료한 설문의 옛 주소에는 종료된 업체의 북마크가 남아 있다. 그 주소가 클라이언트 링크를
+     * 내주면, 두 링크의 비밀번호가 같은 설문에서 종료된 업체가 알던 비밀번호로 고객 화면에 들어간다
+     * (2026-11-16 적대적 리뷰). 그래서 **외주 링크가 발급된 적이 있는 설문은 클라이언트 링크로 보내지 않는다.**
+     */
+    it('외주 링크가 종료된 설문은 클라이언트 링크가 열려 있어도 그 주소를 내주지 않는다 — 비밀번호가 같아도 종료된 업체가 고객 화면에 닿지 못한다', async () => {
+      const client = await issueClientLink('SharedPass2026');
+      const fieldwork = await issueAndSignIn('SharedPass2026');
       await admin.accessLinks.close({ surveyId, linkId: fieldwork.linkId });
 
-      expect((await visitBridge([fieldwork.cookie])).location).toBe(clientEntry(client.token));
+      for (const cookies of [[], [fieldwork.cookie]]) {
+        const visit = await visitBridge(cookies);
+        expect(visit.location).toBe(`${ORIGIN}/surveys/${surveyId}/operations`);
+        expect(visit.location).not.toContain(client.token);
+      }
     });
 
     it('종료된 클라이언트 링크로는 보내지 않는다 — 내부 콘솔 주소다', async () => {
