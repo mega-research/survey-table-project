@@ -261,7 +261,7 @@ describe('보기만 하는 게스트 grant', () => {
     );
   });
 
-  it('데이터 내려받기는 관리자와 내보내기를 허용한 게스트 grant 만 된다(guest9, 2026-11-16)', () => {
+  it('내려받기는 관리자가 전부, 게스트는 grant 가 허용한 종류만 받는다(guest9 = 응답 내역 목록, 2026-11-16)', () => {
     const DAIRY = '75060289-51b4-44e7-8fd1-dabf73a0bfaf';
     const DAIRY_2026 = '24b15972-36fe-400a-adfe-7d4c80438204';
     vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
@@ -269,21 +269,27 @@ describe('보기만 하는 게스트 grant', () => {
       'GUEST_SURVEY_GRANTS',
       `${GUEST9}:${AI_2026_PUBLIC},${GUEST9}:survey-b,${DAIRY}:${DAIRY_2026},field-1:${AI_2026_PUBLIC}`,
     );
-    expect(canExportSurveyData('admin-1', AI_2026_PUBLIC)).toBe(true);
-    expect(canExportSurveyData(GUEST9, AI_2026_PUBLIC)).toBe(true);
-    // 같은 계정의 다른 grant 설문에는 걸리지 않는다
-    expect(canExportSurveyData(GUEST9, 'survey-b')).toBe(false);
-    // 보기 전용이지만 스위치가 꺼진 계정, 일반 게스트, grant 밖 설문, 아무 권한 없는 세션
-    expect(canExportSurveyData(DAIRY, DAIRY_2026)).toBe(false);
-    expect(canExportSurveyData('field-1', AI_2026_PUBLIC)).toBe(false);
-    expect(canExportSurveyData(GUEST9, DAIRY_2026)).toBe(false);
-    expect(canExportSurveyData('nobody', AI_2026_PUBLIC)).toBe(false);
+    // 관리자는 전부
+    expect(canExportSurveyData('admin-1', AI_2026_PUBLIC, 'data')).toBe(true);
+    expect(canExportSurveyData('admin-1', AI_2026_PUBLIC, 'response-list')).toBe(true);
+    // guest9 는 응답 내역 목록만 — 답이 든 파일(Raw·SPSS)은 받지 못한다
+    expect(canExportSurveyData(GUEST9, AI_2026_PUBLIC, 'response-list')).toBe(true);
+    expect(canExportSurveyData(GUEST9, AI_2026_PUBLIC, 'data')).toBe(false);
+    for (const kind of ['response-list', 'data'] as const) {
+      // 같은 계정의 다른 grant 설문에는 걸리지 않는다
+      expect(canExportSurveyData(GUEST9, 'survey-b', kind)).toBe(false);
+      // 보기 전용이지만 스위치가 꺼진 계정, 일반 게스트, grant 밖 설문, 아무 권한 없는 세션
+      expect(canExportSurveyData(DAIRY, DAIRY_2026, kind)).toBe(false);
+      expect(canExportSurveyData('field-1', AI_2026_PUBLIC, kind)).toBe(false);
+      expect(canExportSurveyData(GUEST9, DAIRY_2026, kind)).toBe(false);
+      expect(canExportSurveyData('nobody', AI_2026_PUBLIC, kind)).toBe(false);
+    }
   });
 
   it('grant 를 뗀 계정은 스위치가 남아 있어도 받지 못한다', () => {
     vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     vi.stubEnv('GUEST_SURVEY_GRANTS', 'field-1:survey-a');
-    expect(canExportSurveyData(GUEST9, AI_2026_PUBLIC)).toBe(false);
+    expect(canExportSurveyData(GUEST9, AI_2026_PUBLIC, 'response-list')).toBe(false);
   });
 
   it('guest9 는 응답 조회를 열지 않는다', () => {

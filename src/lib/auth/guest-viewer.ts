@@ -1,6 +1,7 @@
 import { cache } from 'react';
 
 import {
+  type SurveyExportKind,
   canExportSurveyData,
   canViewOnlyGuestPreview,
   canViewOnlyGuestViewResponse,
@@ -68,12 +69,15 @@ async function loadCanOpenResponseView(surveyId: string): Promise<boolean> {
 export const canOpenResponseView = cache(loadCanOpenResponseView);
 
 /**
- * 현재 세션에 「데이터 내보내기」 버튼을 보일 것인가 — 관리자와, 내보내기를 허용한 게스트 grant.
+ * 현재 세션의 「엑셀 다운로드」 버튼 — `data` 면 내보내기 창(Raw·분할·SPSS, 관리자), `response-list` 면
+ * 응답 내역 목록을 바로 받는 버튼(그것만 허용한 게스트 grant), 없으면 null.
  * 버튼 분기용이고 실제 차단은 내보내기 주소가 같은 판정(`canExportSurveyData`)으로 한다.
  */
-async function loadCanOpenExport(surveyId: string): Promise<boolean> {
+async function loadExportMenu(surveyId: string): Promise<SurveyExportKind | null> {
   const user = await requirePageUser();
-  return canExportSurveyData(user.id, surveyId);
+  if (canExportSurveyData(user.id, surveyId, 'data')) return 'data';
+  if (canExportSurveyData(user.id, surveyId, 'response-list')) return 'response-list';
+  return null;
 }
 
-export const canOpenExport = cache(loadCanOpenExport);
+export const exportMenuOf = cache(loadExportMenu);

@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { requireAuth } from '@/lib/auth';
 import {
-  canOpenExport,
   canOpenResponseView,
   canOpenSurveyPreview,
+  exportMenuOf,
   isGuestViewer,
   isViewOnlyViewer,
 } from '@/lib/auth/guest-viewer';
@@ -90,20 +90,20 @@ describe('canOpenSurveyPreview', () => {
     await expect(canOpenSurveyPreview(DAIRY_2026)).resolves.toBe(true);
   });
 
-  it('데이터 내보내기 버튼은 관리자와 내보내기를 허용한 게스트 grant 에만 보인다', async () => {
+  it('엑셀 다운로드 버튼 — 관리자는 내보내기 창, 목록만 허용한 게스트는 목록 버튼, 그 밖은 없다', async () => {
     vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     vi.stubEnv(
       'GUEST_SURVEY_GRANTS',
       `${GUEST9}:${AI_2026_PUBLIC},${DAIRY}:${DAIRY_2026},guest-1:${SURVEY_ID}`,
     );
     vi.mocked(requireAuth).mockResolvedValue({ id: 'admin-1' } as never);
-    await expect(canOpenExport(SURVEY_ID)).resolves.toBe(true);
+    await expect(exportMenuOf(SURVEY_ID)).resolves.toBe('data');
     vi.mocked(requireAuth).mockResolvedValue({ id: GUEST9 } as never);
-    await expect(canOpenExport(AI_2026_PUBLIC)).resolves.toBe(true);
+    await expect(exportMenuOf(AI_2026_PUBLIC)).resolves.toBe('response-list');
     vi.mocked(requireAuth).mockResolvedValue({ id: DAIRY } as never);
-    await expect(canOpenExport(DAIRY_2026)).resolves.toBe(false);
+    await expect(exportMenuOf(DAIRY_2026)).resolves.toBeNull();
     vi.mocked(requireAuth).mockResolvedValue({ id: 'guest-1' } as never);
-    await expect(canOpenExport(SURVEY_ID)).resolves.toBe(false);
+    await expect(exportMenuOf(SURVEY_ID)).resolves.toBeNull();
   });
 
   it('응답 조회 열은 응답 조회를 허용한 보기 전용 grant 에만 생긴다', async () => {

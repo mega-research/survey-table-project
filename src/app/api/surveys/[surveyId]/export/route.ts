@@ -1,3 +1,4 @@
+import ExcelJS from 'exceljs';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { and, count, eq } from 'drizzle-orm';
@@ -22,7 +23,12 @@ import {
 } from '@/lib/crypto/export-pii-mask';
 import type { PiiFieldType } from '@/lib/crypto/pii-fields';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
-import { generateRawDataWorkbook, toSpssColumnOptions } from '@/lib/analytics/raw-workbook';
+import {
+  autoFitRawColumns,
+  generateRawDataWorkbook,
+  styleHeaderRows,
+  toSpssColumnOptions,
+} from '@/lib/analytics/raw-workbook';
 import { applyExportRowExclusions } from '@/lib/analytics/export-exclusions';
 import {
   MAX_EXPORT_RESPONSES,
@@ -35,6 +41,7 @@ import {
   type RawExportLoadOptions,
   type RawExportLoadResult,
 } from './raw-export-load';
+import { loadResponseListTable } from './response-list-load';
 import { selectRawExportContactColumns } from '@/lib/operations/profile-columns-format';
 import { getContactColumnScheme } from '@/server/read-models/contacts';
 import { buildSplitWorkbook } from '@/lib/analytics/split-workbook';
@@ -47,7 +54,7 @@ import { SurveySubmission } from '@/types/survey';
 // Vercel serverless 최대 실행시간 30초 (기본 10초)
 export const maxDuration = 30;
 
-const ALLOWED_EXPORT_TYPES = ['sav', 'raw', 'raw-split', 'sps'] as const;
+const ALLOWED_EXPORT_TYPES = ['sav', 'raw', 'raw-split', 'sps', 'response-list'] as const;
 type ExportType = (typeof ALLOWED_EXPORT_TYPES)[number];
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -88,16 +95,21 @@ async function handleExport(
     if (!canAccessSurvey(user.id, surveyId)) {
       return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
     }
-    // 게스트는 내보내기를 허용한 grant 만 받는다 — 버튼은 화면에서 숨기지만 이 주소는 직접 부를 수 있다.
-    if (!canExportSurveyData(user.id, surveyId)) {
-      return NextResponse.json({ error: '이 계정은 데이터를 내려받을 수 없습니다.' }, { status: 403 });
-    }
     // 게스트가 받는 파일은 개인정보로 표시된 값을 가린다(lib/crypto/export-pii-mask). 관리자는 평문 그대로.
+    // 지금 게스트에게 여는 것은 응답 내역 목록뿐이라 아래 Raw·SPSS 의 가리기는 닿지 않는다 —
+    // 게스트에게 답이 든 파일을 열게 되면 그때도 가려져 나가도록 남겨 둔다.
     const maskPii = isGuestUser(user.id);
     ctx.bind({ maskPii });
 
     const type = request.nextUrl.searchParams.get('type') as ExportType | null;
     if (type) ctx.bind({ exportType: type });
+
+    // 게스트는 grant 가 허용한 종류만 받는다 — 버튼은 화면에서 숨기지만 이 주소는 직접 부를 수 있다.
+    // 형식 검사보다 먼저 본다(권한 없는 계정에 「지원하는 형식」을 알려 주지 않는다).
+    const exportKind = type === 'response-list' ? 'response-list' : 'data';
+    if (!canExportSurveyData(user.id, surveyId, exportKind)) {
+      return NextResponse.json({ error: '이 계정은 데이터를 내려받을 수 없습니다.' }, { status: 403 });
+    }
 
     if (!type || !ALLOWED_EXPORT_TYPES.includes(type)) {
       return NextResponse.json({ error: '지원하지 않는 내보내기 형식입니다.' }, { status: 400 });
@@ -129,6 +141,35 @@ async function handleExport(
     // (게스트는 항상 실). 테스트 검수용 다운로드에 실 응답이 섞이는 것과 그 반대를 함께 막는다.
     const scope = await loadOperationsDataScope(surveyId);
     ctx.bind({ scope });
+
+    // 0. 응답 내역 목록 xlsx — 응답 내역 화면의 열 그대로 한 시트. 답은 싣지 않는다(response-list-load).
+    if (type === 'response-list') {
+      const loaded = await loadResponseListTable(surveyId, scope, { maskPii });
+      if (loaded.kind === 'too_many') {
+        return NextResponse.json(
+          { error: `응답이 ${MAX_EXPORT_RESPONSES.toLocaleString()}건을 초과하여 내보내기할 수 없습니다. (현재 ${loaded.total.toLocaleString()}건)` },
+          { status: 413 },
+        );
+      }
+      ctx.bind({ rowCount: loaded.rows.length, columnCount: loaded.headers.length });
+      const workbook = new ExcelJS.Workbook();
+      const ws = workbook.addWorksheet('응답 내역');
+      ws.addRow(loaded.headers);
+      for (const row of loaded.rows) ws.addRow(row);
+      styleHeaderRows(ws, [1], loaded.headers.length);
+      autoFitRawColumns(ws, loaded.headers.length);
+      const buffer = await workbook.xlsx.writeBuffer();
+      const listDate = new Date().toISOString().slice(0, 10);
+      const listFilename = `${encodeURIComponent(surveyData.title)}_${encodeURIComponent('응답내역')}_${listDate}.xlsx`;
+      return new NextResponse(buffer as ArrayBuffer, {
+        headers: {
+          'Content-Disposition': `attachment; filename="${listFilename}"`,
+          'Content-Type': XLSX_MIME,
+          // 화면의 열 설정에 명단 값이 들어갈 수 있다 — 캐시에 남기지 않는다.
+          'Cache-Control': 'no-store',
+        },
+      });
+    }
 
     // 조사 대상 명단 열 — Raw Data 계열(raw/raw-split)에 항상 붙는다. 열은 응답 내역 컬럼 설정에서
     // 표시 중인 attrs·pii 열이라 토글이 없고, 설정이 없거나 명단 미업로드면 열 0개로 정상 진행한다.

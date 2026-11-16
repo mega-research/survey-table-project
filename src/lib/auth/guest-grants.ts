@@ -75,23 +75,25 @@ export function canAccessSurvey(userId: string, surveyId: string): boolean {
  * (`…/profiles/<응답>/view` — 응답 수정 화면을 잠가 그린 조회 전용 화면). 수정 화면 경로와 수정
  * 저장은 그대로 막힌다. 답은 원문 그대로 보인다(응답자 정보 문항 포함 — 2026-11-16 사용자 결정).
  *
- * `allowExport` 를 켠 grant 는 응답 현황의 「데이터 내보내기」가 열린다. 게스트가 받는 파일은 개인정보로
- * 표시된 값이 가려져 나간다(`lib/crypto/export-pii-mask`). **이 스위치가 없는 게스트 계정은 — 보기
- * 전용이든 아니든 — 내보내기 주소를 직접 불러도 받지 못한다**(`canExportSurveyData`, 2026-11-16).
+ * `allowExport: 'response-list'` 를 켠 grant 는 응답 현황의 「엑셀 다운로드」로 **응답 내역 목록**
+ * (응답 내역 화면의 열 그대로 — 순번·유저ID·기업명·상태 등)을 받는다. 답이 든 Raw·SPSS 는 받지 못한다
+ * (2026-11-16 사용자 결정 — 처음엔 가린 Raw 를 열었다가 같은 날 목록만으로 바꿨다). **게스트 계정은 —
+ * 보기 전용이든 아니든 — 이 스위치가 허용한 것 말고는 내보내기 주소를 직접 불러도 받지 못한다**
+ * (`canExportSurveyData`).
  */
 const VIEW_ONLY_GUEST_GRANTS: ReadonlyArray<{
   userId: string;
   surveyId: string;
   allowPreview?: true;
   allowResponseView?: true;
-  allowExport?: true;
+  allowExport?: 'response-list';
 }> = [
   // guest9 — 2026년 인공지능산업 실태조사 공개본(리멤버 패널용), 2026-10-22 요청
   {
     userId: 'c79af8a1-186a-4157-be4c-2bebfbde4a8d',
     surveyId: '253534a5-913a-4891-a019-f9643ccea0a7',
-    // 데이터 내보내기를 연다 — 성명·연락처·이메일은 가려서(2026-11-16 요청)
-    allowExport: true,
+    // 응답 내역 목록 엑셀만 받는다 — 답이 든 Raw 는 열지 않는다(2026-11-16 요청)
+    allowExport: 'response-list',
   },
   // dairy@ (처음 client1@) — 2026 유가공업 실태조사 고객(클라이언트) 계정, 2026-11-05 요청
   {
@@ -149,15 +151,26 @@ export function canViewOnlyGuestViewResponse(userId: string, surveyId: string): 
 }
 
 /**
- * 이 계정이 이 설문의 응답 데이터를 내려받을 수 있는가 — 내보내기 주소(export·split-preview)의 판정.
- * 관리자는 설문 접근 판정 그대로, 게스트는 `allowExport` 를 켠 grant 만 받는다. 버튼을 숨기는 것만으로는
- * 주소를 직접 부르는 요청을 막지 못한다.
+ * 내려받는 것의 종류 — `response-list` 는 응답 내역 목록(화면의 열 그대로, 답은 없다),
+ * `data` 는 답이 든 파일(Raw·분할·SPSS)과 그 미리보기.
  */
-export function canExportSurveyData(userId: string, surveyId: string): boolean {
+export type SurveyExportKind = 'response-list' | 'data';
+
+/**
+ * 이 계정이 이 설문에서 그 종류를 내려받을 수 있는가 — 내보내기 주소(export·split-preview)의 판정.
+ * 관리자는 설문 접근 판정 그대로 전부, 게스트는 grant 의 `allowExport` 가 허용한 종류만 받는다
+ * (지금은 `response-list` 뿐 — 답이 든 파일을 받는 게스트는 없다). 버튼을 숨기는 것만으로는 주소를
+ * 직접 부르는 요청을 막지 못한다.
+ */
+export function canExportSurveyData(
+  userId: string,
+  surveyId: string,
+  kind: SurveyExportKind,
+): boolean {
   if (!canAccessSurvey(userId, surveyId)) return false;
   if (!isGuestUser(userId)) return true;
   return VIEW_ONLY_GUEST_GRANTS.some(
-    (g) => g.userId === userId && g.surveyId === surveyId && g.allowExport === true,
+    (g) => g.userId === userId && g.surveyId === surveyId && g.allowExport === kind,
   );
 }
 
