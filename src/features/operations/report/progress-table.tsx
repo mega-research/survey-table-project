@@ -28,7 +28,7 @@ interface Props {
   showResid?: boolean;
   /**
    * 분류 기준(groupBy) 활성 시 기준 값 컬럼들 (key=직렬화된 분류 키 — 정렬 식별자,
-   * label=컬럼 설정 라벨, nullLabel=값 없는 그룹 표기 — 기본 「(미분류)」). 순서는
+   * label=컬럼 설정 라벨, nullLabel=값 없는 그룹 표기 — 없으면 표시 열과 같은 줄표). 순서는
    * row.groupValues 와 일치. 빈 배열이면 기존과 동일 — 그룹 라벨 컬럼을 자동 노출하지
    * 않고 번호(firstResid) 컬럼을 표시한다.
    */
@@ -58,7 +58,7 @@ function formatRate(completed: number, list: number): string {
  * - meta 컬럼은 surveys.progress_columns 스킴에 따라 동적으로 렌더링.
  *   그룹 라벨 컬럼은 자동 노출하지 않음 — 컬럼 설정에서 hidden=false 한 키만 메타로 표시.
  * - 응답률은 임계값(toneFromRate)에 따라 색상 pill 로 표기.
- * - groupValueRaw=null('(미분류)') 도 안정적인 row key 유지.
+ * - groupValueRaw=null(값 없는 그룹) 도 안정적인 row key 유지.
  */
 export function ProgressTable({
   rows,
@@ -224,11 +224,12 @@ export function ProgressTable({
                       className="max-w-[240px] truncate whitespace-nowrap px-3 py-2 font-medium text-slate-800"
                       title={v ?? undefined}
                     >
-                      {v ?? (
-                        <span className="font-normal text-slate-400">
-                          {c.nullLabel ?? '(미분류)'}
-                        </span>
-                      )}
+                      {v ??
+                        (c.nullLabel ? (
+                          <span className="font-normal text-slate-400">{c.nullLabel}</span>
+                        ) : (
+                          <span className="font-normal text-slate-300">—</span>
+                        ))}
                     </td>
                   );
                 })}

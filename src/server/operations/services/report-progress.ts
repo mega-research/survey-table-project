@@ -227,7 +227,7 @@ function groupKeyCount(groupByKeys: ProgressGroupKey[] | undefined): number {
 /**
  * 분류 기준 하나의 SQL 조각.
  * - value: base 서브쿼리(ctt)에서 그룹 키를 내는 식 — GROUP BY·행 식별의 기준
- * - label: 그룹 키 컬럼 → 표시 값 (null = 미분류 — 표가 nullLabel 로 그린다)
+ * - label: 그룹 키 컬럼 → 표시 값 (null = 값 없음 — 표가 줄표나 nullLabel 로 그린다)
  * - sort: 그룹 키 컬럼 → 정렬 값 (null 은 NULLS LAST 로 끝)
  */
 interface GroupKeySql {
