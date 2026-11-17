@@ -101,7 +101,7 @@ interface DisplayRow {
   /** 원본 status — 액션 메뉴의 이탈 응답 안내(수정 시 완료 전환) 분기용. pill 은 표시 전용. */
   status: string;
   pill: StatusPillResult;
-  startedAt: Date;
+  startedAt: Date | null;
   completedAt: Date | null;
   isInProgress: boolean;
   totalTimeText: string;

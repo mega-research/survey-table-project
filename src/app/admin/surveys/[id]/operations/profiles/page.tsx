@@ -23,8 +23,11 @@ import { listResponsesForProfiles } from '@/server/operations/services/profiles'
 import {
   answerKeyOf,
   entryKeyOf,
+  clientVisibleProfileSort,
   hydrateProfileColumns,
   visibleProfileColumns,
+  withoutClientHiddenProfileColumns,
+  withoutClientHiddenProfileTimings,
 } from '@/lib/operations/profile-columns-format';
 import {
   getProfileAnswerChoices,
@@ -101,7 +104,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
       getProfileAnswerChoices(surveyId),
     ]);
   // 표시 컬럼 스킴 — NULL(미설정)이면 hydrate 가 기본 스킴(기존 9컬럼)을 만든다.
-  const displayColumns = visibleProfileColumns(
+  const configuredColumns = visibleProfileColumns(
     hydrateProfileColumns(
       contactScheme,
       profileScheme,
@@ -109,6 +112,10 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
       new Set(answerSources.map((s) => s.key)),
     ),
   );
+  // 고객 계정(보기 전용)에는 시작일시·소요시간을 내지 않는다 — 열도, 그 값도, 그 열의 정렬도.
+  const displayColumns = viewOnly
+    ? withoutClientHiddenProfileColumns(configuredColumns)
+    : configuredColumns;
   const filterableAnswerKeys = new Set(
     answerSources.filter((s) => !s.encrypted).map((s) => s.key),
   );
@@ -151,13 +158,14 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
   const visibleAttrsSortKeys = new Set(
     displayColumns.map((c) => c.key).filter((k) => k.startsWith('attrs.')),
   );
+  const requestedSort = viewOnly ? clientVisibleProfileSort(args.sort) : args.sort;
   const sort =
-    (!hasContacts && args.sort === 'resid') ||
-    (args.sort.startsWith('attrs.') && !visibleAttrsSortKeys.has(args.sort))
+    (!hasContacts && requestedSort === 'resid') ||
+    (requestedSort.startsWith('attrs.') && !visibleAttrsSortKeys.has(requestedSort))
       ? 'idx'
-      : args.sort;
+      : requestedSort;
 
-  const [{ rows, total, page: clampedPage }, qs, groups] = await Promise.all([
+  const [{ rows: listedRows, total, page: clampedPage }, qs, groups] = await Promise.all([
     listResponsesForProfiles({
       surveyId,
       scope,
@@ -187,6 +195,8 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
       .orderBy(asc(questionsTable.order), asc(questionsTable.id)),
     getQuestionGroupsBySurvey(surveyId),
   ]);
+
+  const rows = viewOnly ? withoutClientHiddenProfileTimings(listedRows) : listedRows;
 
   // 표시 스킴의 pii.* 컬럼만 현재 페이지 행 단위로 일괄 복호화.
   const piiKeys = displayColumns
