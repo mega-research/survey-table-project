@@ -17,6 +17,18 @@ import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 export const RESID_DEFAULT_LABEL = '시스템ID';
 
 /**
+ * 시스템ID 열의 표시 이름 — 컬럼 설정에서 고친 라벨이 먼저고, 비었거나 스킴이 없으면 기본 라벨이다.
+ * 명단에 `resid` 라는 열이 따로 올라오는 설문이 있어, 시스템ID 를 가리키는 화면 글자는 이 이름을 쓴다.
+ */
+export function residColumnLabel(
+  scheme: Pick<ContactColumnScheme, 'columns'> | null | undefined,
+): string {
+  return (
+    scheme?.columns.find((c) => c.source === 'system.resid')?.label?.trim() || RESID_DEFAULT_LABEL
+  );
+}
+
+/**
  * contact_columns / test_contact_columns JSONB 드리프트 방어.
  *
  * 이 컬럼은 `.$type<ContactColumnScheme>()` 로 선언돼 있어 타입 시스템은 `columns` 가

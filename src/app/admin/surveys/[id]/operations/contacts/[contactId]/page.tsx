@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation';
 
 import { ContactDetailForm } from '@/features/operations/contacts/contact-detail-form';
 import { getMailTemplatesBySurvey } from '@/server/mail/services/templates';
-import { attrsKeyOf } from '@/lib/operations/contacts-format';
+import { attrsKeyOf, residColumnLabel } from '@/lib/operations/contacts-format';
 import { extractSystemFieldKeys } from '@/lib/operations/contacts-shared';
 import {
   getContactColumnScheme,
@@ -96,7 +96,7 @@ export default async function ContactDetailPage({ params }: PageProps) {
     <main className="mx-auto max-w-7xl px-6 py-6">
       <div className="mb-4">
         <h2 className="text-xl font-bold text-gray-900">
-          조사 대상 단건 편집 — resid {detail.contact.resid}
+          조사 대상 단건 편집 — {residColumnLabel(scheme)} {detail.contact.resid}
         </h2>
         <p className="text-sm text-slate-500">
           {groupLabel}
