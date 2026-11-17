@@ -63,7 +63,7 @@ const VALID_SORTS: ProgressSortKey[] = [
 /** 분류 기준 칩 하나 — key 는 주소·정렬에 실리는 직렬화된 태그 키. */
 interface GroupCriterion extends GroupByOption {
   groupKey: ProgressGroupKey;
-  /** 값 없는 그룹 표기 (기본 「(미분류)」) */
+  /** 값 없는 그룹 표기 — 없으면 표가 줄표로 그린다 */
   nullLabel?: string;
 }
 
