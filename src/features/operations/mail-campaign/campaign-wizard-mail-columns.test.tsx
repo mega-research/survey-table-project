@@ -94,6 +94,23 @@ function columnCells(label: string): string[] {
 }
 
 describe('CampaignWizard 메일 표시 컬럼', () => {
+  it('메일 표시 열마다 깔때기가 붙는다 — 명단 열·개인정보 열·컨택원', () => {
+    renderWizard(
+      [candidate({ id: 'ct-1', resid: 1, attrs: { 전시회: 'A' } })],
+      [
+        { key: '전시회', label: '전시회명', kind: 'attrs' },
+        { key: '담당자', label: '담당자', kind: 'pii' },
+        { key: 'contact_owner', label: '컨택원', kind: 'owner' },
+      ],
+    );
+
+    expect(screen.getByRole('button', { name: '전시회명 필터' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '담당자 필터' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '컨택원 필터' })).toBeInTheDocument();
+    // 머리 글자는 그대로다 — 깔때기는 글자 없는 버튼이다.
+    expect(headerLabels()).toContain('전시회명');
+  });
+
   it('시스템ID 다음 헤더로 붙고, 행마다 attrs 값을 그린다 — 값이 없으면 —', () => {
     renderWizard(
       [
