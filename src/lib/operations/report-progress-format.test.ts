@@ -3,6 +3,7 @@ import {
   formatProgressGroupKey,
   parseProgressGroupKey,
   metaColumnsOutsideGroupKeys,
+  progressCriterionLabel,
   computeRate,
   toneFromRate,
   sortGroupRows,
@@ -168,5 +169,24 @@ describe('metaColumnsOutsideGroupKeys', () => {
     expect(
       metaColumnsOutsideGroupKeys(withOwner, [{ kind: 'system', key: 'contact_owner' }]),
     ).toEqual(withOwner);
+  });
+});
+
+describe('progressCriterionLabel', () => {
+  const columns = [
+    { key: 'Q0', label: '국내전시회명' },
+    { key: 'Q0_1', label: '  ' },
+  ];
+
+  it('진척률 컬럼 설정에서 고친 라벨을 분류 기준 이름으로 쓴다', () => {
+    expect(progressCriterionLabel(columns, 'Q0', 'Q0')).toBe('국내전시회명');
+  });
+
+  it('라벨을 비웠으면 조사 대상 목록의 라벨로 돌아간다', () => {
+    expect(progressCriterionLabel(columns, 'Q0_1', 'Q0_1')).toBe('Q0_1');
+  });
+
+  it('진척률 컬럼 설정을 저장한 적 없는 열은 조사 대상 목록의 라벨이다', () => {
+    expect(progressCriterionLabel(columns, '개최기간', '개최 기간')).toBe('개최 기간');
   });
 });
