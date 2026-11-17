@@ -23,7 +23,10 @@ import {
 } from '@/lib/contacts/group-levels';
 import { resultErrorMessage } from '@/lib/get-error-message';
 import { client } from '@/shared/lib/rpc';
-import type { NormalizedContactColumnScheme } from '@/lib/operations/contacts-format';
+import {
+  type NormalizedContactColumnScheme,
+  residColumnLabel,
+} from '@/lib/operations/contacts-format';
 
 interface Props {
   surveyId: string;
@@ -81,8 +84,7 @@ export function ProgressColumnEditor({ surveyId, initialScheme, contactScheme }:
   const [columns, setColumns] = useState<ProgressColumnDef[]>(hydratedColumns);
   // 시스템ID(firstResid) 컬럼 표시 여부 — 진척률 표 전용, 조사 대상 목록 표시와 독립.
   const [showResid, setShowResid] = useState<boolean>(initialScheme.showResid ?? true);
-  const residLabel =
-    contactScheme?.columns.find((c) => c.source === 'system.resid')?.label?.trim() || '시스템ID';
+  const residLabel = residColumnLabel(contactScheme);
   // 분류 기준 레벨 (attrs key → 레벨) — 조사대상목록 컬럼 설정과 같은
   // contactColumns.groupLevel 을 편집한다 (저장 시 contacts.columns.update 동시 호출).
   const [levels, setLevels] = useState<Record<string, GroupLevel>>(() =>

@@ -9,7 +9,7 @@ import {
 } from '@/features/operations/report/progress-group-by-tabs';
 import { ProgressTable } from '@/features/operations/report/progress-table';
 import { resolveGroupCriteria } from '@/lib/contacts/group-levels';
-import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts-format';
+import { residColumnLabel } from '@/lib/operations/contacts-format';
 import { getContactColumnScheme } from '@/server/read-models/contacts';
 import { getOperationsDataScope } from '@/server/data-scope';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
@@ -199,9 +199,7 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
 
   // ProgressTable 의 # 컬럼 헤더 — contactColumns 의 system.resid 라벨 사용.
   // 스킴에 없거나 라벨이 비어있으면 기본 라벨 폴백.
-  const residLabel =
-    contactScheme?.columns.find((c) => c.source === FILTER_SOURCE.RESID)?.label?.trim() ||
-    RESID_DEFAULT_LABEL;
+  const residLabel = residColumnLabel(contactScheme);
 
   // 조사 대상 0건 빠른 검출 — getProgressTotals 보다 훨씬 가벼움.
   const isEmpty = (await countContactTargets(surveyId, scope)) === 0;

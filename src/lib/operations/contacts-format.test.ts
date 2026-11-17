@@ -5,6 +5,7 @@ import {
   CONTACTS_PAGE_SIZE,
   maskEmail,
   attrsKeyOf,
+  residColumnLabel,
   visiblePiiColumnKeys,
 } from '@/lib/operations/contacts-format';
 
@@ -77,5 +78,30 @@ describe('visiblePiiColumnKeys', () => {
 
   it('스킴이 없으면 빈 배열', () => {
     expect(visiblePiiColumnKeys(null)).toEqual([]);
+  });
+});
+
+describe('residColumnLabel', () => {
+  it('컬럼 설정에서 고친 시스템ID 라벨을 쓴다', () => {
+    expect(
+      residColumnLabel({
+        columns: [
+          { key: 'resid', label: ' 관리번호 ', source: 'system.resid', order: 1 },
+          { key: 'resid', label: 'resid', source: 'attrs.resid', order: 2 },
+        ],
+      }),
+    ).toBe('관리번호');
+  });
+
+  it('라벨이 비었거나 스킴이 없으면 기본 라벨이다 — 명단의 resid 열 이름을 쓰지 않는다', () => {
+    expect(
+      residColumnLabel({
+        columns: [
+          { key: 'resid', label: '', source: 'system.resid', order: 1 },
+          { key: 'resid', label: 'resid', source: 'attrs.resid', order: 2 },
+        ],
+      }),
+    ).toBe('시스템ID');
+    expect(residColumnLabel(null)).toBe('시스템ID');
   });
 });
