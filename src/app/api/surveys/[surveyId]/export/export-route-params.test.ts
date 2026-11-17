@@ -485,8 +485,10 @@ describe('GET /export — 게스트의 내려받기', () => {
       paramsOf(AI_2026_PUBLIC),
     );
     expect(res.status).toBe(200);
+    // 보기 전용 게스트 = 고객 계정 — 시작일시·소요시간 열을 빼게 부른다
     expect(loadResponseListTableMock).toHaveBeenCalledWith(AI_2026_PUBLIC, 'real', {
       maskPii: true,
+      forClient: true,
     });
     expect(res.headers.get('Cache-Control')).toBe('no-store');
     expect(res.headers.get('Content-Disposition')).toContain(encodeURIComponent('응답내역'));
@@ -512,6 +514,7 @@ describe('GET /export — 게스트의 내려받기', () => {
     expect(list.status).toBe(200);
     expect(loadResponseListTableMock).toHaveBeenCalledWith(AI_2026_PUBLIC, 'real', {
       maskPii: false,
+      forClient: false,
     });
 
     const raw = await exportGet(requestOf(AI_2026_PUBLIC, 'type=raw'), paramsOf(AI_2026_PUBLIC));

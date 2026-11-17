@@ -15,7 +15,12 @@ import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { normalizeQuestions } from '@/lib/question';
 import { normalizePassParamNames } from '@/lib/survey/end-redirect';
 import { requireAuth } from '@/lib/auth';
-import { canAccessSurvey, canExportSurveyData, isGuestUser } from '@/lib/auth/guest-grants';
+import {
+  canAccessSurvey,
+  canExportSurveyData,
+  isGuestUser,
+  isViewOnlyGuest,
+} from '@/lib/auth/guest-grants';
 import {
   collectPiiAnswerFormats,
   maskContactPiiValues,
@@ -144,7 +149,10 @@ async function handleExport(
 
     // 0. 응답 내역 목록 xlsx — 응답 내역 화면의 열 그대로 한 시트. 답은 싣지 않는다(response-list-load).
     if (type === 'response-list') {
-      const loaded = await loadResponseListTable(surveyId, scope, { maskPii });
+      const loaded = await loadResponseListTable(surveyId, scope, {
+        maskPii,
+        forClient: isViewOnlyGuest(user.id, surveyId),
+      });
       if (loaded.kind === 'too_many') {
         return NextResponse.json(
           { error: `응답이 ${MAX_EXPORT_RESPONSES.toLocaleString()}건을 초과하여 내보내기할 수 없습니다. (현재 ${loaded.total.toLocaleString()}건)` },

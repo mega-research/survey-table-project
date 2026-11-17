@@ -35,8 +35,10 @@ export interface ProfilesRow {
   /** visible step 진척 (분기/표시조건 반영). 응답 페이지 저장값. 구 데이터·첫 답변 전 null. */
   visibleStepIndex: number | null;
   visibleStepTotal: number | null;
-  startedAt: Date;
+  /** 고객 계정(보기 전용 게스트) 화면에는 싣지 않는다 — null(withoutClientHiddenProfileTimings). */
+  startedAt: Date | null;
   completedAt: Date | null;
+  /** 고객 계정 화면에는 싣지 않는다 — null. */
   totalSeconds: number | null;
   /** 매칭된 contact_targets.group_value (전시회명 국문 등). 익명/미매칭이면 null. */
   groupValue: string | null;

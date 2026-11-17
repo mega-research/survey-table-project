@@ -66,7 +66,7 @@ export function canAccessSurvey(userId: string, surveyId: string): boolean {
  * 응답 내역 목록만 본다. 다른 탭·설문 보기는 메뉴에서 빠지고 경로도 응답 현황으로 돌려보낸다.
  * 응답 현황 안에서는 KPI·쿼터·일자별 추이 차트만 남기고(operations/overview 페이지),
  * 응답 내역에서는 수정·삭제·초기화 메뉴가 없으며 수정 화면 경로와 수정 저장(saveAdminEdit)도
- * 막는다. 같은 계정의 다른 grant 설문에는 걸리지 않는다.
+ * 막는다. 응답 내역의 시작일시·소요시간도 이 계정에는 내지 않는다(화면·내려받는 목록 — 2026-11-17). 같은 계정의 다른 grant 설문에는 걸리지 않는다.
  *
  * `allowPreview` 를 켠 grant 는 설문 보기(preview)도 연다 — 설문 내용을 보여 줘도 되는 고객용이다.
  * 끈 grant(guest9)는 협업 업체와 함께 하는 조사라 설문 보기를 막아 둔다.

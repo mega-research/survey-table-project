@@ -140,6 +140,41 @@ export function visibleProfileColumns(columns: ProfileColumnDef[]): ProfileColum
     .sort((a, b) => a.order - b.order);
 }
 
+/**
+ * 고객 계정(보기 전용 게스트)에 내지 않는 시스템 열 — 시작일시·소요시간. 종료일시는 남는다.
+ * 소요시간이 짧은 응답을 빼 달라는 요구가 고객에게서 나와 화면과 내려받는 목록 양쪽에서 뺐다
+ * (2026-11-17 사용자 결정). 관리자가 컬럼 설정에서 켜 둔 열이라도 고객 계정에는 나가지 않는다.
+ */
+const CLIENT_HIDDEN_PROFILE_COLUMN_KEYS: ReadonlySet<string> = new Set([
+  'sys.startedAt',
+  'sys.totalSeconds',
+]);
+
+/** 고객 계정에 보일 열 — 시작일시·소요시간을 뺀다. 나머지 순서는 그대로다. */
+export function withoutClientHiddenProfileColumns<T extends { key: string }>(
+  columns: readonly T[],
+): T[] {
+  return columns.filter((c) => !CLIENT_HIDDEN_PROFILE_COLUMN_KEYS.has(c.key));
+}
+
+/**
+ * 고객 계정이 고른 정렬이 감춘 열(시작일시·소요시간)이면 기본 정렬(순번)로 돌린다 —
+ * 보이지 않는 값으로 줄을 세우면 주소만 고쳐 짧은 응답부터 늘어놓을 수 있다.
+ */
+export function clientVisibleProfileSort<T extends string>(sort: T): T | 'idx' {
+  return CLIENT_HIDDEN_PROFILE_COLUMN_KEYS.has(`sys.${sort}`) ? 'idx' : sort;
+}
+
+/**
+ * 고객 계정 화면에 넘길 행 — 시작일시·소요시간 값을 비운다. 열만 빼면 값은 화면 데이터에 실려
+ * 브라우저까지 간다.
+ */
+export function withoutClientHiddenProfileTimings<
+  T extends { startedAt: Date | null; totalSeconds: number | null },
+>(rows: readonly T[]): T[] {
+  return rows.map((r) => ({ ...r, startedAt: null, totalSeconds: null }));
+}
+
 /** 접속 식별값(IP 해시·브라우저 ID·기기 사양) 표시 자릿수 — 전체 값은 노출하지 않는다. */
 export const RESPONSE_SIGNAL_DISPLAY_LEN = 8;
 
