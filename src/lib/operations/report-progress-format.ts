@@ -107,6 +107,20 @@ export function metaColumnsOutsideGroupKeys<T extends { key: string }>(
   return columns.filter((c) => !grouped.has(c.key));
 }
 
+/**
+ * 분류 기준의 이름 — 진척률 컬럼 설정에서 고친 라벨이 먼저다.
+ *
+ * 그 화면은 열마다 라벨과 분류 기준을 한 줄에서 함께 고치므로, 거기서 고친 라벨이 칩·표 머리·
+ * 제목에 그대로 나와야 한다. 비웠거나 저장한 적 없는 열은 조사 대상 목록의 라벨로 돌아간다.
+ */
+export function progressCriterionLabel(
+  columns: ReadonlyArray<{ key: string; label: string }>,
+  key: string,
+  contactLabel: string,
+): string {
+  return columns.find((c) => c.key === key)?.label.trim() || contactLabel;
+}
+
 export type ProgressSortKey =
   | 'firstResid'
   | 'groupLabel'

@@ -21,6 +21,7 @@ import {
   formatProgressGroupKey,
   metaColumnsOutsideGroupKeys,
   parseProgressGroupKey,
+  progressCriterionLabel,
   type ProgressGroupKey,
   type ProgressSortKey,
   type SortDir,
@@ -138,13 +139,17 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
   const condition = parseConditionFromUrl(rawCol, rawQ, columnCandidates);
 
   // 분류 기준 후보 — 컬럼 설정의 레벨 슬롯 배정을 레벨 순서(대>중>소>세부)로.
-  // 라벨은 컬럼 설정에서 편집한 헤더 라벨(엑셀 헤더 시드)을 그대로 사용.
+  // 라벨은 진척률 컬럼 설정에서 고친 것이 먼저고, 없으면 조사 대상 목록의 라벨(엑셀 헤더 시드)이다.
   // 「컨택원」 칩은 컨택원이 하나라도 있을 때 맨 끝에 나오고 처음에는 꺼져 있다 — 보던 진척
   // 보고가 컨택원이 생겼다고 갑자기 바뀌지 않게 (defaultOff).
   const groupByCriteria: GroupCriterion[] = [
     ...resolveGroupCriteria(contactScheme).map((c) => {
       const groupKey: ProgressGroupKey = { kind: 'attrs', key: c.key };
-      return { key: formatProgressGroupKey(groupKey), label: c.label, groupKey };
+      return {
+        key: formatProgressGroupKey(groupKey),
+        label: progressCriterionLabel(scheme.columns, c.key, c.label),
+        groupKey,
+      };
     }),
     ...(hasAssignments
       ? [
