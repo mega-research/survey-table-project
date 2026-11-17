@@ -6,8 +6,9 @@
 ## shadcn 으로 받기
 
 - `components.json` 의 style 은 `base-vega` 다 — `shadcn add` 는 Base UI(`@base-ui/react`) 공식 판을 받는다.
-- `ui/` 의 Base UI 부품(alert-dialog·button·checkbox·collapsible·combobox·dialog·dropdown-menu·input-group·label·navigation-menu·popover·select·switch·tabs·tooltip)은 **공식 판 원본 그대로**다(2026-11-02). 고쳐 쓰지 말고 쓰는 쪽에서 공식 API 를 따른다. `input`·`textarea`·`badge`·`card` 는 이 레포 것이라 받지 않는다(combobox 가 받아 오려 하면 덮어쓰지 말 것).
-- **원본에서 바꾼 곳은 하나** — `popover.tsx` 의 `PopoverContent` 가 `anchor` 를 받는다(공식 combobox 와 같은 모양, 설문 카드·태그 편집이 쓴다). 다시 받아 덮어쓰면 이 줄이 사라지고 tsc 가 그 두 곳을 호명한다.
+- `ui/` 의 Base UI 부품(alert-dialog·checkbox·collapsible·combobox·dialog·dropdown-menu·input-group·label·navigation-menu·popover·select·switch·tabs·tooltip)은 **공식 판 원본 그대로**다(2026-11-02). 고쳐 쓰지 말고 쓰는 쪽에서 공식 API 를 따른다. `input`·`textarea`·`badge`·`card` 는 이 레포 것이라 받지 않는다(combobox 가 받아 오려 하면 덮어쓰지 말 것).
+- **원본에서 바꾼 곳은 둘이다.** 하나는 `popover.tsx` 의 `PopoverContent` 가 `anchor` 를 받는다(공식 combobox 와 같은 모양, 설문 카드·태그 편집이 쓴다). 다시 받아 덮어쓰면 이 줄이 사라지고 tsc 가 그 두 곳을 호명한다.
+- 다른 하나는 **`button.tsx` — 뼈대만 공식 판이고 모양은 이 레포 것이다**(2026-11-17, 공식 모양이 화면에서 어색하다는 확인 뒤). 쓰는 쪽 400여 곳이 옛 사양에 맞춰 쓰여 있다: 기본 `h-12 px-6`·sm `h-9 px-3`·`rounded-lg`·파란 바탕(`bg-blue-500`)·빨간 바탕 destructive, 아이콘 간격은 아이콘의 `mr-2`(버튼에 `gap` 없음), 아이콘 크기는 `h-3.5 w-3.5` 처럼 직접 적는다(크기를 안 적은 아이콘만 16px). **`shadcn add button` 으로 덮어쓰지 말 것** — tsc 는 조용하고 화면만 바뀐다(`button.test.ts` 가 사양을 붙든다). `buttonVariants()` 는 병합까지 해서 돌려주므로 `<Link>` 에 입힐 때도 `className` 의 높이·여백이 기본값을 이긴다.
 - 받은 파일은 npm `cn` 을 import 한다. `@/lib/utils` 의 `cn` 도 같은 패키지를 내보내 병합 규칙은 한 벌이다. 스타일은 `globals.css` 의 `tw-animate-css`·`shadcn/tailwind.css` import 와 shadcn 테마 토큰(`--primary` 등)에 기댄다.
 
 ## 쓰는 쪽이 지킬 공식 규칙
