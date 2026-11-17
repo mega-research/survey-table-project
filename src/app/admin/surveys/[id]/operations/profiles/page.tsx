@@ -25,6 +25,7 @@ import {
   entryKeyOf,
   hydrateProfileColumns,
   visibleProfileColumns,
+  withoutAdminOnlyProfileColumns,
 } from '@/lib/operations/profile-columns-format';
 import {
   getProfileAnswerChoices,
@@ -101,7 +102,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
       getProfileAnswerChoices(surveyId),
     ]);
   // 표시 컬럼 스킴 — NULL(미설정)이면 hydrate 가 기본 스킴(기존 9컬럼)을 만든다.
-  const displayColumns = visibleProfileColumns(
+  const shownColumns = visibleProfileColumns(
     hydrateProfileColumns(
       contactScheme,
       profileScheme,
@@ -109,6 +110,8 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
       new Set(answerSources.map((s) => s.key)),
     ),
   );
+  // 브라우저 ID·기기 사양은 관리자만 본다 — 관리자가 켜 둔 열이라도 게스트 화면에서는 뺀다.
+  const displayColumns = isGuest ? withoutAdminOnlyProfileColumns(shownColumns) : shownColumns;
   const filterableAnswerKeys = new Set(
     answerSources.filter((s) => !s.encrypted).map((s) => s.key),
   );
@@ -169,6 +172,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
       view: args.view,
       clauses,
       answerChoices,
+      includeBrowserSignals: !isGuest,
     }),
     db
       .select({

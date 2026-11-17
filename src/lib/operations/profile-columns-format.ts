@@ -150,6 +150,44 @@ export function formatResponseSignal(value: string | null): string {
 }
 
 /**
+ * 관리자에게만 보이는 시스템 열 — 브라우저 ID·기기 사양. 게스트 화면·게스트가 받는 파일에는 열도 값도
+ * 나가지 않는다. 응답자 브라우저에 남아 있는 식별값을 응답 행과 묶어 밖으로 내보내지 않기 위해서다.
+ * IP 해시는 이 기능 전부터 게스트에게도 보이던 열이라 여기 넣지 않았다(기존 화면 유지).
+ */
+const ADMIN_ONLY_PROFILE_COLUMN_KEYS: ReadonlySet<string> = new Set([
+  'sys.deviceId',
+  'sys.fpHash',
+]);
+
+/** 게스트에게 보일 열 — 관리자 전용 열을 뺀다. 나머지 순서는 그대로다. */
+export function withoutAdminOnlyProfileColumns<T extends { key: string }>(
+  columns: readonly T[],
+): T[] {
+  return columns.filter((c) => !ADMIN_ONLY_PROFILE_COLUMN_KEYS.has(c.key));
+}
+
+/**
+ * 조회 결과에 실을 접속 식별값. 서버가 이 모양으로 줄여서만 내보낸다 — 화면에서 자르면 전체 값이
+ * RSC 데이터로 브라우저까지 간다. 브라우저 ID·기기 사양은 `includeBrowserSignals`(관리자 조회)일 때만 싣는다.
+ */
+export function pickResponseSignals(
+  raw: {
+    ipHash: string | null | undefined;
+    deviceId: string | null | undefined;
+    fpHash: string | null | undefined;
+  },
+  includeBrowserSignals: boolean,
+): { ipHash: string | null; deviceId: string | null; fpHash: string | null } {
+  const cut = (value: string | null | undefined) =>
+    value ? value.slice(0, RESPONSE_SIGNAL_DISPLAY_LEN) : null;
+  return {
+    ipHash: cut(raw.ipHash),
+    deviceId: includeBrowserSignals ? cut(raw.deviceId) : null,
+    fpHash: includeBrowserSignals ? cut(raw.fpHash) : null,
+  };
+}
+
+/**
  * 이어 넘길 값(패널 회원 ID) 표시 자릿수 — UUID 첫 마디만큼만 보이고 나머지는 말줄임.
  * IP 해시와 달리 값을 감출 이유는 없어 전체 값은 title·복사로 꺼낼 수 있게 화면에 둔다.
  */

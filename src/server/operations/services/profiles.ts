@@ -8,6 +8,7 @@ import { attrsSortKey } from '@/lib/operations/contacts-format';
 import { attrsNaturalSortExprs } from '@/lib/operations/contacts-filter-sql.server';
 import type { Platform } from '@/lib/operations/parse-ua';
 import type { AnswerChoiceMap } from '@/lib/operations/profile-answer-choices';
+import { pickResponseSignals } from '@/lib/operations/profile-columns-format';
 import {
   type NormalizedListArgs,
   type ProfilesSystemSortKey,
@@ -40,6 +41,11 @@ export type ListProfilesArgs = Omit<NormalizedListArgs, 'q' | 'col'> & {
   clauses: FilterClause[];
   /** 보기 열(응답값 열 키) → 보기 목록 — 그 열의 검색·깔때기를 보기 글자로 한다 */
   answerChoices?: AnswerChoiceMap;
+  /**
+   * 브라우저 ID·기기 사양을 행에 싣는가 — 관리자 조회만 true 로 부른다.
+   * 기본은 싣지 않는다: 게스트에게도 열리는 화면·파일이 이 조회를 쓰므로, 빠뜨린 호출부가 값을 내보내지 않게 한다.
+   */
+  includeBrowserSignals?: boolean;
 };
 
 export interface ListProfilesResult {
@@ -72,6 +78,7 @@ export async function listResponsesForProfiles(
   args: ListProfilesArgs,
 ): Promise<ListProfilesResult> {
   const { surveyId, scope, page, pageSize, status, sort, dir, view, clauses, answerChoices } = args;
+  const includeBrowserSignals = args.includeBrowserSignals === true;
 
   // negative result codes — base subquery WHERE 의 NOT EXISTS 분기에 사용.
   // 빈 배열이면 unsubscribed_at 만 검사 (negative code 분기는 SQL 차원에서 생략).
@@ -264,9 +271,8 @@ export async function listResponsesForProfiles(
     resid: r.resid ?? null,
     attrs: (r.attrs ?? null) as Record<string, string> | null,
     contactTargetId: r.contactTargetId ?? null,
-    ipHash: r.ipHash ?? null,
-    deviceId: r.deviceId ?? null,
-    fpHash: r.fpHash ?? null,
+    // 접속 식별값은 앞 8자로 줄여서만 싣고, 브라우저 ID·기기 사양은 관리자 조회에만 싣는다.
+    ...pickResponseSignals(r, includeBrowserSignals),
     entryParams: readStoredEntryParams(r.entryParams) ?? null,
   }));
 

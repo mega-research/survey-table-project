@@ -8,9 +8,11 @@ import {
   entryKeyOf,
   formatResponseSignal,
   hydrateProfileColumns,
+  pickResponseSignals,
   PROFILE_SYS_COLUMNS,
   selectRawExportContactColumns,
   visibleProfileColumns,
+  withoutAdminOnlyProfileColumns,
 } from '@/lib/operations/profile-columns-format';
 import type { ProfileColumnScheme } from '@/shared/contracts/operations';
 
@@ -201,6 +203,55 @@ describe('formatResponseSignal', () => {
   it('null·빈 문자열은 — 로 표시한다', () => {
     expect(formatResponseSignal(null)).toBe('—');
     expect(formatResponseSignal('')).toBe('—');
+  });
+});
+
+describe('pickResponseSignals', () => {
+  const raw = {
+    ipHash: '1b2f67f8aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    deviceId: '5cce2545-1111-4222-8333-444444444444',
+    fpHash: 'ec7b3f35bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+  };
+
+  it('관리자 조회에는 세 값을 앞 8자로 줄여 싣는다 — 전체 값은 서버 밖으로 나가지 않는다', () => {
+    expect(pickResponseSignals(raw, true)).toEqual({
+      ipHash: '1b2f67f8',
+      deviceId: '5cce2545',
+      fpHash: 'ec7b3f35',
+    });
+  });
+
+  it('게스트 조회에는 브라우저 ID·기기 사양을 싣지 않는다 — IP 해시는 종전대로 앞 8자', () => {
+    expect(pickResponseSignals(raw, false)).toEqual({
+      ipHash: '1b2f67f8',
+      deviceId: null,
+      fpHash: null,
+    });
+  });
+
+  it('값이 없으면 null 이다', () => {
+    expect(pickResponseSignals({ ipHash: null, deviceId: undefined, fpHash: '' }, true)).toEqual({
+      ipHash: null,
+      deviceId: null,
+      fpHash: null,
+    });
+  });
+});
+
+describe('withoutAdminOnlyProfileColumns', () => {
+  it('관리자가 켜 둔 브라우저 ID·기기 사양 열을 빼고 나머지 순서는 그대로 둔다', () => {
+    const columns = [
+      { key: 'sys.idx', label: '순번', order: 0 },
+      { key: 'sys.deviceId', label: '브라우저 ID', order: 1 },
+      { key: 'sys.ipHash', label: 'IP 해시', order: 2 },
+      { key: 'sys.fpHash', label: '기기 사양', order: 3 },
+      { key: 'attrs.업체명', label: '업체명', order: 4 },
+    ];
+    expect(withoutAdminOnlyProfileColumns(columns).map((c) => c.key)).toEqual([
+      'sys.idx',
+      'sys.ipHash',
+      'attrs.업체명',
+    ]);
   });
 });
 
