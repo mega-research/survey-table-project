@@ -187,6 +187,25 @@ describe('listContactAttrValues', () => {
     expect(result.values).toEqual(['A', 'B']);
   });
 
+  it('조사 대상에선 hidden 이어도 메일 표시를 켠 열이면 허용 — 단체 메일 미리보기의 깔때기', async () => {
+    selectResults.push([
+      {
+        scheme: schemeWith([
+          { key: 'resid', label: '번호', source: 'system.resid', order: 1 },
+          { key: 'c2', label: '전시회ID', source: 'attrs.전시회ID', order: 2, hidden: true, showInMail: true },
+        ]),
+      },
+    ]);
+    selectResults.push([{ v: '1' }, { v: '12' }]);
+
+    const result = await listContactAttrValues({
+      surveyId: 'sv-1',
+      attrsKey: '전시회ID',
+      scope: 'real',
+    });
+    expect(result.values).toEqual(['1', '12']);
+  });
+
   it('스킴 자체가 없으면 ForbiddenAttrColumnError', async () => {
     selectResults.push([]);
 

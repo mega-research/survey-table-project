@@ -4,6 +4,7 @@ import {
   parseProgressGroupKey,
   metaColumnsOutsideGroupKeys,
   progressCriterionLabel,
+  remapGroupedMetaSort,
   computeRate,
   toneFromRate,
   sortGroupRows,
@@ -188,5 +189,29 @@ describe('progressCriterionLabel', () => {
 
   it('진척률 컬럼 설정을 저장한 적 없는 열은 조사 대상 목록의 라벨이다', () => {
     expect(progressCriterionLabel(columns, '개최기간', '개최 기간')).toBe('개최 기간');
+  });
+});
+
+describe('remapGroupedMetaSort', () => {
+  const active = [{ kind: 'attrs' as const, key: 'Q0' }];
+
+  it('표시 열 정렬이 켜진 분류 기준을 가리키면 그 기준의 정렬로 읽는다', () => {
+    expect(remapGroupedMetaSort('meta:Q0', active)).toBe('group:Q0');
+  });
+
+  it('분류 기준이 아닌 표시 열·다른 정렬은 그대로다', () => {
+    expect(remapGroupedMetaSort('meta:개최기간', active)).toBe('meta:개최기간');
+    expect(remapGroupedMetaSort('listCount', active)).toBe('listCount');
+    expect(remapGroupedMetaSort(undefined, active)).toBeUndefined();
+  });
+
+  it('칩으로 꺼 둔 기준이면 표시 열 정렬 그대로다', () => {
+    expect(remapGroupedMetaSort('meta:Q0', [])).toBe('meta:Q0');
+  });
+
+  it('시스템 기준은 이름이 같은 표시 열의 정렬을 가져가지 않는다', () => {
+    expect(
+      remapGroupedMetaSort('meta:contact_owner', [{ kind: 'system', key: 'contact_owner' }]),
+    ).toBe('meta:contact_owner');
   });
 });

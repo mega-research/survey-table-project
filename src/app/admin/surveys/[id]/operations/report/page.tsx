@@ -22,6 +22,7 @@ import {
   metaColumnsOutsideGroupKeys,
   parseProgressGroupKey,
   progressCriterionLabel,
+  remapGroupedMetaSort,
   type ProgressGroupKey,
   type ProgressSortKey,
   type SortDir,
@@ -192,7 +193,8 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
   const metaKeys = visibleColumns.map((c) => c.key).filter((k) => k.length > 0);
   const titleLabel =
     activeCriteria.length > 0 ? activeCriteria.map((c) => c.label).join('·') : groupLabel;
-  const parsedSort = parseSort(sp.sort, metaKeys, activeKeys);
+  // 분류 기준이 된 열의 옛 표시 열 정렬 주소는 그 기준의 정렬로 잇는다.
+  const parsedSort = parseSort(remapGroupedMetaSort(sp.sort, activeGroupKeys), metaKeys, activeKeys);
   // 시스템ID 컬럼 비표시 시 firstResid 정렬은 보이지 않는 컬럼 정렬이 되므로 기본값 폴백.
   const showResid = scheme.showResid ?? true;
   const sort = !showResid && parsedSort === 'firstResid' ? 'responseRate' : parsedSort;

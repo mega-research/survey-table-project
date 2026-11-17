@@ -121,6 +121,23 @@ export function progressCriterionLabel(
   return columns.find((c) => c.key === key)?.label.trim() || contactLabel;
 }
 
+/**
+ * 표시 열 정렬 주소(`meta:<키>`)가 지금 켜진 분류 기준을 가리키면 그 기준의 정렬(`group:<키>`)로 읽는다.
+ *
+ * 분류 기준과 겹치는 표시 열은 그리지 않으므로(`metaColumnsOutsideGroupKeys`) 그 열의 정렬 주소는
+ * 갈 곳이 없어 기본 정렬로 떨어진다 — 같은 값이 기준 칸에 그대로 있으니 그쪽 정렬로 잇는다.
+ * 저장해 둔 주소와, 표시 열로 정렬한 채 그 칩을 켜는 경우 둘 다다.
+ */
+export function remapGroupedMetaSort(
+  sort: string | undefined,
+  activeGroupKeys: readonly ProgressGroupKey[],
+): string | undefined {
+  if (!sort?.startsWith('meta:')) return sort;
+  const key = sort.slice(5);
+  const grouped = activeGroupKeys.some((k) => k.kind === 'attrs' && k.key === key);
+  return grouped ? `group:${formatProgressGroupKey({ kind: 'attrs', key })}` : sort;
+}
+
 export type ProgressSortKey =
   | 'firstResid'
   | 'groupLabel'
