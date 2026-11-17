@@ -261,7 +261,8 @@ export function ProgressColumnEditor({ surveyId, initialScheme, contactScheme }:
 
       <div className="text-xs text-slate-500">
         분류 기준: 대·중·소·세부분류 레벨에 배정하면 진척률 표가 그 순서대로 조합 집계합니다. 조사
-        대상 목록 컬럼 설정과 같은 설정을 편집하며, 어느 쪽에서 바꿔도 동기화됩니다.
+        대상 목록 컬럼 설정과 같은 설정을 편집하며, 어느 쪽에서 바꿔도 동기화됩니다. 분류 기준으로
+        지정한 컬럼은 표에 그 칸으로 한 번만 나옵니다 — 「표시」를 켜 두어도 겹쳐 나오지 않습니다.
       </div>
 
       <div className="flex gap-2">

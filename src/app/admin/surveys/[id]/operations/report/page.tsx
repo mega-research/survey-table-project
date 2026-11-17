@@ -19,6 +19,7 @@ import { parseConditionFromUrl } from '@/server/operations/services/progress-fil
 import {
   EMPTY_PROGRESS_TOTALS,
   formatProgressGroupKey,
+  metaColumnsOutsideGroupKeys,
   parseProgressGroupKey,
   type ProgressGroupKey,
   type ProgressSortKey,
@@ -116,9 +117,7 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
   // 컨택원은 내부 실사 운영 정보 — 게스트에게는 분류 기준 칩이 없다.
   const hasAssignments =
     !isGuest && (await listAssignmentOptions(surveyId, scope)).length > 0;
-  const visibleColumns = scheme.columns.filter((c) => !c.hidden).sort((a, b) => a.order - b.order);
-  // metaKeys 에서 빈 문자열 방어 — `attrs->>''` 는 SQL legal 이지만 의미 없음.
-  const metaKeys = visibleColumns.map((c) => c.key).filter((k) => k.length > 0);
+  const shownColumns = scheme.columns.filter((c) => !c.hidden).sort((a, b) => a.order - b.order);
 
   // 후보: system.resid + attrs.* + pii.* 만. 그 외 system.* 은 이번 슬라이스 제외.
   const columnCandidates: ColumnCandidateWithPii[] = (contactScheme?.columns ?? [])
@@ -182,6 +181,10 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
   }
   const activeKeys = activeCriteria.map((c) => c.key);
   const activeGroupKeys = activeCriteria.map((c) => c.groupKey);
+  // 분류 기준으로 이미 나오는 열은 표시 열에서 뺀다 — 같은 값이 두 번 보이지 않게.
+  const visibleColumns = metaColumnsOutsideGroupKeys(shownColumns, activeGroupKeys);
+  // metaKeys 에서 빈 문자열 방어 — `attrs->>''` 는 SQL legal 이지만 의미 없음.
+  const metaKeys = visibleColumns.map((c) => c.key).filter((k) => k.length > 0);
   const titleLabel =
     activeCriteria.length > 0 ? activeCriteria.map((c) => c.label).join('·') : groupLabel;
   const parsedSort = parseSort(sp.sort, metaKeys, activeKeys);

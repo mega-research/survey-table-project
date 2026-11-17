@@ -92,6 +92,21 @@ export function formatProgressGroupKey(key: ProgressGroupKey): string {
   return key.kind === 'attrs' ? key.key : `${SYSTEM_GROUP_KEY_PREFIX}${key.key}`;
 }
 
+/**
+ * 표시 열 중 지금 켜진 분류 기준과 겹치지 않는 것만 남긴다.
+ *
+ * 분류 기준으로 묶은 열은 그 값이 이미 기준 칸에 나온다 — 「표시」까지 켜 둔 열을 그대로 그리면
+ * 같은 값이 두 번 보인다. 칩으로 꺼 둔 기준은 묶는 축이 아니므로 표시 열(대표값)로 남는다.
+ * 시스템 기준은 명단 attrs 가 아니라 이름이 같아도 다른 열이다.
+ */
+export function metaColumnsOutsideGroupKeys<T extends { key: string }>(
+  columns: readonly T[],
+  activeGroupKeys: readonly ProgressGroupKey[],
+): T[] {
+  const grouped = new Set(activeGroupKeys.filter((k) => k.kind === 'attrs').map((k) => k.key));
+  return columns.filter((c) => !grouped.has(c.key));
+}
+
 export type ProgressSortKey =
   | 'firstResid'
   | 'groupLabel'
