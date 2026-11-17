@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   formatProgressGroupKey,
   parseProgressGroupKey,
+  metaColumnsOutsideGroupKeys,
   computeRate,
   toneFromRate,
   sortGroupRows,
@@ -136,5 +137,36 @@ describe('parseProgressGroupKey / formatProgressGroupKey', () => {
 
   it('빈 문자열은 키가 아니다', () => {
     expect(parseProgressGroupKey('')).toBeNull();
+  });
+});
+
+describe('metaColumnsOutsideGroupKeys', () => {
+  const columns = [{ key: 'Q0' }, { key: 'Q0_1' }, { key: '개최기간' }];
+
+  it('분류 기준으로 이미 나오는 열은 표시 열에서 뺀다 — 같은 값이 두 번 보이지 않게', () => {
+    expect(
+      metaColumnsOutsideGroupKeys(columns, [
+        { kind: 'attrs', key: 'Q0' },
+        { kind: 'attrs', key: 'Q0_1' },
+      ]),
+    ).toEqual([{ key: '개최기간' }]);
+  });
+
+  it('칩으로 꺼 둔 분류 기준의 열은 표시 열로 남는다', () => {
+    expect(metaColumnsOutsideGroupKeys(columns, [{ kind: 'attrs', key: 'Q0' }])).toEqual([
+      { key: 'Q0_1' },
+      { key: '개최기간' },
+    ]);
+  });
+
+  it('분류 기준이 없으면 그대로다', () => {
+    expect(metaColumnsOutsideGroupKeys(columns, [])).toEqual(columns);
+  });
+
+  it('시스템 기준은 이름이 같은 명단 열을 빼지 않는다', () => {
+    const withOwner = [{ key: 'contact_owner' }, { key: 'Q0' }];
+    expect(
+      metaColumnsOutsideGroupKeys(withOwner, [{ kind: 'system', key: 'contact_owner' }]),
+    ).toEqual(withOwner);
   });
 });
