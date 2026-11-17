@@ -154,8 +154,12 @@ async function seedFieldworkCompleted(surveyId: string, resid: number) {
   return target.id;
 }
 
+/**
+ * 넘긴 id 순서대로 돌려준다. 정렬 없이 읽으면 순서가 DB 마음이라(제출이 행을 고쳐 쓰면 자리가 바뀐다)
+ * 「첫째는 완료, 둘째는 쿼터마감」을 순서로 단언하는 테스트가 가끔 뒤집혀 실패한다.
+ */
 async function loadRows(responseIds: string[]) {
-  return db
+  const rows = await db
     .select({
       id: surveyResponses.id,
       status: surveyResponses.status,
@@ -166,6 +170,8 @@ async function loadRows(responseIds: string[]) {
     })
     .from(surveyResponses)
     .where(inArray(surveyResponses.id, responseIds));
+  const position = new Map(responseIds.map((id, i) => [id, i]));
+  return rows.sort((a, b) => (position.get(a.id) ?? 0) - (position.get(b.id) ?? 0));
 }
 
 const setPlan = (surveyId: string, quotaConfig: QuotaConfig) =>
