@@ -10,6 +10,7 @@ import {
   PERSONAL_TAG_MESSAGE,
   type SurveyGuestTabs,
   accessLinkKindValues,
+  accessLinkSurveyBlockValues,
   fieldworkOrgStatusValues,
   normalizePersonalTagName,
   personalTagColorValues,
@@ -1365,6 +1366,12 @@ export type AccessLinkListItem = z.infer<typeof AccessLinkListItem>;
 export const SurveyAccessLinksOutput = z.object({
   links: z.array(AccessLinkListItem),
   canManage: z.boolean(),
+  /**
+   * 이 종류의 링크가 **설문 상태 때문에** 지금 닫혀 있는 사유 — 중단(외주만) | 종료 | null(열림).
+   * 링크마다가 아니라 블록에 하나다: 설문 상태는 그 종류의 모든 링크를 함께 닫는다. 목록은 여전히
+   * 「열린 링크」(종료하지 않은 링크)를 싣는다 — 이 값은 그 링크들로 지금 들어올 수 있는지다.
+   */
+  surveyBlock: z.enum(accessLinkSurveyBlockValues).nullable(),
 });
 export type SurveyAccessLinksOutput = z.infer<typeof SurveyAccessLinksOutput>;
 

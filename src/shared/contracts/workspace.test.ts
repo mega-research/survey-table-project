@@ -7,6 +7,7 @@ import {
   normalizeClientLinkTabs,
   normalizeClientResponseColumns,
   normalizeSurveyGuestTabs,
+  resolveAccessLinkSurveyBlock,
   surveyGuestTabValues,
 } from './workspace';
 
@@ -99,5 +100,35 @@ describe('normalizeClientResponseColumns', () => {
   it('version 이 정수가 아니면 0 으로 읽는다', () => {
     expect(normalizeClientResponseColumns({ version: '2', keys: ['sys.idx'] }).version).toBe(0);
     expect(normalizeClientResponseColumns({ version: -1, keys: ['sys.idx'] }).version).toBe(0);
+  });
+});
+
+/**
+ * 닫힘 표의 설문 상태 두 줄 (ADR-0029·0030) — 세션 판정과 공유 설정의 표시가 함께 보는 함수다.
+ */
+describe('resolveAccessLinkSurveyBlock', () => {
+  const open = { isPaused: false, surveyClosed: false };
+
+  it('열려 있으면 두 종류 모두 null 이다', () => {
+    expect(resolveAccessLinkSurveyBlock('fieldwork', open)).toBeNull();
+    expect(resolveAccessLinkSurveyBlock('client', open)).toBeNull();
+  });
+
+  it('중단은 외주 링크만 닫는다 — 클라이언트 링크는 열려 있다', () => {
+    const paused = { isPaused: true, surveyClosed: false };
+    expect(resolveAccessLinkSurveyBlock('fieldwork', paused)).toBe('paused');
+    expect(resolveAccessLinkSurveyBlock('client', paused)).toBeNull();
+  });
+
+  it('종료는 두 종류를 모두 닫는다', () => {
+    const closed = { isPaused: false, surveyClosed: true };
+    expect(resolveAccessLinkSurveyBlock('fieldwork', closed)).toBe('closed');
+    expect(resolveAccessLinkSurveyBlock('client', closed)).toBe('closed');
+  });
+
+  it('중단과 종료가 함께 서 있으면 종료를 말한다 — 재개만으로는 다시 열리지 않는다', () => {
+    const both = { isPaused: true, surveyClosed: true };
+    expect(resolveAccessLinkSurveyBlock('fieldwork', both)).toBe('closed');
+    expect(resolveAccessLinkSurveyBlock('client', both)).toBe('closed');
   });
 });

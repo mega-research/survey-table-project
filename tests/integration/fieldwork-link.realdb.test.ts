@@ -496,10 +496,16 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
       kind: 'closed',
       surveyTitle: '외주 실사 조사',
     });
+    // 공유 설정의 카드도 같은 사실을 말한다 — 중단은 외주만 닫고, 링크는 목록에 그대로 있다.
+    const pausedList = await client.accessLinks.list({ surveyId, kind: 'fieldwork' });
+    expect(pausedList.surveyBlock).toBe('paused');
+    expect(pausedList.links).toHaveLength(1);
+    expect((await client.accessLinks.list({ surveyId, kind: 'client' })).surveyBlock).toBeNull();
 
     // 만료가 아니라 「중단 중 차단」이다 — 재개는 비밀번호도 토큰도 건드리지 않는다.
     await db.update(surveysTable).set({ isPaused: false }).where(eq(surveysTable.id, surveyId));
     expect(await resolveLinkActor(token, headers)).toMatchObject({ ok: true });
+    expect((await client.accessLinks.list({ surveyId, kind: 'fieldwork' })).surveyBlock).toBeNull();
   });
 
   it('중단 중에는 비밀번호가 맞아도 닫힘이다 — 접속으로 뚫리지 않는다', async () => {
@@ -533,6 +539,9 @@ describe.skipIf(!isLocalDb)('외주 실사 링크 수명 (real local DB)', () =>
     // 「이 링크만 닫는다」로 남고, 비밀번호 표식이 그대로라 선 세션이 폐기되지도 않는다.
     const [linkAfter] = await db.select().from(linksTable).where(eq(linksTable.id, linkId));
     expect(linkAfter).toEqual(linkBefore);
+    // 공유 설정의 카드 — 종료는 두 종류를 모두 닫는다.
+    expect((await client.accessLinks.list({ surveyId, kind: 'fieldwork' })).surveyBlock).toBe('closed');
+    expect((await client.accessLinks.list({ surveyId, kind: 'client' })).surveyBlock).toBe('closed');
 
     await setClosed({ surveyId, isClosed: false });
     expect(await resolveLinkActor(token, headers)).toMatchObject({ ok: true });

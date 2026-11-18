@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import {
   ACCESS_LINK_LABEL_MAX_LENGTH,
   type AccessLinkKind,
+  type AccessLinkSurveyBlock,
   CLIENT_LINK_TAB_LABEL,
   type ClientLinkTab,
   type ClientLinkTabs,
@@ -114,6 +115,47 @@ const TEXT_LINK = cn(
 /** 안내 문단 — 닫히는 조건처럼 읽어야 하는 글이라 본문 대비(4.5:1 이상)를 지킨다. */
 const HELP_TEXT = 'text-[11px] leading-[1.5] text-[#6E6E73]';
 
+/**
+ * 설문 상태 때문에 링크가 지금 닫혀 있다는 안내 — 카드 위에 한 번만 선다.
+ *
+ * 카드 아래 `lifecycle` 문단은 「언제 닫히는가」(규칙)를 말하고 이쪽은 「지금 닫혀 있다」(상태)를
+ * 말한다. 규칙만 있으면 담당자는 멀쩡해 보이는 카드를 보고 외주에게 「다시 해 보라」고 한다.
+ * 사유별 문구에 다시 여는 방법을 함께 적는다 — 링크를 새로 발급할 일이 아니기 때문이다.
+ */
+const SURVEY_BLOCK_NOTICE: Record<AccessLinkKind, Record<AccessLinkSurveyBlock, string>> = {
+  fieldwork: {
+    paused:
+      '설문이 중단되어 있어 지금은 외주가 이 링크로 들어올 수 없습니다. 설문을 재개하면 같은 주소·같은 비밀번호로 다시 열립니다.',
+    closed:
+      '설문이 종료되어 있어 지금은 외주가 이 링크로 들어올 수 없습니다. 종료를 취소하거나 다시 배포하면 같은 주소·같은 비밀번호로 다시 열립니다.',
+  },
+  client: {
+    // 클라이언트 링크는 중단에 닫히지 않는다 — 서버가 이 조합을 주지 않지만 어휘 전부에 문구를 둔다.
+    paused:
+      '설문이 중단되어 있습니다. 클라이언트 링크는 중단 중에도 열려 있습니다.',
+    closed:
+      '설문이 종료되어 있어 지금은 클라이언트가 이 링크로 들어올 수 없습니다. 종료를 취소하거나 다시 배포하면 같은 주소·같은 비밀번호로 다시 열립니다.',
+  },
+};
+
+function SurveyBlockNotice({
+  kind,
+  block,
+}: {
+  kind: AccessLinkKind;
+  block: AccessLinkSurveyBlock | null;
+}) {
+  if (!block) return null;
+  return (
+    <p
+      role="status"
+      className="rounded-[8px] bg-[#FFFBEB] px-2.5 py-2 text-[12px] leading-[1.5] font-medium text-[#92400E]"
+    >
+      {SURVEY_BLOCK_NOTICE[kind][block]}
+    </p>
+  );
+}
+
 const ERROR_TEXT = 'text-[12px] text-[#DC2626]';
 
 /**
@@ -190,18 +232,23 @@ export function AccessLinkPanel({ surveyId, kind }: AccessLinkPanelProps) {
     const link = data.links[0];
     if (!link) return <div className="pt-1">{issueSection}</div>;
     return (
-      <AccessLinkCard
-        key={link.id}
-        surveyId={surveyId}
-        link={link}
-        canManage={data.canManage}
-        initialPassword={issuedPasswords[link.id] ?? null}
-      />
+      <div className="flex flex-col gap-2.5">
+        <SurveyBlockNotice kind={kind} block={data.surveyBlock} />
+        <AccessLinkCard
+          key={link.id}
+          surveyId={surveyId}
+          link={link}
+          canManage={data.canManage}
+          initialPassword={issuedPasswords[link.id] ?? null}
+        />
+      </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-2.5 pt-1">
+      {/* 닫혔다고 말할 링크가 있을 때만 — 발급 전에는 「지금 못 들어온다」가 가리킬 것이 없다. */}
+      {data.links.length > 0 && <SurveyBlockNotice kind={kind} block={data.surveyBlock} />}
       {data.links.map((link) => (
         <AccessLinkCard
           key={link.id}

@@ -76,9 +76,12 @@ const list = authed
   .output(SurveyAccessLinksOutput)
   .handler(async ({ input, context }) => {
     await assertSurveyCapabilityRpc(context.user, input.surveyId, 'survey.manageAccess');
-    const links = await svc.listAccessLinks(input.surveyId, input.kind);
+    const [links, surveyBlock] = await Promise.all([
+      svc.listAccessLinks(input.surveyId, input.kind),
+      svc.getAccessLinkSurveyBlock(input.surveyId, input.kind),
+    ]);
     // 이 표면 자체가 manageAccess 를 요구하므로 여기까지 온 주체는 언제나 관리자다.
-    return { links, canManage: true };
+    return { links, canManage: true, surveyBlock };
   });
 
 /** 발급 — 자동 생성 비밀번호를 **이때 한 번** 평문으로 함께 돌려준다. */

@@ -64,7 +64,12 @@ function linkOf(kind: AccessLinkKind, over: Partial<AccessLinkListItem> = {}): A
 
 /** 링크 하나가 열린 상태. `link` 로 그 링크를 바로 집는다(옛 단건 모양의 테스트가 쓴다). */
 function linkState(kind: AccessLinkKind, over: Partial<SurveyAccessLinksOutput> = {}) {
-  const state = { links: [linkOf(kind)], canManage: true, ...over } satisfies SurveyAccessLinksOutput;
+  const state = {
+    links: [linkOf(kind)],
+    canManage: true,
+    surveyBlock: null,
+    ...over,
+  } satisfies SurveyAccessLinksOutput;
   return { ...state, link: state.links[0]! };
 }
 
@@ -76,6 +81,7 @@ function twoFieldworkLinks(): SurveyAccessLinksOutput {
       linkOf('fieldwork', { id: SECOND_LINK_ID, token: 'Bq7nW3xY9kLm2pRt', ordinal: 2 }),
     ],
     canManage: true,
+    surveyBlock: null,
   };
 }
 
@@ -243,6 +249,43 @@ describe('AccessLinkPanel', () => {
     state.data = linkState('fieldwork');
     render(<AccessLinkPanel surveyId="s-1" kind="fieldwork" />);
     expect(screen.queryByRole('button', { name: '응답 내역 열 설정' })).toBeNull();
+  });
+
+  it('설문이 중단되어 있으면 외주 링크 카드 위에 지금 못 들어온다고 한 번 알린다 — 다시 여는 방법과 함께', () => {
+    state.data = { ...twoFieldworkLinks(), surveyBlock: 'paused' };
+    render(<AccessLinkPanel surveyId="s-1" kind="fieldwork" />);
+
+    const notices = screen.getAllByRole('status');
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toHaveTextContent('설문이 중단되어 있어 지금은 외주가 이 링크로 들어올 수 없습니다');
+    expect(notices[0]).toHaveTextContent('설문을 재개하면 같은 주소·같은 비밀번호로 다시 열립니다');
+  });
+
+  it('설문이 종료되어 있으면 두 종류 모두 닫혔다고 알리고, 종료를 풀어야 열린다고 말한다', () => {
+    state.data = linkState('fieldwork', { surveyBlock: 'closed' });
+    const { unmount } = render(<AccessLinkPanel surveyId="s-1" kind="fieldwork" />);
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '설문이 종료되어 있어 지금은 외주가 이 링크로 들어올 수 없습니다',
+    );
+    unmount();
+
+    state.data = linkState('client', { surveyBlock: 'closed' });
+    render(<AccessLinkPanel surveyId="s-1" kind="client" />);
+    const notice = screen.getByRole('status');
+    expect(notice).toHaveTextContent('설문이 종료되어 있어 지금은 클라이언트가 이 링크로 들어올 수 없습니다');
+    expect(notice).toHaveTextContent('종료를 취소하거나 다시 배포하면');
+  });
+
+  it('열려 있으면 닫힘 안내가 없다', () => {
+    state.data = linkState('fieldwork');
+    render(<AccessLinkPanel surveyId="s-1" kind="fieldwork" />);
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('발급한 링크가 없으면 설문이 닫혀 있어도 안내하지 않는다 — 가리킬 링크가 없다', () => {
+    state.data = { links: [], canManage: true, surveyBlock: 'closed' };
+    render(<AccessLinkPanel surveyId="s-1" kind="fieldwork" />);
+    expect(screen.queryByRole('status')).toBeNull();
   });
 
   it('닫히는 조건을 종류마다 다르게 말한다', () => {
@@ -414,6 +457,7 @@ describe('AccessLinkPanel', () => {
         }),
       ],
       canManage: true,
+      surveyBlock: null,
     } satisfies SurveyAccessLinksOutput;
     const user = userEvent.setup();
     render(<AccessLinkPanel surveyId="s-1" kind="fieldwork" />);

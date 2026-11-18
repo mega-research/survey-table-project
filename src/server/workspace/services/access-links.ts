@@ -4,7 +4,7 @@ import { and, eq, isNull } from 'drizzle-orm';
 
 import { InternalFailure } from '@/server/internal-failure';
 import { db } from '@/db';
-import { surveyAccessLinks } from '@/db/schema';
+import { surveyAccessLinks, surveys } from '@/db/schema';
 import { decryptSharedSecret, encryptSharedSecret } from '@/lib/crypto/aes';
 import { logger } from '@/lib/logger';
 import { resolveClientResponseColumnKeys } from '@/lib/operations/client-response-columns-format';
@@ -20,14 +20,17 @@ import {
   loadClientResponseColumnMaterial,
 } from '@/server/read-models/client-response-columns';
 import { selectAccessLinksInIssueOrder } from '@/server/read-models/fieldwork-link-names';
+import { surveyClosedColumn } from '@/server/survey-access';
 import {
   type AccessLinkKind,
+  type AccessLinkSurveyBlock,
   type ClientLinkTab,
   type ClientLinkTabs,
   type ClientResponseColumns,
   CLIENT_RESPONSE_FIRST_COLUMN_KEY,
   normalizeClientLinkTabs,
   normalizeClientResponseColumns,
+  resolveAccessLinkSurveyBlock,
 } from '@/shared/contracts/workspace';
 import type {
   AccessLinkListItem,
@@ -174,6 +177,26 @@ export async function listAccessLinks(
         ]
       : [],
   );
+}
+
+/**
+ * 그 종류의 링크가 설문 상태 때문에 지금 닫혀 있는 사유 — 공유 설정의 「지금은 못 들어온다」 표시.
+ *
+ * 판정은 세션 판정(`server/access-link` 의 `isClosed`)과 같은 함수다. 여기서 「중단이면 외주만」을
+ * 다시 적으면 카드와 실제 입구가 서로 다른 답을 낸다. 삭제·배치 대기는 묻지 않는다 — 이 표면에
+ * 닿으려면 `survey.manageAccess` 관문을 지나야 하고, 관문이 그 둘을 먼저 거른다.
+ */
+export async function getAccessLinkSurveyBlock(
+  surveyId: string,
+  kind: AccessLinkKind,
+): Promise<AccessLinkSurveyBlock | null> {
+  const [row] = await db
+    .select({ isPaused: surveys.isPaused, surveyClosed: surveyClosedColumn })
+    .from(surveys)
+    .where(eq(surveys.id, surveyId))
+    .limit(1);
+  // 관문을 지난 직후라 행이 없을 수 없다 — 그 사이 지워졌다면 목록도 비어 표시할 카드가 없다.
+  return row ? resolveAccessLinkSurveyBlock(kind, row) : null;
 }
 
 /**

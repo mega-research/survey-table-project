@@ -20,6 +20,7 @@ import {
   type ClientLinkTabs,
   type SurveyAssignmentStatus,
   normalizeClientLinkTabs,
+  resolveAccessLinkSurveyBlock,
 } from '@/shared/contracts/workspace';
 
 import { type LinkActor, surveyClosedColumn } from './survey-access';
@@ -165,9 +166,9 @@ export function isClosed(row: LinkRow): boolean {
     row.closedAt !== null ||
     row.deletedAt !== null ||
     // 중단은 「실사를 멈춘다」다 — 외주 링크만 닫는다. 클라이언트는 응답이 멈춘 뒤에 결과를
-    // 보므로 열려 있고, 조사가 끝나 외부를 전부 닫는 일은 아래 종료가 한다.
-    (row.kind === 'fieldwork' && row.isPaused) ||
-    row.surveyClosed ||
+    // 보므로 열려 있고, 조사가 끝나 외부를 전부 닫는 일은 종료가 한다. 이 두 줄은 공유 설정의
+    // 「지금은 못 들어온다」 표시와 같은 함수를 본다 — 표시와 판정이 갈리지 않게.
+    resolveAccessLinkSurveyBlock(row.kind, row) !== null ||
     row.assignmentStatus === 'assignment_pending'
   );
 }

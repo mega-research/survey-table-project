@@ -588,6 +588,32 @@ export const ACCESS_LINK_TOKEN_MAX_LENGTH = 64;
 export const accessLinkKindValues = ['fieldwork', 'client'] as const;
 export type AccessLinkKind = (typeof accessLinkKindValues)[number];
 
+/**
+ * 열린 링크가 **설문 상태 때문에** 지금 닫혀 있는 사유 — 중단 | 종료 (ADR-0029·0030 「닫힘 표」).
+ *
+ * 링크 행은 그대로다. 재개하거나 종료를 취소하면 같은 주소·같은 비밀번호로 다시 열리므로,
+ * 링크의 종료(`closed_at`)와 다른 사실이고 공유 설정이 「지금은 못 들어온다」를 따로 말해야 한다 —
+ * 말하지 않으면 담당자는 멀쩡해 보이는 카드를 보고 외주에게 「다시 해 보라」고 한다.
+ */
+export const accessLinkSurveyBlockValues = ['paused', 'closed'] as const;
+export type AccessLinkSurveyBlock = (typeof accessLinkSurveyBlockValues)[number];
+
+/**
+ * 닫힘 표의 설문 상태 두 줄 — **중단은 외주 링크만, 종료는 둘 다** 닫는다.
+ *
+ * 세션 판정(`server/access-link` 의 `isClosed`)과 공유 설정의 표시가 이 함수 하나를 본다. 표시가
+ * 판정을 따로 적으면 「카드는 닫혔다는데 외주는 들어온다」가 생긴다. 둘 다 서 있으면 종료를
+ * 말한다 — 재개만으로는 다시 열리지 않기 때문이다.
+ */
+export function resolveAccessLinkSurveyBlock(
+  kind: AccessLinkKind,
+  survey: { isPaused: boolean; surveyClosed: boolean },
+): AccessLinkSurveyBlock | null {
+  if (survey.surveyClosed) return 'closed';
+  if (kind === 'fieldwork' && survey.isPaused) return 'paused';
+  return null;
+}
+
 /** 외주 링크 이름표의 최대 글자 수 — 경계 스키마와 0159 의 CHECK 가 같은 값을 본다. */
 export const ACCESS_LINK_LABEL_MAX_LENGTH = 40;
 
