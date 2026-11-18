@@ -291,6 +291,7 @@ export async function listSurveyPage(
       activeTeam: null,
       whose: 'team',
       teamWideTotal: null,
+      groupSubtree: false,
     };
   } else {
     source = { kind: 'scoped', filter };
@@ -311,6 +312,8 @@ export async function listSurveyPage(
       // 휴지통 카드에는 별·태그가 없다 — 행이 남아 있어도(soft delete 는 지우지 않는다) 비워 싣는다.
       isFavorite: source.kind === 'deleted' ? false : row.isFavorite,
       myTagIds: source.kind === 'deleted' ? [] : row.myTagIds,
+      // 그룹 화면의 검색이 아래 전체에서 찾았을 때만 채워진다 — 그 밖에는 read model 이 빈 배열을 준다.
+      groupPath: row.groupPath,
     })),
     total: result.total,
     page: result.page,
@@ -321,6 +324,7 @@ export async function listSurveyPage(
     activeTeam: result.activeTeam,
     whose,
     teamWideTotal: result.teamWideTotal,
+    groupSubtree: result.groupSubtree,
   };
 }
 

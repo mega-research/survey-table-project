@@ -13,6 +13,7 @@ import {
   EllipsisVertical,
   ExternalLink,
   FileText,
+  Folder,
   Globe,
   Link as LinkIcon,
   Loader2,
@@ -91,6 +92,11 @@ interface SurveyCardProps {
   groups: readonly SurveyGroupListItem[];
   /** null 이면 케밥에서 「그룹 이동」 항목 자체를 그리지 않는다(핸들러 없는 자리는 안 만든다). */
   onMoveToGroup: ((surveyId: string, groupId: string | null) => void) | null;
+  /**
+   * 보고 있는 그룹에서부터 이 설문이 담긴 하위 그룹까지의 이름(목록 페이지 항목의 `groupPath`) —
+   * 그룹 화면의 검색이 아래 전체에서 찾았을 때만 채워진다. 비었으면 줄을 그리지 않는다.
+   */
+  groupPath: readonly string[];
 }
 
 /** 수정일 텍스트 접미사 — 내 설문이 아니면 소유자를, 남의 팀 설문이면 소유 팀을 잇는다. */
@@ -145,6 +151,7 @@ export function SurveyCard({
   isDuplicating,
   groups,
   onMoveToGroup,
+  groupPath,
 }: SurveyCardProps) {
   const { scope, currentUserId } = viewer;
   const canEdit = canEditSurveyCard(survey, viewer);
@@ -163,6 +170,7 @@ export function SurveyCard({
   const cardTags = resolveCardTags(tagging.myTagIds, tagging.tags, tagging.activeTagIds);
   const activeTagIds = new Set(tagging.activeTagIds);
   const displayTitle = surveyCardTitle(survey);
+  const groupPathText = groupPath.length > 0 ? groupPath.join(' › ') : null;
   const isPending = survey.assignmentStatus === 'assignment_pending';
   const surveyUrl = getSurveyAccessUrl(
     {
@@ -292,6 +300,23 @@ export function SurveyCard({
           </DropdownMenu>
         </div>
       </div>
+
+      {/* 하위 그룹 경로 줄 — 그룹 화면의 검색이 아래 전체에서 찾은 설문에만 선다. 어느 하위 그룹의
+          설문인지 적지 않으면 찾은 설문이 어디 있는지 알 수 없다. 긴 이름은 한 줄에서 자른다.
+          무슨 줄인지는 폴더 그림이 말하는데 그림은 읽히지 않는다 — 문단에 붙인 aria-label 도 읽히지
+          않으므로(이름을 갖는 역할이 아니다) **보이지 않는 글자**로 앞에 붙인다. */}
+      {groupPathText && (
+        <p
+          title={groupPathText}
+          className="-mt-1 flex min-w-0 items-center gap-1.5 text-[13px] text-[#6E6E73]"
+        >
+          <Folder aria-hidden className="h-3.5 w-3.5 shrink-0 text-[#9CA3AF]" />
+          <span className="truncate">
+            <span className="sr-only">담긴 하위 그룹: </span>
+            {groupPathText}
+          </span>
+        </p>
+      )}
 
       {/* 태그 창은 응답 수 줄 + 태그 줄 묶음 아래에 붙는다(시안 F6 ①). 태그 줄이 없을 때(태그 0개)도
           같은 자리에서 열리게 묶음 전체를 기준점으로 둔다. */}

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { surveyAnchorKeys } from '@/features/survey-builder/queries/use-survey-anchors';
 import { client, orpc } from '@/shared/lib/rpc';
+import { surveyGroupKeys } from '@/shared/lib/survey-group-queries';
 import { surveyKeys } from '@/shared/lib/survey-list-queries';
 import type { Survey } from '@/types/survey';
 
@@ -12,6 +13,9 @@ import type { Survey } from '@/types/survey';
  *
  * 휴지통 목록과 일반 목록 **양쪽**을 무효화한다. 복구된 설문은 휴지통에서 빠지고 일반
  * 목록에 나타나므로, 한쪽만 접으면 팀 화면으로 돌아갔을 때 방금 되살린 설문이 없다.
+ *
+ * **그룹 목록도 함께 접는다** — 복구된 설문은 지워질 때의 그룹에 담긴 채 돌아와 그 그룹과 위쪽
+ * 그룹의 건수를 늘린다(그룹의 건수는 지워지지 않은 설문만 센다).
  */
 export function useRestoreSurvey() {
   const queryClient = useQueryClient();
@@ -20,6 +24,7 @@ export function useRestoreSurvey() {
     mutationFn: (surveyId: string) => client.surveyBuilder.surveys.restore({ surveyId }),
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: surveyKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: surveyGroupKeys.all });
     },
   });
 }
@@ -59,6 +64,9 @@ export function useSaveSurvey() {
 
 /**
  * 설문 삭제
+ *
+ * **그룹 목록도 함께 접는다** — 그룹의 건수는 지워지지 않은 설문만 센다(하위 그룹까지). 설문 목록만
+ * 접으면 그룹 화면 머리 · 폴더 줄 · 사이드바의 숫자가 지운 설문을 센 채 남는다.
  */
 export function useDeleteSurvey() {
   const queryClient = useQueryClient();
@@ -67,6 +75,7 @@ export function useDeleteSurvey() {
     mutationFn: (surveyId: string) => client.surveyBuilder.surveys.delete({ surveyId }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: surveyKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: surveyGroupKeys.all });
     },
   });
 }
@@ -89,6 +98,9 @@ export function useSetSurveyCardTitle() {
 
 /**
  * 설문 복제
+ *
+ * 그룹 목록은 접지 않는다 — 사본은 원본의 그룹을 물려받지 않고 미분류로 선다(복제 서비스가 소속 그룹
+ * 칸을 옮기지 않는다). 어느 그룹의 건수도 바뀌지 않는다.
  */
 export function useDuplicateSurvey() {
   const queryClient = useQueryClient();

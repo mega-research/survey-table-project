@@ -14,8 +14,18 @@ src/features/
 │   │   │                       # · 보는 자리 「팀 전체 | 내 설문」 whose-toggle · 목록 상태 세그먼트·자주 쓰는 태그 한 줄 quick-tag-row·정렬)·카드(별·태그 줄)·태그 창 tag-picker(+ tag-edit-panel) · 공용 태그 꼴 personal-tag-label (페이지네이션은 components/ui/list-pagination)
 │   │   │                       # 거르기·정렬·페이지는 서버(read.listPage) — 조건의 정본은 주소(survey-list-url 이 주소 ↔ 조건 변환, 휴지통 적용 applyTrashAccess)
 │   │   │                       # 표시 규칙만 순수 함수로 남는다(personal-tags·search-suggest) ·버튼 노출 근사(survey-list-capability — 판정은 서버)
-│   │   │   └── groups/         # 설문 그룹 UI (티켓 12 — .pen FLOW 2): 관리 모달(CRUD·dnd 정렬)·
-│   │   │                       # 담기 패널(미분류 전용)·삭제 확인·카드 케밥 이동 서브메뉴·그룹 화면 머리
+│   │   │   └── groups/         # 설문 그룹 UI — 3단계 중첩 (.pen FLOW 2 · pencil/설문그룹_3단계_시안 G1~G4, ADR-0038)
+│   │   │                       # 그룹 화면: group-view-header(브레드크럼·제목 옆 하위 포함 건수) · subgroup-section(하위 그룹 폴더 줄 + ⋯ 메뉴
+│   │   │                       #   이름 바꾸기·옮기기·삭제) · group-screen(resolveGroupScreen — 경로·하위 그룹·하위를 더 만들 수 있는가)
+│   │   │                       # 그룹 관리 창 group-manage-modal: 들여쓰기 트리, 줄마다 ⋯ 메뉴(이름 바꾸기·하위 그룹 만들기·옮기기·삭제),
+│   │   │                       #   끌기는 같은 부모 안의 순서만(형제 목록마다 DndContext, 계산은 group-reorder). 구조만 다룬다 —
+│   │   │                       #   「설문 담기」 입구는 그룹 화면 머리 버튼 하나(group-collect-modal, 미분류 전용)
+│   │   │                       # 창 셋: group-name-dialog(새 하위 그룹·이름 바꾸기 겸용 — 최상위 새 그룹은 관리 창 아래 입력 줄) · group-relocate-dialog(옮길 자리 트리 —
+│   │   │                       #   못 가는 자리는 사유와 함께 꺼 둔다) · group-delete-dialog(「한 단계 위로 올라갑니다」, 설문 건수는 적지 않는다.
+│   │   │                       #   문구·이름 겹침 안내·사라진 그룹의 갈 주소는 group-delete-plan)
+│   │   │                       # 카드 케밥 「그룹 이동」 group-move-submenu: 전부 편 들여쓰기 트리(group-move-options), 미분류 = 빼기
+│   │   │                       # 트리 조립·위쪽 경로·옮길 수 있는 자리 판정은 공용 순수 함수 src/utils/survey-group-tree —
+│   │   │                       #   사이드바(workspace)·서버(옮기기 재판정)와 함께 쓴다. 화면 판정은 보이는 그룹만 아는 근사이고 서버가 답이다
 │   │   ├── sharing/            # 공유 설정 모달 (share-settings-modal 진입점, 티켓 16 — .pen FLOW 4-2)
 │   │   │                       # 입구는 둘 — 설문 카드 케밥 「공유」와 운영 헤더 「공유」(share-settings-button, 내부 운영 레이아웃이
 │   │   │                       # 헤더의 shareAction 자리에 끼운다 — operations 는 이 묶음을 import 할 수 없다)

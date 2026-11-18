@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Folder, Loader2, Plus } from 'lucide-react';
+import { Folder, FolderPlus, ListPlus, Loader2, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { ListPagination } from '@/components/ui/list-pagination';
@@ -45,8 +45,19 @@ import {
   NoSurveysEmptyState,
   NoTeamEmptyState,
 } from './empty-states';
+import { GroupCollectModal } from './groups/group-collect-modal';
+import { GroupDeleteDialog } from './groups/group-delete-dialog';
+import { resolveGroupFallbackHref } from './groups/group-delete-plan';
 import { GroupManageModal } from './groups/group-manage-modal';
+import { GroupNameDialog, type GroupNameDialogTarget } from './groups/group-name-dialog';
+import { GroupRelocateDialog } from './groups/group-relocate-dialog';
+import { type GroupScreenSubgroup, resolveGroupScreen } from './groups/group-screen';
 import { GroupViewFooterNote, GroupViewHeader } from './groups/group-view-header';
+import {
+  GroupScreenSectionTitle,
+  NoDirectSurveysNote,
+  SubgroupSection,
+} from './groups/subgroup-section';
 import { ListToolbar } from './list-toolbar';
 import { keepKnownTagIds } from './personal-tags';
 import { SurveyCard } from './survey-card';
@@ -171,6 +182,20 @@ export function SurveyListView() {
   } = useSurveyGroups(teamScopeId);
   const { mutate: moveSurveyToGroup } = useMoveSurveyToGroup();
   const [groupManagerOpen, setGroupManagerOpen] = useState(false);
+  // 그룹 화면의 이름 창 — 「새 하위 그룹」과 폴더 줄의 「이름 바꾸기」가 함께 쓴다.
+  const [groupNameTarget, setGroupNameTarget] = useState<GroupNameDialogTarget | null>(null);
+  // 그룹 화면 머리의 「설문 담기」 — 지금 보고 있는 그룹에 미분류 설문을 넣는 창. **여는 순간의 그룹
+  // id 를 든다**: 열림 표시만 따로 두면, 연 사이 그 그룹이 지워져 화면이 위 그룹으로 옮겨 갔을 때 창이
+  // 위 그룹을 대상으로 다시 뜬다(「2026」에 담는 줄 알고 「이정운」에 담는다).
+  const [collectGroupId, setCollectGroupId] = useState<string | null>(null);
+  // 폴더 줄의 「옮기기」가 여는 창 — 그 그룹을 통째로 옮길 자리를 고른다.
+  const [relocateTarget, setRelocateTarget] = useState<{ id: string; name: string } | null>(null);
+  // 폴더 줄 ⋯ 메뉴의 「삭제」가 연다 — 지우면 그 안의 것들이 지금 보고 있는 이 그룹으로 올라온다.
+  const [groupDeleteTarget, setGroupDeleteTarget] = useState<{
+    id: string;
+    name: string;
+    parentGroupId: string | null;
+  } | null>(null);
   const [teamPickOpen, setTeamPickOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
@@ -209,17 +234,52 @@ export function SurveyListView() {
     [groupList],
   );
   const activeGroup = groupList.find((g) => g.id === requestedGroupId) ?? null;
+  // 그룹 화면의 재료 — 브레드크럼 경로 · 폴더 줄로 그릴 하위 그룹 · 「새 하위 그룹」을 보일지(3단계 중첩).
+  const groupScreen = useMemo(
+    () => (activeGroup ? resolveGroupScreen(groupList, activeGroup.id) : null),
+    [groupList, activeGroup],
+  );
+  const subgroups = groupScreen?.subgroups ?? EMPTY_SUBGROUPS;
+  // 「설문 담기」는 **내 팀 그룹 화면이면 어느 단계에서든** 된다 — 설문은 1·2·3단계 어디에든 직접
+  // 담긴다. 협업 그룹(타 팀 폴더)은 그 팀 사람만 채우므로 대상이 아니다. 판정은 서버가 다시 한다.
+  const collectTargetGroup =
+    activeGroup && activeGroup.foreignTeamName === null && teamScopeId !== null
+      ? activeGroup
+      : null;
+  // 담기 창은 **연 그룹을 보고 있는 동안만** 열려 있다. 그 그룹이 목록에서 사라졌거나(다른 팀원이
+  // 지웠다) 화면이 다른 그룹으로 옮겨 갔으면 닫는다 — 닫아 두지 않으면 나중에 같은 주소로 돌아왔을 때
+  // 누르지도 않은 창이 저절로 뜬다.
+  const collectingInto =
+    collectGroupId !== null && collectTargetGroup?.id === collectGroupId
+      ? collectTargetGroup
+      : null;
+  if (collectGroupId !== null && collectingInto === null) setCollectGroupId(null);
+  // 그룹 화면의 검색은 그 그룹 아래 전체에서 찾는다(티켓 08) — 넓혔는지는 서버가 답한다(내 팀 그룹 +
+  // 검색어). 주소의 검색어가 아니라 **그려진 결과**의 값을 본다: 조건을 바꾸는 동안 흐리게 남긴 이전
+  // 결과에는 이전 범위의 숫자와 카드가 있다.
+  const searchedSubtree = activeGroup !== null && (data?.groupSubtree ?? false);
   // 지목한 그룹이 없으면(삭제됐거나 남의 팀 id) 주소를 정리한다 — 서버는 그 그룹으로 좁혀 빈
   // 결과를 주므로, 두면 유령 그룹 주소로 빈 화면에 갇힌다. 시스템 전체 보기에는 그룹 개념이
   // 없어 언제나 정리한다. 그룹 목록이 아직 안 왔거나 실패했으면 손대지 않는다 — "아직 안 왔다"
   // 와 "없더라" 는 다른 상태다.
+  //
+  // **보고 있던 그룹이 지워졌으면 그 위 그룹 화면으로 간다**(최상위였으면 설문 목록). 그룹을 지우면
+  // 내용물이 한 단계 위로 올라가므로 방금 보던 것들이 거기에 있다. 마지막으로 본 경로를 기억해 두고
+  // 남아 있는 가장 가까운 위 그룹을 고른다 — 내가 지웠든 다른 팀원이 지웠든 같은 길이다.
   const groupsSettled = teamScopeId !== null && !groupsPending && !groupsError;
   const groupMissing =
     requestedGroupId !== null &&
     (resolvedScope?.kind === 'system' || (groupsSettled && !activeGroup));
+  const lastGroupPathRef = useRef<readonly { id: string }[]>([]);
   useEffect(() => {
-    if (groupMissing) router.replace('/surveys');
-  }, [groupMissing, router]);
+    if (groupScreen) lastGroupPathRef.current = groupScreen.path;
+  }, [groupScreen]);
+  useEffect(() => {
+    if (!groupMissing) return;
+    const lastPath = lastGroupPathRef.current;
+    const wasViewing = lastPath.at(-1)?.id === requestedGroupId;
+    router.replace(wasViewing ? resolveGroupFallbackHref(lastPath, groupList) : '/surveys');
+  }, [groupMissing, requestedGroupId, groupList, router]);
 
   // 팀 좁힘은 서버가 실제로 건 경우에만 제목을 바꾼다 — 지목한 팀 설문이 없으면 좁히지 않는다.
   const activeTeam = data?.activeTeam ?? null;
@@ -352,11 +412,12 @@ export function SurveyListView() {
     // 목록 영역 폭 상한 — .pen FLOW 6-2 본문(976px)보다 넓혀 카드 한 장이 약 410px 가 된다.
     // 큰 모니터에서 3열 카드가 가로로만 늘어나지 않게 막는 것이 목적이다.
     <div className="mx-auto flex w-full max-w-[1360px] flex-col gap-[18px] px-9 py-[30px]">
-      <div className="flex items-center justify-between">
-        {activeGroup ? (
+      <div className="flex items-center justify-between gap-6">
+        {activeGroup && groupScreen ? (
           <GroupViewHeader
-            groupName={activeGroup.name}
+            path={groupScreen.path}
             foreignTeamName={activeGroup.foreignTeamName}
+            surveyCount={activeGroup.surveyCount}
           />
         ) : activeTeam ? (
           <h1 className="text-2xl font-semibold text-[#1C1C1E]">
@@ -368,7 +429,7 @@ export function SurveyListView() {
             {isSystemScope ? '설문 목록 — 시스템 전체 보기' : '설문 목록'}
           </h1>
         )}
-        <div className="flex items-center gap-2.5">
+        <div className="flex shrink-0 items-center gap-2.5">
           {canManageGroups && (
             <button
               type="button"
@@ -376,7 +437,35 @@ export function SurveyListView() {
               className="flex h-[42px] items-center gap-1.5 rounded-[9px] border border-[#E5E5EA] bg-white px-[18px] text-[14px] font-medium text-[#374151] hover:bg-[#F5F5F7]"
             >
               <Folder className="h-4 w-4" />
-              {activeGroup ? '그룹 편집' : '그룹 관리'}
+              그룹 관리
+            </button>
+          )}
+          {/* 3단계 그룹과 협업 그룹(타 팀 폴더)에서는 보이지 않는다 — 만들 수 없는 것을 눌러 보고
+              오류를 만나지 않게. 판정은 서버가 다시 한다. */}
+          {activeGroup && groupScreen?.canCreateSubgroup && teamScopeId && (
+            <button
+              type="button"
+              onClick={() =>
+                setGroupNameTarget({
+                  kind: 'create-subgroup',
+                  teamId: teamScopeId,
+                  parent: { id: activeGroup.id, name: activeGroup.name },
+                })
+              }
+              className="flex h-[42px] items-center gap-1.5 rounded-[9px] border border-[#E5E5EA] bg-white px-[18px] text-[14px] font-medium text-[#374151] hover:bg-[#F5F5F7]"
+            >
+              <FolderPlus className="h-4 w-4" />새 하위 그룹
+            </button>
+          )}
+          {/* 이 그룹에 바로 담는다 — 「설문 담기」의 입구는 여기 하나다(그룹 관리 창은 구조만 다룬다). */}
+          {collectTargetGroup && (
+            <button
+              type="button"
+              onClick={() => setCollectGroupId(collectTargetGroup.id)}
+              className="flex h-[42px] items-center gap-1.5 rounded-[9px] border border-[#E5E5EA] bg-white px-[18px] text-[14px] font-medium text-[#374151] hover:bg-[#F5F5F7]"
+            >
+              <ListPlus className="h-4 w-4" />
+              설문 담기
             </button>
           )}
           {canCreate ? (
@@ -453,7 +542,13 @@ export function SurveyListView() {
             sortBy={query.sort}
             onSortByChange={(sort) => updateQuery({ sort })}
             searchPlaceholder={
-              activeGroup ? `이 그룹 안에서 ${SEARCH_PLACEHOLDER}` : SEARCH_PLACEHOLDER
+              // 하위 그룹이 있는 내 팀 그룹만 「아래 전체」를 말한다(시안 G1) — 하위 그룹이 없으면 넓어질
+              // 것이 없고, 협업 그룹(타 팀 폴더)의 검색은 직접 담긴 설문에서 멈춘다.
+              activeGroup && subgroups.length > 0
+                ? `「${activeGroup.name}」 아래 전체에서 찾기 — 하위 그룹의 설문도 함께 나옵니다`
+                : activeGroup
+                  ? `이 그룹 안에서 ${SEARCH_PLACEHOLDER}`
+                  : SEARCH_PLACEHOLDER
             }
             advancedOpen={advancedOpen}
             onToggleAdvanced={() => setAdvancedOpen(!advancedOpen)}
@@ -520,21 +615,53 @@ export function SurveyListView() {
             }
           />
 
+          {/* 하위 그룹 폴더 줄 — 하위 그룹이 없으면 아무것도 그리지 않아 화면이 전과 같다.
+              그 아래는 이 그룹에 **직접** 담긴 설문뿐이라, 둘이 함께 있을 때만 구역 제목을 단다.
+              폴더 줄은 검색 중에도 그대로다(구조이지 검색 결과가 아니다). 검색이 아래 전체에서 찾았으면
+              카드가 하위 그룹의 설문까지라 제목이 그 범위와 결과 수를 말한다 — 그때 「전체」 숫자는
+              아래 전체의 설문 수이지 직접 담긴 수가 아니다.
+              **「직접 담긴 설문」의 숫자는 「팀 전체」로 볼 때만 적는다** — 「내 설문」의 「전체」 숫자는
+              내 것만 센 수라 「이 그룹에 직접 담긴 설문 수」가 아니다. */}
+          <SubgroupSection
+            subgroups={subgroups}
+            onRename={(group) => setGroupNameTarget({ kind: 'rename', group })}
+            onRelocate={setRelocateTarget}
+            onDelete={setGroupDeleteTarget}
+          />
+          {subgroups.length > 0 &&
+            (searchedSubtree ? (
+              <GroupScreenSectionTitle count={total}>
+                이 그룹과 하위 그룹에서 찾은 설문
+              </GroupScreenSectionTitle>
+            ) : (
+              <GroupScreenSectionTitle count={whose === 'team' ? counts.all : null}>
+                이 그룹에 직접 담긴 설문
+              </GroupScreenSectionTitle>
+            ))}
+
           {scope.kind === 'none' ? (
             // 셸 밖 트리에서 서버가 미배치로 해석한 경우 — FLOW 9-1 문구로 안내한다.
             <NoTeamEmptyState />
           ) : mineEmpty !== null ? (
             // 「내 설문」은 비었는데 같은 조건으로 팀 전체에는 있다 — 「설문이 없다」로 읽히지 않게 먼저 본다.
             <MineEmptyState teamWideTotal={mineEmpty} onShowTeam={() => changeWhose('team')} />
-          ) : counts.all === 0 ? (
+          ) : counts.all === 0 && !searchedSubtree ? (
             // 「전체」 숫자는 범위·그룹·팀 좁힘까지만 센다 — 0 이면 조건과 무관하게 빈 화면이다.
+            // 아래 전체에서 찾은 검색만은 예외다: 그때의 0 은 「이 그룹이 비었다」가 아니라 「아래 어디에도
+            // 없다」라, 빈 그룹 안내 대신 조건을 푸는 결과 없음 화면으로 간다.
             // 휴지통이 비어 있는 것·그룹이 비어 있는 것·팀에 설문이 없는 것은 다른 화면이다 —
             // 여기서 「새 설문 만들기」를 권하면 방금 무엇을 보러 왔는지와 어긋나고, 그룹 좁힘은
             // 주소가 소유해 「조건 풀기」로는 풀리지 않는다.
             showDeleted ? (
               <EmptyDeletedState />
             ) : activeGroup ? (
-              <EmptyGroupState />
+              // 하위 그룹만 있는 그룹은 「비어 있는 그룹」이 아니다 — 큰 빈 화면이 폴더 줄 아래에 서면
+              // 방금 본 폴더들과 어긋난다.
+              subgroups.length > 0 ? (
+                <NoDirectSurveysNote />
+              ) : (
+                <EmptyGroupState />
+              )
             ) : (
               <NoSurveysEmptyState canCreate={canCreate} />
             )
@@ -588,6 +715,7 @@ export function SurveyListView() {
                       isDuplicating={isDuplicating}
                       groups={manageableGroups}
                       onMoveToGroup={canManageGroups ? handleMoveToGroup : null}
+                      groupPath={survey.groupPath}
                     />
                   ),
                 )}
@@ -625,11 +753,40 @@ export function SurveyListView() {
           onClose={() => setGroupManagerOpen(false)}
         />
       )}
+
+      {groupNameTarget && (
+        <GroupNameDialog target={groupNameTarget} onClose={() => setGroupNameTarget(null)} />
+      )}
+
+      {collectingInto && teamScopeId && (
+        <GroupCollectModal
+          teamId={teamScopeId}
+          group={collectingInto}
+          onClose={() => setCollectGroupId(null)}
+        />
+      )}
+
+      {relocateTarget && (
+        <GroupRelocateDialog
+          group={relocateTarget}
+          groups={groupList}
+          onClose={() => setRelocateTarget(null)}
+        />
+      )}
+
+      {groupDeleteTarget && teamScopeId && (
+        <GroupDeleteDialog
+          group={groupDeleteTarget}
+          teamId={teamScopeId}
+          onClose={() => setGroupDeleteTarget(null)}
+        />
+      )}
     </div>
   );
 }
 
 const EMPTY_TAGS: readonly PersonalTagItem[] = [];
+const EMPTY_SUBGROUPS: readonly GroupScreenSubgroup[] = [];
 
 /** 검색창 안내 — 단어마다 이 칸들 중 하나에 들면 맞는다(내 태그는 요청자 본인의 태그 이름). */
 const SEARCH_PLACEHOLDER = '설문 이름, 설명, 소유자, 내 태그 — 여러 단어는 띄어서';

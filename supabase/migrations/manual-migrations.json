@@ -140,6 +140,7 @@
     "0161_revoke_survey_access_links_grants",
     "0167_survey_list_title",
     "0168_survey_list_title_into_card_title",
-    "0169_drop_survey_list_title"
+    "0169_drop_survey_list_title",
+    "0166_survey_groups_nesting"
   ]
 }

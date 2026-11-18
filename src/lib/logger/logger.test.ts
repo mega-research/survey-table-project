@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import { DrizzleQueryError } from 'drizzle-orm/errors';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -65,6 +66,29 @@ describe('logger redact', () => {
     const log = lastLog(lines);
     expect(log['questionResponses']).toBe('[Redacted]');
     expect(log['answers']).toBe('[Redacted]');
+  });
+
+  it('그룹 삭제의 이름 겹침 거부 — err.data 에 실린 그룹 이름을 검열한다', () => {
+    // RPC 실패 로그는 에러를 통째로 싣고, 표준 직렬화는 에러의 `data` 까지 옮긴다. 겹치는 그룹
+    // 이름(직원 이름일 수 있다)은 응답으로만 가야 한다 — 성공 로그가 이름을 뺀 것과 같은 기준이다.
+    const { lines, stream } = captureStream();
+    const logger = createLogger(stream);
+
+    logger.error(
+      {
+        err: new ORPCError('CONFLICT', {
+          message: '이름이 같은 그룹이 있어 하위 그룹을 올릴 수 없습니다.',
+          data: { conflictingNames: ['이정운 2026'], hasHiddenConflicts: false },
+        }),
+      },
+      '[rpc] 실패',
+    );
+
+    expect(lines.at(-1)).not.toContain('이정운');
+    const err = lastLog(lines)['err'] as { code: string; data: Record<string, unknown> };
+    // 무슨 거부였는지는 남는다 — 이름만 가린다.
+    expect(err.code).toBe('CONFLICT');
+    expect(err.data).toEqual({ conflictingNames: '[Redacted]', hasHiddenConflicts: false });
   });
 
   it('ip 는 의도적으로 검열하지 않는다 (로그 스키마의 "어디서")', () => {

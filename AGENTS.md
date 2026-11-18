@@ -15,11 +15,12 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 
 | 작업 영역                                                                                                                                 | 읽을 문서                                        |
 | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| 라우트 트리 · API 엔드포인트 · 운영 콘솔·게스트·링크 콘솔 주소 · 응답 진입 경로(초대 링크·짧은 링크)                                                       | `src/app/AGENTS.md`                              |
+| 라우트 트리 · API 엔드포인트 · 운영 콘솔·게스트·링크 콘솔 주소 · 응답 진입 경로(초대 링크·짧은 링크)                                      | `src/app/AGENTS.md`                              |
 | 운영 집계·파티션 · 진척 보고 분류 키                                                                                                      | `src/server/operations/AGENTS.md`                |
 | 메일 발송 주소·대체 발송 · 회신 전달(받은 메일 넘기기)                                                                                    | `src/server/mail/AGENTS.md`                      |
 | 서버 트리 · 설문 관문·procedure 베이스·capability 코어 · soft delete · 테스트 모드·테스트 버전 · 설문 목록 조회                           | `src/server/AGENTS.md`                           |
 | 팀·소유권·참여자·공개 범위·그룹·재배치 · 외주 링크(업체별 여럿·이름표)/클라이언트 링크 · 설문 종료 · 대리 응답 · 옛 게스트/실사 계정 모델 | `src/server/workspace/AGENTS.md`                 |
+| 설문 그룹 구조 쓰기 — 팀 키 잠금 순서 · 옮기기 · 지우기(한 단계 위로) · 그룹 목록 가시성                                                  | `src/server/workspace/services/AGENTS.md`        |
 | 계정 수명주기 · 프로필 · 계정 발급 입구                                                                                                   | `src/server/auth/AGENTS.md`                      |
 | 세션(Better Auth) · 1차 게이트(proxy) · 로그인 · 유형별 목적지                                                                            | `src/lib/auth/AGENTS.md`                         |
 | 쿼터                                                                                                                                      | `src/server/quota/AGENTS.md`                     |
@@ -129,6 +130,7 @@ src/
 │   ├── conditional-table-layout.ts  # 응답 표 가시 투영(행·열 표시조건 + 동적 행 선택) — 렌더러·차단 검증·저장 경계 strip 공용이라 공용 구역 (구 question-renderer/utils, 2026-10-22)
 │   ├── cell-gate-tree.ts       # 셀 게이팅 조건 트리 순회(잎 수집·컨트롤러 id·잎 매핑·잎 재해석) — 타입만 import 하는 잎 모듈, lib·utils·features 공용
 │   ├── survey-language / system-strings.ts  # 다국어 판정(언어 문항·현재 언어·언어 묶음)·응답 화면 시스템 글자 사전 ko·zh·en — 공용 구역 (src/features/AGENTS.md "다국어 설문")
+│   ├── survey-group-tree.ts    # 설문 그룹 3단계 트리 — 조립·위쪽 경로·옮길 수 있는 자리 판정. 사이드바(workspace)·설문 목록(survey-builder)·서버(옮기기 재판정) 공용
 │   ├── dynamic-row-selection-sidecar.ts  # 동적 행 선택 사이드카 키·정제 — lib/survey/response-sidecars 등록부가 import 하므로 공용 구역 (구 question-renderer/utils)
 │   └── ...
 │

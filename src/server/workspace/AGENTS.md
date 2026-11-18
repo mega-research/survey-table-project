@@ -82,25 +82,21 @@
   `tests/integration/invite-only-visibility.test.ts`(전환 전 열려 있었음 ↔ 전환 후 전 표면
   NOT_FOUND — 짝으로 물어야 관문 유무를 갈라낸다)와 `survey-sharing.realdb.test.ts`(목록 SQL·
   updatedAt 보존은 목으로는 증명되지 않는다).
-- **설문 그룹은 접근 권한이 아니라 정리용 묶음이다**(티켓 12, .pen FLOW 2). 그래서 관문이
-  두 갈래다 — **그룹 구조**(목록·생성·이름 변경·정렬·삭제·담기 후보 조회)는 팀 공용이라
-  슈퍼어드민 또는 그 팀 active 멤버면 팀장·팀원을 가리지 않고, **설문을 넣고 빼는 것**만
-  그 설문의 `survey.edit` + `surveyGroup.manage` 를 함께 요구한다. 전자만 보면 참여자
-  (티켓 18)가 남의 팀 폴더를 재배치하고, 후자만 보면 팀원이 못 고치는 설문을 옮긴다.
-  **그룹 mutation 은 트랜잭션 안에서 `teams` 행을 `FOR SHARE` 로 잡고 active 를 다시 본다** —
-  관문의 확인은 별도 왕복이라 그 사이 해산이 커밋되면 감사 계보로 남겨야 할 archived 팀의 그룹
-  행이 수정·삭제된다(`collect`·`move` 는 잠근 설문 행의 `teamId` 로 이미 잡힌다).
-  판정은 `assertSurveyCapabilityBatchRpc` 로 한 왕복에 끝낸다(담기는 최대 200건이고
-  하나라도 막히면 트랜잭션 하나라 전부 거부다). `groupId` 만 받는 표면(이름 변경·삭제)은
-  **타 팀 그룹을 없는 그룹과 같은 NOT_FOUND 로 접는다** — 사유가 갈리면 id 스캔으로 타 팀
-  그룹의 존재가 확인된다. 담기 후보의 `canMove` 는 근사가 아니라 서버 판정 그대로다
-  (주체 한 번 + `resolveSurveyCapabilities` 를 행마다). 담기·이동은 그룹 행 → 설문 행
-  순서로 `FOR UPDATE` 를 잡고 **잠긴 값으로** 팀 일치·미분류 여부를 다시 본다. 그룹 이동은
-  `surveys.updatedAt` 을 건드리지 않는다 — 폴더에 넣는 일은 내용 수정이 아니고, 건드리면
-  「최신 수정순」 기본 정렬이 담기 한 번에 통째로 뒤집힌다. 화면 쪽은 그룹 화면이 목록의
-  다른 상태가 아니라 **주소**(`/surveys?group=<id>`)이며, 사이드바 그룹 트리가 그
-  입구다. 지목한 그룹이 없으면(삭제됨·타 팀 id·시스템 범위) 화면이 주소를 `/surveys` 로
-  정리한다 — 서버는 그 그룹으로 좁혀 0건을 주므로 두면 빈 화면에 갇힌다.
+- **설문 그룹은 접근 권한이 아니라 정리용 묶음이고 3단계까지 겹친다**(.pen FLOW 2, ADR-0038).
+  관문이 두 갈래다 — **그룹 구조**(`list`·`create`·`rename`·`reorder`·`relocate`·`remove`·담기 후보)는
+  팀 공용이라 슈퍼어드민 또는 그 팀 active 멤버면 팀장·팀원을 가리지 않고, **설문을 넣고 빼는 것**
+  (`collect`·`move`)만 그 설문의 `survey.edit` + `surveyGroup.manage` 를 함께 요구한다
+  (`assertSurveyCapabilityBatchRpc` 한 왕복 — 담기는 최대 200건, 전부 아니면 전무). 전자만 보면
+  참여자가 남의 팀 폴더를 재배치하고, 후자만 보면 팀원이 못 고치는 설문을 옮긴다. `groupId` 만 받는
+  표면은 **타 팀 그룹을 없는 그룹과 같은 NOT_FOUND 로 접고**(사유가 갈리면 id 스캔으로 존재가
+  확인된다), 상위 그룹을 받는 `create`·`relocate` 는 그 상위가 같은 팀 것인지 따로 묻는다.
+  **구조 쓰기 다섯(만들기·이름 바꾸기·순서 바꾸기·옮기기·지우기)은 팀 키 advisory lock 한 줄에 서고,
+  잠금 순서는 팀 키 → 팀 행 `FOR SHARE` → 그룹 행 → 설문 행 하나다**(담기·이동은 팀 키 없이 그룹 행 →
+  설문 행). 깊이 3·같은 팀 부모·순환은 DB 도 막지만(0166) 그 거부는 500 이라 서비스가 먼저 판정한다.
+  옮기기·지우기의 순서, 목록의 가시성 조각, `updatedAt` 계약은 **`services/AGENTS.md`** 에 있다.
+  화면 쪽은 그룹 화면이 목록의 다른 상태가 아니라 **주소**(`/surveys?group=<id>`)이며 사이드바 그룹
+  트리가 입구다. 지목한 그룹이 없으면(삭제됨·타 팀 id·시스템 범위) 화면이 주소를 정리한다 — 서버는
+  그 그룹으로 좁혀 0건을 주므로 두면 빈 화면에 갇힌다.
 - **즐겨찾기·내 태그는 「개인 표시」 모듈이다**(`personal-marks` 의 domain·services·procedures,
   `workspace.personalMarks.*`, CONTEXT.md). 요청자 한 사람의 행만 쓰고 읽는다 — 쓰기는 `context.user.id`
   로만, 태그는 언제나 `user_id = 요청자` 를 WHERE 에 걸어 **남의 태그 id 는 없는 태그와 같은 NOT_FOUND**

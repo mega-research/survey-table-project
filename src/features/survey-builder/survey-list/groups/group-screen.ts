@@ -1,0 +1,65 @@
+// 그룹 화면이 그릴 것 — 순수 계산 (설문 그룹 중첩 티켓 01).
+//
+// 그룹 화면(`/surveys?group=<id>`)은 평평한 그룹 목록 하나에서 세 가지를 뽑는다: 브레드크럼의
+// 경로, 폴더 줄로 그릴 하위 그룹, 「새 하위 그룹」을 보일지. 트리 묶기와 경로 찾기 자체는 공용
+// (`@/utils/survey-group-tree`)이고 여기는 그 화면의 규칙만 둔다.
+import { SURVEY_GROUP_MAX_DEPTH } from '@/shared/contracts/workspace-io';
+import type { SurveyGroupListItem } from '@/shared/contracts/workspace-io';
+import { findSurveyGroupPath, listSurveyGroupPathLabels } from '@/utils/survey-group-tree';
+
+export interface GroupScreenSubgroup {
+  group: SurveyGroupListItem;
+  /** 이 하위 그룹 바로 밑의, **내게 보이는** 그룹 수 — 폴더 줄의 「하위 그룹 M」. */
+  subgroupCount: number;
+  /**
+   * 읽어 주는 이름 — 뿌리부터의 경로(「이정운 › 2026」). ⋯ 단추의 이름에 쓴다: 같은 이름이 다른 그룹
+   * 밑에도 있을 수 있어 이름만으로는 어느 폴더의 단추인지 알 수 없다. 보이는 글자는 이름 그대로다.
+   */
+  pathLabel: string;
+}
+
+export interface GroupScreen {
+  /** 브레드크럼 — 뿌리부터 지금 그룹까지(자기 포함). */
+  path: SurveyGroupListItem[];
+  /** 지금 그룹 바로 밑의 하위 그룹, 표시 순서대로. 없으면 폴더 줄 영역을 그리지 않는다. */
+  subgroups: GroupScreenSubgroup[];
+  /** 「새 하위 그룹」을 보일지 — 내 팀 그룹이고 3단계가 아닐 때만. */
+  canCreateSubgroup: boolean;
+}
+
+/**
+ * 지목한 그룹의 화면 재료. 목록에 없는 그룹이면 null(주소를 정리할 화면이다).
+ *
+ * **협업 그룹(타 팀 폴더)은 한 줄이다** — 서버가 상위 그룹을 내지 않아 경로가 자기 하나이고,
+ * 구조를 고칠 수 없으므로 하위 그룹도 만들기도 없다.
+ *
+ * 깊이는 경로의 길이로 센다. 서버가 위쪽 그룹이 전부 보이는 줄만 내므로(내 팀 줄의 상위 그룹
+ * id 는 언제나 목록 안에 있다) 이 길이가 실제 깊이와 같다.
+ */
+export function resolveGroupScreen(
+  groups: readonly SurveyGroupListItem[],
+  groupId: string,
+): GroupScreen | null {
+  const path = findSurveyGroupPath(groups, groupId);
+  const current = path.at(-1);
+  if (!current) return null;
+
+  const isMine = current.foreignTeamName === null;
+  const mine = groups.filter((group) => group.foreignTeamName === null);
+  const pathLabels = isMine ? listSurveyGroupPathLabels(mine) : null;
+  const subgroups = pathLabels
+    ? mine
+        .filter((group) => group.parentGroupId === current.id)
+        .map((group) => ({
+          group,
+          subgroupCount: mine.filter((child) => child.parentGroupId === group.id).length,
+          pathLabel: pathLabels.get(group.id) ?? group.name,
+        }))
+    : [];
+
+  return {
+    path,
+    subgroups,
+    canCreateSubgroup: isMine && path.length < SURVEY_GROUP_MAX_DEPTH,
+  };
+}

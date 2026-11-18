@@ -54,10 +54,12 @@ function renderCard(
     activeTagIds: [],
     onFilterByTag: vi.fn(),
   },
+  groupPath: readonly string[] = [],
 ) {
   return render(
     <SurveyCard
       survey={survey}
+      groupPath={groupPath}
       isFavorite={favorite.isFavorite}
       onFavoriteChange={favorite.onFavoriteChange}
       tagging={tagging}
@@ -250,5 +252,33 @@ describe('SurveyCard — 내 태그 줄', () => {
     await user.click(screen.getByRole('button', { name: '더보기' }));
     await user.click(await screen.findByRole('menuitem', { name: '태그' }));
     expect(await screen.findByRole('listbox', { name: '내 태그' })).toBeInTheDocument();
+  });
+});
+
+/**
+ * 하위 그룹 경로 줄 (설문 그룹 3단계 중첩 티켓 08).
+ *
+ * 그룹 화면의 검색은 그 그룹 아래 전체에서 찾는다 — 카드가 어느 하위 그룹의 설문인지 적지 않으면
+ * 찾은 설문이 어디 있는지 알 수 없다. 그 그룹에 직접 담긴 설문과 그 밖의 목록에는 줄이 없다.
+ */
+describe('SurveyCard — 하위 그룹 경로 줄', () => {
+  it('경로가 있으면 한 줄로 적는다 — 무슨 줄인지는 보이지 않는 글자로 앞에 붙는다', () => {
+    renderCard(item(), undefined, undefined, ['2026', '상반기']);
+    // 긴 이름은 한 줄에서 잘리므로 전체 경로를 툴팁으로 남긴다.
+    const line = screen.getByTitle('2026 › 상반기');
+    expect(line).toHaveTextContent(/^담긴 하위 그룹: 2026 › 상반기$/);
+    // 문단에 붙인 aria-label 은 읽히지 않는다 — 맥락은 글자여야 한다(화면에는 보이지 않는다).
+    expect(line).not.toHaveAttribute('aria-label');
+    expect(screen.getByText('담긴 하위 그룹:')).toHaveClass('sr-only');
+  });
+
+  it('한 단계 아래면 그 그룹 이름만 적는다', () => {
+    renderCard(item(), undefined, undefined, ['2025']);
+    expect(screen.getByTitle('2025')).toHaveTextContent(/^담긴 하위 그룹: 2025$/);
+  });
+
+  it('경로가 비었으면 줄이 없다 — 직접 담긴 설문과 그 밖의 목록', () => {
+    renderCard(item(), undefined, undefined, []);
+    expect(screen.queryByText(/담긴 하위 그룹/)).toBeNull();
   });
 });

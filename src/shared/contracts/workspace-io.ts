@@ -224,14 +224,35 @@ export type WorkspaceActionOutput = z.infer<typeof WorkspaceActionOutput>;
 // 설문 그룹 (.pen FLOW 2) — 팀 공용 정리용 묶음
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** 그룹 이름 — 팀 안에서 유일하다. 팀 이름보다 짧게 쓰는 폴더 라벨이라 60자. */
+/** 그룹 이름 — 같은 상위 그룹 안에서 유일하다. 팀 이름보다 짧게 쓰는 폴더 라벨이라 60자. */
 const SurveyGroupNameField = z.string().trim().min(1, '그룹 이름을 입력하세요.').max(60);
+
+/**
+ * 그룹을 겹칠 수 있는 최대 단계 — 「부서 › 인원 › 연도」까지.
+ *
+ * 강제하는 것은 DB 다(0166 의 `survey_groups_parent_depth_check`). 이 값은 서버가 알맞은 문구로
+ * 먼저 거부하고 화면이 만들 수 없는 「새 하위 그룹」을 감추는 데 쓴다 — 바꾸려면 마이그레이션이 먼저다.
+ */
+export const SURVEY_GROUP_MAX_DEPTH = 3;
 
 export const SurveyGroupListItem = z.object({
   id: z.uuid(),
   name: z.string(),
   order: z.number().int(),
-  /** 소속 설문 수 — 삭제되지 않은 설문만 센다(삭제 확인 모달의 「설문 N개가 미분류로」). */
+  /**
+   * 상위 그룹 id — 최상위면 null. **협업 그룹(타 팀 폴더) 행에는 언제나 null 이다**: 설문 하나에
+   * 초대했을 뿐인 타 팀 사람에게 그 팀의 정리 구조(위쪽 그룹)를 알려 주지 않는다.
+   *
+   * 목록은 평평하게 오고 트리는 화면이 묶는다(`@/utils/survey-group-tree`). 내 팀 줄의 이 id 는
+   * **언제나 같은 목록 안의 줄**을 가리킨다 — 위쪽 그룹이 하나라도 내게 숨으면 그 밑의 줄도 함께
+   * 나오지 않는다. 그래서 목록 안에서 센 깊이가 실제 깊이와 같다.
+   */
+  parentGroupId: z.uuid().nullable(),
+  /**
+   * 요청자가 **볼 수 있는** 설문 수 — 삭제되지 않은 설문만 센다. 내 팀 그룹은 **하위 그룹까지
+   * 합친 수**이고(폴더 옆·사이드바·그룹 화면 제목의 「설문 N」), 협업 그룹은 직접 담긴 수다.
+   * 그 그룹에 직접 담긴 설문 수가 아니다 — 그것은 그 그룹으로 좁힌 설문 목록이 센다.
+   */
   surveyCount: z.number().int(),
   /**
    * 이 그룹이 **다른 팀의 것**일 때 그 팀 이름. 내 팀 그룹이면 null.
@@ -250,7 +271,16 @@ export type ListSurveyGroupsInput = z.infer<typeof ListSurveyGroupsInput>;
 export const ListSurveyGroupsOutput = z.array(SurveyGroupListItem);
 export type ListSurveyGroupsOutput = z.infer<typeof ListSurveyGroupsOutput>;
 
-export const CreateSurveyGroupInput = z.object({ teamId: z.uuid(), name: SurveyGroupNameField });
+/**
+ * 그룹 만들기 — `parentGroupId` 를 주면 그 그룹 밑의 하위 그룹이다(없거나 null 이면 최상위).
+ *
+ * 상위는 `teamId` 팀의 그룹이어야 하고 3단계 그룹 밑에는 만들 수 없다 — 서버가 본다.
+ */
+export const CreateSurveyGroupInput = z.object({
+  teamId: z.uuid(),
+  name: SurveyGroupNameField,
+  parentGroupId: z.uuid().nullable().optional(),
+});
 export type CreateSurveyGroupInput = z.infer<typeof CreateSurveyGroupInput>;
 
 /** 생성 직후 응답 — drizzle raw row(teamId·createdBy 등 내부 컬럼)를 노출하지 않는다. */
@@ -268,15 +298,38 @@ export type RenameSurveyGroupInput = z.infer<typeof RenameSurveyGroupInput>;
  *
  * teamId 를 함께 받는 것은 장식이 아니라 권한 축이다. 서버는 요청자가 그 팀의 팀원인지 묻고,
  * UPDATE 도 그 teamId 로 좁힌다 — 타 팀 groupId 가 배열에 섞여도 아무 행에도 닿지 않는다.
+ *
+ * **한 번에 한 부모의 형제만 다시 매긴다.** `parentGroupId` 가 그 부모다(없거나 null 이면
+ * 최상위끼리). 다른 부모 밑의 그룹 id 가 섞여 와도 같은 방식으로 닿지 않는다.
  */
 export const ReorderSurveyGroupsInput = z.object({
   teamId: z.uuid(),
+  parentGroupId: z.uuid().nullable().optional(),
   orderedGroupIds: z.array(z.uuid()).min(1).max(200),
 });
 export type ReorderSurveyGroupsInput = z.infer<typeof ReorderSurveyGroupsInput>;
 
 export const SurveyGroupIdInput = z.object({ groupId: z.uuid() });
 export type SurveyGroupIdInput = z.infer<typeof SurveyGroupIdInput>;
+
+/**
+ * 그룹 삭제가 이름 겹침으로 막혔을 때 CONFLICT 에 함께 실리는 것 (`ORPCError.data`).
+ *
+ * 그룹을 지우면 그 하위 그룹이 한 단계 위로 올라가는데, 올라갈 자리에 같은 이름의 그룹이 있으면
+ * 아무것도 바꾸지 않고 거부한다. 무엇을 고치면 되는지 알려면 **겹치는 이름**이 필요해서 값으로 준다
+ * (에러 메시지에는 이름이 없다 — 메시지는 실패 로그에 통째로 남는다). 화면은 이 모양으로 읽어 보고
+ * (`safeParse`) 아니면 일반 오류로 다룬다.
+ *
+ * **이름은 요청자에게 보이는 것만 실린다.** 겹치는 두 그룹(올라갈 하위 그룹 · 그 자리에 이미 있는
+ * 그룹)이 다 요청자의 그룹 목록에 없으면 그 이름은 빠지고 `hasHiddenConflicts` 가 참이 된다 — 그래서
+ * `conflictingNames` 는 빌 수 있다.
+ */
+export const SurveyGroupRemoveConflict = z.object({
+  conflictingNames: z.array(z.string()),
+  /** 이름을 싣지 않은 겹침이 더 있다 — 요청자에게 보이지 않는 그룹끼리 겹친다. */
+  hasHiddenConflicts: z.boolean(),
+});
+export type SurveyGroupRemoveConflict = z.infer<typeof SurveyGroupRemoveConflict>;
 
 /**
  * 「설문 담기」 후보 — **미분류 설문만** 나온다 (.pen FLOW 2-2).
@@ -323,6 +376,24 @@ export const MoveSurveyToGroupInput = z.object({
   groupId: z.uuid().nullable(),
 });
 export type MoveSurveyToGroupInput = z.infer<typeof MoveSurveyToGroupInput>;
+
+/**
+ * 그룹 옮기기 — 그룹을 **하위 그룹과 담긴 설문째** 다른 그룹 밑으로 옮긴다. `parentGroupId: null`
+ * 은 최상위로.
+ *
+ * 위의 `MoveSurveyToGroupInput`(설문 한 건을 그룹에 넣고 빼기)과 다른 표면이다 — 이쪽은 그룹
+ * 구조를 바꾸고 설문의 소속 그룹은 건드리지 않는다. 새 상위는 같은 팀의 그룹이어야 하고, 자기
+ * 자신·자기 하위·옮긴 결과가 3단계를 넘는 자리·같은 이름이 있는 자리는 서버가 거부한다. 지금
+ * 있는 자리로 옮기는 요청은 아무것도 바꾸지 않고 성공한다.
+ *
+ * `parentGroupId` 는 **기본값 없는 필수**다. 선택 칸으로 두면 칸을 빠뜨린 요청이 조용히
+ * 「최상위로」가 된다.
+ */
+export const RelocateSurveyGroupInput = z.object({
+  groupId: z.uuid(),
+  parentGroupId: z.uuid().nullable(),
+});
+export type RelocateSurveyGroupInput = z.infer<typeof RelocateSurveyGroupInput>;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 재배치 센터 (.pen FLOW 8-2~8-4·9-2) — 슈퍼어드민 전용 인박스

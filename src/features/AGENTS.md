@@ -43,7 +43,7 @@ src/
 │   │   ├── admin-shell/        # admin 공통 셸 (티켓 08, .pen FLOW 6-1) — admin-shell 진입점(레이아웃이 연다)
 │   │   │                       # + sidebar(로고·메뉴)·team-switcher(팀 전환+메가리서치)·sidebar-profile(프로필·로그아웃)
 │   │   │                       # + sidebar-menu(순수 메뉴 판정 — 미배치는 프로필만)
-│   │   │                       # + sidebar-group-tree(설문 그룹 트리 — 그룹 화면 입구, 티켓 12). 범위 전환 시 쿠키 기록
+│   │   │                       # + sidebar-group-tree(설문 그룹 3단계 트리 — 협업 그룹은 아래에 평평하게). 범위 전환 시 쿠키 기록
 │   │   │                       # + 전체 캐시 무효화 + router.refresh 를 한 곳에서 처리한다
 │   │   │                       # + sidebar-participation-tree(**실사팀 범위만** — 「설문 목록」·그룹 트리 대신 「참여 중」 →
 │   │   │                       #   소유 팀 줄(?team=) → 폴더·미분류(?ungrouped=1). 수치는 participation-tree 순수 계산이
@@ -94,7 +94,7 @@ src/
 | ------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | `text`        | 단답형 텍스트      | placeholder, defaultValueTemplate, inputType(숫자·형식 5종), emptyDefault, numberFormat, textValidation, inputRows, inputAutoGrow        |
 | `textarea`    | 장문형 텍스트      | textValidation(최소 글자 수·의미 없는 입력 거부), inputRows(기본 4줄), inputAutoGrow                                                     |
-| `radio`       | 단일 선택          | options, choiceGroups, allowOtherOption, optionsAlign, defaultValueTemplate(명단 값과 맞는 보기를 골라 잠금 — `utils/choice-prefill`)      |
+| `radio`       | 단일 선택          | options, choiceGroups, allowOtherOption, optionsAlign, defaultValueTemplate(명단 값과 맞는 보기를 골라 잠금 — `utils/choice-prefill`)    |
 | `checkbox`    | 복수 선택          | options, choiceGroups, allowOtherOption, minSelections, maxSelections                                                                    |
 | `select`      | 드롭다운 단일 선택 | options, allowOtherOption                                                                                                                |
 | `multiselect` | 드롭다운 복수 선택 | selectLevels (다단계 — 옵션 리스트는 selectLevels 내부 소유)                                                                             |
