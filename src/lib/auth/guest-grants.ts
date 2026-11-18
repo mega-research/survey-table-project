@@ -109,6 +109,12 @@ const VIEW_ONLY_GUEST_GRANTS: ReadonlyArray<{
     userId: '6ca037a8-c282-4bbe-af64-f4f147bf5039',
     surveyId: '8f2bc707-5821-4bbb-bc69-fcd7277cd1cb',
   },
+  // guest13 — guest9 와 같은 권한의 두 번째 계정, 2026년 인공지능산업 실태조사 공개본(2026-11-18 요청)
+  {
+    userId: '4f3bb82e-ff76-4984-8493-5630be980c58',
+    surveyId: '253534a5-913a-4891-a019-f9643ccea0a7',
+    allowExport: 'response-list',
+  },
 ];
 
 /** 이 계정이 보기만 하는 grant 설문 목록 — grant 가 없는 설문은 빼고 돌려준다. */
