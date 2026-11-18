@@ -168,7 +168,7 @@ export function buildLabel(col: SPSSExportColumn, questionCode?: string): string
     case 'notice-date':
       return `${head} - 동의 일시`;
     case 'ranking-rank':
-      // grouped 그룹 라벨 접두: optionLabel "그룹라벨 - 1순위" → "질문제목 - 그룹라벨 - 1순위"
+      // 그룹이 둘 이상인 순위 문항: optionLabel "그룹라벨 - 1순위" → "앞머리 - 그룹라벨 - 1순위"
       return col.optionLabel && col.optionLabel !== `${col.rankIndex}순위`
         ? `${head} - ${col.optionLabel}`
         : `${head} (${col.rankIndex}순위)`;
@@ -219,8 +219,8 @@ export function buildLabel(col: SPSSExportColumn, questionCode?: string): string
         ? `${head} - ${col.optionLabel}`
         : col.questionText;
     case 'choice-group-item':
-      // optionLabel 이 "그룹라벨 - 보기라벨" 을 이미 포함한다. 문항 제목 앞머리는 장황해 붙이지 않고,
-      // 짧은 문항코드 앞머리만 붙인다.
+      // optionLabel 은 보기 라벨이고, 그룹이 둘 이상인 문항에서는 "그룹라벨 - 보기라벨" 이다.
+      // 문항 제목 앞머리는 장황해 붙이지 않고, 짧은 문항코드 앞머리만 붙인다.
       if (!col.optionLabel) return col.questionText;
       return questionCode?.trim() ? `${head} - ${col.optionLabel}` : col.optionLabel;
     default:
