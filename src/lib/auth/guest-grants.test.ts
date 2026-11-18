@@ -193,6 +193,18 @@ describe('보기만 하는 게스트 grant', () => {
     expect(canViewOnlyGuestPreview(GUEST11, WOMEN_BIZ_2026)).toBe(false);
   });
 
+  it('guest13 은 guest9 와 같은 권한으로 인공지능 실태조사 공개본을 본다(2026-11-18)', () => {
+    const GUEST13 = '4f3bb82e-ff76-4984-8493-5630be980c58';
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `${GUEST9}:${AI_2026_PUBLIC},${GUEST13}:${AI_2026_PUBLIC}`);
+    for (const user of [GUEST9, GUEST13]) {
+      expect(isViewOnlyGuest(user, AI_2026_PUBLIC)).toBe(true);
+      expect(canViewOnlyGuestPreview(user, AI_2026_PUBLIC)).toBe(false);
+      expect(canViewOnlyGuestViewResponse(user, AI_2026_PUBLIC)).toBe(false);
+      expect(canExportSurveyData(user, AI_2026_PUBLIC, 'response-list')).toBe(true);
+      expect(canExportSurveyData(user, AI_2026_PUBLIC, 'data')).toBe(false);
+    }
+  });
+
   it('설문 보기를 허용한 보기 전용 grant 는 설문 보기만 더 열린다(dairy@, 2026-11-05)', () => {
     const DAIRY = '75060289-51b4-44e7-8fd1-dabf73a0bfaf';
     const DAIRY_2026 = '24b15972-36fe-400a-adfe-7d4c80438204';
