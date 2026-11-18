@@ -4,7 +4,7 @@ import { extractResultCodeStatuses } from '@/lib/contacts/result-code-statuses-n
 import { DEFAULT_RESULT_CODES, type ContactResultCode } from '@/shared/contracts/contacts';
 
 describe('extractResultCodeStatuses', () => {
-  it('DEFAULT 13개에서 positive=[1.조사완료], negative=[] — 수신거부는 neutral', () => {
+  it('기본 목록에서 positive=[1.조사완료], negative=[] — 수신거부는 neutral', () => {
     // 수신거부는 조사 거절 의사일 뿐 모집단 이탈이 아니다 (2026-08-27 결정).
     // 단체메일 배제는 status 무관한 수신거부 키워드 축이 담당한다.
     const result = extractResultCodeStatuses(DEFAULT_RESULT_CODES);

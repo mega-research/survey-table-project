@@ -73,6 +73,22 @@ describe('MailWrapper test footer', () => {
     expect(html).not.toContain('테스트 캠페인 메일');
   });
 
+  it('template-live 종류는 링크가 열리고 테스트 응답으로 쌓인다고 말한다 — 「비활성화」를 말하지 않는다', async () => {
+    const html = await render(
+      createElement(MailWrapper, {
+        bodyHtml: '<p>본문</p>',
+        unsubscribeUrl: 'https://example.test/unsubscribe',
+        testFooterKind: 'template-live',
+      }),
+    );
+
+    expect(html).toContain('템플릿 테스트 발송');
+    expect(html).toContain('테스트 조사');
+    expect(html).toContain('테스트 응답으로 기록');
+    expect(html).not.toContain('미리보기용으로 비활성화');
+    expect(html).not.toContain('테스트 캠페인 메일');
+  });
+
   it('campaign 종류는 테스트 응답 기록 안내를 표시한다', async () => {
     const html = await render(
       createElement(MailWrapper, {

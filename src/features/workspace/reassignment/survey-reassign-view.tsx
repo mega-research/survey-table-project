@@ -167,18 +167,15 @@ export function SurveyReassignView({ surveyId }: { surveyId: string }) {
           <NoCandidateNotice fields={fields} />
 
           {/*
-            .pen 8-4 의 「기존 참여자 유지」·「문의·메일 회신 새 소유자 연동」은 자리만 두고
-            비활성이다. 참여자 테이블(survey_participants)은 티켓 18 이, 메일 발신자 연동은
-            티켓 20 이 만든다 — 지금 켜면 저장할 곳이 없다. 줄을 지우지 않는 이유는 이전이
-            무엇을 건드리고 무엇을 건드리지 않는지가 이 화면의 설명이기 때문이다.
+            이전이 무엇을 건드리고 무엇을 건드리지 않는지 (.pen 8-4). 셋 다 지금 동작이다 —
+            배치는 참여 행(survey_participants)과 링크 행을 건드리지 않고, 회신·문의 주소는
+            발송 시점의 소유자에서 읽는다(소유자 연동). 처음에는 앞의 둘이 아직 없는 기능이라
+            「이후 티켓」 표식을 달고 흐리게 그렸는데, 기능이 선 뒤에도 그 표식이 화면에 남아 있었다.
           */}
           <div className="flex flex-col gap-2 rounded-[10px] bg-[#F9FAFB] p-3.5">
-            <PendingRow
-              title="기존 참여자 유지"
-              detail="참여자·클라이언트·실사 부여를 그대로 이전"
-            />
-            <PendingRow title="문의·메일 회신" detail="새 소유자 연동" />
-            <PendingRow title="새 팀 그룹" detail="미분류로 시작 (그룹은 팀 소유물)" done />
+            <EffectRow title="기존 참여자 유지" detail="참여자·클라이언트·실사 부여를 그대로 이전" />
+            <EffectRow title="문의·메일 회신" detail="다음 발송부터 새 소유자 연동" />
+            <EffectRow title="새 팀 그룹" detail="미분류로 시작 (그룹은 팀 소유물)" />
           </div>
 
           {error && <p className="text-[12.5px] text-red-600">{error}</p>}
@@ -204,22 +201,11 @@ export function SurveyReassignView({ surveyId }: { surveyId: string }) {
   );
 }
 
-function PendingRow({
-  title,
-  detail,
-  done = false,
-}: {
-  title: string;
-  detail: string;
-  done?: boolean;
-}) {
+function EffectRow({ title, detail }: { title: string; detail: string }) {
   return (
     <span className="flex items-baseline gap-2 text-[12.5px]">
-      <span className={done ? 'font-semibold text-[#374151]' : 'font-semibold text-[#9CA3AF]'}>
-        {title}
-      </span>
-      <span className="text-[#9CA3AF]">{detail}</span>
-      {!done && <span className="ml-auto text-[11px] text-[#9CA3AF]">이후 티켓</span>}
+      <span className="font-semibold text-[#374151]">{title}</span>
+      <span className="text-[#6E6E73]">{detail}</span>
     </span>
   );
 }

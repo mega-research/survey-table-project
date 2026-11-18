@@ -13,8 +13,14 @@ interface Props {
   bodyHtml: string;
   /** 받은편지함 프리뷰 텍스트 (subject 옆 회색 글자). 비우면 표시 안 함. */
   previewText?: string;
-  /** 테스트 footer 종류. template은 단독 테스트 발송, campaign은 테스트 캠페인. */
-  testFooterKind?: 'template' | 'campaign' | null;
+  /**
+   * 테스트 footer 종류. template·template-live 는 단독 테스트 발송, campaign 은 테스트 캠페인.
+   *
+   * 단독 테스트 발송이 둘로 갈리는 것은 본문의 설문 링크가 둘 중 하나라서다(CONTEXT.md
+   * 「테스트 발송」) — 테스트 조사 대상자가 있으면 눌러서 열리는 그 대상자의 링크(template-live),
+   * 없으면 열리지 않는 견본(template). 한 문구로 두면 열리는 링크에 「비활성화되어 있다」가 붙는다.
+   */
+  testFooterKind?: 'template' | 'template-live' | 'campaign' | null;
   /** 수신거부 링크 URL. null 이면 footer 표시 안 함 (정책상 발송 코드에서는 항상 채움). */
   unsubscribeUrl: string | null;
 }
@@ -101,6 +107,12 @@ export function MailWrapper({
               이 메일은 템플릿 테스트 발송입니다. 본문 내 설문 링크는
               미리보기용으로 비활성화되어 있어, 클릭하셔도 실제 응답으로 기록되지
               않습니다.
+            </Section>
+          ) : null}
+          {testFooterKind === 'template-live' ? (
+            <Section style={footer}>
+              이 메일은 템플릿 테스트 발송입니다. 본문 내 설문 링크는 테스트 조사
+              대상자의 링크라, 제출한 응답은 테스트 응답으로 기록됩니다.
             </Section>
           ) : null}
           {testFooterKind === 'campaign' ? (

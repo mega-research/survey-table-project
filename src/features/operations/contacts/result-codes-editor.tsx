@@ -140,7 +140,7 @@ export function ResultCodesEditor({ surveyId, initialCodes }: ResultCodesEditorP
   }
 
   function reset() {
-    if (!window.confirm('디폴트 13개로 복귀합니다. 진행할까요?')) return;
+    if (!window.confirm(`디폴트 ${DEFAULT_RESULT_CODES.length}개로 복귀합니다. 진행할까요?`)) return;
     ensureCustomMode();
     setCodes(DEFAULT_RESULT_CODES.map((c) => ({ ...c })));
   }
@@ -214,8 +214,8 @@ export function ResultCodesEditor({ surveyId, initialCodes }: ResultCodesEditorP
           role="status"
           className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
         >
-          사용자 정의 해제 모드 — 저장 시 디폴트 13개로 되돌아갑니다. 편집을 시작하면 다시 사용자
-          정의로 전환됩니다.
+          사용자 정의 해제 모드 — 저장 시 디폴트 {DEFAULT_RESULT_CODES.length}개로 되돌아갑니다.
+          편집을 시작하면 다시 사용자 정의로 전환됩니다.
         </div>
       )}
 
@@ -396,7 +396,7 @@ export function ResultCodesEditor({ surveyId, initialCodes }: ResultCodesEditorP
           + 결과코드 추가
         </Button>
         <Button onClick={reset} variant="outline">
-          디폴트 13개로 복귀
+          디폴트 {DEFAULT_RESULT_CODES.length}개로 복귀
         </Button>
         <Button onClick={clearOverride} variant="outline" className="text-slate-600">
           사용자 정의 해제

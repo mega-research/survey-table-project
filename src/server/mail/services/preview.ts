@@ -189,7 +189,8 @@ export async function sendTestTemplateMail(
       bodyHtml: rendered.bodyHtml,
       previewText: rendered.subject,
       unsubscribeUrl,
-      testFooterKind: 'template',
+      // 하단 문구는 본문에 실린 링크와 같은 사실에서 나와야 한다 — 아래 `inviteLink` 와 같은 판정.
+      testFooterKind: testTarget ? 'template-live' : 'template',
     }),
   );
 

@@ -41,7 +41,7 @@ const EMPTY_SCHEME: ProgressColumnScheme = { version: 1, columns: [] };
  * contact_attempts.result_code = ANY(positive codes) (담당자 수동 마감).
  *
  * positive codes 는 `getResultCodeStatuses(surveyId).positive` 동적 추출.
- * DEFAULT 13개에서는 ['1.조사완료'] (기존 하드코딩과 일치).
+ * 기본 목록(DEFAULT_RESULT_CODES)에서는 ['1.조사완료'] (기존 하드코딩과 일치).
  *
  * `getProgressRows` / `getProgressTotals` 의 `COUNT(*) FILTER (...)` 절에서
  * 동일 정의를 사용하므로 모듈 private 헬퍼로 단일화. 클로징 정의 변경 시

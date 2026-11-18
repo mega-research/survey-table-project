@@ -208,8 +208,9 @@ describe('sendTestTemplateMail', () => {
     expect(sent?.html).not.toContain('/i/abc123');
     expect(getFirstContactSample).not.toHaveBeenCalled();
     expect(result).toEqual({ ok: true, id: 'message-1', inviteLink: 'live' });
-    // 수신거부는 여전히 견본 토큰이다
+    // 수신거부는 여전히 견본 토큰이다. 하단 문구는 열리는 링크용이다 — 「비활성화」 문구가 붙으면 안 된다.
     expect(vi.mocked(MailWrapper).mock.calls.at(-1)?.[0]).toMatchObject({
+      testFooterKind: 'template-live',
       unsubscribeUrl: 'https://survey.example.com/unsubscribe/__test__',
     });
   });
