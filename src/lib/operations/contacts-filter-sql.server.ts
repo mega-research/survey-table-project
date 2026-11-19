@@ -333,7 +333,15 @@ export function attrsNaturalSortExprs(
   // 응답 내역은 numbered subquery 의 컨택 LEFT JOIN 컬럼을 주입 (기본값 = 조사 대상).
   attrsRef: SQL = sql`"contact_targets".attrs`,
 ): [SQL, SQL] {
-  const trimmedExpr = sql`btrim(${attrsRef}->>${attrsKey}, E' \\t\\r\\n')`;
+  return naturalTextSortExprs(sql`${attrsRef}->>${attrsKey}`);
+}
+
+/**
+ * 글자 값 하나의 자연 정렬 표현식 쌍 — 위 규칙 그대로다. 명단 열을 직접 읽지 않고 이미 뽑아 둔
+ * 글자 값(진척 보고의 그룹 대표값·분류 기준 값)을 정렬하는 자리가 같은 순서를 내도록 식을 나눠 둔다.
+ */
+export function naturalTextSortExprs(textExpr: SQL): [SQL, SQL] {
+  const trimmedExpr = sql`btrim(${textExpr}, E' \\t\\r\\n')`;
   const numericExpr = sql`(CASE WHEN ${trimmedExpr} ~ '^[0-9]+(\\.[0-9]+)?$' THEN (${trimmedExpr})::numeric END)`;
   return [numericExpr, trimmedExpr];
 }
