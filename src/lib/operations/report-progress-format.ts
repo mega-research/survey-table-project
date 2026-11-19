@@ -138,6 +138,28 @@ export function remapGroupedMetaSort(
   return grouped ? `group:${formatProgressGroupKey({ kind: 'attrs', key })}` : sort;
 }
 
+/**
+ * 주소에 정렬이 없을 때 이 표가 따를 정렬 — 조사 대상 목록의 기본 정렬 열(컬럼 설정의 「기본 정렬」)이
+ * 이 표에 나와 있으면 그 열 오름차순이다. 담당자가 「이 ID 순서가 우리 명단의 순서」라고 정해 둔 열이므로
+ * 그룹(전시회 등)을 늘어놓는 표도 같은 순서로 연다.
+ *
+ * 그 열이 켜진 분류 기준이면 기준 칸의 정렬(`group:<키>`), 표시 열이면 그 열의 정렬(`meta:<키>`)이다.
+ * 기본 정렬 열을 정하지 않았거나 그 열이 이 표에 없으면 null — 호출부가 종전 기본(응답률 내림차순)을 쓴다.
+ * 머리글을 눌러 바꾼 정렬(주소의 `sort`)이 있으면 이 함수를 부르지 않는다.
+ */
+export function progressDefaultSort(
+  defaultSortAttrsKey: string | null,
+  activeGroupKeys: readonly ProgressGroupKey[],
+  metaKeys: readonly string[],
+): ProgressSortKey | null {
+  if (defaultSortAttrsKey === null) return null;
+  const grouped = activeGroupKeys.find(
+    (k) => k.kind === 'attrs' && k.key === defaultSortAttrsKey,
+  );
+  if (grouped) return `group:${formatProgressGroupKey(grouped)}`;
+  return metaKeys.includes(defaultSortAttrsKey) ? `meta:${defaultSortAttrsKey}` : null;
+}
+
 export type ProgressSortKey =
   | 'firstResid'
   | 'groupLabel'

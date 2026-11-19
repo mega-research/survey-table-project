@@ -4,6 +4,7 @@ import {
   parseProgressGroupKey,
   metaColumnsOutsideGroupKeys,
   progressCriterionLabel,
+  progressDefaultSort,
   remapGroupedMetaSort,
   computeRate,
   toneFromRate,
@@ -213,5 +214,30 @@ describe('remapGroupedMetaSort', () => {
     expect(
       remapGroupedMetaSort('meta:contact_owner', [{ kind: 'system', key: 'contact_owner' }]),
     ).toBe('meta:contact_owner');
+  });
+});
+
+describe('progressDefaultSort', () => {
+  it('기본 정렬 열이 표시 열로 나와 있으면 그 열의 정렬이다', () => {
+    expect(progressDefaultSort('전시회ID', [{ kind: 'attrs', key: '국내전시회명' }], ['전시회ID'])).toBe(
+      'meta:전시회ID',
+    );
+  });
+
+  it('기본 정렬 열이 켜진 분류 기준이면 기준 칸의 정렬이다 — 표시 열 목록에 없어도 된다', () => {
+    expect(progressDefaultSort('전시회ID', [{ kind: 'attrs', key: '전시회ID' }], [])).toBe(
+      'group:전시회ID',
+    );
+  });
+
+  it('기본 정렬 열을 정하지 않았거나 그 열이 이 표에 없으면 null — 종전 기본을 쓴다', () => {
+    expect(progressDefaultSort(null, [], ['전시회ID'])).toBeNull();
+    expect(progressDefaultSort('전시회ID', [{ kind: 'attrs', key: '국내전시회명' }], ['담당자'])).toBeNull();
+  });
+
+  it('이름이 같은 시스템 기준은 명단 열이 아니다', () => {
+    expect(
+      progressDefaultSort('contact_owner', [{ kind: 'system', key: 'contact_owner' }], []),
+    ).toBeNull();
   });
 });

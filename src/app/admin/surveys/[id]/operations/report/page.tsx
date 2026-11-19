@@ -9,7 +9,8 @@ import {
 } from '@/features/operations/report/progress-group-by-tabs';
 import { ProgressTable } from '@/features/operations/report/progress-table';
 import { resolveGroupCriteria } from '@/lib/contacts/group-levels';
-import { residColumnLabel } from '@/lib/operations/contacts-format';
+import { resolveDefaultSortKey } from '@/lib/contacts/default-sort';
+import { attrsKeyOf, residColumnLabel } from '@/lib/operations/contacts-format';
 import { getContactColumnScheme } from '@/server/read-models/contacts';
 import { getOperationsDataScope } from '@/server/data-scope';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
@@ -22,6 +23,7 @@ import {
   metaColumnsOutsideGroupKeys,
   parseProgressGroupKey,
   progressCriterionLabel,
+  progressDefaultSort,
   remapGroupedMetaSort,
   type ProgressGroupKey,
   type ProgressSortKey,
@@ -106,7 +108,6 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
   const pageRaw = Number(sp.page);
   const page = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1;
   const size = 20;
-  const dir: SortDir = sp.dir === 'asc' ? 'asc' : 'desc';
 
   // contactScheme 은 pii blindIndex 계산용 piiType 매핑에 필요. getContactColumnScheme 가
   // cache() 로 RSC pass dedupe 되어 있어 getProgressGroupLabel 내부 lookup 과 같은 query 를 공유한다.
@@ -195,9 +196,21 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
     activeCriteria.length > 0 ? activeCriteria.map((c) => c.label).join('·') : groupLabel;
   // 분류 기준이 된 열의 옛 표시 열 정렬 주소는 그 기준의 정렬로 잇는다.
   const parsedSort = parseSort(remapGroupedMetaSort(sp.sort, activeGroupKeys), metaKeys, activeKeys);
+  // 주소에 정렬이 없으면 조사 대상 목록의 기본 정렬 열을 따른다(이 표에 나와 있을 때) — 그 열 오름차순.
+  // 없으면 종전 기본(응답률 내림차순)이다.
+  const defaultSortKey = resolveDefaultSortKey(contactScheme);
+  const followedSort = sp.sort
+    ? null
+    : progressDefaultSort(
+        defaultSortKey === 'resid' ? null : attrsKeyOf(defaultSortKey),
+        activeGroupKeys,
+        metaKeys,
+      );
+  const dir: SortDir = followedSort !== null || sp.dir === 'asc' ? 'asc' : 'desc';
   // 시스템ID 컬럼 비표시 시 firstResid 정렬은 보이지 않는 컬럼 정렬이 되므로 기본값 폴백.
   const showResid = scheme.showResid ?? true;
-  const sort = !showResid && parsedSort === 'firstResid' ? 'responseRate' : parsedSort;
+  const sort =
+    followedSort ?? (!showResid && parsedSort === 'firstResid' ? 'responseRate' : parsedSort);
 
   // ProgressTable 의 # 컬럼 헤더 — contactColumns 의 system.resid 라벨 사용.
   // 스킴에 없거나 라벨이 비어있으면 기본 라벨 폴백.
