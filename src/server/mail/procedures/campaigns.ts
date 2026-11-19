@@ -1,6 +1,7 @@
 import * as z from 'zod';
 
 import { isGuestUser } from '@/lib/auth/guest-grants';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 import {
   assertSurveyAccess,
   assertSurveyWriteAccess,
@@ -29,7 +30,10 @@ const create = scoped
   .handler(({ context, input }) => {
     assertSurveyWriteAccess(context.user.id, input.surveyId);
     // 인증된 context 에서 1회 파생 — 서비스가 auth 를 재조회하지 않는다.
-    return svc.createCampaign(input, context.user.id, isGuestUser(context.user.id));
+    // 단체 발송은 담당 범위에 묶인 게스트에게 닫혀 있다(위 확인이 거부한다) — 여기 오는 발송자는 전체를 본다.
+    return svc.createCampaign(input, context.user.id, isGuestUser(context.user.id), {
+      share: FIELDWORK_SHARE_ALL,
+    });
   });
 
 const cancel = scoped

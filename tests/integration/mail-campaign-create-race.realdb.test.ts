@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { db } from '@/db';
 import { createCampaign } from '@/server/mail/services/campaigns';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 // 이 브라우저가 「테스트 데이터 보기」를 켠 상태 — 전역 테스트 모드가 켜지면 콘솔이 테스트 파티션을 본다.
 // (쿠키가 없으면 전역 플래그가 켜져 있어도 실데이터다 — server/data-scope)
@@ -552,7 +553,7 @@ run('메일 캠페인 생성 DB 경쟁', () => {
         const firstCreation = trackOperation(createCampaign(
           campaignInput(fixture, fixture.testTargetId, 'test-a'),
           randomUUID(),
-          false,
+          false, { share: FIELDWORK_SHARE_ALL },
         ));
         creations.push(firstCreation);
         const firstIdentity = await observedTransactions.identityAt(0);
@@ -561,7 +562,7 @@ run('메일 캠페인 생성 DB 경쟁', () => {
         const secondCreation = trackOperation(createCampaign(
           campaignInput(fixture, fixture.testTargetId, 'test-b'),
           randomUUID(),
-          false,
+          false, { share: FIELDWORK_SHARE_ALL },
         ));
         creations.push(secondCreation);
         const secondIdentity = await observedTransactions.identityAt(1);
@@ -600,7 +601,7 @@ run('메일 캠페인 생성 DB 경쟁', () => {
           const realCreation = trackOperation(createCampaign(
             campaignInput(fixture, fixture.realTargetId, 'real-a'),
             randomUUID(),
-            false,
+            false, { share: FIELDWORK_SHARE_ALL },
           ));
           await withTimeout(
             realCreation,
@@ -650,7 +651,7 @@ run('메일 캠페인 생성 DB 경쟁', () => {
         creation = trackOperation(createCampaign(
           campaignInput(fixture, fixture.testTargetId, 'locked-test'),
           randomUUID(),
-          false,
+          false, { share: FIELDWORK_SHARE_ALL },
         ));
         operations.push(creation);
         const creationIdentity = await observedTransactions.identityAt(0);
@@ -715,7 +716,7 @@ run('메일 캠페인 생성 DB 경쟁', () => {
           const staleCreation = trackOperation(createCampaign(
             campaignInput(fixture, fixture.testTargetId, 'stale-test'),
             randomUUID(),
-            false,
+            false, { share: FIELDWORK_SHARE_ALL },
           ));
           await withTimeout(
             expect(staleCreation).rejects.toThrow('화면을 새로고침'),

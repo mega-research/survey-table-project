@@ -5,6 +5,7 @@ import { Eye } from 'lucide-react';
 
 import { SurveyResponseFlow } from '@/features/survey-response/survey-response-flow';
 import { TooManyRequestsScreen } from '@/features/survey-response/survey-response-screens';
+import { hasGuestTargetShares } from '@/lib/auth/guest-grants';
 import { isRscRateLimited } from '@/lib/rate-limit/rsc-guard';
 import { loadPreviewContactSeed } from '@/server/contacts/services/preview-contact';
 import { loadOperationsDataScope } from '@/server/data-scope';
@@ -81,13 +82,17 @@ export default async function PublicSurveyPreviewPage({ params }: PageProps) {
     );
   }
 
-  const seed = await loadPreviewContactSeed({
-    surveyId: survey.id,
-    isTest: (await loadOperationsDataScope(survey.id)) === 'test',
-    structure: preview.survey,
-    // 공개 미리보기는 계정이 아니라 토큰으로 연다 — 담당 범위(게스트 계정의 축)가 없다.
-    share: FIELDWORK_SHARE_ALL,
-  });
+  // 공개 미리보기는 계정이 아니라 토큰으로 연다 — 담당 범위(게스트 계정의 축)를 걸 열람자가 없다.
+  // 그래서 담당 범위로 나눈 설문은 조사 대상 값을 아예 싣지 않는다: 「첫 대상」이 어느 업체 몫인지 모르고,
+  // 이 링크는 범위 게스트를 포함해 받은 사람 누구나 연다.
+  const seed = hasGuestTargetShares(survey.id)
+    ? null
+    : await loadPreviewContactSeed({
+        surveyId: survey.id,
+        isTest: (await loadOperationsDataScope(survey.id)) === 'test',
+        structure: preview.survey,
+        share: FIELDWORK_SHARE_ALL,
+      });
 
   return (
     <>

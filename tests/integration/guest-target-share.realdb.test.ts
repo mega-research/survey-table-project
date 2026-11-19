@@ -19,6 +19,7 @@ import { db } from '@/db';
 import {
   contactAttempts,
   contactTargets,
+  mailCampaigns,
   surveyResponses,
   surveyVersions,
   surveys,
@@ -35,6 +36,7 @@ import {
   type FieldworkShare,
   resolveGuestShare,
 } from '@/server/fieldwork-share-scope';
+import { createCampaign } from '@/server/mail/services/campaigns';
 import { sendSingleCampaign } from '@/server/mail/services/single-send';
 import {
   aggregateDaily,
@@ -101,6 +103,8 @@ run('게스트 담당 범위 (real DB)', () => {
   /** 응답 id — 프롬 대상(1번)의 완료, 프라임 대상(4번)의 완료, 대상 없는 공개 응답 */
   const responses = { from: '', prime: '', open: '' };
   let versionId = '';
+  /** 이 실행이 설문을 직접 만들었는가 — 만들지 않았으면 정리도 하지 않는다(남의 데이터를 지우지 않게). */
+  let seeded = false;
   let fromShare: FieldworkShare;
   let primeShare: FieldworkShare;
   const prevEnv = {
@@ -133,6 +137,7 @@ run('게스트 담당 범위 (real DB)', () => {
       contactColumns: SCHEME,
       testContactColumns: SCHEME,
     });
+    seeded = true;
     const [version] = await db
       .insert(surveyVersions)
       .values({
@@ -194,10 +199,15 @@ run('게스트 담당 범위 (real DB)', () => {
   });
 
   afterAll(async () => {
-    await db.delete(surveyResponses).where(eq(surveyResponses.surveyId, SURVEY_ID));
-    await db.update(surveys).set({ currentVersionId: null }).where(eq(surveys.id, SURVEY_ID));
-    await db.delete(surveyVersions).where(eq(surveyVersions.surveyId, SURVEY_ID));
-    await db.delete(surveys).where(eq(surveys.id, SURVEY_ID));
+    // beforeAll 이 「이미 있는 설문」에서 멈춰도 afterAll 은 돈다 — 이 실행이 만든 설문일 때만 지운다.
+    if (seeded) {
+      await db.transaction(async (tx) => {
+        await tx.delete(surveyResponses).where(eq(surveyResponses.surveyId, SURVEY_ID));
+        await tx.update(surveys).set({ currentVersionId: null }).where(eq(surveys.id, SURVEY_ID));
+        await tx.delete(surveyVersions).where(eq(surveyVersions.surveyId, SURVEY_ID));
+        await tx.delete(surveys).where(eq(surveys.id, SURVEY_ID));
+      });
+    }
     if (prevEnv.grants === undefined) delete process.env['GUEST_SURVEY_GRANTS'];
     else process.env['GUEST_SURVEY_GRANTS'] = prevEnv.grants;
     if (prevEnv.admins === undefined) delete process.env['ADMIN_USER_IDS'];
@@ -406,6 +416,27 @@ run('게스트 담당 범위 (real DB)', () => {
         fromShare,
       ),
     ).rejects.toMatchObject({ code: 'NOT_FOUND', message: '조사 대상을 찾을 수 없습니다.' });
+  });
+
+  it('캠페인 생성 — 사전 확인을 지난 뒤 범위가 옮겨져도 잠금 아래에서 다시 걸러 NOT_FOUND 다', async () => {
+    // 단건 발송의 사전 확인과 캠페인 생성 사이에 관리자가 대상을 다른 업체로 옮긴 상황 — 생성 트랜잭션이
+    // 받는 것은 「범위 밖 대상 id + 발송자의 범위」다. 템플릿을 읽기 전, 주소를 복호화하기 전에 끝난다.
+    await expect(
+      createCampaign(
+        {
+          surveyId: SURVEY_ID,
+          mailTemplateId: randomUUID(),
+          title: '단건',
+          contactTargetIds: [targetId(4)],
+        },
+        FROM2,
+        true,
+        { kind: 'single', share: fromShare },
+      ),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND', message: '조사 대상을 찾을 수 없습니다.' });
+    expect(await db.select().from(mailCampaigns).where(eq(mailCampaigns.surveyId, SURVEY_ID))).toEqual(
+      [],
+    );
   });
 
   it('응답 내역 — 자기 범위 대상의 응답만, 대상 없는 응답은 관리자만 본다', async () => {

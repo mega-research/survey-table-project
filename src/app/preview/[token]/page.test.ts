@@ -255,6 +255,22 @@ describe('PublicSurveyPreviewPage (/preview/[token])', () => {
     expect(flattenText(result).join('')).toContain('조사 대상 #1 기준');
   });
 
+  it('담당 범위로 나눈 설문은 조사 대상 값을 싣지 않는다 — 이 링크에는 범위를 걸 열람자가 없다', async () => {
+    // guest-grants.ts 의 GUEST_TARGET_SHARES 에 등재된 설문 — 「첫 대상」이 어느 업체 몫인지 모른다.
+    const SHARED_SURVEY_ID = '1b88ae5a-257a-40ad-80a4-a6a698fde05a';
+    getSurveyByPreviewTokenMock.mockResolvedValue({ id: SHARED_SURVEY_ID });
+    getSurveyByIdMock.mockResolvedValue({ ...SURVEY_ROW, id: SHARED_SURVEY_ID });
+    getSurveyForResponseMock.mockResolvedValue({
+      survey: { id: SHARED_SURVEY_ID, title: '테스트 설문' },
+      versionId: 'v1',
+    });
+
+    const result = await PublicSurveyPreviewPage({ params: Promise.resolve({ token: PREVIEW_TOKEN }) });
+
+    expect(loadPreviewContactSeedMock).not.toHaveBeenCalled();
+    expect(findElementByType(result, SurveyResponseFlowStub)).toBeTruthy();
+  });
+
   it('테스트 파티션이면 테스트 대상으로 연다', async () => {
     getSurveyByPreviewTokenMock.mockResolvedValue({ id: SURVEY_ID });
     getSurveyByIdMock.mockResolvedValue(SURVEY_ROW);
