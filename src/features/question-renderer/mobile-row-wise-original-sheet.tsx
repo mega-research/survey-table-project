@@ -11,10 +11,12 @@ import type {
   RowScaleBar,
   RowScaleLayout,
 } from '@/features/question-renderer/utils/row-scale-bars';
+import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { ChoiceGroup, TableCell } from '@/types/survey';
 import { systemText } from '@/utils/system-strings';
 
+import { useAnswerQuotes, useContactAttrs } from './contact-attrs-context';
 import { MobileOriginalRowTable } from './mobile-original-row-table';
 import { useInlineSurveyLocale } from './survey-locale-context';
 
@@ -71,13 +73,29 @@ export function MobileRowWiseOriginalSheet({
 }: MobileRowWiseOriginalSheetProps) {
   const labelIdPrefix = useId();
   const locale = useInlineSurveyLocale();
+  const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
+  // 섹션·하위 그룹·줄 제목은 표의 글자 칸에서 올라온 평문이라 명단 토큰·응답 인용이 그대로 들어 있다 —
+  // 행 카드·드릴다운과 같이 여기서 푼다. 호스트가 받는 줄 제목(막대·타일의 접근성 이름)도 푼 글자다.
+  const sections = model.sections.map((section) => ({
+    ...section,
+    label: substituteTokens(section.label, attrs, quotes),
+    subgroups: section.subgroups.map((subgroup) => ({
+      ...subgroup,
+      label: substituteTokens(subgroup.label, attrs, quotes),
+      questions: subgroup.questions.map((question) => ({
+        ...question,
+        title: substituteTokens(question.title, attrs, quotes),
+      })),
+    })),
+  }));
 
   return (
     <div
       data-testid="mobile-row-wise-original-sheet"
       className="overflow-hidden rounded-xl border border-gray-200 bg-white"
     >
-      {model.sections.map((section, sectionIndex) => (
+      {sections.map((section, sectionIndex) => (
         <section key={section.id} className={cn(sectionIndex > 0 && 'border-t-8 border-gray-100')}>
           {section.label ? (
             <h3 className="border-b border-gray-200 bg-blue-50 px-4 py-3 text-base font-semibold text-blue-700">
