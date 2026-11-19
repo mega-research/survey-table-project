@@ -12,6 +12,7 @@ import { expandHeaderGrid } from './expand-header-grid';
  * - 제목 줄: 비지 않은 칸 하나가 대상 열 전체를 덮는다 — 버린다(카드의 그룹 이름과 겹친다)
  * - 칸 줄: 비지 않은 칸이 전부 한 칸짜리이고 대상 열을 빠짐없이 덮는다 — 칸 글자의 대체 출처,
  *   5칸 이하 칸 안 라벨, 6칸 이상(구간 줄 없음)은 막대 아래 칸 이름 목록
+ *   칸 줄이 둘이면(이름 줄 + 번호 줄) 칸 글자는 아래 줄, 이름은 번호뿐이 아닌 가장 가까운 줄(cellNameAt)
  * - 구간 줄: 그 밖(여러 칸을 묶었거나 일부 칸만 이름이 있다) — 구간 띠·양끝/가운데 라벨·선택값 표시
  *
  * 고정 문구는 없다. 모든 글자는 보기 칸의 평문 content 와 헤더에서만 읽는다 — exportLabel 은
@@ -158,6 +159,21 @@ function columnLabelLines(
   return [{ role: segments.length === count ? 'cells' : 'bands', segments }];
 }
 
+/**
+ * 칸 줄들에서 i번째 칸의 **이름** — 보기에 가까운 아래 줄부터 보고, 비었거나 칸 글자와 같거나 번호뿐인
+ * 글자는 건너뛴다. 원문 조사표처럼 머리에 이름 줄(「전혀 그렇지 않다 …」)과 번호 줄(「① … ⑤」)이 함께
+ * 있고 칸에는 컨트롤만 둔 표에서, 번호가 칸 글자가 되고 이름은 그 윗줄에서 온다.
+ */
+function cellNameAt(lines: HeaderLine[], i: number, text: string): string | undefined {
+  for (let l = lines.length - 1; l >= 0; l -= 1) {
+    const line = lines[l]!;
+    if (line.role !== 'cells') continue;
+    const label = line.segments[i]?.label ?? '';
+    if (label !== '' && label !== text && !NUMBER_MARK.test(label)) return label;
+  }
+  return undefined;
+}
+
 /** 가장 아래(보기에 가장 가까운) 해당 역할 줄 */
 function lastLine(lines: HeaderLine[], role: 'cells' | 'bands'): Segment[] | undefined {
   for (let i = lines.length - 1; i >= 0; i -= 1) {
@@ -226,16 +242,18 @@ export function projectScaleBar(input: ProjectScaleBarInput): ScaleBarProjection
 
   /** 6칸 이상 — 라벨을 칸 안이 아니라 막대 아래(양끝·가운데)와 선택값 표시로 보인다 */
   const labelsBelowBar = count > IN_CELL_LABEL_MAX_CELLS;
-  // 5칸 이하는 칸 폭(약 70px)이 넉넉해 라벨을 칸 안에 넣는다 — 칸 줄 글자, 없으면 그 칸을 덮는 한 칸짜리
-  // 구간 이름. 여러 칸짜리 구간 이름은 한 칸에 붙일 수 없어 구간 띠로만 드러낸다. 칸 글자와 같은
-  // 라벨(보기 칸 글자가 곧 라벨이거나 칸 글자를 칸 줄에서 가져온 경우)은 되풀이하지 않는다.
+  // 5칸 이하는 칸 폭(약 70px)이 넉넉해 라벨을 칸 안에 넣는다 — 칸 줄의 이름(cellNameAt), 없으면 그 칸을
+  // 덮는 한 칸짜리 구간 이름. 여러 칸짜리 구간 이름은 한 칸에 붙일 수 없어 구간 띠로만 드러낸다. 칸 글자와
+  // 같은 라벨(보기 칸 글자가 곧 라벨이거나 칸 글자를 칸 줄에서 가져온 경우)은 되풀이하지 않는다.
   const inCellLabelAt = (i: number, text: string, bandIndex: number | null): string | undefined => {
     if (labelsBelowBar) return undefined;
+    const fromCells = cellNameAt(lines, i, text);
+    if (fromCells !== undefined) return fromCells;
     const band = bandIndex === null ? undefined : bands[bandIndex];
-    const candidates = [cellLine?.[i]?.label, band?.span === 1 ? band.label : undefined];
-    return candidates.find(
-      (label) => label !== undefined && label !== '' && label !== text && !NUMBER_MARK.test(label),
-    );
+    const label = band?.span === 1 ? band.label : undefined;
+    return label !== undefined && label !== '' && label !== text && !NUMBER_MARK.test(label)
+      ? label
+      : undefined;
   };
 
   // 6칸 이상인데 구간 줄이 없으면 칸 이름이 설 자리가 없다 — 칸마다 이름이 따로 있는 척도(「ⓞ 전혀
@@ -243,10 +261,7 @@ export function projectScaleBar(input: ProjectScaleBarInput): ScaleBarProjection
   // 이름이 없거나 번호뿐이거나 칸 글자와 같으면 목록을 두지 않는다(반쪽 목록은 빠진 칸을 숨긴다).
   const legendNames =
     labelsBelowBar && bands.length === 0 && cellLine
-      ? texts.map((text, i) => {
-          const name = cellLine[i]?.label ?? '';
-          return name !== '' && name !== text && !NUMBER_MARK.test(name) ? name : null;
-        })
+      ? texts.map((text, i) => cellNameAt(lines, i, text) ?? null)
       : [];
   const hasLegend = legendNames.length === count && legendNames.every((name) => name !== null);
 

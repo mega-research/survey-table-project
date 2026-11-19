@@ -345,6 +345,21 @@ describe('projectScaleBar — 5칸 이하 칸 안 라벨', () => {
     );
   });
 
+  it('칸 줄이 둘(이름 줄 + 번호 줄)이고 보기 칸 글자가 비면 번호가 칸 글자, 이름이 칸 안 라벨이다', () => {
+    // 원문 조사표 모양 — 머리에 「전혀 그렇지 않다 …」 줄과 「① … ⑤」 줄이 함께 있고 칸에는 라디오만 둔다
+    const NUMS = ['①', '②', '③', '④', '⑤'];
+    const header: HeaderCell[][] = [
+      [head('h-pre', '', 4), head('h-sat', '평가', 5)],
+      [head('h-pre2', '', 4), ...FIVE.map((label, n) => head(`h${n}`, label, 1))],
+      [head('h-pre3', '', 4), ...NUMS.map((label, n) => head(`n${n}`, label, 1))],
+    ];
+    const model = modelOf(c4({ scale: fiveScale(['', '', '', '', '']), headerGrid: header }));
+    expect(model.cells.map((c) => [c.text, c.inCellLabel])).toEqual(
+      FIVE.map((label, n) => [NUMS[n], label]),
+    );
+    expect(model.bands).toEqual([]);
+  });
+
   it('한 칸짜리 구간이 일부 칸에만 있으면 그 칸에만 라벨이 붙는다', () => {
     const header: HeaderCell[][] = [
       [
@@ -597,6 +612,20 @@ describe('projectScaleBar — 막대 아래 칸 이름 목록', () => {
     ]);
     expect(model.cells.every((c) => c.inCellLabel === undefined)).toBe(true);
     expect(model.anchors).toEqual({});
+  });
+
+  it('이름 줄 아래 번호 줄이 따로 있고 보기 칸 글자가 비어도 이름 줄로 목록을 싣는다', () => {
+    const numbers = ['ⓞ', '①', '②', '③', '④', '⑤'];
+    const header: HeaderCell[][] = [
+      NAMES.map((label, n) => head(`h${n}`, label, 1)),
+      numbers.map((label, n) => head(`n${n}`, label, 1)),
+    ];
+    const empty = numbers.map((_, n) => choice(`c${n}`, ''));
+    const model = modelOf(lineOf(empty, NAMES.map(() => ''), header));
+    expect(model.cells.map((c) => c.text)).toEqual(numbers);
+    expect(model.cells.map((c) => c.legendLabel)).toEqual(
+      NAMES.map((name) => name.replace(/\s+/g, ' ')),
+    );
   });
 
   it('5칸 이하는 칸 안 라벨이 있으므로 목록이 없다', () => {
