@@ -112,6 +112,7 @@ export async function sendSingleCampaign(
     },
     userId,
     isGuest,
-    { kind: 'single' },
+    // 위 사전 확인은 잠금 밖이다 — 캠페인 생성이 설문 행 잠금 아래에서 범위를 다시 본다.
+    { kind: 'single', share },
   );
 }

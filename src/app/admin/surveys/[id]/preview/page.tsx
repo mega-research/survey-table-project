@@ -13,7 +13,7 @@ import {
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
 import { loadPreviewContactSeed } from '@/server/contacts/services/preview-contact';
 import { loadOperationsDataScope } from '@/server/data-scope';
-import { resolveGuestShare } from '@/server/fieldwork-share-scope';
+import { isShareRestricted, resolveGuestShare } from '@/server/fieldwork-share-scope';
 
 import { CopyPreviewLinkButton } from './copy-preview-link-button';
 
@@ -52,7 +52,7 @@ export default async function SurveyPreviewPage({ params }: PageProps) {
               </Link>
             </Button>
             <div className="flex items-center gap-2">
-              {survey.previewToken && (
+              {survey.previewToken && !isShareRestricted(share) && (
                 <CopyPreviewLinkButton previewToken={survey.previewToken} />
               )}
               {!isGuest && (
@@ -113,7 +113,10 @@ export default async function SurveyPreviewPage({ params }: PageProps) {
                 현황으로
               </Link>
             </Button>
-            {survey.previewToken && <CopyPreviewLinkButton previewToken={survey.previewToken} />}
+            {/* 공개 미리보기 링크는 담당 범위에 묶인 게스트에게 내주지 않는다 — 계정 밖으로 나가는 링크다. */}
+            {survey.previewToken && !isShareRestricted(share) && (
+              <CopyPreviewLinkButton previewToken={survey.previewToken} />
+            )}
             {!isGuest && (
               <Button variant="outline" size="sm" asChild>
                 <Link href={`/admin/surveys/${surveyId}/edit`}>

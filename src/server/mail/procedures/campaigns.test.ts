@@ -46,7 +46,9 @@ describe('mail.campaigns procedures', () => {
       contactTargetIds: [CONTACT_ID],
     };
     const res = await client.campaigns.create(input);
-    expect(svc.createCampaign).toHaveBeenCalledWith(input, 'admin-1', false);
+    expect(svc.createCampaign).toHaveBeenCalledWith(input, 'admin-1', false, {
+      share: { kind: 'all' },
+    });
     expect(res).toEqual({ campaignId: CAMPAIGN_ID, queuedCount: 1, skippedCount: 0 });
   });
 
@@ -196,7 +198,9 @@ describe('mail.campaigns procedures', () => {
       contactTargetIds: [CONTACT_ID],
     };
     const res = await client.campaigns.create(input);
-    expect(svc.createCampaign).toHaveBeenCalledWith(input, 'guest-1', true);
+    expect(svc.createCampaign).toHaveBeenCalledWith(input, 'guest-1', true, {
+      share: { kind: 'all' },
+    });
     expect(res).toEqual({ campaignId: CAMPAIGN_ID, queuedCount: 1, skippedCount: 0 });
   });
 

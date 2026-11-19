@@ -214,6 +214,15 @@ export function getShareRestrictedSurveyIds(userId: string): string[] {
   ).map((g) => g.surveyId);
 }
 
+/**
+ * 이 설문에 담당 범위 등재가 하나라도 있는가 — 설문을 계정이 아닌 길(공개 미리보기 토큰)로 여는 화면이
+ * 조사 대상 값을 싣지 않기 위한 판정이다. 그 길에는 열람자가 없어 범위를 걸 수 없는데, 「첫 대상」은
+ * 어느 업체 몫일지 모른다.
+ */
+export function hasGuestTargetShares(surveyId: string): boolean {
+  return GUEST_TARGET_SHARES.some((g) => g.surveyId === surveyId);
+}
+
 /** 이 계정이 이 설문에서 담당 범위에 묶인 게스트인가. */
 export function isShareRestrictedGuest(userId: string, surveyId: string): boolean {
   return getGuestTargetShare(userId, surveyId) !== null;
