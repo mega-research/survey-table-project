@@ -9,6 +9,7 @@ import {
   getContactResultCodes,
 } from '@/server/read-models/contacts';
 import { getOperationsDataScope } from '@/server/data-scope';
+import { resolveGuestShare, withoutShareColumn } from '@/server/fieldwork-share-scope';
 
 export const metadata: Metadata = {
   title: '현황 - 조사 대상 추가',
@@ -21,15 +22,17 @@ interface PageProps {
 export default async function ContactNewPage({ params }: PageProps) {
   const { id: surveyId } = await params;
   // 미들웨어를 통과한 무권한 세션을 거른다 — 이 설문에 접근할 수 있는 계정만.
-  // 담당 범위에 묶인 게스트에게도 연다 — 이 화면은 스킴·결과코드만 읽고, 저장(`contacts.targets.add`)이
+  // 담당 범위에 묶인 게스트에게도 연다 — 범위를 가르는 열은 입력 칸에서 빼고, 저장(`contacts.targets.add`)이
   // 추가하는 대상에 그 계정의 범위 값을 찍는다.
-  await requireSurveyConsolePage(surveyId, { share: 'allow' });
+  const user = await requireSurveyConsolePage(surveyId, { share: 'allow' });
+  const share = resolveGuestShare(user.id, surveyId);
   const scope = await getOperationsDataScope(surveyId);
 
-  const [scheme, resultCodes] = await Promise.all([
+  const [loadedScheme, resultCodes] = await Promise.all([
     getContactColumnScheme(surveyId, scope),
     getContactResultCodes(surveyId),
   ]);
+  const scheme = withoutShareColumn(loadedScheme, share);
   if (!scheme) notFound();
 
   return (

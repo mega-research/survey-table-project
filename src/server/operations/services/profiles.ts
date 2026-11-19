@@ -24,7 +24,11 @@ import {
 } from '@/server/data-scope';
 import type { FilterClause } from '@/lib/operations/filter-shared';
 import { readStoredEntryParams } from '@/lib/survey/end-redirect';
-import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share-scope';
+import {
+  type FieldworkShare,
+  shareTargetCondition,
+  withoutShareAttr,
+} from '@/server/fieldwork-share-scope';
 import {
   buildNegativeCodeExists,
   getResultCodeStatuses,
@@ -284,7 +288,7 @@ export async function listResponsesForProfiles(
     isTest: r.isTest,
     groupValue: r.groupValue ?? null,
     resid: r.resid ?? null,
-    attrs: (r.attrs ?? null) as Record<string, string> | null,
+    attrs: withoutShareAttr((r.attrs ?? null) as Record<string, string> | null, share),
     contactTargetId: r.contactTargetId ?? null,
     // 접속 식별값은 앞 8자로 줄여서만 싣고, 브라우저 ID·기기 사양은 관리자 조회에만 싣는다.
     ...pickResponseSignals(r, includeBrowserSignals),

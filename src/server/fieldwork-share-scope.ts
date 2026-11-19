@@ -66,6 +66,43 @@ export function shareAttrStamp(share: FieldworkShare): { attrsKey: string; value
   return share.kind === 'targets' ? { attrsKey: share.attrsKey, value: share.value } : null;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 범위 열 가리기 — 범위를 가르는 명단 열 자체는 범위 게스트에게 보이지 않는다 (2026-11-20 요청)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 「어느 업체에 맡겼는가」는 관리자만 안다. 범위 게스트의 화면에는 그 열이 목록 열·필터 후보·값 목록·상세·
+// 수정 기록 어디에도 실리지 않는다(값도 RSC props 로 나가지 않는다). 컨택원 열을 게스트에게 감추는 것과 같은 결이다.
+// 운영판(게스트 계정 + 명단 열 값)에만 있는 조각이다 — staging 의 외주 링크 담당 범위는 범위가 명단 열이 아니라
+// 따로 둔 표라 감출 열이 없다. 승격 때 이 절과 이 헬퍼를 부르는 줄을 함께 걷는다.
+
+/** 범위 게스트에게 감출 명단 열 이름(`attrs` 의 키) — 범위가 걸리지 않았으면 null. */
+export function shareHiddenAttrsKey(share: FieldworkShare): string | null {
+  return share.kind === 'targets' ? share.attrsKey : null;
+}
+
+/** 범위 열을 뺀 컬럼 스킴 — 없으면 그대로. 원본을 고치지 않는다(스킴은 요청 안에서 캐시된다). */
+export function withoutShareColumn<T extends { columns: ReadonlyArray<{ source: string }> }>(
+  scheme: T | null,
+  share: FieldworkShare,
+): T | null {
+  const key = shareHiddenAttrsKey(share);
+  if (!scheme || key === null) return scheme;
+  const source = `attrs.${key}`;
+  if (!scheme.columns.some((c) => c.source === source)) return scheme;
+  return { ...scheme, columns: scheme.columns.filter((c) => c.source !== source) };
+}
+
+/** 범위 열 값을 뺀 명단 값 — 화면으로 내보내기 직전에 부른다. 원본을 고치지 않는다. */
+export function withoutShareAttr<T extends Record<string, string> | null | undefined>(
+  attrs: T,
+  share: FieldworkShare,
+): T {
+  const key = shareHiddenAttrsKey(share);
+  if (!attrs || key === null || !(key in attrs)) return attrs;
+  const { [key]: _hidden, ...rest } = attrs;
+  return rest as T;
+}
+
 /**
  * 조사 대상 id 칸에 거는 술어 — `all` 이면 `undefined`(drizzle `and()` 가 건너뛴다).
  *

@@ -5,8 +5,11 @@ import {
   isShareRestricted,
   resolveGuestShare,
   shareAttrStamp,
+  shareHiddenAttrsKey,
   shareTargetCondition,
   shareTargetSql,
+  withoutShareAttr,
+  withoutShareColumn,
 } from './fieldwork-share-scope';
 
 afterEach(() => vi.unstubAllEnvs());
@@ -68,5 +71,46 @@ describe('담당 범위 술어', () => {
     expect(shareAttrStamp(targets)).toEqual({ attrsKey: '실사업체', value: '프롬' });
     expect(shareAttrStamp(FIELDWORK_SHARE_ALL)).toBeNull();
     expect(shareAttrStamp({ kind: 'none' })).toBeNull();
+  });
+});
+
+/**
+ * 범위를 가르는 명단 열은 범위 게스트에게 보이지 않는다(2026-11-20) — 「어느 업체에 맡겼는가」는 관리자만 안다.
+ */
+describe('범위 열 가리기', () => {
+  const targets = { kind: 'targets', surveyId: SURVEY, attrsKey: '실사업체', value: '프롬' } as const;
+  const scheme = {
+    version: 1,
+    columns: [
+      { key: 'resid', source: 'system.resid' },
+      { key: '실사업체', source: 'attrs.실사업체' },
+      { key: '기업체명', source: 'attrs.기업체명' },
+    ],
+  };
+
+  it('범위가 걸리면 그 열과 값을 뺀다 — 원본은 그대로다', () => {
+    expect(shareHiddenAttrsKey(targets)).toBe('실사업체');
+    expect(withoutShareColumn(scheme, targets)?.columns.map((c) => c.key)).toEqual([
+      'resid',
+      '기업체명',
+    ]);
+    expect(scheme.columns).toHaveLength(3);
+
+    const attrs = { 실사업체: '프롬', 기업체명: '메가' };
+    expect(withoutShareAttr(attrs, targets)).toEqual({ 기업체명: '메가' });
+    expect(attrs).toEqual({ 실사업체: '프롬', 기업체명: '메가' });
+  });
+
+  it('관리자(전체)에게는 아무것도 빼지 않는다', () => {
+    expect(shareHiddenAttrsKey(FIELDWORK_SHARE_ALL)).toBeNull();
+    expect(withoutShareColumn(scheme, FIELDWORK_SHARE_ALL)).toBe(scheme);
+    const attrs = { 실사업체: '프롬' };
+    expect(withoutShareAttr(attrs, FIELDWORK_SHARE_ALL)).toBe(attrs);
+  });
+
+  it('스킴·값이 없으면 그대로 돌려준다', () => {
+    expect(withoutShareColumn(null, targets)).toBeNull();
+    expect(withoutShareAttr(null, targets)).toBeNull();
+    expect(withoutShareAttr({ 기업체명: '메가' }, targets)).toEqual({ 기업체명: '메가' });
   });
 });

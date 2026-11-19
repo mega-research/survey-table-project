@@ -34,7 +34,11 @@ import {
   getFirstTestTargetSample,
 } from '@/server/read-models/contact-sample';
 import { loadOperationsDataScope } from '@/server/data-scope';
-import { type FieldworkShare, isShareRestricted } from '@/server/fieldwork-share-scope';
+import {
+  type FieldworkShare,
+  isShareRestricted,
+  withoutShareAttr,
+} from '@/server/fieldwork-share-scope';
 import { InternalFailure } from '@/server/internal-failure';
 
 import type {
@@ -92,7 +96,8 @@ export async function getMailPreviewSample(
   const inviteUrl = buildInviteUrl(sample.inviteCode, baseUrl);
 
   return {
-    attrs: sample.attrs,
+    // 범위를 가르는 열의 값은 범위 게스트에게 내리지 않는다(메일 변수 미리보기에도 쓰지 않는 값이다).
+    attrs: withoutShareAttr(sample.attrs, share),
     inviteUrl,
     email: sample.email,
     resid: sample.resid,

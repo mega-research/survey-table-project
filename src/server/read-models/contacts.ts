@@ -74,7 +74,11 @@ import type {
 } from '@/shared/contracts/contacts-io';
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
 
-import { type FieldworkShare, shareTargetCondition } from '../fieldwork-share-scope';
+import {
+  type FieldworkShare,
+  shareTargetCondition,
+  withoutShareAttr,
+} from '../fieldwork-share-scope';
 import { type ResolvedContactFilter, resolvedContactFilterSql } from './contact-filter-resolution';
 
 // 표가 props 로 받는 행 모양은 계약(@/shared/contracts/contacts-io) 소관 — 여기서 다시 내보내
@@ -278,7 +282,8 @@ export async function listContactsForSurvey(args: ListContactsArgs): Promise<Lis
     id: r.id,
     resid: r.resid,
     groupValue: r.groupValue,
-    attrs: (r.attrs ?? {}) as Record<string, string>,
+    // 범위를 가르는 열의 값은 범위 게스트의 화면에 싣지 않는다(열도 스킴에서 빠져 있다).
+    attrs: withoutShareAttr((r.attrs ?? {}) as Record<string, string>, filter.share),
     piiMaskHints: maskHintsMap.get(r.id) ?? {},
     ...(plainMap ? { piiPlain: plainMap.get(r.id) ?? {} } : {}),
     latestResultCode: r.latestResultCode,
@@ -514,7 +519,8 @@ export async function getContactDetailById(
   return {
     contact: {
       ...contact,
-      attrs: (contact.attrs ?? {}) as Record<string, string>,
+      // 범위를 가르는 열의 값은 범위 게스트에게 내리지 않는다 — 저장 때 서비스가 다시 찍는다(`withShareStamp`).
+      attrs: withoutShareAttr((contact.attrs ?? {}) as Record<string, string>, share),
       piiDecrypted,
       contactMethod: contact.contactMethod as ContactMethod | null,
     },

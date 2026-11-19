@@ -13,7 +13,11 @@ import { resolveDefaultSortKey } from '@/lib/contacts/default-sort';
 import { attrsKeyOf, residColumnLabel } from '@/lib/operations/contacts-format';
 import { getContactColumnScheme } from '@/server/read-models/contacts';
 import { getOperationsDataScope } from '@/server/data-scope';
-import { resolveGuestShare } from '@/server/fieldwork-share-scope';
+import {
+  resolveGuestShare,
+  shareHiddenAttrsKey,
+  withoutShareColumn,
+} from '@/server/fieldwork-share-scope';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
 import { listAssignmentOptions } from '@/server/read-models/contact-assignment-options';
 import { type ColumnCandidateWithPii, FILTER_SOURCE } from '@/lib/operations/filter-shared';
@@ -114,12 +118,19 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
 
   // contactScheme 은 pii blindIndex 계산용 piiType 매핑에 필요. getContactColumnScheme 가
   // cache() 로 RSC pass dedupe 되어 있어 getProgressGroupLabel 내부 lookup 과 같은 query 를 공유한다.
-  const [scheme, groupLabel, contactScheme, isGuest] = await Promise.all([
+  const [loadedScheme, groupLabel, loadedContactScheme, isGuest] = await Promise.all([
     getProgressColumnScheme(surveyId),
     getProgressGroupLabel(surveyId, scope),
     getContactColumnScheme(surveyId, scope),
     isGuestViewer(),
   ]);
+  // 범위를 가르는 명단 열은 범위 게스트에게 없는 열이다 — 표시 열·분류 기준·검색 후보에서 함께 빠진다.
+  const hiddenAttrsKey = shareHiddenAttrsKey(share);
+  const contactScheme = withoutShareColumn(loadedContactScheme, share);
+  const scheme =
+    hiddenAttrsKey === null
+      ? loadedScheme
+      : { ...loadedScheme, columns: loadedScheme.columns.filter((c) => c.key !== hiddenAttrsKey) };
   // 컨택원은 내부 실사 운영 정보 — 게스트에게는 분류 기준 칩이 없다.
   const hasAssignments =
     !isGuest && (await listAssignmentOptions(surveyId, scope)).length > 0;

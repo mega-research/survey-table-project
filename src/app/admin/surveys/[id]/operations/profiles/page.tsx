@@ -47,7 +47,7 @@ import {
 import type { FilterClause } from '@/lib/operations/filter-shared';
 import { FILTER_SOURCE } from '@/lib/operations/filter-shared';
 import { getOperationsDataScope } from '@/server/data-scope';
-import { resolveGuestShare } from '@/server/fieldwork-share-scope';
+import { resolveGuestShare, withoutShareColumn } from '@/server/fieldwork-share-scope';
 import { canOpenResponseView, isGuestViewer, isViewOnlyViewer } from '@/lib/auth/guest-viewer';
 
 export const metadata: Metadata = {
@@ -99,7 +99,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
     canOpenResponseView(surveyId),
   ]);
 
-  const [contactScheme, profileScheme, entryParamNames, answerSources, answerChoices] =
+  const [loadedContactScheme, profileScheme, entryParamNames, answerSources, answerChoices] =
     await Promise.all([
       getContactColumnScheme(surveyId, scope),
       getProfileColumnScheme(surveyId),
@@ -107,6 +107,8 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
       getProfileAnswerSources(surveyId),
       getProfileAnswerChoices(surveyId),
     ]);
+  // 범위를 가르는 명단 열은 범위 게스트에게 없는 열이다 — 표시 열·검색 후보·정렬에서 함께 빠진다.
+  const contactScheme = withoutShareColumn(loadedContactScheme, share);
   // 표시 컬럼 스킴 — NULL(미설정)이면 hydrate 가 기본 스킴(기존 9컬럼)을 만든다.
   const configuredColumns = visibleProfileColumns(
     hydrateProfileColumns(

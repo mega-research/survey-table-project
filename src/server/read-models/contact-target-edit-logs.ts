@@ -16,10 +16,15 @@ export const CONTACT_TARGET_EDIT_LOG_LIMIT = 200;
  */
 export function visibleContactTargetEditChanges(
   changes: ContactTargetEditChange[],
-  viewer: { isGuest: boolean },
+  viewer: { isGuest: boolean; hiddenAttrsKey?: string | null },
 ): ContactTargetEditChange[] {
   if (!viewer.isGuest) return changes;
-  return changes.filter((c) => c.kind !== 'assignment');
+  // 담당 범위를 가르는 열의 변경(관리자가 대상을 다른 업체로 옮긴 기록)도 범위 게스트에게는 싣지 않는다 —
+  // 그 값에 다른 업체 이름이 들어 있다.
+  const hiddenKey = viewer.hiddenAttrsKey ?? null;
+  return changes.filter(
+    (c) => c.kind !== 'assignment' && !(c.kind === 'attr' && hiddenKey !== null && c.key === hiddenKey),
+  );
 }
 
 /**
@@ -32,7 +37,7 @@ export function visibleContactTargetEditChanges(
 export async function getContactTargetEditLogs(
   contactTargetId: string,
   scope: OperationsDataScope,
-  viewer: { isGuest: boolean },
+  viewer: { isGuest: boolean; hiddenAttrsKey?: string | null },
 ): Promise<ContactTargetEditLogRow[]> {
   const rows = await db
     .select({

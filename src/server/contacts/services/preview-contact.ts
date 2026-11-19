@@ -4,7 +4,11 @@ import { and, asc, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { contactTargets } from '@/db/schema/contacts';
 import { collectReferencedContactKeys } from '@/lib/contacts/respondent-pii';
-import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share-scope';
+import {
+  type FieldworkShare,
+  shareTargetCondition,
+  withoutShareAttr,
+} from '@/server/fieldwork-share-scope';
 import { appendContactPii } from '@/server/read-models/respondent-contact-attrs';
 
 import { lookupPriorAnswersByContactTarget } from '@/server/read-models/contact-prior-answers';
@@ -56,5 +60,6 @@ export async function loadPreviewContactSeed(input: {
     appendContactPii(row, { allowedKeys: async () => collectReferencedContactKeys(structure) }),
     lookupPriorAnswersByContactTarget({ surveyId, contactTargetId: row.id, isTest }),
   ]);
-  return { resid: row.resid, isTest, contactAttrs, priorAnswers };
+  // 범위를 가르는 열의 값은 범위 게스트의 화면(RSC props)에 싣지 않는다.
+  return { resid: row.resid, isTest, contactAttrs: withoutShareAttr(contactAttrs, share), priorAnswers };
 }
