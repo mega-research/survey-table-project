@@ -13,6 +13,9 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { db } from '@/db';
 import { contactTargets, surveys } from '@/db/schema';
 import { getProgressRows } from '@/server/operations/services/report-progress';
+import { listContactsForSurvey } from '@/server/read-models/contacts';
+
+import { resolvedFilterForTest } from '../helpers/resolved-contact-filter';
 
 const isLocalDb =
   (process.env['DATABASE_URL'] ?? '').includes('127.0.0.1') ||
@@ -43,6 +46,8 @@ async function seedSurvey(): Promise<string> {
       isTest: false,
       inviteCode: `ns-${row.id.slice(0, 8)}-${i + 1}`,
       attrs: { 전시회명: e.name, 전시회ID: e.id },
+      // 그룹도 명단에서 온 글자 값 — 숫자로 된 그룹명을 쓰는 설문이 있다
+      groupValue: e.id.trim(),
     })),
   );
   return row.id;
@@ -75,6 +80,23 @@ describe.skipIf(!isLocalDb)('getProgressRows — 명단 값 자연 정렬', () =
     expect(desc.map((r) => r.groupLabel)).toEqual(['라전', '가전', '나전', '다전', '마전']);
   });
 
+  it('응답률이 같은 그룹끼리도 분류 기준 값의 자연 정렬 순서로 선다', async () => {
+    const surveyId = await seedSurvey();
+    // 완료가 없어 응답률이 전부 0 — 동률 꼬리(분류 기준 값)만으로 순서가 정해진다
+    const rows = await getProgressRows({
+      surveyId,
+      scope: 'real',
+      condition: null,
+      page: 1,
+      size: 20,
+      sort: 'responseRate',
+      dir: 'desc',
+      metaKeys: [],
+      groupByKeys: [{ kind: 'attrs', key: '전시회ID' }],
+    });
+    expect(rows.map((r) => r.groupValues[0]?.trim())).toEqual(['1', '2', '10', '11', 'A-3']);
+  });
+
   it('명단 열 분류 기준의 정렬도 같은 자연 정렬이다', async () => {
     const surveyId = await seedSurvey();
     const rows = await getProgressRows({
@@ -89,5 +111,21 @@ describe.skipIf(!isLocalDb)('getProgressRows — 명단 값 자연 정렬', () =
       groupByKeys: [{ kind: 'attrs', key: '전시회ID' }],
     });
     expect(rows.map((r) => r.groupValues[0]?.trim())).toEqual(['1', '2', '10', '11', 'A-3']);
+  });
+});
+
+describe.skipIf(!isLocalDb)('listContactsForSurvey — 그룹 정렬', () => {
+  it('숫자로 된 그룹명은 숫자순으로, 숫자가 아닌 그룹명은 그 뒤에 선다', async () => {
+    const surveyId = await seedSurvey();
+    const { rows } = await listContactsForSurvey({
+      surveyId,
+      scope: 'real',
+      page: 1,
+      pageSize: 20,
+      filter: resolvedFilterForTest(),
+      sort: 'group',
+      dir: 'asc',
+    });
+    expect(rows.map((r) => r.groupValue)).toEqual(['1', '2', '10', '11', 'A-3']);
   });
 });

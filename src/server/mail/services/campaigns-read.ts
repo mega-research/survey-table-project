@@ -399,7 +399,8 @@ export async function listCampaignRecipientFacets(args: {
       // 센티널과 같은 실제 값은 선택지에서 제외한다 — 노출하면 파서가 빈 값으로 승격시켜
       // 화면에 보이는 값과 다른 행이 걸린다 (FILTER_NONE_VALUE 주석 참조).
       .filter((v): v is string => v != null && v !== FILTER_NONE_VALUE)
-      .sort((a, b) => a.localeCompare(b, 'ko-KR'))
+      // 숫자 인식 정렬 — 조사 대상 목록의 깔때기 값 목록(contact-attr-values)과 같은 순서
+      .sort((a, b) => a.localeCompare(b, 'ko', { numeric: true }))
       .slice(0, FACET_LIMIT);
     return { values, hasEmpty };
   };

@@ -5,7 +5,10 @@ import { deletedResponse, notDeletedResponse } from '@/server/response-filters';
 import { db } from '@/db';
 import { contactTargets, surveyResponses } from '@/db/schema';
 import { attrsSortKey } from '@/lib/operations/contacts-format';
-import { attrsNaturalSortExprs } from '@/lib/operations/contacts-filter-sql.server';
+import {
+  attrsNaturalSortExprs,
+  naturalTextSortExprs,
+} from '@/lib/operations/contacts-filter-sql.server';
 import type { Platform } from '@/lib/operations/parse-ua';
 import type { AnswerChoiceMap } from '@/lib/operations/profile-answer-choices';
 import {
@@ -213,7 +216,10 @@ export async function listResponsesForProfiles(
         ? [orderExpr(numbered.startedAt, dir)]
         : sort === 'status'
           ? [orderExpr(statusRankExpr, dir)]
-          : [orderExpr(SORT_COLUMN_MAP[sort as keyof typeof SORT_COLUMN_MAP], dir)];
+          : sort === 'group'
+            ? // 그룹도 명단에서 온 글자 값이다 — 명단 열과 같은 자연 정렬.
+              naturalTextSortExprs(sql`${numbered.groupValue}`).map((c) => orderExpr(c, dir))
+            : [orderExpr(SORT_COLUMN_MAP[sort as keyof typeof SORT_COLUMN_MAP], dir)];
 
   const dataQuery = db
     .select({
