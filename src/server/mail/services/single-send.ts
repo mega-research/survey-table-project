@@ -5,6 +5,7 @@ import 'server-only';
 import { db } from '@/db';
 import { contactTargets } from '@/db/schema/contacts';
 import { latestResultUnsubscribedSql } from '@/lib/operations/contacts-filter-sql.server';
+import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share-scope';
 import { loadMailEmailOrder, resolveSendAddresses } from '@/server/read-models/send-address';
 import {
   buildNegativeCodeExists,
@@ -28,6 +29,8 @@ export async function sendSingleCampaign(
   input: SendSingleCampaignInput,
   userId: string,
   isGuest: boolean,
+  /** 열람자의 담당 범위 — 범위 밖 대상은 없는 대상과 같은 NOT_FOUND 다(아래 조회의 조건). */
+  share: FieldworkShare,
 ): Promise<CreateCampaignResult> {
   const [contact] = await db
     .select({
@@ -41,6 +44,7 @@ export async function sendSingleCampaign(
       and(
         eq(contactTargets.id, input.contactTargetId),
         eq(contactTargets.surveyId, input.surveyId),
+        shareTargetCondition(share),
       ),
     )
     .limit(1);

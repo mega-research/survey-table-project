@@ -157,6 +157,69 @@ export function canViewOnlyGuestViewResponse(userId: string, surveyId: string): 
 }
 
 /**
+ * 게스트 담당 범위 — 이 (계정, 설문) 쌍은 **명단의 `attrsKey` 열이 `value` 인 조사 대상**과 그 대상의
+ * 응답·회차·메일 이력만 본다. 한 설문을 외주 업체 여럿이 나눠 뛸 때 서로의 명단(연락처)을 가린다
+ * (2026-11-19 요청, `.scratch/guest-target-share/PRD.md`).
+ *
+ * - 범위는 명단 값이라 관리자가 명단 업로드(또는 상세의 값 수정)로 나눈다. 그 열이 비었거나 다른 값인
+ *   대상은 이 계정에 보이지 않는다 — 어느 등재에도 안 걸리는 대상은 관리자만 본다.
+ * - 등재된 계정(「범위 게스트」)에는 **범위로 거르는 표면만 열린다**. 거르지 않는 표면(단체 메일·내려받기 등)은
+ *   procedure(`assertSurveyAccess`)·페이지 가드(`requireSurveyConsolePage`)·미들웨어(`guestPathRedirect`)·
+ *   REST 라우트가 닫는다 — 기본 거부.
+ * - 범위 게스트는 그 열을 바꾸지 못하고, 추가하는 대상에는 자기 값이 찍힌다(`contact-targets` 서비스).
+ * - 술어와 해석은 `server/fieldwork-share-scope` 한 곳이다.
+ *
+ * staging 의 외주 링크 「담당 범위」(ADR-0035)가 운영에 오르면 이 목록과 함께 걷는다 — 그때까지의 다리다.
+ */
+const GUEST_TARGET_SHARES: ReadonlyArray<{
+  userId: string;
+  surveyId: string;
+  attrsKey: string;
+  value: string;
+}> = [
+  // from2@ — 피지컬 AI 산업·인력 실태조사 개별링크, 프롬 몫(2026-11-19 요청)
+  {
+    userId: 'ddcdc638-3cc2-4a84-acd9-204b66b57e28',
+    surveyId: '1b88ae5a-257a-40ad-80a4-a6a698fde05a',
+    attrsKey: '실사업체',
+    value: '프롬',
+  },
+  // prime2@ — 같은 설문, 프라임 몫(2026-11-19 요청)
+  {
+    userId: '882ddaa3-f52b-4c7b-8837-0dcffc44575d',
+    surveyId: '1b88ae5a-257a-40ad-80a4-a6a698fde05a',
+    attrsKey: '실사업체',
+    value: '프라임',
+  },
+];
+
+export interface GuestTargetShare {
+  /** 범위를 가르는 명단 일반 열 이름(`attrs` 의 키) */
+  attrsKey: string;
+  /** 이 계정 몫의 값 — 그 열이 정확히 이 값인 대상만 보인다 */
+  value: string;
+}
+
+/** 이 계정이 이 설문에서 담당 범위에 묶여 있으면 그 범위, 아니면 null(설문 전체). */
+export function getGuestTargetShare(userId: string, surveyId: string): GuestTargetShare | null {
+  const hit = GUEST_TARGET_SHARES.find((g) => g.userId === userId && g.surveyId === surveyId);
+  return hit ? { attrsKey: hit.attrsKey, value: hit.value } : null;
+}
+
+/** 이 계정이 담당 범위에 묶인 grant 설문 목록 — 미들웨어의 경로 판정용. */
+export function getShareRestrictedSurveyIds(userId: string): string[] {
+  const granted = getGuestSurveyIds(userId);
+  return GUEST_TARGET_SHARES.filter(
+    (g) => g.userId === userId && granted.includes(g.surveyId),
+  ).map((g) => g.surveyId);
+}
+
+/** 이 계정이 이 설문에서 담당 범위에 묶인 게스트인가. */
+export function isShareRestrictedGuest(userId: string, surveyId: string): boolean {
+  return getGuestTargetShare(userId, surveyId) !== null;
+}
+
+/**
  * 내려받는 것의 종류 — `response-list` 는 응답 내역 목록(화면의 열 그대로, 답은 없다),
  * `data` 는 답이 든 파일(Raw·분할·SPSS)과 그 미리보기.
  */
@@ -175,6 +238,8 @@ export function canExportSurveyData(
 ): boolean {
   if (!canAccessSurvey(userId, surveyId)) return false;
   if (!isGuestUser(userId)) return true;
+  // 담당 범위에 묶인 게스트 — 내보내기 로더는 범위를 거르지 않으므로 어떤 종류도 내지 않는다
+  if (isShareRestrictedGuest(userId, surveyId)) return false;
   return VIEW_ONLY_GUEST_GRANTS.some(
     (g) => g.userId === userId && g.surveyId === surveyId && g.allowExport === kind,
   );
@@ -229,6 +294,21 @@ function isResponseViewPath(pathname: string, profilesPrefix: string): boolean {
 }
 
 /**
+ * 담당 범위에 묶인 게스트에게 닫는 운영 콘솔 하위 경로 — 그 화면의 조회가 범위를 거르지 않는다.
+ * 단체 메일(캠페인·템플릿·위저드), 문항 수요, 이월 응답, 컬럼 설정 둘. 페이지 가드(`requireSurveyConsolePage` 의
+ * `share` 정책)와 같은 집합이어야 한다 — `tests/repo/admin-page-guard.test.ts` 가 대조한다.
+ */
+export const SHARE_RESTRICTED_BLOCKED_SUBPATHS: readonly string[] = [
+  'mail',
+  'demand',
+  'contacts/prior-answers',
+  // 컬럼 설정 화면 — 저장 procedure 가 관리자 전용이라 게스트에게는 쓸모가 없고, 범위를 거르는지
+  // 따질 화면을 늘리지 않는다.
+  'profiles/columns',
+  'report/columns',
+];
+
+/**
  * 미들웨어용 게스트 경로 판정 (순수 함수).
  * 허용 경로면 null, 차단이면 리다이렉트 목적지 pathname 반환.
  *
@@ -244,6 +324,7 @@ export function guestPathRedirect(
   viewOnlySurveyIds: readonly string[] = [],
   viewOnlyPreviewSurveyIds: readonly string[] = [],
   viewOnlyResponseViewSurveyIds: readonly string[] = [],
+  shareRestrictedSurveyIds: readonly string[] = [],
 ): string | null {
   if (pathname === '/admin/login') return null;
   // 강제 로그아웃 라우트 자신은 통과 — 리다이렉트 루프 방지.
@@ -293,6 +374,10 @@ export function guestPathRedirect(
         // 척도 평균 — 내부 담당자용 집계(발주처 공개는 별도 결정, CONTEXT.md 「척도 평균」).
         'scale-mean',
       ];
+      // 담당 범위에 묶인 게스트 — 범위로 거르지 않는 화면을 더 닫는다(GUEST_TARGET_SHARES).
+      if (shareRestrictedSurveyIds.includes(grantedSurveyId)) {
+        blockedSubpaths.push(...SHARE_RESTRICTED_BLOCKED_SUBPATHS);
+      }
       for (const sub of blockedSubpaths) {
         const full = `${allowedPrefix}/${sub}`;
         if (pathname === full || pathname.startsWith(`${full}/`)) {
@@ -321,6 +406,7 @@ export function guestPostLoginRedirect(
   viewOnlySurveyIds: readonly string[] = [],
   viewOnlyPreviewSurveyIds: readonly string[] = [],
   viewOnlyResponseViewSurveyIds: readonly string[] = [],
+  shareRestrictedSurveyIds: readonly string[] = [],
 ): string {
   const path = target.split(/[?#]/)[0] ?? target;
   const dest = guestPathRedirect(
@@ -329,6 +415,7 @@ export function guestPostLoginRedirect(
     viewOnlySurveyIds,
     viewOnlyPreviewSurveyIds,
     viewOnlyResponseViewSurveyIds,
+    shareRestrictedSurveyIds,
   );
   // 허용 경로 — 단 로그인·로그아웃 라우트는 로그인 직후 목적지로 무의미
   if (dest === null && path !== '/admin/login' && path !== GUEST_FORCE_LOGOUT_PATH) {

@@ -5,6 +5,7 @@ import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 import { addContactTarget } from '@/server/contacts/services/contact-targets';
 import { ingestContactUpload } from '@/server/contacts/services/contact-uploads';
 import { generateTestContacts } from '@/server/contacts/services/test-contacts';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 // 이 브라우저가 「테스트 모드로 보기」를 켠 상태 — 전역 테스트 모드가 켜지면 콘솔이 테스트 파티션을 본다.
 // (쿠키가 없으면 전역 플래그가 켜져 있어도 실데이터다 — server/data-scope)
@@ -354,7 +355,7 @@ describe('수동 대상자 생성 스코프', () => {
   it('서버가 현재 실제 모드이면 isTest=false로 저장한다', async () => {
     h.survey.testModeEnabled = false;
 
-    await addContactTarget({ surveyId: SURVEY_ID, attrs: { 소속: '실제 회사' } }, false);
+    await addContactTarget({ surveyId: SURVEY_ID, attrs: { 소속: '실제 회사' } }, false, FIELDWORK_SHARE_ALL);
 
     expect(h.targets).toHaveLength(1);
     expect(h.targets[0]?.isTest).toBe(false);
@@ -370,10 +371,10 @@ describe('수동 대상자 생성 스코프', () => {
       },
       false,
     );
-    await addContactTarget({ surveyId: SURVEY_ID, attrs: { 소속: '수동 테스트기업' } }, false);
+    await addContactTarget({ surveyId: SURVEY_ID, attrs: { 소속: '수동 테스트기업' } }, false, FIELDWORK_SHARE_ALL);
 
     await expect(
-      addContactTarget({ surveyId: SURVEY_ID, attrs: { 소속: '한도 초과' } }, false),
+      addContactTarget({ surveyId: SURVEY_ID, attrs: { 소속: '한도 초과' } }, false, FIELDWORK_SHARE_ALL),
     ).rejects.toMatchObject({
       code: 'BAD_REQUEST',
       message: '테스트 대상자는 20명까지 만들 수 있습니다.',
@@ -392,8 +393,8 @@ describe('수동 대상자 생성 스코프', () => {
     );
 
     const results = await Promise.allSettled([
-      addContactTarget({ surveyId: SURVEY_ID, attrs: { 소속: '수동 A' } }, false),
-      addContactTarget({ surveyId: SURVEY_ID, attrs: { 소속: '수동 B' } }, false),
+      addContactTarget({ surveyId: SURVEY_ID, attrs: { 소속: '수동 A' } }, false, FIELDWORK_SHARE_ALL),
+      addContactTarget({ surveyId: SURVEY_ID, attrs: { 소속: '수동 B' } }, false, FIELDWORK_SHARE_ALL),
     ]);
 
     expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);

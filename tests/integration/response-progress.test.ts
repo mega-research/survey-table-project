@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 // ========================
 // 모듈 모킹
@@ -154,7 +155,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
     await saveAdminEdit(
       { surveyId: 's1', responseId: 'r1', questionResponses: { q1: 'v' }, versionId: null },
       { id: 'admin-1', email: 'a@b.com' },
-      false,
+      false, FIELDWORK_SHARE_ALL,
     );
 
     const completedCall = updateSetMock.mock.calls[0];
@@ -179,7 +180,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
     await saveAdminEdit(
       { surveyId: 's1', responseId: 'r1', questionResponses: {}, versionId: null },
       { id: 'admin-1', email: 'a@b.com' },
-      false,
+      false, FIELDWORK_SHARE_ALL,
     );
 
     const dropEmptyCall = updateSetMock.mock.calls[0];
@@ -211,7 +212,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
         versionId: null,
       },
       { id: 'admin-1', email: 'a@b.com' },
-      false,
+      false, FIELDWORK_SHARE_ALL,
     );
 
     const dropAnsweredCall = updateSetMock.mock.calls[0];
@@ -238,7 +239,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
       saveAdminEdit(
         { surveyId: 's1', responseId: 'r1', questionResponses: { q1: 'a' }, versionId: null },
         { id: 'admin-1', email: 'a@b.com' },
-        false,
+        false, FIELDWORK_SHARE_ALL,
       ),
     ).resolves.toEqual({ ok: true });
 
@@ -264,7 +265,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
         versionId: null,
       },
       { id: 'admin-1', email: 'a@b.com' },
-      false,
+      false, FIELDWORK_SHARE_ALL,
     );
 
     const nullVersionCall = updateSetMock.mock.calls[0];
@@ -292,7 +293,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
       saveAdminEdit(
         { surveyId: 's1', responseId: 'r1', questionResponses: { q1: 'a' }, versionId: null },
         { id: 'admin-1', email: 'a@b.com' },
-        false,
+        false, FIELDWORK_SHARE_ALL,
       ),
     ).rejects.toMatchObject({ reason: 'response_deleted' });
   });

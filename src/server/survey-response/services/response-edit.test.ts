@@ -5,6 +5,7 @@ import { db } from '@/db';
 import { responseMigrationHistory } from '@/db/schema';
 
 import { saveAdminEdit } from './response-edit';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 // 이 브라우저가 「테스트 모드로 보기」를 켠 상태 — 전역 테스트 모드가 켜지면 콘솔이 테스트 파티션을 본다.
 // (쿠키가 없으면 전역 플래그가 켜져 있어도 실데이터다 — server/data-scope)
@@ -214,7 +215,7 @@ describe('saveAdminEdit 파티션 가드', () => {
       saveAdminEdit(
         { surveyId: SURVEY_ID, responseId: RESPONSE_ID, questionResponses: {}, versionId: null },
         EDITOR,
-        true,
+        true, FIELDWORK_SHARE_ALL,
       ),
     ).rejects.toMatchObject({ reason: 'response_not_found' });
 
@@ -239,7 +240,7 @@ describe('saveAdminEdit 파티션 가드', () => {
       saveAdminEdit(
         { surveyId: SURVEY_ID, responseId: RESPONSE_ID, questionResponses: {}, versionId: null },
         EDITOR,
-        true,
+        true, FIELDWORK_SHARE_ALL,
       ),
     ).resolves.toEqual({ ok: true });
   });
@@ -261,7 +262,7 @@ describe('saveAdminEdit 파티션 가드', () => {
       saveAdminEdit(
         { surveyId: SURVEY_ID, responseId: RESPONSE_ID, questionResponses: {}, versionId: null },
         EDITOR,
-        false,
+        false, FIELDWORK_SHARE_ALL,
       ),
     ).resolves.toEqual({ ok: true });
   });
@@ -300,7 +301,7 @@ describe('saveAdminEdit 이탈 응답 완료 전환', () => {
           versionId: null,
         },
         EDITOR,
-        false,
+        false, FIELDWORK_SHARE_ALL,
       ),
     ).resolves.toEqual({ ok: true });
 
@@ -322,7 +323,7 @@ describe('saveAdminEdit 이탈 응답 완료 전환', () => {
         versionId: null,
       },
       EDITOR,
-      false,
+      false, FIELDWORK_SHARE_ALL,
     );
 
     const row = h.responses[0]!;
@@ -342,7 +343,7 @@ describe('saveAdminEdit 이탈 응답 완료 전환', () => {
         versionId: null,
       },
       EDITOR,
-      false,
+      false, FIELDWORK_SHARE_ALL,
     );
 
     const row = h.responses[0]!;
@@ -386,7 +387,7 @@ describe('버전 가드와 이관', () => {
       saveAdminEdit(
         { surveyId: SURVEY_ID, responseId: RESPONSE_ID, questionResponses: {}, versionId: 'v84' },
         EDITOR,
-        false,
+        false, FIELDWORK_SHARE_ALL,
       ),
     ).rejects.toMatchObject({ reason: 'version_conflict' });
 
@@ -407,7 +408,7 @@ describe('버전 가드와 이관', () => {
           versionId: 'v84',
         },
         EDITOR,
-        false,
+        false, FIELDWORK_SHARE_ALL,
       ),
     ).resolves.toEqual({ ok: true });
 
@@ -444,7 +445,7 @@ describe('버전 가드와 이관', () => {
         versionId: 'v84',
       },
       EDITOR,
-      false,
+      false, FIELDWORK_SHARE_ALL,
     );
 
     expect(h.lastSetPayload?.['versionId']).toBe('v84');
@@ -464,7 +465,7 @@ describe('버전 가드와 이관', () => {
           versionId: 'v84',
         },
         EDITOR,
-        false,
+        false, FIELDWORK_SHARE_ALL,
       ),
     ).resolves.toEqual({ ok: true });
 
@@ -487,7 +488,7 @@ describe('버전 가드와 이관', () => {
           versionId: 'v84',
         },
         EDITOR,
-        false,
+        false, FIELDWORK_SHARE_ALL,
       ),
     ).resolves.toEqual({ ok: true });
 
@@ -509,7 +510,7 @@ describe('버전 가드와 이관', () => {
       saveAdminEdit(
         { surveyId: SURVEY_ID, responseId: RESPONSE_ID, questionResponses: {}, versionId: null },
         EDITOR,
-        false,
+        false, FIELDWORK_SHARE_ALL,
       ),
     ).resolves.toEqual({ ok: true });
 

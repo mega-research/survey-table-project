@@ -104,6 +104,7 @@ describe('AdminResponseViewPage', () => {
 
     expect(vi.mocked(requireSurveyConsolePage)).toHaveBeenCalledWith(SURVEY_ID, {
       viewOnly: 'responseViewGrant',
+      share: 'allow',
     });
     const props = findEditorProps(rendered);
     expect(props?.['readOnly']).toBe(true);

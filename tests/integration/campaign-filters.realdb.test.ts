@@ -24,6 +24,7 @@ import {
 } from '@/server/read-models/contact-filter-resolution';
 
 import { resolvedFilterForTest } from '../helpers/resolved-contact-filter';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 const run = process.env['RUN_REALDB'] === '1' ? describe : describe.skip;
 
@@ -218,7 +219,7 @@ run('캠페인 필터 실 DB 왕복', () => {
     });
 
     // 단체 메일 깔때기의 응답 열은 스킴과 무관한 고정 열이다(surface: 'mail').
-    const filterCtx = await loadContactFilterContext(surveyId, 'real', {
+    const filterCtx = await loadContactFilterContext(surveyId, 'real', { share: FIELDWORK_SHARE_ALL,
       isGuest: false,
       surface: 'mail',
     });

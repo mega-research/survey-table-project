@@ -47,6 +47,7 @@ import {
 import type { FilterClause } from '@/lib/operations/filter-shared';
 import { FILTER_SOURCE } from '@/lib/operations/filter-shared';
 import { getOperationsDataScope } from '@/server/data-scope';
+import { resolveGuestShare } from '@/server/fieldwork-share-scope';
 import { canOpenResponseView, isGuestViewer, isViewOnlyViewer } from '@/lib/auth/guest-viewer';
 
 export const metadata: Metadata = {
@@ -79,7 +80,9 @@ interface PageProps {
 export default async function ProfilesPage({ params, searchParams }: PageProps) {
   const { id: surveyId } = await params;
   // 미들웨어를 통과한 무권한 세션을 거른다 — 이 설문에 접근할 수 있는 계정만.
-  await requireSurveyConsolePage(surveyId, { viewOnly: 'allow' });
+  // 담당 범위에 묶인 게스트에게도 연다 — 그 범위 대상의 응답만 싣는다(대상 없는 응답은 빠진다).
+  const user = await requireSurveyConsolePage(surveyId, { viewOnly: 'allow', share: 'allow' });
+  const share = resolveGuestShare(user.id, surveyId);
   const sp = await searchParams;
 
   // col/q 는 다중 조건 필터로 전환돼 배열일 수 있다 — normalize 는 스칼라 파라미터만 받는다.
@@ -174,6 +177,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
     listResponsesForProfiles({
       surveyId,
       scope,
+      share,
       pageSize: PROFILES_PAGE_SIZE,
       page: args.page,
       status: args.status,

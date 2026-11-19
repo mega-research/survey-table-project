@@ -52,6 +52,7 @@ async function main() {
   const { host, file: envSource } = loadOpsEnv(args.env);
   const { getSurveyForResponse } = await import('@/server/survey-builder/services/survey-read');
   const { loadPreviewContactSeed } = await import('@/server/contacts/services/preview-contact');
+  const { FIELDWORK_SHARE_ALL } = await import('@/server/fieldwork-share-scope');
 
   const preview = await getSurveyForResponse(
     { surveyId },
@@ -62,6 +63,7 @@ async function main() {
     surveyId,
     isTest,
     structure: preview.survey,
+    share: FIELDWORK_SHARE_ALL,
     ...(resid !== undefined ? { resid } : {}),
   });
   if (resid !== undefined && !seed)

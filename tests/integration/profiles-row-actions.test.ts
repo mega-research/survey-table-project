@@ -18,6 +18,7 @@ import type { StatusCounts } from '@/lib/operations/aggregate-status-format';
 import * as aggregateStatusServer from '@/server/operations/services/aggregate-status';
 import * as profilesServer from '@/server/operations/services/profiles';
 import type { ListProfilesResult } from '@/server/operations/services/profiles';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 // ========================
 // 모듈 모킹
@@ -236,8 +237,10 @@ vi.mock('drizzle-orm', async (importOriginal) => {
         return false;
       };
     },
-    and: (...conds: Array<(row: Record<string, unknown>) => boolean>) => {
-      return (row: Record<string, unknown>) => conds.every((c) => c(row));
+    // 실제 drizzle `and` 처럼 undefined 조건(담당 범위 `all`)은 건너뛴다
+    and: (...conds: Array<((row: Record<string, unknown>) => boolean) | undefined>) => {
+      return (row: Record<string, unknown>) =>
+        conds.every((c) => c === undefined || c(row));
     },
     isNull: (col: { __col?: string }) => {
       // saveAdminEdit 의 isNull(deletedAt) 가드를 predicate 로 변환
@@ -521,6 +524,7 @@ describe('profiles-row-actions', () => {
         view: 'active' as const,
         clauses: [],
         scope: 'real' as const,
+        share: FIELDWORK_SHARE_ALL,
       };
 
       const before = await profilesServer.listResponsesForProfiles(normalizedArgs);
@@ -548,12 +552,12 @@ describe('profiles-row-actions', () => {
 
       vi.spyOn(aggregateStatusServer, 'aggregateStatus').mockImplementation(stubAggregateStatus);
 
-      const before = await aggregateStatusServer.aggregateStatus(surveyId, 'real');
+      const before = await aggregateStatusServer.aggregateStatus(surveyId, 'real', FIELDWORK_SHARE_ALL);
       expect(before.completed).toBeGreaterThanOrEqual(1);
 
       await softDeleteResponse({ surveyId, responseId });
 
-      const after = await aggregateStatusServer.aggregateStatus(surveyId, 'real');
+      const after = await aggregateStatusServer.aggregateStatus(surveyId, 'real', FIELDWORK_SHARE_ALL);
       expect(after.completed).toBe(before.completed - 1);
 
       vi.restoreAllMocks();
@@ -578,6 +582,7 @@ describe('profiles-row-actions', () => {
         view: 'active' as const,
         clauses: [],
         scope: 'real' as const,
+        share: FIELDWORK_SHARE_ALL,
       };
 
       // 1단계: softDelete
@@ -591,7 +596,7 @@ describe('profiles-row-actions', () => {
         ...normalizedArgs,
         view: 'deleted',
       });
-      const midCounts = await aggregateStatusServer.aggregateStatus(surveyId, 'real');
+      const midCounts = await aggregateStatusServer.aggregateStatus(surveyId, 'real', FIELDWORK_SHARE_ALL);
       expect(midActive.total).toBe(0);
       expect(midDeleted.total).toBe(1);
       expect(midCounts.completed).toBe(0);
@@ -607,7 +612,7 @@ describe('profiles-row-actions', () => {
         ...normalizedArgs,
         view: 'deleted',
       });
-      const afterCounts = await aggregateStatusServer.aggregateStatus(surveyId, 'real');
+      const afterCounts = await aggregateStatusServer.aggregateStatus(surveyId, 'real', FIELDWORK_SHARE_ALL);
       expect(afterActive.total).toBe(1);
       expect(afterDeleted.total).toBe(0);
       expect(afterCounts.completed).toBe(1);
@@ -638,7 +643,7 @@ describe('profiles-row-actions', () => {
           versionId: null,
         },
         { id: 'admin-1', email: 'a@b.com' },
-        false,
+        false, FIELDWORK_SHARE_ALL,
       );
 
       const after = h.responseStore.get(responseId);
@@ -660,7 +665,7 @@ describe('profiles-row-actions', () => {
         saveAdminEdit(
           { surveyId, responseId, questionResponses: {}, versionId: null },
           { id: 'admin-1', email: 'a@b.com' },
-          false,
+          false, FIELDWORK_SHARE_ALL,
         ),
       ).rejects.toMatchObject({ reason: 'response_deleted' });
     });
@@ -671,7 +676,7 @@ describe('profiles-row-actions', () => {
         saveAdminEdit(
           { surveyId, responseId: 'nonexistent-id', questionResponses: {}, versionId: null },
           { id: 'admin-1', email: 'a@b.com' },
-          false,
+          false, FIELDWORK_SHARE_ALL,
         ),
       ).rejects.toMatchObject({ reason: 'response_not_found' });
     });

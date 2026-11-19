@@ -15,6 +15,7 @@ import { QuotaStatusPanel } from '@/features/operations/quota/quota-status-panel
 import { ResponseTimeStats } from '@/features/operations/response-time-stats';
 import { exportMenuOf, isViewOnlyViewer } from '@/lib/auth/guest-viewer';
 import { getOperationsDataScope } from '@/server/data-scope';
+import { isShareRestricted, resolveGuestShare } from '@/server/fieldwork-share-scope';
 import {
   aggregateDaily,
   aggregateDailyAvailableDates,
@@ -89,7 +90,9 @@ export default async function OperationsOverviewPage({
 }: OperationsOverviewPageProps) {
   const { id: surveyId } = await params;
   // 미들웨어를 통과한 무권한 세션을 거른다 — 이 설문에 접근할 수 있는 계정만.
-  await requireSurveyConsolePage(surveyId, { viewOnly: 'allow' });
+  // 담당 범위에 묶인 게스트에게도 연다 — 응답 수·일자별·응답시간·이탈·체류가 그 범위 대상의 응답만 센다.
+  const user = await requireSurveyConsolePage(surveyId, { viewOnly: 'allow', share: 'allow' });
+  const share = resolveGuestShare(user.id, surveyId);
   const {
     mode = 'day',
     date,
@@ -106,7 +109,7 @@ export default async function OperationsOverviewPage({
     isViewOnlyViewer(surveyId),
     exportMenuOf(surveyId),
   ]);
-  const availableDates = await aggregateDailyAvailableDates(surveyId, scope);
+  const availableDates = await aggregateDailyAvailableDates(surveyId, scope, share);
   const latestAvailable =
     availableDates.length > 0 ? availableDates[availableDates.length - 1] : undefined;
   const effectiveDate = mode === 'hour' ? (date ?? latestAvailable ?? todayKst()) : undefined;
@@ -121,20 +124,23 @@ export default async function OperationsOverviewPage({
     quotaStatus,
     survey,
   ] = await Promise.all([
-    aggregateStatus(surveyId, scope),
+    aggregateStatus(surveyId, scope, share),
     aggregateDaily({
       surveyId,
       scope,
+      share,
       mode,
       ...(effectiveDate !== undefined ? { hourModeDate: effectiveDate } : {}),
     }),
     // 보기만 하는 게스트에게 감추는 카드 — 그리지 않으므로 집계도 하지 않는다.
-    viewOnly ? null : getDailyStats(surveyId, scope),
-    viewOnly ? null : getResponseTime(surveyId, scope),
-    viewOnly ? null : getDropFunnel(surveyId, scope),
-    viewOnly ? null : getPageDwell(surveyId, scope),
+    viewOnly ? null : getDailyStats(surveyId, scope, share),
+    viewOnly ? null : getResponseTime(surveyId, scope, share),
+    viewOnly ? null : getDropFunnel(surveyId, scope, share),
+    viewOnly ? null : getPageDwell(surveyId, scope, share),
     // 테스트 모드에서도 테스트 응답 기준으로 집계해 보여준다(표시 전용 — 집행은 실응답만).
-    getQuotaStatus(surveyId, scope),
+    // 담당 범위에 묶인 게스트에게는 쿼터 조각을 그리지 않는다 — 쿼터 집계는 설문 전체 기준이라
+    // 남의 범위 몫이 숫자로 드러난다(범위별 쿼터 투영은 만들지 않았다).
+    isShareRestricted(share) ? null : getQuotaStatus(surveyId, scope),
     getSurveyById(surveyId),
   ]);
 

@@ -20,6 +20,11 @@ interface OperationsTabStripProps {
   viewOnly?: boolean;
   /** 조사표가 붙은 설문인가 — 문항 수요 탭은 이때만 낸다. */
   hasSurveyDocument?: boolean;
+  /**
+   * 담당 범위에 묶인 게스트 — 범위로 거르지 않는 화면(메일·문항 수요)의 탭을 내지 않는다.
+   * 경로는 미들웨어와 페이지 가드가 따로 막는다.
+   */
+  shareRestricted?: boolean;
 }
 
 /**
@@ -32,6 +37,7 @@ interface OperationsTabStripProps {
  * - "쿼터" 는 단일 페이지 링크 (`/operations/quota`)
  * - "문항 수요" 는 조사표가 붙은 설문에서만 나타난다 — 다른 설문에서는 쓸 일이 없는 탭이다
  * - 보기만 하는 게스트(`viewOnly`)에게는 「실사 현황」(응답 현황·응답 내역)만 낸다
+ * - 담당 범위에 묶인 게스트(`shareRestricted`)에게는 「메일」·「문항 수요」를 내지 않는다
  * - shadcn NavigationMenu primitive 가 hover/click/키보드 표준을 처리하며
  *   Trigger 의 ChevronDown 이 내장돼 있어 caret 마크업은 별도로 그리지 않는다.
  */
@@ -40,6 +46,7 @@ export function OperationsTabStrip({
   isGuest,
   viewOnly = false,
   hasSurveyDocument = false,
+  shareRestricted = false,
 }: OperationsTabStripProps) {
   const pathname = usePathname() ?? '';
   const operationsBase = `/admin/surveys/${surveyId}/operations`;
@@ -173,31 +180,33 @@ export function OperationsTabStrip({
                 </NavigationMenuContent>
               </NavigationMenuItem>
 
-              <NavigationMenuItem>
-                <NavigationMenuTrigger
-                  className={cn(
-                    'flex h-auto items-center gap-1 rounded-none border-b-2 bg-transparent px-4 py-3 text-sm transition-colors hover:bg-transparent data-[state=open]:bg-transparent',
-                    isMailActive
-                      ? 'border-blue-600 font-semibold text-blue-600 hover:text-blue-600'
-                      : 'border-transparent text-slate-500 hover:text-slate-900',
-                  )}
-                >
-                  메일
-                </NavigationMenuTrigger>
-                <NavigationMenuContent className="min-w-[180px] p-1">
-                  <SubLink href={mailTemplatesHref} active={isMailTemplatesActive}>
-                    템플릿
-                  </SubLink>
-                  <SubLink href={mailCampaignsHref} active={isMailCampaignsActive}>
-                    단체 발송
-                  </SubLink>
-                  <SubLink href={mailCostHref} active={false}>
-                    비용 정산
-                  </SubLink>
-                </NavigationMenuContent>
-              </NavigationMenuItem>
+              {!shareRestricted && (
+                <NavigationMenuItem>
+                  <NavigationMenuTrigger
+                    className={cn(
+                      'flex h-auto items-center gap-1 rounded-none border-b-2 bg-transparent px-4 py-3 text-sm transition-colors hover:bg-transparent data-[state=open]:bg-transparent',
+                      isMailActive
+                        ? 'border-blue-600 font-semibold text-blue-600 hover:text-blue-600'
+                        : 'border-transparent text-slate-500 hover:text-slate-900',
+                    )}
+                  >
+                    메일
+                  </NavigationMenuTrigger>
+                  <NavigationMenuContent className="min-w-[180px] p-1">
+                    <SubLink href={mailTemplatesHref} active={isMailTemplatesActive}>
+                      템플릿
+                    </SubLink>
+                    <SubLink href={mailCampaignsHref} active={isMailCampaignsActive}>
+                      단체 발송
+                    </SubLink>
+                    <SubLink href={mailCostHref} active={false}>
+                      비용 정산
+                    </SubLink>
+                  </NavigationMenuContent>
+                </NavigationMenuItem>
+              )}
 
-              {hasSurveyDocument && (
+              {hasSurveyDocument && !shareRestricted && (
                 <NavigationMenuItem>
                   <Link
                     href={demandHref}

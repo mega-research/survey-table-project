@@ -149,4 +149,24 @@ describe('requireSurveyConsolePage', () => {
     );
     expect(notFound).not.toHaveBeenCalled();
   });
+  it('담당 범위에 묶인 게스트는 범위를 거르는 화면(share: allow)만 연다', async () => {
+    // from2@ — guest-grants.ts 의 GUEST_TARGET_SHARES 에 박힌 실제 쌍.
+    const FROM2 = 'ddcdc638-3cc2-4a84-acd9-204b66b57e28';
+    const PHYSICAL_AI_LINKS = '1b88ae5a-257a-40ad-80a4-a6a698fde05a';
+    process.env['ADMIN_USER_IDS'] = 'admin-1';
+    process.env['GUEST_SURVEY_GRANTS'] = `${FROM2}:${PHYSICAL_AI_LINKS},guest-1:${PHYSICAL_AI_LINKS}`;
+    requireAuth.mockResolvedValue({ id: FROM2 });
+
+    const guard = await loadGuard();
+    // 기본은 거부 — 단체 메일처럼 범위를 거르지 않는 화면.
+    await expect(guard(PHYSICAL_AI_LINKS)).rejects.toThrow('NEXT_NOT_FOUND');
+    await expect(guard(PHYSICAL_AI_LINKS, { viewOnly: 'allow' })).rejects.toThrow('NEXT_NOT_FOUND');
+    await expect(guard(PHYSICAL_AI_LINKS, { share: 'allow' })).resolves.toEqual({ id: FROM2 });
+
+    // 같은 설문의 범위 없는 게스트·관리자는 정책과 무관하게 연다.
+    requireAuth.mockResolvedValue({ id: 'guest-1' });
+    await expect(guard(PHYSICAL_AI_LINKS)).resolves.toEqual({ id: 'guest-1' });
+    requireAuth.mockResolvedValue({ id: 'admin-1' });
+    await expect(guard(PHYSICAL_AI_LINKS)).resolves.toEqual({ id: 'admin-1' });
+  });
 });

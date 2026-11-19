@@ -1,7 +1,9 @@
 import { ORPCError } from '@orpc/server';
+import { type SQL, and } from 'drizzle-orm';
 import 'server-only';
 
 import { type DbOrTx } from '@/db';
+import { buildContactsFilterSql } from '@/lib/operations/contacts-filter-sql.server';
 import {
   withoutContactOwnerColumn,
   type NormalizedContactColumnScheme,
@@ -13,6 +15,7 @@ import {
   type FilterClause,
 } from '@/lib/operations/filter-shared';
 import type { OperationsDataScope } from '@/server/data-scope';
+import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share-scope';
 import type { ContactResultCode } from '@/shared/contracts/contacts';
 import type { ContactAssignmentOption } from '@/shared/contracts/contacts-io';
 
@@ -44,7 +47,7 @@ import {
  * - **조사 대상 필터 해석** (2026-10-19): 조사 대상 목록 · 단체 메일 위저드 · `fetchCandidateIds` · 교체
  *   적용(미리보기·오른쪽 목록 포함) · 컨택원 수정 화면이 `server/read-models/contact-filter-resolution.ts` 한
  *   곳으로 조건을 읽는다.
- * - `loadContactFilterContext(surveyId, scope, { isGuest, surface: 'contacts' | 'mail', executor? })` 가
+ * - `loadContactFilterContext(surveyId, scope, { isGuest, surface: 'contacts' | 'mail', share, executor? })` 가
  *   스킴(게스트면 컨택원 열 제거)·결과코드·컨택원 선택지(게스트면 빈 배열)·검색바 후보·열 머리 후보(`mail` 이면
  *   미리보기 고정 열 `CAMPAIGN_HEADER_FILTER_COLUMNS` 를 덧붙임)를 읽고 — 페이지는 같은 컨텍스트를 UI props
  *   에도 쓴다 — `resolveContactFilter(ctx, input, { mode })` 가 ID 목록을 읽어 해석한다.
@@ -108,6 +111,11 @@ export type ContactFilterContext = Readonly<{
   /** 이 파티션의 컨택원 — 게스트면 빈 배열 */
   assignmentOptions: ContactAssignmentOption[];
   isGuest: boolean;
+  /**
+   * 담당 범위(`server/fieldwork-share-scope`) — 해석 결과에 **강제 절**로 실린다. 사용자가 고른 조건과 AND 로
+   * 묶이고 입력으로는 지울 수 없다(입력 모양에 이 칸이 없다). 관리자·범위 등재가 없는 게스트는 `all`.
+   */
+  share: FieldworkShare;
 }> & { readonly [contextBrand]: true };
 
 /** 입력 — 캠페인 스냅샷과 같은 모양. 주소는 `contactFilterInputFromUrl` 로 바꾼다. */
@@ -133,14 +141,39 @@ export type ResolvedContactFilter<M extends ContactFilterMode = ContactFilterMod
   /** 열 머리 필터 절만 */
   headerClauses: FilterClause[];
   unresolved: UnresolvedClause[];
+  /**
+   * 강제 절 — 컨텍스트의 담당 범위. `clauses` 와 따로 두는 이유는 그것이 열 조건이 아니라 열람자의
+   * 경계라서다: 「조건 줄 복원」·「필터가 걸렸는가」에 섞이면 화면에 지울 수 없는 조건이 보인다.
+   * SQL 소비자는 `resolvedContactFilterSql` 로 둘을 함께 건다 — `clauses` 만 따로 쓰지 말 것.
+   */
+  share: FieldworkShare;
 }> & { readonly [resolvedBrand]: M };
+
+/**
+ * 해석 결과의 SQL — 사용자 조건(`clauses`) AND 강제 절(담당 범위). 조사 대상 행(`contact_targets`)에
+ * 거는 술어다. 조사 대상 목록이 필터를 SQL 로 바꿀 때 이것을 쓴다.
+ */
+export function resolvedContactFilterSql(filter: ResolvedContactFilter): SQL {
+  const forced = shareTargetCondition(filter.share);
+  const user = buildContactsFilterSql(filter.clauses);
+  return forced ? and(user, forced)! : user;
+}
 
 export async function loadContactFilterContext(
   surveyId: string,
   scope: OperationsDataScope,
-  opts: { isGuest: boolean; surface: ContactFilterSurface; executor?: DbOrTx },
+  opts: {
+    isGuest: boolean;
+    surface: ContactFilterSurface;
+    /**
+     * 담당 범위 — **필수다**(빠뜨리면 열리는 쪽이라 tsc 가 잡게 한다). 범위 게스트가 지나는 표면은
+     * `resolveGuestShare(userId, surveyId)`, 관리자만 지나는 표면은 `FIELDWORK_SHARE_ALL` 을 명시한다.
+     */
+    share: FieldworkShare;
+    executor?: DbOrTx;
+  },
 ): Promise<ContactFilterContext> {
-  const { isGuest, surface, executor } = opts;
+  const { isGuest, surface, share, executor } = opts;
   const [loadedScheme, resultCodes, assignmentOptions] = await Promise.all([
     getContactColumnScheme(surveyId, scope),
     getContactResultCodes(surveyId),
@@ -167,6 +200,7 @@ export async function loadContactFilterContext(
     resultCodes,
     assignmentOptions,
     isGuest,
+    share,
   } as ContactFilterContext;
 }
 
@@ -262,7 +296,13 @@ export function resolveContactFilterWith<M extends ContactFilterMode>(
       op: builderClauses.length === 0 && i === 0 ? null : ('AND' as const),
     })),
   ];
-  return { clauses, builderClauses, headerClauses, unresolved } as unknown as ResolvedContactFilter<M>;
+  return {
+    clauses,
+    builderClauses,
+    headerClauses,
+    unresolved,
+    share: ctx.share,
+  } as unknown as ResolvedContactFilter<M>;
 }
 
 function unresolvedMessage(u: UnresolvedClause): string {

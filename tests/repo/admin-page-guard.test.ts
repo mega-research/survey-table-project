@@ -18,8 +18,16 @@ import { guestPathRedirect } from '@/lib/auth/guest-grants';
 type Guard =
   /** 관리자 전용 — `await requireAdminPage()`. 게스트는 미들웨어도 막는다. */
   | { kind: 'admin' }
-  /** 게스트에게도 여는 설문 화면 — `await requireSurveyConsolePage(surveyId[, { viewOnly }])`. */
-  | { kind: 'console'; viewOnly?: 'allow' | 'previewGrant' | 'responseViewGrant' }
+  /**
+   * 게스트에게도 여는 설문 화면 — `await requireSurveyConsolePage(surveyId[, { viewOnly, share }])`.
+   * `share: 'allow'` 는 담당 범위에 묶인 게스트(`GUEST_TARGET_SHARES`)에게도 연다는 뜻이다 — 그 화면이
+   * 범위를 어떻게 거르는지는 `tests/helpers/guest-share-surfaces.ts` 가 따로 쥔다.
+   */
+  | {
+      kind: 'console';
+      viewOnly?: 'allow' | 'previewGrant' | 'responseViewGrant';
+      share?: 'allow';
+    }
   /** 클라이언트 컴포넌트 — 서버가 렌더하는 데이터가 없고, 데이터는 procedure 로만 온다. */
   | { kind: 'client'; reason: string }
   /** 로그인 없이 여는 화면. */
@@ -27,6 +35,8 @@ type Guard =
 
 const ADMIN: Guard = { kind: 'admin' };
 const CONSOLE: Guard = { kind: 'console' };
+/** 담당 범위에 묶인 게스트에게도 여는 화면 */
+const CONSOLE_SHARED: Guard = { kind: 'console', share: 'allow' };
 const OPS = 'admin/surveys/[id]/operations';
 
 const PAGES: Record<string, Guard> = {
@@ -55,16 +65,16 @@ const PAGES: Record<string, Guard> = {
   'admin/surveys/[id]/analytics': ADMIN,
   'analytics': ADMIN,
   'analytics/[surveyId]': ADMIN,
-  'admin/surveys/[id]/preview': { kind: 'console', viewOnly: 'previewGrant' },
+  'admin/surveys/[id]/preview': { kind: 'console', viewOnly: 'previewGrant', share: 'allow' },
 
   // 운영 콘솔 — 보기만 하는 게스트에게도 여는 둘
-  [`${OPS}/overview`]: { kind: 'console', viewOnly: 'allow' },
-  [`${OPS}/profiles`]: { kind: 'console', viewOnly: 'allow' },
+  [`${OPS}/overview`]: { kind: 'console', viewOnly: 'allow', share: 'allow' },
+  [`${OPS}/profiles`]: { kind: 'console', viewOnly: 'allow', share: 'allow' },
 
-  // 운영 콘솔 — 게스트에게 여는 화면
-  [`${OPS}/contacts`]: CONSOLE,
-  [`${OPS}/contacts/[contactId]`]: CONSOLE,
-  [`${OPS}/contacts/new`]: CONSOLE,
+  // 운영 콘솔 — 게스트에게 여는 화면 (CONSOLE_SHARED 는 담당 범위에 묶인 게스트에게도)
+  [`${OPS}/contacts`]: CONSOLE_SHARED,
+  [`${OPS}/contacts/[contactId]`]: CONSOLE_SHARED,
+  [`${OPS}/contacts/new`]: CONSOLE_SHARED,
   [`${OPS}/contacts/prior-answers`]: CONSOLE,
   [`${OPS}/demand`]: CONSOLE,
   [`${OPS}/mail/campaigns`]: CONSOLE,
@@ -73,10 +83,14 @@ const PAGES: Record<string, Guard> = {
   [`${OPS}/mail/templates`]: CONSOLE,
   [`${OPS}/mail/templates/new`]: CONSOLE,
   [`${OPS}/mail/templates/[mid]/edit`]: CONSOLE,
-  [`${OPS}/profiles/[responseId]/edit`]: CONSOLE,
-  [`${OPS}/profiles/[responseId]/view`]: { kind: 'console', viewOnly: 'responseViewGrant' },
+  [`${OPS}/profiles/[responseId]/edit`]: CONSOLE_SHARED,
+  [`${OPS}/profiles/[responseId]/view`]: {
+    kind: 'console',
+    viewOnly: 'responseViewGrant',
+    share: 'allow',
+  },
   [`${OPS}/profiles/columns`]: CONSOLE,
-  [`${OPS}/report`]: CONSOLE,
+  [`${OPS}/report`]: CONSOLE_SHARED,
   [`${OPS}/report/columns`]: CONSOLE,
 
   // 운영 콘솔 — 관리자 전용 (미들웨어의 blockedSubpaths 와 같은 집합)
@@ -121,9 +135,13 @@ function samplePath(route: string): string {
 function guardCallPattern(guard: Guard): RegExp | null {
   if (guard.kind === 'admin') return /await requireAdminPage\(\)/;
   if (guard.kind === 'console') {
-    return guard.viewOnly
+    const options = [
+      guard.viewOnly ? `viewOnly: '${guard.viewOnly}'` : null,
+      guard.share ? `share: '${guard.share}'` : null,
+    ].filter((part) => part !== null);
+    return options.length > 0
       ? new RegExp(
-          `await requireSurveyConsolePage\\(surveyId, \\{ viewOnly: '${guard.viewOnly}' \\}\\)`,
+          `await requireSurveyConsolePage\\(surveyId, \\{ ${options.join(', ')} \\}\\)`,
         )
       : /await requireSurveyConsolePage\(surveyId\)/;
   }
@@ -186,6 +204,13 @@ describe('관리자 화면 진입 가드', () => {
         guestPathRedirect(path, [SURVEY_ID], [SURVEY_ID], [SURVEY_ID]) === null;
       const viewOnlyResponseViewOpen =
         guestPathRedirect(path, [SURVEY_ID], [SURVEY_ID], [], [SURVEY_ID]) === null;
+
+      const shareRestrictedOpen =
+        guestPathRedirect(path, [SURVEY_ID], [], [], [], [SURVEY_ID]) === null;
+      const expectShareRestrictedOpen = guard.kind === 'console' && guard.share === 'allow';
+      if (shareRestrictedOpen !== expectShareRestrictedOpen) {
+        mismatches.push(`${route} — 담당 범위 게스트: 미들웨어 ${shareRestrictedOpen}`);
+      }
 
       const expectGuestOpen = guard.kind === 'console';
       const expectViewOnlyOpen = guard.kind === 'console' && guard.viewOnly === 'allow';

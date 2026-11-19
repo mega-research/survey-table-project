@@ -5,6 +5,7 @@ import { createServerClient } from '@supabase/ssr';
 import {
   GUEST_FORCE_LOGOUT_PATH,
   getGuestSurveyIds,
+  getShareRestrictedSurveyIds,
   getViewOnlyPreviewSurveyIds,
   getViewOnlyResponseViewSurveyIds,
   getViewOnlySurveyIds,
@@ -79,6 +80,7 @@ export async function updateSession(request: NextRequest) {
           getViewOnlySurveyIds(user.id),
           getViewOnlyPreviewSurveyIds(user.id),
           getViewOnlyResponseViewSurveyIds(user.id),
+          getShareRestrictedSurveyIds(user.id),
         );
         if (dest) {
           const url = request.nextUrl.clone();

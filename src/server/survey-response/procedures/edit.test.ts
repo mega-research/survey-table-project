@@ -43,6 +43,7 @@ describe('surveyResponse.edit procedures', () => {
       input,
       { id: 'admin-1', email: 'a@b.com' },
       false,
+      { kind: 'all' },
     );
     expect(res).toEqual({ ok: true });
   });
@@ -148,6 +149,7 @@ describe('surveyResponse.edit procedures', () => {
       input,
       { id: 'guest-1', email: 'g@b.com' },
       true,
+      { kind: 'all' },
     );
     expect(res).toEqual({ ok: true });
   });
@@ -179,6 +181,7 @@ describe('surveyResponse.edit procedures', () => {
       input,
       { id: 'guest-1', email: 'g@b.com' },
       true,
+      { kind: 'all' },
     );
     expect(res).toEqual({ ok: true });
   });
@@ -247,6 +250,7 @@ describe('surveyResponse.edit procedures', () => {
       expect.objectContaining({ versionId: 'v-latest' }),
       expect.anything(),
       expect.anything(),
+      { kind: 'all' },
     );
   });
 

@@ -6,6 +6,7 @@ import { db } from '@/db';
 import { TEST_VERSION_STATUS } from '@/shared/contracts/survey';
 import { surveyResponses, surveyVersions } from '@/db/schema';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
+import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share-scope';
 import { notDeletedResponse, notTestResponse } from '@/server/response-filters';
 
 // ========================
@@ -16,11 +17,27 @@ import { notDeletedResponse, notTestResponse } from '@/server/response-filters';
 // 테스트 응답도 열람·수정할 수 있어야 한다(단건 조회는 "모수" 통계가 아님).
 export async function getResponseById(
   responseId: string,
-  options: { includeDeleted?: boolean } = {},
+  /**
+   * `surveyId` 는 **조회 조건이다** — 호출측의 사후 확인이 아니다. id 로만 찾고 호출측이 설문을 대조하면
+   * 그 사이에 `decryptQuestionResponses` 가 이미 돌아 남의 설문 응답 원문이 복호화된다.
+   */
+  options: {
+    surveyId: string;
+    includeDeleted?: boolean;
+    /**
+     * 담당 범위 — **필수**, 같은 이유로 조회 조건이다. 범위 밖 응답은 복호화 전에 WHERE 에서 떨어져
+     * 「없음」이 된다(범위 게스트가 남의 범위 응답 id 를 알아도 존재가 드러나지 않는다). 관리자만 지나는
+     * 호출은 `FIELDWORK_SHARE_ALL`.
+     */
+    share: FieldworkShare;
+  },
 ) {
-  const where = options.includeDeleted
-    ? eq(surveyResponses.id, responseId)
-    : and(eq(surveyResponses.id, responseId), notDeletedResponse);
+  const scoped = and(
+    eq(surveyResponses.id, responseId),
+    eq(surveyResponses.surveyId, options.surveyId),
+    shareTargetCondition(options.share, surveyResponses.contactTargetId),
+  );
+  const where = options.includeDeleted ? scoped : and(scoped, notDeletedResponse);
   const response = await db.query.surveyResponses.findFirst({ where });
   if (!response) return response;
   return {

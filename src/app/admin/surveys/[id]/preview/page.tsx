@@ -13,6 +13,7 @@ import {
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
 import { loadPreviewContactSeed } from '@/server/contacts/services/preview-contact';
 import { loadOperationsDataScope } from '@/server/data-scope';
+import { resolveGuestShare } from '@/server/fieldwork-share-scope';
 
 import { CopyPreviewLinkButton } from './copy-preview-link-button';
 
@@ -27,7 +28,9 @@ export const metadata = { title: '설문 보기' };
 export default async function SurveyPreviewPage({ params }: PageProps) {
   const { id: surveyId } = await params;
   // 미들웨어를 통과한 무권한 세션을 거른다 — 이 설문에 접근할 수 있는 계정만.
-  await requireSurveyConsolePage(surveyId, { viewOnly: 'previewGrant' });
+  // 담당 범위에 묶인 게스트에게도 연다 — 명단 값 씨앗이 그 범위 안의 첫 대상이다.
+  const user = await requireSurveyConsolePage(surveyId, { viewOnly: 'previewGrant', share: 'allow' });
+  const share = resolveGuestShare(user.id, surveyId);
   const survey = await getSurveyById(surveyId);
   if (!survey || survey.deletedAt) notFound();
 
@@ -87,6 +90,7 @@ export default async function SurveyPreviewPage({ params }: PageProps) {
     surveyId,
     isTest: (await loadOperationsDataScope(surveyId)) === 'test',
     structure: preview.survey,
+    share,
   });
 
   return (

@@ -6,6 +6,7 @@ import {
   canAccessSurvey,
   canViewOnlyGuestPreview,
   canViewOnlyGuestViewResponse,
+  isShareRestrictedGuest,
   isViewOnlyGuest,
 } from './guest-grants';
 import { requirePageUser } from './require-page-user';
@@ -18,6 +19,14 @@ import { requirePageUser } from './require-page-user';
  * - `responseViewGrant`: 응답 조회를 허용한 grant(`allowResponseView`)만 연다. 응답 조회 화면.
  */
 export type ViewOnlyPolicy = 'deny' | 'allow' | 'previewGrant' | 'responseViewGrant';
+
+/**
+ * 담당 범위에 묶인 게스트(`GUEST_TARGET_SHARES`)를 이 화면이 어떻게 다루는가.
+ * - `deny`(기본): 막는다. 이 화면의 조회가 범위를 거르지 않는다.
+ * - `allow`: 연다. 이 화면은 `resolveGuestShare` 로 범위를 받아 조회마다 넘기거나, 조사 대상 데이터를 싣지 않는다.
+ *   어느 쪽인지는 `tests/helpers/guest-share-surfaces.ts` 등재표에 적는다.
+ */
+export type SharePolicy = 'deny' | 'allow';
 
 /**
  * 게스트에게도 여는 설문 화면(운영 콘솔·설문 보기)의 RSC 진입 가드.
@@ -36,10 +45,14 @@ export type ViewOnlyPolicy = 'deny' | 'allow' | 'previewGrant' | 'responseViewGr
  */
 export async function requireSurveyConsolePage(
   surveyId: string,
-  options: { viewOnly?: ViewOnlyPolicy } = {},
+  options: { viewOnly?: ViewOnlyPolicy; share?: SharePolicy } = {},
 ) {
   const user = await requirePageUser();
   if (!canAccessSurvey(user.id, surveyId)) notFound();
+  // 담당 범위에 묶인 게스트 — 범위를 거르는 화면만 연다(기본 거부, 미들웨어와 같은 규칙).
+  if (isShareRestrictedGuest(user.id, surveyId) && (options.share ?? 'deny') !== 'allow') {
+    notFound();
+  }
   if (isViewOnlyGuest(user.id, surveyId)) {
     const policy = options.viewOnly ?? 'deny';
     const allowed =

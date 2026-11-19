@@ -1,5 +1,5 @@
 import { isGuestUser } from '@/lib/auth/guest-grants';
-import { assertSurveyAccess, assertSurveyWriteAccess, scoped } from '@/server/orpc';
+import { assertSurveyAccessInShare, assertSurveyWriteAccess, scoped } from '@/server/orpc';
 
 import {
   GetMailPreviewSampleInput,
@@ -14,8 +14,9 @@ const sample = scoped
   .input(GetMailPreviewSampleInput)
   .output(GetMailPreviewSampleOutput)
   .handler(({ context, input }) => {
-    assertSurveyAccess(context.user.id, input.surveyId);
-    return svc.getMailPreviewSample(input, { isGuest: isGuestUser(context.user.id) });
+    // 담당 범위에 묶인 게스트에게도 연다(단건 발송 미리보기) — 범위 밖 대상은 null 이다.
+    const share = assertSurveyAccessInShare(context.user.id, input.surveyId);
+    return svc.getMailPreviewSample(input, { isGuest: isGuestUser(context.user.id), share });
   });
 
 /**

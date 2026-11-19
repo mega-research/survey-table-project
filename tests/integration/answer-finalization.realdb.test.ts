@@ -16,6 +16,7 @@ import type { QuestionData, SurveyVersionSnapshot } from '@/shared/contracts/sur
 import type { ResponseStatus } from '@/shared/contracts/survey-response';
 import { completeResponse } from '@/server/survey-response/services/response-completion';
 import { saveAdminEdit } from '@/server/survey-response/services/response-edit';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 const isLocalDb =
   (process.env['DATABASE_URL'] ?? '').includes('127.0.0.1') ||
@@ -171,7 +172,7 @@ describe.skipIf(!isLocalDb)('응답 확정 실DB 왕복', () => {
         questionResponses: { 'q-ctrl': 'no', 'q-hid': '숨기 전에 적은 값' },
       },
       { id: null, email: null },
-      false,
+      false, FIELDWORK_SHARE_ALL,
     );
 
     const row = await readRow(responseId);

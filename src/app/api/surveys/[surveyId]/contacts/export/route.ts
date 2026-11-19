@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { requireAuth } from '@/lib/auth';
-import { canAccessSurvey, isGuestUser, isViewOnlyGuest } from '@/lib/auth/guest-grants';
+import {
+  canAccessSurvey,
+  isGuestUser,
+  isShareRestrictedGuest,
+  isViewOnlyGuest,
+} from '@/lib/auth/guest-grants';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import { resolveExportColumns } from '@/lib/operations/contacts-export-format';
 import {
@@ -44,7 +49,12 @@ async function handleContactsExport(
     });
     // 보기만 하는 게스트는 조사 대상 화면이 막혀 있다 — 이 주소를 직접 불러도 같은 판정이어야 한다
     // (미들웨어의 화면 차단은 /api 에 걸리지 않는다).
-    if (!canAccessSurvey(user.id, surveyId) || isViewOnlyGuest(user.id, surveyId)) {
+    // 담당 범위에 묶인 게스트도 받지 못한다 — 이 파일은 명단 전체(개인정보 평문)를 낸다.
+    if (
+      !canAccessSurvey(user.id, surveyId) ||
+      isViewOnlyGuest(user.id, surveyId) ||
+      isShareRestrictedGuest(user.id, surveyId)
+    ) {
       return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
     }
 

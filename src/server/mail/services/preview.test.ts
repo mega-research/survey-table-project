@@ -33,6 +33,7 @@ import { loadOperationsDataScope } from '@/server/data-scope';
 import { MailWrapper } from './template-wrapper';
 
 import { getMailPreviewSample, sendTestTemplateMail } from './preview';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 const sampleData: FirstContactSample = {
   id: 'ct-1',
@@ -64,7 +65,7 @@ describe('getMailPreviewSample', () => {
     vi.mocked(getFirstTestTargetSample).mockResolvedValue(testTarget);
     vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://survey.example.com');
 
-    const res = await getMailPreviewSample({ surveyId: 'sv-1' });
+    const res = await getMailPreviewSample({ surveyId: 'sv-1' }, { share: FIELDWORK_SHARE_ALL });
 
     expect(res).toEqual({
       attrs: testTarget.attrs,
@@ -83,7 +84,7 @@ describe('getMailPreviewSample', () => {
     vi.mocked(getFirstContactSample).mockResolvedValue(sampleData);
     vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://survey.example.com');
 
-    const res = await getMailPreviewSample({ surveyId: 'sv-1' }, { isGuest: true });
+    const res = await getMailPreviewSample({ surveyId: 'sv-1' }, { share: FIELDWORK_SHARE_ALL, isGuest: true });
 
     expect(getFirstTestTargetSample).not.toHaveBeenCalled();
     expect(res?.inviteUrl).toBe('https://survey.example.com/i/abc123');
@@ -95,7 +96,7 @@ describe('getMailPreviewSample', () => {
     vi.mocked(loadOperationsDataScope).mockResolvedValue('test');
     vi.mocked(getFirstContactSample).mockResolvedValue(null);
     vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://survey.example.com');
-    const res = await getMailPreviewSample({ surveyId: 'sv-1' });
+    const res = await getMailPreviewSample({ surveyId: 'sv-1' }, { share: FIELDWORK_SHARE_ALL });
     expect(res).toBeNull();
     expect(getFirstContactSample).toHaveBeenCalledWith('sv-1', 'test');
   });
@@ -104,7 +105,7 @@ describe('getMailPreviewSample', () => {
     vi.mocked(loadOperationsDataScope).mockResolvedValue('real');
     vi.mocked(getFirstContactSample).mockResolvedValue(sampleData);
     vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://survey.example.com/');
-    const res = await getMailPreviewSample({ surveyId: 'sv-1' });
+    const res = await getMailPreviewSample({ surveyId: 'sv-1' }, { share: FIELDWORK_SHARE_ALL });
     expect(res).toEqual({
       attrs: sampleData.attrs,
       inviteUrl: 'https://survey.example.com/i/abc123',
@@ -118,7 +119,7 @@ describe('getMailPreviewSample', () => {
     vi.mocked(loadOperationsDataScope).mockResolvedValue('real');
     vi.mocked(getFirstContactSample).mockResolvedValue(sampleData);
     vi.stubEnv('NEXT_PUBLIC_APP_URL', '');
-    await expect(getMailPreviewSample({ surveyId: 'sv-1' })).rejects.toThrow(
+    await expect(getMailPreviewSample({ surveyId: 'sv-1' }, { share: FIELDWORK_SHARE_ALL })).rejects.toThrow(
       'NEXT_PUBLIC_APP_URL 환경변수가 설정되지 않았습니다.',
     );
   });
@@ -133,8 +134,13 @@ describe('getMailPreviewSample', () => {
       resid: 4,
     });
     vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://survey.example.com');
-    const res = await getMailPreviewSample({ surveyId: SURVEY_ID, contactTargetId: CONTACT_ID });
-    expect(getContactSampleById).toHaveBeenCalledWith(SURVEY_ID, CONTACT_ID, expect.anything());
+    const res = await getMailPreviewSample({ surveyId: SURVEY_ID, contactTargetId: CONTACT_ID }, { share: FIELDWORK_SHARE_ALL });
+    expect(getContactSampleById).toHaveBeenCalledWith(
+      SURVEY_ID,
+      CONTACT_ID,
+      expect.anything(),
+      FIELDWORK_SHARE_ALL,
+    );
     expect(getFirstContactSample).not.toHaveBeenCalled();
     expect(res?.resid).toBe(4);
     expect(res?.inviteUrl).toContain('/i/DktK3edZjq');

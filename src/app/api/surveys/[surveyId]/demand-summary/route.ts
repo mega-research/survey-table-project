@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { requireAuth } from '@/lib/auth';
 import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
-import { canAccessSurvey, isGuestUser, isViewOnlyGuest } from '@/lib/auth/guest-grants';
+import {
+  canAccessSurvey,
+  isGuestUser,
+  isShareRestrictedGuest,
+  isViewOnlyGuest,
+} from '@/lib/auth/guest-grants';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import { loadOperationsDataScope } from '@/server/data-scope';
 import { applyDemandView, parseDemandSortMode } from '@/lib/operations/demand-summary-format';
@@ -42,7 +47,12 @@ async function handleDemandSummaryExport(
     surveyId,
   });
   // 보기만 하는 게스트는 수요 집계 화면이 막혀 있다 — 이 주소를 직접 불러도 같은 판정이어야 한다.
-  if (!canAccessSurvey(userId, surveyId) || isViewOnlyGuest(userId, surveyId)) {
+  // 담당 범위에 묶인 게스트도 같다 — 집계가 설문 전체 응답을 센다.
+  if (
+    !canAccessSurvey(userId, surveyId) ||
+    isViewOnlyGuest(userId, surveyId) ||
+    isShareRestrictedGuest(userId, surveyId)
+  ) {
     return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
   }
 

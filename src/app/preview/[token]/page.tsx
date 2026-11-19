@@ -8,6 +8,7 @@ import { TooManyRequestsScreen } from '@/features/survey-response/survey-respons
 import { isRscRateLimited } from '@/lib/rate-limit/rsc-guard';
 import { loadPreviewContactSeed } from '@/server/contacts/services/preview-contact';
 import { loadOperationsDataScope } from '@/server/data-scope';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 import {
   getSurveyById,
   getSurveyByPreviewToken,
@@ -84,6 +85,8 @@ export default async function PublicSurveyPreviewPage({ params }: PageProps) {
     surveyId: survey.id,
     isTest: (await loadOperationsDataScope(survey.id)) === 'test',
     structure: preview.survey,
+    // 공개 미리보기는 계정이 아니라 토큰으로 연다 — 담당 범위(게스트 계정의 축)가 없다.
+    share: FIELDWORK_SHARE_ALL,
   });
 
   return (

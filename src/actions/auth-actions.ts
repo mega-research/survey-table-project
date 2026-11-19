@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 
 import {
   getGuestSurveyIds,
+  getShareRestrictedSurveyIds,
   getViewOnlyPreviewSurveyIds,
   getViewOnlyResponseViewSurveyIds,
   getViewOnlySurveyIds,
@@ -71,6 +72,7 @@ export async function login(formData: FormData) {
         viewOnlySurveyIds,
         viewOnlyPreviewSurveyIds,
         viewOnlyResponseViewSurveyIds,
+        signIn.user ? getShareRestrictedSurveyIds(signIn.user.id) : [],
       ),
     );
   }

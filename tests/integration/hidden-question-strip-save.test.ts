@@ -6,6 +6,7 @@ import {
   quoteFromOptionResponses,
   quoteFromOtherTextResponses,
 } from '../helpers/answer-quote-condition-survey';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 /**
  * 저장 경계의 숨은 문항 strip — **호출부** 계약 검증.
@@ -326,7 +327,7 @@ describe('saveAdminEdit — 숨은 문항 strip 게이트', () => {
         versionId: VERSION_ID,
       },
       { id: 'admin-1', email: 'a@b.com' },
-      false,
+      false, FIELDWORK_SHARE_ALL,
     );
 
     const setArg = updateSetLogMock.mock.calls[0]![0] as {
@@ -359,7 +360,7 @@ describe('saveAdminEdit — 숨은 문항 strip 게이트', () => {
         versionId: VERSION_ID,
       },
       { id: 'admin-1', email: 'a@b.com' },
-      false,
+      false, FIELDWORK_SHARE_ALL,
     );
 
     const setArg = updateSetLogMock.mock.calls[0]![0] as {
@@ -658,7 +659,7 @@ describe('저장 경계 — 응답 인용값을 읽는 조건', () => {
         versionId: VERSION_ID,
       },
       { id: 'admin-1', email: 'a@b.com' },
-      false,
+      false, FIELDWORK_SHARE_ALL,
     );
 
     const setArg = updateSetLogMock.mock.calls[0]![0] as {

@@ -13,6 +13,11 @@ import { SurveyOwnershipError } from '@/lib/auth/require-survey-ownership';
 import { decryptQuestionResponses, withoutEncryptedAnswers } from '@/lib/crypto/response-pii';
 import { logger } from '@/lib/logger';
 import { readBrowserTestView, resolveWriteScopeIsTest } from '@/server/data-scope';
+import {
+  type FieldworkShare,
+  shareTargetCondition,
+  shareTargetSql,
+} from '@/server/fieldwork-share-scope';
 import { buildChangedQuestions, diffQuestionResponses } from '@/lib/operations/response-edit-diff';
 import { pinnedVersionId } from '@/shared/contracts/survey';
 import { calculateProgressPct, getProgressSnapshot } from './response-progress';
@@ -97,7 +102,14 @@ export async function saveAdminEdit(
   input: SaveAdminEditInput,
   editor: { id: string | null; email: string | null },
   isGuest: boolean,
+  /**
+   * 담당 범위 — **필수**. 범위 밖 응답(범위 게스트에게는 대상 없는 공개 응답 포함)은 존재하지 않는 응답과
+   * 같이 `response_not_found` 다. 조회와 UPDATE 둘 다에 건다 — 그 사이 관리자가 대상의 범위 값을 바꾸면
+   * UPDATE 가 0행이 되어 옮겨 간 응답을 고치지 못한다.
+   */
+  share: FieldworkShare,
 ): Promise<{ ok: true }> {
+  const shareCondition = shareTargetCondition(share, surveyResponses.contactTargetId);
   const { surveyId, responseId, questionResponses } = input;
 
   // 소유권 검증 — surveys row 존재 확인 (require-survey-ownership.ts 패턴 인라인 복제)
@@ -119,6 +131,7 @@ export async function saveAdminEdit(
       eq(surveyResponses.id, responseId),
       eq(surveyResponses.surveyId, surveyId),
       eq(surveyResponses.isTest, isTest),
+      shareCondition,
     ),
   });
   if (!existing) throw new ResponseEditError('response_not_found');
@@ -308,6 +321,7 @@ export async function saveAdminEdit(
           eq(surveyResponses.surveyId, surveyId),
           eq(surveyResponses.isTest, isTest),
           isNull(surveyResponses.deletedAt),
+          shareCondition,
           // 종결 상태를 쓰는 저장은 조회 당시 상태가 그대로일 때만 통과한다. terminalStatusSet 은
           // 트랜잭션 밖에서 읽은 existing.status 로 정해지므로, 그 사이 재응답 허용이
           // in_progress 로 되돌렸다면 이 UPDATE 가 completed·screened_out 을 다시 덮어쓴다 —
@@ -320,11 +334,16 @@ export async function saveAdminEdit(
       .returning({ id: surveyResponses.id });
 
     if (updated.length === 0) {
-      // 0행의 원인은 둘이다 — 동시 삭제, 또는 위 상태 가드. 삭제가 아니면 상태 충돌이다.
+      // 0행의 원인은 셋이다 — 동시 삭제, 위 상태 가드, 그 사이 담당 범위가 옮겨 감. 범위 밖이면 없음,
+      // 삭제가 아니면 상태 충돌이다.
       const [current] = await tx
-        .select({ deletedAt: surveyResponses.deletedAt })
+        .select({
+          deletedAt: surveyResponses.deletedAt,
+          inShare: sql<boolean>`${shareTargetSql(share, surveyResponses.contactTargetId)}`,
+        })
         .from(surveyResponses)
         .where(and(eq(surveyResponses.id, responseId), eq(surveyResponses.surveyId, surveyId)));
+      if (current?.inShare === false) throw new ResponseEditError('response_not_found');
       throw new ResponseEditError(
         current && current.deletedAt === null ? 'status_conflict' : 'response_deleted',
       );

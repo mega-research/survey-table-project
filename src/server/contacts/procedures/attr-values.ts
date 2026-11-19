@@ -1,4 +1,4 @@
-import { assertSurveyAccess, scoped } from '@/server/orpc';
+import { assertSurveyAccessInShare, scoped } from '@/server/orpc';
 import { loadOperationsDataScope } from '@/server/data-scope';
 
 import {
@@ -24,10 +24,11 @@ const list = scoped
   .input(ListContactAttrValuesInput)
   .output(ListContactAttrValuesOutput)
   .handler(async ({ input, context, errors }) => {
-    assertSurveyAccess(context.user.id, input.surveyId);
+    // 담당 범위에 묶인 게스트에게도 연다 — 값 목록이 그 범위 대상의 값만 담는다.
+    const share = assertSurveyAccessInShare(context.user.id, input.surveyId);
     const scope = await loadOperationsDataScope(input.surveyId);
     try {
-      return await svc.listContactAttrValues({ ...input, scope });
+      return await svc.listContactAttrValues({ ...input, scope, share });
     } catch (error) {
       if (error instanceof svc.ForbiddenAttrColumnError) {
         throw errors.FORBIDDEN_COLUMN();
@@ -50,10 +51,10 @@ const nonNumericCount = scoped
   .input(ListContactAttrValuesInput)
   .output(CountNonNumericAttrValuesOutput)
   .handler(async ({ input, context, errors }) => {
-    assertSurveyAccess(context.user.id, input.surveyId);
+    const share = assertSurveyAccessInShare(context.user.id, input.surveyId);
     const scope = await loadOperationsDataScope(input.surveyId);
     try {
-      return { count: await svc.countNonNumericAttrValues({ ...input, scope }) };
+      return { count: await svc.countNonNumericAttrValues({ ...input, scope, share }) };
     } catch (error) {
       if (error instanceof svc.ForbiddenAttrColumnError) {
         throw errors.FORBIDDEN_COLUMN();

@@ -24,6 +24,7 @@ import {
 } from '@/server/data-scope';
 import type { FilterClause } from '@/lib/operations/filter-shared';
 import { readStoredEntryParams } from '@/lib/survey/end-redirect';
+import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share-scope';
 import {
   buildNegativeCodeExists,
   getResultCodeStatuses,
@@ -39,6 +40,11 @@ export type { ProfilesRow };
 export type ListProfilesArgs = Omit<NormalizedListArgs, 'q' | 'col'> & {
   surveyId: string;
   scope: OperationsDataScope;
+  /**
+   * 담당 범위 — **필수**. 관리자만 지나는 호출은 `FIELDWORK_SHARE_ALL`, 게스트에게도 여는 화면은
+   * `resolveGuestShare(userId, surveyId)`. 범위 게스트에게는 조사 대상에 묶이지 않은 공개 응답이 빠진다.
+   */
+  share: FieldworkShare;
   pageSize: number;
   /** 다중 조건 필터 (검색바 + 헤더 깔때기, 조사 대상과 동일 절 파이프라인) */
   clauses: FilterClause[];
@@ -80,7 +86,8 @@ function orderExpr(col: AnyColumn | SQL, direction: SortDir): SQL {
 export async function listResponsesForProfiles(
   args: ListProfilesArgs,
 ): Promise<ListProfilesResult> {
-  const { surveyId, scope, page, pageSize, status, sort, dir, view, clauses, answerChoices } = args;
+  const { surveyId, scope, share, page, pageSize, status, sort, dir, view, clauses, answerChoices } =
+    args;
   const includeBrowserSignals = args.includeBrowserSignals === true;
 
   // negative result codes — base subquery WHERE 의 NOT EXISTS 분기에 사용.
@@ -134,6 +141,8 @@ export async function listResponsesForProfiles(
         eq(surveyResponses.surveyId, surveyId),
         view === 'deleted' ? deletedResponse : notDeletedResponse,
         responseScopeCondition(scope),
+        // 담당 범위 — base subquery 에 걸어 순번이 범위 안에서 다시 매겨진다(남의 응답 수를 순번으로 읽지 못하게).
+        shareTargetCondition(share, surveyResponses.contactTargetId),
         // negative ct 의 응답 가림. 익명 (contact_target_id IS NULL) 은
         // NOT EXISTS 가 자동 true → 통과. excluded 가 빠진 후 row_number 가
         // 다시 매겨지므로 idx 가 자동 보정된다.

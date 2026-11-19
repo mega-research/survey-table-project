@@ -15,6 +15,7 @@ import {
   getResponseEditLogs,
 } from '@/server/read-models/contacts';
 import { getOperationsDataScope } from '@/server/data-scope';
+import { resolveGuestShare } from '@/server/fieldwork-share-scope';
 import { listAssignmentOptions } from '@/server/read-models/contact-assignment-options';
 import { getContactTargetEditLogs } from '@/server/read-models/contact-target-edit-logs';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
@@ -31,11 +32,13 @@ interface PageProps {
 export default async function ContactDetailPage({ params }: PageProps) {
   const { id: surveyId, contactId } = await params;
   // 미들웨어를 통과한 무권한 세션을 거른다 — 이 설문에 접근할 수 있는 계정만.
-  await requireSurveyConsolePage(surveyId);
+  // 담당 범위에 묶인 게스트에게도 연다 — 범위 밖 대상은 없는 대상처럼 404 다(조회 조건).
+  const user = await requireSurveyConsolePage(surveyId, { share: 'allow' });
+  const share = resolveGuestShare(user.id, surveyId);
   const scope = await getOperationsDataScope(surveyId);
 
-  const detail = await getContactDetailById(contactId, scope);
-  if (!detail || detail.contact.surveyId !== surveyId) notFound();
+  const detail = await getContactDetailById(contactId, surveyId, scope, share);
+  if (!detail) notFound();
 
   // 완료·진행중·이탈 통틀어 최신 응답이 수정 대상. contactTargetId 미링크
   // 레거시 완료 건만 contact_targets.responseId 로 폴백한다 (레거시 링크는

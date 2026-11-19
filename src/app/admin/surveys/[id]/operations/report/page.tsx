@@ -13,6 +13,7 @@ import { resolveDefaultSortKey } from '@/lib/contacts/default-sort';
 import { attrsKeyOf, residColumnLabel } from '@/lib/operations/contacts-format';
 import { getContactColumnScheme } from '@/server/read-models/contacts';
 import { getOperationsDataScope } from '@/server/data-scope';
+import { resolveGuestShare } from '@/server/fieldwork-share-scope';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
 import { listAssignmentOptions } from '@/server/read-models/contact-assignment-options';
 import { type ColumnCandidateWithPii, FILTER_SOURCE } from '@/lib/operations/filter-shared';
@@ -99,7 +100,9 @@ function parseSort(
 export default async function ReportProgressPage({ params, searchParams }: PageProps) {
   const { id: surveyId } = await params;
   // 미들웨어를 통과한 무권한 세션을 거른다 — 이 설문에 접근할 수 있는 계정만.
-  await requireSurveyConsolePage(surveyId);
+  // 담당 범위에 묶인 게스트에게도 연다 — 행·합계·분모가 그 범위 대상만 센다.
+  const user = await requireSurveyConsolePage(surveyId, { share: 'allow' });
+  const share = resolveGuestShare(user.id, surveyId);
   const sp = await searchParams;
   const scope = await getOperationsDataScope(surveyId);
 
@@ -217,7 +220,7 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
   const residLabel = residColumnLabel(contactScheme);
 
   // 조사 대상 0건 빠른 검출 — getProgressTotals 보다 훨씬 가벼움.
-  const isEmpty = (await countContactTargets(surveyId, scope)) === 0;
+  const isEmpty = (await countContactTargets(surveyId, scope, share)) === 0;
 
   const { rows, totals } = isEmpty
     ? { rows: [], totals: EMPTY_PROGRESS_TOTALS }
@@ -225,6 +228,7 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
         getProgressRows({
           surveyId,
           scope,
+          share,
           condition,
           page,
           size,
@@ -233,7 +237,7 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
           metaKeys,
           groupByKeys: activeGroupKeys,
         }),
-        getProgressTotals(surveyId, scope, condition, activeGroupKeys),
+        getProgressTotals(surveyId, scope, share, condition, activeGroupKeys),
       ]).then(([r, t]) => ({ rows: r, totals: t }));
 
   return (

@@ -46,7 +46,6 @@ import {
 import {
   attrsNaturalSortExprs,
   naturalTextSortExprs,
-  buildContactsFilterSql,
   effectiveMailStatusExpr,
   latestResultCodeExpr,
   mailStatusRankExpr,
@@ -75,7 +74,8 @@ import type {
 } from '@/shared/contracts/contacts-io';
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
 
-import type { ResolvedContactFilter } from './contact-filter-resolution';
+import { type FieldworkShare, shareTargetCondition } from '../fieldwork-share-scope';
+import { type ResolvedContactFilter, resolvedContactFilterSql } from './contact-filter-resolution';
 
 // 표가 props 로 받는 행 모양은 계약(@/shared/contracts/contacts-io) 소관 — 여기서 다시 내보내
 // 기존 호출부(RSC·서비스)의 import 경로를 유지한다.
@@ -187,7 +187,8 @@ export async function listContactsForSurvey(args: ListContactsArgs): Promise<Lis
 
   const whereParts: SQL[] = [eq(contactTargets.surveyId, surveyId), targetScopeCondition(scope)];
 
-  whereParts.push(buildContactsFilterSql(filter.clauses));
+  // 사용자 조건 + 강제 절(담당 범위) — 강제 절은 화면이 지울 수 없다.
+  whereParts.push(resolvedContactFilterSql(filter));
 
   const whereClause = and(...whereParts)!;
 
@@ -448,11 +449,20 @@ export interface ContactDetailResult {
 
 /**
  * 컨택 단건 편집 페이지용 — 컨택 본체 + 회차 이력 (최근순).
- * 본인 survey 의 컨택만 조회 (surveyId guard 호출자가 책임).
  */
 export async function getContactDetailById(
   id: string,
+  /**
+   * 이 컨택이 속해야 하는 설문 — **조회 조건이지 사후 확인이 아니다**. id 로만 찾은 뒤 호출측이 설문을
+   * 대조하면 그 사이에 `decryptForTarget` 이 이미 돌아 남의 설문 컨택의 개인정보가 복호화된다.
+   */
+  surveyId: string,
   scope: OperationsDataScope,
+  /**
+   * 열람자의 담당 범위 — 설문처럼 **조회 조건이다**. 범위 밖 대상은 없는 대상과 같은 null 이라 화면이
+   * notFound 로 접고, 개인정보 복호화·회차 조회까지 가지 않는다. 관리자만 지나는 호출은 `FIELDWORK_SHARE_ALL`.
+   */
+  share: FieldworkShare,
 ): Promise<ContactDetailResult | null> {
   const [contact] = await db
     .select({
@@ -473,7 +483,14 @@ export async function getContactDetailById(
       updatedAt: contactTargets.updatedAt,
     })
     .from(contactTargets)
-    .where(and(eq(contactTargets.id, id), targetScopeCondition(scope)))
+    .where(
+      and(
+        eq(contactTargets.id, id),
+        eq(contactTargets.surveyId, surveyId),
+        targetScopeCondition(scope),
+        shareTargetCondition(share),
+      ),
+    )
     .limit(1);
 
   if (!contact) return null;

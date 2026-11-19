@@ -62,6 +62,7 @@ import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 
 import { backendPid, waitForLockWaitersBehind } from '../helpers/lock-waiters';
 import { resolvedFilterForTest } from '../helpers/resolved-contact-filter';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 // 이 브라우저의 「테스트 데이터 보기」 쿠키 — 켜고 끄며 파티션을 오간다 (server/data-scope).
 const cookieState = vi.hoisted(() => ({ testView: false }));
@@ -282,7 +283,7 @@ run('컨택원 배정 (real local DB)', () => {
     );
     // t4 는 배정 없음
 
-    const filterCtx = await loadContactFilterContext(surveyId, 'real', {
+    const filterCtx = await loadContactFilterContext(surveyId, 'real', { share: FIELDWORK_SHARE_ALL,
       isGuest: false,
       surface: 'contacts',
     });
@@ -372,7 +373,7 @@ run('컨택원 배정 (real local DB)', () => {
     expect(data.total).toBe(5);
 
     // 같은 숫자를 조사 대상 목록 web 필터로도 얻는다.
-    const filterCtx = await loadContactFilterContext(surveyId, 'real', {
+    const filterCtx = await loadContactFilterContext(surveyId, 'real', { share: FIELDWORK_SHARE_ALL,
       isGuest: false,
       surface: 'contacts',
     });
@@ -842,7 +843,7 @@ run('컨택원 배정 (real local DB)', () => {
         size: 20,
         metaKeys: [],
       };
-      const byOwner = await getProgressRows({
+      const byOwner = await getProgressRows({ share: FIELDWORK_SHARE_ALL,
         ...base,
         sort: `group:system:contact_owner`,
         dir: 'asc',
@@ -856,10 +857,10 @@ run('컨택원 배정 (real local DB)', () => {
         ['(배정 없음)', [null], 2, 0],
       ]);
 
-      const totals = await getProgressTotals(surveyId, 'real', null, [OWNER]);
+      const totals = await getProgressTotals(surveyId, 'real', FIELDWORK_SHARE_ALL, null, [OWNER]);
       expect(totals).toMatchObject({ groupCount: 3, listTotal: 5, completedTotal: 1 });
 
-      const mixed = await getProgressRows({
+      const mixed = await getProgressRows({ share: FIELDWORK_SHARE_ALL,
         ...base,
         sort: 'groupLabel',
         dir: 'asc',
@@ -872,7 +873,7 @@ run('컨택원 배정 (real local DB)', () => {
       expect(combo.get('기업3 / 11차')).toBe(1);
       expect(combo.get('기업5 / (배정 없음)')).toBe(1);
       expect(
-        (await getProgressTotals(surveyId, 'real', null, [{ kind: 'attrs', key: '기업명' }, OWNER]))
+        (await getProgressTotals(surveyId, 'real', FIELDWORK_SHARE_ALL, null, [{ kind: 'attrs', key: '기업명' }, OWNER]))
           .groupCount,
       ).toBe(5);
     });

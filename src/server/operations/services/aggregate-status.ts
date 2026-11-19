@@ -4,6 +4,7 @@ import { and, eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyResponses } from '@/db/schema';
+import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share-scope';
 import { notDeletedResponse } from '@/server/response-filters';
 
 import {
@@ -31,6 +32,8 @@ import { getResultCodeStatuses } from '@/server/read-models/result-code-statuses
 export async function aggregateStatus(
   surveyId: string,
   scope: OperationsDataScope,
+  /** 담당 범위 — 범위 게스트면 응답 행도 실사 완료 처리 수도 그 범위 대상의 것만 센다(대상 없는 응답은 빠진다). */
+  share: FieldworkShare,
 ): Promise<StatusCounts> {
   const isTest = testFlagForScope(scope);
   const { positive } = await getResultCodeStatuses(surveyId);
@@ -57,11 +60,12 @@ export async function aggregateStatus(
           eq(surveyResponses.surveyId, surveyId),
           notDeletedResponse,
           responseScopeCondition(scope),
+          shareTargetCondition(share, surveyResponses.contactTargetId),
         ),
       )
       // 표식 식은 바인딩 파라미터를 품어 SELECT·GROUP BY 에 따로 바인딩되면 PG 가 같은 식으로 보지 못한다 — 열 번호로 묶는다
       .groupBy(sql.raw('1'), sql.raw('2')),
-    getFieldworkCompletedCounts([surveyId], isTest),
+    getFieldworkCompletedCounts([surveyId], isTest, share),
   ]);
 
   return mapRowsToCounts(rows, fieldworkCounts.get(surveyId) ?? 0);

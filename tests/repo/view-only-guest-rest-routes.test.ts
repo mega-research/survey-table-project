@@ -65,3 +65,42 @@ describe('보기만 하는 게스트는 화면이 막힌 REST 주소도 받지 �
     expect(res.status).toBe(403);
   });
 });
+
+/**
+ * 담당 범위에 묶인 게스트(guest-grants 의 GUEST_TARGET_SHARES)도 같은 주소를 받지 못한다 — 두 파일 모두
+ * 설문 전체(명단 평문·전체 응답 집계)를 내고 범위를 거르지 않는다. 조사 대상 화면은 그 계정에 열려 있어
+ * (자기 범위만) 화면 차단에 기댈 수 없다.
+ */
+describe('담당 범위에 묶인 게스트는 설문 전체를 내는 REST 주소를 받지 못한다', () => {
+  const SHARE_RESTRICTED = [
+    ['ddcdc638-3cc2-4a84-acd9-204b66b57e28', '1b88ae5a-257a-40ad-80a4-a6a698fde05a'], // from2@
+    ['882ddaa3-f52b-4c7b-8837-0dcffc44575d', '1b88ae5a-257a-40ad-80a4-a6a698fde05a'], // prime2@
+  ] as const;
+
+  beforeEach(() => {
+    process.env['ADMIN_USER_IDS'] = 'admin-1';
+    process.env['GUEST_SURVEY_GRANTS'] = SHARE_RESTRICTED.map(([u, s]) => `${u}:${s}`).join(',');
+  });
+  afterEach(() => {
+    delete process.env['ADMIN_USER_IDS'];
+    delete process.env['GUEST_SURVEY_GRANTS'];
+  });
+
+  it.each(SHARE_RESTRICTED)('조사 대상 목록 엑셀 — %s', async (userId, surveyId) => {
+    authState.user = { id: userId };
+    const res = await contactsExportGet(
+      new NextRequest(`http://localhost/api/surveys/${surveyId}/contacts/export`),
+      { params: Promise.resolve({ surveyId }) },
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it.each(SHARE_RESTRICTED)('문항 수요 집계표 — %s', async (userId, surveyId) => {
+    authState.user = { id: userId };
+    const res = await demandSummaryGet(
+      new NextRequest(`http://localhost/api/surveys/${surveyId}/demand-summary`),
+      { params: Promise.resolve({ surveyId }) },
+    );
+    expect(res.status).toBe(403);
+  });
+});
