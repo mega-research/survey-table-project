@@ -15,7 +15,11 @@ import {
   type FilterClause,
 } from '@/lib/operations/filter-shared';
 import type { OperationsDataScope } from '@/server/data-scope';
-import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share-scope';
+import {
+  type FieldworkShare,
+  shareTargetCondition,
+  withoutShareColumn,
+} from '@/server/fieldwork-share-scope';
 import type { ContactResultCode } from '@/shared/contracts/contacts';
 import type { ContactAssignmentOption } from '@/shared/contracts/contacts-io';
 
@@ -180,7 +184,11 @@ export async function loadContactFilterContext(
     // 컨택원은 내부 실사 운영 정보 — 게스트에게는 열·후보·선택지·절 모두 싣지 않는다.
     isGuest ? Promise.resolve([]) : listAssignmentOptions(surveyId, scope, executor),
   ]);
-  const scheme = isGuest ? withoutContactOwnerColumn(loadedScheme) : loadedScheme;
+  // 범위를 가르는 열도 범위 게스트에게는 없는 열이다 — 목록 열·검색 후보·열 머리 필터에서 함께 빠진다.
+  const scheme = withoutShareColumn(
+    isGuest ? withoutContactOwnerColumn(loadedScheme) : loadedScheme,
+    share,
+  );
   const columnCandidates = buildColumnCandidates(scheme, { includeContactOwner: !isGuest });
   // 단체 메일 미리보기 표는 고정 열이라 깔때기 후보도 스킴과 무관하게 고정 목록을 얹는다.
   const headerCandidates =

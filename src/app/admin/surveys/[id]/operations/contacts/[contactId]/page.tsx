@@ -15,7 +15,11 @@ import {
   getResponseEditLogs,
 } from '@/server/read-models/contacts';
 import { getOperationsDataScope } from '@/server/data-scope';
-import { resolveGuestShare } from '@/server/fieldwork-share-scope';
+import {
+  resolveGuestShare,
+  shareHiddenAttrsKey,
+  withoutShareColumn,
+} from '@/server/fieldwork-share-scope';
 import { listAssignmentOptions } from '@/server/read-models/contact-assignment-options';
 import { getContactTargetEditLogs } from '@/server/read-models/contact-target-edit-logs';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
@@ -54,7 +58,7 @@ export default async function ContactDetailPage({ params }: PageProps) {
 
   const isGuest = await isGuestViewer();
   const [
-    scheme,
+    loadedScheme,
     resultCodes,
     mailHistory,
     editLogs,
@@ -67,11 +71,16 @@ export default async function ContactDetailPage({ params }: PageProps) {
     getMailRecipientsForTarget(detail.contact.id, scope),
     getResponseEditLogs(editableResponseId, detail.contact.id),
     // 게스트면 로더가 컨택원 변경을 빼고 싣는다 — 컨택원은 내부 실사 운영 정보.
-    getContactTargetEditLogs(detail.contact.id, scope, { isGuest }),
+    getContactTargetEditLogs(detail.contact.id, scope, {
+      isGuest,
+      hiddenAttrsKey: shareHiddenAttrsKey(share),
+    }),
     getMailTemplatesBySurvey(surveyId),
     // 컨택원은 내부 실사 운영 정보 — 게스트에게는 읽지도 내리지도 않는다.
     isGuest ? Promise.resolve(null) : listAssignmentOptions(surveyId, scope),
   ]);
+  // 범위를 가르는 열은 범위 게스트에게 없는 열이다 — 입력 칸도 그리지 않는다(값은 저장 때 서버가 지킨다).
+  const scheme = withoutShareColumn(loadedScheme, share);
   if (!scheme) notFound();
 
   const groupLabel = detail.contact.groupValue ?? '미지정';

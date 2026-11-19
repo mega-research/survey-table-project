@@ -26,6 +26,7 @@ import {
 } from '@/db/schema';
 import { addAttempt, deleteAttempt, updateAttempt } from '@/server/contacts/services/contact-attempts';
 import {
+  ForbiddenAttrColumnError,
   countNonNumericAttrValues,
   listContactAttrValues,
 } from '@/server/contacts/services/contact-attr-values';
@@ -249,29 +250,100 @@ run('게스트 담당 범위 (real DB)', () => {
     });
   });
 
-  it('사용자가 고른 조건으로 범위를 벗어날 수 없다 — 남의 범위 값을 조건으로 넣어도 0건이다', async () => {
+  it('사용자가 고른 조건으로 범위를 벗어날 수 없다 — 남의 범위 대상을 짚는 조건은 0건이다', async () => {
     const ctx = await loadContactFilterContext(SURVEY_ID, 'real', {
       isGuest: true,
       surface: 'contacts',
       share: fromShare,
     });
-    const filter = await resolveContactFilter(
-      ctx,
-      { clauses: [{ source: `attrs.${SHARE_KEY}`, value: '프라임', op: null }] },
-      { mode: 'read' },
-    );
-    const { rows, total } = await listContactsForSurvey({
+    const list = async (clauses: Array<{ source: string; value: string; op: null }>) => {
+      const filter = await resolveContactFilter(ctx, { clauses }, { mode: 'read' });
+      const { rows } = await listContactsForSurvey({
+        surveyId: SURVEY_ID,
+        scope: 'real',
+        filter,
+        page: 1,
+        pageSize: 50,
+        sort: 'resid',
+        dir: 'asc',
+        includeAssignment: false,
+      });
+      return rows.map((r) => r.resid);
+    };
+    // 프라임 대상의 기업명을 넣어도 강제 절에 걸려 안 나온다
+    expect(await list([{ source: 'attrs.기업체명', value: '기업4', op: null }])).toEqual([]);
+    // 범위를 가르는 열은 후보가 아니라 조건이 버려진다 — 그래도 자기 범위 밖으로는 못 나간다
+    expect(await list([{ source: `attrs.${SHARE_KEY}`, value: '프라임', op: null }])).toEqual([
+      1, 2, 3,
+    ]);
+  });
+
+  it('범위를 가르는 열은 범위 게스트의 화면에 없다 — 열도 값도, 관리자만 본다', async () => {
+    const guestCtx = await loadContactFilterContext(SURVEY_ID, 'real', {
+      isGuest: true,
+      surface: 'contacts',
+      share: fromShare,
+    });
+    expect(guestCtx.scheme?.columns.map((c) => c.key)).not.toContain(SHARE_KEY);
+    expect(guestCtx.columnCandidates.map((c) => c.source)).not.toContain(`attrs.${SHARE_KEY}`);
+    const guestFilter = await resolveContactFilter(guestCtx, {}, { mode: 'read' });
+    const guestList = await listContactsForSurvey({
       surveyId: SURVEY_ID,
       scope: 'real',
-      filter,
+      filter: guestFilter,
       page: 1,
       pageSize: 50,
       sort: 'resid',
       dir: 'asc',
       includeAssignment: false,
     });
-    expect(rows).toEqual([]);
-    expect(total).toBe(0);
+    expect(guestList.rows.length).toBeGreaterThan(0);
+    for (const row of guestList.rows) expect(row.attrs).not.toHaveProperty(SHARE_KEY);
+
+    const adminCtx = await loadContactFilterContext(SURVEY_ID, 'real', {
+      isGuest: false,
+      surface: 'contacts',
+      share: FIELDWORK_SHARE_ALL,
+    });
+    expect(adminCtx.scheme?.columns.map((c) => c.key)).toContain(SHARE_KEY);
+    const adminList = await listContactsForSurvey({
+      surveyId: SURVEY_ID,
+      scope: 'real',
+      filter: await resolveContactFilter(adminCtx, {}, { mode: 'read' }),
+      page: 1,
+      pageSize: 50,
+      sort: 'resid',
+      dir: 'asc',
+    });
+    expect(adminList.rows.find((r) => r.resid === 1)?.attrs[SHARE_KEY]).toBe('프롬');
+    expect(adminList.rows.find((r) => r.resid === 4)?.attrs[SHARE_KEY]).toBe('프라임');
+
+    // 상세·설문 보기 씨앗도 같다
+    const detail = await getContactDetailById(targetId(1), SURVEY_ID, 'real', fromShare);
+    expect(detail?.contact.attrs).toEqual({ 기업체명: '기업1' });
+    const seed = await loadPreviewContactSeed({
+      surveyId: SURVEY_ID,
+      isTest: false,
+      structure: {},
+      share: fromShare,
+    });
+    expect(seed?.contactAttrs).not.toHaveProperty(SHARE_KEY);
+  });
+
+  it('범위 게스트가 값을 못 본 채 저장해도 대상은 자기 범위에 남는다', async () => {
+    // 화면이 받은 명단 값에는 범위 열이 없다 — 그대로 되돌려 보내면 서버가 다시 찍는다.
+    const detail = await getContactDetailById(targetId(1), SURVEY_ID, 'real', fromShare);
+    await updateContactTarget(
+      { id: targetId(1), surveyId: SURVEY_ID, attrs: { ...detail!.contact.attrs } },
+      true,
+      editor,
+      fromShare,
+    );
+    const [row] = await db
+      .select({ attrs: contactTargets.attrs })
+      .from(contactTargets)
+      .where(eq(contactTargets.id, targetId(1)));
+    expect(row?.attrs[SHARE_KEY]).toBe('프롬');
   });
 
   it('필터 값 목록 — 자기 범위 대상의 값만 담는다', async () => {
@@ -279,8 +351,8 @@ run('게스트 담당 범위 (real DB)', () => {
       (await listContactAttrValues({ surveyId: SURVEY_ID, attrsKey, scope: 'real', share })).values;
     expect(await values(fromShare, '기업체명')).toEqual(['기업1', '기업2', '기업3']);
     expect(await values(primeShare, '기업체명')).toEqual(['기업4', '기업5']);
-    // 범위 열 자체의 값 목록에도 남의 업체 이름이 없다
-    expect(await values(fromShare, SHARE_KEY)).toEqual(['프롬']);
+    // 범위를 가르는 열은 범위 게스트에게 없는 열이다 — 값 목록을 물을 수 없다. 관리자는 본다.
+    await expect(values(fromShare, SHARE_KEY)).rejects.toBeInstanceOf(ForbiddenAttrColumnError);
     expect((await values(FIELDWORK_SHARE_ALL, SHARE_KEY)).sort()).toEqual(['프라임', '프롬']);
     expect(
       await countNonNumericAttrValues({
@@ -455,6 +527,7 @@ run('게스트 담당 범위 (real DB)', () => {
       });
     const from = await list(fromShare);
     expect(from.total).toBe(1);
+    expect(from.rows[0]?.attrs).not.toHaveProperty(SHARE_KEY);
     expect(from.rows.map((r) => r.id)).toEqual([responses.from]);
     // 순번은 범위 안에서 다시 매긴다 — 남의 응답 수가 순번으로 드러나지 않는다
     expect(from.rows.map((r) => Number(r.idx))).toEqual([1]);

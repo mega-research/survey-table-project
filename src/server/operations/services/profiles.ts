@@ -23,7 +23,11 @@ import {
 } from '@/server/data-scope';
 import type { FilterClause } from '@/lib/operations/filter-shared';
 import { readStoredEntryParams } from '@/lib/survey/end-redirect';
-import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share-scope';
+import {
+  type FieldworkShare,
+  shareTargetCondition,
+  withoutShareAttr,
+} from '@/server/fieldwork-share-scope';
 import {
   buildNegativeCodeExists,
   getResultCodeStatuses,
@@ -273,7 +277,7 @@ export async function listResponsesForProfiles(
     isTest: r.isTest,
     groupValue: r.groupValue ?? null,
     resid: r.resid ?? null,
-    attrs: (r.attrs ?? null) as Record<string, string> | null,
+    attrs: withoutShareAttr((r.attrs ?? null) as Record<string, string> | null, share),
     contactTargetId: r.contactTargetId ?? null,
     ipHash: r.ipHash ?? null,
     entryParams: readStoredEntryParams(r.entryParams) ?? null,

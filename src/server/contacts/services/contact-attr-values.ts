@@ -11,7 +11,11 @@ import {
   type OperationsDataScope,
 } from '@/server/data-scope';
 import { FILTER_NONE_VALUE, FILTER_SOURCE } from '@/lib/operations/filter-shared';
-import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share-scope';
+import {
+  type FieldworkShare,
+  shareHiddenAttrsKey,
+  shareTargetCondition,
+} from '@/server/fieldwork-share-scope';
 import { hydrateProfileColumns } from '@/lib/operations/profile-columns-format';
 import { getProfileColumnScheme } from '@/server/read-models/profile-column-scheme';
 
@@ -99,6 +103,8 @@ export async function listContactAttrValues(
   input: ListContactAttrValuesInput,
 ): Promise<ListContactAttrValuesResult> {
   const { surveyId, attrsKey, scope, share } = input;
+  // 범위를 가르는 열은 범위 게스트에게 없는 열이다 — 스킴 밖 열과 같은 거부로 접는다.
+  if (shareHiddenAttrsKey(share) === attrsKey) throw new ForbiddenAttrColumnError(attrsKey);
   await assertAttrColumnAllowed(surveyId, attrsKey, scope);
 
   const valueExpr = sql<string>`${contactTargets.attrs} ->> ${attrsKey}`;
@@ -159,6 +165,8 @@ export async function countNonNumericAttrValues(
   input: ListContactAttrValuesInput,
 ): Promise<number> {
   const { surveyId, attrsKey, scope, share } = input;
+  // 범위를 가르는 열은 범위 게스트에게 없는 열이다 — 스킴 밖 열과 같은 거부로 접는다.
+  if (shareHiddenAttrsKey(share) === attrsKey) throw new ForbiddenAttrColumnError(attrsKey);
   await assertAttrColumnAllowed(surveyId, attrsKey, scope);
   const valueExpr = sql<string>`${contactTargets.attrs} ->> ${attrsKey}`;
   const [row] = await db

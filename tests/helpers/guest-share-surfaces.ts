@@ -77,9 +77,8 @@ export const PAGE_SHARE_SURFACES: Record<string, ShareSurfaceStatus> = {
   'admin/surveys/[id]/operations/profiles/[responseId]/view': FILTERED,
   'admin/surveys/[id]/operations/contacts': FILTERED,
   'admin/surveys/[id]/operations/contacts/[contactId]': FILTERED,
-  'admin/surveys/[id]/operations/contacts/new': exempt(
-    '스킴·결과코드만 읽는다 — 저장(contacts.targets.add)이 추가하는 대상에 범위 값을 찍는다',
-  ),
+  // 대상 데이터는 읽지 않지만 범위를 가르는 열을 입력 칸에서 빼야 해 범위를 푼다
+  'admin/surveys/[id]/operations/contacts/new': FILTERED,
   'admin/surveys/[id]/operations/report': FILTERED,
 };
 
