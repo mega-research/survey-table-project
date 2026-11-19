@@ -11,6 +11,8 @@ import {
   type OperationsDataScope,
 } from '@/server/data-scope';
 
+import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share-scope';
+
 import { loadSendEmailForTarget } from './send-address';
 
 export interface FirstContactSample {
@@ -102,12 +104,16 @@ export async function getFirstTestTargetSample(surveyId: string): Promise<FirstC
 }
 
 /**
- * 특정 컨택 1건 샘플 — 단건 발송 미리보기용. 스코프 불일치/미존재면 null.
+ * 특정 컨택 1건 샘플 — 단건 발송 미리보기용. 스코프 불일치/미존재/**담당 범위 밖**이면 null.
+ *
+ * 범위는 조회 조건이다 — 사후에 거르면 그 사이에 남의 범위 대상의 메일 주소가 이미 복호화된다
+ * (`getContactDetailById` 의 「조회는 조건이지 사후 확인이 아니다」와 같은 결).
  */
 export async function getContactSampleById(
   surveyId: string,
   contactTargetId: string,
   scope: OperationsDataScope,
+  share: FieldworkShare,
 ): Promise<FirstContactSample | null> {
   const [row] = await db
     .select({
@@ -122,6 +128,7 @@ export async function getContactSampleById(
         eq(contactTargets.id, contactTargetId),
         eq(contactTargets.surveyId, surveyId),
         targetScopeCondition(scope),
+        shareTargetCondition(share),
       ),
     )
     .limit(1);

@@ -2,6 +2,7 @@ import { Param } from 'drizzle-orm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Question } from '@/types/survey';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 /**
  * 관리자 응답 수정의 자격미달 양방향 재판정.
@@ -167,7 +168,7 @@ async function save(answers: Record<string, unknown>) {
   return saveAdminEdit(
     { surveyId: SURVEY_ID, responseId: RESPONSE_ID, versionId: VERSION_ID, questionResponses: answers },
     EDITOR,
-    false,
+    false, FIELDWORK_SHARE_ALL,
   );
 }
 

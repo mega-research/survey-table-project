@@ -136,7 +136,7 @@ describe('mail.campaigns procedures', () => {
       mailTemplateId: TEMPLATE_ID,
     };
     const res = await client.campaigns.sendSingle(input);
-    expect(singleSvc.sendSingleCampaign).toHaveBeenCalledWith(input, 'admin-1', false);
+    expect(singleSvc.sendSingleCampaign).toHaveBeenCalledWith(input, 'admin-1', false, { kind: 'all' });
     expect(res).toEqual({ campaignId: CAMPAIGN_ID, queuedCount: 1, skippedCount: 0 });
   });
 
@@ -173,7 +173,7 @@ describe('mail.campaigns procedures', () => {
       mailTemplateId: TEMPLATE_ID,
     };
     const res = await client.campaigns.sendSingle(input);
-    expect(singleSvc.sendSingleCampaign).toHaveBeenCalledWith(input, 'guest-1', true);
+    expect(singleSvc.sendSingleCampaign).toHaveBeenCalledWith(input, 'guest-1', true, { kind: 'all' });
     expect(res).toEqual({ campaignId: CAMPAIGN_ID, queuedCount: 1, skippedCount: 0 });
   });
 

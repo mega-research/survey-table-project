@@ -1,7 +1,12 @@
 import * as z from 'zod';
 
 import { isGuestUser } from '@/lib/auth/guest-grants';
-import { assertSurveyAccess, assertSurveyWriteAccess, scoped } from '@/server/orpc';
+import {
+  assertSurveyAccess,
+  assertSurveyWriteAccess,
+  assertSurveyWriteAccessInShare,
+  scoped,
+} from '@/server/orpc';
 
 import {
   CancelCampaignInput,
@@ -64,8 +69,10 @@ const sendSingle = scoped
   .input(SendSingleCampaignInput)
   .output(CreateCampaignResult)
   .handler(({ context, input }) => {
-    assertSurveyWriteAccess(context.user.id, input.surveyId);
-    return sendSingleCampaign(input, context.user.id, isGuestUser(context.user.id));
+    // 담당 범위에 묶인 게스트에게도 연다 — 범위 밖 대상은 서비스가 NOT_FOUND 로 접는다.
+    // (단체 발송 create 는 범위를 거르지 않아 범위 게스트에게 닫혀 있다.)
+    const share = assertSurveyWriteAccessInShare(context.user.id, input.surveyId);
+    return sendSingleCampaign(input, context.user.id, isGuestUser(context.user.id), share);
   });
 
 export const campaigns = {

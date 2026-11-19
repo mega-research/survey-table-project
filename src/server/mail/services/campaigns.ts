@@ -15,6 +15,7 @@ import { inngest } from '@/lib/inngest/client';
 import { resolveSendAddress } from '@/lib/mail/send-address';
 import { withTestPrefix } from './test-campaign';
 import { loadOperationsDataScope, lockWriteScope } from '@/server/data-scope';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 import {
   NO_BOUNCED_ADDRESSES,
   decryptSendAddressCells,
@@ -361,7 +362,12 @@ export async function fetchCandidateIds(
   // 마법사 페이지와 같은 컨텍스트·같은 해석 — 어긋나면 "필터 결과 전체 선택"이 화면에 보이는
   // 명단과 다른 집합을 고른다. 화면을 연 뒤 조건의 컨택원이 지워지는 등으로 해석되지 않는
   // 조건이 생기면 write 해석이 거부한다 — 버리면 화면보다 넓은 명단(빈 조건이면 전체)을 고른다.
-  const filterCtx = await loadContactFilterContext(surveyId, scope, { isGuest, surface: 'mail' });
+  const filterCtx = await loadContactFilterContext(surveyId, scope, {
+    isGuest,
+    surface: 'mail',
+    // 단체 메일 후보 조회는 담당 범위에 묶인 게스트에게 닫혀 있다(`assertSurveyAccess` 가 거부한다).
+    share: FIELDWORK_SHARE_ALL,
+  });
   const resolved = await resolveContactFilter(filterCtx, filter, { mode: 'write' });
   const unrespondedOnly = filter.unrespondedOnly ?? false;
 

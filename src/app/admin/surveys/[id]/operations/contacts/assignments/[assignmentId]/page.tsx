@@ -8,6 +8,7 @@ import { assignmentsHref } from '@/features/operations/contacts/assignments/assi
 import { FILTER_SOURCE } from '@/lib/operations/filter-shared';
 import { getAssignmentForEdit } from '@/server/contacts/services/contact-assignments';
 import { getOperationsDataScope } from '@/server/data-scope';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 import { loadContactFilterContext } from '@/server/read-models/contact-filter-resolution';
 
 export const metadata: Metadata = {
@@ -31,7 +32,12 @@ export default async function ContactAssignmentEditPage({ params }: PageProps) {
   // 교체 적용이 조건을 해석하는 것과 같은 컨텍스트 — 후보·결과코드·컨택원이 서버 해석과 같다.
   const [assignment, filterCtx] = await Promise.all([
     getAssignmentForEdit(surveyId, scope, assignmentId),
-    loadContactFilterContext(surveyId, scope, { isGuest: false, surface: 'contacts' }),
+    loadContactFilterContext(surveyId, scope, {
+      isGuest: false,
+      surface: 'contacts',
+      // 컨택원 관리는 관리자 전용 화면이다
+      share: FIELDWORK_SHARE_ALL,
+    }),
   ]);
   if (!assignment) notFound();
   const { scheme, resultCodes, assignmentOptions } = filterCtx;

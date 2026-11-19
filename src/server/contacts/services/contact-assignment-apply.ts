@@ -7,6 +7,7 @@ import { contactAssignments, contactTargets } from '@/db/schema';
 import { resolveDefaultSortKey } from '@/lib/contacts/default-sort';
 import { buildContactsFilterSql } from '@/lib/operations/contacts-filter-sql.server';
 import { type OperationsDataScope, lockWriteScope, testFlagForScope } from '@/server/data-scope';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 import {
   type ResolvedContactFilter,
   loadContactFilterContext,
@@ -46,6 +47,8 @@ async function resolveAssignmentFilter(
   const ctx = await loadContactFilterContext(surveyId, scope, {
     isGuest: false,
     surface: 'contacts',
+    // 컨택원 배정은 관리자 전용이다(procedure 가 authed) — 담당 범위 축이 없다.
+    share: FIELDWORK_SHARE_ALL,
     executor,
   });
   return resolveContactFilter(ctx, { clauses }, { mode: 'write' });
@@ -205,6 +208,7 @@ export async function listAssignmentMatches(
   const ctx = await loadContactFilterContext(input.surveyId, scope, {
     isGuest: false,
     surface: 'contacts',
+    share: FIELDWORK_SHARE_ALL,
   });
   const filter = await resolveContactFilter(ctx, { clauses: input.clauses }, { mode: 'write' });
   const { rows, total, page } = await listContactsForSurvey({

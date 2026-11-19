@@ -14,6 +14,7 @@ import { loadRespondentContactAttrs } from '@/server/read-models/respondent-cont
 import { collectReferencedContactKeys } from '@/lib/contacts/respondent-pii';
 import { isResponseExcluded } from '@/server/operations/services/profiles';
 import { getOperationsDataScope, testFlagForScope } from '@/server/data-scope';
+import type { FieldworkShare } from '@/server/fieldwork-share-scope';
 import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
 import { normalizeQuestions } from '@/lib/question/normalize';
 import { toFlatQuestion } from '@/lib/question/variants';
@@ -27,6 +28,11 @@ interface Props {
   idx: number | null;
   /** 조회 전용 — 값을 바꿀 수 없고 저장도 없다(응답 조회 화면). */
   readOnly: boolean;
+  /**
+   * 열람자의 담당 범위 — 각 페이지가 가드에서 받은 계정으로 풀어 넘긴다(`resolveGuestShare`).
+   * 범위 밖 응답(대상 없는 응답 포함)은 없는 응답과 같은 404 다 — 조회 조건이라 복호화 전에 걸러진다.
+   */
+  share: FieldworkShare;
 }
 
 /**
@@ -42,16 +48,18 @@ interface Props {
  *   구조 생존 필터(applyStructuralSurvival)로 프리필하고 배너를 띄운다(스펙 결정 2·3).
  *   렌더만으로는 DB 를 바꾸지 않는다 — 실제 이관은 저장 시점에 service 가 수행한다.
  */
-export async function renderAdminResponseScreen({ surveyId, responseId, idx, readOnly }: Props) {
+export async function renderAdminResponseScreen({
+  surveyId,
+  responseId,
+  idx,
+  readOnly,
+  share,
+}: Props) {
   await requireSurveyOwnership(surveyId);
   const scope = await getOperationsDataScope(surveyId);
 
-  const response = await getResponseById(responseId, { includeDeleted: true });
-  if (
-    !response ||
-    response.surveyId !== surveyId ||
-    response.isTest !== testFlagForScope(scope)
-  ) {
+  const response = await getResponseById(responseId, { surveyId, includeDeleted: true, share });
+  if (!response || response.isTest !== testFlagForScope(scope)) {
     notFound();
   }
 

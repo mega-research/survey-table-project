@@ -45,6 +45,7 @@ describe('contacts.attrValues procedures', () => {
       surveyId: SURVEY_ID,
       attrsKey: '기업유형',
       scope: 'test',
+      share: { kind: 'all' },
     });
     expect(res).toEqual({ values: ['상장', '코스닥'], truncated: false, hasEmpty: false });
   });
@@ -72,6 +73,7 @@ describe('contacts.attrValues procedures', () => {
       surveyId: SURVEY_ID,
       attrsKey: '명단ID',
       scope: 'real',
+      share: { kind: 'all' },
     });
     expect(res).toEqual({ count: 3 });
   });

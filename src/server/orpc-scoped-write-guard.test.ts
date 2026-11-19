@@ -58,18 +58,27 @@ describe('scoped 쓰기 procedure 의 쓰기 권한 확인', () => {
     expect(procedures.length).toBeGreaterThan(15);
   });
 
-  it('쓰기 procedure 는 assertSurveyWriteAccess 를 부른다', () => {
+  // 담당 범위에 묶인 게스트에게도 여는 procedure 는 같은 확인의 `…InShare` 판을 부른다
+  // (어느 procedure 가 그런지는 guest-share-surfaces.test.ts 가 등재표와 맞춘다).
+  it('쓰기 procedure 는 assertSurveyWriteAccess(또는 …InShare) 를 부른다', () => {
     const missing = procedures
       .filter((p) => !READ_ONLY.has(p.key) && !NO_SURVEY_ID.has(p.key))
-      .filter((p) => !p.body.includes('assertSurveyWriteAccess('))
+      .filter(
+        (p) =>
+          !p.body.includes('assertSurveyWriteAccess(') &&
+          !p.body.includes('assertSurveyWriteAccessInShare('),
+      )
       .map((p) => p.key);
     expect(missing).toEqual([]);
   });
 
-  it('읽기 procedure 는 assertSurveyAccess 로 설문 접근을 확인한다', () => {
+  it('읽기 procedure 는 assertSurveyAccess(또는 …InShare) 로 설문 접근을 확인한다', () => {
     const missing = procedures
       .filter((p) => READ_ONLY.has(p.key))
-      .filter((p) => !p.body.includes('assertSurveyAccess('))
+      .filter(
+        (p) =>
+          !p.body.includes('assertSurveyAccess(') && !p.body.includes('assertSurveyAccessInShare('),
+      )
       .map((p) => p.key);
     expect(missing).toEqual([]);
   });

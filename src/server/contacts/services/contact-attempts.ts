@@ -8,6 +8,7 @@ import { logger } from '@/lib/logger';
 import { isUniqueViolation } from '@/lib/pg-error';
 import { isUUID } from '@/lib/survey-url';
 import { lockWriteScope } from '@/server/data-scope';
+import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share-scope';
 import type { ContactTargetEditAttemptSnapshot } from '@/shared/contracts/contacts';
 import { InternalFailure } from '@/server/internal-failure';
 
@@ -43,6 +44,7 @@ async function lockTargetInCurrentScope(
   contactTargetId: string,
   surveyId: string,
   isGuest: boolean,
+  share: FieldworkShare,
 ): Promise<void> {
   const locked = await lockWriteScope(tx, surveyId, isGuest, { lock: 'update' });
   if (!locked) throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
@@ -56,6 +58,9 @@ async function lockTargetInCurrentScope(
         eq(contactTargets.id, contactTargetId),
         eq(contactTargets.surveyId, surveyId),
         eq(contactTargets.isTest, isTest),
+        // 담당 범위도 같은 잠금 조회의 조건이다 — 범위 밖 대상은 없는 대상과 똑같이 NOT_FOUND 다
+        // (권한 없음과 없음을 가르지 않는다). 회차 추가·수정·삭제가 모두 이 잠금을 먼저 지난다.
+        shareTargetCondition(share),
       ),
     )
     .for('update');
@@ -80,6 +85,8 @@ export async function addAttempt(
   input: AddContactAttemptInput,
   isGuest: boolean,
   editor: ContactEditor,
+  /** 열람자의 담당 범위(`resolveGuestShare`) — 범위 밖 대상은 `NOT_FOUND`. 관리자는 `all`. */
+  share: FieldworkShare,
 ): Promise<{ id: string; attemptNo: number }> {
   const { contactTargetId, resultCode, note } = input;
 
@@ -90,7 +97,7 @@ export async function addAttempt(
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
       result = await db.transaction(async (tx) => {
-        await lockTargetInCurrentScope(tx, input.contactTargetId, input.surveyId, isGuest);
+        await lockTargetInCurrentScope(tx, input.contactTargetId, input.surveyId, isGuest, share);
         const [maxRow] = await tx
           .select({ maxNo: sql<number | null>`MAX(${contactAttempts.attemptNo})` })
           .from(contactAttempts)
@@ -141,11 +148,12 @@ export async function updateAttempt(
   input: UpdateContactAttemptInput,
   isGuest: boolean,
   editor: ContactEditor,
+  share: FieldworkShare,
 ): Promise<void> {
   const { id, contactTargetId, surveyId, resultCode } = input;
   const note = input.note ?? null;
   await db.transaction(async (tx) => {
-    await lockTargetInCurrentScope(tx, contactTargetId, surveyId, isGuest);
+    await lockTargetInCurrentScope(tx, contactTargetId, surveyId, isGuest, share);
     const scope = and(
       eq(contactAttempts.id, id),
       eq(contactAttempts.contactTargetId, contactTargetId),
@@ -179,10 +187,11 @@ export async function deleteAttempt(
   input: DeleteContactAttemptInput,
   isGuest: boolean,
   editor: ContactEditor,
+  share: FieldworkShare,
 ): Promise<void> {
   const { id, contactTargetId, surveyId } = input;
   await db.transaction(async (tx) => {
-    await lockTargetInCurrentScope(tx, contactTargetId, surveyId, isGuest);
+    await lockTargetInCurrentScope(tx, contactTargetId, surveyId, isGuest, share);
     const [deleted] = await tx
       .delete(contactAttempts)
       .where(and(eq(contactAttempts.id, id), eq(contactAttempts.contactTargetId, contactTargetId)))

@@ -17,6 +17,7 @@ import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-conf
 import { withSurveyListGroup } from '@/lib/survey-list-groups.server';
 import { isValidUUID } from '@/lib/utils';
 import { toAnchorSnapshot } from '@/server/read-models/anchor-row';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 import { getFieldworkCompletedCounts } from '@/server/read-models/fieldwork-completions';
 import { findContactByInviteToken } from '@/server/read-models/invite-lookup';
 import { getAllTags } from '@/server/read-models/library-taxonomy';
@@ -103,7 +104,8 @@ export async function getSurveyListWithCounts(): Promise<SurveyListItem[]> {
   // 목록은 실데이터만 센다 — 응답 수(notTestResponse)와 같은 파티션.
   const [responseCounts, fieldworkCounts] = await Promise.all([
     getResponseCountsGroupedBySurvey(surveyIds),
-    getFieldworkCompletedCounts(surveyIds, false),
+    // 관리자 설문 목록 — 담당 범위는 게스트 콘솔의 축이라 여기는 전체다.
+    getFieldworkCompletedCounts(surveyIds, false, FIELDWORK_SHARE_ALL),
   ]);
 
   return surveyList.map((survey) => ({

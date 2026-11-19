@@ -41,6 +41,7 @@ import {
   saveAdminEdit,
 } from '@/server/survey-response/services/response-edit';
 import { TestResponseVersionPrunedError } from '@/server/survey-response/services/response-version-snapshot';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 const isLocalDb =
   (process.env['DATABASE_URL'] ?? '').includes('127.0.0.1') ||
@@ -317,7 +318,7 @@ describe.skipIf(!isLocalDb)('테스트 버전 위의 테스트 응답 실DB 왕�
       saveAdminEdit(
         { surveyId: s.surveyId, responseId, versionId: published.id, questionResponses: { [s.ctrl]: 'no' } },
         { id: null, email: null },
-        false,
+        false, FIELDWORK_SHARE_ALL,
       ),
     ).rejects.toBeInstanceOf(ResponseEditError);
 
@@ -329,7 +330,7 @@ describe.skipIf(!isLocalDb)('테스트 버전 위의 테스트 응답 실DB 왕�
         questionResponses: { [s.ctrl]: 'yes', [s.hid]: '관리자가 적은 값' },
       },
       { id: null, email: null },
-      false,
+      false, FIELDWORK_SHARE_ALL,
     );
 
     const row = await rowOf(responseId);

@@ -44,6 +44,7 @@ vi.mock('@/db', () => {
 });
 
 import { updateContactTarget } from './contact-targets';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 // 잠금 아래에서 읽는 대상 행 — 대상 정보의 지금 값(스키마상 attrs 는 늘 객체다).
 const lockedTarget = { id: 'ct-1', attrs: {}, memo: null, contactMethod: null };
@@ -65,7 +66,7 @@ describe('updateContactTarget groupValue 보존', () => {
         memo: '메모만 수정',
       },
       false,
-      { id: 'editor-1', email: 'editor@local' },
+      { id: 'editor-1', email: 'editor@local' }, FIELDWORK_SHARE_ALL,
     );
 
     expect(capturedSets).toHaveLength(1);
@@ -84,7 +85,7 @@ describe('updateContactTarget groupValue 보존', () => {
         systemFieldKeys: { group: '전시회' },
       },
       false,
-      { id: 'editor-1', email: 'editor@local' },
+      { id: 'editor-1', email: 'editor@local' }, FIELDWORK_SHARE_ALL,
     );
 
     expect(capturedSets).toHaveLength(1);
@@ -100,7 +101,7 @@ describe('updateContactTarget groupValue 보존', () => {
         systemFieldKeys: { group: '전시회' },
       },
       false,
-      { id: 'editor-1', email: 'editor@local' },
+      { id: 'editor-1', email: 'editor@local' }, FIELDWORK_SHARE_ALL,
     );
 
     expect(capturedSets).toHaveLength(1);
@@ -116,7 +117,7 @@ describe('updateContactTarget groupValue 보존', () => {
         systemFieldKeys: { group: '전시회' },
       },
       false,
-      { id: 'editor-1', email: 'editor@local' },
+      { id: 'editor-1', email: 'editor@local' }, FIELDWORK_SHARE_ALL,
     );
 
     expect(capturedSets).toHaveLength(1);
@@ -149,7 +150,7 @@ describe('updateContactTarget — 형식이 틀린 PII 는 거부한다', () => 
           piiUpdates: [{ columnKey: '이메일1', fieldType: 'email', plain: 'dream-elec.co.kr' }],
         },
         false,
-        { id: 'editor-1', email: 'editor@local' },
+        { id: 'editor-1', email: 'editor@local' }, FIELDWORK_SHARE_ALL,
       ),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST', message: expect.stringMatching(/「이메일1」.*메일 형식/) });
 
@@ -169,7 +170,7 @@ describe('updateContactTarget — 형식이 틀린 PII 는 거부한다', () => 
         piiUpdates: [{ columnKey: '이메일1', fieldType: 'email', plain: '' }],
       },
       false,
-      { id: 'editor-1', email: 'editor@local' },
+      { id: 'editor-1', email: 'editor@local' }, FIELDWORK_SHARE_ALL,
     );
 
     expect(upsertPiiValue).toHaveBeenCalledWith(expect.anything(), 'ct-1', '이메일1', 'email', '');
@@ -186,7 +187,7 @@ describe('updateContactTarget — 형식이 틀린 PII 는 거부한다', () => 
         piiUpdates: [{ columnKey: '이메일1', fieldType: 'email', plain: 'info@dream-elec.co.kr' }],
       },
       false,
-      { id: 'editor-1', email: 'editor@local' },
+      { id: 'editor-1', email: 'editor@local' }, FIELDWORK_SHARE_ALL,
     );
 
     expect(upsertPiiValue).toHaveBeenCalledTimes(1);

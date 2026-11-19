@@ -26,7 +26,12 @@ describe('attempts procedures', () => {
     const input = { contactTargetId: 'ct-1', surveyId: 's-1', resultCode: '1.조사완료', note: '메모' };
     const res = await client.contacts.attempts.add(input);
     // 기록자도 인증된 context 에서 넘긴다 — 회차 목록의 기록자 열.
-    expect(svc.addAttempt).toHaveBeenCalledWith(input, false, { id: 'admin-1', email: 'a@b.com' });
+    expect(svc.addAttempt).toHaveBeenCalledWith(
+      input,
+      false,
+      { id: 'admin-1', email: 'a@b.com' },
+      { kind: 'all' },
+    );
     expect(res).toEqual({ id: 'att-1', attemptNo: 1 });
   });
 
@@ -35,10 +40,12 @@ describe('attempts procedures', () => {
     const client = createRouterClient({ contacts: { attempts } }, { context: authedContext() });
     const input = { id: 'att-1', contactTargetId: 'ct-1', surveyId: 's-1', resultCode: '6.거절' };
     const res = await client.contacts.attempts.update(input);
-    expect(svc.updateAttempt).toHaveBeenCalledWith(input, false, {
-      id: 'admin-1',
-      email: 'a@b.com',
-    });
+    expect(svc.updateAttempt).toHaveBeenCalledWith(
+      input,
+      false,
+      { id: 'admin-1', email: 'a@b.com' },
+      { kind: 'all' },
+    );
     expect(res).toEqual({ ok: true });
   });
 
@@ -47,10 +54,12 @@ describe('attempts procedures', () => {
     const client = createRouterClient({ contacts: { attempts } }, { context: authedContext() });
     const input = { surveyId: 's-1', contactTargetId: 'ct-1', id: 'att-1' };
     const res = await client.contacts.attempts.remove(input);
-    expect(svc.deleteAttempt).toHaveBeenCalledWith(input, false, {
-      id: 'admin-1',
-      email: 'a@b.com',
-    });
+    expect(svc.deleteAttempt).toHaveBeenCalledWith(
+      input,
+      false,
+      { id: 'admin-1', email: 'a@b.com' },
+      { kind: 'all' },
+    );
     expect(res).toEqual({ ok: true });
   });
 
@@ -82,7 +91,12 @@ describe('attempts procedures', () => {
       resultCode: '1.조사완료',
     };
     const res = await client.contacts.attempts.add(input);
-    expect(svc.addAttempt).toHaveBeenCalledWith(input, true, { id: 'guest-1', email: 'g@b.com' });
+    expect(svc.addAttempt).toHaveBeenCalledWith(
+      input,
+      true,
+      { id: 'guest-1', email: 'g@b.com' },
+      { kind: 'all' },
+    );
     expect(res).toEqual({ id: 'att-1', attemptNo: 1 });
   });
 

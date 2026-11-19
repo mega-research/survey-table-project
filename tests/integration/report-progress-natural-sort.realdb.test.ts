@@ -16,6 +16,7 @@ import { getProgressRows } from '@/server/operations/services/report-progress';
 import { listContactsForSurvey } from '@/server/read-models/contacts';
 
 import { resolvedFilterForTest } from '../helpers/resolved-contact-filter';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 const isLocalDb =
   (process.env['DATABASE_URL'] ?? '').includes('127.0.0.1') ||
@@ -72,18 +73,18 @@ describe.skipIf(!isLocalDb)('getProgressRows — 명단 값 자연 정렬', () =
       groupByKeys: [{ kind: 'attrs' as const, key: '전시회명' }],
     };
 
-    const asc = await getProgressRows({ ...base, sort: 'meta:전시회ID', dir: 'asc' });
+    const asc = await getProgressRows({ share: FIELDWORK_SHARE_ALL, ...base, sort: 'meta:전시회ID', dir: 'asc' });
     expect(asc.map((r) => r.groupLabel)).toEqual(['다전', '나전', '가전', '라전', '마전']);
 
     // 내림차순도 숫자 무리가 숫자순으로 뒤집히고, 숫자가 아닌 값은 여전히 뒤다(NULLS LAST)
-    const desc = await getProgressRows({ ...base, sort: 'meta:전시회ID', dir: 'desc' });
+    const desc = await getProgressRows({ share: FIELDWORK_SHARE_ALL, ...base, sort: 'meta:전시회ID', dir: 'desc' });
     expect(desc.map((r) => r.groupLabel)).toEqual(['라전', '가전', '나전', '다전', '마전']);
   });
 
   it('응답률이 같은 그룹끼리도 분류 기준 값의 자연 정렬 순서로 선다', async () => {
     const surveyId = await seedSurvey();
     // 완료가 없어 응답률이 전부 0 — 동률 꼬리(분류 기준 값)만으로 순서가 정해진다
-    const rows = await getProgressRows({
+    const rows = await getProgressRows({ share: FIELDWORK_SHARE_ALL,
       surveyId,
       scope: 'real',
       condition: null,
@@ -99,7 +100,7 @@ describe.skipIf(!isLocalDb)('getProgressRows — 명단 값 자연 정렬', () =
 
   it('명단 열 분류 기준의 정렬도 같은 자연 정렬이다', async () => {
     const surveyId = await seedSurvey();
-    const rows = await getProgressRows({
+    const rows = await getProgressRows({ share: FIELDWORK_SHARE_ALL,
       surveyId,
       scope: 'real',
       condition: null,

@@ -170,7 +170,11 @@ describe('survey-read.service getSurveyListWithCounts', () => {
       }),
     );
     expect(getResponseCountsGroupedBySurvey).toHaveBeenCalledWith(['survey-1', 'survey-2']);
-    expect(getFieldworkCompletedCounts).toHaveBeenCalledWith(['survey-1', 'survey-2'], false);
+    expect(getFieldworkCompletedCounts).toHaveBeenCalledWith(
+      ['survey-1', 'survey-2'],
+      false,
+      { kind: 'all' },
+    );
     expect(result).toEqual([
       {
         id: 'survey-1',

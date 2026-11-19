@@ -18,6 +18,7 @@ import {
   updateAttempt,
 } from '@/server/contacts/services/contact-attempts';
 import { getContactDetailById } from '@/server/read-models/contacts';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 // 요청 밖이라 쿠키가 없다 — 콘솔은 실데이터 파티션을 본다(server/data-scope).
 vi.mock('next/headers', () => ({
@@ -80,7 +81,7 @@ run('대상 정보 수정 현황 — 컨택 결과 회차 (real DB)', () => {
     await addAttempt(
       { contactTargetId: targetId, surveyId, resultCode: '13. 독려', note: '금일중' },
       false,
-      editor,
+      editor, FIELDWORK_SHARE_ALL,
     );
 
     const rows = await attemptsOf(targetId);
@@ -101,11 +102,11 @@ run('대상 정보 수정 현황 — 컨택 결과 회차 (real DB)', () => {
     await addAttempt({ contactTargetId: targetId, surveyId, resultCode: '13. 독려' }, false, {
       id: 'test-admin',
       email: 'plain@local',
-    });
+    }, FIELDWORK_SHARE_ALL);
     await addAttempt({ contactTargetId: targetId, surveyId, resultCode: '3.비수신' }, false, {
       id: randomUUID(),
       email: 'gone@local',
-    });
+    }, FIELDWORK_SHARE_ALL);
 
     const rows = await attemptsOf(targetId);
     expect(rows.map((r) => [r.attemptNo, r.createdBy, r.createdByEmail])).toEqual([
@@ -121,7 +122,7 @@ run('대상 정보 수정 현황 — 컨택 결과 회차 (real DB)', () => {
     await addAttempt({ contactTargetId: targetId, surveyId, resultCode: '13. 독려' }, false, {
       id: goneId,
       email: 'gone@local',
-    });
+    }, FIELDWORK_SHARE_ALL);
 
     await db.execute(sql`DELETE FROM auth.users WHERE id = ${goneId}`);
 
@@ -136,14 +137,14 @@ run('대상 정보 수정 현황 — 컨택 결과 회차 (real DB)', () => {
     const added = await addAttempt(
       { contactTargetId: targetId, surveyId, resultCode: '13. 독려', note: '금일중' },
       false,
-      editor,
+      editor, FIELDWORK_SHARE_ALL,
     );
     const [attempt] = await attemptsOf(targetId);
 
     await deleteAttempt({ surveyId, contactTargetId: targetId, id: added.id }, false, {
       id: 'deleter',
       email: 'deleter@local',
-    });
+    }, FIELDWORK_SHARE_ALL);
 
     expect(await attemptsOf(targetId)).toEqual([]);
     const logs = await logsOf(targetId);
@@ -174,19 +175,19 @@ run('대상 정보 수정 현황 — 컨택 결과 회차 (real DB)', () => {
     await addAttempt(
       { contactTargetId: targetId, surveyId, resultCode: '13. 독려' },
       false,
-      editor,
+      editor, FIELDWORK_SHARE_ALL,
     );
     await addAttempt(
       { contactTargetId: targetId, surveyId, resultCode: '13. 독려', note: '금일중' },
       false,
-      editor,
+      editor, FIELDWORK_SHARE_ALL,
     );
     const second = (await attemptsOf(targetId))[1]!;
 
     await updateAttempt(
       { id: second.id, contactTargetId: targetId, surveyId, resultCode: '3.비수신' },
       false,
-      { id: 'fixer', email: 'fixer@local' },
+      { id: 'fixer', email: 'fixer@local' }, FIELDWORK_SHARE_ALL,
     );
 
     const after = (await attemptsOf(targetId))[1]!;
@@ -220,7 +221,7 @@ run('대상 정보 수정 현황 — 컨택 결과 회차 (real DB)', () => {
     const added = await addAttempt(
       { contactTargetId: targetId, surveyId, resultCode: '13. 독려', note: longBefore },
       false,
-      editor,
+      editor, FIELDWORK_SHARE_ALL,
     );
 
     await updateAttempt(
@@ -232,9 +233,9 @@ run('대상 정보 수정 현황 — 컨택 결과 회차 (real DB)', () => {
         note: longAfter,
       },
       false,
-      editor,
+      editor, FIELDWORK_SHARE_ALL,
     );
-    await deleteAttempt({ surveyId, contactTargetId: targetId, id: added.id }, false, editor);
+    await deleteAttempt({ surveyId, contactTargetId: targetId, id: added.id }, false, editor, FIELDWORK_SHARE_ALL);
 
     const logs = await logsOf(targetId);
     expect(logs.map((l) => l.changes)).toEqual([
@@ -261,13 +262,13 @@ run('대상 정보 수정 현황 — 컨택 결과 회차 (real DB)', () => {
     const added = await addAttempt(
       { contactTargetId: targetId, surveyId, resultCode: '13. 독려' },
       false,
-      editor,
+      editor, FIELDWORK_SHARE_ALL,
     );
 
     await updateAttempt(
       { id: added.id, contactTargetId: targetId, surveyId, resultCode: '13. 독려', note: '' },
       false,
-      editor,
+      editor, FIELDWORK_SHARE_ALL,
     );
 
     expect(await logsOf(targetId)).toEqual([]);
@@ -278,7 +279,7 @@ run('대상 정보 수정 현황 — 컨택 결과 회차 (real DB)', () => {
     const added = await addAttempt(
       { contactTargetId: targetId, surveyId, resultCode: '13. 독려' },
       false,
-      editor,
+      editor, FIELDWORK_SHARE_ALL,
     );
     // 이 대상의 기록 INSERT 만 실패시키는 트리거 — 테스트가 끝나면 지운다.
     const fn = `ceh_fail_attempt_log_${targetId.replace(/-/g, '')}`;
@@ -292,7 +293,7 @@ run('대상 정보 수정 현황 — 컨택 결과 회차 (real DB)', () => {
     );
     try {
       await expect(
-        deleteAttempt({ surveyId, contactTargetId: targetId, id: added.id }, false, editor),
+        deleteAttempt({ surveyId, contactTargetId: targetId, id: added.id }, false, editor, FIELDWORK_SHARE_ALL),
       ).rejects.toThrow();
     } finally {
       await db.execute(
@@ -314,10 +315,10 @@ run('대상 정보 수정 현황 — 컨택 결과 회차 (real DB)', () => {
     await addAttempt(
       { contactTargetId: targetId, surveyId, resultCode: '3.비수신' },
       false,
-      editor,
+      editor, FIELDWORK_SHARE_ALL,
     );
 
-    const detail = await getContactDetailById(targetId, 'real');
+    const detail = await getContactDetailById(targetId, surveyId, 'real', FIELDWORK_SHARE_ALL);
     expect(detail?.attempts.map((a) => [a.attemptNo, a.createdByEmail])).toEqual([
       [2, 'caller@local'],
       [1, null],

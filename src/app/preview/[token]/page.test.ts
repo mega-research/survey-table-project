@@ -243,6 +243,7 @@ describe('PublicSurveyPreviewPage (/preview/[token])', () => {
       surveyId: SURVEY_ID,
       isTest: false,
       structure: previewSurvey,
+      share: { kind: 'all' },
     });
     const flow = findElementByType(result, SurveyResponseFlowStub);
     expect(flow?.props?.['previewContext']).toEqual({

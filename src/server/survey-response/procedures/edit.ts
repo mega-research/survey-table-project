@@ -1,7 +1,7 @@
 import { ORPCError } from '@orpc/server';
 
 import { isGuestUser } from '@/lib/auth/guest-grants';
-import { assertSurveyWriteAccess, scoped } from '@/server/orpc';
+import { assertSurveyWriteAccessInShare, scoped } from '@/server/orpc';
 
 import { SaveAdminEditInput, SaveAdminEditOutput } from '../domain/response-edit';
 import * as svc from '../services/response-edit';
@@ -52,7 +52,8 @@ const saveAdminEdit = scoped
   .output(SaveAdminEditOutput)
   .handler(async ({ input, context }) => {
     // 보기만 하는 게스트는 응답 내역 수정 메뉴·화면이 없고 저장 자체도 여기서 막힌다.
-    assertSurveyWriteAccess(context.user.id, input.surveyId);
+    // 담당 범위에 묶인 게스트에게도 연다 — 범위 밖 응답은 서비스가 없는 응답으로 접는다.
+    const share = assertSurveyWriteAccessInShare(context.user.id, input.surveyId);
     try {
       return await svc.saveAdminEdit(
         input,
@@ -62,6 +63,7 @@ const saveAdminEdit = scoped
         },
         // 인증된 context 에서 1회 파생 — 서비스가 auth 를 재조회하지 않는다.
         isGuestUser(context.user.id),
+        share,
       );
     } catch (err) {
       mapServiceError(err);

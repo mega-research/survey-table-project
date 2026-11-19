@@ -6,6 +6,8 @@ import {
   canViewOnlyGuestPreview,
   canViewOnlyGuestViewResponse,
   getGuestSurveyIds,
+  getGuestTargetShare,
+  getShareRestrictedSurveyIds,
   getViewOnlyPreviewSurveyIds,
   getViewOnlyResponseViewSurveyIds,
   getViewOnlySurveyIds,
@@ -14,6 +16,7 @@ import {
   isAdminOrGuestGrantHolder,
   isForeignSurveyConsolePath,
   isGuestUser,
+  isShareRestrictedGuest,
   isViewOnlyGuest,
   parseGuestGrants,
   sanitizeInternalPath,
@@ -367,6 +370,97 @@ describe('보기만 하는 게스트 grant', () => {
     expect(guestPostLoginRedirect(`${overview}?mode=hour`, grants, grants)).toBe(
       `${overview}?mode=hour`,
     );
+  });
+});
+
+describe('담당 범위에 묶인 게스트', () => {
+  // guest-grants.ts 의 GUEST_TARGET_SHARES 에 박힌 실제 쌍 — 피지컬 AI 개별링크 설문의 외주 업체 둘.
+  const FROM2 = 'ddcdc638-3cc2-4a84-acd9-204b66b57e28';
+  const PRIME2 = '882ddaa3-f52b-4c7b-8837-0dcffc44575d';
+  const PHYSICAL_AI_LINKS = '1b88ae5a-257a-40ad-80a4-a6a698fde05a';
+  const base = `/admin/surveys/${PHYSICAL_AI_LINKS}/operations`;
+  const overview = `${base}/overview`;
+  const grants = `${FROM2}:${PHYSICAL_AI_LINKS},${PRIME2}:${PHYSICAL_AI_LINKS}`;
+
+  it('두 업체 계정은 같은 설문에서 서로 다른 명단 값에 묶인다(2026-11-19)', () => {
+    expect(getGuestTargetShare(FROM2, PHYSICAL_AI_LINKS)).toEqual({
+      attrsKey: '실사업체',
+      value: '프롬',
+    });
+    expect(getGuestTargetShare(PRIME2, PHYSICAL_AI_LINKS)).toEqual({
+      attrsKey: '실사업체',
+      value: '프라임',
+    });
+    expect(isShareRestrictedGuest(FROM2, PHYSICAL_AI_LINKS)).toBe(true);
+  });
+
+  it('등재가 없는 계정·다른 설문은 묶이지 않는다', () => {
+    expect(getGuestTargetShare('guest-other', PHYSICAL_AI_LINKS)).toBeNull();
+    expect(getGuestTargetShare(FROM2, 'other-survey')).toBeNull();
+    expect(isShareRestrictedGuest('admin-1', PHYSICAL_AI_LINKS)).toBe(false);
+  });
+
+  it('미들웨어용 목록은 grant 가 살아 있는 설문만 낸다', () => {
+    vi.stubEnv('GUEST_SURVEY_GRANTS', grants);
+    expect(getShareRestrictedSurveyIds(FROM2)).toEqual([PHYSICAL_AI_LINKS]);
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `${FROM2}:other-survey`);
+    expect(getShareRestrictedSurveyIds(FROM2)).toEqual([]);
+  });
+
+  it('범위로 거르는 화면은 열고, 거르지 않는 화면은 응답 현황으로 돌려보낸다', () => {
+    const redirect = (path: string) =>
+      guestPathRedirect(path, [PHYSICAL_AI_LINKS], [], [], [], [PHYSICAL_AI_LINKS]);
+    for (const open of [
+      overview,
+      `${base}/profiles`,
+      `${base}/profiles/r1/edit`,
+      `${base}/contacts`,
+      `${base}/contacts/c1`,
+      `${base}/contacts/new`,
+      `${base}/report`,
+      `/admin/surveys/${PHYSICAL_AI_LINKS}/preview`,
+    ]) {
+      expect(redirect(open), open).toBeNull();
+    }
+    for (const closed of [
+      `${base}/mail/campaigns`,
+      `${base}/mail/campaigns/new`,
+      `${base}/mail/templates`,
+      `${base}/demand`,
+      `${base}/contacts/prior-answers`,
+      `${base}/profiles/columns`,
+      `${base}/report/columns`,
+      // 일반 게스트에게도 막힌 화면은 그대로 막힌다
+      `${base}/contacts/upload`,
+      `${base}/quota`,
+    ]) {
+      expect(redirect(closed), closed).toBe(overview);
+    }
+  });
+
+  it('같은 설문의 일반 게스트(범위 없음)는 메일 화면을 그대로 연다', () => {
+    expect(guestPathRedirect(`${base}/mail/campaigns`, [PHYSICAL_AI_LINKS])).toBeNull();
+  });
+
+  it('로그인 직후 닫힌 화면이 목적지면 응답 현황에 정착시킨다', () => {
+    expect(
+      guestPostLoginRedirect(
+        `${base}/mail/campaigns`,
+        [PHYSICAL_AI_LINKS],
+        [],
+        [],
+        [],
+        [PHYSICAL_AI_LINKS],
+      ),
+    ).toBe(overview);
+  });
+
+  it('어떤 종류도 내려받지 못한다 — 내보내기 로더가 범위를 거르지 않는다', () => {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    vi.stubEnv('GUEST_SURVEY_GRANTS', grants);
+    expect(canExportSurveyData(FROM2, PHYSICAL_AI_LINKS, 'data')).toBe(false);
+    expect(canExportSurveyData(FROM2, PHYSICAL_AI_LINKS, 'response-list')).toBe(false);
+    expect(canExportSurveyData('admin-1', PHYSICAL_AI_LINKS, 'data')).toBe(true);
   });
 });
 

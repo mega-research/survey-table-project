@@ -5,6 +5,7 @@ import { inArray, sql, type SQL } from 'drizzle-orm';
 import { db, type DbOrTx } from '@/db';
 import { surveys } from '@/db/schema';
 import { extractResultCodeStatuses } from '@/lib/contacts/result-code-statuses-normalize';
+import { type FieldworkShare, shareTargetSql } from '@/server/fieldwork-share-scope';
 import type { ContactResultCode } from '@/shared/contracts/contacts';
 
 /**
@@ -21,6 +22,12 @@ import type { ContactResultCode } from '@/shared/contracts/contacts';
 export async function getFieldworkCompletedCounts(
   surveyIds: readonly string[],
   isTest: boolean,
+  /**
+   * 담당 범위(`server/fieldwork-share-scope`) — 범위 게스트의 응답 현황이 자기 범위 대상만 센다. 범위는 한 설문의
+   * 것이라 설문 하나를 물을 때만 의미가 있다. 여러 설문을 한꺼번에 세는 내부 목록은 `FIELDWORK_SHARE_ALL` 을
+   * 명시한다 — 기본값을 두지 않는다(빠뜨리면 열리는 쪽이라 tsc 가 잡게).
+   */
+  share: FieldworkShare,
   /** 쿼터 「완료」 조건의 제출 판정이 잠금을 쥔 트랜잭션을 넘긴다 — 전역 db 로 새면 풀을 잡아먹는다. */
   executor: DbOrTx = db,
 ): Promise<Map<string, number>> {
@@ -46,6 +53,7 @@ export async function getFieldworkCompletedCounts(
     SELECT ct.survey_id, count(*)::int AS count
       FROM contact_targets ct
      WHERE ct.is_test = ${isTest}
+       AND ${shareTargetSql(share, sql`ct.id`)}
        AND EXISTS (SELECT 1
                      FROM contact_attempts ca
                      JOIN positive_codes pc

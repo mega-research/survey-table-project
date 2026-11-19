@@ -34,6 +34,7 @@ import {
   getFirstTestTargetSample,
 } from '@/server/read-models/contact-sample';
 import { loadOperationsDataScope } from '@/server/data-scope';
+import { type FieldworkShare, isShareRestricted } from '@/server/fieldwork-share-scope';
 import { InternalFailure } from '@/server/internal-failure';
 
 import type {
@@ -59,11 +60,17 @@ async function loadTestLinkSample(surveyId: string, isGuest: boolean | undefined
  * inviteUrl 은 NEXT_PUBLIC_APP_URL 기준으로 서버에서 빌드 (window.origin 사용 시
  * localhost 미리보기 / 실제 발송 도메인 불일치 문제 발생).
  * 컨택 0건이면 null.
+ *
+ * `share` 는 열람자의 담당 범위다 — 범위 게스트는 **지목한 대상**(단건 발송 미리보기)만 표본으로 받고 그 대상이
+ * 범위 밖이면 null 이다(없는 대상과 같다). 대상을 지목하지 않은 호출(템플릿 편집기)은 범위 게스트에게 표본을
+ * 주지 않는다 — 「첫 대상」이 남의 범위일 수 있다.
  */
 export async function getMailPreviewSample(
   input: GetMailPreviewSampleInput,
-  opts: { isGuest?: boolean | undefined } = {},
+  opts: { isGuest?: boolean | undefined; share: FieldworkShare },
 ): Promise<GetMailPreviewSampleOutput> {
+  const { share } = opts;
+  if (!input.contactTargetId && isShareRestricted(share)) return null;
   const testTarget = input.contactTargetId
     ? null
     : await loadTestLinkSample(input.surveyId, opts.isGuest);
@@ -71,7 +78,7 @@ export async function getMailPreviewSample(
   if (!sample) {
     const scope = await loadOperationsDataScope(input.surveyId);
     sample = input.contactTargetId
-      ? await getContactSampleById(input.surveyId, input.contactTargetId, scope)
+      ? await getContactSampleById(input.surveyId, input.contactTargetId, scope, share)
       : await getFirstContactSample(input.surveyId, scope);
   }
   if (!sample) return null;

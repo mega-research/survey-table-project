@@ -42,7 +42,10 @@ describe('mail.preview procedures', () => {
     vi.mocked(svc.getMailPreviewSample).mockResolvedValue(sampleData as never);
     const client = createRouterClient({ preview }, { context: authedContext() });
     const res = await client.preview.sample({ surveyId: 'sv-1' });
-    expect(svc.getMailPreviewSample).toHaveBeenCalledWith({ surveyId: 'sv-1' }, { isGuest: false });
+    expect(svc.getMailPreviewSample).toHaveBeenCalledWith(
+      { surveyId: 'sv-1' },
+      { isGuest: false, share: { kind: 'all' } },
+    );
     expect(res).toEqual(sampleData);
   });
 
@@ -105,7 +108,10 @@ describe('mail.preview procedures', () => {
       { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
     );
     const res = await client.preview.sample({ surveyId: 'sv-1' });
-    expect(svc.getMailPreviewSample).toHaveBeenCalledWith({ surveyId: 'sv-1' }, { isGuest: true });
+    expect(svc.getMailPreviewSample).toHaveBeenCalledWith(
+      { surveyId: 'sv-1' },
+      { isGuest: true, share: { kind: 'all' } },
+    );
     expect(res).toEqual(sampleData);
   });
 });

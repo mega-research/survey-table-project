@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PgDialect } from 'drizzle-orm/pg-core';
 
 import { resolvedFilterForTest } from '../helpers/resolved-contact-filter';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 const { mockExecute, mockInnerJoin, mockWhere } = vi.hoisted(() => ({
   mockExecute: vi.fn(),
@@ -81,25 +82,25 @@ describe('운영 응답 범위', () => {
   it('aggregateStatus는 전달된 test scope의 응답만 집계한다', async () => {
     const { aggregateStatus } = await import('@/server/operations/services/aggregate-status');
 
-    await aggregateStatus('survey-1', 'test');
+    await aggregateStatus('survey-1', 'test', FIELDWORK_SHARE_ALL);
 
     const query = whereQuery();
     expect(query.sql).toContain('is_test');
     expect(query.params).toContain(true);
     const { getFieldworkCompletedCounts } = await import('@/server/read-models/fieldwork-completions');
-    expect(getFieldworkCompletedCounts).toHaveBeenLastCalledWith(['survey-1'], true);
+    expect(getFieldworkCompletedCounts).toHaveBeenLastCalledWith(['survey-1'], true, { kind: 'all' });
   });
 
   it('aggregateStatus는 전달된 real scope의 응답만 집계한다', async () => {
     const { aggregateStatus } = await import('@/server/operations/services/aggregate-status');
 
-    await aggregateStatus('survey-1', 'real');
+    await aggregateStatus('survey-1', 'real', FIELDWORK_SHARE_ALL);
 
     const query = whereQuery();
     expect(query.sql).toContain('is_test');
     expect(query.params).toContain(false);
     const { getFieldworkCompletedCounts } = await import('@/server/read-models/fieldwork-completions');
-    expect(getFieldworkCompletedCounts).toHaveBeenLastCalledWith(['survey-1'], false);
+    expect(getFieldworkCompletedCounts).toHaveBeenLastCalledWith(['survey-1'], false, { kind: 'all' });
   });
 
   it.each(SCOPE_CASES)('contacts는 %s scope의 조사대상만 조회한다', async (scope, isTest) => {
@@ -121,7 +122,7 @@ describe('운영 응답 범위', () => {
   it.each(SCOPE_CASES)('contact 상세는 %s scope 밖의 대상을 조회하지 않는다', async (scope, isTest) => {
     const { getContactDetailById } = await import('@/server/read-models/contacts');
 
-    const result = await getContactDetailById(`contact-${scope}`, scope);
+    const result = await getContactDetailById(`contact-${scope}`, 'survey-1', scope, FIELDWORK_SHARE_ALL);
 
     expect(result).toBeNull();
     expect(whereQuery().params).toContain(isTest);
@@ -141,7 +142,7 @@ describe('운영 응답 범위', () => {
   it.each(SCOPE_CASES)('report는 contact와 response를 모두 %s scope로 제한한다', async (scope, isTest) => {
     const { getProgressRows } = await import('@/server/operations/services/report-progress');
 
-    await getProgressRows({
+    await getProgressRows({ share: FIELDWORK_SHARE_ALL,
       surveyId: `report-${scope}`,
       scope,
       condition: null,

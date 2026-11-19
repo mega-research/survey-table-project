@@ -22,6 +22,7 @@ import {
   resolveContactFilter,
 } from '@/server/read-models/contact-filter-resolution';
 import { getOperationsDataScope } from '@/server/data-scope';
+import { isShareRestricted, resolveGuestShare } from '@/server/fieldwork-share-scope';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
 import { requireSurveyConsolePage } from '@/lib/auth/require-survey-console-page';
 
@@ -47,7 +48,9 @@ interface PageProps {
 export default async function ContactsPage({ params, searchParams }: PageProps) {
   const { id: surveyId } = await params;
   // 이 화면은 개인정보 평문을 싣는다 — 미들웨어를 통과한 무권한 세션을 여기서 한 번 더 거른다.
-  await requireSurveyConsolePage(surveyId);
+  // 담당 범위에 묶인 게스트에게도 연다 — 목록·필터 후보가 그 범위의 대상만 싣는다(강제 절).
+  const user = await requireSurveyConsolePage(surveyId, { share: 'allow' });
+  const share = resolveGuestShare(user.id, surveyId);
   const sp = await searchParams;
   const scope = await getOperationsDataScope(surveyId);
 
@@ -61,6 +64,7 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
   const filterCtx = await loadContactFilterContext(surveyId, scope, {
     isGuest,
     surface: 'contacts',
+    share,
   });
   const { scheme, resultCodes, assignmentOptions, columnCandidates } = filterCtx;
 
@@ -123,21 +127,26 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
           <p className="text-sm text-slate-500">총 {total.toLocaleString('ko-KR')}건</p>
         </div>
         <div className="flex items-center gap-2">
-          <ContactsDownloadDialog
-            surveyId={surveyId}
-            candidates={buildDownloadCandidates(scheme)}
-          />
+          {/* 내려받기는 명단 전체를 낸다 — 담당 범위에 묶인 게스트에게는 주소도 막혀 있다. */}
+          {!isShareRestricted(share) && (
+            <ContactsDownloadDialog
+              surveyId={surveyId}
+              candidates={buildDownloadCandidates(scheme)}
+            />
+          )}
           <ContactUploadAction
             href={`/admin/surveys/${surveyId}/operations/contacts/upload/new`}
             label="+ 업로드"
             disabled={scope === 'test'}
           />
           {/* 이월 응답은 명단과 다른 경로다 — 명단 업로드의 replace 는 개별 링크를 재발급한다. */}
-          <Button asChild variant="outline" size="sm">
-            <Link href={`/admin/surveys/${surveyId}/operations/contacts/prior-answers`}>
-              이월 응답 임포트
-            </Link>
-          </Button>
+          {!isShareRestricted(share) && (
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/admin/surveys/${surveyId}/operations/contacts/prior-answers`}>
+                이월 응답 임포트
+              </Link>
+            </Button>
+          )}
           <Button asChild size="sm">
             <Link href={contactDetailHref(surveyId, 'new', listQueryFromSearchParams(sp))}>
               + 조사 대상 추가

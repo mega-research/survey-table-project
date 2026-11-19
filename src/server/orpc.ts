@@ -5,12 +5,14 @@ import {
   canAccessSurvey,
   isAdminOrGuestGrantHolder,
   isGuestUser,
+  isShareRestrictedGuest,
   isViewOnlyGuest,
 } from '@/lib/auth/guest-grants';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
 import { isRateLimitedTwoTier, type RateLimitGroup } from '@/lib/rate-limit/rate-limiter';
 
 import type { ORPCContext } from './context';
+import { type FieldworkShare, resolveGuestShare } from './fieldwork-share-scope';
 import { rpcLoggingMiddleware } from './rpc-logging';
 
 /** 컨텍스트 타입만 박은 원시 빌더 — 미들웨어 팩토리(withRateLimit) 전용. */
@@ -124,11 +126,36 @@ export const scoped = base.use(({ context, next }) => {
   return next({ context: { user: context.user } });
 });
 
-/** 설문 접근 강제 — admin 통과, 게스트는 grant 일치 필수. 불일치 FORBIDDEN. */
+/**
+ * 설문 접근 강제 — admin 통과, 게스트는 grant 일치 필수. 불일치 FORBIDDEN.
+ *
+ * **담당 범위에 묶인 게스트(`GUEST_TARGET_SHARES`)는 거부한다** — 이 확인만 하는 procedure 는 조사 대상을
+ * 범위로 거르지 않으므로, 그대로 열면 남의 범위 명단이 샌다(기본 거부). 범위를 거르는 procedure 는 아래
+ * `assertSurveyAccessInShare`·`assertSurveyWriteAccessInShare` 를 부르고 돌려받은 범위를 서비스에 넘긴다.
+ */
 export function assertSurveyAccess(userId: string, surveyId: string): void {
+  assertSurveyGrant(userId, surveyId);
+  if (isShareRestrictedGuest(userId, surveyId)) {
+    throw new ORPCError('FORBIDDEN', { message: '이 계정에는 열려 있지 않은 기능입니다.' });
+  }
+}
+
+function assertSurveyGrant(userId: string, surveyId: string): void {
   if (!canAccessSurvey(userId, surveyId)) {
     throw new ORPCError('FORBIDDEN', { message: '해당 설문에 대한 권한이 없습니다.' });
   }
+}
+
+/**
+ * 설문 접근 강제 + 담당 범위 — 범위 게스트에게도 여는 **읽기** procedure 전용.
+ *
+ * 돌려준 범위(`server/fieldwork-share-scope`)를 **반드시 서비스에 넘겨** 조사 대상·응답을 거른다. 대상 데이터를
+ * 읽지도 돌려주지도 않는 procedure(조사표 문서 등)는 돌려받은 값을 쓰지 않아도 되지만, 그 사유를
+ * `tests/helpers/guest-share-surfaces.ts` 등재표에 적어야 한다 — 표와 소스를 맞추는 테스트가 빠진 것을 잡는다.
+ */
+export function assertSurveyAccessInShare(userId: string, surveyId: string): FieldworkShare {
+  assertSurveyGrant(userId, surveyId);
+  return resolveGuestShare(userId, surveyId);
 }
 
 /**
@@ -144,4 +171,17 @@ export function assertSurveyWriteAccess(userId: string, surveyId: string): void 
   if (isViewOnlyGuest(userId, surveyId)) {
     throw new ORPCError('FORBIDDEN', { message: '이 설문을 바꿀 권한이 없습니다.' });
   }
+}
+
+/**
+ * 설문 쓰기 강제 + 담당 범위 — 범위 게스트에게도 여는 **쓰기** procedure 전용.
+ * `assertSurveyWriteAccess` 처럼 보기만 하는 게스트를 거부하고, 돌려준 범위를 서비스에 넘겨 범위 밖 행을
+ * 건드리지 못하게 한다(범위 밖 id 는 NOT_FOUND — 존재를 드러내지 않는다).
+ */
+export function assertSurveyWriteAccessInShare(userId: string, surveyId: string): FieldworkShare {
+  const share = assertSurveyAccessInShare(userId, surveyId);
+  if (isViewOnlyGuest(userId, surveyId)) {
+    throw new ORPCError('FORBIDDEN', { message: '이 설문을 바꿀 권한이 없습니다.' });
+  }
+  return share;
 }

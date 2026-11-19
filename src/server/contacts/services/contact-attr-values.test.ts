@@ -39,6 +39,7 @@ import {
   ForbiddenAttrColumnError,
   listContactAttrValues,
 } from './contact-attr-values';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 function schemeWith(columns: ContactColumnScheme['columns']): ContactColumnScheme {
   return { version: 1, headerRow: 1, columns };
@@ -64,7 +65,7 @@ describe('listContactAttrValues', () => {
     selectResults.push([{ scheme: visibleScheme }]);
     selectResults.push([]);
 
-    await listContactAttrValues({ surveyId: 'sv-1', attrsKey: '기업유형', scope: 'real' });
+    await listContactAttrValues({ share: FIELDWORK_SHARE_ALL, surveyId: 'sv-1', attrsKey: '기업유형', scope: 'real' });
 
     expect(orderByArgs).toHaveLength(1);
     const rendered = new PgDialect().sqlToQuery(orderByArgs[0] as SQL);
@@ -76,7 +77,7 @@ describe('listContactAttrValues', () => {
     selectResults.push([{ scheme: visibleScheme }]);
     selectResults.push([{ v: '상장' }, { v: '코스닥' }]);
 
-    const result = await listContactAttrValues({
+    const result = await listContactAttrValues({ share: FIELDWORK_SHARE_ALL,
       surveyId: 'sv-1',
       attrsKey: '기업유형',
       scope: 'real',
@@ -90,7 +91,7 @@ describe('listContactAttrValues', () => {
     selectResults.push([{ v: '상장' }, { v: '__none__' }]);
     selectResults.push([]);
 
-    const result = await listContactAttrValues({
+    const result = await listContactAttrValues({ share: FIELDWORK_SHARE_ALL,
       surveyId: 'sv-1',
       attrsKey: '기업유형',
       scope: 'real',
@@ -106,7 +107,7 @@ describe('listContactAttrValues', () => {
     selectResults.push([{ v: '상장' }]);
     selectResults.push([{ id: 'ct-1' }]); // 빈 값 존재 확인 쿼리
 
-    const result = await listContactAttrValues({
+    const result = await listContactAttrValues({ share: FIELDWORK_SHARE_ALL,
       surveyId: 'sv-1',
       attrsKey: '기업유형',
       scope: 'real',
@@ -122,7 +123,7 @@ describe('listContactAttrValues', () => {
       Array.from({ length: ATTR_VALUES_CHECKBOX_LIMIT + 1 }, (_, i) => ({ v: `값${i}` })),
     );
 
-    const result = await listContactAttrValues({
+    const result = await listContactAttrValues({ share: FIELDWORK_SHARE_ALL,
       surveyId: 'sv-1',
       attrsKey: '기업유형',
       scope: 'real',
@@ -138,7 +139,7 @@ describe('listContactAttrValues', () => {
     selectResults.push([{ scheme: visibleScheme }]);
     selectResults.push([{ v: '값1' }, { v: '값10' }, { v: '값2' }]);
 
-    const result = await listContactAttrValues({
+    const result = await listContactAttrValues({ share: FIELDWORK_SHARE_ALL,
       surveyId: 'sv-1',
       attrsKey: '기업유형',
       scope: 'real',
@@ -151,7 +152,7 @@ describe('listContactAttrValues', () => {
     selectResults.push([{ scheme: visibleScheme }]);
 
     await expect(
-      listContactAttrValues({ surveyId: 'sv-1', attrsKey: '없는컬럼', scope: 'real' }),
+      listContactAttrValues({ share: FIELDWORK_SHARE_ALL, surveyId: 'sv-1', attrsKey: '없는컬럼', scope: 'real' }),
     ).rejects.toBeInstanceOf(ForbiddenAttrColumnError);
   });
 
@@ -161,7 +162,7 @@ describe('listContactAttrValues', () => {
     selectResults.push([]);
 
     await expect(
-      listContactAttrValues({ surveyId: 'sv-1', attrsKey: '숨김컬럼', scope: 'real' }),
+      listContactAttrValues({ share: FIELDWORK_SHARE_ALL, surveyId: 'sv-1', attrsKey: '숨김컬럼', scope: 'real' }),
     ).rejects.toBeInstanceOf(ForbiddenAttrColumnError);
   });
 
@@ -179,7 +180,7 @@ describe('listContactAttrValues', () => {
     ]);
     selectResults.push([{ v: 'A' }, { v: 'B' }]);
 
-    const result = await listContactAttrValues({
+    const result = await listContactAttrValues({ share: FIELDWORK_SHARE_ALL,
       surveyId: 'sv-1',
       attrsKey: '숨김컬럼',
       scope: 'real',
@@ -198,7 +199,7 @@ describe('listContactAttrValues', () => {
     ]);
     selectResults.push([{ v: '1' }, { v: '12' }]);
 
-    const result = await listContactAttrValues({
+    const result = await listContactAttrValues({ share: FIELDWORK_SHARE_ALL,
       surveyId: 'sv-1',
       attrsKey: '전시회ID',
       scope: 'real',
@@ -210,7 +211,7 @@ describe('listContactAttrValues', () => {
     selectResults.push([]);
 
     await expect(
-      listContactAttrValues({ surveyId: 'sv-1', attrsKey: '기업유형', scope: 'real' }),
+      listContactAttrValues({ share: FIELDWORK_SHARE_ALL, surveyId: 'sv-1', attrsKey: '기업유형', scope: 'real' }),
     ).rejects.toBeInstanceOf(ForbiddenAttrColumnError);
   });
 });

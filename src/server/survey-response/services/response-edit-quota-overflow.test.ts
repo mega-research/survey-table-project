@@ -2,6 +2,7 @@ import { Param } from 'drizzle-orm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { saveAdminEdit } from './response-edit';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 // 관리자 응답 수정의 이탈→완료 전환은 쿼터 「진행 중 마감」 하드 차단을 타지 않는다(ADR 0025 —
 // 운영자의 결정을 뒤집지 않는다). 대신 찬 셀이면 기존 초과 표식(metadata.quotaOverflow)만 남긴다.
@@ -132,7 +133,7 @@ async function edit() {
   return saveAdminEdit(
     { surveyId: SURVEY_ID, responseId: RESPONSE_ID, questionResponses: { q1: '남' }, versionId: null },
     EDITOR,
-    false,
+    false, FIELDWORK_SHARE_ALL,
   );
 }
 

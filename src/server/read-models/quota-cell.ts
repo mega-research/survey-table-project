@@ -4,6 +4,7 @@ import 'server-only';
 import { db, type DbOrTx } from '@/db';
 import { surveyResponses, surveys } from '@/db/schema/surveys';
 import { type OperationsDataScope, responseScopeCondition } from '@/server/data-scope';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 import { completedResponse, notDeletedResponse } from '@/server/response-filters';
 import {
   cellKeyOf,
@@ -124,7 +125,13 @@ export async function countQuotaTotalCompleted(
         responseScopeCondition(scope),
       ),
     );
-  const fieldwork = await getFieldworkCompletedCounts([surveyId], scope === 'test', executor);
+  // 쿼터 「완료」 조건은 설문 전체의 완료 수로 판정한다 — 담당 범위(게스트 콘솔의 축)와 무관하다.
+  const fieldwork = await getFieldworkCompletedCounts(
+    [surveyId],
+    scope === 'test',
+    FIELDWORK_SHARE_ALL,
+    executor,
+  );
   return (online?.total ?? 0) + (fieldwork.get(surveyId) ?? 0);
 }
 

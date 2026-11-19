@@ -20,6 +20,7 @@ import {
 import type { OperationsDataScope } from '@/server/data-scope';
 import { getSurveyContactStats } from '@/server/operations/services/contact-stats';
 import { loadProfileAnswerValues } from '@/server/operations/services/profile-answer-values';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 import { listResponsesForProfiles } from '@/server/operations/services/profiles';
 import { getContactColumnScheme } from '@/server/read-models/contacts';
 import {
@@ -87,6 +88,8 @@ export async function loadResponseListTable(
     listResponsesForProfiles({
       surveyId,
       scope,
+      // 내려받기는 담당 범위에 묶인 게스트에게 닫혀 있다(`canExportSurveyData`) — 여기는 설문 전체를 읽는다.
+      share: FIELDWORK_SHARE_ALL,
       pageSize: MAX_EXPORT_RESPONSES,
       page: 1,
       status: 'all',

@@ -30,6 +30,7 @@ vi.mock('@/db', () => ({
 
 import type { QuotaConfig } from '@/shared/contracts/quota';
 import { encryptAnswerValue } from '@/lib/crypto/response-pii';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 describe('data/responses.getResponseById — 복호화 경계', () => {
   it('암호문 답변이 평문으로 복호화되어 반환된다 (평문·비문자열 혼재 보존)', async () => {
@@ -39,7 +40,7 @@ describe('data/responses.getResponseById — 복호화 경계', () => {
       questionResponses: { q1: cipher, q2: '평문', q3: ['a'] },
     });
     const { getResponseById } = await import('@/server/read-models/responses');
-    const row = await getResponseById('r1');
+    const row = await getResponseById('r1', { surveyId: 's1', share: FIELDWORK_SHARE_ALL });
     expect(row?.questionResponses).toEqual({ q1: '김철수', q2: '평문', q3: ['a'] });
   });
 });

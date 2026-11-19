@@ -3,7 +3,14 @@ import * as z from 'zod';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from './context';
-import { assertSurveyAccess, assertSurveyWriteAccess, authed, scoped } from './orpc';
+import {
+  assertSurveyAccess,
+  assertSurveyAccessInShare,
+  assertSurveyWriteAccess,
+  assertSurveyWriteAccessInShare,
+  authed,
+  scoped,
+} from './orpc';
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -129,5 +136,59 @@ describe('authed 베이스 grant-first', () => {
     vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:s1');
     const client = createRouterClient({ adminOnly }, { context: ctx('guest-1') });
     await expect(client.adminOnly()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+});
+
+/**
+ * 담당 범위에 묶인 게스트(guest-grants 의 GUEST_TARGET_SHARES)는 기본으로 거부된다 — 설문 접근만 확인하는
+ * procedure 는 조사 대상을 범위로 거르지 않으므로 그대로 열면 남의 범위 명단이 샌다. 범위를 거르는 procedure 만
+ * `…InShare` 확인으로 그 계정을 받고, 돌려받은 범위를 서비스에 넘긴다.
+ */
+describe('담당 범위에 묶인 게스트의 설문 접근 확인', () => {
+  const FROM2 = 'ddcdc638-3cc2-4a84-acd9-204b66b57e28';
+  const PHYSICAL_AI_LINKS = '1b88ae5a-257a-40ad-80a4-a6a698fde05a';
+
+  function stub() {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `${FROM2}:${PHYSICAL_AI_LINKS},guest-1:${PHYSICAL_AI_LINKS}`);
+  }
+
+  it('assertSurveyAccess·assertSurveyWriteAccess 는 범위 게스트를 FORBIDDEN 으로 막는다', () => {
+    stub();
+    expect(() => assertSurveyAccess(FROM2, PHYSICAL_AI_LINKS)).toThrow(
+      expect.objectContaining({ code: 'FORBIDDEN' }),
+    );
+    expect(() => assertSurveyWriteAccess(FROM2, PHYSICAL_AI_LINKS)).toThrow(
+      expect.objectContaining({ code: 'FORBIDDEN' }),
+    );
+  });
+
+  it('InShare 확인은 범위 게스트를 받고 그 계정의 범위를 돌려준다', () => {
+    stub();
+    const expected = {
+      kind: 'targets',
+      surveyId: PHYSICAL_AI_LINKS,
+      attrsKey: '실사업체',
+      value: '프롬',
+    };
+    expect(assertSurveyAccessInShare(FROM2, PHYSICAL_AI_LINKS)).toEqual(expected);
+    expect(assertSurveyWriteAccessInShare(FROM2, PHYSICAL_AI_LINKS)).toEqual(expected);
+  });
+
+  it('관리자와 범위 등재가 없는 게스트는 설문 전체다', () => {
+    stub();
+    expect(assertSurveyAccessInShare('admin-1', PHYSICAL_AI_LINKS)).toEqual({ kind: 'all' });
+    expect(assertSurveyAccessInShare('guest-1', PHYSICAL_AI_LINKS)).toEqual({ kind: 'all' });
+    expect(() => assertSurveyAccess('guest-1', PHYSICAL_AI_LINKS)).not.toThrow();
+  });
+
+  it('InShare 확인도 grant 밖 설문은 FORBIDDEN 이다', () => {
+    stub();
+    expect(() => assertSurveyAccessInShare(FROM2, 'other-survey')).toThrow(
+      expect.objectContaining({ code: 'FORBIDDEN' }),
+    );
+    expect(() => assertSurveyWriteAccessInShare('nobody', PHYSICAL_AI_LINKS)).toThrow(
+      expect.objectContaining({ code: 'FORBIDDEN' }),
+    );
   });
 });

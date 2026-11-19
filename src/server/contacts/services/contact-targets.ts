@@ -12,6 +12,11 @@ import {
   hardDeleteMailForTargets,
 } from '@/server/workflows/test-mail-archive';
 import { lockWriteScope } from '@/server/data-scope';
+import {
+  type FieldworkShare,
+  shareAttrStamp,
+  shareTargetCondition,
+} from '@/server/fieldwork-share-scope';
 import { generateInviteCode } from '@/lib/survey-url';
 import { InternalFailure } from '@/server/internal-failure';
 
@@ -60,6 +65,7 @@ async function lockTargetAndReadCurrent(
   tx: DbTransaction,
   input: { id: string; surveyId: string },
   isGuest: boolean,
+  share: FieldworkShare,
 ): Promise<{
   isTest: boolean;
   scheme: NormalizedContactColumnScheme | null;
@@ -81,6 +87,8 @@ async function lockTargetAndReadCurrent(
         eq(contactTargets.id, input.id),
         eq(contactTargets.surveyId, input.surveyId),
         eq(contactTargets.isTest, scope.isTest),
+        // 담당 범위도 잠금 조회의 조건이다 — 범위 밖 대상은 없는 대상과 똑같이 NOT_FOUND 다.
+        shareTargetCondition(share),
       ),
     )
     .for('update');
@@ -112,6 +120,19 @@ async function lockCurrentSurveyScope(
 }
 
 /**
+ * 담당 범위에 묶인 게스트가 쓰는 명단 값에 범위 열을 박는다 — 입력이 그 열을 비우거나 다른 값으로 보내도
+ * 자기 범위 값이 저장된다. 범위 게스트가 대상을 남의 범위로 옮기거나(수정) 범위 밖에 만들지(추가) 못하게
+ * 하는 유일한 자리다 — 범위 열은 명단 값(JSONB)이라 DB 제약이 없다. `all` 이면 입력 그대로다.
+ */
+function withShareStamp(attrs: Record<string, string>, share: FieldworkShare): Record<string, string> {
+  if (share.kind === 'none') {
+    throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
+  }
+  const stamp = shareAttrStamp(share);
+  return stamp ? { ...attrs, [stamp.attrsKey]: stamp.value } : attrs;
+}
+
+/**
  * 컨택리스트의 "+ 컨택 추가" 모달 저장.
  * resid 는 next_contact_resid() 로 자동 발번.
  * PII 컬럼은 piiUpdates 로 별도 전달 → contact_pii 에 암호화 저장.
@@ -120,10 +141,13 @@ async function lockCurrentSurveyScope(
  *
  * isGuest 는 procedure 가 이미 인증한 context.user.id 에서 파생해 전달한다 — 서비스가
  * auth 를 재조회하면 그 실패가 fail-open(어드민 취급)으로 이어질 수 있다.
+ *
+ * `share` 는 열람자의 담당 범위다 — 범위 게스트가 추가한 대상에는 자기 범위 값이 찍힌다(`withShareStamp`).
  */
 export async function addContactTarget(
   input: AddContactTargetInput,
   isGuest: boolean,
+  share: FieldworkShare,
 ): Promise<ContactTargetRow> {
   const { surveyId, attrs: rawAttrs, piiUpdates, memo, contactMethod, systemFieldKeys } = input;
   assertStorablePiiUpdates(piiUpdates);
@@ -136,7 +160,7 @@ export async function addContactTarget(
       isGuest,
     });
     // 잠금 뒤 읽은 현재 스코프의 스킴으로 평문 PII 누적을 차단한다.
-    const attrs = sanitizeAttrsAgainstPiiScheme(rawAttrs, prepared.scheme);
+    const attrs = withShareStamp(sanitizeAttrsAgainstPiiScheme(rawAttrs, prepared.scheme), share);
     // 빈 셀('')만 NULL 처리. '0' 등 falsy 문자열 group 라벨은 보존 (|| 사용 금지).
     const rawGroup = systemFieldKeys?.group ? attrs[systemFieldKeys.group] : undefined;
     const groupValue = rawGroup != null && rawGroup !== '' ? rawGroup : null;
@@ -178,11 +202,15 @@ export async function addContactTarget(
  * 화면이 보낸 값이 아니라 대상 행 잠금 아래에서 읽은 지금 값이다 — 그 사이 다른 사람이 고친 칸을
  * 이 저장이 옛 값으로 덮으면 그것도 변경으로 남는다. 기록 INSERT 가 실패하면 저장도 롤백된다.
  * editor 는 procedure 가 인증된 context 에서 넘긴다.
+ *
+ * `share` 는 열람자의 담당 범위다 — 범위 밖 대상은 NOT_FOUND 이고, 범위 게스트는 범위 열을 바꾸지 못한다
+ * (`withShareStamp` 가 자기 값으로 되돌린다).
  */
 export async function updateContactTarget(
   input: UpdateContactTargetInput,
   isGuest: boolean,
   editor: ContactEditor,
+  share: FieldworkShare,
 ): Promise<void> {
   const { id, surveyId, attrs: rawAttrs, piiUpdates, memo, contactMethod, systemFieldKeys } = input;
   assertStorablePiiUpdates(piiUpdates);
@@ -192,9 +220,10 @@ export async function updateContactTarget(
       tx,
       { id, surveyId },
       isGuest,
+      share,
     );
     // 모드·대상 소속과 같은 잠금 스냅샷에서 확정한 스킴으로 PII 평문을 제거한다.
-    const attrs = sanitizeAttrsAgainstPiiScheme(rawAttrs, scheme);
+    const attrs = withShareStamp(sanitizeAttrsAgainstPiiScheme(rawAttrs, scheme), share);
 
     // 분류 기준 키가 전달된 경우에만 group_value 재계산.
     // systemFieldKeys.group 이 없으면(예: 자동 감지 실패) 기존 group_value 를 보존해야 함 —

@@ -18,6 +18,7 @@ import {
   resolveContactFilter,
 } from '@/server/read-models/contact-filter-resolution';
 import { getOperationsDataScope } from '@/server/data-scope';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
 import {
   mailPiiMaskKeys,
@@ -117,7 +118,12 @@ export default async function NewCampaignPage({ params, searchParams }: Props) {
   // 「현재 컨택원」 조건은 내부 실사 운영 정보라 게스트 위저드에는 열·후보·선택지를 싣지 않는다.
   // 미리보기 표는 고정 컬럼이라 깔때기 후보에 고정 목록이 붙는다(surface: 'mail').
   const isGuest = await isGuestViewer();
-  const filterCtx = await loadContactFilterContext(surveyId, scope, { isGuest, surface: 'mail' });
+  const filterCtx = await loadContactFilterContext(surveyId, scope, {
+    isGuest,
+    surface: 'mail',
+    // 단체 메일은 담당 범위에 묶인 게스트에게 닫혀 있다(페이지 가드 기본 거부) — 여기 오는 열람자는 전체를 본다.
+    share: FIELDWORK_SHARE_ALL,
+  });
   const { scheme, resultCodes, assignmentOptions, columnCandidates } = filterCtx;
   const filter = await resolveContactFilter(filterCtx, contactFilterInputFromUrl(sp), {
     mode: 'read',
