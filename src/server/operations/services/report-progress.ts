@@ -397,10 +397,19 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
   const groupLabelParts = keySqls
     .map((k, i) => sql`COALESCE(${k.label(groupKeyCol(i))}, ${k.nullLabel})`)
     .reduce((acc, cur) => sql`${acc}, ${cur}`);
-  // ORDER BY 안정 tiebreaker — 그룹 값 컬럼 전체 (동률 시 결정적 순서)
-  const tiebreaker = Array.from({ length: keyCount }, (_, i) =>
-    sql.raw(`group_sort_${i} NULLS LAST, group_raw_${i} NULLS LAST`),
-  ).reduce((acc, cur) => sql`${acc}, ${cur}`);
+  // ORDER BY 안정 tiebreaker — 그룹 값 컬럼 전체 (동률 시 결정적 순서). 명단의 글자 값은 여기서도
+  // 자연 정렬이다 — 응답률이 같은 그룹(0% 여럿 등)이 1, 10, 2 로 서지 않게.
+  const tiebreaker = sql.join(
+    keySqls.flatMap((k, i) => {
+      const sortCol = sql.raw(`group_sort_${i}`);
+      const sortExprsOfKey = k.sortsAsText ? naturalTextSortExprs(sortCol) : [sortCol];
+      return [
+        ...sortExprsOfKey.map((expr) => sql`${expr} NULLS LAST`),
+        sql.raw(`group_raw_${i} NULLS LAST`),
+      ];
+    }),
+    sql`, `,
+  );
 
   const result = await db.execute(sql`
     SELECT * FROM (

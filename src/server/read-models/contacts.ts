@@ -45,6 +45,7 @@ import {
 } from '@/lib/operations/contacts-format';
 import {
   attrsNaturalSortExprs,
+  naturalTextSortExprs,
   buildContactsFilterSql,
   effectiveMailStatusExpr,
   latestResultCodeExpr,
@@ -231,12 +232,15 @@ export async function listContactsForSurvey(args: ListContactsArgs): Promise<Lis
               orderExpr(assignmentNameExpr, dir),
               asc(contactTargets.resid),
             ]
-          : [
-              orderExpr(
-                SYSTEM_SORT_MAP[sort as keyof typeof SYSTEM_SORT_MAP] ?? contactTargets.resid,
-                dir,
-              ),
-            ];
+          : sort === 'group'
+            ? // 그룹도 명단에서 온 글자 값이다 — 명단 열과 같은 자연 정렬(숫자로 된 그룹명은 숫자순).
+              naturalTextSortExprs(sql`${contactTargets.groupValue}`).map((c) => orderExpr(c, dir))
+            : [
+                orderExpr(
+                  SYSTEM_SORT_MAP[sort as keyof typeof SYSTEM_SORT_MAP] ?? contactTargets.resid,
+                  dir,
+                ),
+              ];
 
   const dataRows = await db
     .select({
