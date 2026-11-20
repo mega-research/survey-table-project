@@ -33,11 +33,6 @@ export interface ScaleBarCell {
    */
   legendLabel?: string;
   bandIndex: number | null;
-  /**
-   * 이 칸의 최소 폭(px) — 칸 글자가 고르게 나눈 칸 폭에 들어가지 않을 만큼 길 때만 싣는다(「미참여」).
-   * 막대는 이 칸을 글자만큼 넓히고 나머지 칸이 그만큼 좁아진다. 번호·짧은 낱말 칸에는 없다.
-   */
-  minWidth?: number;
 }
 
 export interface ScaleBarBand {
@@ -122,20 +117,41 @@ const CELL_TEXT_PADDING_PX = 6;
  * 화면에 따라 달라진다.
  */
 const REFERENCE_BAR_WIDTH_PX = 324;
+/** 가장 좁은 화면(320px)에서의 막대 폭 — 넓힌 칸들이 이 폭 안에 나머지 칸의 자리를 남겨야 한다 */
+const NARROW_BAR_WIDTH_PX = 254;
+/** 넓히지 않는 칸에 남겨야 하는 최소 폭 — 번호 글자(13px)와 여백이 들어가는 폭 */
+const OTHER_CELL_MIN_PX = 18;
 
-/**
- * 칸 글자가 길어 넓혀야 하는 칸의 최소 폭. 줄바꿈되는 자리(공백)로 나눈 가장 긴 낱말로 잰다 — 칸 글자는
- * 낱말 단위로만 꺾인다(`break-keep`). 짧거나 칸이 넉넉해 넓힐 필요가 없으면 undefined.
- */
-function longTextMinWidth(text: string, count: number): number | undefined {
+/** 칸 글자가 길어 넓혀야 하는 칸의 폭 — 줄바꿈되는 자리(공백)로 나눈 가장 긴 낱말로 잰다(`break-keep`) */
+function longTextWidth(text: string, count: number): number | undefined {
   const widest = Math.max(
     ...text.split(/\s+/).map((word) =>
       [...word].reduce((sum, char) => sum + (WIDE_CHAR.test(char) ? 13 : 7.5), 0),
     ),
   );
   if (widest < LONG_TEXT_MIN_PX) return undefined;
-  const minWidth = Math.ceil(widest) + CELL_TEXT_PADDING_PX;
-  return minWidth > REFERENCE_BAR_WIDTH_PX / count ? minWidth : undefined;
+  const width = Math.ceil(widest) + CELL_TEXT_PADDING_PX;
+  return width > REFERENCE_BAR_WIDTH_PX / count ? width : undefined;
+}
+
+/**
+ * 막대 칸마다의 최소 폭(px) — 칸 글자가 고르게 나눈 칸 폭에 들어가지 않을 만큼 길 때만 값이 있다(「미참여」).
+ * 막대는 그 칸을 글자만큼 넓히고 나머지 칸이 그만큼 좁아진다. 번호·짧은 낱말 칸과 칸이 넉넉한 막대는 없다.
+ *
+ * **화면에 보이는 글자**를 넘긴다 — 명단 토큰·응답 인용은 치환한 뒤의 글자여야 한다(토큰 이름의 길이로 재면
+ * 보이는 글자와 무관하게 칸이 넓어진다). 그래서 투영(projectScaleBar)이 아니라 그리는 쪽이 부른다.
+ *
+ * 넓힐 칸이 많아 가장 좁은 화면에서 나머지 칸의 자리가 남지 않으면 아무 칸도 넓히지 않는다 — 최소 폭의 합이
+ * 막대 폭을 넘으면 뒤쪽 칸이 화면 밖으로 밀려 누를 수 없게 된다. 그럴 때는 고르게 나누는 종전 모양이 낫다.
+ */
+export function resolveScaleBarCellMinWidths(texts: readonly string[]): (number | undefined)[] {
+  const widths = texts.map((text) => longTextWidth(text, texts.length));
+  const widened = widths.filter((width): width is number => width !== undefined);
+  if (widened.length === 0) return widths;
+  const needed =
+    widened.reduce((sum, width) => sum + width, 0) +
+    (texts.length - widened.length) * OTHER_CELL_MIN_PX;
+  return needed <= NARROW_BAR_WIDTH_PX ? widths : texts.map(() => undefined);
 }
 
 function fallback(reason: ScaleBarFallbackReason): ScaleBarProjection {
@@ -319,11 +335,9 @@ export function projectScaleBar(input: ProjectScaleBarInput): ScaleBarProjection
     const text = texts[i]!;
     const bandIndex = bandIndexAt(i);
     const inCellLabel = inCellLabelAt(i, text, bandIndex);
-    const minWidth = longTextMinWidth(text, count);
     return {
       cellId: cell.id,
       text,
-      ...(minWidth !== undefined ? { minWidth } : {}),
       ...(inCellLabel !== undefined ? { inCellLabel } : {}),
       ...(hasLegend ? { legendLabel: legendNames[i]! } : {}),
       bandIndex,

@@ -4,6 +4,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ChoiceGroupScaleBar } from '@/features/question-renderer/choice-group-scale-bar';
 import type { ScaleBarModel } from '@/features/question-renderer/utils/choice-group-scale-bar';
 
+const attrs = vi.hoisted(() => ({ value: {} as Record<string, string> }));
+vi.mock('@/features/question-renderer/contact-attrs-context', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/features/question-renderer/contact-attrs-context')>()),
+  useContactAttrs: () => attrs.value,
+  useAnswerQuotes: () => ({}),
+}));
+
 /** 헤더에 구간 줄이 없는 5점 척도 — 칸마다 이름이 하나씩이라 구간(bands)이 비어 있다 */
 const fivePoint: ScaleBarModel = {
   cells: ['①', '②', '③', '④', '⑤'].map((text, n) => ({
@@ -126,7 +133,7 @@ describe('ChoiceGroupScaleBar — 글자가 긴 칸과 구간에 붙는 라벨',
   const withOffScale: ScaleBarModel = {
     cells: [
       ...DESC.map((text, n) => ({ cellId: `c${n}`, text, bandIndex: bandIndexOf(n) })),
-      { cellId: 'c10', text: '미참여', bandIndex: null, minWidth: 45 },
+      { cellId: 'c10', text: '미참여', bandIndex: null },
     ],
     bands: [
       { label: '매우 만족', start: 0, span: 2 },
@@ -177,6 +184,22 @@ describe('ChoiceGroupScaleBar — 글자가 긴 칸과 구간에 붙는 라벨',
     expect(template(bar)).toBe(expected);
     expect(template(screen.getByTestId('scale-bar-strip'))).toBe(expected);
     expect(template(screen.getByTestId('scale-bar-anchors'))).toBe(expected);
+  });
+
+  it('칸 폭은 화면에 보이는 글자로 잰다 — 명단 토큰은 치환한 값이 기준이다', () => {
+    const tokenCell = (raw: string): ScaleBarModel => ({
+      ...withOffScale,
+      cells: [...withOffScale.cells.slice(0, 10), { cellId: 'c10', text: raw, bandIndex: null }],
+    });
+    attrs.value = { 긴이름의명단열: '모름', 짧음: '해당없음' };
+    // 토큰 이름은 길지만 보이는 글자(「모름」)는 짧다 — 넓히지 않는다
+    draw(tokenCell('{{긴이름의명단열}}'));
+    expect(template(screen.getByTestId('scale-bar-strip'))).toBe('repeat(11, minmax(0, 1fr))');
+    cleanup();
+    // 토큰 이름은 짧지만 보이는 글자(「해당없음」)는 길다 — 넓힌다
+    draw(tokenCell('{{짧음}}'));
+    expect(template(screen.getByTestId('scale-bar-strip'))).toContain('minmax(58px, 1fr)');
+    attrs.value = {};
   });
 
   it('라벨은 제 구간에 붙는다 — 오른쪽 라벨은 구간 끝 칸까지, 가운데 라벨은 구간 칸들 가운데', () => {
