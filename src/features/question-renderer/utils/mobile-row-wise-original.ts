@@ -34,6 +34,13 @@ export interface MobileRowWiseOriginalQuestion {
    * 빠뜨리면 응답자가 채울 수 없는 칸이 된다.
    */
   omittedAnswerCells: TableCell[];
+  /**
+   * 제목 아래 입력칸(`TableCell.mobileBelowRowTitle`) — 조각에 두지 않고 행 제목 아래에 화면 폭으로 그릴 칸.
+   * 비어 있지 않으면 `hidesPiece` 가 참이다.
+   */
+  belowTitleCells: TableCell[];
+  /** 이 줄은 원본 표 조각을 그리지 않는다 — 조각의 응답 칸이 전부 `belowTitleCells` 로 옮겨졌다 */
+  hidesPiece: boolean;
 }
 
 export interface MobileRowWiseOriginalSubgroup {
@@ -106,6 +113,20 @@ function materializeRowsForClassification(
 
 /** 이름(섹션·행 제목)의 출처가 될 수 있는 칸 — 글자·이미지·영상 칸. 그 밖은 응답 칸이다 */
 const DISPLAY_CELL_TYPES = new Set<TableCell['type']>(['text', 'image', 'video']);
+
+/**
+ * 제목 아래 입력칸 — 조각의 응답 칸이 **전부** 표식을 켠 입력 칸일 때만 그 칸들을 돌려준다. 표식 없는 응답
+ * 칸(다른 입력칸·보기 칸·선택 칸)이 하나라도 남으면 조각을 지울 수 없으므로 표식을 읽지 않는다 — 조각을
+ * 지우면 그 칸을 채울 자리가 없어진다. 조각의 글자 칸은 함께 사라진다(표식을 켠 저작자의 선택이다).
+ */
+function collectBelowTitleCells(pieceRow: TableRow): TableCell[] {
+  const answerCells = pieceRow.cells.filter(isMobileOriginalRowInteractiveCell);
+  if (answerCells.length === 0) return [];
+  const allFlagged = answerCells.every(
+    (cell) => cell.type === 'input' && cell.mobileBelowRowTitle === true,
+  );
+  return allFlagged ? answerCells : [];
+}
 
 export function buildMobileRowWiseOriginalModel(
   input: BuildMobileRowWiseOriginalModelInput,
@@ -195,7 +216,15 @@ export function buildMobileRowWiseOriginalModel(
                 subgroups.push(next);
                 return next;
               })();
-        subgroup.questions.push({ rowId: row.id, title, projection, omittedAnswerCells });
+        const belowTitleCells = collectBelowTitleCells(projection.row);
+        subgroup.questions.push({
+          rowId: row.id,
+          title,
+          projection,
+          omittedAnswerCells,
+          belowTitleCells,
+          hidesPiece: belowTitleCells.length > 0,
+        });
       }
 
       const questions = subgroups.flatMap((subgroup) => subgroup.questions);

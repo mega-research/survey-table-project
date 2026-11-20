@@ -94,6 +94,8 @@ export const TABLE_CELL_FIELD_POLICY = {
   textInputPlaceholder: { form: 'dropped', library: 'carry' },
   // 보기 칸 안 상세 기재 — 폼에 칸이 없어 원본 그대로 둔다(스크립트로 적는다)
   optionTextInCell: { form: 'kept', library: 'carry' },
+  // 제목 아래 입력칸 — 폼에 칸이 없어 원본 그대로 둔다(스크립트로 적는다)
+  mobileBelowRowTitle: { form: 'kept', library: 'carry' },
   // 내용 선택 입력 — 폼에 칸이 없어 원본 그대로 둔다(스크립트로 적는다)
   textInputOptional: { form: 'kept', library: 'carry' },
   textInputType: OWNED,

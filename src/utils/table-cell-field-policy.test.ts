@@ -9,7 +9,7 @@ import {
 } from './table-cell-field-policy';
 
 describe('셀 필드 정책', () => {
-  it('폼이 모르는 키(kept)는 id·병합 숨김·렌더 표식·보기 칸 변수번호·보기 칸 안 상세 기재·내용 선택 입력뿐이다', () => {
+  it('폼이 모르는 키(kept)는 id·병합 숨김·렌더 표식·보기 칸 변수번호·보기 칸 안 상세 기재·내용 선택 입력·제목 아래 입력칸뿐이다', () => {
     const kept = Object.keys(TABLE_CELL_FIELD_POLICY).filter(
       (k) => !(CELL_FORM_STRIPPED_KEYS as readonly string[]).includes(k),
     );
@@ -18,6 +18,7 @@ describe('셀 필드 정책', () => {
       '_isContinuation',
       'id',
       'isHidden',
+      'mobileBelowRowTitle',
       'optionCode',
       'optionTextInCell',
       'textInputOptional',
