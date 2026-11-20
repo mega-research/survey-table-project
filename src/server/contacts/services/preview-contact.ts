@@ -57,7 +57,10 @@ export async function loadPreviewContactSeed(input: {
   if (!row) return null;
 
   const [contactAttrs, priorAnswers] = await Promise.all([
-    appendContactPii(row, { allowedKeys: async () => collectReferencedContactKeys(structure) }),
+    appendContactPii(
+      { ...row, surveyId },
+      { allowedKeys: async () => collectReferencedContactKeys(structure) },
+    ),
     lookupPriorAnswersByContactTarget({ surveyId, contactTargetId: row.id, isTest }),
   ]);
   // 범위를 가르는 열의 값은 범위 게스트의 화면(RSC props)에 싣지 않는다.

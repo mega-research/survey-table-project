@@ -32,6 +32,7 @@ import {
   upsertPiiValue,
 } from '@/lib/crypto/contact-pii-repo';
 import type { PiiFieldType } from '@/lib/crypto/pii-fields';
+import { getGuestTargetShareAttrsKeys } from '@/lib/auth/guest-grants';
 import { logger } from '@/lib/logger';
 import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts-format';
 import {
@@ -180,6 +181,15 @@ export async function ingestContactUpload(
   const groupKeyCandidate =
     (level1Key != null && headerKeys.includes(level1Key) ? level1Key : null) ??
     (mapping.systemFields.group != null ? (headerKeys[mapping.systemFields.group] ?? null) : null);
+  // 담당 범위를 가르는 열은 분류 기준이 될 수 없다 — 대분류는 group_value 로 복제돼 그룹 이름으로 드러나는데
+  // 그 열의 값은 관리자만 본다(`getGuestTargetShareAttrsKeys`). 명단을 지우기 전에 거부한다.
+  const shareKeys = getGuestTargetShareAttrsKeys(surveyId);
+  const leveledKeys = [...Object.keys(mapping.groupLevels ?? {}), groupKeyCandidate];
+  if (leveledKeys.some((key) => key != null && shareKeys.includes(key))) {
+    throw new ORPCError('BAD_REQUEST', {
+      message: '실사 업체를 가르는 열은 분류 기준으로 쓸 수 없습니다.',
+    });
+  }
   let groupKey: string | null = null;
 
   let uploadedRows = 0;

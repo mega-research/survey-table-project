@@ -60,6 +60,10 @@ import {
 } from '@/server/read-models/contact-filter-resolution';
 import { getContactSampleById } from '@/server/read-models/contact-sample';
 import { getContactDetailById, listContactsForSurvey } from '@/server/read-models/contacts';
+import {
+  loadRespondentContactAttrs,
+  loadRespondentContactAttrsMany,
+} from '@/server/read-models/respondent-contact-attrs';
 import { getResponseById } from '@/server/read-models/responses';
 import { saveAdminEdit } from '@/server/survey-response/services/response-edit';
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
@@ -328,6 +332,14 @@ run('게스트 담당 범위 (real DB)', () => {
       share: fromShare,
     });
     expect(seed?.contactAttrs).not.toHaveProperty(SHARE_KEY);
+  });
+
+  it('응답 화면이 보는 명단 값에도 범위를 가르는 열은 없다 — 초대 링크로 되읽을 수 없다', async () => {
+    // 범위 게스트는 자기 대상의 초대 링크를 안다(대리 응답) — 그 링크로 부르는 조회가 이 로더를 지난다.
+    expect(await loadRespondentContactAttrs(targetId(1))).toEqual({ 기업체명: '기업1' });
+    const many = await loadRespondentContactAttrsMany([targetId(1), targetId(4)]);
+    expect(many.get(targetId(1))).toEqual({ 기업체명: '기업1' });
+    expect(many.get(targetId(4))).toEqual({ 기업체명: '기업4' });
   });
 
   it('범위 게스트가 값을 못 본 채 저장해도 대상은 자기 범위에 남는다', async () => {

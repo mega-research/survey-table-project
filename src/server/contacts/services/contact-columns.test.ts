@@ -146,4 +146,30 @@ describe('updateContactColumns 현재 스코프', () => {
     );
     expect(capturedSets).toEqual([]);
   });
+  it('실사 업체를 가르는 열은 분류 기준으로 지정할 수 없다 — 그룹 이름으로 드러난다', async () => {
+    // guest-grants.ts 의 GUEST_TARGET_SHARES 에 등재된 설문과 그 열
+    const SHARED_SURVEY_ID = '1b88ae5a-257a-40ad-80a4-a6a698fde05a';
+    const scheme = {
+      version: 1,
+      headerRow: 1,
+      columns: [
+        {
+          key: '실사업체',
+          label: '실사업체',
+          source: 'attrs.실사업체' as const,
+          order: 1,
+          groupLevel: 1 as const,
+        },
+      ],
+    };
+
+    await expect(updateContactColumns({ surveyId: SHARED_SURVEY_ID, scheme })).rejects.toThrow(
+      '실사 업체를 가르는 열은 분류 기준으로 쓸 수 없습니다.',
+    );
+    expect(capturedSets).toEqual([]);
+
+    // 등재가 없는 설문은 같은 이름의 열을 분류 기준으로 써도 된다
+    await updateContactColumns({ surveyId: 'sv-1', scheme });
+    expect(capturedSets).toHaveLength(1);
+  });
 });

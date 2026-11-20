@@ -7,6 +7,7 @@ import {
   formatRespondentPiiValue,
   mergeRespondentAttrs,
 } from '@/lib/contacts/respondent-pii';
+import { getGuestTargetShareAttrsKeys } from '@/lib/auth/guest-grants';
 import { decryptPii } from '@/lib/crypto/aes';
 import { isPiiFieldType } from '@/lib/crypto/pii-fields';
 import { logger } from '@/lib/logger';
@@ -22,13 +23,16 @@ import { logger } from '@/lib/logger';
  * 보낸다(lookupContactAttrs). 서버 안에서 쓰는 재평가는 주지 않는다: 설문이 읽지 않는 키는 평가에
  * 쓰이지 않으므로 전부 합쳐도 결과가 같다. 개인정보 행이 없는 대상은 `allowedKeys` 를 부르지 않는다.
  * 복호화에 실패한 열은 빼고(경고 로그) 나머지로 진행한다 — 값이 비면 프리필 칸은 잠기지 않는다.
+ *
+ * **담당 범위를 가르는 열은 넣지 않는다**(`withoutShareColumns`) — 운영 내부 값이라 응답 화면으로 나가지 않고,
+ * 브라우저와 서버 재평가가 같은 값을 보도록 이 모듈의 세 조회가 똑같이 뺀다.
  */
 export async function appendContactPii(
-  target: { id: string; attrs: Record<string, string> | null | undefined },
+  target: { id: string; surveyId: string; attrs: Record<string, string> | null | undefined },
   options: { allowedKeys?: () => Promise<ReadonlySet<string>> } = {},
   executor: DbOrTx = db,
 ): Promise<Record<string, string>> {
-  const attrs = target.attrs ?? {};
+  const attrs = withoutShareColumns(target.surveyId, target.attrs ?? {});
   const rows = await executor
     .select({ fieldType: contactPii.fieldType, columnKey: contactPii.columnKey, cipher: contactPii.cipher })
     .from(contactPii)
@@ -41,6 +45,24 @@ export async function appendContactPii(
     attrs,
     allowed ? rows.filter((row) => allowed.has(row.columnKey)) : rows,
   );
+}
+
+/**
+ * 담당 범위를 가르는 명단 열(`guest-grants` 의 `GUEST_TARGET_SHARES`)을 뺀 명단 값.
+ *
+ * 그 열의 값(「어느 업체에 맡겼는가」)은 관리자만 본다. 초대 링크만 있으면 로그인 없이 부르는 명단 조회가 이
+ * 모듈을 지나므로, 여기서 빼지 않으면 범위 게스트가 자기 대상의 초대 링크로 그 값을 되읽고 응답자 브라우저에도
+ * 업체 이름이 실린다. 등재가 없는 설문은 아무것도 빼지 않는다.
+ */
+function withoutShareColumns(
+  surveyId: string,
+  attrs: Record<string, string>,
+): Record<string, string> {
+  const keys = getGuestTargetShareAttrsKeys(surveyId).filter((key) => key in attrs);
+  if (keys.length === 0) return attrs;
+  const rest = { ...attrs };
+  for (const key of keys) delete rest[key];
+  return rest;
 }
 
 interface PiiRow {
@@ -87,7 +109,11 @@ export async function loadRespondentContactAttrs(
   options: { allowedKeys?: () => Promise<ReadonlySet<string>> } = {},
 ): Promise<Record<string, string>> {
   const [row] = await executor
-    .select({ id: contactTargets.id, attrs: contactTargets.attrs })
+    .select({
+      id: contactTargets.id,
+      surveyId: contactTargets.surveyId,
+      attrs: contactTargets.attrs,
+    })
     .from(contactTargets)
     .where(eq(contactTargets.id, contactTargetId))
     .limit(1);
@@ -112,7 +138,11 @@ export async function loadRespondentContactAttrsMany(
     const chunk = ids.slice(i, i + TARGET_CHUNK);
     const [targets, piiRows] = await Promise.all([
       executor
-        .select({ id: contactTargets.id, attrs: contactTargets.attrs })
+        .select({
+          id: contactTargets.id,
+          surveyId: contactTargets.surveyId,
+          attrs: contactTargets.attrs,
+        })
         .from(contactTargets)
         .where(inArray(contactTargets.id, chunk)),
       executor
@@ -132,7 +162,14 @@ export async function loadRespondentContactAttrsMany(
       else rowsByTarget.set(row.contactTargetId, [row]);
     }
     for (const target of targets) {
-      out.set(target.id, mergePiiRows(target.id, target.attrs ?? {}, rowsByTarget.get(target.id) ?? []));
+      out.set(
+        target.id,
+        mergePiiRows(
+          target.id,
+          withoutShareColumns(target.surveyId, target.attrs ?? {}),
+          rowsByTarget.get(target.id) ?? [],
+        ),
+      );
     }
   }
   return out;

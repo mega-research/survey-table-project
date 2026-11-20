@@ -4,6 +4,7 @@ import 'server-only';
 
 import { db } from '@/db';
 import { contactTargets, surveys } from '@/db/schema';
+import { getGuestTargetShareAttrsKeys } from '@/lib/auth/guest-grants';
 import { validateDefaultSort } from '@/lib/contacts/default-sort';
 import { isGroupLevel } from '@/lib/contacts/group-levels';
 import { validateMailEmailOrder } from '@/lib/contacts/mail-email-order';
@@ -36,6 +37,10 @@ export async function updateContactColumns(input: UpdateContactColumnsInput): Pr
   if (leveled.some((c) => !isGroupLevel(c.groupLevel))) {
     throw new ORPCError('BAD_REQUEST', { message: '분류 기준 레벨은 대·중·소·세부분류만 가능합니다.' });
   }
+  assertShareColumnNotGrouped(
+    surveyId,
+    leveled.map((c) => c.source),
+  );
   const levels = leveled.map((c) => c.groupLevel);
   if (new Set(levels).size !== levels.length) {
     throw new ORPCError('BAD_REQUEST', { message: '같은 분류 레벨을 여러 컬럼에 지정할 수 없습니다.' });
@@ -60,6 +65,19 @@ export async function updateContactColumns(input: UpdateContactColumnsInput): Pr
       .set(locked.isTest ? { testContactColumns: scheme } : { contactColumns: scheme })
       .where(eq(surveys.id, surveyId));
   });
+}
+
+/**
+ * 담당 범위를 가르는 열은 분류 기준이 될 수 없다 — 대분류는 `group_value` 로 복제돼 그룹 이름·진척 보고의
+ * 줄로 드러나는데, 그 열의 값(「어느 업체에 맡겼는가」)은 관리자만 본다(`getGuestTargetShareAttrsKeys`).
+ */
+function assertShareColumnNotGrouped(surveyId: string, sources: readonly string[]): void {
+  const shareSources = getGuestTargetShareAttrsKeys(surveyId).map((key) => `attrs.${key}`);
+  if (sources.some((source) => shareSources.includes(source))) {
+    throw new ORPCError('BAD_REQUEST', {
+      message: '실사 업체를 가르는 열은 분류 기준으로 쓸 수 없습니다.',
+    });
+  }
 }
 
 /**
@@ -92,6 +110,10 @@ export async function updateContactGroupLevels(
       throw new ORPCError('CONFLICT', { message: '컬럼 스킴이 없습니다. 먼저 명단을 업로드하세요.' });
     }
 
+    assertShareColumnNotGrouped(
+      surveyId,
+      scheme.columns.filter((c) => isGroupLevel(levels[c.key])).map((c) => c.source),
+    );
     const patched = {
       ...scheme,
       columns: scheme.columns.map((c) => {

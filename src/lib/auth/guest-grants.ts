@@ -223,6 +223,20 @@ export function hasGuestTargetShares(surveyId: string): boolean {
   return GUEST_TARGET_SHARES.some((g) => g.surveyId === surveyId);
 }
 
+/**
+ * 이 설문에서 담당 범위를 가르는 명단 열 이름들(등재가 없으면 빈 배열).
+ *
+ * 그 열은 **운영 내부 값**이다 — 「어느 업체에 맡겼는가」는 관리자만 안다. 그래서 ① 응답 화면이 보는 명단 값에
+ * 넣지 않고(초대 링크로 조회하는 값·서버 재평가가 같은 값을 본다 — `read-models/respondent-contact-attrs`),
+ * ② 분류 기준으로 쓸 수 없다(대분류는 `group_value` 로 복제돼 그룹 이름으로 드러난다 — 업로드·컬럼 설정이 거부한다).
+ * 설문의 토큰·표시 조건이 이 열을 읽을 수 없다는 뜻이기도 하다.
+ */
+export function getGuestTargetShareAttrsKeys(surveyId: string): string[] {
+  return [
+    ...new Set(GUEST_TARGET_SHARES.filter((g) => g.surveyId === surveyId).map((g) => g.attrsKey)),
+  ];
+}
+
 /** 이 계정이 이 설문에서 담당 범위에 묶인 게스트인가. */
 export function isShareRestrictedGuest(userId: string, surveyId: string): boolean {
   return getGuestTargetShare(userId, surveyId) !== null;
