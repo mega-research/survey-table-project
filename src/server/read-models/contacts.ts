@@ -47,6 +47,7 @@ import {
   attrsNaturalSortExprs,
   naturalTextSortExprs,
   effectiveMailStatusExpr,
+  linkClickStateExpr,
   latestResultCodeExpr,
   mailStatusRankExpr,
   matchedResponseSubquery,
@@ -72,7 +73,7 @@ import type {
   MailHistoryRow,
   ResponseEditLogRow,
 } from '@/shared/contracts/contacts-io';
-import type { MailRecipientStatus } from '@/shared/contracts/mail';
+import type { LinkClickState, MailRecipientStatus } from '@/shared/contracts/mail';
 
 import {
   type FieldworkShare,
@@ -261,6 +262,7 @@ export async function listContactsForSurvey(args: ListContactsArgs): Promise<Lis
       progressPct: progressPctExpr.as('progress_pct'),
       responseStatus: responseStatusExpr.as('response_status'),
       latestMailStatus: effectiveMailStatusExpr.as('latest_mail_status'),
+      linkClick: linkClickStateExpr.as('link_click'),
       assignmentId: contactTargets.assignmentId,
       assignmentName: assignmentNameExpr.as('assignment_name'),
     })
@@ -292,6 +294,7 @@ export async function listContactsForSurvey(args: ListContactsArgs): Promise<Lis
     progressPct: r.progressPct,
     responseStatus: r.responseStatus,
     latestMailStatus: r.latestMailStatus,
+    linkClick: r.linkClick,
     inviteToken: r.inviteToken,
     createdAt: r.createdAt,
     assignment:
@@ -316,6 +319,7 @@ export interface ContactExportSourceRow {
   progressPct: number | null;
   responseStatus: string | null;
   latestMailStatus: MailRecipientStatus | null;
+  linkClick: LinkClickState | null;
 }
 
 /**
@@ -338,6 +342,7 @@ export async function listContactsForExport(
       progressPct: progressPctExpr.as('progress_pct'),
       responseStatus: responseStatusExpr.as('response_status'),
       latestMailStatus: effectiveMailStatusExpr.as('latest_mail_status'),
+      linkClick: linkClickStateExpr.as('link_click'),
     })
     .from(contactTargets)
     .where(and(eq(contactTargets.surveyId, surveyId), targetScopeCondition(scope)))

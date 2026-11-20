@@ -16,8 +16,11 @@ import {
   listCampaignsForSurvey,
 } from '@/server/mail/services/campaigns-read';
 import { MAX_CLICKS_PER_RECIPIENT } from '@/server/mail/domain/link-click';
+import { listContactsForExport, listContactsForSurvey } from '@/server/read-models/contacts';
 import { processResendWebhookEvent } from '@/server/mail/services/resend-webhook';
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
+
+import { resolvedFilterForTest } from '../helpers/resolved-contact-filter';
 
 vi.mock('@/lib/inngest/client', () => ({ inngest: { send: vi.fn(async () => undefined) } }));
 
@@ -340,6 +343,99 @@ run('링크 클릭 (mail link click)', () => {
       const serialized = JSON.stringify(row);
       expect(serialized).not.toContain('SecretAgent');
       expect(serialized).not.toContain(saltedHash('198.51.100.99'));
+    });
+  });
+
+  describe('조사 대상 목록의 「링크 클릭」', () => {
+    /** 조사 대상 목록이 그 대상에 보이는 링크 클릭 상태. */
+    async function linkClickOf(contactId: string) {
+      const { rows } = await listContactsForSurvey({
+        surveyId,
+        scope: 'real',
+        filter: resolvedFilterForTest(),
+        page: 1,
+        pageSize: 500,
+        sort: 'resid',
+        dir: 'asc',
+      });
+      const row = rows.find((r) => r.id === contactId);
+      if (!row) throw new Error('대상이 목록에 없다');
+      return row.linkClick;
+    }
+
+    it('설문 링크를 누른 대상은 있음, 발송 이력만 있는 대상은 없음, 발송 이력이 없으면 null 이다', async () => {
+      const campaignId = await seedCampaign();
+      const clicker = await seedContact();
+      const quiet = await seedContact();
+      const neverMailed = await seedContact();
+      const { messageId } = await seedRecipient(campaignId, clicker);
+      await seedRecipient(campaignId, quiet);
+
+      await click(messageId, SURVEY_LINK);
+
+      expect(await linkClickOf(clicker)).toBe('clicked');
+      expect(await linkClickOf(quiet)).toBe('not_clicked');
+      expect(await linkClickOf(neverMailed)).toBeNull();
+    });
+
+    it('그 밖의 링크나 수신거부 링크만 누른 대상은 없음이다', async () => {
+      const campaignId = await seedCampaign();
+      const reportOnly = await seedContact();
+      const unsubscribeOnly = await seedContact();
+      const a = await seedRecipient(campaignId, reportOnly);
+      const b = await seedRecipient(campaignId, unsubscribeOnly);
+
+      await click(a.messageId, REPORT_LINK);
+      await click(b.messageId, UNSUBSCRIBE_LINK);
+
+      expect(await linkClickOf(reportOnly)).toBe('not_clicked');
+      expect(await linkClickOf(unsubscribeOnly)).toBe('not_clicked');
+    });
+
+    it('어느 회차에서 눌렀든 있음이다 — 나중 회차에서 누르지 않아도', async () => {
+      const first = await seedCampaign();
+      const second = await seedCampaign();
+      const contactId = await seedContact();
+      const { messageId } = await seedRecipient(first, contactId);
+      await seedRecipient(second, contactId);
+
+      await click(messageId, SURVEY_LINK);
+
+      expect(await linkClickOf(contactId)).toBe('clicked');
+    });
+
+    it('보관한 회차의 클릭은 빼고, 그 회차뿐이던 대상은 발송 이력 없음으로 돌아간다', async () => {
+      const archived = await seedCampaign();
+      const kept = await seedCampaign();
+      const onlyArchived = await seedContact();
+      const both = await seedContact();
+      const a = await seedRecipient(archived, onlyArchived);
+      const b = await seedRecipient(archived, both);
+      await seedRecipient(kept, both);
+      await click(a.messageId, SURVEY_LINK);
+      await click(b.messageId, SURVEY_LINK);
+
+      await db
+        .update(mailCampaigns)
+        .set({ archivedAt: new Date() })
+        .where(eq(mailCampaigns.id, archived));
+
+      expect(await linkClickOf(onlyArchived)).toBeNull();
+      expect(await linkClickOf(both)).toBe('not_clicked');
+    });
+
+    it('엑셀 조회도 같은 값을 싣는다', async () => {
+      const campaignId = await seedCampaign();
+      const clicker = await seedContact();
+      const quiet = await seedContact();
+      const { messageId } = await seedRecipient(campaignId, clicker);
+      await seedRecipient(campaignId, quiet);
+      await click(messageId, SURVEY_LINK);
+
+      const rows = await listContactsForExport(surveyId, 'real');
+
+      expect(rows.find((r) => r.id === clicker)?.linkClick).toBe('clicked');
+      expect(rows.find((r) => r.id === quiet)?.linkClick).toBe('not_clicked');
     });
   });
 

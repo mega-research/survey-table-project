@@ -5,9 +5,12 @@ import {
   CONTACTS_PAGE_SIZE,
   maskEmail,
   attrsKeyOf,
+  normalizeContactColumnScheme,
   residColumnLabel,
   visiblePiiColumnKeys,
+  withLinkClickColumn,
 } from '@/lib/operations/contacts-format';
+import type { ContactColumnDef, ContactColumnScheme } from '@/shared/contracts/contacts';
 
 // normalizeContactListArgs / hasActiveContactFilters 테스트는 함수 제거와 함께 삭제됨
 // (다중 조건 필터 모델로 전환 — page.tsx 가 인라인으로 page/sort/dir 파싱).
@@ -103,5 +106,89 @@ describe('residColumnLabel', () => {
       }),
     ).toBe('시스템ID');
     expect(residColumnLabel(null)).toBe('시스템ID');
+  });
+});
+
+describe('withLinkClickColumn — 「링크 클릭」 열 읽기 보정', () => {
+  const col = (key: string, source: ContactColumnDef['source'], order: number): ContactColumnDef => ({
+    key,
+    label: key,
+    source,
+    order,
+  });
+  const scheme = (columns: ContactColumnDef[]): ContactColumnScheme => ({
+    version: 1,
+    headerRow: 1,
+    columns,
+  });
+  const sources = (s: ContactColumnScheme) =>
+    [...s.columns].sort((a, b) => a.order - b.order).map((c) => c.source);
+
+  it('「메일」 열 바로 뒤에 끼우고 순서 번호를 다시 매긴다', () => {
+    const out = withLinkClickColumn(
+      scheme([
+        col('resid', 'system.resid', 1),
+        col('회사명', 'attrs.회사명', 2),
+        col('email_count', 'system.email_count', 3),
+        col('web', 'system.web', 4),
+      ]),
+    );
+
+    expect(sources(out)).toEqual([
+      'system.resid',
+      'attrs.회사명',
+      'system.email_count',
+      'system.link_click',
+      'system.web',
+    ]);
+    expect(out.columns.map((c) => c.order)).toEqual([1, 2, 3, 4, 5]);
+    expect(out.columns.find((c) => c.source === 'system.link_click')).toMatchObject({
+      key: 'link_click',
+      label: '링크 클릭',
+    });
+  });
+
+  it('배열 순서와 order 가 어긋난 스킴도 order 기준 「메일」 뒤에 선다', () => {
+    const out = withLinkClickColumn(
+      scheme([
+        col('web', 'system.web', 3),
+        col('email_count', 'system.email_count', 2),
+        col('resid', 'system.resid', 1),
+      ]),
+    );
+
+    expect(sources(out)).toEqual([
+      'system.resid',
+      'system.email_count',
+      'system.link_click',
+      'system.web',
+    ]);
+  });
+
+  it('이미 있으면 같은 객체를 그대로 돌려준다 — 숨김 설정도 그대로', () => {
+    const input = scheme([
+      col('email_count', 'system.email_count', 1),
+      { ...col('link_click', 'system.link_click', 2), hidden: true },
+    ]);
+
+    expect(withLinkClickColumn(input)).toBe(input);
+  });
+
+  it('「메일」 열이 없는 스킴은 건드리지 않는다', () => {
+    const input = scheme([col('resid', 'system.resid', 1)]);
+
+    expect(withLinkClickColumn(input)).toBe(input);
+  });
+
+  it('두 번 보정해도 같다', () => {
+    const once = withLinkClickColumn(scheme([col('email_count', 'system.email_count', 1)]));
+
+    expect(withLinkClickColumn(once)).toBe(once);
+  });
+
+  it('스킴을 읽는 정규화가 이 보정을 거친다', () => {
+    const out = normalizeContactColumnScheme(scheme([col('email_count', 'system.email_count', 1)]));
+
+    expect(out?.columns.map((c) => c.source)).toEqual(['system.email_count', 'system.link_click']);
   });
 });

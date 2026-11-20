@@ -7,7 +7,9 @@
  * 단위 테스트: 곁의 contacts-format.test.ts.
  */
 
-import type { ContactColumnScheme } from '@/shared/contracts/contacts';
+import type { ContactColumnDef, ContactColumnScheme } from '@/shared/contracts/contacts';
+
+import { LINK_CLICK_COLUMN_LABEL } from './filter-shared';
 
 /**
  * system.resid 컬럼의 기본 표시 라벨.
@@ -62,8 +64,34 @@ export function normalizeContactColumnScheme(
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const scheme = raw as ContactColumnScheme;
   // 브랜드는 런타임에 존재하지 않는 표식이므로 이 한 곳에서만 단언한다.
-  if (Array.isArray(scheme.columns)) return scheme as NormalizedContactColumnScheme;
+  if (Array.isArray(scheme.columns)) {
+    return withLinkClickColumn(scheme) as NormalizedContactColumnScheme;
+  }
   return { ...scheme, columns: [] } as unknown as NormalizedContactColumnScheme;
+}
+
+/**
+ * 「메일」 열은 있는데 「링크 클릭」 열(system.link_click)이 없는 스킴에 그 열을 「메일」 열 바로 뒤에 끼운다.
+ * 링크 클릭 기능(0170) 전에 저장된 스킴을 읽을 때의 보정이다 — DB 는 고치지 않고, 열 설정을 저장하면 그때 함께
+ * 저장된다(숨김도 그때 저장된다). 이미 있거나 「메일」 열이 없으면 같은 객체를 그대로 돌려준다.
+ * 끼울 때는 order 순으로 세운 뒤 1부터 다시 매긴다 — 화면은 order 로, 열 설정 편집기는 배열 순서로 그린다.
+ */
+export function withLinkClickColumn<T extends ContactColumnScheme>(scheme: T): T {
+  if (scheme.columns.some((c) => c.source === 'system.link_click')) return scheme;
+  if (!scheme.columns.some((c) => c.source === 'system.email_count')) return scheme;
+  const sorted = [...scheme.columns].sort((a, b) => a.order - b.order);
+  const at = sorted.findIndex((c) => c.source === 'system.email_count');
+  const linkClick: ContactColumnDef = {
+    key: 'link_click',
+    label: LINK_CLICK_COLUMN_LABEL,
+    source: 'system.link_click',
+    order: 0,
+  };
+  const columns = [...sorted.slice(0, at + 1), linkClick, ...sorted.slice(at + 1)].map((c, i) => ({
+    ...c,
+    order: i + 1,
+  }));
+  return { ...scheme, columns };
 }
 
 /**

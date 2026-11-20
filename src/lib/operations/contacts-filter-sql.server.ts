@@ -1,6 +1,6 @@
 import { sql, type SQL } from 'drizzle-orm';
 
-import type { MailRecipientStatus } from '@/shared/contracts/mail';
+import type { LinkClickState, MailRecipientStatus } from '@/shared/contracts/mail';
 import { attrsSortKey } from './contacts-format';
 import type { NumRange, Parity } from './range-list';
 import {
@@ -89,6 +89,30 @@ function mailStatusCondSql(value: string): SQL {
     ? sql`${effectiveMailStatusExpr} IS NULL`
     : sql`${effectiveMailStatusExpr} = ${value}`;
 }
+
+/**
+ * 링크 클릭 상태 — 'clicked'(어느 발송 회차에서든 설문 링크를 한 번이라도 눌렀다) · 'not_clicked'(발송 이력은
+ * 있는데 누르지 않았다) · NULL(발송 이력 없음). CONTEXT.md 「링크 클릭」.
+ *
+ * 조사 대상 목록·엑셀·위저드의 칸과 필터가 이 식 하나를 쓴다. 「발송 이력」의 범위는 latestMailStatusExpr 와
+ * 같다(보관한 회차·수신자 제외, 같은 파티션) — 갈라지면 「클릭 있음」인데 메일 칸은 발송 이력 없음으로 보이는
+ * 행이 생긴다. 수신거부 여부와는 무관하다(수신거부한 사람도 눌렀으면 있음).
+ * 설문 링크 클릭만 본다 — 수신거부 링크나 그 밖의 링크만 누른 대상은 'not_clicked' 다.
+ */
+export const linkClickStateExpr = sql<LinkClickState | null>`(CASE
+  WHEN EXISTS (
+    SELECT 1 FROM mail_link_clicks
+    INNER JOIN mail_recipients ON mail_recipients.id = mail_link_clicks.recipient_id
+    INNER JOIN mail_campaigns ON mail_campaigns.id = mail_recipients.campaign_id
+    WHERE mail_recipients.contact_target_id = "contact_targets"."id"
+      AND mail_link_clicks.link_kind = 'survey'
+      AND mail_recipients.archived_at IS NULL
+      AND mail_campaigns.archived_at IS NULL
+      AND mail_campaigns.is_test = "contact_targets"."is_test"
+  ) THEN 'clicked'
+  WHEN ${latestMailStatusExpr} IS NOT NULL THEN 'not_clicked'
+  ELSE NULL
+END)`;
 
 /**
  * 메일 컬럼 상태 순위 정렬 표현식 — MAIL_FILTER_OPTIONS 순서(잘된 순: 열람 →

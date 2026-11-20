@@ -1,6 +1,7 @@
 import { ORPCError } from '@orpc/server';
 import type { ContactColumnDef, ContactColumnScheme } from '@/shared/contracts/contacts';
 import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts-format';
+import { LINK_CLICK_COLUMN_LABEL } from '@/lib/operations/filter-shared';
 
 type ContactColumnSchemeInput = Omit<ContactColumnScheme, 'columns'> & {
   readonly columns: readonly ContactColumnDef[];
@@ -31,6 +32,7 @@ const TEST_SYSTEM_COLUMNS: readonly ContactColumnDef[] = [
   { key: 'resid', label: RESID_DEFAULT_LABEL, source: 'system.resid', order: 0 },
   { key: 'contact_result', label: '컨택결과', source: 'system.contact_result', order: 0 },
   { key: 'email_count', label: '메일', source: 'system.email_count', order: 0 },
+  { key: 'link_click', label: LINK_CLICK_COLUMN_LABEL, source: 'system.link_click', order: 0 },
   { key: 'web', label: 'web', source: 'system.web', order: 0 },
   { key: 'contact_owner', label: '컨택원', source: 'system.contact_owner', order: 0 },
 ];

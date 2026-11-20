@@ -21,6 +21,7 @@ const rows: ContactExportRowData[] = [
     latestResultCode: null,
     latestAttemptNo: null,
     latestMailStatus: null,
+    linkClick: null,
     progressPct: null,
     responseStatus: null,
     inviteCode: 'abc123',

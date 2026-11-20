@@ -18,6 +18,7 @@ import {
 import {
   FILTER_SOURCE,
   MAIL_FILTER_OPTIONS,
+  linkClickLabel,
   withNoneOption,
 } from '@/lib/operations/filter-shared';
 import { type StatusPillResult, mapStatusPill } from '@/lib/operations/profiles-format';
@@ -156,6 +157,21 @@ function computeCell(
             plain: recipientStatusMeta(row.latestMailStatus).label,
           }
         : { display: '—', plain: undefined };
+    case 'system.link_click': {
+      // 어느 발송 회차에서든 메일의 설문 링크를 눌렀는가(CONTEXT.md 「링크 클릭」). 눌렀다는 것이지 응답했다는
+      // 것이 아니라 응답 상태 배지와 같은 모양을 쓰지 않는다 — 있음만 진하게, 없음·발송 이력 없음은 흐리게.
+      const label = linkClickLabel(row.linkClick);
+      if (row.linkClick === 'clicked') {
+        return {
+          display: <span className="text-xs font-medium text-slate-900">{label}</span>,
+          plain: label,
+        };
+      }
+      return {
+        display: <span className="text-xs text-slate-400">{label || '—'}</span>,
+        plain: label || undefined,
+      };
+    }
     case 'system.web': {
       if (row.responseStatus == null) {
         return {
@@ -209,6 +225,7 @@ function computeCell(
  * - pii.* source: 평문(row.piiPlain)이 실렸으면 그 값, 없으면 마스킹 힌트
  * - system.resid/contact_result/web: 시스템 필드
  * - system.email_count: 최신 메일 수신 상태 badge (mail_recipients, 발송 이력 없으면 —)
+ * - system.link_click: 메일의 설문 링크 클릭 — 있음 / 없음 (발송 이력 없으면 —)
  * - system.contact_owner: 지금 맡은 컨택원 이름 칩 (배정 없음은 —)
  *
  * 페이지네이션은 TablePagerFooter (totalPages/onPrev/onNext) 패턴을 그대로 사용.

@@ -37,6 +37,8 @@ describe('buildDownloadCandidates', () => {
       'attrs.회사명',
       'attrs.비고',
       'pii.이메일',
+      // 스킴에 없는 「링크 클릭」은 폴백 후보로 뒤에 붙는다(읽기 보정을 거친 스킴이면 「메일」 뒤에 선다).
+      'system.link_click',
       INVITE_URL_SOURCE,
     ]);
   });
@@ -60,6 +62,7 @@ describe('buildDownloadCandidates', () => {
       'system.resid',
       'system.contact_result',
       'system.email_count',
+      'system.link_click',
       'system.web',
       INVITE_URL_SOURCE,
     ]);
@@ -103,6 +106,7 @@ function makeRow(overrides: Partial<ContactExportRowData> = {}): ContactExportRo
     latestResultCode: null,
     latestAttemptNo: null,
     latestMailStatus: null,
+    linkClick: null,
     progressPct: null,
     responseStatus: null,
     inviteCode: 'abc123',
@@ -137,6 +141,12 @@ describe('formatExportCell', () => {
     const row = makeRow({ latestMailStatus: 'delivered' });
     expect(formatExportCell('system.email_count', row, base)).toBe('전달 완료');
     expect(formatExportCell('system.email_count', makeRow(), base)).toBe('');
+  });
+
+  it('링크 클릭은 있음 / 없음, 발송 이력이 없으면 빈 문자열', () => {
+    expect(formatExportCell('system.link_click', makeRow({ linkClick: 'clicked' }), '')).toBe('있음');
+    expect(formatExportCell('system.link_click', makeRow({ linkClick: 'not_clicked' }), '')).toBe('없음');
+    expect(formatExportCell('system.link_click', makeRow(), '')).toBe('');
   });
 
   it('web 은 목록 표와 같은 상태 어휘 — 완료는 라벨만, 미완료는 진행율 부속, 응답없음은 빈 문자열', () => {

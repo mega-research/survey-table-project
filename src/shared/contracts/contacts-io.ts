@@ -9,7 +9,11 @@ import type {
   ContactTargetEditChange,
   ContactUploadMode,
 } from '@/shared/contracts/contacts';
-import type { MailCampaignKind, MailRecipientStatus } from '@/shared/contracts/mail';
+import type {
+  LinkClickState,
+  MailCampaignKind,
+  MailRecipientStatus,
+} from '@/shared/contracts/mail';
 import type { ResponseEditChange } from '@/shared/contracts/survey-response';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -178,6 +182,11 @@ export interface ContactsRow {
    * 필터의 수신거부 판정과 같은 축(effectiveMailStatusExpr).
    */
   latestMailStatus: MailRecipientStatus | null;
+  /**
+   * 링크 클릭 상태 — 어느 발송 회차에서든 메일의 설문 링크를 눌렀으면 'clicked', 발송 이력은 있는데 누르지
+   * 않았으면 'not_clicked', 발송 이력이 없으면 null. 필터와 같은 식(linkClickStateExpr).
+   */
+  linkClick: LinkClickState | null;
   inviteToken: string;
   createdAt: Date;
   /**

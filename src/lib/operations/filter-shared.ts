@@ -1,4 +1,5 @@
 import type { PiiFieldType } from '@/lib/crypto/pii-fields';
+import type { LinkClickState } from '@/shared/contracts/mail';
 import type { NumRange, Parity } from './range-list';
 
 export type CombineOp = 'AND' | 'OR';
@@ -55,6 +56,8 @@ export const FILTER_SOURCE = {
   CONTACT_RESULT: 'system.contact_result',
   WEB: 'system.web',
   EMAIL: 'system.email_count',
+  /** 링크 클릭 — 어느 발송 회차에서든 메일의 설문 링크를 눌렀는가(CONTEXT.md 「링크 클릭」). */
+  LINK_CLICK: 'system.link_click',
   /**
    * 현재 컨택원 — 값은 컨택원 id, 배정 없음은 FILTER_NONE_VALUE. 파서가 이 설문·파티션의
    * 컨택원 id 로 검증한다(ParseExtraHooks.assignmentIds). 게스트 표면 후보에는 넣지 않는다.
@@ -202,6 +205,19 @@ export const MAIL_FILTER_OPTIONS = [
 export const MAIL_FILTER_VALUES: ReadonlySet<string> = new Set(
   MAIL_FILTER_OPTIONS.map((o) => o.value),
 );
+
+/** 조사 대상 목록·단체 메일 위저드 표의 「링크 클릭」 열 머리 글자. */
+export const LINK_CLICK_COLUMN_LABEL = '링크 클릭';
+
+/**
+ * 링크 클릭 칸의 글자 — 화면 칸과 엑셀이 함께 쓴다(CONTEXT.md 「링크 클릭」). 발송 이력이 없으면 빈 문자열이다
+ * (화면은 「—」, 엑셀은 빈칸). 눌렀다는 것이지 응답했다는 것이 아니다 — 「응답」이라는 글자를 쓰지 않는다.
+ */
+export function linkClickLabel(state: LinkClickState | null | undefined): string {
+  if (state === 'clicked') return '있음';
+  if (state === 'not_clicked') return '없음';
+  return '';
+}
 
 /**
  * 최근 결과코드명이 이 문자열을 포함하면 수신거부로 판정 — 조사 대상의
