@@ -175,6 +175,8 @@ export function projectRowScaleLayout(input: ProjectRowScaleLayoutInput): RowSca
         headerGrid: input.barHeaderGrid,
         row,
         targetCells: unit.cells,
+        // 그룹 없는 묶음(보기 소스 표의 문항 선택)은 그룹 설정이 없어 늘 꺼짐이다
+        middleBandLabel: unit.group?.mobileScaleBarMiddleLabel === true,
       });
       if (projected.ok) {
         drafts.push({

@@ -240,3 +240,45 @@ describe('projectRowScaleLayout — 행별 척도의 한 행', () => {
     expect(kinds(layout.segments)).toEqual(['tiles:g-use', 'bar:g-sat']);
   });
 });
+
+describe('projectRowScaleLayout — 가운데 구간 이름(mobileScaleBarMiddleLabel)', () => {
+  // 10점 척도 — 구간이 두 칸씩이라 「보통」은 여러 칸짜리 가운데 구간이다
+  const TEN_HEADER: HeaderCell[][] = [
+    [
+      head('h-item', '평가항목', 1),
+      head('h-u1', '활용함', 1),
+      head('h-u2', '활용 안함', 1),
+      head('h-a', '매우 만족', 2),
+      head('h-b', '', 2),
+      head('h-c', '보통', 2),
+      head('h-d', '', 2),
+      head('h-e', '매우 불만족', 2),
+    ],
+  ];
+  const tenInput = (group: ChoiceGroup) =>
+    input({
+      columns: columns.slice(0, 13),
+      barHeaderGrid: TEN_HEADER,
+      pieceHeaderGrid: TEN_HEADER,
+      row: row([...useCells, ...satCells().slice(0, 10)]),
+      choiceGroups: [USE, group],
+    });
+  const barOf = (group: ChoiceGroup) => {
+    const bar = projectRowScaleLayout(tenInput(group)).segments!.find((s) => s.kind === 'bar');
+    if (bar?.kind !== 'bar') throw new Error('막대가 없다');
+    return bar.bar.model;
+  };
+
+  it('그룹에 켜면 그 그룹의 막대만 가운데 구간 이름을 싣는다', () => {
+    expect(barOf({ ...SAT, mobileScaleBarMiddleLabel: true }).anchors.middle).toEqual({
+      label: '보통',
+      index: 4,
+      span: 2,
+    });
+  });
+
+  it('켜지 않은 그룹은 종전대로 가운데 라벨이 없다', () => {
+    expect(barOf(SAT).anchors).toEqual({ left: '매우 만족', right: '매우 불만족' });
+  });
+});
+

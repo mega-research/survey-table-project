@@ -652,3 +652,147 @@ describe('projectScaleBar — 막대 아래 칸 이름 목록', () => {
     expect(sameAsText.cells.every((c) => c.legendLabel === undefined)).toBe(true);
   });
 });
+
+describe('projectScaleBar — 척도 밖 보기 칸이 낀 막대(청암대 재학생 문31)', () => {
+  // ⑩~① 열 칸 뒤에 「미참여」 한 칸. 구간 줄은 「매우 만족 | (빈칸) | 보통 | (빈칸) | 매우 불만족 | (빈칸)」.
+  const DESC = ['⑩', '⑨', '⑧', '⑦', '⑥', '⑤', '④', '③', '②', '①'];
+  const anchorHeader = (tail: boolean): HeaderCell[][] => [
+    [
+      head('h-cat', '구분', 1),
+      head('h-item', '질 문', 1),
+      head('h-use', '활용 여부', 2),
+      head('h-a', '매우 만족', 2),
+      head('h-b', '', 2),
+      head('h-c', '보통', 2),
+      head('h-d', '', 2),
+      head('h-e', '매우 불만족', 2),
+      ...(tail ? [head('h-f', '', 1)] : []),
+    ],
+  ];
+  const q31 = (extra: Partial<ProjectScaleBarInput> = {}) => ({
+    ...c4({
+      scale: [...DESC, '미참여'].map((text, n) => choice(`c${n}`, text)),
+      headerGrid: anchorHeader(true),
+    }),
+    ...extra,
+  });
+  const q24 = (extra: Partial<ProjectScaleBarInput> = {}) => ({
+    ...c4({ scale: DESC.map((text, n) => choice(`c${n}`, text)), headerGrid: anchorHeader(false) }),
+    ...extra,
+  });
+
+  it('마지막 칸에 구간 이름이 없으면 이름 있는 마지막 구간을 오른쪽 라벨로 쓰고 그 구간 끝 칸에 붙인다', () => {
+    const model = modelOf(q31());
+    expect(model.bands.map((b) => b.label)).toEqual(['매우 만족', '보통', '매우 불만족']);
+    expect(model.anchors).toEqual({ left: '매우 만족', right: '매우 불만족', rightEnd: 9 });
+  });
+
+  it('첫 칸에 구간 이름이 없으면 이름 있는 첫 구간을 왼쪽 라벨로 쓰고 그 구간 첫 칸에 붙인다', () => {
+    const header: HeaderCell[][] = [
+      [
+        head('h-cat', '구분', 1),
+        head('h-item', '질 문', 1),
+        head('h-use', '활용 여부', 2),
+        head('h-x', '', 1),
+        head('h-a', '매우 만족', 2),
+        head('h-b', '', 6),
+        head('h-e', '매우 불만족', 2),
+      ],
+    ];
+    const model = modelOf(
+      c4({ scale: ['모름', ...DESC].map((text, n) => choice(`c${n}`, text)), headerGrid: header }),
+    );
+    expect(model.anchors).toEqual({ left: '매우 만족', leftStart: 1, right: '매우 불만족' });
+  });
+
+  it('이름 있는 구간이 하나뿐이면 양쪽에 같은 이름을 되풀이하지 않는다', () => {
+    const header: HeaderCell[][] = [
+      [
+        head('h-cat', '구분', 1),
+        head('h-item', '질 문', 1),
+        head('h-use', '활용 여부', 2),
+        head('h-a', '매우 만족', 2),
+        head('h-b', '', 9),
+      ],
+    ];
+    const model = modelOf(
+      c4({ scale: [...DESC, '미참여'].map((text, n) => choice(`c${n}`, text)), headerGrid: header }),
+    );
+    expect(model.anchors).toEqual({ left: '매우 만족' });
+  });
+
+  it('가운데 구간 이름(middleBandLabel)을 켜면 척도 한가운데의 여러 칸짜리 구간 이름을 그 띠 아래에 둔다', () => {
+    expect(modelOf(q31({ middleBandLabel: true })).anchors).toEqual({
+      left: '매우 만족',
+      middle: { label: '보통', index: 4, span: 2 },
+      right: '매우 불만족',
+      rightEnd: 9,
+    });
+    expect(modelOf(q24({ middleBandLabel: true })).anchors).toEqual({
+      left: '매우 만족',
+      middle: { label: '보통', index: 4, span: 2 },
+      right: '매우 불만족',
+    });
+  });
+
+  it('켜지 않으면 종전대로 여러 칸짜리 가운데 구간 이름은 쓰지 않는다', () => {
+    expect(modelOf(q24()).anchors).toEqual({ left: '매우 만족', right: '매우 불만족' });
+    expect(modelOf(q31()).anchors.middle).toBeUndefined();
+  });
+
+  it('켜도 한 칸짜리 정가운데 구간은 종전과 같은 모양이고, 한가운데가 아닌 구간은 가운데 라벨이 아니다', () => {
+    expect(modelOf({ ...c4(), middleBandLabel: true }).anchors).toEqual({
+      left: '매우 불만족',
+      middle: { label: '보통', index: 5 },
+      right: '매우 만족',
+    });
+    const offCenter: HeaderCell[][] = [
+      [
+        head('h-cat', '구분', 1),
+        head('h-item', '질 문', 1),
+        head('h-use', '활용 여부', 2),
+        head('h-a', '매우 만족', 2),
+        head('h-c', '보통', 2),
+        head('h-d', '', 4),
+        head('h-e', '매우 불만족', 2),
+      ],
+    ];
+    const model = modelOf({
+      ...c4({ scale: DESC.map((text, n) => choice(`c${n}`, text)), headerGrid: offCenter }),
+      middleBandLabel: true,
+    });
+    expect(model.anchors).toEqual({ left: '매우 만족', right: '매우 불만족' });
+  });
+
+  it('글자가 긴 칸에만 최소 폭을 준다 — 번호 칸과 띄어 쓴 짧은 낱말은 그대로다', () => {
+    const cells = modelOf(q31()).cells;
+    expect(cells.slice(0, 10).every((cell) => cell.minWidth === undefined)).toBe(true);
+    expect(cells[10]!.minWidth).toBeGreaterThanOrEqual(42);
+    const texts = ['10점', '모름', '해당 없음', '해당없음', 'N/A'];
+    const widths = modelOf(
+      c4({
+        scale: [...DESC.slice(0, 6), ...texts].map((text, n) => choice(`c${n}`, text)),
+        headerGrid: undefined,
+      }),
+    ).cells.slice(6);
+    expect(widths.map((cell) => cell.minWidth !== undefined)).toEqual([
+      false,
+      false,
+      false,
+      true,
+      false,
+    ]);
+  });
+
+  it('칸이 넉넉한 막대는 긴 글자 칸도 넓히지 않는다 — 고르게 나눈 폭에 이미 들어간다', () => {
+    // 여성기업 사전조사 E4 모양(6칸) · 균형성장 만족도 모양(7칸) — 운영 중인 막대는 열 틀이 그대로여야 한다
+    const six = ['①', '②', '③', '④', '⑤', '운영과 관계 없음'];
+    const seven = ['① 전혀 그렇지 않다', '② 그렇지 않다', '③', '④ 보통', '⑤', '⑥ 그렇다', '⑦ 매우 그렇다'];
+    for (const texts of [six, seven]) {
+      const cells = modelOf(
+        c4({ scale: texts.map((text, n) => choice(`c${n}`, text)), headerGrid: undefined }),
+      ).cells;
+      expect(cells.every((cell) => cell.minWidth === undefined)).toBe(true);
+    }
+  });
+});

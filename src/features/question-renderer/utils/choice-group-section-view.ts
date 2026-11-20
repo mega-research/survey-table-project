@@ -36,6 +36,7 @@ export function projectChoiceGroupSectionView(
       headerGrid: input.headerGrid,
       row: input.row,
       targetCells: input.groupCells,
+      middleBandLabel: group.mobileScaleBarMiddleLabel === true,
     });
     if (scaleBar.ok) return { kind: 'scale-bar', group, model: scaleBar.model };
   }

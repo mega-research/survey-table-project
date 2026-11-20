@@ -954,6 +954,10 @@ export interface ChoiceGroup {
   // 라벨)로 그린다. mobileOriginalLine 과 배타 — 읽기·쓰기는 features/question-renderer/utils/
   // choice-group-mobile-view, 판정은 choice-group-scale-bar. 그릴 수 없으면 원본 한 줄로 폴백한다.
   mobileScaleBar?: boolean;
+  // 척도 막대의 가운데 구간 이름 — 척도 한가운데의 여러 칸짜리 구간 이름(10점 척도의 「보통」)도 그 띠 아래에
+  // 적는다. 기본 꺼짐(한 칸짜리 정가운데 구간만 가운데 라벨). 양끝 이름이 길면 겹칠 수 있어 그룹마다 켠다.
+  // 빌더 화면 없이 스크립트로 적는다. 판정은 choice-group-scale-bar 의 projectScaleBar.
+  mobileScaleBarMiddleLabel?: boolean;
 }
 
 export interface TableColumn {

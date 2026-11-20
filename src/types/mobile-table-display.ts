@@ -26,6 +26,8 @@
  * - `ChoiceGroup.mobileScaleBar` 를 켜면 그 그룹을 가로 스크롤 없는 척도 막대로 그린다 — `mobileOriginalLine`
  *   과 배타, 읽기·쓰기는 question-renderer/utils/choice-group-mobile-view, 판정은 choice-group-scale-bar(못
  *   그리면 이유 코드와 함께 원본 한 줄 폴백, 빌더 경고는 survey-builder/lib/scale-bar-diagnostics)).
+ * - `ChoiceGroup.mobileScaleBarMiddleLabel` 을 켜면 그 그룹의 척도 막대가 한가운데의 여러 칸짜리 구간
+ *   이름(10점 척도의 「보통」)도 띠 아래에 둔다 — 기본 꺼짐(CONTEXT.md 「척도 막대」).
  * - axis-cards 는 보기 소스 표에서는 보기 그룹이 축 — 축(그룹)마다 카드 하나, 제목은 열 헤더(sticky), 타일은 행
  *   제목.
  * - 테이블 유형에서는 응답 칸이 놓인 열이 축이라 그룹 없이도 열마다 카드 하나(행 제목 + 그 칸의 입력, 투영
