@@ -147,6 +147,13 @@ export function MobileRowWiseOriginalSheet({
                       renderScaleBar && renderGroupTiles
                         ? scaleLayoutByRowId?.get(question.rowId)?.segments
                         : undefined;
+                    // 조각 밖에 그리는 칸도 조각의 칸과 같은 표식을 갖는다 — 오류 안내의 「위치로 이동」
+                    // (scroll-to-issue)이 이 표식으로 칸을 찾는다. 인스턴스 id 는 조각 표와 같은 규약
+                    // (`buildRowWiseCellInstanceIds`)이다. 없으면 문항 카드 맨 위로 떨어진다.
+                    const issueTargetProps = (cell: TableCell) => ({
+                      'data-cell-id': cell.id,
+                      'data-cell-instance-id': `${question.rowId}:${question.rowId}:${cell.id}`,
+                    });
                     const renderPieceCell = (cell: TableCell) =>
                       renderCell(
                         cell,
@@ -189,6 +196,7 @@ export function MobileRowWiseOriginalSheet({
                           <div
                             key={cell.id}
                             data-omitted-answer-cell={cell.id}
+                            {...issueTargetProps(cell)}
                             className={cn(
                               'px-1',
                               errorCellIds?.has(cell.id) && 'rounded-lg ring-2 ring-red-300',
@@ -198,18 +206,24 @@ export function MobileRowWiseOriginalSheet({
                           </div>
                         ))}
                         {/* 제목 아래 입력칸 — 조각 대신 화면 폭으로(척도 표 맨 아래 서술형 줄) */}
-                        {question.belowTitleCells.map((cell) => (
-                          <div
-                            key={cell.id}
-                            data-below-title-cell={cell.id}
-                            className={cn(
-                              'px-1',
-                              errorCellIds?.has(cell.id) && 'rounded-lg ring-2 ring-red-300',
-                            )}
-                          >
-                            {renderPieceCell(cell)}
-                          </div>
-                        ))}
+                        {question.belowTitleCells.map((cell) => {
+                          // 화면 폭으로 그린다 — 원본 표 칸에 맞춘 고정 너비(inputWidth)는 여기서 뜻이 없다
+                          const fullWidthCell = { ...cell };
+                          delete fullWidthCell.inputWidth;
+                          return (
+                            <div
+                              key={cell.id}
+                              data-below-title-cell={cell.id}
+                              {...issueTargetProps(cell)}
+                              className={cn(
+                                'px-1',
+                                errorCellIds?.has(cell.id) && 'rounded-lg ring-2 ring-red-300',
+                              )}
+                            >
+                              {renderPieceCell(fullWidthCell)}
+                            </div>
+                          );
+                        })}
                         {question.hidesPiece ? null : segments && renderScaleBar && renderGroupTiles ? (
                           // 행별 척도 — 그룹은 제 보기 모양(타일·원본 한 줄·막대), 나머지 응답 칸은 원본 조각
                           <div className="space-y-3">

@@ -175,4 +175,45 @@ describe('MobileRowWiseOriginalSheet', () => {
     expect(field.getAttribute('data-invalid')).toBe('true');
     expect(container.querySelector('[data-below-title-cell="essay-input"]')).not.toBeNull();
   });
+
+  it('제목 아래 입력칸은 오류 「위치로 이동」 표식을 갖고, 원본 표용 고정 너비 없이 그린다', () => {
+    const essay: MobileRowWiseOriginalQuestion = {
+      ...question('essay-row', '개선점'),
+      belowTitleCells: [
+        { id: 'essay-input', type: 'input', content: '', mobileBelowRowTitle: true, inputWidth: 60 },
+      ],
+      hidesPiece: true,
+    };
+    const rendered: Array<number | undefined> = [];
+    const { container } = render(
+      <MobileRowWiseOriginalSheet
+        model={{ sections: [{ id: 's', label: '', subgroups: [{ id: 'g', label: '', questions: [essay] }] }] }}
+        renderCell={(cell) => {
+          rendered.push(cell.inputWidth);
+          return <textarea aria-label={cell.id} />;
+        }}
+      />,
+    );
+    // 조각의 칸과 같은 표식 규약 — scrollToIssue 가 data-cell-instance-id → data-cell-id 순으로 찾는다
+    const wrapper = container.querySelector('[data-cell-id="essay-input"]')!;
+    expect(wrapper.getAttribute('data-cell-instance-id')).toBe('essay-row:essay-row:essay-input');
+    expect(wrapper.contains(screen.getByLabelText('essay-input'))).toBe(true);
+    expect(rendered).toEqual([undefined]);
+  });
+
+  it('제외한 앞쪽 열의 응답 칸도 오류 「위치로 이동」 표식을 갖는다', () => {
+    const etc: MobileRowWiseOriginalQuestion = {
+      ...question('etc-row', '기타'),
+      omittedAnswerCells: [{ id: 'etc-input', type: 'input', content: '' }],
+    };
+    const { container } = render(
+      <MobileRowWiseOriginalSheet
+        model={{ sections: [{ id: 's', label: '', subgroups: [{ id: 'g', label: '', questions: [etc] }] }] }}
+        renderCell={(cell) => <input aria-label={cell.id} />}
+      />,
+    );
+    const wrapper = container.querySelector('[data-cell-id="etc-input"]')!;
+    expect(wrapper.getAttribute('data-cell-instance-id')).toBe('etc-row:etc-row:etc-input');
+    expect(wrapper.contains(screen.getByLabelText('etc-input'))).toBe(true);
+  });
 });

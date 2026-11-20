@@ -7,6 +7,7 @@ import type { MobileTableDisplayMode } from '@/types/mobile-table-display';
 import type { ChoiceGroup, HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 
 import { InteractiveTableResponse } from './interactive-table-response';
+import { buildRowWiseCellInstanceIds, scrollToIssue } from './scroll-to-issue';
 
 /**
  * 표 문항 — 모바일 표시 방식 「행별 척도」(row-wise-scale). 「행별 원본 문항」과 같은 시트 구조에서
@@ -342,6 +343,22 @@ describe('행별 척도 — 제목 아래 입력칸(mobileBelowRowTitle)', () =>
     expect(valueOf()['essay-input']).toBe('실습실 확충');
     // 척도 줄은 그대로 막대다
     expect(within(rowBlock('r1')).getByTestId('choice-group-scale-bar-g1')).toBeInTheDocument();
+  });
+
+  it('오류 「위치로 이동」이 제목 아래 입력칸으로 가고, 고정 너비를 준 칸도 좁게 그리지 않는다', () => {
+    const narrow = essayRow(true);
+    narrow.cells[1] = { ...narrow.cells[1]!, inputWidth: 60 };
+    const allRows = [...rows, narrow];
+    render(<Harness rowsOverride={allRows} errorCellIds={new Set(['essay-input'])} />);
+    const field = within(rowBlock('essay')).getByRole('textbox');
+    expect(field.closest('[style*="60px"]')).toBeNull();
+    Element.prototype.scrollIntoView = vi.fn();
+    scrollToIssue({
+      cellInstanceIds: buildRowWiseCellInstanceIds(allRows, ['essay-input']),
+      cellIds: ['essay-input'],
+      questionId: 'q1',
+    });
+    expect(document.activeElement).toBe(field);
   });
 
   it('표식이 없으면 종전대로 원본 표 조각 안에 그린다', () => {
