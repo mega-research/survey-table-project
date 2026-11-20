@@ -24,7 +24,6 @@ describe('classifyClickedLink', () => {
 
   it.each([
     ['다른 호스트', 'https://spri.kr/posts?code=stat_sw_ai_reports'],
-    ['다른 호스트의 /survey 경로', 'https://other.example.com/survey/x'],
     ['우리 호스트의 다른 경로', `${APP}/admin/login`],
     ['경로 앞머리만 닮은 것', `${APP}/surveys-list`],
     ['경로 앞머리만 닮은 것(짧은 링크)', `${APP}/index`],
@@ -33,14 +32,45 @@ describe('classifyClickedLink', () => {
     expect(classifyClickedLink(link, APP)).toEqual({ kind: 'other', url: link });
   });
 
-  it('앱 주소를 모르면 전부 그 밖의 링크다', () => {
-    expect(classifyClickedLink(`${APP}/survey/x`, null).kind).toBe('other');
-    expect(classifyClickedLink(`${APP}/survey/x`, 'not a url').kind).toBe('other');
+  it('앱 주소를 모르면 판정하지 않는다 — 토큰이 든 주소를 그 밖의 링크로 저장하지 않게', () => {
+    expect(classifyClickedLink(`${APP}/i/AbCdEf1234`, null)).toBeNull();
+    expect(classifyClickedLink(`${APP}/survey/x`, undefined)).toBeNull();
+    expect(classifyClickedLink('https://spri.kr/posts', 'not a url')).toBeNull();
+  });
+
+  it.each([
+    ['짧은 초대 링크', 'https://old.example.co.kr/i/AbCdEf1234', 'https://old.example.co.kr'],
+    [
+      '초대 링크',
+      'https://old.example.co.kr/survey/abc?invite=3f0c6c1e-0000-4000-8000-000000000000',
+      'https://old.example.co.kr',
+    ],
+    [
+      '수신거부 링크',
+      'https://old.example.co.kr/unsubscribe/3f0c6c1e-token',
+      'https://old.example.co.kr',
+    ],
+  ])(
+    '다른 호스트라도 우리 주소 모양(%s)이면 경로와 매개변수를 버리고 사이트 주소만 남긴다',
+    (_name, link, origin) => {
+      // 발송한 뒤 앱 주소가 바뀌면 옛 메일의 링크가 다른 호스트로 온다 — 그 사람 전용 토큰이 남으면 안 된다.
+      expect(classifyClickedLink(link, APP)).toEqual({ kind: 'other', url: origin });
+    },
+  );
+
+  it('우리 호스트의 다른 경로에 초대 매개변수가 붙어 와도 그 값은 남기지 않는다', () => {
+    const stored = classifyClickedLink(
+      `${APP}/admin/login?invite=3f0c6c1e-0000-4000-8000-000000000000&from=mail`,
+      APP,
+    );
+    expect(stored?.kind).toBe('other');
+    expect(stored?.url).not.toContain('3f0c6c1e');
+    expect(stored?.url).toContain('from=mail');
   });
 
   it('그 밖의 링크 주소는 상한에서 자른다', () => {
     const long = `https://spri.kr/${'a'.repeat(LINK_URL_MAX_LENGTH + 50)}`;
-    expect(classifyClickedLink(long, APP).url).toHaveLength(LINK_URL_MAX_LENGTH);
+    expect(classifyClickedLink(long, APP)?.url).toHaveLength(LINK_URL_MAX_LENGTH);
   });
 });
 

@@ -14,6 +14,7 @@ import {
 import { encryptPii } from '@/lib/crypto/aes';
 import { blindIndex } from '@/lib/crypto/blind';
 import { saltedHash } from '@/lib/duplicate-detection/salted-hash.server';
+import { logger } from '@/lib/logger';
 import { fetchCandidateIds } from '@/server/mail/services/campaigns';
 import {
   countCampaignCandidates,
@@ -267,27 +268,74 @@ run('링크 클릭 (mail link click)', () => {
       expect(await recipientStatus(campaignId, recipientId)).toBe('delivered');
     });
 
-    it('수신자 한 명의 클릭 줄은 상한을 넘지 않는다', async () => {
-      const campaignId = await seedCampaign();
-      const { recipientId, messageId } = await seedRecipient(campaignId, await seedContact());
-      await db.insert(mailLinkClicks).values(
-        Array.from({ length: MAX_CLICKS_PER_RECIPIENT }, () => ({
-          recipientId,
-          linkKind: 'other' as const,
-          linkUrl: REPORT_LINK,
-          clickedAt: new Date('2026-11-20T05:00:00.000Z'),
-        })),
-      );
+    describe('수신자당 상한', () => {
+      /** 그 밖의 링크 클릭으로 상한을 채운 수신자. */
+      async function seedRecipientAtCap() {
+        const campaignId = await seedCampaign();
+        const seeded = await seedRecipient(campaignId, await seedContact());
+        await db.insert(mailLinkClicks).values(
+          Array.from({ length: MAX_CLICKS_PER_RECIPIENT }, () => ({
+            recipientId: seeded.recipientId,
+            linkKind: 'other' as const,
+            linkUrl: REPORT_LINK,
+            clickedAt: new Date('2026-11-20T05:00:00.000Z'),
+          })),
+        );
+        return { campaignId, ...seeded };
+      }
 
-      expect(await click(messageId, SURVEY_LINK)).toBe('processed');
+      it('상한이 찬 뒤의 클릭은 줄을 늘리지 않고 경고를 남긴다', async () => {
+        const { recipientId, messageId } = await seedRecipientAtCap();
+        const warn = vi.spyOn(logger, 'warn');
 
-      expect(await storedClicks(recipientId)).toHaveLength(MAX_CLICKS_PER_RECIPIENT);
-      expect((await campaignRow(campaignId)).clickedCount).toBe(0);
+        expect(await click(messageId, REPORT_LINK)).toBe('processed');
+
+        expect(await storedClicks(recipientId)).toHaveLength(MAX_CLICKS_PER_RECIPIENT);
+        expect(warn).toHaveBeenCalledWith(
+          expect.objectContaining({ recipientId }),
+          expect.stringContaining('상한'),
+        );
+        // 로그에는 식별자만 — 주소·IP·브라우저 정보를 싣지 않는다.
+        expect(JSON.stringify(warn.mock.calls)).not.toContain('spri.kr');
+        expect(JSON.stringify(warn.mock.calls)).not.toContain('203.0.113.7');
+        warn.mockRestore();
+      });
+
+      it('상한이 찼어도 첫 설문 링크 클릭은 남긴다 — 설문에 들어온 사람이 「없음」으로 남지 않게', async () => {
+        const { campaignId, recipientId, messageId } = await seedRecipientAtCap();
+
+        await click(messageId, SURVEY_LINK);
+        await click(messageId, SURVEY_LINK, { at: '2026-11-21T00:00:00.000Z' });
+
+        expect((await campaignRow(campaignId)).clickedCount).toBe(1);
+        // 첫 설문 링크 클릭 한 줄만 늘고, 그 뒤 클릭은 다시 버린다.
+        expect(await storedClicks(recipientId)).toHaveLength(MAX_CLICKS_PER_RECIPIENT + 1);
+      });
     });
 
-    it('클릭 정보가 빠진 알림은 줄 없이 열람으로만 올린다', async () => {
+    it('앱 주소 설정이 없으면 기록하지 않고 실패한다 — 설정을 고친 뒤 재전송이 처리된다', async () => {
       const campaignId = await seedCampaign();
       const { recipientId, messageId } = await seedRecipient(campaignId, await seedContact());
+      const id = `evt-${randomUUID()}`;
+
+      delete process.env['NEXT_PUBLIC_APP_URL'];
+      try {
+        await expect(click(messageId, `${APP}/i/AbCdEf1234`, { id })).rejects.toThrow();
+      } finally {
+        process.env['NEXT_PUBLIC_APP_URL'] = APP;
+      }
+      expect(await storedClicks(recipientId)).toHaveLength(0);
+      expect(await recipientStatus(campaignId, recipientId)).toBe('delivered');
+
+      // 실패한 알림은 장부에도 남지 않는다 — 같은 알림이 다시 오면 처음부터 처리한다.
+      expect(await click(messageId, `${APP}/i/AbCdEf1234`, { id })).toBe('processed');
+      expect((await storedClicks(recipientId)).map((c) => c.linkKind)).toEqual(['survey']);
+    });
+
+    it('클릭 정보가 빠진 알림은 줄 없이 열람으로만 올리고 경고를 남긴다', async () => {
+      const campaignId = await seedCampaign();
+      const { recipientId, messageId } = await seedRecipient(campaignId, await seedContact());
+      const warn = vi.spyOn(logger, 'warn');
 
       const result = await processResendWebhookEvent({
         id: `evt-${randomUUID()}`,
@@ -300,6 +348,12 @@ run('링크 클릭 (mail link click)', () => {
       expect(result).toBe('processed');
       expect(await storedClicks(recipientId)).toHaveLength(0);
       expect(await recipientStatus(campaignId, recipientId)).toBe('opened');
+      // 발송 서비스가 알림 모양을 바꾸면 클릭 기록이 통째로 사라진다 — 조용히 넘어가지 않는다.
+      expect(warn).toHaveBeenCalledWith(
+        expect.objectContaining({ recipientId }),
+        expect.stringContaining('클릭 정보'),
+      );
+      warn.mockRestore();
     });
 
     it('보관된 수신자의 클릭은 세지 않는다', async () => {

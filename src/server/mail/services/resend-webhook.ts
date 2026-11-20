@@ -11,6 +11,7 @@ import {
 } from '@/db/schema/mail';
 import { hashClientIp } from '@/lib/duplicate-detection/salted-hash.server';
 import { logger } from '@/lib/logger';
+import { InternalFailure } from '@/server/internal-failure';
 import {
   CLICKED_EVENT_TYPE,
   MAX_CLICKS_PER_RECIPIENT,
@@ -170,17 +171,27 @@ async function applyClickEvent(
   const clickedAt = parseEventAt(click?.timestamp) ?? parseEventAt(createdAtRaw) ?? new Date();
 
   if (click) {
+    const link = classifyClickedLink(click.link, process.env['NEXT_PUBLIC_APP_URL']);
+    // 앱 주소를 모르면 어느 링크인지 판정할 수 없다 — 판정 없이 저장하면 초대·수신거부 주소가 그 밖의 링크로
+    // 남는다. 실패로 답해 발송 서비스가 다시 보내게 한다(발송도 이 설정이 없으면 멈춘다).
+    if (!link) throw new InternalFailure('NEXT_PUBLIC_APP_URL 환경변수가 설정되지 않았습니다.');
+
     const [counted] = await tx
-      .select({ count: sql<number>`count(*)::int` })
+      .select({
+        total: sql<number>`count(*)::int`,
+        survey: sql<number>`count(*) FILTER (WHERE ${mailLinkClicks.linkKind} = 'survey')::int`,
+      })
       .from(mailLinkClicks)
       .where(eq(mailLinkClicks.recipientId, row.id));
-    if ((counted?.count ?? 0) >= MAX_CLICKS_PER_RECIPIENT) {
+    const atCap = (counted?.total ?? 0) >= MAX_CLICKS_PER_RECIPIENT;
+    // 상한이 찼어도 그 수신자의 첫 설문 링크 클릭은 남긴다 — MAX_CLICKS_PER_RECIPIENT 주석 참조.
+    const firstSurveyClick = link.kind === 'survey' && (counted?.survey ?? 0) === 0;
+    if (atCap && !firstSurveyClick) {
       logger.warn(
         { recipientId: row.id, campaignId: row.campaignId },
         '[link-click] 수신자당 클릭 상한 — 이 클릭은 기록하지 않는다',
       );
     } else {
-      const link = classifyClickedLink(click.link, process.env['NEXT_PUBLIC_APP_URL']);
       await tx.insert(mailLinkClicks).values({
         recipientId: row.id,
         linkKind: link.kind,
@@ -190,6 +201,12 @@ async function applyClickEvent(
         userAgent: click.userAgent?.slice(0, USER_AGENT_MAX_LENGTH) ?? null,
       });
     }
+  } else {
+    // 발송 서비스가 알림 모양을 바꾸면 여기로만 들어와 클릭 기록이 통째로 사라진다 — 조용히 넘어가지 않는다.
+    logger.warn(
+      { recipientId: row.id, campaignId: row.campaignId },
+      '[link-click] 클릭 정보를 읽지 못한 알림 — 줄 없이 열람으로만 올린다',
+    );
   }
 
   await applyRecipientTransition(tx, {
