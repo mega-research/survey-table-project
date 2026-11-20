@@ -83,7 +83,7 @@ export async function lookupContactAttrs(
   // 개인정보로 암호화된 열도 합친다 — 단 응답자 브라우저로 가는 값이라 이 대상자가 보는 버전(실대상은
   // 발행본, 테스트 대상자는 테스트 버전)이 토큰·조건으로 실제로 읽는 열만 보낸다. 쓰지도 않는 남의
   // 연락처가 초대 링크로 새어 나가면 안 된다.
-  return appendContactPii(row, {
+  return appendContactPii({ ...row, surveyId }, {
     allowedKeys: async () =>
       collectReferencedContactKeys(await loadPinnedVersionSnapshot(surveyId, row.isTest)),
   });

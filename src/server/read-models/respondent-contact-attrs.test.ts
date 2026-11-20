@@ -24,6 +24,7 @@ function makeExecutor(rows: Array<{ fieldType: string; columnKey: string; cipher
 }
 
 const TARGET_ID = '11111111-1111-4111-8111-111111111111';
+const SURVEY_ID = '22222222-2222-4222-8222-222222222222';
 
 describe('appendContactPii', () => {
   it('개인정보 열의 복호화 값을 열 이름 키로 합친다 — 사업자번호는 하이픈을 넣는다', async () => {
@@ -31,7 +32,7 @@ describe('appendContactPii', () => {
       { fieldType: 'biz_number', columnKey: '사업자등록번호', cipher: encryptPii('1234567890') },
       { fieldType: 'name', columnKey: '대표자명', cipher: encryptPii('홍길동') },
     ]);
-    const out = await appendContactPii({ id: TARGET_ID, attrs: { 기업명: '가나' } }, {}, executor);
+    const out = await appendContactPii({ id: TARGET_ID, surveyId: SURVEY_ID, attrs: { 기업명: '가나' } }, {}, executor);
     expect(out).toEqual({ 기업명: '가나', 사업자등록번호: '123-45-67890', 대표자명: '홍길동' });
     expect(dialect.sqlToQuery(captured.where as never).params).toEqual([TARGET_ID]);
   });
@@ -42,7 +43,7 @@ describe('appendContactPii', () => {
       { fieldType: 'mobile', columnKey: '실무자 휴대번호', cipher: encryptPii('01012345678') },
     ]);
     const out = await appendContactPii(
-      { id: TARGET_ID, attrs: {} },
+      { id: TARGET_ID, surveyId: SURVEY_ID, attrs: {} },
       { allowedKeys: async () => new Set(['사업자등록번호']) },
       executor,
     );
@@ -52,7 +53,7 @@ describe('appendContactPii', () => {
   it('개인정보 행이 없으면 allowedKeys 를 부르지 않고 attrs 를 그대로 돌려준다', async () => {
     const { executor } = makeExecutor([]);
     const allowedKeys = vi.fn(async () => new Set<string>());
-    const out = await appendContactPii({ id: TARGET_ID, attrs: { 기업명: '가나' } }, { allowedKeys }, executor);
+    const out = await appendContactPii({ id: TARGET_ID, surveyId: SURVEY_ID, attrs: { 기업명: '가나' } }, { allowedKeys }, executor);
     expect(out).toEqual({ 기업명: '가나' });
     expect(allowedKeys).not.toHaveBeenCalled();
   });
@@ -62,7 +63,34 @@ describe('appendContactPii', () => {
       { fieldType: 'biz_number', columnKey: '사업자등록번호', cipher: 'broken' },
       { fieldType: 'name', columnKey: '대표자명', cipher: encryptPii('홍길동') },
     ]);
-    const out = await appendContactPii({ id: TARGET_ID, attrs: null }, {}, executor);
+    const out = await appendContactPii({ id: TARGET_ID, surveyId: SURVEY_ID, attrs: null }, {}, executor);
     expect(out).toEqual({ 대표자명: '홍길동' });
+  });
+  it('담당 범위를 가르는 열은 넣지 않는다 — 초대 링크로 조회해도 업체 이름이 나가지 않는다', async () => {
+    // guest-grants.ts 의 GUEST_TARGET_SHARES 에 등재된 설문과 그 열
+    const SHARED_SURVEY_ID = '1b88ae5a-257a-40ad-80a4-a6a698fde05a';
+    const { executor } = makeExecutor([
+      { fieldType: 'name', columnKey: '대표자명', cipher: encryptPii('홍길동') },
+    ]);
+    const attrs = { 기업명: '가나', 실사업체: '프롬' };
+    const out = await appendContactPii(
+      { id: TARGET_ID, surveyId: SHARED_SURVEY_ID, attrs },
+      {},
+      executor,
+    );
+    expect(out).toEqual({ 기업명: '가나', 대표자명: '홍길동' });
+    // 원본은 그대로다
+    expect(attrs).toEqual({ 기업명: '가나', 실사업체: '프롬' });
+
+    // 개인정보 행이 없는 대상도 같다
+    const none = makeExecutor([]);
+    expect(
+      await appendContactPii({ id: TARGET_ID, surveyId: SHARED_SURVEY_ID, attrs }, {}, none.executor),
+    ).toEqual({ 기업명: '가나' });
+
+    // 등재가 없는 설문은 같은 이름의 열이 있어도 그대로 둔다
+    expect(
+      await appendContactPii({ id: TARGET_ID, surveyId: SURVEY_ID, attrs }, {}, none.executor),
+    ).toEqual({ 기업명: '가나', 실사업체: '프롬' });
   });
 });

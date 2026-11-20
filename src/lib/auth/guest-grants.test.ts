@@ -7,6 +7,7 @@ import {
   canViewOnlyGuestViewResponse,
   getGuestSurveyIds,
   getGuestTargetShare,
+  getGuestTargetShareAttrsKeys,
   getShareRestrictedSurveyIds,
   getViewOnlyPreviewSurveyIds,
   getViewOnlyResponseViewSurveyIds,
@@ -398,6 +399,11 @@ describe('담당 범위에 묶인 게스트', () => {
     expect(getGuestTargetShare('guest-other', PHYSICAL_AI_LINKS)).toBeNull();
     expect(getGuestTargetShare(FROM2, 'other-survey')).toBeNull();
     expect(isShareRestrictedGuest('admin-1', PHYSICAL_AI_LINKS)).toBe(false);
+  });
+
+  it('설문에서 범위를 가르는 열 이름을 낸다 — 응답 화면용 명단 값과 분류 기준에서 그 열을 뺀다', () => {
+    expect(getGuestTargetShareAttrsKeys(PHYSICAL_AI_LINKS)).toEqual(['실사업체']);
+    expect(getGuestTargetShareAttrsKeys('other-survey')).toEqual([]);
   });
 
   it('미들웨어용 목록은 grant 가 살아 있는 설문만 낸다', () => {
