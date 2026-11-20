@@ -72,13 +72,15 @@ export function ContactsFilterBar({
         />
       )}
       // 상태 dropdown 컬럼은 기본값으로 초기화 (빈 value 면 silent drop 함정) —
-      // web 은 completed, 메일은 delivered. 레거시 'true' 는 구 URL 복원 전용.
+      // web 은 completed, 메일은 delivered, 링크 클릭은 not_clicked. 레거시 'true' 는 구 URL 복원 전용.
       defaultValueForSource={(source) =>
         source === FILTER_SOURCE.WEB
           ? 'completed'
           : source === FILTER_SOURCE.EMAIL
             ? 'delivered'
-            : ''
+            : source === FILTER_SOURCE.LINK_CLICK
+              ? 'not_clicked'
+              : ''
       }
     />
   );

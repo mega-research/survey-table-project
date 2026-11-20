@@ -209,15 +209,35 @@ export const MAIL_FILTER_VALUES: ReadonlySet<string> = new Set(
 /** 조사 대상 목록·단체 메일 위저드 표의 「링크 클릭」 열 머리 글자. */
 export const LINK_CLICK_COLUMN_LABEL = '링크 클릭';
 
+/** 링크 클릭 상태의 글자 — 칸 표시 · 필터 선택지 · 엑셀이 이 한 곳을 쓴다. */
+const LINK_CLICK_STATE_LABEL: Record<LinkClickState, string> = {
+  clicked: '있음',
+  not_clicked: '없음',
+};
+
 /**
  * 링크 클릭 칸의 글자 — 화면 칸과 엑셀이 함께 쓴다(CONTEXT.md 「링크 클릭」). 발송 이력이 없으면 빈 문자열이다
  * (화면은 「—」, 엑셀은 빈칸). 눌렀다는 것이지 응답했다는 것이 아니다 — 「응답」이라는 글자를 쓰지 않는다.
  */
 export function linkClickLabel(state: LinkClickState | null | undefined): string {
-  if (state === 'clicked') return '있음';
-  if (state === 'not_clicked') return '없음';
-  return '';
+  return state ? LINK_CLICK_STATE_LABEL[state] : '';
 }
+
+/**
+ * 링크 클릭 필터의 값 어휘 — 열 머리 필터와 검색 조건 줄이 쓴다. 'clicked'·'not_clicked' 는 칸에 보이는 상태
+ * 그대로이고, 'none' 은 발송 이력이 없는 대상이다(linkClickStateExpr 가 NULL — 메일 필터의 'none' 과 같은 뜻).
+ * 「없음」은 메일을 받은 적이 있는데 누르지 않은 대상만이다 — 한 번도 받지 않은 대상은 섞이지 않는다.
+ */
+export const LINK_CLICK_FILTER_OPTIONS = [
+  { value: 'clicked', label: LINK_CLICK_STATE_LABEL.clicked },
+  { value: 'not_clicked', label: LINK_CLICK_STATE_LABEL.not_clicked },
+  { value: 'none', label: FILTER_NONE_LABEL },
+] as const;
+
+/** 링크 클릭 필터로 수용 가능한 전체 값. */
+export const LINK_CLICK_FILTER_VALUES: ReadonlySet<string> = new Set(
+  LINK_CLICK_FILTER_OPTIONS.map((o) => o.value),
+);
 
 /**
  * 최근 결과코드명이 이 문자열을 포함하면 수신거부로 판정 — 조사 대상의

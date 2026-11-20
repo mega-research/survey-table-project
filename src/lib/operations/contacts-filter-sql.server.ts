@@ -114,6 +114,13 @@ export const linkClickStateExpr = sql<LinkClickState | null>`(CASE
   ELSE NULL
 END)`;
 
+/** 링크 클릭 필터 값 1개 → SQL 조건. 'none' 은 발송 이력 없음(IS NULL). 값 검증은 파서 책임. */
+function linkClickCondSql(value: string): SQL {
+  return value === 'none'
+    ? sql`${linkClickStateExpr} IS NULL`
+    : sql`${linkClickStateExpr} = ${value}`;
+}
+
 /**
  * 메일 컬럼 상태 순위 정렬 표현식 — MAIL_FILTER_OPTIONS 순서(잘된 순: 열람 →
  * 전달 완료 → … → 실패)와 동일 축. 발송 이력 없음은 NULL 로 축 밖 — orderExpr 의
@@ -252,6 +259,10 @@ export function buildClauseSql(
 
   if (cond.source === FILTER_SOURCE.EMAIL && cond.mode === 'boolean') {
     return mailStatusCondSql(cond.value);
+  }
+
+  if (cond.source === FILTER_SOURCE.LINK_CLICK && cond.mode === 'boolean') {
+    return linkClickCondSql(cond.value);
   }
 
   if (cond.source.startsWith(FILTER_SOURCE.ATTRS_PREFIX) && cond.mode === 'idlist') {
@@ -438,6 +449,11 @@ function buildInClauseSql(cond: FilterCondition, refs: ClauseColumnRefs): SQL {
   if (cond.source === FILTER_SOURCE.EMAIL) {
     // 'none'(IS NULL) 이 섞일 수 있어 IN 목록 대신 조건 OR 전개.
     const conds = values.map(mailStatusCondSql);
+    return sql`(${sql.join(conds, sql` OR `)})`;
+  }
+
+  if (cond.source === FILTER_SOURCE.LINK_CLICK) {
+    const conds = values.map(linkClickCondSql);
     return sql`(${sql.join(conds, sql` OR `)})`;
   }
 

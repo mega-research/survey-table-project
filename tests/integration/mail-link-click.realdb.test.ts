@@ -16,13 +16,23 @@ import {
   listCampaignsForSurvey,
 } from '@/server/mail/services/campaigns-read';
 import { MAX_CLICKS_PER_RECIPIENT } from '@/server/mail/domain/link-click';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
+import {
+  type ContactListFilterParams,
+  contactFilterInputFromUrl,
+  loadContactFilterContext,
+  resolveContactFilter,
+} from '@/server/read-models/contact-filter-resolution';
 import { listContactsForExport, listContactsForSurvey } from '@/server/read-models/contacts';
+import { HEADER_FILTER_VALUE_SEPARATOR } from '@/lib/operations/filter-shared';
 import { processResendWebhookEvent } from '@/server/mail/services/resend-webhook';
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
 
 import { resolvedFilterForTest } from '../helpers/resolved-contact-filter';
 
 vi.mock('@/lib/inngest/client', () => ({ inngest: { send: vi.fn(async () => undefined) } }));
+// 요청 밖이라 쿠키가 없다 — 콘솔은 실데이터 파티션을 본다(server/data-scope).
+vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => undefined }) }));
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
@@ -45,7 +55,19 @@ run('링크 클릭 (mail link click)', () => {
   let runNumber = 0;
 
   beforeAll(async () => {
-    await db.insert(surveys).values({ id: surveyId, title: '링크 클릭 실DB 테스트' });
+    await db.insert(surveys).values({
+      id: surveyId,
+      title: '링크 클릭 실DB 테스트',
+      // 링크 클릭 기능 전에 저장된 스킴 모양 — 「링크 클릭」 열이 없다(읽을 때 보정된다).
+      contactColumns: {
+        version: 1,
+        headerRow: 1,
+        columns: [
+          { key: 'resid', label: '시스템ID', source: 'system.resid', order: 1 },
+          { key: 'email_count', label: '메일', source: 'system.email_count', order: 2 },
+        ],
+      },
+    });
   });
 
   afterAll(async () => {
@@ -436,6 +458,107 @@ run('링크 클릭 (mail link click)', () => {
 
       expect(rows.find((r) => r.id === clicker)?.linkClick).toBe('clicked');
       expect(rows.find((r) => r.id === quiet)?.linkClick).toBe('not_clicked');
+    });
+  });
+
+  describe('조사 대상 목록에서 「링크 클릭」으로 거르기', () => {
+    /** 주소의 필터 매개변수로 조사 대상 목록을 읽어, 걸린 대상 id 를 돌려준다. */
+    async function filteredIds(params: ContactListFilterParams, mode: 'read' | 'write' = 'read') {
+      const ctx = await loadContactFilterContext(surveyId, 'real', {
+        isGuest: false,
+        surface: 'contacts',
+        share: FIELDWORK_SHARE_ALL,
+      });
+      const filter = await resolveContactFilter(ctx, contactFilterInputFromUrl(params), { mode });
+      const { rows } = await listContactsForSurvey({
+        surveyId,
+        scope: 'real',
+        filter,
+        page: 1,
+        pageSize: 500,
+        sort: 'resid',
+        dir: 'asc',
+      });
+      return { ids: rows.map((r) => r.id), unresolved: filter.unresolved };
+    }
+
+    const header = (...values: string[]): ContactListFilterParams => ({
+      hcol: 'system.link_click',
+      hm: 'in',
+      hv: values.join(HEADER_FILTER_VALUE_SEPARATOR),
+    });
+
+    /** 눌렀다 · 받았지만 누르지 않았다 · 받은 적 없다 — 한 벌. */
+    async function seedTrio() {
+      const campaignId = await seedCampaign();
+      const clicker = await seedContact();
+      const quiet = await seedContact();
+      const neverMailed = await seedContact();
+      const { messageId } = await seedRecipient(campaignId, clicker);
+      await seedRecipient(campaignId, quiet);
+      await click(messageId, SURVEY_LINK);
+      return { clicker, quiet, neverMailed };
+    }
+
+    it('있음 · 없음 · 발송 이력 없음이 각각 그 대상만 고른다', async () => {
+      const { clicker, quiet, neverMailed } = await seedTrio();
+      const pick = (ids: string[]) => [clicker, quiet, neverMailed].filter((id) => ids.includes(id));
+
+      expect(pick((await filteredIds(header('clicked'))).ids)).toEqual([clicker]);
+      expect(pick((await filteredIds(header('not_clicked'))).ids)).toEqual([quiet]);
+      expect(pick((await filteredIds(header('none'))).ids)).toEqual([neverMailed]);
+    });
+
+    it('여러 값을 함께 고르면 「또는」이다', async () => {
+      const { clicker, quiet, neverMailed } = await seedTrio();
+
+      const { ids } = await filteredIds(header('clicked', 'none'));
+
+      expect(ids).toContain(clicker);
+      expect(ids).toContain(neverMailed);
+      expect(ids).not.toContain(quiet);
+    });
+
+    it('「수신 상황」 필터와 함께 걸면 「그리고」다 — 전달 완료·열람이면서 클릭 없음', async () => {
+      const campaignId = await seedCampaign();
+      const delivered = await seedContact();
+      const bounced = await seedContact();
+      const clicker = await seedContact();
+      await seedRecipient(campaignId, delivered, 'delivered');
+      await seedRecipient(campaignId, bounced, 'bounced');
+      const { messageId } = await seedRecipient(campaignId, clicker, 'delivered');
+      await click(messageId, SURVEY_LINK);
+
+      const { ids } = await filteredIds({
+        hcol: ['system.email_count', 'system.link_click'],
+        hm: ['in', 'in'],
+        hv: [['delivered', 'opened'].join(HEADER_FILTER_VALUE_SEPARATOR), 'not_clicked'],
+      });
+
+      expect(ids).toContain(delivered);
+      expect(ids).not.toContain(bounced);
+      expect(ids).not.toContain(clicker);
+    });
+
+    it('검색 조건 줄로도 고른다', async () => {
+      const { clicker, quiet, neverMailed } = await seedTrio();
+
+      const { ids } = await filteredIds({ col: 'system.link_click', q: 'not_clicked' });
+
+      expect(ids).toContain(quiet);
+      expect(ids).not.toContain(clicker);
+      expect(ids).not.toContain(neverMailed);
+    });
+
+    it('모르는 값은 읽을 때 버리고 알리며, 대상을 고르는 쓰기에서는 거부한다', async () => {
+      const { clicker, quiet } = await seedTrio();
+
+      const read = await filteredIds(header('responded'));
+      expect(read.unresolved).toHaveLength(1);
+      expect(read.ids).toContain(clicker);
+      expect(read.ids).toContain(quiet);
+
+      await expect(filteredIds(header('responded'), 'write')).rejects.toThrow();
     });
   });
 

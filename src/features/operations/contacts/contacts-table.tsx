@@ -17,6 +17,7 @@ import {
 } from '@/lib/operations/contacts-format';
 import {
   FILTER_SOURCE,
+  LINK_CLICK_FILTER_OPTIONS,
   MAIL_FILTER_OPTIONS,
   linkClickLabel,
   withNoneOption,
@@ -59,6 +60,7 @@ function isHeaderFilterable(source: string): boolean {
     source === FILTER_SOURCE.CONTACT_RESULT ||
     source === FILTER_SOURCE.WEB ||
     source === FILTER_SOURCE.EMAIL ||
+    source === FILTER_SOURCE.LINK_CLICK ||
     source === FILTER_SOURCE.CONTACT_OWNER
   );
 }
@@ -313,6 +315,14 @@ export function ContactsTable({
                           {...(col.source === FILTER_SOURCE.EMAIL
                             ? {
                                 fixedOptions: MAIL_FILTER_OPTIONS.map((o) => ({
+                                  value: o.value,
+                                  label: o.label,
+                                })),
+                              }
+                            : {})}
+                          {...(col.source === FILTER_SOURCE.LINK_CLICK
+                            ? {
+                                fixedOptions: LINK_CLICK_FILTER_OPTIONS.map((o) => ({
                                   value: o.value,
                                   label: o.label,
                                 })),

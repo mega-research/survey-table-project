@@ -84,6 +84,12 @@ describe('ContactsTable 「링크 클릭」 열', () => {
     expect(linkClickCells()).toEqual(['있음', '없음', '—']);
   });
 
+  it('열 머리에 필터가 붙는다', () => {
+    renderTable([row({ linkClick: 'clicked' })]);
+
+    expect(screen.getByRole('button', { name: '링크 클릭 필터' })).toBeInTheDocument();
+  });
+
   it('열 설정에서 숨기면 그리지 않는다', () => {
     renderTable([row({ linkClick: 'clicked' })], {
       ...scheme,
