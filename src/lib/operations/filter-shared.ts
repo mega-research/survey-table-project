@@ -225,19 +225,36 @@ export function linkClickLabel(state: LinkClickState | null | undefined): string
 
 /**
  * 링크 클릭 필터의 값 어휘 — 열 머리 필터와 검색 조건 줄이 쓴다. 'clicked'·'not_clicked' 는 칸에 보이는 상태
- * 그대로이고, 'none' 은 발송 이력이 없는 대상이다(linkClickStateExpr 가 NULL — 메일 필터의 'none' 과 같은 뜻).
- * 「없음」은 메일을 받은 적이 있는데 누르지 않은 대상만이다 — 한 번도 받지 않은 대상은 섞이지 않는다.
+ * 그대로이고, 'none' 은 발송 이력이 없는 대상이다(linkClickStateExpr 가 NULL).
+ * 「없음」은 발송 이력이 있는데 누르지 않은 대상만이다 — 발송 이력이 없는 대상은 섞이지 않는다.
+ *
+ * 메일 필터의 'none' 과 범위가 다르다: 메일 필터는 수신거부 판정을 먼저 보므로 발송 이력 없는 수신거부자가
+ * 'none' 에서 빠지지만, 여기는 수신거부 여부와 무관하게 발송 이력만 본다.
+ * 셋째 글자는 공용 「— (없음)」을 쓰지 않는다 — 바로 위 「없음」과 나란히 서면 구분되지 않는다.
  */
 export const LINK_CLICK_FILTER_OPTIONS = [
   { value: 'clicked', label: LINK_CLICK_STATE_LABEL.clicked },
   { value: 'not_clicked', label: LINK_CLICK_STATE_LABEL.not_clicked },
-  { value: 'none', label: FILTER_NONE_LABEL },
+  { value: 'none', label: '— (발송 이력 없음)' },
 ] as const;
 
 /** 링크 클릭 필터로 수용 가능한 전체 값. */
 export const LINK_CLICK_FILTER_VALUES: ReadonlySet<string> = new Set(
   LINK_CLICK_FILTER_OPTIONS.map((o) => o.value),
 );
+
+/**
+ * 검색 조건 줄에서 열을 고른 직후의 값 — 값을 선택 상자로 고르는 열은 화면에 처음 보이는 선택지를 준다.
+ * 빈 값으로 두면 화면에는 선택지가 골라진 것처럼 보이는데 조건은 전송 전에 버려진다(조건이 조용히 넓어진다).
+ * 조사 대상 검색바 · 컨택원 수정 화면 · 값 입력 위젯이 이 한 곳을 쓴다. 글자로 적는 열은 빈 문자열이다.
+ * web 은 'completed'(레거시 'true' 는 구 URL 복원 전용), 링크 클릭은 'not_clicked'(독촉 대상 고르기가 쓰임이다).
+ */
+export function defaultFilterValueForSource(source: string): string {
+  if (source === FILTER_SOURCE.WEB) return 'completed';
+  if (source === FILTER_SOURCE.EMAIL) return 'delivered';
+  if (source === FILTER_SOURCE.LINK_CLICK) return 'not_clicked';
+  return '';
+}
 
 /**
  * 최근 결과코드명이 이 문자열을 포함하면 수신거부로 판정 — 조사 대상의

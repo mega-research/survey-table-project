@@ -669,6 +669,35 @@ run('링크 클릭 (mail link click)', () => {
     });
   });
 
+  describe('컨택원 교체 적용 조건 (범위 밖)', () => {
+    async function assignmentContext() {
+      return loadContactFilterContext(surveyId, 'real', {
+        isGuest: false,
+        surface: 'assignments',
+        share: FIELDWORK_SHARE_ALL,
+      });
+    }
+
+    it('조건 후보에 「링크 클릭」이 없다 — 「메일」 열은 그대로 있다', async () => {
+      const sources = (await assignmentContext()).columnCandidates.map((c) => c.source);
+
+      expect(sources).toContain('system.email_count');
+      expect(sources).not.toContain('system.link_click');
+    });
+
+    it('링크 클릭 조건이 직접 들어오면 넓혀서 적용하지 않고 거부한다', async () => {
+      const ctx = await assignmentContext();
+
+      await expect(
+        resolveContactFilter(
+          ctx,
+          { clauses: [{ source: 'system.link_click', value: 'not_clicked', op: '' }] },
+          { mode: 'write' },
+        ),
+      ).rejects.toThrow();
+    });
+  });
+
   describe('남기는 것과 남기지 않는 것', () => {
     it('설문·수신거부 주소는 남기지 않고 그 밖의 링크만 주소를 남긴다', async () => {
       const campaignId = await seedCampaign();

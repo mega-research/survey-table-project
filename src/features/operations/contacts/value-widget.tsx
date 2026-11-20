@@ -25,6 +25,7 @@ import {
   FILTER_SOURCE,
   LINK_CLICK_FILTER_OPTIONS,
   MAIL_FILTER_OPTIONS,
+  defaultFilterValueForSource,
   placeholderFor,
   webFilterOptionsFor,
   withNoneOption,
@@ -204,9 +205,8 @@ function ValueInput({
   }
 
   if (source === FILTER_SOURCE.LINK_CLICK) {
-    // 기본값은 「없음」 — 이 열로 거르는 일은 독촉 대상(누르지 않은 대상) 고르기다.
     return (
-      <Select value={value || 'not_clicked'} onValueChange={onChange}>
+      <Select value={value || defaultFilterValueForSource(source)} onValueChange={onChange}>
         <SelectTrigger id={inputId} className="w-[260px] h-10">
           <SelectValue />
         </SelectTrigger>
@@ -223,7 +223,7 @@ function ValueInput({
 
   if (source === FILTER_SOURCE.EMAIL) {
     return (
-      <Select value={value || 'delivered'} onValueChange={onChange}>
+      <Select value={value || defaultFilterValueForSource(source)} onValueChange={onChange}>
         <SelectTrigger id={inputId} className="w-[260px] h-10">
           <SelectValue />
         </SelectTrigger>
@@ -242,7 +242,7 @@ function ValueInput({
     // 레거시 값 노출 규칙은 webFilterOptionsFor 주석 참조. 사용자가 새 옵션을
     // 고르는 순간부터 레거시 항목은 목록에서 사라진다.
     return (
-      <Select value={value || 'completed'} onValueChange={onChange}>
+      <Select value={value || defaultFilterValueForSource(source)} onValueChange={onChange}>
         <SelectTrigger id={inputId} className="w-[260px] h-10">
           <SelectValue />
         </SelectTrigger>

@@ -46,7 +46,7 @@ async function resolveAssignmentFilter(
 ): Promise<ResolvedContactFilter<'write'>> {
   const ctx = await loadContactFilterContext(surveyId, scope, {
     isGuest: false,
-    surface: 'contacts',
+    surface: 'assignments',
     // 컨택원 배정은 관리자 전용이다(procedure 가 authed) — 담당 범위 축이 없다.
     share: FIELDWORK_SHARE_ALL,
     executor,
@@ -207,7 +207,7 @@ export async function listAssignmentMatches(
 ): Promise<ContactAssignmentMatchesResult> {
   const ctx = await loadContactFilterContext(input.surveyId, scope, {
     isGuest: false,
-    surface: 'contacts',
+    surface: 'assignments',
     share: FIELDWORK_SHARE_ALL,
   });
   const filter = await resolveContactFilter(ctx, { clauses: input.clauses }, { mode: 'write' });

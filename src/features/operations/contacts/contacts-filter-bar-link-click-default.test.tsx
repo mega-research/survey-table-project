@@ -75,6 +75,6 @@ describe('ContactsFilterBar 「링크 클릭」 검색 조건', () => {
 
     expect(await screen.findByRole('option', { name: '있음' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: '없음' })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: '— (없음)' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: '— (발송 이력 없음)' })).toBeInTheDocument();
   });
 });
