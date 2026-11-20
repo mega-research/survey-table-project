@@ -96,12 +96,6 @@ export type MailRecipientStatus = (typeof mailRecipientStatusValues)[number];
 export const mailLinkKindValues = ['survey', 'unsubscribe', 'other'] as const;
 export type MailLinkKind = (typeof mailLinkKindValues)[number];
 
-/**
- * 조사 대상 한 명의 링크 클릭 상태 — 'clicked' 는 어느 발송 회차에서든 설문 링크를 한 번이라도 눌렀다,
- * 'not_clicked' 는 발송 이력은 있는데 누르지 않았다. 발송 이력이 없으면 null 이다.
- */
-export type LinkClickState = 'clicked' | 'not_clicked';
-
 /** 링크 종류의 화면 글자 — 수신자 표가 쓴다. */
 export const MAIL_LINK_KIND_LABEL: Record<MailLinkKind, string> = {
   survey: '설문 링크',

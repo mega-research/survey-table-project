@@ -6,7 +6,6 @@ import * as z from 'zod';
 import type {
   MailCampaignKind,
   MailCampaignStatus,
-  LinkClickState,
   MailLinkKind,
   MailRecipientStatus,
 } from '@/shared/contracts/mail';
@@ -63,6 +62,13 @@ export interface CampaignRow {
   createdAt: Date;
   createdBy: string | null;
 }
+
+/**
+ * 조사 대상 한 명의 링크 클릭 상태 — 저장하는 값이 아니라 읽을 때 계산하는 값이다(CONTEXT.md 「링크 클릭」).
+ * 'clicked' 는 어느 발송 회차에서든 설문 링크를 한 번이라도 눌렀다, 'not_clicked' 는 발송 이력은 있는데 누르지
+ * 않았다. 발송 이력이 없으면 null 이다. 조사 대상 목록·엑셀·단체 메일 위저드의 행이 싣는다.
+ */
+export type LinkClickState = 'clicked' | 'not_clicked';
 
 /**
  * 수신자가 누른 링크 한 줄 — 링크 종류마다(그 밖의 링크는 주소마다) 하나이고 시각은 처음 누른 때다

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { hashClientIp, saltedHash } from './salted-hash.server';
 
@@ -26,5 +26,21 @@ describe('hashClientIp', () => {
     expect(hashClientIp(null)).toBeNull();
     expect(hashClientIp(undefined)).toBeNull();
     expect(hashClientIp('   ')).toBeNull();
+  });
+});
+
+describe('솔트 설정', () => {
+  const original = process.env['DUPLICATE_DETECTION_SALT'];
+
+  afterEach(() => {
+    process.env['DUPLICATE_DETECTION_SALT'] = original;
+    vi.resetModules();
+  });
+
+  it('솔트가 없으면 import 시점에 실패한다 — 조용히 넘어가면 중복 차단이 무력화된다', async () => {
+    delete process.env['DUPLICATE_DETECTION_SALT'];
+    vi.resetModules();
+
+    await expect(import('./salted-hash.server')).rejects.toThrow('DUPLICATE_DETECTION_SALT');
   });
 });

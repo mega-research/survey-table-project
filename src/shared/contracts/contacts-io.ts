@@ -9,11 +9,8 @@ import type {
   ContactTargetEditChange,
   ContactUploadMode,
 } from '@/shared/contracts/contacts';
-import type {
-  LinkClickState,
-  MailCampaignKind,
-  MailRecipientStatus,
-} from '@/shared/contracts/mail';
+import type { MailCampaignKind, MailRecipientStatus } from '@/shared/contracts/mail';
+import type { LinkClickState } from '@/shared/contracts/mail-io';
 import type { ResponseEditChange } from '@/shared/contracts/survey-response';
 
 // ─────────────────────────────────────────────────────────────────────────────

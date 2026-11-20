@@ -73,7 +73,8 @@ import type {
   MailHistoryRow,
   ResponseEditLogRow,
 } from '@/shared/contracts/contacts-io';
-import type { LinkClickState, MailRecipientStatus } from '@/shared/contracts/mail';
+import type { MailRecipientStatus } from '@/shared/contracts/mail';
+import type { LinkClickState } from '@/shared/contracts/mail-io';
 
 import {
   type FieldworkShare,

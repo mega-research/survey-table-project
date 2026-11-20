@@ -518,6 +518,55 @@ run('링크 클릭 (mail link click)', () => {
       expect(await linkClickOf(both)).toBe('not_clicked');
     });
 
+    it('대체 발송 회차에서 누른 것도 그 대상의 클릭이다', async () => {
+      const parent = await seedCampaign();
+      const contactId = await seedContact();
+      await seedRecipient(parent, contactId, 'bounced');
+      // 반송 뒤 다음 순위 주소로 간 대체 회차 — 별도 회차·별도 수신자 행이다.
+      const fallback = randomUUID();
+      await db.insert(mailCampaigns).values({
+        id: fallback,
+        surveyId,
+        runNumber: 2_000_000 + runNumber,
+        kind: 'fallback',
+        parentCampaignId: parent,
+        title: '대체 발송',
+        subjectSnapshot: '제목',
+        bodyHtmlSnapshot: '<p>본문</p>',
+        fromLocalSnapshot: 'survey',
+        fromNameSnapshot: '조사',
+        status: 'completed',
+      });
+      const { messageId } = await seedRecipient(fallback, contactId);
+
+      await click(messageId, SURVEY_LINK);
+
+      expect(await linkClickOf(contactId)).toBe('clicked');
+    });
+
+    it('테스트 파티션의 회차에서 누른 것은 실데이터 대상의 클릭이 아니다', async () => {
+      const contactId = await seedContact();
+      const testCampaign = randomUUID();
+      await db.insert(mailCampaigns).values({
+        id: testCampaign,
+        surveyId,
+        runNumber: 9_000 + runNumber,
+        isTest: true,
+        title: '테스트 회차',
+        subjectSnapshot: '제목',
+        bodyHtmlSnapshot: '<p>본문</p>',
+        fromLocalSnapshot: 'survey',
+        fromNameSnapshot: '조사',
+        status: 'completed',
+      });
+      const { messageId } = await seedRecipient(testCampaign, contactId);
+
+      await click(messageId, SURVEY_LINK);
+
+      // 수신 상황과 같은 범위 — 다른 파티션의 발송은 이 대상의 발송 이력이 아니다.
+      expect(await linkClickOf(contactId)).toBeNull();
+    });
+
     it('엑셀 조회도 같은 값을 싣는다', async () => {
       const campaignId = await seedCampaign();
       const clicker = await seedContact();
@@ -620,6 +669,28 @@ run('링크 클릭 (mail link click)', () => {
       expect(ids).toContain(quiet);
       expect(ids).not.toContain(clicker);
       expect(ids).not.toContain(neverMailed);
+    });
+
+    it('아는 값과 모르는 값이 섞이면 아는 값만 건다', async () => {
+      const { clicker, quiet } = await seedTrio();
+
+      const { ids, unresolved } = await filteredIds(header('responded', 'clicked'));
+
+      expect(unresolved).toEqual([]);
+      expect(ids).toContain(clicker);
+      expect(ids).not.toContain(quiet);
+    });
+
+    it('검색 조건 줄의 모르는 값도 읽을 때 버리고 알리며, 쓰기에서는 거부한다', async () => {
+      const { clicker, quiet } = await seedTrio();
+      const params = { col: 'system.link_click', q: '응답함' };
+
+      const read = await filteredIds(params);
+      expect(read.unresolved).toHaveLength(1);
+      expect(read.ids).toContain(clicker);
+      expect(read.ids).toContain(quiet);
+
+      await expect(filteredIds(params, 'write')).rejects.toThrow();
     });
 
     it('모르는 값은 읽을 때 버리고 알리며, 대상을 고르는 쓰기에서는 거부한다', async () => {

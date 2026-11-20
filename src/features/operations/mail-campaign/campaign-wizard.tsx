@@ -30,6 +30,7 @@ import { ContactsFilterBar } from '@/features/operations/contacts/contacts-filte
 import { FilterResetButton } from '@/features/operations/filters/filter-reset-button';
 import { HeaderFilterPopover } from '@/features/operations/filters/header-filter-popover';
 import { StatusPill } from '@/features/operations/profiles/status-pill';
+import { LinkClickMark } from '@/features/operations/link-click-mark';
 import { RecipientStatusBadge } from '@/features/operations/mail-campaign/recipient-status-badge';
 import {
   PAGER_ELLIPSIS_CLASS,
@@ -65,7 +66,6 @@ import {
   LINK_CLICK_COLUMN_LABEL,
   LINK_CLICK_FILTER_OPTIONS,
   MAIL_FILTER_OPTIONS,
-  linkClickLabel,
   withNoneOption,
 } from '@/lib/operations/filter-shared';
 
@@ -611,13 +611,7 @@ export function CampaignWizard({
                       )}
                     </td>
                     <td className="px-3 py-2 text-xs">
-                      {r.linkClick === 'clicked' ? (
-                        <span className="font-medium text-slate-900">
-                          {linkClickLabel(r.linkClick)}
-                        </span>
-                      ) : (
-                        <span className="text-slate-400">{linkClickLabel(r.linkClick) || '—'}</span>
-                      )}
+                      <LinkClickMark state={r.linkClick} />
                     </td>
                     <td className="px-3 py-2 text-xs text-slate-600">
                       {r.latestResultCode ?? '—'}

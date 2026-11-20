@@ -125,7 +125,8 @@ function parseEventAt(raw: string | null | undefined): Date | null {
   return Number.isNaN(at.getTime()) ? null : at;
 }
 
-async function applyResendEvent(
+/** 상태 알림(발송됨·전달·열람·반송·신고) 한 건을 수신자 상태와 회차 집계에 반영한다. */
+async function applyStatusEvent(
   tx: Tx,
   resendMessageId: string,
   eventType: string,
@@ -160,15 +161,13 @@ async function applyResendEvent(
  */
 async function applyClickEvent(
   tx: Tx,
-  resendMessageId: string,
-  createdAtRaw: string,
-  click: ResendClickData | null,
-  tags?: Record<string, string>,
+  event: VerifiedResendWebhookEvent & { resendMessageId: string },
 ): Promise<void> {
-  const row = await lockRecipientForEvent(tx, resendMessageId, tags);
+  const row = await lockRecipientForEvent(tx, event.resendMessageId, event.tags);
   if (!row) return;
 
-  const clickedAt = parseEventAt(click?.timestamp) ?? parseEventAt(createdAtRaw) ?? new Date();
+  const click = event.click ?? null;
+  const clickedAt = parseEventAt(click?.timestamp) ?? parseEventAt(event.createdAt) ?? new Date();
 
   if (click) {
     const link = classifyClickedLink(click.link, process.env['NEXT_PUBLIC_APP_URL']);
@@ -227,7 +226,7 @@ export async function processResendEvent(
   tags?: Record<string, string>,
 ): Promise<void> {
   const fallbackRecipientId = await db.transaction((tx) =>
-    applyResendEvent(tx, resendMessageId, eventType, createdAtRaw, tags),
+    applyStatusEvent(tx, resendMessageId, eventType, createdAtRaw, tags),
   );
   if (fallbackRecipientId) await requestRecipientFallbacks([fallbackRecipientId]);
 }
@@ -299,17 +298,11 @@ export async function processResendWebhookEvent(
       return { result: 'ignored' as const, fallbackRecipientId: null };
     }
     if (event.type === CLICKED_EVENT_TYPE) {
-      await applyClickEvent(
-        tx,
-        event.resendMessageId,
-        event.createdAt,
-        event.click ?? null,
-        event.tags,
-      );
+      await applyClickEvent(tx, { ...event, resendMessageId: event.resendMessageId });
       return { result: 'processed' as const, fallbackRecipientId: null };
     }
 
-    const fallbackRecipientId = await applyResendEvent(
+    const fallbackRecipientId = await applyStatusEvent(
       tx,
       event.resendMessageId,
       event.type,

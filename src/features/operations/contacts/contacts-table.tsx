@@ -24,6 +24,7 @@ import {
 } from '@/lib/operations/filter-shared';
 import { type StatusPillResult, mapStatusPill } from '@/lib/operations/profiles-format';
 import { recipientStatusMeta } from '@/lib/operations/recipient-status';
+import { LinkClickMark } from '@/features/operations/link-click-mark';
 import type {
   ContactColumnDef,
   ContactColumnScheme,
@@ -160,18 +161,10 @@ function computeCell(
           }
         : { display: '—', plain: undefined };
     case 'system.link_click': {
-      // 어느 발송 회차에서든 메일의 설문 링크를 눌렀는가(CONTEXT.md 「링크 클릭」). 눌렀다는 것이지 응답했다는
-      // 것이 아니라 응답 상태 배지와 같은 모양을 쓰지 않는다 — 있음만 진하게, 없음·발송 이력 없음은 흐리게.
-      const label = linkClickLabel(row.linkClick);
-      if (row.linkClick === 'clicked') {
-        return {
-          display: <span className="text-xs font-medium text-slate-900">{label}</span>,
-          plain: label,
-        };
-      }
+      // 어느 발송 회차에서든 메일의 설문 링크를 눌렀는가(CONTEXT.md 「링크 클릭」).
       return {
-        display: <span className="text-xs text-slate-400">{label || '—'}</span>,
-        plain: label || undefined,
+        display: <LinkClickMark state={row.linkClick} />,
+        plain: linkClickLabel(row.linkClick) || undefined,
       };
     }
     case 'system.web': {

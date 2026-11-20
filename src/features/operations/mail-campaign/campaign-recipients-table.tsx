@@ -16,6 +16,7 @@ import { type MailDisplayColumn, mailColumnValue } from '@/lib/contacts/mail-dis
 import { MAIL_LINK_KIND_LABEL, type MailRecipientStatus } from '@/shared/contracts/mail';
 import type { CampaignRecipientRow, RecipientLinkClick } from '@/shared/contracts/mail-io';
 import {
+  LINK_CLICK_COLUMN_LABEL,
   RECIPIENT_FILTER_LABEL,
   RECIPIENT_FILTER_SOURCE,
   isUnsubscribeResultCode,
@@ -254,7 +255,7 @@ export function CampaignRecipientsTable({
                   className="px-3 py-2"
                   title="메일 본문에서 누른 링크와 처음 누른 시각 — 눌렀다는 것이지 응답했다는 것은 아닙니다"
                 >
-                  링크 클릭
+                  {LINK_CLICK_COLUMN_LABEL}
                 </th>
                 <th className="px-3 py-2">
                   <span className="inline-flex items-center gap-1">

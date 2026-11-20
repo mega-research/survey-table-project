@@ -1,5 +1,5 @@
 import type { PiiFieldType } from '@/lib/crypto/pii-fields';
-import type { LinkClickState } from '@/shared/contracts/mail';
+import type { LinkClickState } from '@/shared/contracts/mail-io';
 import type { NumRange, Parity } from './range-list';
 
 export type CombineOp = 'AND' | 'OR';

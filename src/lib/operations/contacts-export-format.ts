@@ -1,5 +1,6 @@
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
-import type { LinkClickState, MailRecipientStatus } from '@/shared/contracts/mail';
+import type { MailRecipientStatus } from '@/shared/contracts/mail';
+import type { LinkClickState } from '@/shared/contracts/mail-io';
 import { LINK_CLICK_COLUMN_LABEL, linkClickLabel } from '@/lib/operations/filter-shared';
 import { recipientStatusMeta } from '@/lib/operations/recipient-status';
 import { formatExportStatusLabel } from '@/lib/operations/profiles-format';
