@@ -12,6 +12,7 @@ import {
   type ScaleBarCell,
   type ScaleBarModel,
   resolveScaleBarBandTones,
+  resolveScaleBarCellMinWidths,
 } from '@/features/question-renderer/utils/choice-group-scale-bar';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
@@ -108,12 +109,12 @@ export const ChoiceGroupScaleBar = React.memo(function ChoiceGroupScaleBar({
   // 칸은 고르게 나누되, 글자가 긴 칸(「미참여」)은 글자만큼의 최소 폭을 갖고 나머지 칸이 그만큼 좁아진다.
   // 막대·구간 띠·라벨이 이 열 틀 하나를 같이 써야 칸 폭이 달라져도 서로 어긋나지 않는다. 최소 폭은 칸
   // 내용이 아니라 px 로 준다 — 내용 기준(min-content)이면 글자가 없는 띠·라벨 줄의 열이 따로 논다.
+  // 폭은 화면에 보이는 글자(토큰·인용을 푼 뒤)로 잰다.
+  const minWidths = resolveScaleBarCellMinWidths(model.cells.map((cell) => text(cell.text)));
   const columnsStyle = {
-    gridTemplateColumns: model.cells.some((cell) => cell.minWidth !== undefined)
-      ? model.cells
-          .map((cell) =>
-            cell.minWidth === undefined ? 'minmax(0, 1fr)' : `minmax(${cell.minWidth}px, 1fr)`,
-          )
+    gridTemplateColumns: minWidths.some((width) => width !== undefined)
+      ? minWidths
+          .map((width) => (width === undefined ? 'minmax(0, 1fr)' : `minmax(${width}px, 1fr)`))
           .join(' ')
       : `repeat(${count}, minmax(0, 1fr))`,
   };

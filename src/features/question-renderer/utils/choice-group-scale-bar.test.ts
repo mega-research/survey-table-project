@@ -4,6 +4,7 @@ import {
   type ProjectScaleBarInput,
   projectScaleBar,
   resolveScaleBarBandTones,
+  resolveScaleBarCellMinWidths,
 } from '@/features/question-renderer/utils/choice-group-scale-bar';
 import type { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 
@@ -763,36 +764,35 @@ describe('projectScaleBar — 척도 밖 보기 칸이 낀 막대(청암대 재�
     });
     expect(model.anchors).toEqual({ left: '매우 만족', right: '매우 불만족' });
   });
+});
+
+describe('resolveScaleBarCellMinWidths — 글자가 긴 칸의 최소 폭', () => {
+  const DESC = ['⑩', '⑨', '⑧', '⑦', '⑥', '⑤', '④', '③', '②', '①'];
+  const widened = (texts: string[]) =>
+    resolveScaleBarCellMinWidths(texts).map((width) => width !== undefined);
 
   it('글자가 긴 칸에만 최소 폭을 준다 — 번호 칸과 띄어 쓴 짧은 낱말은 그대로다', () => {
-    const cells = modelOf(q31()).cells;
-    expect(cells.slice(0, 10).every((cell) => cell.minWidth === undefined)).toBe(true);
-    expect(cells[10]!.minWidth).toBeGreaterThanOrEqual(42);
-    const texts = ['10점', '모름', '해당 없음', '해당없음', 'N/A'];
-    const widths = modelOf(
-      c4({
-        scale: [...DESC.slice(0, 6), ...texts].map((text, n) => choice(`c${n}`, text)),
-        headerGrid: undefined,
-      }),
-    ).cells.slice(6);
-    expect(widths.map((cell) => cell.minWidth !== undefined)).toEqual([
-      false,
-      false,
-      false,
-      true,
-      false,
-    ]);
+    const widths = resolveScaleBarCellMinWidths([...DESC, '미참여']);
+    expect(widths.slice(0, 10).every((width) => width === undefined)).toBe(true);
+    expect(widths[10]).toBeGreaterThanOrEqual(42);
+    expect(
+      widened([...DESC.slice(0, 6), '10점', '모름', '해당 없음', '해당없음', 'N/A']).slice(6),
+    ).toEqual([false, false, false, true, false]);
   });
 
   it('칸이 넉넉한 막대는 긴 글자 칸도 넓히지 않는다 — 고르게 나눈 폭에 이미 들어간다', () => {
     // 여성기업 사전조사 E4 모양(6칸) · 균형성장 만족도 모양(7칸) — 운영 중인 막대는 열 틀이 그대로여야 한다
     const six = ['①', '②', '③', '④', '⑤', '운영과 관계 없음'];
     const seven = ['① 전혀 그렇지 않다', '② 그렇지 않다', '③', '④ 보통', '⑤', '⑥ 그렇다', '⑦ 매우 그렇다'];
-    for (const texts of [six, seven]) {
-      const cells = modelOf(
-        c4({ scale: texts.map((text, n) => choice(`c${n}`, text)), headerGrid: undefined }),
-      ).cells;
-      expect(cells.every((cell) => cell.minWidth === undefined)).toBe(true);
-    }
+    expect(widened(six).some(Boolean)).toBe(false);
+    expect(widened(seven).some(Boolean)).toBe(false);
+  });
+
+  it('긴 글자 칸이 많아 좁은 화면에서 나머지 칸이 설 자리가 없으면 아무 칸도 넓히지 않는다', () => {
+    // 최소 폭의 합이 막대 폭을 넘으면 뒤쪽 칸이 화면 밖으로 밀려 누를 수 없다 — 고르게 나누는 종전 모양이 낫다
+    const manyLong = ['매우불만족', '불만족함', '약간불만', '보통임', '약간만족', '만족함', '매우만족함', '모름'];
+    expect(widened(manyLong).some(Boolean)).toBe(false);
+    // 척도 밖 보기 칸이 둘이어도 나머지 칸이 설 자리가 남으면 넓힌다
+    expect(widened([...DESC.slice(0, 8), '미참여', '해당없음']).slice(8)).toEqual([true, true]);
   });
 });
