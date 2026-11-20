@@ -6,6 +6,7 @@ import * as z from 'zod';
 import type {
   MailCampaignKind,
   MailCampaignStatus,
+  LinkClickState,
   MailLinkKind,
   MailRecipientStatus,
 } from '@/shared/contracts/mail';
@@ -124,6 +125,11 @@ export interface CampaignCandidateRow {
   latestResultCode: string | null;
   /** 가장 최근 단체 메일에서의 수신 status. 발송 이력 없으면 null — 재전송 명단 대조용. */
   latestMailStatus: MailRecipientStatus | null;
+  /**
+   * 링크 클릭 상태 — 조사 대상 목록의 「링크 클릭」 열과 같은 값·같은 식(CONTEXT.md 「링크 클릭」).
+   * 발송 이력이 없으면 null. 독촉 대상 고르기에 쓴다.
+   */
+  linkClick: LinkClickState | null;
 }
 
 /** 미리보기 정렬 — 번호 / 응답여부 / 수신 상황 / 최근 결과코드. 이메일·그룹은 PII·비용 사유로 제외. */

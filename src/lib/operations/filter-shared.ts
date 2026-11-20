@@ -348,6 +348,7 @@ export interface ColumnCandidate {
 export const CAMPAIGN_HEADER_FILTER_COLUMNS: ReadonlyArray<ColumnCandidate> = [
   { source: FILTER_SOURCE.WEB, label: '응답' },
   { source: FILTER_SOURCE.EMAIL, label: '수신 상황' },
+  { source: FILTER_SOURCE.LINK_CLICK, label: LINK_CLICK_COLUMN_LABEL },
   { source: FILTER_SOURCE.CONTACT_RESULT, label: '최근 결과코드' },
 ];
 

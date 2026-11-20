@@ -34,6 +34,7 @@ import {
   defaultSortOrderExprs,
   latestResultCodeExpr,
   latestResultUnsubscribedSql,
+  linkClickStateExpr,
   matchedResponseSubquery,
 } from '@/lib/operations/contacts-filter-sql.server';
 import {
@@ -963,6 +964,8 @@ export async function previewCampaignCandidates(args: {
       ),
       latestResultCode: latestResultCodeExpr.as('latest_result_code'),
       latestMailStatus: latestMailStatusExpr(args.scope).as('latest_mail_status'),
+      // 조사 대상 목록과 같은 식 — 필터(조사 대상 필터 해석)도 이 식으로 거른다.
+      linkClick: linkClickStateExpr.as('link_click'),
     })
     .from(contactTargets)
     .where(where)
@@ -993,6 +996,7 @@ export async function previewCampaignCandidates(args: {
       progressPct: r.progressPct,
       latestResultCode: r.latestResultCode,
       latestMailStatus: r.latestMailStatus,
+      linkClick: r.linkClick,
     })),
     total,
     page: clampedPage,
