@@ -105,8 +105,21 @@ export const ChoiceGroupScaleBar = React.memo(function ChoiceGroupScaleBar({
   const selectedBand = selected?.bandIndex ?? null;
   const bandLabelOf = (cell: ScaleBarCell) =>
     cell.bandIndex === null ? '' : text(model.bands[cell.bandIndex]!.label);
-  const columnsStyle = { gridTemplateColumns: `repeat(${count}, minmax(0, 1fr))` };
+  // 칸은 고르게 나누되, 글자가 긴 칸(「미참여」)은 글자만큼의 최소 폭을 갖고 나머지 칸이 그만큼 좁아진다.
+  // 막대·구간 띠·라벨이 이 열 틀 하나를 같이 써야 칸 폭이 달라져도 서로 어긋나지 않는다. 최소 폭은 칸
+  // 내용이 아니라 px 로 준다 — 내용 기준(min-content)이면 글자가 없는 띠·라벨 줄의 열이 따로 논다.
+  const columnsStyle = {
+    gridTemplateColumns: model.cells.some((cell) => cell.minWidth !== undefined)
+      ? model.cells
+          .map((cell) =>
+            cell.minWidth === undefined ? 'minmax(0, 1fr)' : `minmax(${cell.minWidth}px, 1fr)`,
+          )
+          .join(' ')
+      : `repeat(${count}, minmax(0, 1fr))`,
+  };
   const { left, middle, right } = model.anchors;
+  const leftStart = model.anchors.leftStart ?? 0;
+  const rightEnd = model.anchors.rightEnd ?? count - 1;
   // 띠는 늘 그린다 — 헤더에 구간 줄이 없는 척도(칸마다 이름이 하나씩인 5점 등)는 칸마다 띠 하나다.
   // 구간 이름·선택값 표시는 여전히 헤더의 구간(model.bands)만 쓴다.
   const hasHeaderBands = model.bands.length > 0;
@@ -219,22 +232,41 @@ export const ChoiceGroupScaleBar = React.memo(function ChoiceGroupScaleBar({
           </div>
         }
         {hasAnchors && (
-          // 라벨은 글자 길이가 아니라 막대 칸에 붙인다 — 왼쪽은 첫 칸에서 오른쪽으로, 오른쪽은 마지막
-          // 칸에서 왼쪽으로 뻗고, 가운데는 그 칸 가운데에 둔다(양 끝 정렬이면 「보통」이 칸 사이로 밀린다).
-          <div aria-hidden className="relative mt-1 h-4 text-[11px] leading-4 text-gray-900">
+          // 라벨은 글자 길이가 아니라 제 구간의 칸에 붙인다 — 왼쪽은 구간 첫 칸에서 오른쪽으로, 오른쪽은
+          // 구간 끝 칸에서 왼쪽으로 뻗고, 가운데는 구간 칸들 가운데에 둔다(양 끝 정렬이면 「보통」이 칸
+          // 사이로 밀린다). 막대와 같은 열 틀의 한 줄에 겹쳐 놓아, 칸 폭이 달라져도 자리가 맞는다.
+          <div
+            aria-hidden
+            data-testid="scale-bar-anchors"
+            className="mt-1 grid h-4 text-[11px] leading-4 text-gray-900"
+            style={columnsStyle}
+          >
             {left !== undefined && (
-              <span className="absolute left-0 whitespace-nowrap">{text(left)}</span>
+              <span
+                className="row-start-1 whitespace-nowrap"
+                style={{ gridColumn: `${leftStart + 1} / -1`, justifySelf: 'start' }}
+              >
+                {text(left)}
+              </span>
             )}
             {middle !== undefined && (
               <span
-                className="absolute -translate-x-1/2 whitespace-nowrap"
-                style={{ left: `${((middle.index + 0.5) / count) * 100}%` }}
+                className="row-start-1 whitespace-nowrap"
+                style={{
+                  gridColumn: `${middle.index + 1} / span ${middle.span ?? 1}`,
+                  justifySelf: 'center',
+                }}
               >
                 {text(middle.label)}
               </span>
             )}
             {right !== undefined && (
-              <span className="absolute right-0 whitespace-nowrap">{text(right)}</span>
+              <span
+                className="row-start-1 whitespace-nowrap"
+                style={{ gridColumn: `1 / ${rightEnd + 2}`, justifySelf: 'end' }}
+              >
+                {text(right)}
+              </span>
             )}
           </div>
         )}

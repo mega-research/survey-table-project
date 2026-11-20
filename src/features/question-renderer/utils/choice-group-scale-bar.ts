@@ -33,6 +33,11 @@ export interface ScaleBarCell {
    */
   legendLabel?: string;
   bandIndex: number | null;
+  /**
+   * 이 칸의 최소 폭(px) — 칸 글자가 고르게 나눈 칸 폭에 들어가지 않을 만큼 길 때만 싣는다(「미참여」).
+   * 막대는 이 칸을 글자만큼 넓히고 나머지 칸이 그만큼 좁아진다. 번호·짧은 낱말 칸에는 없다.
+   */
+  minWidth?: number;
 }
 
 export interface ScaleBarBand {
@@ -44,8 +49,20 @@ export interface ScaleBarBand {
 export interface ScaleBarModel {
   cells: ScaleBarCell[];
   bands: ScaleBarBand[];
-  /** 막대 아래 라벨 — 6칸 이상만 */
-  anchors: { left?: string; middle?: { label: string; index: number }; right?: string };
+  /**
+   * 막대 아래 라벨 — 6칸 이상만. 라벨은 제 구간에 붙는다: 왼쪽은 구간 첫 칸에서 오른쪽으로, 오른쪽은
+   * 구간 끝 칸에서 왼쪽으로, 가운데는 구간 가운데에 둔다.
+   * - `leftStart`·`rightEnd`: 라벨이 붙는 칸 — 막대의 첫 칸·끝 칸이면 싣지 않는다(척도 밖 보기 칸이
+   *   끝에 낀 막대에서만 생긴다)
+   * - `middle.index`: 가운데 구간의 첫 칸, `middle.span`: 그 구간의 칸 수(한 칸이면 싣지 않는다)
+   */
+  anchors: {
+    left?: string;
+    leftStart?: number;
+    middle?: { label: string; index: number; span?: number };
+    right?: string;
+    rightEnd?: number;
+  };
   /** 고른 칸의 「글자 · 구간 이름」 표시 — 6칸 이상이고 구간이 있을 때 */
   showsSelectionLabel: boolean;
 }
@@ -72,6 +89,11 @@ export interface ProjectScaleBarInput {
   row: TableRow;
   /** 막대 칸이 될 이 행의 보기 칸(보이는 것만, 행 순서) */
   targetCells: readonly TableCell[];
+  /**
+   * 가운데 구간 이름(`ChoiceGroup.mobileScaleBarMiddleLabel`) — 척도 한가운데의 여러 칸짜리 구간 이름도
+   * 그 띠 아래에 둔다. 끄면(기본) 한 칸짜리 정가운데 구간만 가운데 라벨이다.
+   */
+  middleBandLabel?: boolean | undefined;
 }
 
 /** 카드 안 칸 폭이 약 29px 이 되는 한계 — 11점 척도 + 여유 1칸 */
@@ -87,6 +109,34 @@ interface Segment {
 }
 
 type HeaderLine = { role: 'title' } | { role: 'cells' | 'bands'; segments: Segment[] };
+
+/** 막대 칸 글자 크기(13px) 기준 글자 폭 어림 — 한글·한자·전각은 한 글자 13px, 그 밖은 7.5px */
+const WIDE_CHAR = /[\u1100-\u11FF\u2E80-\u9FFF\uAC00-\uD7AF\uF900-\uFAFF\uFF00-\uFFEF]/u;
+/** 이 폭부터 긴 글자로 본다 — 한글 세 글자(「미참여」). 「10점」·「모름」·「N/A」는 좁은 칸에도 들어간다 */
+const LONG_TEXT_MIN_PX = 36;
+/** 칸 좌우 안쪽 여백(px-0.5 × 2)과 여유 */
+const CELL_TEXT_PADDING_PX = 6;
+/**
+ * 넓힐지 가르는 기준 막대 폭 — 390px 화면에서 카드 안 막대가 차지하는 폭. 고르게 나눈 칸 폭이 글자보다
+ * 넉넉한 막대(6·7칸에 낱말 라벨)는 넓히지 않는다 — 이미 들어가는 칸까지 건드리면 운영 중인 막대의 칸 폭이
+ * 화면에 따라 달라진다.
+ */
+const REFERENCE_BAR_WIDTH_PX = 324;
+
+/**
+ * 칸 글자가 길어 넓혀야 하는 칸의 최소 폭. 줄바꿈되는 자리(공백)로 나눈 가장 긴 낱말로 잰다 — 칸 글자는
+ * 낱말 단위로만 꺾인다(`break-keep`). 짧거나 칸이 넉넉해 넓힐 필요가 없으면 undefined.
+ */
+function longTextMinWidth(text: string, count: number): number | undefined {
+  const widest = Math.max(
+    ...text.split(/\s+/).map((word) =>
+      [...word].reduce((sum, char) => sum + (WIDE_CHAR.test(char) ? 13 : 7.5), 0),
+    ),
+  );
+  if (widest < LONG_TEXT_MIN_PX) return undefined;
+  const minWidth = Math.ceil(widest) + CELL_TEXT_PADDING_PX;
+  return minWidth > REFERENCE_BAR_WIDTH_PX / count ? minWidth : undefined;
+}
 
 function fallback(reason: ScaleBarFallbackReason): ScaleBarProjection {
   return { ok: false, reason };
@@ -269,9 +319,11 @@ export function projectScaleBar(input: ProjectScaleBarInput): ScaleBarProjection
     const text = texts[i]!;
     const bandIndex = bandIndexAt(i);
     const inCellLabel = inCellLabelAt(i, text, bandIndex);
+    const minWidth = longTextMinWidth(text, count);
     return {
       cellId: cell.id,
       text,
+      ...(minWidth !== undefined ? { minWidth } : {}),
       ...(inCellLabel !== undefined ? { inCellLabel } : {}),
       ...(hasLegend ? { legendLabel: legendNames[i]! } : {}),
       bandIndex,
@@ -280,18 +332,52 @@ export function projectScaleBar(input: ProjectScaleBarInput): ScaleBarProjection
 
   const anchors: ScaleBarModel['anchors'] = {};
   if (labelsBelowBar && bands.length > 0) {
-    const leftBand = cells[0]!.bandIndex;
-    const rightBand = cells[count - 1]!.bandIndex;
-    if (leftBand !== null) anchors.left = bands[leftBand]!.label;
-    if (rightBand !== null) anchors.right = bands[rightBand]!.label;
     // 가운데 라벨은 정가운데 칸을 덮는 구간이 한 칸짜리일 때만 — 여러 칸짜리 구간 이름을 막대 아래에
     // 쓰면 긴 양끝 라벨과 겹친다. 그런 이름은 구간 띠와 선택값 표시로만 드러낸다.
+    let middleBand: number | null = null;
     if (count % 2 === 1) {
       const index = (count - 1) / 2;
-      const middleBand = cells[index]!.bandIndex;
-      if (middleBand !== null && bands[middleBand]!.span === 1) {
-        anchors.middle = { label: bands[middleBand]!.label, index };
-      }
+      const centerBand = cells[index]!.bandIndex;
+      if (centerBand !== null && bands[centerBand]!.span === 1) middleBand = centerBand;
+    }
+    // 「가운데 구간 이름」을 켠 그룹은 여러 칸짜리도 쓴다 — 이름 있는 구간이 덮는 범위(척도 밖 보기 칸은
+    // 구간 이름이 없어 빠진다)의 한가운데에 놓인 구간이다. 양끝 구간은 가운데가 될 수 없다.
+    if (middleBand === null && input.middleBandLabel === true && bands.length >= 3) {
+      const first = bands[0]!;
+      const last = bands[bands.length - 1]!;
+      const center = (first.start + last.start + last.span) / 2;
+      const found = bands.findIndex(
+        (band, index) =>
+          index > 0 && index < bands.length - 1 && band.start + band.span / 2 === center,
+      );
+      if (found >= 0) middleBand = found;
+    }
+    if (middleBand !== null) {
+      const band = bands[middleBand]!;
+      anchors.middle = {
+        label: band.label,
+        index: band.start,
+        ...(band.span > 1 ? { span: band.span } : {}),
+      };
+    }
+    // 양끝 라벨은 첫 칸·끝 칸을 덮는 구간의 이름이다. 그 칸에 구간 이름이 없으면(「미참여」·「모름」 같은
+    // 척도 밖 보기 칸) 이름 있는 첫·끝 구간을 쓰고 그 구간에 붙인다 — 비워 두면 척도의 한쪽 끝이 무엇인지
+    // 보이지 않는다. 가운데로 쓴 구간과 반대쪽 라벨이 된 구간은 다시 쓰지 않는다.
+    const leftBand = cells[0]!.bandIndex ?? (middleBand === 0 ? null : 0);
+    if (leftBand !== null) {
+      const band = bands[leftBand]!;
+      anchors.left = band.label;
+      if (band.start > 0) anchors.leftStart = band.start;
+    }
+    const lastBand = bands.length - 1;
+    const rightBand =
+      cells[count - 1]!.bandIndex ??
+      (lastBand === middleBand || lastBand === leftBand ? null : lastBand);
+    if (rightBand !== null) {
+      const band = bands[rightBand]!;
+      const end = band.start + band.span - 1;
+      anchors.right = band.label;
+      if (end < count - 1) anchors.rightEnd = end;
     }
   }
 
