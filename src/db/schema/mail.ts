@@ -2,6 +2,7 @@ import { relations, sql } from 'drizzle-orm';
 import {
   type AnyPgColumn,
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -18,6 +19,7 @@ import type {
   MailAttachment,
   MailCampaignKind,
   MailCampaignStatus,
+  MailLinkKind,
   MailRecipientSendPayloadSnapshot,
   MailRecipientStatus,
 } from '@/shared/contracts/mail';
@@ -210,6 +212,44 @@ export const mailRecipientsRelations = relations(mailRecipients, ({ one }) => ({
 }));
 
 // ─────────────────────────────────────────────────────────────────────────────
+// mail_link_clicks — 수신자가 메일 본문의 링크를 누른 기록 (0170, CONTEXT.md 「링크 클릭」, ADR 0042).
+// 수신 상태와 별도다 — 한 수신자가 여러 링크를 여러 번 누르고 클릭마다 한 줄이다.
+// 회차·조사 대상은 수신자 행을 거쳐 읽는다(사본 열 없음).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const mailLinkClicks = pgTable(
+  'mail_link_clicks',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    recipientId: uuid('recipient_id')
+      .notNull()
+      .references(() => mailRecipients.id, { onDelete: 'cascade' }),
+    linkKind: text('link_kind').$type<MailLinkKind>().notNull(),
+    /** 그 밖의 링크(other)만 담는다 — 설문·수신거부 주소에는 그 사람 전용 토큰이 들어 있다. */
+    linkUrl: text('link_url'),
+    clickedAt: timestamp('clicked_at', { withTimezone: true }).notNull(),
+    /** 응답(survey_responses.ip_hash)과 같은 식의 해시. IP 원문은 저장하지 않는다. */
+    ipHash: text('ip_hash'),
+    userAgent: text('user_agent'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    kindCheck: check(
+      'mail_link_clicks_kind_check',
+      sql`${table.linkKind} IN ('survey', 'unsubscribe', 'other')`,
+    ),
+    urlOnlyOtherCheck: check(
+      'mail_link_clicks_url_only_other_check',
+      sql`(${table.linkKind} = 'other') = (${table.linkUrl} IS NOT NULL)`,
+    ),
+    recipientKindIdx: index('mail_link_clicks_recipient_kind_idx').on(
+      table.recipientId,
+      table.linkKind,
+    ),
+  }),
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
 // webhook_events — Resend webhook idempotency dedupe. id = svix-id (header).
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -227,5 +267,7 @@ export type MailCampaign = typeof mailCampaigns.$inferSelect;
 export type NewMailCampaign = typeof mailCampaigns.$inferInsert;
 export type MailRecipient = typeof mailRecipients.$inferSelect;
 export type NewMailRecipient = typeof mailRecipients.$inferInsert;
+export type MailLinkClick = typeof mailLinkClicks.$inferSelect;
+export type NewMailLinkClick = typeof mailLinkClicks.$inferInsert;
 export type WebhookEvent = typeof webhookEvents.$inferSelect;
 export type NewWebhookEvent = typeof webhookEvents.$inferInsert;

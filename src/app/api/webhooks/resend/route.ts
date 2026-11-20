@@ -5,6 +5,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { Webhook } from 'svix';
 
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
+import { CLICKED_EVENT_TYPE, parseResendClick } from '@/server/mail/domain/link-click';
 import { processResendWebhookEvent } from '@/server/mail/services/resend-webhook';
 
 /**
@@ -22,6 +23,10 @@ import { processResendWebhookEvent } from '@/server/mail/services/resend-webhook
  * Finalize (status='sending' → 'completed'/'partial'):
  *   - 같은 트랜잭션에서 carrier UPDATE 다음에 한 번 더 UPDATE. queued+sent=0 도달 시 즉시 마킹.
  *   - opened 는 사후에도 계속 도착 가능하지만 status 변동은 없음 (opened_count 만 누증).
+ *
+ * 클릭 알림 (`email.clicked`):
+ *   - 수신자가 본문의 링크를 눌렀다. 같은 트랜잭션에서 클릭 줄(`mail_link_clicks`)을 넣고 수신 상태를 열람으로 올린다.
+ *   - 발송 서비스의 웹훅 구독에 `email.clicked` 가 있어야 온다(CONTEXT.md 「링크 클릭」).
  */
 
 interface ResendEventPayload {
@@ -30,6 +35,8 @@ interface ResendEventPayload {
   data?: {
     email_id?: string;
     tags?: Record<string, string>;
+    /** 클릭 알림(`email.clicked`)에만 실린다 — 누른 링크·시각·IP·브라우저 정보. 로그·Sentry 에는 싣지 않는다. */
+    click?: unknown;
     // 나머지 필드는 본 핸들러에서 미사용.
   };
 }
@@ -75,6 +82,7 @@ const POST_HANDLER = async (req: NextRequest, ctx: RouteLogContext): Promise<Nex
       createdAt: payload.created_at,
       ...(messageId !== undefined ? { resendMessageId: messageId } : {}),
       ...(payload.data?.tags !== undefined ? { tags: payload.data.tags } : {}),
+      ...(payload.type === CLICKED_EVENT_TYPE ? { click: parseResendClick(payload.data?.click) } : {}),
     });
     if (result === 'deduped') {
       return NextResponse.json({ ok: true, deduped: true });

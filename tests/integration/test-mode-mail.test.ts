@@ -326,6 +326,7 @@ describe('테스트 캠페인 목록', () => {
           sentCount: 0,
           deliveredCount: 0,
           openedCount: 0,
+          clickedCount: 0,
           bouncedCount: 0,
           complainedCount: 0,
           failedCount: 0,

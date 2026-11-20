@@ -3,7 +3,7 @@
 import type { ContactResultCode } from '@/shared/contracts/contacts';
 import type { ContactAssignmentOption } from '@/shared/contracts/contacts-io';
 import {
-  FILTER_SOURCE,
+  defaultFilterValueForSource,
   formatIdListToken,
   type ColumnCandidate,
 } from '@/lib/operations/filter-shared';
@@ -72,14 +72,8 @@ export function ContactsFilterBar({
         />
       )}
       // 상태 dropdown 컬럼은 기본값으로 초기화 (빈 value 면 silent drop 함정) —
-      // web 은 completed, 메일은 delivered. 레거시 'true' 는 구 URL 복원 전용.
-      defaultValueForSource={(source) =>
-        source === FILTER_SOURCE.WEB
-          ? 'completed'
-          : source === FILTER_SOURCE.EMAIL
-            ? 'delivered'
-            : ''
-      }
+      // 열마다의 기본값은 defaultFilterValueForSource 한 곳이다.
+      defaultValueForSource={defaultFilterValueForSource}
     />
   );
 }

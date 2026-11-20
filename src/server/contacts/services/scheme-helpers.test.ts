@@ -58,13 +58,13 @@ describe('appendNewColumnsToScheme', () => {
     const keys = next.columns.map((c) => c.key);
     expect(keys).toEqual([
       'resid', 'idx', '이메일', '신규컬럼',
-      'contact_result', 'email_count', 'web', 'contact_owner',
+      'contact_result', 'email_count', 'link_click', 'web', 'contact_owner',
     ]);
     const added = next.columns.find((c) => c.key === '신규컬럼');
     expect(added?.source).toBe('attrs.신규컬럼');
     expect(added?.hidden).toBe(false);
     // order 는 1부터 연속 재부여
-    expect(next.columns.map((c) => c.order)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(next.columns.map((c) => c.order)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
     // 기존 컬럼 라벨 보존
     expect(next.columns.find((c) => c.key === 'idx')?.label).toBe('번호표');
   });

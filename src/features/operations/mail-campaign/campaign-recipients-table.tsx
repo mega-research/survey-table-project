@@ -13,9 +13,10 @@ import {
 import { PagerJump } from '@/features/operations/pager-jump';
 import { buildPageItems, pageBlockNavTargets } from '@/features/operations/table-primitives';
 import { type MailDisplayColumn, mailColumnValue } from '@/lib/contacts/mail-display-columns';
-import type { MailRecipientStatus } from '@/shared/contracts/mail';
-import type { CampaignRecipientRow } from '@/shared/contracts/mail-io';
+import { MAIL_LINK_KIND_LABEL, type MailRecipientStatus } from '@/shared/contracts/mail';
+import type { CampaignRecipientRow, RecipientLinkClick } from '@/shared/contracts/mail-io';
 import {
+  LINK_CLICK_COLUMN_LABEL,
   RECIPIENT_FILTER_LABEL,
   RECIPIENT_FILTER_SOURCE,
   isUnsubscribeResultCode,
@@ -223,7 +224,7 @@ export function CampaignRecipientsTable({
         </Card>
       ) : (
         <Card className="overflow-x-auto">
-          <table className="w-full min-w-[900px]">
+          <table className="w-full min-w-[1040px]">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50 text-left text-xs font-medium tracking-wide text-gray-500 uppercase">
                 {showResid ? <th className="px-3 py-2">시스템ID</th> : null}
@@ -250,6 +251,12 @@ export function CampaignRecipientsTable({
                 <th className="px-3 py-2">발송</th>
                 <th className="px-3 py-2">전달</th>
                 <th className="px-3 py-2">열람</th>
+                <th
+                  className="px-3 py-2"
+                  title="메일 본문에서 누른 링크와 처음 누른 시각 — 눌렀다는 것이지 응답했다는 것은 아닙니다"
+                >
+                  {LINK_CLICK_COLUMN_LABEL}
+                </th>
                 <th className="px-3 py-2">
                   <span className="inline-flex items-center gap-1">
                     {RECIPIENT_FILTER_LABEL[RECIPIENT_FILTER_SOURCE.RESULT]}
@@ -325,6 +332,9 @@ export function CampaignRecipientsTable({
                     </td>
                     <td className="px-3 py-2 text-xs text-slate-500">
                       <LocalDateTime value={r.openedAt} />
+                    </td>
+                    <td className="px-3 py-2 text-xs text-slate-500">
+                      <RecipientLinkClicks clicks={r.linkClicks} />
                     </td>
                     <td className="px-3 py-2 text-xs text-slate-600">
                       {r.latestResultCode ?? '—'}
@@ -406,6 +416,33 @@ export function CampaignRecipientsTable({
         </div>
       ) : null}
     </section>
+  );
+}
+
+/**
+ * 수신자가 누른 링크 — 줄마다 링크 종류와 처음 누른 시각(CONTEXT.md 「링크 클릭」).
+ * 그 밖의 링크는 종류 대신 주소를 보인다. 주소는 글자로만 그린다 — 수신자가 받은 주소라 개인별 값이 실렸을 수 있고
+ * 담당자가 눌러 볼 이유가 없다. 긴 주소는 칸 폭에서 자르고 전체는 title 로 본다.
+ */
+function RecipientLinkClicks({ clicks }: { clicks: RecipientLinkClick[] }) {
+  if (clicks.length === 0) return <>—</>;
+  return (
+    <ul className="space-y-0.5">
+      {clicks.map((c) => (
+        <li key={`${c.kind}:${c.url ?? ''}`} className="flex items-baseline gap-1.5">
+          {c.kind === 'other' ? (
+            <span className="max-w-[220px] truncate text-slate-600" title={c.url ?? undefined}>
+              {c.url}
+            </span>
+          ) : (
+            <span className={c.kind === 'survey' ? 'font-medium text-slate-900' : 'text-slate-600'}>
+              {MAIL_LINK_KIND_LABEL[c.kind]}
+            </span>
+          )}
+          <LocalDateTime value={c.firstClickedAt} className="shrink-0 tabular-nums" />
+        </li>
+      ))}
+    </ul>
   );
 }
 

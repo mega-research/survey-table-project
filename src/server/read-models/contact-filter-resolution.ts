@@ -51,7 +51,7 @@ import {
  * - **조사 대상 필터 해석** (2026-10-19): 조사 대상 목록 · 단체 메일 위저드 · `fetchCandidateIds` · 교체
  *   적용(미리보기·오른쪽 목록 포함) · 컨택원 수정 화면이 `server/read-models/contact-filter-resolution.ts` 한
  *   곳으로 조건을 읽는다.
- * - `loadContactFilterContext(surveyId, scope, { isGuest, surface: 'contacts' | 'mail', share, executor? })` 가
+ * - `loadContactFilterContext(surveyId, scope, { isGuest, surface: 'contacts' | 'mail' | 'assignments', share, executor? })` 가
  *   스킴(게스트면 컨택원 열 제거)·결과코드·컨택원 선택지(게스트면 빈 배열)·검색바 후보·열 머리 후보(`mail` 이면
  *   미리보기 고정 열 `CAMPAIGN_HEADER_FILTER_COLUMNS` 를 덧붙임)를 읽고 — 페이지는 같은 컨텍스트를 UI props
  *   에도 쓴다 — `resolveContactFilter(ctx, input, { mode })` 가 ID 목록을 읽어 해석한다.
@@ -96,7 +96,12 @@ import {
  *   지우게)로 담으면 파서가 헤더 체크박스와 같은 in 절로 읽는다(컨택원 수정 화면 오른쪽 값 목록이 만든다).
  */
 
-export type ContactFilterSurface = 'contacts' | 'mail';
+/**
+ * 필터를 거는 표면. `assignments`(컨택원 수정 화면과 교체 적용)는 조사 대상 목록과 같되 「링크 클릭」 조건을
+ * 받지 않는다 — 범위 밖으로 정한 자리다(`.scratch/mail-link-click/PRD.md`). 후보에서 빠지므로 화면에 나오지 않고,
+ * 직접 들어온 조건은 write 해석이 해석 불가로 거부한다.
+ */
+export type ContactFilterSurface = 'contacts' | 'mail' | 'assignments';
 export type ContactFilterMode = 'read' | 'write';
 
 declare const contextBrand: unique symbol;
@@ -189,7 +194,10 @@ export async function loadContactFilterContext(
     isGuest ? withoutContactOwnerColumn(loadedScheme) : loadedScheme,
     share,
   );
-  const columnCandidates = buildColumnCandidates(scheme, { includeContactOwner: !isGuest });
+  const columnCandidates = buildColumnCandidates(scheme, {
+    includeContactOwner: !isGuest,
+    includeLinkClick: surface !== 'assignments',
+  });
   // 단체 메일 미리보기 표는 고정 열이라 깔때기 후보도 스킴과 무관하게 고정 목록을 얹는다.
   const headerCandidates =
     surface === 'mail'

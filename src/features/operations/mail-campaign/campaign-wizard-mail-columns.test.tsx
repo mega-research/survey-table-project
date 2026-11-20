@@ -41,6 +41,7 @@ function candidate(overrides: Partial<CampaignCandidateRow>): CampaignCandidateR
     progressPct: null,
     latestResultCode: null,
     latestMailStatus: null,
+    linkClick: null,
     ...overrides,
   };
 }
@@ -125,10 +126,10 @@ describe('CampaignWizard 메일 표시 컬럼', () => {
     expect(columnCells('리스트 ID')).toEqual(['L-001', '—']);
   });
 
-  it('메일 표시 컬럼이 없으면 기존 7열 그대로다', () => {
+  it('메일 표시 컬럼이 없으면 고정 8열 그대로다', () => {
     renderWizard([candidate({ attrs: { 리스트ID: 'L-001' } })], []);
 
-    expect(headerLabels()).toHaveLength(7);
+    expect(headerLabels()).toHaveLength(8);
     expect(screen.queryByText('L-001')).not.toBeInTheDocument();
   });
 
@@ -159,7 +160,7 @@ describe('CampaignWizard 메일 표시 컬럼', () => {
   it('시스템ID 를 끄면 그 열이 빠진다', () => {
     renderWizard([candidate({})], [], false);
 
-    expect(headerLabels()).toHaveLength(6);
+    expect(headerLabels()).toHaveLength(7);
     expect(headerLabels()).not.toContain('시스템ID');
   });
 });

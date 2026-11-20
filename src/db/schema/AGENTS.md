@@ -20,6 +20,7 @@ surveys                    # 설문 설정
 ├── localizedMessages (JSONB)     # 언어별 설문 글자 { zh?, en? : { title, description, thankYou, screenedOut } } (0145, NULL=한국어만, 빈 칸은 한국어 폴백). 발행 스냅샷 settings 에 얼린다(라이브 아님). 계약 shared/contracts/survey 의 LocalizedSurveyTexts — `src/features/AGENTS.md` 「다국어 설문」
 ├── piiRetentionUntil (개인정보 보관기한)
 ├── contactColumns / testContactColumns (JSONB)  # 컨택리스트 표시 컬럼 스킴 (실/테스트 분리)
+│                                 #   시스템 열 system.link_click(「링크 클릭」)은 0170 전에 저장된 스킴에 없다 — 읽을 때 「메일」 열 뒤로 끼운다(lib/operations/contacts-format 의 withLinkClickColumn)
 │                                 #   컬럼별 플래그: hidden(목록 숨김) · piiType · groupLevel(진척보고 분류 축)
 │                                 #   · showInMail(단체 메일 위저드·캠페인 상세 수신자 표·수신거부 명단에 열 노출 — attrs.* 는 값, pii.* 는 마스킹 힌트(켠 열만 서버가 읽는다), system.contact_owner 는 컨택원 이름(게스트 화면 제외), system.resid 는 기본 보임이라 끈 경우만 false. 해석 lib/contacts/mail-display-columns)
 │                                 #   · mailOrder(메일 발송 주소 순서 1부터, 이메일로 암호화된 열 전용 — `src/server/mail/AGENTS.md`)
@@ -251,6 +252,13 @@ mail_recipients            # 수신자별 status + Resend message id
 ├── sentAt, deliveredAt, openedAt, bouncedAt, complainedAt, archivedAt
 └── createdAt, updatedAt  (UNIQUE campaignId+contactTargetId)
 
+mail_link_clicks           # 링크 클릭 — 수신자가 메일 본문의 링크를 누른 기록 (0170, CONTEXT.md 「링크 클릭」, ADR 0042)
+├── id, recipientId (cascade)   # 클릭 한 번이 한 줄. 회차·조사 대상은 수신자 행을 거쳐 읽는다(사본 열 없음)
+├── linkKind               # survey(우리 응답 화면 주소) | unsubscribe | other (CHECK — 어휘는 shared/contracts/mail 의 mailLinkKindValues)
+├── linkUrl                # other 만 (CHECK). 설문·수신거부 주소는 그 사람 전용 토큰이 들어 있어 남기지 않는다
+├── clickedAt, ipHash, userAgent  # ipHash 는 응답의 ip_hash 와 같은 식(lib/duplicate-detection/salted-hash.server). 화면·내보내기에 싣지 않는다
+└── createdAt              # INDEX (recipientId, linkKind). 수신자당 200줄 상한은 앱(웹훅)이 건다
+
 webhook_events             # Resend webhook idempotency dedupe (id = svix-id)
 ├── id, source, eventType, receivedAt
 
@@ -289,7 +297,8 @@ surveys (1) ─┬─ (N) survey_documents ── (N) survey_document_anchors
              ├─ (N) survey_versions ── (N) survey_responses [versionId]
              ├─ (N) contact_uploads ── (N) contact_targets
              ├─ (N) mail_templates ── (N) mail_campaigns
-             └─ (N) mail_campaigns ── (N) mail_recipients ── (1) contact_targets
+             └─ (N) mail_campaigns ── (N) mail_recipients ─┬─ (1) contact_targets
+                                                            └─ (N) mail_link_clicks
 
 contact_targets ─┬─ (N) contact_pii (암호화 PII)
                  ├─ (N) contact_attempts (결과 회차)

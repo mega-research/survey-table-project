@@ -34,7 +34,7 @@ export default async function ContactAssignmentEditPage({ params }: PageProps) {
     getAssignmentForEdit(surveyId, scope, assignmentId),
     loadContactFilterContext(surveyId, scope, {
       isGuest: false,
-      surface: 'contacts',
+      surface: 'assignments',
       // 컨택원 관리는 관리자 전용 화면이다
       share: FIELDWORK_SHARE_ALL,
     }),

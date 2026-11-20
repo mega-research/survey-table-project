@@ -6,6 +6,7 @@ import * as z from 'zod';
 import type {
   MailCampaignKind,
   MailCampaignStatus,
+  MailLinkKind,
   MailRecipientStatus,
 } from '@/shared/contracts/mail';
 
@@ -47,6 +48,11 @@ export interface CampaignRow {
   sentCount: number;
   deliveredCount: number;
   openedCount: number;
+  /**
+   * 이 회차에서 메일의 설문 링크를 누른 수신자 수(사람 수, 보관된 수신자 제외) — CONTEXT.md 「링크 클릭」.
+   * 집계 열이 아니라 조회할 때 센다. 눌렀다는 것이지 응답했다는 것이 아니다.
+   */
+  clickedCount: number;
   bouncedCount: number;
   complainedCount: number;
   failedCount: number;
@@ -55,6 +61,23 @@ export interface CampaignRow {
   completedAt: Date | null;
   createdAt: Date;
   createdBy: string | null;
+}
+
+/**
+ * 조사 대상 한 명의 링크 클릭 상태 — 저장하는 값이 아니라 읽을 때 계산하는 값이다(CONTEXT.md 「링크 클릭」).
+ * 'clicked' 는 어느 발송 회차에서든 설문 링크를 한 번이라도 눌렀다, 'not_clicked' 는 발송 이력은 있는데 누르지
+ * 않았다. 발송 이력이 없으면 null 이다. 조사 대상 목록·엑셀·단체 메일 위저드의 행이 싣는다.
+ */
+export type LinkClickState = 'clicked' | 'not_clicked';
+
+/**
+ * 수신자가 누른 링크 한 줄 — 링크 종류마다(그 밖의 링크는 주소마다) 하나이고 시각은 처음 누른 때다
+ * (CONTEXT.md 「링크 클릭」). 설문·수신거부 링크는 주소를 싣지 않는다.
+ */
+export interface RecipientLinkClick {
+  kind: MailLinkKind;
+  url: string | null;
+  firstClickedAt: Date;
 }
 
 // 단체 메일 detail 의 recipients 목록 (status 필터 + email 검색 + 페이지네이션)
@@ -82,6 +105,8 @@ export interface CampaignRecipientRow {
   complainedAt: Date | null;
   /** 컨택 최신 회차의 result_code — 조사 대상 목록의 컨택결과 컬럼과 같은 값. */
   latestResultCode: string | null;
+  /** 이 회차의 메일에서 누른 링크 — 설문 링크 · 수신거부 · 그 밖의 링크 순. 누른 것이 없으면 빈 배열. */
+  linkClicks: RecipientLinkClick[];
 }
 
 export interface CampaignCandidateRow {
@@ -106,6 +131,11 @@ export interface CampaignCandidateRow {
   latestResultCode: string | null;
   /** 가장 최근 단체 메일에서의 수신 status. 발송 이력 없으면 null — 재전송 명단 대조용. */
   latestMailStatus: MailRecipientStatus | null;
+  /**
+   * 링크 클릭 상태 — 조사 대상 목록의 「링크 클릭」 열과 같은 값·같은 식(CONTEXT.md 「링크 클릭」).
+   * 발송 이력이 없으면 null. 독촉 대상 고르기에 쓴다.
+   */
+  linkClick: LinkClickState | null;
 }
 
 /** 미리보기 정렬 — 번호 / 응답여부 / 수신 상황 / 최근 결과코드. 이메일·그룹은 PII·비용 사유로 제외. */

@@ -30,6 +30,7 @@ import { ContactsFilterBar } from '@/features/operations/contacts/contacts-filte
 import { FilterResetButton } from '@/features/operations/filters/filter-reset-button';
 import { HeaderFilterPopover } from '@/features/operations/filters/header-filter-popover';
 import { StatusPill } from '@/features/operations/profiles/status-pill';
+import { LinkClickMark } from '@/features/operations/link-click-mark';
 import { RecipientStatusBadge } from '@/features/operations/mail-campaign/recipient-status-badge';
 import {
   PAGER_ELLIPSIS_CLASS,
@@ -62,6 +63,8 @@ import type {
 import {
   CAMPAIGN_HEADER_FILTER_COLUMNS,
   FILTER_SOURCE,
+  LINK_CLICK_COLUMN_LABEL,
+  LINK_CLICK_FILTER_OPTIONS,
   MAIL_FILTER_OPTIONS,
   withNoneOption,
 } from '@/lib/operations/filter-shared';
@@ -536,6 +539,19 @@ export function CampaignWizard({
                     />
                   </span>
                 </th>
+                <th
+                  className="px-3 py-2"
+                  title="어느 발송 회차에서든 메일의 설문 링크를 눌렀는가 — 눌렀다는 것이지 응답했다는 것은 아닙니다"
+                >
+                  <span className="inline-flex items-center gap-1">
+                    {LINK_CLICK_COLUMN_LABEL}
+                    <PreviewHeaderFilter
+                      surveyId={surveyId}
+                      source={FILTER_SOURCE.LINK_CLICK}
+                      resultCodeOptions={resultCodeOptions}
+                    />
+                  </span>
+                </th>
                 <th className="px-3 py-2">
                   <span className="inline-flex items-center gap-1">
                     <SortHeader
@@ -557,7 +573,7 @@ export function CampaignWizard({
             <tbody>
               {candidates.rows.length === 0 ? (
                 <tr>
-                  <td colSpan={6 + (showResid ? 1 : 0) + mailColumns.length} className="px-3 py-10 text-center text-sm text-slate-500">
+                  <td colSpan={7 + (showResid ? 1 : 0) + mailColumns.length} className="px-3 py-10 text-center text-sm text-slate-500">
                     필터에 해당하는 수신자가 없습니다.
                   </td>
                 </tr>
@@ -593,6 +609,9 @@ export function CampaignWizard({
                       ) : (
                         <span className="text-slate-400">—</span>
                       )}
+                    </td>
+                    <td className="px-3 py-2 text-xs">
+                      <LinkClickMark state={r.linkClick} />
                     </td>
                     <td className="px-3 py-2 text-xs text-slate-600">
                       {r.latestResultCode ?? '—'}
@@ -822,6 +841,14 @@ function PreviewHeaderFilter({
       {...(source === FILTER_SOURCE.EMAIL
         ? {
             fixedOptions: MAIL_FILTER_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+          }
+        : {})}
+      {...(source === FILTER_SOURCE.LINK_CLICK
+        ? {
+            fixedOptions: LINK_CLICK_FILTER_OPTIONS.map((o) => ({
+              value: o.value,
+              label: o.label,
+            })),
           }
         : {})}
       {...(source === FILTER_SOURCE.CONTACT_OWNER

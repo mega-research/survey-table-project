@@ -1,23 +1,10 @@
-import { createHash } from 'node:crypto';
-
+import { saltedHash } from '@/lib/duplicate-detection/salted-hash.server';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
 
 import type { ClientSignals, ServerSignals } from '@/lib/duplicate-detection/types';
-import { InternalFailure } from '@/server/internal-failure';
 
-// Module-level fail-fast: server boot 또는 첫 import 시 즉시 검증
-// salt 누락 시 silent fallthrough 로 중복 차단이 무력화되는 보안 risk 차단
-// 한 번 정한 salt 는 절대 회전하지 말 것 — 회전 시 기존 hash 무용지물
-const SALT = process.env['DUPLICATE_DETECTION_SALT'];
-if (!SALT) {
-  throw new InternalFailure(
-    'DUPLICATE_DETECTION_SALT not set. Add to .env.local (dev) and deploy env (prod/CI).',
-  );
-}
-
-function sha256(input: string): string {
-  return createHash('sha256').update(input).digest('hex');
-}
+// 솔트 검증과 해시 식은 `lib/duplicate-detection/salted-hash.server` 가 쥔다 — 메일 링크 클릭의 IP 해시와
+// 같은 식이어야 나중에 맞춰 볼 수 있다. 솔트가 없으면 그 모듈이 import 시점에 던진다.
 
 /**
  * 헤더에서 IP 를 추출한다. rate limit 과 동일한 신뢰 추출 경로(getTrustedClientIpOrNull)를 공유한다.
@@ -45,8 +32,9 @@ export function computeSignals(h: Headers, client: ClientSignals): ServerSignals
   ].join('|');
 
   return {
-    ipHash: ip ? sha256(ip + SALT) : null,
-    fpHash: sha256(fpInput + SALT),
+    // 종전 식 그대로(다듬지 않는다) — 이미 저장된 해시와 같은 값이 나와야 한다.
+    ipHash: ip ? saltedHash(ip) : null,
+    fpHash: saltedHash(fpInput),
     deviceId: client.deviceId,
   };
 }

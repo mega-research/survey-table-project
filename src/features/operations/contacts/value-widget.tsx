@@ -23,7 +23,9 @@ import {
   FILTER_NOT_NONE_TOGGLE_LABEL,
   FILTER_NOT_NONE_VALUE,
   FILTER_SOURCE,
+  LINK_CLICK_FILTER_OPTIONS,
   MAIL_FILTER_OPTIONS,
+  defaultFilterValueForSource,
   placeholderFor,
   webFilterOptionsFor,
   withNoneOption,
@@ -102,6 +104,7 @@ export function ValueWidget(props: Props) {
  * 컬럼 source 에 따라 다른 입력 위젯 렌더.
  * - system.contact_result -> 결과코드 dropdown (+ "결과 없음")
  * - system.web -> 응답 완료/미응답 dropdown
+ * - system.link_click -> 링크 클릭 있음/없음/발송 이력 없음 dropdown
  * - system.contact_owner -> 컨택원 dropdown (+ "— (없음)")
  * - system.resid / attrs.* -> ID 목록 입력 (IdListInput — 엑셀 붙여넣기·인식 개수·경고)
  * - 그 외 (pii.*) -> text input
@@ -134,6 +137,9 @@ function ValueInput({
       }
       if (source === FILTER_SOURCE.EMAIL) {
         return MAIL_FILTER_OPTIONS.find((o) => o.value === v)?.label ?? v;
+      }
+      if (source === FILTER_SOURCE.LINK_CLICK) {
+        return LINK_CLICK_FILTER_OPTIONS.find((o) => o.value === v)?.label ?? v;
       }
       return v;
     };
@@ -198,9 +204,26 @@ function ValueInput({
     );
   }
 
+  if (source === FILTER_SOURCE.LINK_CLICK) {
+    return (
+      <Select value={value || defaultFilterValueForSource(source)} onValueChange={onChange}>
+        <SelectTrigger id={inputId} className="w-[260px] h-10">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {LINK_CLICK_FILTER_OPTIONS.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    );
+  }
+
   if (source === FILTER_SOURCE.EMAIL) {
     return (
-      <Select value={value || 'delivered'} onValueChange={onChange}>
+      <Select value={value || defaultFilterValueForSource(source)} onValueChange={onChange}>
         <SelectTrigger id={inputId} className="w-[260px] h-10">
           <SelectValue />
         </SelectTrigger>
@@ -219,7 +242,7 @@ function ValueInput({
     // 레거시 값 노출 규칙은 webFilterOptionsFor 주석 참조. 사용자가 새 옵션을
     // 고르는 순간부터 레거시 항목은 목록에서 사라진다.
     return (
-      <Select value={value || 'completed'} onValueChange={onChange}>
+      <Select value={value || defaultFilterValueForSource(source)} onValueChange={onChange}>
         <SelectTrigger id={inputId} className="w-[260px] h-10">
           <SelectValue />
         </SelectTrigger>
