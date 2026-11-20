@@ -15,20 +15,26 @@ import {
 } from './recipient-status-transition';
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
 
-async function applyResendEvent(
+interface LockedRecipient {
+  id: string;
+  campaignId: string;
+  status: MailRecipientStatus;
+  archivedAt: Date | null;
+}
+
+/**
+ * 알림이 가리키는 수신자를 찾아 잠근다 — 회차 행 → 수신자 행 순서다(이 수신자에 닿는 알림은 종류와 무관하게
+ * 같은 순서로 잠가 서로 엇갈리지 않는다). 발송 서비스 메일 id 로 찾고, 없으면 발송 태그(수신자 id·회차 id)로 찾는다.
+ * 전달 메일(회신 전달)과 중계 메일(답장 중계)은 수신자 기록이 없는 메일이라 null 이다.
+ * 발송 직후 메일 id 가 아직 안 적힌 수신자면 여기서 적는다.
+ */
+async function lockRecipientForEvent(
   tx: Tx,
   resendMessageId: string,
-  eventType: string,
-  createdAtRaw: string,
   tags?: Record<string, string>,
-): Promise<string | null> {
-  const newStatus = mapResendWebhookType(eventType);
-  if (!newStatus) return null;
+): Promise<LockedRecipient | null> {
   // 전달 메일(회신 전달)과 중계 메일(답장 중계)은 수신자 기록이 없는 메일이다 — 수신자 상태·발송 회차 집계를 건드리지 않는다.
   if (hasReplyForwardTag(tags) || hasReplyRelayTag(tags)) return null;
-
-  const eventAt = new Date(createdAtRaw);
-  if (Number.isNaN(eventAt.getTime())) eventAt.setTime(Date.now());
 
   const rows = await tx
     .select({
@@ -85,12 +91,40 @@ async function applyResendEvent(
       .where(and(eq(mailRecipients.id, row.id), isNull(mailRecipients.resendMessageId)));
   }
 
+  return {
+    id: row.id,
+    campaignId: row.campaignId,
+    status: row.status as MailRecipientStatus,
+    archivedAt: row.archivedAt,
+  };
+}
+
+/** 알림의 시각 글자 → Date. 없거나 읽히지 않으면 null. */
+function parseEventAt(raw: string | null | undefined): Date | null {
+  if (!raw) return null;
+  const at = new Date(raw);
+  return Number.isNaN(at.getTime()) ? null : at;
+}
+
+async function applyResendEvent(
+  tx: Tx,
+  resendMessageId: string,
+  eventType: string,
+  createdAtRaw: string,
+  tags?: Record<string, string>,
+): Promise<string | null> {
+  const newStatus = mapResendWebhookType(eventType);
+  if (!newStatus) return null;
+
+  const row = await lockRecipientForEvent(tx, resendMessageId, tags);
+  if (!row) return null;
+
   const applied = await applyRecipientTransition(tx, {
     recipientId: row.id,
     campaignId: row.campaignId,
-    prevStatus: row.status as MailRecipientStatus,
+    prevStatus: row.status,
     newStatus,
-    eventAt,
+    eventAt: parseEventAt(createdAtRaw) ?? new Date(),
     recipientArchivedAt: row.archivedAt,
   });
   // 반송·실패로 바뀐 수신자 — 커밋 뒤 다음 순위 주소로 대체 발송을 건다.
