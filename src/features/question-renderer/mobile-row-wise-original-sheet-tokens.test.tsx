@@ -31,6 +31,8 @@ function question(rowId: string, title: string): MobileRowWiseOriginalQuestion {
     rowId,
     title,
     omittedAnswerCells: [],
+    belowTitleCells: [],
+    hidesPiece: false,
     projection: {
       columns: [{ id: 'answer', label: '응답', width: 240 }],
       row: { id: rowId, label: title, cells: [cell] },

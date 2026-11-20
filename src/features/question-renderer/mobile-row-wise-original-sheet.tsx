@@ -139,6 +139,7 @@ export function MobileRowWiseOriginalSheet({
                     const hasError = [
                       ...question.projection.row.cells,
                       ...question.omittedAnswerCells,
+                      ...question.belowTitleCells,
                     ].some((cell) => errorCellIds?.has(cell.id));
                     const inputIdScope = question.rowId;
                     const errorDescriptionId = hasError ? `${labelId}-error` : undefined;
@@ -196,7 +197,20 @@ export function MobileRowWiseOriginalSheet({
                             {renderPieceCell(cell)}
                           </div>
                         ))}
-                        {segments && renderScaleBar && renderGroupTiles ? (
+                        {/* 제목 아래 입력칸 — 조각 대신 화면 폭으로(척도 표 맨 아래 서술형 줄) */}
+                        {question.belowTitleCells.map((cell) => (
+                          <div
+                            key={cell.id}
+                            data-below-title-cell={cell.id}
+                            className={cn(
+                              'px-1',
+                              errorCellIds?.has(cell.id) && 'rounded-lg ring-2 ring-red-300',
+                            )}
+                          >
+                            {renderPieceCell(cell)}
+                          </div>
+                        ))}
+                        {question.hidesPiece ? null : segments && renderScaleBar && renderGroupTiles ? (
                           // 행별 척도 — 그룹은 제 보기 모양(타일·원본 한 줄·막대), 나머지 응답 칸은 원본 조각
                           <div className="space-y-3">
                             {segments.map((segment) =>
