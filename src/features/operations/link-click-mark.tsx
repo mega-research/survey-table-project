@@ -8,9 +8,13 @@ import type { LinkClickState } from '@/shared/contracts/mail-io';
  */
 export function LinkClickMark({ state }: { state: LinkClickState | null }) {
   const label = linkClickLabel(state);
-  return state === 'clicked' ? (
-    <span className="text-xs font-medium text-slate-900">{label}</span>
+  if (state === 'clicked') {
+    return <span className="text-xs font-medium text-slate-900">{label}</span>;
+  }
+  // 「없음」은 필터로 고르는 값이라 읽혀야 한다(slate-500 — 흰 바탕 대비 4.5:1 이상). 값이 없는 칸의 — 만 흐리게.
+  return state === 'not_clicked' ? (
+    <span className="text-xs text-slate-500">{label}</span>
   ) : (
-    <span className="text-xs text-slate-400">{label || '—'}</span>
+    <span className="text-xs text-slate-400">—</span>
   );
 }
