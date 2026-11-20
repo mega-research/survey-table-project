@@ -85,6 +85,20 @@ const DEFAULT_PAGE_SIZE = 20;
 // 단체 메일 list (메인 페이지)
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * 회차에서 메일의 설문 링크를 누른 수신자 수 — 사람 수다(같은 사람이 여러 번 눌러도 1). 보관된 수신자는 뺀다
+ * (다른 집계 열과 같은 범위). 집계 열을 두지 않고 조회할 때 센다 — 클릭 줄과 어긋날 수 없다.
+ * outer correlation 은 qualifier 를 직접 박는다(`contacts-filter-sql.server` 의 latestResultCodeExpr 주석 참고).
+ */
+const campaignSurveyLinkClickedCountExpr = sql<number>`(
+  SELECT count(DISTINCT mail_link_clicks.recipient_id)::int
+  FROM mail_link_clicks
+  INNER JOIN mail_recipients ON mail_recipients.id = mail_link_clicks.recipient_id
+  WHERE mail_recipients.campaign_id = "mail_campaigns"."id"
+    AND mail_recipients.archived_at IS NULL
+    AND mail_link_clicks.link_kind = 'survey'
+)`;
+
 export interface ListCampaignsResult {
   rows: CampaignRow[];
   total: number;
@@ -130,6 +144,7 @@ export async function listCampaignsForSurvey(args: {
       sentCount: mailCampaigns.sentCount,
       deliveredCount: mailCampaigns.deliveredCount,
       openedCount: mailCampaigns.openedCount,
+      clickedCount: campaignSurveyLinkClickedCountExpr.as('clicked_count'),
       bouncedCount: mailCampaigns.bouncedCount,
       complainedCount: mailCampaigns.complainedCount,
       failedCount: mailCampaigns.failedCount,

@@ -1,10 +1,23 @@
 import * as Sentry from '@sentry/nextjs';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import 'server-only';
 
 import { type DbTransaction as Tx, db } from '@/db';
-import { mailCampaigns, mailRecipients, webhookEvents } from '@/db/schema/mail';
+import {
+  mailCampaigns,
+  mailLinkClicks,
+  mailRecipients,
+  webhookEvents,
+} from '@/db/schema/mail';
+import { hashClientIp } from '@/lib/duplicate-detection/salted-hash.server';
 import { logger } from '@/lib/logger';
+import {
+  CLICKED_EVENT_TYPE,
+  MAX_CLICKS_PER_RECIPIENT,
+  USER_AGENT_MAX_LENGTH,
+  type ResendClickData,
+  classifyClickedLink,
+} from '../domain/link-click';
 import { hasReplyForwardTag, isReplyForwardDeliveryFailure } from '../domain/reply-forward';
 import { hasReplyRelayTag } from '../domain/reply-relay';
 import { requestRecipientFallbacks } from './campaign-fallback';
@@ -14,6 +27,11 @@ import {
   triggersFallback,
 } from './recipient-status-transition';
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
+
+/** 이 서비스가 수신자 기록에 반영하는 알림인가 — 상태 알림이거나 클릭 알림. */
+function isRecipientEvent(eventType: string): boolean {
+  return eventType === CLICKED_EVENT_TYPE || mapResendWebhookType(eventType) !== null;
+}
 
 interface LockedRecipient {
   id: string;
@@ -131,6 +149,59 @@ async function applyResendEvent(
   return applied && triggersFallback(newStatus) ? row.id : null;
 }
 
+/**
+ * 클릭 알림 한 건을 수신자 기록에 반영한다 (CONTEXT.md 「링크 클릭」, ADR 0042).
+ *
+ * 수신자 행을 잠근 채로 클릭 줄을 넣고(수신자당 상한을 같은 잠금 아래에서 센다), 수신 상태가 아직 열람
+ * 전이면 열람으로 올린다 — 이미지를 막은 메일 프로그램은 열람이 잡히지 않는데 링크는 누른다.
+ * 클릭 정보의 모양이 달라 줄을 못 넣어도 열람으로는 올린다(눌렀다는 사실은 알림 자체가 말한다).
+ * 링크 주소·IP·브라우저 정보는 로그에 싣지 않는다.
+ */
+async function applyClickEvent(
+  tx: Tx,
+  resendMessageId: string,
+  createdAtRaw: string,
+  click: ResendClickData | null,
+  tags?: Record<string, string>,
+): Promise<void> {
+  const row = await lockRecipientForEvent(tx, resendMessageId, tags);
+  if (!row) return;
+
+  const clickedAt = parseEventAt(click?.timestamp) ?? parseEventAt(createdAtRaw) ?? new Date();
+
+  if (click) {
+    const [counted] = await tx
+      .select({ count: sql<number>`count(*)::int` })
+      .from(mailLinkClicks)
+      .where(eq(mailLinkClicks.recipientId, row.id));
+    if ((counted?.count ?? 0) >= MAX_CLICKS_PER_RECIPIENT) {
+      logger.warn(
+        { recipientId: row.id, campaignId: row.campaignId },
+        '[link-click] 수신자당 클릭 상한 — 이 클릭은 기록하지 않는다',
+      );
+    } else {
+      const link = classifyClickedLink(click.link, process.env['NEXT_PUBLIC_APP_URL']);
+      await tx.insert(mailLinkClicks).values({
+        recipientId: row.id,
+        linkKind: link.kind,
+        linkUrl: link.url,
+        clickedAt,
+        ipHash: hashClientIp(click.ipAddress),
+        userAgent: click.userAgent?.slice(0, USER_AGENT_MAX_LENGTH) ?? null,
+      });
+    }
+  }
+
+  await applyRecipientTransition(tx, {
+    recipientId: row.id,
+    campaignId: row.campaignId,
+    prevStatus: row.status,
+    newStatus: 'opened',
+    eventAt: clickedAt,
+    recipientArchivedAt: row.archivedAt,
+  });
+}
+
 /** 검증된 Resend 이벤트를 recipient 상태와 campaign 집계에 반영한다. */
 export async function processResendEvent(
   resendMessageId: string,
@@ -150,6 +221,8 @@ export interface VerifiedResendWebhookEvent {
   createdAt: string;
   resendMessageId?: string;
   tags?: Record<string, string>;
+  /** 클릭 알림(`email.clicked`)에만 실린다 — 누른 링크·시각·IP·브라우저 정보. 모양이 다르면 null. */
+  click?: ResendClickData | null;
 }
 
 /**
@@ -189,6 +262,7 @@ function reportReplyRelayDeliveryFailure(event: VerifiedResendWebhookEvent): voi
 /**
  * webhook dedupe 기록과 recipient 전이를 한 transaction으로 커밋한다.
  * 전이 실패 시 dedupe insert도 rollback되어 provider retry가 이벤트를 다시 처리할 수 있다.
+ * 클릭 알림(`email.clicked`)은 같은 트랜잭션에서 클릭 줄을 넣고 수신 상태를 열람으로 올린다(`applyClickEvent`).
  *
  * 전달 메일(`kind=reply-forward` 태그)과 중계 메일(`kind=reply-relay` 태그)의 상태 알림은 장부에만 적고 전이하지 않는다.
  * 그 가운데 닿지 못했다는 알림(반송·실패·보내지 않음·스팸 신고)은 커밋 뒤 Sentry 경고를 낸다 — 수신자 전이로 옮길 수
@@ -204,8 +278,18 @@ export async function processResendWebhookEvent(
       .onConflictDoNothing()
       .returning({ id: webhookEvents.id });
     if (inserted.length === 0) return { result: 'deduped' as const, fallbackRecipientId: null };
-    if (!event.resendMessageId || !mapResendWebhookType(event.type)) {
+    if (!event.resendMessageId || !isRecipientEvent(event.type)) {
       return { result: 'ignored' as const, fallbackRecipientId: null };
+    }
+    if (event.type === CLICKED_EVENT_TYPE) {
+      await applyClickEvent(
+        tx,
+        event.resendMessageId,
+        event.createdAt,
+        event.click ?? null,
+        event.tags,
+      );
+      return { result: 'processed' as const, fallbackRecipientId: null };
     }
 
     const fallbackRecipientId = await applyResendEvent(

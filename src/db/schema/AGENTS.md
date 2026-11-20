@@ -251,6 +251,13 @@ mail_recipients            # 수신자별 status + Resend message id
 ├── sentAt, deliveredAt, openedAt, bouncedAt, complainedAt, archivedAt
 └── createdAt, updatedAt  (UNIQUE campaignId+contactTargetId)
 
+mail_link_clicks           # 링크 클릭 — 수신자가 메일 본문의 링크를 누른 기록 (0170, CONTEXT.md 「링크 클릭」, ADR 0042)
+├── id, recipientId (cascade)   # 클릭 한 번이 한 줄. 회차·조사 대상은 수신자 행을 거쳐 읽는다(사본 열 없음)
+├── linkKind               # survey(우리 응답 화면 주소) | unsubscribe | other (CHECK — 어휘는 shared/contracts/mail 의 mailLinkKindValues)
+├── linkUrl                # other 만 (CHECK). 설문·수신거부 주소는 그 사람 전용 토큰이 들어 있어 남기지 않는다
+├── clickedAt, ipHash, userAgent  # ipHash 는 응답의 ip_hash 와 같은 식(lib/duplicate-detection/salted-hash.server). 화면·내보내기에 싣지 않는다
+└── createdAt              # INDEX (recipientId, linkKind). 수신자당 200줄 상한은 앱(웹훅)이 건다
+
 webhook_events             # Resend webhook idempotency dedupe (id = svix-id)
 ├── id, source, eventType, receivedAt
 │                          # eventType = 알림 종류 그대로. 회신 전달·답장 중계(email.received)만 결과 줄·자리 줄·발송 기록 줄을 갈라 적는다(id 는 알림 id 또는 거기서 파생) — 값은 `src/server/mail/AGENTS.md` 「회신 전달」의 「장부의 이벤트 종류 칸」
@@ -290,7 +297,8 @@ surveys (1) ─┬─ (N) survey_documents ── (N) survey_document_anchors
              ├─ (N) survey_versions ── (N) survey_responses [versionId]
              ├─ (N) contact_uploads ── (N) contact_targets
              ├─ (N) mail_templates ── (N) mail_campaigns
-             └─ (N) mail_campaigns ── (N) mail_recipients ── (1) contact_targets
+             └─ (N) mail_campaigns ── (N) mail_recipients ─┬─ (1) contact_targets
+                                                            └─ (N) mail_link_clicks
 
 contact_targets ─┬─ (N) contact_pii (암호화 PII)
                  ├─ (N) contact_attempts (결과 회차)

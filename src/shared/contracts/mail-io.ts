@@ -47,6 +47,11 @@ export interface CampaignRow {
   sentCount: number;
   deliveredCount: number;
   openedCount: number;
+  /**
+   * 이 회차에서 메일의 설문 링크를 누른 수신자 수(사람 수, 보관된 수신자 제외) — CONTEXT.md 「링크 클릭」.
+   * 집계 열이 아니라 조회할 때 센다. 눌렀다는 것이지 응답했다는 것이 아니다.
+   */
+  clickedCount: number;
   bouncedCount: number;
   complainedCount: number;
   failedCount: number;

@@ -91,6 +91,73 @@ describe('Resend webhook route retry response', () => {
   });
 });
 
+describe('Resend webhook route — 클릭 알림(email.clicked)', () => {
+  beforeEach(() => {
+    process.env['RESEND_WEBHOOK_SECRET'] = 'test-secret';
+    processMock.mockReset();
+    forwardMock.mockReset();
+    captureMock.mockReset();
+  });
+
+  it('클릭 정보를 읽어 수신자 기록 경로로 넘긴다', async () => {
+    verified.payload = {
+      type: 'email.clicked',
+      created_at: '2026-11-20T05:03:11Z',
+      data: {
+        email_id: 'message-1',
+        tags: { campaign_id: 'c1', recipient_id: 'r1' },
+        click: {
+          ipAddress: '203.0.113.7',
+          link: 'https://spri.kr/posts',
+          timestamp: '2026-11-20T05:03:10.000Z',
+          userAgent: 'Mozilla/5.0',
+        },
+      },
+    };
+    processMock.mockResolvedValueOnce('processed');
+
+    const response = await POST(webhookRequest());
+
+    expect(response.status).toBe(200);
+    expect(forwardMock).not.toHaveBeenCalled();
+    expect(processMock).toHaveBeenCalledWith({
+      id: 'svix-event-1',
+      type: 'email.clicked',
+      createdAt: '2026-11-20T05:03:11Z',
+      resendMessageId: 'message-1',
+      tags: { campaign_id: 'c1', recipient_id: 'r1' },
+      click: {
+        link: 'https://spri.kr/posts',
+        timestamp: '2026-11-20T05:03:10.000Z',
+        ipAddress: '203.0.113.7',
+        userAgent: 'Mozilla/5.0',
+      },
+    });
+  });
+
+  it('클릭 정보의 모양이 다르면 null 로 넘긴다 — 서비스가 열람으로만 올린다', async () => {
+    verified.payload = {
+      type: 'email.clicked',
+      created_at: '2026-11-20T05:03:11Z',
+      data: { email_id: 'message-1' },
+    };
+    processMock.mockResolvedValueOnce('processed');
+
+    await POST(webhookRequest());
+
+    expect(processMock).toHaveBeenCalledWith(expect.objectContaining({ click: null }));
+  });
+
+  it('상태 알림에는 클릭 정보를 붙이지 않는다', async () => {
+    verified.payload = STATUS_EVENT;
+    processMock.mockResolvedValueOnce('processed');
+
+    await POST(webhookRequest());
+
+    expect(processMock.mock.calls[0]?.[0]).not.toHaveProperty('click');
+  });
+});
+
 describe('Resend webhook route — 받은 메일 알림(email.received)', () => {
   beforeEach(() => {
     process.env['RESEND_WEBHOOK_SECRET'] = 'test-secret';

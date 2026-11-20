@@ -90,3 +90,8 @@ export const mailRecipientStatusValues = [
   'skipped_unsubscribed',
 ] as const;
 export type MailRecipientStatus = (typeof mailRecipientStatusValues)[number];
+
+// mail_link_clicks.link_kind — 수신자가 누른 메일 본문 링크의 종류(CONTEXT.md 「링크 클릭」).
+// 어휘를 늘리면 이 배열 · 스키마 check() · 마이그레이션 CHECK 셋을 함께 고친다(루트 AGENTS.md 주의사항 1).
+export const mailLinkKindValues = ['survey', 'unsubscribe', 'other'] as const;
+export type MailLinkKind = (typeof mailLinkKindValues)[number];
