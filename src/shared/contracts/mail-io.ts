@@ -6,6 +6,7 @@ import * as z from 'zod';
 import type {
   MailCampaignKind,
   MailCampaignStatus,
+  MailLinkKind,
   MailRecipientStatus,
 } from '@/shared/contracts/mail';
 
@@ -62,6 +63,16 @@ export interface CampaignRow {
   createdBy: string | null;
 }
 
+/**
+ * 수신자가 누른 링크 한 줄 — 링크 종류마다(그 밖의 링크는 주소마다) 하나이고 시각은 처음 누른 때다
+ * (CONTEXT.md 「링크 클릭」). 설문·수신거부 링크는 주소를 싣지 않는다.
+ */
+export interface RecipientLinkClick {
+  kind: MailLinkKind;
+  url: string | null;
+  firstClickedAt: Date;
+}
+
 // 단체 메일 detail 의 recipients 목록 (status 필터 + email 검색 + 페이지네이션)
 export interface CampaignRecipientRow {
   id: string;
@@ -87,6 +98,8 @@ export interface CampaignRecipientRow {
   complainedAt: Date | null;
   /** 컨택 최신 회차의 result_code — 조사 대상 목록의 컨택결과 컬럼과 같은 값. */
   latestResultCode: string | null;
+  /** 이 회차의 메일에서 누른 링크 — 설문 링크 · 수신거부 · 그 밖의 링크 순. 누른 것이 없으면 빈 배열. */
+  linkClicks: RecipientLinkClick[];
 }
 
 export interface CampaignCandidateRow {

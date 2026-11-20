@@ -274,6 +274,75 @@ run('링크 클릭 (mail link click)', () => {
     });
   });
 
+  describe('수신자 표의 「링크 클릭」', () => {
+    async function recipientRow(campaignId: string, recipientId: string) {
+      const { rows } = await listCampaignRecipients({
+        surveyId,
+        campaignId,
+        scope: 'real',
+        pageSize: 100,
+      });
+      const row = rows.find((r) => r.id === recipientId);
+      if (!row) throw new Error('수신자가 표에 없다');
+      return row;
+    }
+
+    it('누른 링크 종류마다 첫 클릭 시각을 한 줄로 보인다 — 그 밖의 링크는 주소도', async () => {
+      const campaignId = await seedCampaign();
+      const { recipientId, messageId } = await seedRecipient(campaignId, await seedContact());
+
+      await click(messageId, REPORT_LINK, { at: '2026-11-20T05:10:00.000Z' });
+      await click(messageId, SURVEY_LINK, { at: '2026-11-21T02:00:00.000Z' });
+      await click(messageId, SURVEY_LINK, { at: '2026-11-20T05:03:10.000Z' });
+      await click(messageId, UNSUBSCRIBE_LINK, { at: '2026-11-22T00:00:00.000Z' });
+
+      const row = await recipientRow(campaignId, recipientId);
+      expect(row.linkClicks).toEqual([
+        { kind: 'survey', url: null, firstClickedAt: new Date('2026-11-20T05:03:10.000Z') },
+        { kind: 'unsubscribe', url: null, firstClickedAt: new Date('2026-11-22T00:00:00.000Z') },
+        { kind: 'other', url: REPORT_LINK, firstClickedAt: new Date('2026-11-20T05:10:00.000Z') },
+      ]);
+    });
+
+    it('그 밖의 링크는 주소마다 한 줄이다', async () => {
+      const campaignId = await seedCampaign();
+      const { recipientId, messageId } = await seedRecipient(campaignId, await seedContact());
+      const guide = 'https://example.org/guide';
+
+      await click(messageId, guide, { at: '2026-11-20T06:00:00.000Z' });
+      await click(messageId, REPORT_LINK, { at: '2026-11-20T05:10:00.000Z' });
+      await click(messageId, REPORT_LINK, { at: '2026-11-20T07:00:00.000Z' });
+
+      const row = await recipientRow(campaignId, recipientId);
+      expect(row.linkClicks).toEqual([
+        { kind: 'other', url: REPORT_LINK, firstClickedAt: new Date('2026-11-20T05:10:00.000Z') },
+        { kind: 'other', url: guide, firstClickedAt: new Date('2026-11-20T06:00:00.000Z') },
+      ]);
+    });
+
+    it('누른 것이 없는 수신자는 빈 목록이고, 남의 클릭이 섞이지 않는다', async () => {
+      const campaignId = await seedCampaign();
+      const quiet = await seedRecipient(campaignId, await seedContact());
+      const clicker = await seedRecipient(campaignId, await seedContact());
+
+      await click(clicker.messageId, SURVEY_LINK);
+
+      expect((await recipientRow(campaignId, quiet.recipientId)).linkClicks).toEqual([]);
+      expect((await recipientRow(campaignId, clicker.recipientId)).linkClicks).toHaveLength(1);
+    });
+
+    it('IP 해시와 브라우저 정보는 행에 싣지 않는다', async () => {
+      const campaignId = await seedCampaign();
+      const { recipientId, messageId } = await seedRecipient(campaignId, await seedContact());
+      await click(messageId, SURVEY_LINK, { ip: '198.51.100.99', ua: 'SecretAgent/1.0' });
+
+      const row = await recipientRow(campaignId, recipientId);
+      const serialized = JSON.stringify(row);
+      expect(serialized).not.toContain('SecretAgent');
+      expect(serialized).not.toContain(saltedHash('198.51.100.99'));
+    });
+  });
+
   describe('남기는 것과 남기지 않는 것', () => {
     it('설문·수신거부 주소는 남기지 않고 그 밖의 링크만 주소를 남긴다', async () => {
       const campaignId = await seedCampaign();

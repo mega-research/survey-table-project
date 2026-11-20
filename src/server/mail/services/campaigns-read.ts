@@ -6,6 +6,7 @@ import {
   contactAttempts,
   contactTargets,
   mailCampaigns,
+  mailLinkClicks,
   mailRecipients,
   mailTemplates,
 } from '@/db/schema';
@@ -54,6 +55,7 @@ import type {
   MailAttachment,
   MailCampaignKind,
   MailCampaignStatus,
+  MailLinkKind,
   MailRecipientStatus,
 } from '@/shared/contracts/mail';
 import type {
@@ -64,6 +66,7 @@ import type {
   CampaignRow,
   CampaignSortDir,
   CampaignSortKey,
+  RecipientLinkClick,
   UnsubscribedContactRow,
 } from '@/shared/contracts/mail-io';
 
@@ -536,10 +539,13 @@ export async function listCampaignRecipients(args: {
     .limit(pageSize)
     .offset(offset);
 
-  const piiMasks = await fetchPiiMasks(
-    rows.flatMap((r) => (r.contactTargetId ? [r.contactTargetId] : [])),
-    args.piiMaskKeys,
-  );
+  const [piiMasks, linkClicks] = await Promise.all([
+    fetchPiiMasks(
+      rows.flatMap((r) => (r.contactTargetId ? [r.contactTargetId] : [])),
+      args.piiMaskKeys,
+    ),
+    fetchRecipientLinkClicks(rows.map((r) => r.id)),
+  ]);
 
   return {
     rows: rows.map((r) => ({
@@ -561,6 +567,7 @@ export async function listCampaignRecipients(args: {
       openedAt: r.openedAt,
       bouncedAt: r.bouncedAt,
       complainedAt: r.complainedAt,
+      linkClicks: linkClicks.get(r.id) ?? [],
     })),
     total,
     page: clampedPage,
@@ -774,6 +781,45 @@ async function fetchEmailMaskHints(
 }
 
 const EMAIL_DASH = '—';
+
+/** 수신자 표에서 링크 종류가 서는 순서 — 설문 링크 · 수신거부 · 그 밖의 링크. */
+const LINK_KIND_DISPLAY_ORDER: Record<MailLinkKind, number> = { survey: 0, unsubscribe: 1, other: 2 };
+
+/**
+ * 수신자들이 누른 링크 — 수신자 id → (링크 종류, 주소)별 첫 클릭 시각 (CONTEXT.md 「링크 클릭」).
+ * 표의 한 쪽에 실린 수신자 id 만 받아 한 번에 읽는다. 어느 수신자를 볼 수 있는가는 호출부(수신자 표 조회)가
+ * 이미 걸렀다 — 여기는 그 id 의 클릭만 읽는다. IP 해시·브라우저 정보는 읽지 않는다(화면에 나가지 않는다).
+ */
+async function fetchRecipientLinkClicks(
+  recipientIds: readonly string[],
+): Promise<Map<string, RecipientLinkClick[]>> {
+  const result = new Map<string, RecipientLinkClick[]>();
+  if (recipientIds.length === 0) return result;
+  const rows = await db
+    .select({
+      recipientId: mailLinkClicks.recipientId,
+      kind: mailLinkClicks.linkKind,
+      url: mailLinkClicks.linkUrl,
+      // min() 은 드라이버가 글자로 돌려준다 — Date 로 되읽는다(컬럼 select 와 달리 매퍼가 붙지 않는다).
+      firstClickedAt: sql<string>`min(${mailLinkClicks.clickedAt})`,
+    })
+    .from(mailLinkClicks)
+    .where(inArray(mailLinkClicks.recipientId, [...recipientIds]))
+    .groupBy(mailLinkClicks.recipientId, mailLinkClicks.linkKind, mailLinkClicks.linkUrl);
+  for (const row of rows) {
+    const clicks = result.get(row.recipientId) ?? [];
+    clicks.push({ kind: row.kind, url: row.url, firstClickedAt: new Date(row.firstClickedAt) });
+    result.set(row.recipientId, clicks);
+  }
+  for (const clicks of result.values()) {
+    clicks.sort(
+      (a, b) =>
+        LINK_KIND_DISPLAY_ORDER[a.kind] - LINK_KIND_DISPLAY_ORDER[b.kind] ||
+        a.firstClickedAt.getTime() - b.firstClickedAt.getTime(),
+    );
+  }
+  return result;
+}
 
 /**
  * 메일 표시를 켠 개인정보 열의 마스킹 힌트 — 조사 대상 목록과 같은 값(평문 복호화 없음).

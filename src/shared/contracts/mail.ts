@@ -95,3 +95,10 @@ export type MailRecipientStatus = (typeof mailRecipientStatusValues)[number];
 // 어휘를 늘리면 이 배열 · 스키마 check() · 마이그레이션 CHECK 셋을 함께 고친다(루트 AGENTS.md 주의사항 1).
 export const mailLinkKindValues = ['survey', 'unsubscribe', 'other'] as const;
 export type MailLinkKind = (typeof mailLinkKindValues)[number];
+
+/** 링크 종류의 화면 글자 — 수신자 표가 쓴다. */
+export const MAIL_LINK_KIND_LABEL: Record<MailLinkKind, string> = {
+  survey: '설문 링크',
+  unsubscribe: '수신거부',
+  other: '그 밖의 링크',
+};
