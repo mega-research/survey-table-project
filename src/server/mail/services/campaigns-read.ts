@@ -32,6 +32,7 @@ import {
   attrsNaturalSortExprs,
   buildContactsFilterSql,
   defaultSortOrderExprs,
+  groupValueExpr,
   latestResultCodeExpr,
   latestResultUnsubscribedSql,
   linkClickStateExpr,
@@ -62,6 +63,7 @@ import type {
 import type {
   CampaignCandidateRow,
   CampaignExclusionCounts,
+  CampaignGroupFacet,
   CampaignRecipientRow,
   CampaignListSortKey,
   CampaignRow,
@@ -589,6 +591,8 @@ export interface CampaignCandidatesResult {
   page: number;
   /** 필터 base 안에서 자동 제외 정책에 걸린 인원 (사유별, 중복 없음) */
   exclusions: CampaignExclusionCounts;
+  /** 「그룹」 열 머리 필터의 선택지 — `includeGroupFacet` 을 켠 호출(위저드 화면)에만 실린다 */
+  groupFacet?: CampaignGroupFacet;
 }
 
 export const CAMPAIGN_SORT_KEYS: readonly CampaignSortKey[] = [
@@ -909,6 +913,8 @@ export async function previewCampaignCandidates(args: {
   piiMaskKeys?: readonly string[];
   /** 컨택원 이름을 행에 싣는가 — 컨택원 열을 메일 표시로 켠 비게스트 화면만 켠다. */
   includeAssignment?: boolean;
+  /** 「그룹」 열 머리 필터의 선택지를 함께 읽는가 — 위저드 화면만 켠다(id 만 모으는 호출은 읽지 않는다). */
+  includeGroupFacet?: boolean;
 }): Promise<CampaignCandidatesResult> {
   const pageSize = args.pageSize ?? DEFAULT_PAGE_SIZE;
   const [{ negative: negativeCodes }, bouncedContactIds, emailOrder] = await Promise.all([
@@ -926,7 +932,7 @@ export async function previewCampaignCandidates(args: {
     emailOrder,
   );
 
-  const [[countRow], exclusions] = await Promise.all([
+  const [[countRow], exclusions, groupFacet] = await Promise.all([
     db
       .select({ total: sql<number>`count(*)::int` })
       .from(contactTargets)
@@ -940,6 +946,13 @@ export async function previewCampaignCandidates(args: {
       bouncedContactIds,
       emailOrder,
     ),
+    args.includeGroupFacet
+      ? loadCandidateGroupFacet(
+          // 지금 걸린 조건·「미응답자만」은 빼고 센다 — 엑셀 오토필터처럼 고를 수 있는 값 전체를 보여 준다.
+          // 조건을 함께 걸면 한 값을 고르는 순간 나머지 선택지가 사라진다(수신자 표 깔때기와 같은 규칙).
+          buildCandidateWhere(args.surveyId, args.scope, [], false, negativeCodes, emailOrder),
+        )
+      : Promise.resolve(undefined),
   ]);
   const total = countRow?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -1001,6 +1014,32 @@ export async function previewCampaignCandidates(args: {
     total,
     page: clampedPage,
     exclusions,
+    ...(groupFacet ? { groupFacet } : {}),
+  };
+}
+
+/**
+ * 위저드 미리보기 「그룹」 열 머리 필터의 선택지 — 발송 후보(자동 제외 정책을 지난 대상)에 실제로 있는 그룹 값.
+ * 식은 필터 절과 같은 `groupValueExpr` 다(빈 글자 = 없음). 상한·정렬·센티널 제외는 수신자 표 깔때기
+ * (`listCampaignRecipientFacets`)와 같다 — NULLS FIRST 가 「없음」 판정을 LIMIT 에서 보호한다.
+ */
+async function loadCandidateGroupFacet(where: SQL): Promise<CampaignGroupFacet> {
+  const rows = await db
+    .selectDistinct({ v: groupValueExpr })
+    .from(contactTargets)
+    .where(where)
+    // ORDER BY 1 (위치 지정) — 식을 다시 쓰면 DISTINCT select list 와 다른 식으로 취급돼 PG 가 거부한다.
+    .orderBy(sql`1 ASC NULLS FIRST`)
+    .limit(FACET_LIMIT + 2);
+
+  return {
+    hasEmpty: rows.some((r) => r.v == null),
+    values: rows
+      .map((r) => r.v)
+      // 센티널과 같은 실제 값은 선택지에서 뺀다 — 파서가 그것을 「없음」으로 승격시킨다.
+      .filter((v): v is string => v != null && v !== FILTER_NONE_VALUE)
+      .sort((a, b) => a.localeCompare(b, 'ko', { numeric: true }))
+      .slice(0, FACET_LIMIT),
   };
 }
 

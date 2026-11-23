@@ -242,4 +242,87 @@ run('캠페인 필터 실 DB 왕복', () => {
     // 필터가 in_progress 로 골랐으면 표에 그릴 값도 in_progress 여야 한다.
     expect(result.rows[0]?.responseStatus).toBe('in_progress');
   });
+
+  // 위저드 미리보기의 「그룹」 열 머리 필터 — 표가 그리는 group_value 를 그대로 거른다.
+  it('미리보기 후보를 그룹으로 거르고, 선택지는 발송 후보에 실제로 있는 그룹 값이다', async () => {
+    const groupSurveyId = randomUUID();
+    await db.insert(surveys).values({ id: groupSurveyId, title: '그룹 깔때기 테스트' });
+
+    const seed = async (resid: number, groupValue: string | null, withEmail = true) => {
+      const id = randomUUID();
+      await db.insert(contactTargets).values({
+        id,
+        surveyId: groupSurveyId,
+        resid,
+        inviteCode: randomUUID(),
+        groupValue,
+      });
+      if (withEmail) {
+        await db.insert(contactPii).values(
+          buildPiiRows(id, [
+            { columnKey: 'email', fieldType: 'email', plain: `g${resid}@example.com` },
+          ]),
+        );
+      }
+      return id;
+    };
+    await seed(1, '국내');
+    await seed(2, '해외');
+    await seed(3, null);
+    await seed(4, '');
+    await seed(5, '국내');
+    // 이메일이 없어 발송 후보가 아닌 대상의 그룹은 선택지에 오르지 않는다.
+    await seed(6, '후보 아님', false);
+
+    try {
+      const filterCtx = await loadContactFilterContext(groupSurveyId, 'real', {
+        share: FIELDWORK_SHARE_ALL,
+        isGuest: false,
+        surface: 'mail',
+      });
+      const preview = async (hv: string) => {
+        const filter = await resolveContactFilter(
+          filterCtx,
+          { headerClauses: [{ source: 'system.group', mode: 'in', hv }] },
+          { mode: 'read' },
+        );
+        expect(filter.unresolved).toEqual([]);
+        return previewCampaignCandidates({
+          surveyId: groupSurveyId,
+          scope: 'real',
+          filter,
+          unrespondedOnly: false,
+          page: 1,
+          pageSize: 20,
+          includeGroupFacet: true,
+        });
+      };
+
+      const domestic = await preview('국내');
+      expect(domestic.total).toBe(2);
+      expect(domestic.rows.map((r) => r.resid)).toEqual([1, 5]);
+      // 선택지는 지금 걸린 조건과 무관하게 후보 전체에서 뽑는다 — 한 값을 골라도 나머지가 남는다.
+      expect(domestic.groupFacet).toEqual({ values: ['국내', '해외'], hasEmpty: true });
+
+      // 「— (없음)」은 NULL 과 빈 글자를 함께 잡는다(표가 둘 다 값 없이 그린다).
+      const empty = await preview(FILTER_NONE_VALUE);
+      expect(empty.rows.map((r) => r.resid)).toEqual([3, 4]);
+
+      const mixed = await preview(['해외', FILTER_NONE_VALUE].join('\u001f'));
+      expect(mixed.rows.map((r) => r.resid)).toEqual([2, 3, 4]);
+
+      // 화면이 요청하지 않으면 선택지를 읽지 않는다(「필터 결과 전체 선택」 등).
+      const plain = await previewCampaignCandidates({
+        surveyId: groupSurveyId,
+        scope: 'real',
+        filter: resolvedFilterForTest(),
+        unrespondedOnly: false,
+        page: 1,
+        pageSize: 20,
+      });
+      expect(plain.groupFacet).toBeUndefined();
+    } finally {
+      await db.delete(surveys).where(eq(surveys.id, groupSurveyId));
+    }
+  });
 });

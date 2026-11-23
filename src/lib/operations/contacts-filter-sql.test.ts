@@ -573,6 +573,56 @@ describe('latestResultUnsubscribedSql', () => {
   });
 });
 
+describe('「그룹」 절 SQL (단체 메일 위저드 열 머리 필터)', () => {
+  it('in 은 group_value IN 목록 — 값은 파라미터로 들어간다', () => {
+    const q = dialect.sqlToQuery(
+      buildContactsFilterSql([
+        {
+          op: null,
+          condition: { source: 'system.group', mode: 'in', value: '', values: ['국내', '해외'] },
+        },
+      ]),
+    );
+    expect(q.sql).toContain(`NULLIF("contact_targets".group_value, '') IN (`);
+    expect(q.sql).not.toContain('국내');
+    expect(q.params).toEqual(expect.arrayContaining(['국내', '해외']));
+  });
+
+  it('「— (없음)」은 NULL 과 빈 글자를 함께 잡고 IN 목록과 OR 로 묶인다', () => {
+    const q = dialect.sqlToQuery(
+      buildContactsFilterSql([
+        {
+          op: null,
+          condition: {
+            source: 'system.group',
+            mode: 'in',
+            value: '',
+            values: ['국내'],
+            includeNull: true,
+          },
+        },
+      ]),
+    );
+    expect(q.sql).toContain(`NULLIF("contact_targets".group_value, '') IN (`);
+    expect(q.sql).toContain(`OR NULLIF("contact_targets".group_value, '') IS NULL`);
+    // 자체 괄호 — 바깥 AND(설문 id 등)와 결합해도 OR 가지가 새지 않는다.
+    expect(q.sql.trim().startsWith('(')).toBe(true);
+  });
+
+  it('없음만 고르면 IS NULL 하나다', () => {
+    const q = dialect.sqlToQuery(
+      buildContactsFilterSql([
+        {
+          op: null,
+          condition: { source: 'system.group', mode: 'in', value: '', values: [], includeNull: true },
+        },
+      ]),
+    );
+    expect(q.sql).toContain(`NULLIF("contact_targets".group_value, '') IS NULL`);
+    expect(q.sql).not.toContain(' IN (');
+  });
+});
+
 describe('「현재 컨택원」 절 SQL', () => {
   const A1 = '11111111-1111-4111-8111-111111111111';
 

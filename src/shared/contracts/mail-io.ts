@@ -160,6 +160,17 @@ export interface CampaignExclusionCounts {
   bounced: number;
 }
 
+/**
+ * 단체 메일 위저드 미리보기 「그룹」 열 머리 필터의 선택지 — 발송 후보에 실제로 있는 그룹 값.
+ * 지금 걸린 조건과 무관하게 후보 전체에서 뽑는다(한 값을 골라도 나머지 선택지가 남는다).
+ */
+export interface CampaignGroupFacet {
+  /** 그룹 값(빈 값 제외, 숫자 인식 오름차순). 상한을 넘으면 앞에서부터 잘린다. */
+  values: string[];
+  /** 그룹이 빈 후보가 있는가 — 「— (없음)」 선택지를 낼지 */
+  hasEmpty: boolean;
+}
+
 export interface UnsubscribedContactRow {
   id: string;
   resid: number;

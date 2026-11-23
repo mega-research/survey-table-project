@@ -57,11 +57,14 @@ import type { CampaignFilterSnapshot } from '@/shared/contracts/mail';
 import type {
   CampaignCandidateRow,
   CampaignExclusionCounts,
+  CampaignGroupFacet,
   CampaignSortDir,
   CampaignListSortKey,
 } from '@/shared/contracts/mail-io';
 import {
   CAMPAIGN_HEADER_FILTER_COLUMNS,
+  FILTER_NONE_LABEL,
+  FILTER_NONE_VALUE,
   FILTER_SOURCE,
   LINK_CLICK_COLUMN_LABEL,
   LINK_CLICK_FILTER_OPTIONS,
@@ -102,6 +105,11 @@ interface Props {
   mailColumns: MailDisplayColumn[];
   /** 맨 앞 시스템ID 열을 그리는가 — 컬럼 설정의 메일 표시 스위치 */
   showResid: boolean;
+  /**
+   * 고정 「그룹」 열 머리 필터의 선택지 — 발송 후보에 실제로 있는 그룹 값. 고를 값이 없으면
+   * (분류 기준을 두지 않은 설문) 필터를 그리지 않는다.
+   */
+  groupFacet?: CampaignGroupFacet;
 }
 
 export function CampaignWizard({
@@ -120,6 +128,7 @@ export function CampaignWizard({
   defaultSortKey,
   mailColumns,
   showResid,
+  groupFacet,
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -512,7 +521,17 @@ export function CampaignWizard({
                   );
                 })}
                 <th className="px-3 py-2">이메일</th>
-                <th className="px-3 py-2">그룹</th>
+                <th className="px-3 py-2">
+                  <span className="inline-flex items-center gap-1">
+                    {GROUP_COLUMN_LABEL}
+                    <PreviewHeaderFilter
+                      surveyId={surveyId}
+                      source={FILTER_SOURCE.GROUP}
+                      resultCodeOptions={resultCodeOptions}
+                      groupOptions={groupFilterOptions(groupFacet)}
+                    />
+                  </span>
+                </th>
                 <th className="px-3 py-2">
                   <span className="inline-flex items-center gap-1">
                     <SortHeader label="응답" sortKey="responded" activeSort={sort} dir={dir} onSort={changeSort} />
@@ -802,6 +821,24 @@ function ResponseCell({
   return <StatusPill pill={pill} />;
 }
 
+/** 고정 「그룹」 열의 머리 글자 — 서버 파싱 후보(CAMPAIGN_HEADER_FILTER_COLUMNS)의 라벨과 같은 글자다. */
+const GROUP_COLUMN_LABEL =
+  CAMPAIGN_HEADER_FILTER_COLUMNS.find((c) => c.source === FILTER_SOURCE.GROUP)?.label ?? '그룹';
+
+/**
+ * 「그룹」 열 머리 필터의 체크박스 선택지. 그룹 값이 하나도 없으면 빈 배열 — 전부 「—」인 열에는
+ * 고를 것이 없어 필터를 그리지 않는다. 「— (없음)」은 그룹이 빈 후보가 실제로 있을 때만 낸다.
+ */
+function groupFilterOptions(
+  facet: CampaignGroupFacet | undefined,
+): Array<{ value: string; label: string }> {
+  if (!facet || facet.values.length === 0) return [];
+  return [
+    ...facet.values.map((v) => ({ value: v, label: v })),
+    ...(facet.hasEmpty ? [{ value: FILTER_NONE_VALUE, label: FILTER_NONE_LABEL }] : []),
+  ];
+}
+
 /** 메일 표시 열의 깔때기 source — 조사 대상 목록의 같은 열과 같은 값이라 서버가 같은 후보로 해석한다. */
 function mailColumnFilterSource(column: MailDisplayColumn): string {
   if (column.kind === 'owner') return FILTER_SOURCE.CONTACT_OWNER;
@@ -821,12 +858,15 @@ function PreviewHeaderFilter({
   label: labelOverride,
   resultCodeOptions,
   assignmentOptions = [],
+  groupOptions = [],
 }: {
   surveyId: string;
   source: string;
   label?: string;
   resultCodeOptions: ContactResultCode[];
   assignmentOptions?: ContactAssignmentOption[];
+  /** 「그룹」 열의 선택지 — 비면 popover 가 그 열의 필터를 그리지 않는다(고정 옵션 없는 source). */
+  groupOptions?: Array<{ value: string; label: string }>;
 }) {
   const label =
     labelOverride ??
@@ -858,6 +898,7 @@ function PreviewHeaderFilter({
             ),
           }
         : {})}
+      {...(source === FILTER_SOURCE.GROUP ? { fixedOptions: groupOptions } : {})}
       resultCodeOptions={resultCodeOptions}
     />
   );
