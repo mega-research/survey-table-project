@@ -44,6 +44,15 @@ describe('extractSystemFieldKeys — 조사 대상 저장이 그룹 값을 읽�
     expect(keys).toEqual({ group: '지역' });
   });
 
+  // 업로드는 대분류(레벨 1) 열만 그룹 값으로 쓴다. 중분류만 지정한 설문에서 첫 분류 기준을 쓰면
+  // 메모만 고쳐도 그룹 값이 중분류 값으로 바뀐다.
+  it('분류 기준은 있는데 대분류가 없으면 비운다 — 중분류 열도, 이름 추측도 쓰지 않는다', () => {
+    const keys = extractSystemFieldKeys(
+      scheme([attrs('전시회ID', 1), attrs('종사자 구간', 2, { groupLevel: 2 })]),
+    );
+    expect(keys).toEqual({});
+  });
+
   it('분류 기준이 없는 옛 설문은 종전대로 이름으로 찾는다', () => {
     // 해외전시회 설문 — 분류 기준 설정 없이 「전시회명(국문)」이 업로드 때의 그룹 열이다.
     const keys = extractSystemFieldKeys(scheme([attrs('업체명', 1), attrs('전시회명(국문)', 2)]));

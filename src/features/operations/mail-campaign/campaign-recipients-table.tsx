@@ -37,6 +37,11 @@ interface Props {
   currentQuery: string;
   /** 활성 깔때기(hcol/hm/hv) — 칩·검색 링크가 유실시키지 않도록 함께 실어 나른다. */
   headerEntries: HeaderFilterEntry[];
+  /**
+   * 주소에 실렸지만 이 표가 받지 못해 빠진 열 머리 조건 수(없어진 그룹 조건 등). 0 보다 크면 명단이
+   * 원래 조건보다 넓으므로 경고한다.
+   */
+  droppedFilterCount?: number;
   /** 메모(반송/실패 사유) 깔때기 체크박스 선택지 */
   errorOptions: Array<{ value: string; label: string }>;
   /** 최근 결과코드 깔때기 체크박스 선택지 */
@@ -111,6 +116,7 @@ export function CampaignRecipientsTable({
   currentStatuses,
   currentQuery,
   headerEntries,
+  droppedFilterCount = 0,
   errorOptions,
   resultOptions,
   mailColumns,
@@ -183,6 +189,16 @@ export function CampaignRecipientsTable({
           )}
         </form>
       </div>
+
+      {droppedFilterCount > 0 ? (
+        <p
+          role="alert"
+          className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+        >
+          적용할 수 없는 조건 {droppedFilterCount}개가 빠져 아래 명단이 원래 조건보다 넓습니다(없어진 그룹
+          칸 등). 필요한 조건을 다시 걸어 주세요.
+        </p>
+      ) : null}
 
       <div className="flex flex-wrap gap-1.5">
         <Link
