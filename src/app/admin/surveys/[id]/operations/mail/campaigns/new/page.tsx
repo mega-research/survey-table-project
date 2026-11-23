@@ -151,7 +151,6 @@ export default async function NewCampaignPage({ params, searchParams }: Props) {
     pageSize: PAGE_SIZE,
     piiMaskKeys: mailPiiMaskKeys(mailColumns),
     includeAssignment: mailShowsContactOwner(mailColumns),
-    includeGroupFacet: true,
   });
 
   // 스냅샷은 빌더/깔때기를 따로 담는다 — 깔때기의 in 모드 다중값은 {source,value,op}
@@ -213,7 +212,6 @@ export default async function NewCampaignPage({ params, searchParams }: Props) {
         dir={dir}
         mailColumns={mailColumns}
         showResid={resolveMailShowsResid(scheme)}
-        {...(candidates.groupFacet ? { groupFacet: candidates.groupFacet } : {})}
       />
     </main>
   );

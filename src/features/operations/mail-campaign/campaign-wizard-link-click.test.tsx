@@ -32,7 +32,6 @@ function candidate(overrides: Partial<CampaignCandidateRow>): CampaignCandidateR
     resid: 1,
     email: '',
     emailMasked: 'lsj...@meg...',
-    groupValue: '메가리서치',
     attrs: {},
     piiMasks: {},
     assignmentName: null,

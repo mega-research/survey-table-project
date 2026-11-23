@@ -63,14 +63,6 @@ export const FILTER_SOURCE = {
    * 컨택원 id 로 검증한다(ParseExtraHooks.assignmentIds). 게스트 표면 후보에는 넣지 않는다.
    */
   CONTACT_OWNER: 'system.contact_owner',
-  /**
-   * 그룹(분류 기준 대분류) — contact_targets.group_value. 단체 메일 위저드 미리보기 표의 고정 열 전용
-   * 열 머리 필터다(CAMPAIGN_HEADER_FILTER_COLUMNS). 검색 조건 줄·조사 대상 목록 후보에는 넣지 않는다 —
-   * 그쪽은 같은 값을 분류 기준 attrs 열로 거른다. 값은 자유 글자이고 빈 값은 FILTER_NONE_VALUE.
-   * 그룹 값이 많은 설문은 체크박스(in) 대신 부분 일치(text)로 거른다.
-   * 캠페인 상세 수신자 표의 그룹 깔때기(RECIPIENT_FILTER_SOURCE.GROUP)와는 축이 다르다 — 저쪽은 발송 스냅샷 위다.
-   */
-  GROUP: 'system.group',
   ATTRS_PREFIX: 'attrs.',
   PII_PREFIX: 'pii.',
   /**
@@ -175,8 +167,6 @@ export function contactResultFilterOptions(
  * 파서로 좁게 해석한다. 라벨은 표 헤더와 같은 문구.
  */
 export const RECIPIENT_FILTER_SOURCE = {
-  /** contact_targets.group_value */
-  GROUP: 'recipient.group',
   /** mail_recipients.error_reason — 표에서는 "메모" 로 노출 */
   ERROR: 'recipient.error',
   /** 컨택 최신 회차 result_code */
@@ -184,7 +174,6 @@ export const RECIPIENT_FILTER_SOURCE = {
 } as const;
 
 export const RECIPIENT_FILTER_LABEL: Record<string, string> = {
-  [RECIPIENT_FILTER_SOURCE.GROUP]: '그룹',
   [RECIPIENT_FILTER_SOURCE.ERROR]: '메모',
   [RECIPIENT_FILTER_SOURCE.RESULT]: '최근 결과코드',
 };
@@ -354,8 +343,6 @@ export function placeholderFor(
   if (source === FILTER_SOURCE.ALL) return '전체 검색 (암호화 컬럼은 전문 일치)';
   if (source === FILTER_SOURCE.RESID) return '예: 1-30, 45 · 엑셀 열 붙여넣기';
   if (source.startsWith(FILTER_SOURCE.PII_PREFIX)) return '정확한 값 입력 (부분 검색 불가)';
-  // 그룹은 글자 부분일치만 — 명단 열의 번호 범위·목록 붙여넣기 문법이 없다.
-  if (source === FILTER_SOURCE.GROUP) return '검색어 (일부만 입력해도 찾습니다)';
   // 응답 내역 응답값 열(answer.<문항 id>[.<칸 id>]) — 번호 범위·목록 붙여넣기 없이 부분일치만.
   if (source.startsWith(FILTER_SOURCE.ANSWER_PREFIX)) return '검색어 (일부만 입력해도 찾습니다)';
   return attrsLabel;
@@ -380,7 +367,6 @@ export interface ColumnCandidate {
  * 페이지(서버 파싱 후보)와 마법사(헤더 렌더)가 이 한 목록을 공유한다.
  */
 export const CAMPAIGN_HEADER_FILTER_COLUMNS: ReadonlyArray<ColumnCandidate> = [
-  { source: FILTER_SOURCE.GROUP, label: '그룹' },
   { source: FILTER_SOURCE.WEB, label: '응답' },
   { source: FILTER_SOURCE.EMAIL, label: '수신 상황' },
   { source: FILTER_SOURCE.LINK_CLICK, label: LINK_CLICK_COLUMN_LABEL },

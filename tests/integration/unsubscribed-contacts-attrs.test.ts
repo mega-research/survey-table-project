@@ -42,7 +42,6 @@ function unsubRow(overrides: Record<string, unknown>) {
   return {
     id: 'ct-1',
     resid: 7,
-    groupValue: null,
     unsubscribedAt: new Date('2026-08-26T00:00:00Z'),
     latestResultCode: null,
     latestAttemptAt: null,

@@ -65,7 +65,6 @@ run('삭제된 대상자의 캠페인 수신자 보존', () => {
       id: recipientId,
       contactTargetId: null,
       contactResid: null,
-      contactGroupValue: null,
       emailMasked: 'ar***@***.com',
       unsubscribedAt: null,
     });

@@ -32,7 +32,6 @@ function candidate(overrides: Partial<CampaignCandidateRow>): CampaignCandidateR
     resid: 1,
     email: '',
     emailMasked: 'lsj...@meg...',
-    groupValue: '메가리서치',
     attrs: {},
     piiMasks: {},
     assignmentName: null,
@@ -126,10 +125,12 @@ describe('CampaignWizard 메일 표시 컬럼', () => {
     expect(columnCells('리스트 ID')).toEqual(['L-001', '—']);
   });
 
-  it('메일 표시 컬럼이 없으면 고정 8열 그대로다', () => {
+  it('메일 표시 컬럼이 없으면 고정 7열이다 — 그룹 칸은 없다', () => {
     renderWizard([candidate({ attrs: { 리스트ID: 'L-001' } })], []);
 
-    expect(headerLabels()).toHaveLength(8);
+    expect(headerLabels()).toHaveLength(7);
+    // 그룹(업로드 때 대분류의 사본)은 현재 분류 기준과 어긋날 수 있어 메일 표에서 뺐다 — 분류는 메일 표시 열로 본다.
+    expect(headerLabels().some((l) => l.includes('그룹'))).toBe(false);
     expect(screen.queryByText('L-001')).not.toBeInTheDocument();
   });
 
@@ -160,7 +161,7 @@ describe('CampaignWizard 메일 표시 컬럼', () => {
   it('시스템ID 를 끄면 그 열이 빠진다', () => {
     renderWizard([candidate({})], [], false);
 
-    expect(headerLabels()).toHaveLength(7);
+    expect(headerLabels()).toHaveLength(6);
     expect(headerLabels()).not.toContain('시스템ID');
   });
 });
