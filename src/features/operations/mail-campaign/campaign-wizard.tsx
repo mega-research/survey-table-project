@@ -66,6 +66,7 @@ import {
   FILTER_NONE_LABEL,
   FILTER_NONE_VALUE,
   FILTER_SOURCE,
+  HEADER_FILTER_VALUE_MAX_LENGTH,
   LINK_CLICK_COLUMN_LABEL,
   LINK_CLICK_FILTER_OPTIONS,
   MAIL_FILTER_OPTIONS,
@@ -529,6 +530,7 @@ export function CampaignWizard({
                       source={FILTER_SOURCE.GROUP}
                       resultCodeOptions={resultCodeOptions}
                       groupOptions={groupFilterOptions(groupFacet)}
+                      groupSearch={groupFacet?.truncated === true}
                     />
                   </span>
                 </th>
@@ -828,6 +830,7 @@ const GROUP_COLUMN_LABEL =
 /**
  * 「그룹」 열 머리 필터의 체크박스 선택지. 그룹 값이 하나도 없으면 빈 배열 — 전부 「—」인 열에는
  * 고를 것이 없어 필터를 그리지 않는다. 「— (없음)」은 그룹이 빈 후보가 실제로 있을 때만 낸다.
+ * 값이 상한을 넘는 설문(`truncated`)은 이 목록을 쓰지 않고 검색 입력을 낸다.
  */
 function groupFilterOptions(
   facet: CampaignGroupFacet | undefined,
@@ -859,6 +862,7 @@ function PreviewHeaderFilter({
   resultCodeOptions,
   assignmentOptions = [],
   groupOptions = [],
+  groupSearch = false,
 }: {
   surveyId: string;
   source: string;
@@ -867,6 +871,8 @@ function PreviewHeaderFilter({
   assignmentOptions?: ContactAssignmentOption[];
   /** 「그룹」 열의 선택지 — 비면 popover 가 그 열의 필터를 그리지 않는다(고정 옵션 없는 source). */
   groupOptions?: Array<{ value: string; label: string }>;
+  /** 「그룹」 값이 상한을 넘는 설문 — 체크박스 대신 검색 입력을 낸다. */
+  groupSearch?: boolean;
 }) {
   const label =
     labelOverride ??
@@ -877,6 +883,8 @@ function PreviewHeaderFilter({
       surveyId={surveyId}
       source={source}
       label={label}
+      // 이 화면의 조건은 캠페인 스냅샷으로 다시 나간다(필터 결과 전체 선택·발송) — 스냅샷이 받는 길이까지만.
+      maxValueLength={HEADER_FILTER_VALUE_MAX_LENGTH}
       // system.email_count · 컨택원은 popover 의 kind 분기에 없어 고정 옵션 주입이 필요하다.
       {...(source === FILTER_SOURCE.EMAIL
         ? {
@@ -898,7 +906,11 @@ function PreviewHeaderFilter({
             ),
           }
         : {})}
-      {...(source === FILTER_SOURCE.GROUP ? { fixedOptions: groupOptions } : {})}
+      {...(source === FILTER_SOURCE.GROUP
+        ? groupSearch
+          ? { textSearch: true }
+          : { fixedOptions: groupOptions }
+        : {})}
       resultCodeOptions={resultCodeOptions}
     />
   );

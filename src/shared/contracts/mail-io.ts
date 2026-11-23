@@ -165,10 +165,15 @@ export interface CampaignExclusionCounts {
  * 지금 걸린 조건과 무관하게 후보 전체에서 뽑는다(한 값을 골라도 나머지 선택지가 남는다).
  */
 export interface CampaignGroupFacet {
-  /** 그룹 값(빈 값 제외, 숫자 인식 오름차순). 상한을 넘으면 앞에서부터 잘린다. */
+  /** 그룹 값(빈 값 제외, 숫자 인식 오름차순). `truncated` 면 일부뿐이라 선택지로 쓰지 않는다. */
   values: string[];
   /** 그룹이 빈 후보가 있는가 — 「— (없음)」 선택지를 낼지 */
   hasEmpty: boolean;
+  /**
+   * 그룹 값이 상한을 넘었는가 — 업체명처럼 대상마다 다른 값을 분류 기준으로 둔 명단이다.
+   * 화면은 체크박스 대신 검색 입력을 낸다(명단 열 깔때기의 고유값 많음 폴백과 같다).
+   */
+  truncated: boolean;
 }
 
 export interface UnsubscribedContactRow {

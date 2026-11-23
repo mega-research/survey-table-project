@@ -1093,9 +1093,32 @@ describe('단체 메일 위저드 「그룹」 열 머리 필터', () => {
     expect(parseHeaderFiltersFromUrl(['system.group'], ['in'], [SEP], candidates, [])).toEqual([]);
   });
 
-  it('체크박스(in) 말고 다른 모드는 받지 않는다', () => {
+  it('그룹 값이 많아 검색 입력으로 넘어간 설문은 부분 일치(text) 절이다', () => {
+    const [c] = parseHeaderFiltersFromUrl(['system.group'], ['text'], ['  가비아 '], candidates, []);
+    expect(c?.condition).toEqual({ source: 'system.group', mode: 'text', value: '가비아' });
+    expect(parseHeaderFiltersFromUrl(['system.group'], ['text'], ['   '], candidates, [])).toEqual([]);
+  });
+
+  it('검색 입력의 「— 제외하고 보기」 토글은 excludeNull 이다 — 단독으로 올 때만', () => {
+    const [c] = parseHeaderFiltersFromUrl(
+      ['system.group'],
+      ['in'],
+      [FILTER_NOT_NONE_VALUE],
+      candidates,
+      [],
+    );
+    expect(c?.condition).toEqual({
+      source: 'system.group',
+      mode: 'in',
+      value: '',
+      values: [],
+      excludeNull: true,
+    });
+  });
+
+  it('전문 일치(exact) 모드는 받지 않는다', () => {
     expect(
-      parseHeaderFiltersFromUrl(['system.group'], ['text'], ['참가업체'], candidates, []),
+      parseHeaderFiltersFromUrl(['system.group'], ['exact'], ['참가업체'], candidates, []),
     ).toEqual([]);
   });
 

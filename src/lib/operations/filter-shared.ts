@@ -67,6 +67,7 @@ export const FILTER_SOURCE = {
    * 그룹(분류 기준 대분류) — contact_targets.group_value. 단체 메일 위저드 미리보기 표의 고정 열 전용
    * 열 머리 필터다(CAMPAIGN_HEADER_FILTER_COLUMNS). 검색 조건 줄·조사 대상 목록 후보에는 넣지 않는다 —
    * 그쪽은 같은 값을 분류 기준 attrs 열로 거른다. 값은 자유 글자이고 빈 값은 FILTER_NONE_VALUE.
+   * 그룹 값이 많은 설문은 체크박스(in) 대신 부분 일치(text)로 거른다.
    * 캠페인 상세 수신자 표의 그룹 깔때기(RECIPIENT_FILTER_SOURCE.GROUP)와는 축이 다르다 — 저쪽은 발송 스냅샷 위다.
    */
   GROUP: 'system.group',
@@ -319,6 +320,13 @@ export function decodeMultiClauseValue(value: string): string[] | null {
   return value.split(HEADER_FILTER_VALUE_SEPARATOR).filter((v) => v.trim().length > 0);
 }
 
+/**
+ * 열 머리 필터 값(hv) 하나의 길이 한도 — 캠페인 스냅샷 스키마(`FilterSnapshotSchema`)가 받는 길이다.
+ * 단체 메일 위저드는 화면의 조건을 스냅샷으로 다시 보내므로(필터 결과 전체 선택·발송) 깔때기가 이 길이를
+ * 넘는 선택을 적용하지 않는다 — 넘겨 버리면 미리보기에는 걸리는데 전체 선택과 발송이 입력 검증에서 거부된다.
+ */
+export const HEADER_FILTER_VALUE_MAX_LENGTH = 2000;
+
 /** 헤더 필터 URL hm 파라미터가 가질 수 있는 모드. */
 export const HEADER_FILTER_MODES = ['in', 'text', 'exact'] as const;
 export type HeaderFilterMode = (typeof HEADER_FILTER_MODES)[number];
@@ -346,6 +354,8 @@ export function placeholderFor(
   if (source === FILTER_SOURCE.ALL) return '전체 검색 (암호화 컬럼은 전문 일치)';
   if (source === FILTER_SOURCE.RESID) return '예: 1-30, 45 · 엑셀 열 붙여넣기';
   if (source.startsWith(FILTER_SOURCE.PII_PREFIX)) return '정확한 값 입력 (부분 검색 불가)';
+  // 그룹은 글자 부분일치만 — 명단 열의 번호 범위·목록 붙여넣기 문법이 없다.
+  if (source === FILTER_SOURCE.GROUP) return '검색어 (일부만 입력해도 찾습니다)';
   // 응답 내역 응답값 열(answer.<문항 id>[.<칸 id>]) — 번호 범위·목록 붙여넣기 없이 부분일치만.
   if (source.startsWith(FILTER_SOURCE.ANSWER_PREFIX)) return '검색어 (일부만 입력해도 찾습니다)';
   return attrsLabel;

@@ -169,6 +169,57 @@ describe('HeaderFilterPopover', () => {
     expect(p.getAll('hv')).toEqual(['제조']);
   });
 
+  it('textSearch — 값 목록 없이 부분검색 입력, 적용 시 hm=text (단체 메일 그룹 열)', async () => {
+    const user = userEvent.setup();
+    renderPopover({ source: 'system.group', label: '그룹', textSearch: true });
+
+    await user.click(screen.getByRole('button', { name: '그룹 필터' }));
+    expect(screen.getByText('고유값이 많아 검색으로 필터링합니다')).toBeInTheDocument();
+    await user.type(screen.getByPlaceholderText('검색어 (일부만 입력해도 찾습니다)'), '가비아');
+    await user.click(screen.getByRole('button', { name: '적용' }));
+
+    expect(listMock).not.toHaveBeenCalled();
+    const p = pushedParams();
+    expect(p.getAll('hcol')).toEqual(['system.group']);
+    expect(p.getAll('hm')).toEqual(['text']);
+    expect(p.getAll('hv')).toEqual(['가비아']);
+  });
+
+  // 단체 메일은 조건을 캠페인 스냅샷으로 다시 보낸다(필터 결과 전체 선택·발송). 스냅샷이 받는 길이를
+  // 넘는 조건을 화면이 적용해 버리면 미리보기에는 걸리는데 전체 선택과 발송이 거부된다.
+  it('maxValueLength — 고른 값을 이은 길이가 넘으면 적용하지 않고 줄이라고 알린다', async () => {
+    const user = userEvent.setup();
+    renderPopover({
+      source: 'system.group',
+      label: '그룹',
+      fixedOptions: [
+        { value: '가'.repeat(6), label: '첫째' },
+        { value: '나'.repeat(6), label: '둘째' },
+      ],
+      maxValueLength: 12,
+    });
+
+    await user.click(screen.getByRole('button', { name: '그룹 필터' }));
+    await user.click(screen.getByLabelText('첫째'));
+    await user.click(screen.getByLabelText('둘째'));
+    await user.click(screen.getByRole('button', { name: '적용' }));
+
+    // 6 + 구분자 1 + 6 = 13자 > 12
+    expect(pushMock).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent('고른 값이 너무 많습니다');
+
+    // 하나를 풀면 안내가 사라지고 적용된다.
+    await user.click(screen.getByLabelText('둘째'));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '적용' }));
+    expect(pushedParams().getAll('hv')).toEqual(['가'.repeat(6)]);
+  });
+
+  it('고정 옵션도 textSearch 도 없는 system.group 은 필터를 그리지 않는다', () => {
+    renderPopover({ source: 'system.group', label: '그룹' });
+    expect(screen.queryByRole('button', { name: '그룹 필터' })).not.toBeInTheDocument();
+  });
+
   it('pii 컬럼 — distinct 조회 없이 전문 일치 입력, 적용 시 hm=exact', async () => {
     const user = userEvent.setup();
     renderPopover({ source: 'pii.mobile', label: '전화번호', piiType: 'mobile' });

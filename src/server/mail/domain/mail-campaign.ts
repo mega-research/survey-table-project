@@ -1,5 +1,6 @@
 import * as z from 'zod';
 
+import { HEADER_FILTER_VALUE_MAX_LENGTH } from '@/lib/operations/filter-shared';
 import type { CampaignFilterSnapshot } from '@/shared/contracts/mail';
 
 export type { CampaignFilterSnapshot };
@@ -28,7 +29,8 @@ export const FilterSnapshotSchema = z
         z.object({
           source: z.string().max(200),
           mode: z.enum(['in', 'text', 'exact']),
-          hv: z.string().max(2000),
+          // 위저드 깔때기가 같은 상수로 적용 전에 막는다 — 화면이 건 조건을 스냅샷이 거부하지 않게.
+          hv: z.string().max(HEADER_FILTER_VALUE_MAX_LENGTH),
         }),
       )
       .max(20)

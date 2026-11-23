@@ -272,6 +272,11 @@ export function buildClauseSql(
     return mailStatusCondSql(cond.value);
   }
 
+  if (cond.source === FILTER_SOURCE.GROUP && cond.mode === 'text') {
+    // 그룹 값이 많은 설문의 검색 입력 — 글자 부분 일치(체크박스는 위 in 분기).
+    return sql`${groupValueExpr} ILIKE '%' || ${escapeLikePattern(cond.value)} || '%'`;
+  }
+
   if (cond.source === FILTER_SOURCE.LINK_CLICK && cond.mode === 'boolean') {
     return linkClickCondSql(cond.value);
   }
@@ -452,6 +457,7 @@ function buildInClauseSql(cond: FilterCondition, refs: ClauseColumnRefs): SQL {
   }
 
   if (cond.source === FILTER_SOURCE.GROUP) {
+    if (cond.excludeNull === true) return sql`${groupValueExpr} IS NOT NULL`;
     // 그룹 IN 목록과 그룹 없음(IS NULL)을 OR 로 묶는다 — NULL 은 IN 으로 표현 불가.
     const parts: SQL[] = [];
     if (values.length > 0) {

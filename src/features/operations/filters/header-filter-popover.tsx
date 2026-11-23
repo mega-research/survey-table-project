@@ -56,6 +56,16 @@ interface Props {
    */
   fixedOptions?: Array<{ value: string; label: string }>;
   /**
+   * 값 목록 없이 부분검색 입력으로 거른다(hm=text) — 고유값이 많아 체크박스를 낼 수 없는
+   * 페이지 전용 source 용(단체 메일 위저드의 그룹 열). fixedOptions 가 있으면 그쪽이 이긴다.
+   */
+  textSearch?: boolean;
+  /**
+   * 적용할 값(hv)의 길이 한도. 넘으면 적용하지 않고 줄이라고 알린다 — 조건을 다른 입력(캠페인 스냅샷)으로
+   * 다시 보내는 화면이 그 입력의 한도를 넘는 조건을 걸지 않게 한다. 지정하지 않으면 제한 없음.
+   */
+  maxValueLength?: number;
+  /**
    * 적용 시 URL 파라미터 추가 조작 (예: 응답 내역 status 깔때기 적용 시 상단
    * 상태 select 의 'status' 제거 — 남겨두면 모순 AND 로 0건이 된다).
    * 클라이언트 컴포넌트에서만 넘길 수 있다 — 서버 컴포넌트는 아래 두 prop 을 쓴다.
@@ -74,10 +84,11 @@ interface Props {
   resetParams?: string[];
 }
 
-type Kind = 'attrs' | 'pii' | 'answer' | 'result' | 'web' | 'fixed';
+type Kind = 'attrs' | 'pii' | 'answer' | 'result' | 'web' | 'fixed' | 'search';
 
-function kindOf(source: string, hasFixedOptions: boolean): Kind | null {
+function kindOf(source: string, hasFixedOptions: boolean, textSearch: boolean): Kind | null {
   if (hasFixedOptions) return 'fixed';
+  if (textSearch) return 'search';
   if (source.startsWith(FILTER_SOURCE.ATTRS_PREFIX)) return 'attrs';
   if (source.startsWith(FILTER_SOURCE.PII_PREFIX)) return 'pii';
   if (source.startsWith(FILTER_SOURCE.ANSWER_PREFIX)) return 'answer';
@@ -94,6 +105,7 @@ function kindOf(source: string, hasFixedOptions: boolean): Kind | null {
  * - pii: 전문 일치 입력 (blind index — distinct 열거 불가)
  * - answer(응답 내역 응답값 열): 부분검색 입력 — 응답자가 적은 글자라 고유값이 많다
  * - system.contact_result / system.web: 고정 옵션 체크박스
+ * - textSearch 지정 source: 부분검색 입력 (값 목록을 낼 수 없는 페이지 전용 열)
  *
  * 적용 시 빌더(col/q/op) 필터가 활성이면 경고 다이얼로그 후 빌더 조건을 폐기한다
  * (필터 모드 상호배타). distinct 조회는 첫 열기(또는 hover 프리페치) 시 1회 +
@@ -105,11 +117,13 @@ export function HeaderFilterPopover({
   label,
   resultCodeOptions = [],
   fixedOptions,
+  textSearch = false,
+  maxValueLength,
   onApplyParams,
   renameOnApply,
   resetParams,
 }: Props) {
-  const kind = kindOf(source, fixedOptions != null && fixedOptions.length > 0);
+  const kind = kindOf(source, fixedOptions != null && fixedOptions.length > 0, textSearch);
   const searchParams = useSearchParams();
   const pushParams = useSearchParamsMutator();
 
@@ -128,6 +142,8 @@ export function HeaderFilterPopover({
   // 위 토글의 여집합 — 값이 있는 행만. 둘은 서로를 끈다 (동시에 켜면 0건).
   const [excludeEmpty, setExcludeEmpty] = useState(false);
   const [confirmEntry, setConfirmEntry] = useState<HeaderFilterEntry | null>(null);
+  // 길이 한도를 넘겨 적용하지 못했다 — 선택·입력을 바꾸면 지운다.
+  const [tooLong, setTooLong] = useState(false);
 
   const attrsKey = kind === 'attrs' ? source.slice(FILTER_SOURCE.ATTRS_PREFIX.length) : null;
   const { data, isPending, isError } = useQuery({
@@ -145,7 +161,10 @@ export function HeaderFilterPopover({
     kind === 'fixed' ||
     (kind === 'attrs' && data != null && !data.truncated);
   const isTextKind =
-    kind === 'pii' || kind === 'answer' || (kind === 'attrs' && data?.truncated === true);
+    kind === 'pii' ||
+    kind === 'answer' ||
+    kind === 'search' ||
+    (kind === 'attrs' && data?.truncated === true);
 
   const checkboxOptions: Array<{ value: string; optionLabel: string }> =
     kind === 'fixed'
@@ -169,6 +188,7 @@ export function HeaderFilterPopover({
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next);
+    setTooLong(false);
     if (!next) return;
     // 열 때 현재 URL 상태로 로컬 상태 초기화.
     if (activeEntry?.mode === 'in') {
@@ -187,6 +207,7 @@ export function HeaderFilterPopover({
   };
 
   const toggleValue = (value: string, checked: boolean) => {
+    setTooLong(false);
     setSelected((prev) => {
       const next = new Set(prev);
       if (checked) next.add(value);
@@ -237,6 +258,10 @@ export function HeaderFilterPopover({
 
   const handleApply = () => {
     const entry = buildEntry();
+    if (entry && maxValueLength != null && entry.hv.length > maxValueLength) {
+      setTooLong(true);
+      return;
+    }
     if (entry && hasBuilderFilterParams(new URLSearchParams(searchParams.toString()))) {
       setConfirmEntry(entry);
       return;
@@ -293,7 +318,7 @@ export function HeaderFilterPopover({
 
           {isTextKind && (
             <div className="space-y-1.5">
-              {kind === 'attrs' && (
+              {(kind === 'attrs' || kind === 'search') && (
                 <p className="text-xs text-slate-500">고유값이 많아 검색으로 필터링합니다</p>
               )}
               {kind === 'pii' && (
@@ -301,7 +326,10 @@ export function HeaderFilterPopover({
               )}
               <Input
                 value={textValue}
-                onChange={(e) => setTextValue(e.target.value)}
+                onChange={(e) => {
+                  setTooLong(false);
+                  setTextValue(e.target.value);
+                }}
                 placeholder={placeholderFor(source)}
                 className="h-8 text-sm normal-case"
                 disabled={emptyOnly || excludeEmpty}
@@ -336,6 +364,12 @@ export function HeaderFilterPopover({
                 <span>{FILTER_NOT_NONE_TOGGLE_LABEL}</span>
               </label>
             </div>
+          )}
+
+          {tooLong && (
+            <p role="alert" className="mt-2 text-xs normal-case text-red-600">
+              고른 값이 너무 많습니다. 선택을 줄여 주세요.
+            </p>
           )}
 
           <div className="mt-3 flex items-center justify-between">
