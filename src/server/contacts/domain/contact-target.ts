@@ -10,11 +10,6 @@ export type { PiiFieldType };
 export { PiiUpdateSchema };
 export type { PiiUpdate };
 
-/** 시스템 필드(분류 기준)가 attrs 의 어느 키에 있는지 — 컬럼 스킴의 systemFields 맵 활용 */
-export const SystemFieldKeysSchema = z.object({
-  group: z.string().optional(),
-});
-
 export const AddContactTargetInput = z.object({
   surveyId: z.string(),
   attrs: z.record(z.string(), z.string()),
@@ -22,7 +17,6 @@ export const AddContactTargetInput = z.object({
   piiUpdates: PiiUpdateSchema.array().optional(),
   memo: z.string().nullable().optional(),
   contactMethod: z.custom<ContactMethod>().nullable().optional(),
-  systemFieldKeys: SystemFieldKeysSchema.optional(),
 });
 export type AddContactTargetInput = z.infer<typeof AddContactTargetInput>;
 
@@ -34,7 +28,6 @@ export const UpdateContactTargetInput = z.object({
   piiUpdates: PiiUpdateSchema.array().optional(),
   memo: z.string().nullable().optional(),
   contactMethod: z.custom<ContactMethod>().nullable().optional(),
-  systemFieldKeys: SystemFieldKeysSchema.optional(),
 });
 export type UpdateContactTargetInput = z.infer<typeof UpdateContactTargetInput>;
 

@@ -3,7 +3,6 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
 import { ContactDetailForm } from '@/features/operations/contacts/contact-detail-form';
-import { extractSystemFieldKeys } from '@/lib/operations/contacts-shared';
 import {
   getContactColumnScheme,
   getContactResultCodes,
@@ -46,7 +45,6 @@ export default async function ContactNewPage({ params }: PageProps) {
         surveyId={surveyId}
         scheme={scheme}
         resultCodes={resultCodes}
-        systemFieldKeys={extractSystemFieldKeys(scheme)}
       />
     </main>
   );

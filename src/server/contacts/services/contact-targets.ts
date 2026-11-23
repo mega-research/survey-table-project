@@ -149,7 +149,7 @@ export async function addContactTarget(
   isGuest: boolean,
   share: FieldworkShare,
 ): Promise<ContactTargetRow> {
-  const { surveyId, attrs: rawAttrs, piiUpdates, memo, contactMethod, systemFieldKeys } = input;
+  const { surveyId, attrs: rawAttrs, piiUpdates, memo, contactMethod } = input;
   assertStorablePiiUpdates(piiUpdates);
 
   const result = await db.transaction(async (tx) => {
@@ -161,9 +161,6 @@ export async function addContactTarget(
     });
     // 잠금 뒤 읽은 현재 스코프의 스킴으로 평문 PII 누적을 차단한다.
     const attrs = withShareStamp(sanitizeAttrsAgainstPiiScheme(rawAttrs, prepared.scheme), share);
-    // 빈 셀('')만 NULL 처리. '0' 등 falsy 문자열 group 라벨은 보존 (|| 사용 금지).
-    const rawGroup = systemFieldKeys?.group ? attrs[systemFieldKeys.group] : undefined;
-    const groupValue = rawGroup != null && rawGroup !== '' ? rawGroup : null;
 
     const resid = await allocateContactResid(tx, surveyId, prepared.isTest);
 
@@ -173,7 +170,7 @@ export async function addContactTarget(
         surveyId,
         resid,
         isTest: prepared.isTest,
-        groupValue,
+        // 그룹 값(group_value)은 명단 업로드만 채운다 — 한 명씩 추가한 대상은 비워 둔다(아래 수정 경로 주석).
         attrs,
         memo: memo ?? null,
         contactMethod: contactMethod ?? null,
@@ -195,7 +192,7 @@ export async function addContactTarget(
 }
 
 /**
- * 행 단위 갱신 — attrs/group/memo/contactMethod + PII 변경분 upsert.
+ * 행 단위 갱신 — attrs/memo/contactMethod + PII 변경분 upsert. 그룹 값(group_value)은 쓰지 않는다.
  *
  * 바뀐 칸이 있으면 같은 트랜잭션에서 「대상 정보 수정 현황」 한 줄(`info_edit`)을 남긴다. 개인정보 열은
  * 값 없이 「입력 · 변경 · 삭제」만 남는다 — 지금 값은 잠금 아래에서 복호화해 비교에만 쓴다. 이전 값은
@@ -212,7 +209,7 @@ export async function updateContactTarget(
   editor: ContactEditor,
   share: FieldworkShare,
 ): Promise<void> {
-  const { id, surveyId, attrs: rawAttrs, piiUpdates, memo, contactMethod, systemFieldKeys } = input;
+  const { id, surveyId, attrs: rawAttrs, piiUpdates, memo, contactMethod } = input;
   assertStorablePiiUpdates(piiUpdates);
 
   await db.transaction(async (tx) => {
@@ -225,14 +222,9 @@ export async function updateContactTarget(
     // 모드·대상 소속과 같은 잠금 스냅샷에서 확정한 스킴으로 PII 평문을 제거한다.
     const attrs = withShareStamp(sanitizeAttrsAgainstPiiScheme(rawAttrs, scheme), share);
 
-    // 분류 기준 키가 전달된 경우에만 group_value 재계산.
-    // systemFieldKeys.group 이 없으면(예: 자동 감지 실패) 기존 group_value 를 보존해야 함 —
-    // 무조건 set 하면 메모/PII 만 수정한 부분 업데이트에서 기존 분류값이 null 로 덮어써짐.
-    // 빈 셀('')만 NULL 처리. '0' 등 falsy 문자열 group 라벨은 보존 (|| 사용 금지).
-    const hasGroupKey = systemFieldKeys?.group != null;
-    const rawGroup = hasGroupKey ? attrs[systemFieldKeys.group as string] : undefined;
-    const groupValue = rawGroup != null && rawGroup !== '' ? rawGroup : null;
-
+    // 그룹 값(group_value)은 건드리지 않는다 — 명단 업로드가 채운 값 그대로 둔다. 전에는 화면이 넘긴 열
+    // 이름으로 다시 썼는데, 그 열을 이름(「전시회」)으로 추측해 저장할 때마다 다른 열 값으로 덮었다
+    // (2026-11-23 국내전시회 설문 — 314명의 그룹이 전시회ID 숫자로 바뀌었다).
     // 개인정보 열의 지금 값 — 같은 잠금 아래, 덮어쓰기 전에 읽어 메모리에서만 비교한다.
     const piiWrites = (piiUpdates ?? []).map((p) => ({
       columnKey: p.columnKey,
@@ -250,7 +242,6 @@ export async function updateContactTarget(
       .update(contactTargets)
       .set({
         attrs,
-        ...(hasGroupKey ? { groupValue } : {}),
         memo: memo ?? null,
         contactMethod: contactMethod ?? null,
         updatedAt: new Date(),

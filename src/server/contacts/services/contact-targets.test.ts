@@ -49,7 +49,10 @@ import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 // 잠금 아래에서 읽는 대상 행 — 대상 정보의 지금 값(스키마상 attrs 는 늘 객체다).
 const lockedTarget = { id: 'ct-1', attrs: {}, memo: null, contactMethod: null };
 
-describe('updateContactTarget groupValue 보존', () => {
+// 그룹 값(group_value)은 명단 업로드가 채우는 값이다. 조사 대상을 한 명씩 고치는 저장이 이 값을 다시 쓰면
+// 저장할 때마다 다른 열 값으로 덮인다 — 2026-11-23 국내전시회 설문에서 314명의 그룹이 전시회ID 숫자로 바뀌어
+// 그 그룹으로 거른 발송 회차에 해외 대상 4명이 들어갔다. 저장은 그룹 값을 건드리지 않는다.
+describe('updateContactTarget — 그룹 값을 건드리지 않는다', () => {
   beforeEach(() => {
     capturedSets.length = 0;
     selectResultQueue.length = 0;
@@ -57,12 +60,12 @@ describe('updateContactTarget groupValue 보존', () => {
     vi.clearAllMocks();
   });
 
-  it('systemFieldKeys 가 없으면 group_value 를 set 하지 않아 기존 분류값이 보존된다', async () => {
+  it('명단 값·메모를 고쳐도 group_value 는 set 하지 않는다', async () => {
     await updateContactTarget(
       {
         id: 'ct-1',
         surveyId: 'sv-1',
-        attrs: { 회사명: '아크미' },
+        attrs: { 전시회ID: '21', 조사대상: '참가업체(해외)', 회사명: '아크미' },
         memo: '메모만 수정',
       },
       false,
@@ -71,57 +74,25 @@ describe('updateContactTarget groupValue 보존', () => {
 
     expect(capturedSets).toHaveLength(1);
     const payload = capturedSets[0];
-    // 부분 업데이트(분류 기준 미전달) — group_value 키 자체가 빠져야 함.
     expect(payload).not.toHaveProperty('groupValue');
-    expect(payload).toMatchObject({ attrs: { 회사명: '아크미' }, memo: '메모만 수정' });
+    expect(payload).toMatchObject({ memo: '메모만 수정' });
   });
 
-  it('systemFieldKeys.group 이 있으면 attrs 에서 계산한 group_value 를 set 한다', async () => {
+  it('옛 화면(배포 전에 열어 둔 탭)이 그룹 열 이름을 실어 보내도 group_value 는 set 하지 않는다', async () => {
     await updateContactTarget(
       {
         id: 'ct-2',
         surveyId: 'sv-1',
-        attrs: { 전시회: 'A관', 회사명: '아크미' },
-        systemFieldKeys: { group: '전시회' },
-      },
+        attrs: { 전시회ID: '21', 조사대상: '참가업체(해외)' },
+        // 옛 클라이언트가 보내던 칸 — 지금 입력 타입에는 없다.
+        systemFieldKeys: { group: '전시회ID' },
+      } as Parameters<typeof updateContactTarget>[0],
       false,
       { id: 'editor-1', email: 'editor@local' }, FIELDWORK_SHARE_ALL,
     );
 
     expect(capturedSets).toHaveLength(1);
-    expect(capturedSets[0]).toMatchObject({ groupValue: 'A관' });
-  });
-
-  it('systemFieldKeys.group 키의 attrs 값이 비면 group_value 를 null 로 set 한다', async () => {
-    await updateContactTarget(
-      {
-        id: 'ct-3',
-        surveyId: 'sv-1',
-        attrs: { 전시회: '', 회사명: '아크미' },
-        systemFieldKeys: { group: '전시회' },
-      },
-      false,
-      { id: 'editor-1', email: 'editor@local' }, FIELDWORK_SHARE_ALL,
-    );
-
-    expect(capturedSets).toHaveLength(1);
-    expect(capturedSets[0]).toHaveProperty('groupValue', null);
-  });
-
-  it("group 라벨이 falsy 문자열 '0' 이어도 null 로 무너지지 않고 보존한다", async () => {
-    await updateContactTarget(
-      {
-        id: 'ct-4',
-        surveyId: 'sv-1',
-        attrs: { 전시회: '0', 회사명: '아크미' },
-        systemFieldKeys: { group: '전시회' },
-      },
-      false,
-      { id: 'editor-1', email: 'editor@local' }, FIELDWORK_SHARE_ALL,
-    );
-
-    expect(capturedSets).toHaveLength(1);
-    expect(capturedSets[0]).toMatchObject({ groupValue: '0' });
+    expect(capturedSets[0]).not.toHaveProperty('groupValue');
   });
 });
 

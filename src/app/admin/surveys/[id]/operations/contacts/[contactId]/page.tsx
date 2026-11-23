@@ -5,7 +5,6 @@ import { notFound } from 'next/navigation';
 import { ContactDetailForm } from '@/features/operations/contacts/contact-detail-form';
 import { getMailTemplatesBySurvey } from '@/server/mail/services/templates';
 import { attrsKeyOf, residColumnLabel } from '@/lib/operations/contacts-format';
-import { extractSystemFieldKeys } from '@/lib/operations/contacts-shared';
 import {
   getContactColumnScheme,
   getContactDetailById,
@@ -120,7 +119,6 @@ export default async function ContactDetailPage({ params }: PageProps) {
         surveyId={surveyId}
         scheme={scheme}
         resultCodes={resultCodes}
-        systemFieldKeys={extractSystemFieldKeys(scheme)}
         mailHistory={mailHistory}
         editLogs={editLogs}
         targetEditLogs={targetEditLogs}
