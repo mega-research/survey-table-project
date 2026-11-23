@@ -8,7 +8,7 @@ import type { Question } from '@/types/survey';
  * 비교하는 규칙은 같고, 다른 점은 **화면에서 막지 않는다**는 것 하나다 — 보기는 그대로 다 누를 수 있고 차단 검증
  * (`NumericIssue.kind: 'distinct'`)만 건다. 그래서 판정을 부르는 곳은 차단 검증 하나다.
  *
- * - 대상은 radio·select 문항이고 답이 글자 하나일 때다. 내장 표를 쓰는 문항은 응답값이 칸 id 라 문항끼리 같을 수
+ * - 대상은 radio·select 문항이고 답이 보기 값 하나일 때다(글자, 또는 옛 「기타」 객체의 `selectedValue`). 내장 표를 쓰는 문항은 응답값이 칸 id 라 문항끼리 같을 수
  *   없어 자연히 걸리지 않는다. 복수 선택·순위·표 문항은 묶음 이름이 있어도 구성원이 아니다.
  * - 대칭이다 — 겹친 문항 모두가 위반이고, 어느 쪽을 바꿀지는 응답자가 고른다. 문항 순서·쪽 배치를 보지 않는다.
  * - 다른 문항의 답은 응답 전체에서 읽는다. 표시 조건으로 숨은 문항의 답은 숨는 순간 지워지므로 비교 대상이 아니다.
@@ -24,9 +24,19 @@ function distinctGroupOf(question: Pick<Question, 'type' | 'distinctGroup'>): st
   return name === '' ? null : name;
 }
 
-/** 단일 선택 문항의 답 — 고른 보기 값 글자. 답이 없으면 null */
+/**
+ * 단일 선택 문항의 답 — 고른 보기 값 글자. 답이 없으면 null.
+ *
+ * 답은 글자이거나, 옛 「기타」 보기(`other-option`)를 고른 드롭다운이 쓰는 객체(`{ selectedValue, hasOther }`)다.
+ * 객체를 답이 없는 것으로 읽으면 그 보기끼리의 중복이 통과한다(「기타」도 한 번). 그 타입의 집은 응답 흐름
+ * (survey-response)이라 여기서는 모양만 읽는다.
+ */
 function singleAnswerOf(response: unknown): string | null {
-  return typeof response === 'string' && response !== '' ? response : null;
+  const value =
+    typeof response === 'object' && response !== null && 'selectedValue' in response
+      ? (response as { selectedValue: unknown }).selectedValue
+      : response;
+  return typeof value === 'string' && value !== '' ? value : null;
 }
 
 /**
