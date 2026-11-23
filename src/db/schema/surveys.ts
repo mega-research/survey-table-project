@@ -267,6 +267,8 @@ export const questions = pgTable(
     collapseButtonLabel: text('collapse_button_label'),
     // 접어 둔 문항을 페이지에서 바로 앞 문항의 설명 밑에 붙인다 (0155). 버튼 글자가 있을 때만 의미가 있다
     collapseAttachToPrevious: boolean('collapse_attach_previous').notNull().default(false),
+    // 문항 사이의 중복 불가 묶음 이름 (0171). NULL·공백 = 없음. 같은 이름의 단일 선택 문항끼리 같은 보기를 못 고른다
+    distinctGroup: text('distinct_group'),
 
     // 단답형·장문형 개인정보 암호화 토글 — 응답값을 encryptPii 암호문으로 저장 (ADR-0012)
     piiEncrypted: boolean('pii_encrypted').default(false).notNull(),

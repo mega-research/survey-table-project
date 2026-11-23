@@ -319,5 +319,6 @@ export interface QuestionData {
   titleHtml?: string | null;
   collapseButtonLabel?: string | null;
   collapseAttachToPrevious?: boolean;
+  distinctGroup?: string | null;
   sumConstraints?: SumConstraint[] | null;
 }

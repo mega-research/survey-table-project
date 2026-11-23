@@ -116,6 +116,7 @@ interface SnapshotQuestion {
   titleHtml?: Question['titleHtml'] | undefined;
   collapseButtonLabel?: Question['collapseButtonLabel'] | undefined;
   collapseAttachToPrevious?: boolean | undefined;
+  distinctGroup?: Question['distinctGroup'] | undefined;
   sumConstraints?: Question['sumConstraints'] | undefined;
   answerQuoteEnabled?: boolean | undefined;
   answerQuoteName?: string | undefined;
@@ -216,6 +217,7 @@ export function buildSurveySnapshot(
       titleHtml: q.titleHtml,
       collapseButtonLabel: q.collapseButtonLabel,
       collapseAttachToPrevious: q.collapseAttachToPrevious,
+      distinctGroup: q.distinctGroup,
       sumConstraints: q.sumConstraints,
       answerQuoteEnabled: q.answerQuoteEnabled,
       answerQuoteName: q.answerQuoteName,

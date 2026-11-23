@@ -56,6 +56,7 @@ questions                  # 개별 질문
 ├── title, description, required, requiredMessage, order, hideTitle
 ├── collapseButtonLabel           # 문항 접어 두기 버튼 글자(0154, NULL·공백=꺼짐) — 응답 화면에서 그 버튼을 눌러야 문항이 펼쳐진다(CONTEXT.md 「문항 접어 두기」)
 ├── collapseAttachToPrevious      # 그 버튼을 바로 앞 문항 설명 밑에 붙이기(기본 false, 0155)
+├── distinctGroup                 # 문항 사이의 중복 불가 묶음 이름(0171, NULL·공백=없음) — 같은 이름의 단일 선택 문항끼리 같은 보기를 고르면 「다음」에서 막는다(CONTEXT.md 「중복 불가 묶음」)
 ├── titleHtml                     # 제목 서식본(굵게·밑줄·글자색·글자 크기, 0125). 정본은 평문 title — 응답 화면 제목 표시만 우선하고, 글자가 평문과 어긋나면 버린다(lib/survey/question-title-html)
 ├── options, selectLevels, choiceGroups (JSONB)
 ├── tableTitle, tableColumns, tableRowsData, tableHeaderGrid (JSONB)  # 테이블

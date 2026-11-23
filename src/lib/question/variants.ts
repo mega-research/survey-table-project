@@ -27,6 +27,7 @@ type QuestionBase = Pick<
   | 'titleHtml'
   | 'collapseButtonLabel'
   | 'collapseAttachToPrevious'
+  | 'distinctGroup'
   | 'description'
   | 'required'
   | 'groupId'

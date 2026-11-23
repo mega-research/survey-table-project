@@ -652,6 +652,9 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                   : question?.collapseButtonLabel,
               collapseAttachToPrevious:
                 currentFormData.collapseAttachToPrevious ?? question?.collapseAttachToPrevious,
+              // 문항 사이의 중복 불가 묶음은 편집 칸이 없어 formData 가 소유하지 않는다(스크립트로 적는다) —
+              // 저장본의 값을 그대로 실어 모달 저장이 묶음을 지우지 않게 한다.
+              distinctGroup: question?.distinctGroup,
               // pageBreakBefore 는 질문 목록의 가위 토글로 store 에만 쓰여 formData 가
               // 소유하지 않는다 — hideColumnLabels 와 동일한 silent drop 방지 머지.
               pageBreakBefore: currentFormData.pageBreakBefore ?? question?.pageBreakBefore,
