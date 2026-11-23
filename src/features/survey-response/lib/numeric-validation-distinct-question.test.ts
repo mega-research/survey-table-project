@@ -80,6 +80,15 @@ describe('collectNumericIssues — 문항 사이의 중복 불가 묶음', () =>
     expect(distinctIssues(q310, responses, [q310, select])).toHaveLength(1);
   });
 
+  it('옛 「기타」 보기를 고른 객체 모양 답도 고른 보기 값으로 비교한다', () => {
+    const other = { selectedValue: '4', otherValue: '안식년', hasOther: true };
+    // 객체 ↔ 객체, 글자 ↔ 객체 어느 조합이든 겹치면 막는다
+    expect(distinctIssues(q311, { q310: other, q311: { ...other, otherValue: '' } })).toHaveLength(1);
+    expect(distinctIssues(q311, { q310: '4', q311: other })).toHaveLength(1);
+    expect(distinctIssues(q310, { q310: '4', q311: other })).toHaveLength(1);
+    expect(distinctIssues(q311, { q310: '3', q311: other })).toEqual([]);
+  });
+
   it('세 문항 묶음에서는 겹친 문항만 막는다', () => {
     const q312 = single('q312');
     const all = [q310, q311, q312];
