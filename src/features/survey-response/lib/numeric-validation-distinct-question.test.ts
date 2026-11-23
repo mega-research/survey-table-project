@@ -42,7 +42,7 @@ describe('collectNumericIssues — 문항 사이의 중복 불가 묶음', () =>
     const responses = { q310: '2', q311: '2' };
     const first = distinctIssues(q310, responses);
     expect(first).toHaveLength(1);
-    expect(first[0]?.message).toBe('다른 문항에서 고른 보기와 같은 보기는 선택할 수 없습니다.');
+    expect(first[0]?.message).toBe('다른 문항과 답이 같습니다. 서로 다른 보기를 골라 주세요.');
     expect(first[0]?.cellIds).toBeUndefined();
     expect(distinctIssues(q311, responses)).toHaveLength(1);
   });
@@ -128,8 +128,8 @@ describe('collectNumericIssues — 문항 사이의 중복 불가 묶음', () =>
     const messageIn = (locale: 'zh' | 'en') =>
       collectNumericIssues(q311, '2', ctx, locale).find((issue) => issue.kind === 'distinct')
         ?.message;
-    expect(messageIn('zh')).toBe('不能选择与其他题目相同的选项。');
-    expect(messageIn('en')).toBe('You cannot select the same option as in another question.');
+    expect(messageIn('zh')).toBe('与其他题目的答案相同。请选择不同的选项。');
+    expect(messageIn('en')).toBe('This answer is the same as in another question. Please choose a different option.');
   });
 
   it('검증 컨텍스트가 없으면 다른 문항을 알 수 없어 검사하지 않는다', () => {
