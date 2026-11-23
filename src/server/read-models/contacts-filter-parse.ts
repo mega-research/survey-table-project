@@ -131,6 +131,7 @@ export function parseClausesFromUrl(
  * - attrs.*: in(구분자 조인 값 목록) 또는 text(고카디널리티 부분검색 폴백)
  * - pii.*: exact 만 (blind index 전문 일치)
  * - system.contact_result: in — 유효 결과코드 + "결과 없음" 센티널만 통과
+ * - system.group: in — 그룹 값(자유 글자) + "없음" 센티널. 후보에 그 열이 있는 표면(단체 메일)만
  * - system.web: in — 'true'/'false' 만 통과
  * 같은 컬럼이 중복 등장하면 마지막 항목이 이긴다 (드롭다운 재적용 시나리오).
  * 검증 실패 절은 silent drop (URL 직접 조작 가드).
@@ -256,6 +257,23 @@ function buildHeaderCondition(
     // 센티널이 항상 이긴다 — 같은 이름의 코드는 UI 가 선택지에서 빼둔다.
     const includeNull = raw.includes(FILTER_NONE_VALUE);
     const values = raw.filter((v) => v !== FILTER_NONE_VALUE && valid.has(v));
+    if (values.length === 0 && !includeNull) return null;
+    return {
+      source: col,
+      mode: 'in',
+      value: '',
+      values,
+      ...(includeNull ? { includeNull: true } : {}),
+    };
+  }
+
+  if (col === FILTER_SOURCE.GROUP) {
+    // 그룹 값은 명단에서 온 자유 글자라 값 목록으로 검증하지 않는다 — 없는 값은 0건일 뿐이고
+    // SQL 에는 파라미터로만 들어간다. 센티널이 항상 이긴다(같은 글자의 실제 값은 선택지에서 뺀다).
+    if (mode !== 'in') return null;
+    const raw = splitHeaderValues(hv);
+    const values = raw.filter((v) => v !== FILTER_NONE_VALUE);
+    const includeNull = values.length !== raw.length;
     if (values.length === 0 && !includeNull) return null;
     return {
       source: col,

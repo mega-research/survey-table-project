@@ -63,6 +63,13 @@ export const FILTER_SOURCE = {
    * 컨택원 id 로 검증한다(ParseExtraHooks.assignmentIds). 게스트 표면 후보에는 넣지 않는다.
    */
   CONTACT_OWNER: 'system.contact_owner',
+  /**
+   * 그룹(분류 기준 대분류) — contact_targets.group_value. 단체 메일 위저드 미리보기 표의 고정 열 전용
+   * 열 머리 필터다(CAMPAIGN_HEADER_FILTER_COLUMNS). 검색 조건 줄·조사 대상 목록 후보에는 넣지 않는다 —
+   * 그쪽은 같은 값을 분류 기준 attrs 열로 거른다. 값은 자유 글자이고 빈 값은 FILTER_NONE_VALUE.
+   * 캠페인 상세 수신자 표의 그룹 깔때기(RECIPIENT_FILTER_SOURCE.GROUP)와는 축이 다르다 — 저쪽은 발송 스냅샷 위다.
+   */
+  GROUP: 'system.group',
   ATTRS_PREFIX: 'attrs.',
   PII_PREFIX: 'pii.',
   /**
@@ -363,6 +370,7 @@ export interface ColumnCandidate {
  * 페이지(서버 파싱 후보)와 마법사(헤더 렌더)가 이 한 목록을 공유한다.
  */
 export const CAMPAIGN_HEADER_FILTER_COLUMNS: ReadonlyArray<ColumnCandidate> = [
+  { source: FILTER_SOURCE.GROUP, label: '그룹' },
   { source: FILTER_SOURCE.WEB, label: '응답' },
   { source: FILTER_SOURCE.EMAIL, label: '수신 상황' },
   { source: FILTER_SOURCE.LINK_CLICK, label: LINK_CLICK_COLUMN_LABEL },
