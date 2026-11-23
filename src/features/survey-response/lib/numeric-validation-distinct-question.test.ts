@@ -101,6 +101,18 @@ describe('collectNumericIssues — 문항 사이의 중복 불가 묶음', () =>
     expect(distinctIssues(q311, { q311: '2' })).toEqual([]);
   });
 
+  it('분기로 건너뛴 쪽에 남은 답과는 비교하지 않는다 — 경로 위 문항만 상대다', () => {
+    const responses = { q310: '2', q311: '2' };
+    const issuesOn = (traversed: string[]) =>
+      collectNumericIssues(q311, '2', {
+        allResponses: responses,
+        allQuestions: [q310, q311],
+        traversedQuestionIds: new Set(traversed),
+      }).filter((issue) => issue.kind === 'distinct');
+    expect(issuesOn(['q311'])).toEqual([]);
+    expect(issuesOn(['q310', 'q311'])).toHaveLength(1);
+  });
+
   it('문구는 현재 언어를 따른다', () => {
     const responses = { q310: '2', q311: '2' };
     const ctx = { allResponses: responses, allQuestions: [q310, q311] };

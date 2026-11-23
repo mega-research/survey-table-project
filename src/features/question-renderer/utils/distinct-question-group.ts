@@ -11,8 +11,9 @@ import type { Question } from '@/types/survey';
  * - 대상은 radio·select 문항이고 답이 글자 하나일 때다. 내장 표를 쓰는 문항은 응답값이 칸 id 라 문항끼리 같을 수
  *   없어 자연히 걸리지 않는다. 복수 선택·순위·표 문항은 묶음 이름이 있어도 구성원이 아니다.
  * - 대칭이다 — 겹친 문항 모두가 위반이고, 어느 쪽을 바꿀지는 응답자가 고른다. 문항 순서·쪽 배치를 보지 않는다.
- * - 다른 문항의 답은 응답 전체에서 읽는다. 숨은 문항의 답은 숨는 순간 지워지므로 비교 대상이 아니다
- *   (최대 선택 개수 연동 `resolveMaxSelections` 과 같은 전제).
+ * - 다른 문항의 답은 응답 전체에서 읽는다. 표시 조건으로 숨은 문항의 답은 숨는 순간 지워지므로 비교 대상이 아니다.
+ *   분기로 건너뛴 쪽의 답은 화면이 즉시 지우지 않으므로, 호출부가 경로 위 문항 집합(`reachableQuestionIds`)을
+ *   넘겨 상대를 좁힌다 — 볼 수 없는 문항의 남은 답 때문에 막히지 않게 한다.
  * - 보기별 예외는 없다(「기타」도 한 번).
  */
 
@@ -33,12 +34,14 @@ function singleAnswerOf(response: unknown): string | null {
  *
  * @param allQuestions 설문의 문항 전체 — 같은 묶음의 구성원을 여기서 찾는다
  * @param allResponses 응답 전체(문항 id → 답)
+ * @param reachableQuestionIds 응답자가 지금 닿을 수 있는 문항 — 주면 이 밖의 문항은 상대가 되지 않는다
  */
 export function hasDistinctQuestionViolation(
   question: Question,
   response: unknown,
   allQuestions: readonly Question[],
   allResponses: Record<string, unknown>,
+  reachableQuestionIds?: ReadonlySet<string>,
 ): boolean {
   const group = distinctGroupOf(question);
   if (group === null) return false;
@@ -47,6 +50,7 @@ export function hasDistinctQuestionViolation(
   return allQuestions.some(
     (other) =>
       other.id !== question.id &&
+      (reachableQuestionIds === undefined || reachableQuestionIds.has(other.id)) &&
       distinctGroupOf(other) === group &&
       singleAnswerOf(allResponses[other.id]) === answer,
   );

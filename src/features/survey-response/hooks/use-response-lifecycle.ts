@@ -839,6 +839,7 @@ export function useResponseLifecycle({
             optionTexts: optionTextsByQuestion[firstId],
             lookups: loadedSurvey?.lookups ?? [],
             contactAttrs,
+            traversedQuestionIds: traversedIds,
           }).some((issue) => issue.kind === 'required-detail' || issue.kind === 'required-cells');
           if (hasBlockingDetailIssue && targetIdx !== -1) {
             setNumericErrorStepIndex(targetIdx);
@@ -870,6 +871,7 @@ export function useResponseLifecycle({
           optionTexts: optionTextsByQuestion[q.id],
           lookups: loadedSurvey?.lookups ?? [],
           contactAttrs,
+          traversedQuestionIds: traversedIds,
         });
         return isAdminEdit
           ? issues.some((issue) => !isRelaxableIssueKind(issue.kind))

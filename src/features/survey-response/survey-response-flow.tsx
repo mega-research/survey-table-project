@@ -1266,6 +1266,8 @@ function SurveyResponseFlowActive({
           contactAttrs,
           // 이월 원본은 형식 검사 면제 판정에만 쓴다 — 손대지 않은 지난 회차 값은 막지 않는다.
           priorAnswers,
+          // 문항 사이의 중복 불가 묶음은 경로 위 문항끼리만 비교한다
+          traversedQuestionIds,
         },
         // 검증 문구는 한 줄짜리라 미정이면 한국어(inlineLocale 과 같은 규칙)
         toInlineLocale(systemLocale),
@@ -1282,6 +1284,7 @@ function SurveyResponseFlowActive({
     loadedSurvey?.lookups,
     contactAttrs,
     priorAnswers,
+    traversedQuestionIds,
     systemLocale,
   ]);
   const [numericErrorStepIndex, setNumericErrorStepIndex] = useState<number | null>(null);
