@@ -706,6 +706,72 @@ describe('projectScaleBar — 척도 밖 보기 칸이 낀 막대(청암대 재�
     expect(model.anchors).toEqual({ left: '매우 만족', leftStart: 1, right: '매우 불만족' });
   });
 
+  // 원문 조사표 모양 — 머리에만 「미참여」를 적고 칸에는 컨트롤만 둔다(청암대 교직원 문8).
+  const namedTailHeader: HeaderCell[][] = [
+    [...anchorHeader(false)[0]!, head('h-f', '미참여', 1)],
+  ];
+
+  it('칸 글자가 빈 척도 밖 보기 칸은 그 칸만 덮는 머리 이름을 칸 글자로 쓰고, 그 이름은 구간·양끝 라벨이 되지 않는다', () => {
+    const model = modelOf(
+      c4({
+        scale: [...DESC, ''].map((text, n) => choice(`c${n}`, text)),
+        headerGrid: namedTailHeader,
+      }),
+    );
+    expect(model.cells.map((cell) => cell.text)).toEqual([...DESC, '미참여']);
+    expect(model.bands.map((b) => b.label)).toEqual(['매우 만족', '보통', '매우 불만족']);
+    expect(model.cells[10]!.bandIndex).toBeNull();
+    expect(model.anchors).toEqual({ left: '매우 만족', right: '매우 불만족', rightEnd: 9 });
+  });
+
+  it('칸 글자가 있으면 머리 이름을 종전대로 구간으로 읽는다 — 운영 중인 막대는 바뀌지 않는다', () => {
+    const model = modelOf(
+      c4({
+        scale: [...DESC, '미참여'].map((text, n) => choice(`c${n}`, text)),
+        headerGrid: namedTailHeader,
+      }),
+    );
+    expect(model.bands.map((b) => b.label)).toEqual(['매우 만족', '보통', '매우 불만족', '미참여']);
+    expect(model.cells[10]!.bandIndex).toBe(3);
+  });
+
+  it('칸 글자도 그 칸의 머리 이름도 비었거나, 머리 이름이 여러 칸을 덮으면 칸 글자를 얻지 못한 것이다', () => {
+    const emptyTail = [...DESC, ''].map((text, n) => choice(`c${n}`, text));
+    expect(projectScaleBar(c4({ scale: emptyTail, headerGrid: anchorHeader(true) }))).toEqual({
+      ok: false,
+      reason: 'missing-text',
+    });
+    const emptyFirst = ['', ...DESC.slice(1)].map((text, n) => choice(`c${n}`, text));
+    expect(projectScaleBar(c4({ scale: emptyFirst, headerGrid: anchorHeader(false) }))).toEqual({
+      ok: false,
+      reason: 'missing-text',
+    });
+  });
+
+  it('5칸 이하에서도 머리 이름을 칸 글자로 쓴 칸은 같은 이름을 칸 안 라벨로 되풀이하지 않는다', () => {
+    const header: HeaderCell[][] = [
+      [
+        head('h-cat', '구분', 1),
+        head('h-item', '질 문', 1),
+        head('h-use', '활용 여부', 2),
+        head('h-a', '아니다', 1),
+        head('h-b', '', 1),
+        head('h-c', '그렇다', 1),
+        head('h-d', '모름', 1),
+      ],
+    ];
+    const model = modelOf(
+      c4({ scale: ['①', '②', '③', ''].map((text, n) => choice(`c${n}`, text)), headerGrid: header }),
+    );
+    expect(model.cells.map((cell) => [cell.text, cell.inCellLabel])).toEqual([
+      ['①', '아니다'],
+      ['②', undefined],
+      ['③', '그렇다'],
+      ['모름', undefined],
+    ]);
+    expect(model.bands.map((b) => b.label)).toEqual(['아니다', '그렇다']);
+  });
+
   it('이름 있는 구간이 하나뿐이면 양쪽에 같은 이름을 되풀이하지 않는다', () => {
     const header: HeaderCell[][] = [
       [
