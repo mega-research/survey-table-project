@@ -10,7 +10,7 @@ import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 // JSONB 순회 순서대로 골랐다. 동일 value 를 가진 attrs 키가 둘 이상이면
 // 헤더 라벨이 어느 키로든 바뀔 수 있었다.
 //
-// 수정 후: contact_columns 스킴(extractSystemFieldKeys)에서 group attrs key 를
+// 수정 후: contact_columns 스킴에서 group attrs key 를
 // 결정적으로 도출하고, 스킴이 못 주는 경우에만 value 매칭으로 폴백하되
 // 동일 value 다중 키는 정렬해 결정적으로 첫 키를 고른다.
 //
