@@ -609,6 +609,28 @@ describe('「그룹」 절 SQL (단체 메일 위저드 열 머리 필터)', () 
     expect(q.sql.trim().startsWith('(')).toBe(true);
   });
 
+  it('text 는 부분 일치 — 와일드카드 글자는 글자 그대로 찾는다', () => {
+    const q = dialect.sqlToQuery(
+      buildContactsFilterSql([
+        { op: null, condition: { source: 'system.group', mode: 'text', value: '100%_가' } },
+      ]),
+    );
+    expect(q.sql).toContain(`NULLIF("contact_targets".group_value, '') ILIKE '%' ||`);
+    expect(q.params).toContain('100\\%\\_가');
+  });
+
+  it('「— 제외하고 보기」는 그룹이 있는 대상만이다', () => {
+    const q = dialect.sqlToQuery(
+      buildContactsFilterSql([
+        {
+          op: null,
+          condition: { source: 'system.group', mode: 'in', value: '', values: [], excludeNull: true },
+        },
+      ]),
+    );
+    expect(q.sql).toContain(`NULLIF("contact_targets".group_value, '') IS NOT NULL`);
+  });
+
   it('없음만 고르면 IS NULL 하나다', () => {
     const q = dialect.sqlToQuery(
       buildContactsFilterSql([

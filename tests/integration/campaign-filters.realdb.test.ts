@@ -302,7 +302,11 @@ run('캠페인 필터 실 DB 왕복', () => {
       expect(domestic.total).toBe(2);
       expect(domestic.rows.map((r) => r.resid)).toEqual([1, 5]);
       // 선택지는 지금 걸린 조건과 무관하게 후보 전체에서 뽑는다 — 한 값을 골라도 나머지가 남는다.
-      expect(domestic.groupFacet).toEqual({ values: ['국내', '해외'], hasEmpty: true });
+      expect(domestic.groupFacet).toEqual({
+        values: ['국내', '해외'],
+        hasEmpty: true,
+        truncated: false,
+      });
 
       // 「— (없음)」은 NULL 과 빈 글자를 함께 잡는다(표가 둘 다 값 없이 그린다).
       const empty = await preview(FILTER_NONE_VALUE);
@@ -321,6 +325,59 @@ run('캠페인 필터 실 DB 왕복', () => {
         pageSize: 20,
       });
       expect(plain.groupFacet).toBeUndefined();
+
+      // 그룹 값이 상한(200)을 넘으면 선택지를 자르지 않고 「넘었다」고 알린다 — 화면이 검색 입력으로 바꾼다.
+      const manyIds = Array.from({ length: 205 }, () => randomUUID());
+      await db.insert(contactTargets).values(
+        manyIds.map((id, i) => ({
+          id,
+          surveyId: groupSurveyId,
+          resid: 100 + i,
+          inviteCode: randomUUID(),
+          groupValue: `업체${String(i).padStart(3, '0')}`,
+        })),
+      );
+      await db.insert(contactPii).values(
+        manyIds.flatMap((id, i) =>
+          buildPiiRows(id, [
+            { columnKey: 'email', fieldType: 'email', plain: `m${i}@example.com` },
+          ]),
+        ),
+      );
+      const searchFilter = await resolveContactFilter(
+        filterCtx,
+        { headerClauses: [{ source: 'system.group', mode: 'text', hv: '업체00' }] },
+        { mode: 'read' },
+      );
+      const searched = await previewCampaignCandidates({
+        surveyId: groupSurveyId,
+        scope: 'real',
+        filter: searchFilter,
+        unrespondedOnly: false,
+        page: 1,
+        pageSize: 20,
+        includeGroupFacet: true,
+      });
+      // 업체000 ~ 업체009
+      expect(searched.total).toBe(10);
+      expect(searched.groupFacet?.truncated).toBe(true);
+      expect(searched.groupFacet?.hasEmpty).toBe(true);
+
+      const withGroup = await resolveContactFilter(
+        filterCtx,
+        { headerClauses: [{ source: 'system.group', mode: 'in', hv: '__not_none__' }] },
+        { mode: 'read' },
+      );
+      const grouped = await previewCampaignCandidates({
+        surveyId: groupSurveyId,
+        scope: 'real',
+        filter: withGroup,
+        unrespondedOnly: false,
+        page: 1,
+        pageSize: 20,
+      });
+      // 국내 2 + 해외 1 + 업체 205 — 그룹이 빈 둘(resid 3·4)만 빠진다.
+      expect(grouped.total).toBe(208);
     } finally {
       await db.delete(surveys).where(eq(surveys.id, groupSurveyId));
     }

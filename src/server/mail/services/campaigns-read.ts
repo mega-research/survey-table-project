@@ -1020,8 +1020,9 @@ export async function previewCampaignCandidates(args: {
 
 /**
  * 위저드 미리보기 「그룹」 열 머리 필터의 선택지 — 발송 후보(자동 제외 정책을 지난 대상)에 실제로 있는 그룹 값.
- * 식은 필터 절과 같은 `groupValueExpr` 다(빈 글자 = 없음). 상한·정렬·센티널 제외는 수신자 표 깔때기
+ * 식은 필터 절과 같은 `groupValueExpr` 다(빈 글자 = 없음). 정렬·센티널 제외는 수신자 표 깔때기
  * (`listCampaignRecipientFacets`)와 같다 — NULLS FIRST 가 「없음」 판정을 LIMIT 에서 보호한다.
+ * 상한을 넘으면 `truncated` 로 알린다(업체명을 분류 기준으로 둔 명단은 그룹이 수천 개다).
  */
 async function loadCandidateGroupFacet(where: SQL): Promise<CampaignGroupFacet> {
   const rows = await db
@@ -1032,12 +1033,14 @@ async function loadCandidateGroupFacet(where: SQL): Promise<CampaignGroupFacet> 
     .orderBy(sql`1 ASC NULLS FIRST`)
     .limit(FACET_LIMIT + 2);
 
+  const present = rows.map((r) => r.v).filter((v): v is string => v != null);
   return {
     hasEmpty: rows.some((r) => r.v == null),
-    values: rows
-      .map((r) => r.v)
+    // 상한을 넘으면 앞 200개만 고를 수 있는 목록이 된다 — 자르지 않고 알려 화면이 검색 입력으로 바꾼다.
+    truncated: present.length > FACET_LIMIT,
+    values: present
       // 센티널과 같은 실제 값은 선택지에서 뺀다 — 파서가 그것을 「없음」으로 승격시킨다.
-      .filter((v): v is string => v != null && v !== FILTER_NONE_VALUE)
+      .filter((v) => v !== FILTER_NONE_VALUE)
       .sort((a, b) => a.localeCompare(b, 'ko', { numeric: true }))
       .slice(0, FACET_LIMIT),
   };
