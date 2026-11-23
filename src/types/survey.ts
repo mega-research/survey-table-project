@@ -1116,6 +1116,13 @@ export interface Question {
    * 제자리에 그린다(survey-response `groupAttachedItems`).
    */
   collapseAttachToPrevious?: boolean;
+  /**
+   * 문항 사이의 중복 불가 묶음 이름 (0171, CONTEXT.md 「중복 불가 묶음」). 같은 이름을 적은 단일 선택 문항(radio·select,
+   * 보기를 직접 가진 문항)끼리 같은 보기를 고른 채 「다음」으로 넘어갈 수 없다(「가장 만족」·「가장 불만족」 한 쌍).
+   * 화면에서는 막지 않고 차단 검증만 건다. NULL·공백 = 없음. 판정은 `question-renderer/utils/distinct-question-group`.
+   * 빌더 편집 칸은 없다(스크립트로 적는다).
+   */
+  distinctGroup?: string | null;
   // 단답형·장문형 입력칸 줄 수 (0124). 미지정 = 유형 기본(단답형 한 줄, 장문형 4줄).
   // 단답형에서 2 이상이면 여러 줄 칸. 숫자 모드·입력 형식은 한 줄 고정(표 input 셀 inputRows 와 같은 규칙).
   inputRows?: number | null;

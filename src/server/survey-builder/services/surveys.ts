@@ -430,6 +430,7 @@ export async function duplicateSurvey(
         titleHtml: question.titleHtml ?? null,
         collapseButtonLabel: question.collapseButtonLabel ?? null,
         collapseAttachToPrevious: question.collapseAttachToPrevious ?? false,
+        distinctGroup: question.distinctGroup ?? null,
         sumConstraints: question.sumConstraints as NewQuestion['sumConstraints'],
         dynamicRowConfigs: question.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
         rowRepeatConfig: question.rowRepeatConfig as NewQuestion['rowRepeatConfig'],

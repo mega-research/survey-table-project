@@ -44,6 +44,7 @@ const BASE_KEYS = [
   'titleHtml',
   'collapseButtonLabel',
   'collapseAttachToPrevious',
+  'distinctGroup',
   'description',
   'required',
   'groupId',

@@ -58,6 +58,7 @@ const SENTINEL_ROW: Record<string, unknown> = {
   titleHtml: '<p><strong>질문</strong></p>',
   collapseButtonLabel: '코드표 보기',
   collapseAttachToPrevious: true,
+  distinctGroup: 'leave',
   piiEncrypted: true,
   tableValidationRules: [],
   sumConstraints: [],

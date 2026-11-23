@@ -122,6 +122,7 @@ function toQuestionRow(question: SurveyType['questions'][number], surveyId: stri
     titleHtml: question.titleHtml ?? null,
     collapseButtonLabel: question.collapseButtonLabel ?? null,
     collapseAttachToPrevious: question.collapseAttachToPrevious ?? false,
+    distinctGroup: question.distinctGroup ?? null,
     sumConstraints: question.sumConstraints as NewQuestion['sumConstraints'],
     dynamicRowConfigs:
       question.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
@@ -199,6 +200,7 @@ const QUESTION_UPSERT_SET = {
   titleHtml: sql`excluded.title_html`,
   collapseButtonLabel: sql`excluded.collapse_button_label`,
   collapseAttachToPrevious: sql`excluded.collapse_attach_previous`,
+  distinctGroup: sql`excluded.distinct_group`,
   sumConstraints: sql`excluded.sum_constraints`,
   dynamicRowConfigs: sql`excluded.dynamic_row_config`,
   rowRepeatConfig: sql`excluded.row_repeat_config`,
