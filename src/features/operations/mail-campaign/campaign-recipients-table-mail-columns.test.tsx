@@ -44,6 +44,7 @@ function renderTable(
   rows: CampaignRecipientRow[],
   mailColumns: MailDisplayColumn[],
   showResid = true,
+  droppedFilterCount = 0,
 ) {
   return render(
     <QueryClientProvider client={new QueryClient()}>
@@ -57,6 +58,7 @@ function renderTable(
         currentStatuses={[]}
         currentQuery=""
         headerEntries={[]}
+        droppedFilterCount={droppedFilterCount}
         errorOptions={[]}
         resultOptions={[]}
         mailColumns={mailColumns}
@@ -117,5 +119,14 @@ describe('CampaignRecipientsTable 메일 표시 컬럼', () => {
 
     expect(headerLabels()).toHaveLength(8);
     expect(headerLabels()).not.toContain('시스템ID');
+  });
+  it('주소의 조건이 빠졌으면 명단이 넓다고 경고한다 — 없어진 그룹 조건이 든 옛 주소', () => {
+    renderTable([recipient({ id: 'r-1' })], [], true, 1);
+    expect(screen.getByRole('alert')).toHaveTextContent('적용할 수 없는 조건 1개가 빠져');
+  });
+
+  it('빠진 조건이 없으면 경고가 없다', () => {
+    renderTable([recipient({ id: 'r-1' })], []);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });

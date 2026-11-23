@@ -6,6 +6,7 @@ import { notFound } from 'next/navigation';
 
 import { CancelCampaignButton } from '@/features/operations/mail-campaign/cancel-campaign-button';
 import { CampaignRecipientsTable } from '@/features/operations/mail-campaign/campaign-recipients-table';
+import { splitRecipientHeaderEntries } from '@/features/operations/mail-campaign/recipient-header-filters';
 import { ResyncCampaignButton } from '@/features/operations/mail-campaign/resync-campaign-button';
 import { Card } from '@/components/ui/card';
 import { LocalDateTime } from '@/components/ui/local-date-time';
@@ -93,14 +94,12 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
   const statuses = parseStatuses(sp.status);
   const q = (sp.rq ?? sp.q ?? '').trim();
 
-  // 깔때기(hcol/hm/hv) — 이 화면이 이해하는 두 축만 좁게 수용한다.
-  const headerEntries = parseHeaderFilterEntries(
-    toSearchParams({ hcol: sp.hcol, hm: sp.hm, hv: sp.hv }),
-  ).filter(
-    (e) =>
-      e.mode === 'in' &&
-      (e.source === RECIPIENT_FILTER_SOURCE.ERROR || e.source === RECIPIENT_FILTER_SOURCE.RESULT),
-  );
+  // 깔때기(hcol/hm/hv) — 이 화면이 이해하는 두 축만 좁게 수용한다. 받지 못한 조건(그룹 칸을 빼기 전에
+  // 저장해 둔 주소의 그룹 조건 등)은 빠진 수를 표에 알려 경고하게 한다.
+  const { accepted: headerEntries, droppedCount: droppedFilterCount } =
+    splitRecipientHeaderEntries(
+      parseHeaderFilterEntries(toSearchParams({ hcol: sp.hcol, hm: sp.hm, hv: sp.hv })),
+    );
   const facetValuesOf = (source: string): string[] => {
     const entry = headerEntries.find((e) => e.source === source);
     return entry ? splitHeaderValues(entry.hv) : [];
@@ -319,6 +318,7 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
         currentStatuses={statuses}
         currentQuery={q}
         headerEntries={headerEntries}
+        droppedFilterCount={droppedFilterCount}
         errorOptions={errorOptions}
         resultOptions={resultOptions}
         mailColumns={mailColumns}
