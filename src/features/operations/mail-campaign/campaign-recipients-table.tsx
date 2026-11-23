@@ -37,8 +37,6 @@ interface Props {
   currentQuery: string;
   /** 활성 깔때기(hcol/hm/hv) — 칩·검색 링크가 유실시키지 않도록 함께 실어 나른다. */
   headerEntries: HeaderFilterEntry[];
-  /** 그룹 깔때기 체크박스 선택지 (이 캠페인 수신자에 실제로 등장하는 값) */
-  groupOptions: Array<{ value: string; label: string }>;
   /** 메모(반송/실패 사유) 깔때기 체크박스 선택지 */
   errorOptions: Array<{ value: string; label: string }>;
   /** 최근 결과코드 깔때기 체크박스 선택지 */
@@ -113,7 +111,6 @@ export function CampaignRecipientsTable({
   currentStatuses,
   currentQuery,
   headerEntries,
-  groupOptions,
   errorOptions,
   resultOptions,
   mailColumns,
@@ -234,19 +231,6 @@ export function CampaignRecipientsTable({
                   </th>
                 ))}
                 <th className="px-3 py-2">이메일</th>
-                <th className="px-3 py-2">
-                  <span className="inline-flex items-center gap-1">
-                    {RECIPIENT_FILTER_LABEL[RECIPIENT_FILTER_SOURCE.GROUP]}
-                    <HeaderFilterPopover
-                      surveyId={surveyId}
-                      source={RECIPIENT_FILTER_SOURCE.GROUP}
-                      label={RECIPIENT_FILTER_LABEL[RECIPIENT_FILTER_SOURCE.GROUP] ?? '그룹'}
-                      renameOnApply={LEGACY_SEARCH_RENAME}
-                      resetParams={RECIPIENT_RESET_PARAMS}
-                      fixedOptions={groupOptions}
-                    />
-                  </span>
-                </th>
                 <th className="px-3 py-2">상태</th>
                 <th className="px-3 py-2">발송</th>
                 <th className="px-3 py-2">전달</th>
@@ -303,7 +287,6 @@ export function CampaignRecipientsTable({
                       </td>
                     ))}
                     <td className="px-3 py-2 text-slate-900">{r.emailMasked}</td>
-                    <td className="px-3 py-2 text-slate-600">{r.contactGroupValue ?? '—'}</td>
                     <td className="px-3 py-2">
                       <div className="flex flex-wrap items-center gap-1">
                         <RecipientStatusBadge status={r.status} />

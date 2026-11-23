@@ -47,7 +47,6 @@ function recipientRow(overrides: Record<string, unknown>) {
     id: 'r-1',
     contactTargetId: 'ct-1',
     contactResid: 7,
-    contactGroupValue: null,
     contactLatestResultCode: null,
     contactUnsubscribedAt: null,
     email: 'someone@example.com',

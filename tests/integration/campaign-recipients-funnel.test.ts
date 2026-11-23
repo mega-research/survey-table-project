@@ -3,7 +3,7 @@ import { getTableName } from 'drizzle-orm';
 import { extractRawSql } from './_helpers/result-code-mock';
 
 /**
- * listCampaignRecipients 의 깔때기(그룹 / 메모=반송사유) 조건 결합 검증.
+ * listCampaignRecipients 의 깔때기(메모=반송사유 / 최근 결과코드) 조건 결합 검증.
  *
  * db 를 mock 해 where 절 raw SQL 을 평탄화한 뒤, "없음"(FILTER_NONE_VALUE) 이
  * IN 목록이 아니라 IS NULL 로 승격되는지 본다 — NULL 은 IN 으로 표현할 수 없어
@@ -93,7 +93,6 @@ const SURVEY_ID = '00000000-0000-4000-8000-000000000041';
 const CAMPAIGN_ID = '00000000-0000-4000-8000-000000000042';
 
 async function run(args: {
-  groupValues?: string[];
   errorReasons?: string[];
   resultCodes?: string[];
 }) {
@@ -113,13 +112,10 @@ describe('listCampaignRecipients — 깔때기 조건', () => {
     state.distinctRows = [];
   });
 
-  // 컨택 상관 필터(그룹 / 최근 결과코드)는 count 와 행 조회 양쪽에서 contact_targets 를
+  // 컨택 상관 필터(최근 결과코드)는 count 와 행 조회 양쪽에서 contact_targets 를
   // 참조한다. 한쪽이라도 조인을 빠뜨리면 PG 가 missing FROM-clause entry 로 거절해
   // 상세 페이지 전체가 죽는다.
-  it.each([
-    ['그룹', { groupValues: ['모바일'] }],
-    ['최근 결과코드', { resultCodes: ['1.조사완료'] }],
-  ])('%s 필터를 걸면 실행되는 모든 쿼리가 contact_targets 를 조인한다', async (_label, args) => {
+  it.each([['최근 결과코드', { resultCodes: ['1.조사완료'] }]])('%s 필터를 걸면 실행되는 모든 쿼리가 contact_targets 를 조인한다', async (_label, args) => {
     await run(args);
     expect(state.queries.length).toBeGreaterThan(1); // count + 행 조회
     for (const q of state.queries) {
@@ -131,23 +127,23 @@ describe('listCampaignRecipients — 깔때기 조건', () => {
   // 그래서 컬럼명 대신 이 모듈이 직접 짠 구조(NULLIF / IN / 대문자 IS NULL)와
   // 바인딩된 값으로 검증한다. 베이스 where 의 archived_at 조건은 drizzle isNull 이라
   // 소문자 "is null" 로 나오므로 대문자 매칭과 섞이지 않는다.
-  it('깔때기 미지정이면 그룹·사유 조건을 아예 붙이지 않는다', async () => {
+  it('깔때기 미지정이면 사유·결과코드 조건을 아예 붙이지 않는다', async () => {
     const raw = await run({});
     expect(raw).not.toContain('NULLIF');
     expect(raw).not.toContain('IS NULL');
   });
 
-  it('그룹 값 선택 → IN 절, IS NULL 없음', async () => {
-    const raw = await run({ groupValues: ['모바일', 'PC'] });
+  it('사유 값 선택 → IN 절, IS NULL 없음', async () => {
+    const raw = await run({ errorReasons: ['hard bounce', 'mailbox full'] });
     expect(raw).toContain('NULLIF');
     expect(raw).toContain(' IN ');
-    expect(raw).toContain('모바일');
-    expect(raw).toContain('PC');
+    expect(raw).toContain('hard bounce');
+    expect(raw).toContain('mailbox full');
     expect(raw).not.toContain('IS NULL');
   });
 
   it('"없음" 단독 → IN 절 없이 IS NULL', async () => {
-    const raw = await run({ groupValues: [FILTER_NONE_VALUE] });
+    const raw = await run({ errorReasons: [FILTER_NONE_VALUE] });
     expect(raw).toContain('IS NULL');
     expect(raw).not.toContain(' IN ');
     // 센티널 문자열이 값으로 새어 들어가면 안 된다.
@@ -164,7 +160,7 @@ describe('listCampaignRecipients — 깔때기 조건', () => {
   });
 
   it('빈 문자열을 NULL 과 같은 "없음" 으로 접는다 — 표의 공백 표시와 일치', async () => {
-    const raw = await run({ groupValues: [FILTER_NONE_VALUE] });
+    const raw = await run({ errorReasons: [FILTER_NONE_VALUE] });
     expect(raw).toContain("NULLIF");
   });
 
@@ -184,8 +180,8 @@ describe('listCampaignRecipients — 깔때기 조건', () => {
   });
 
   it('두 축을 함께 걸면 AND 로 결합된다', async () => {
-    const raw = await run({ groupValues: ['모바일'], errorReasons: ['hard bounce'] });
-    expect(raw).toContain('모바일');
+    const raw = await run({ resultCodes: ['1.조사완료'], errorReasons: ['hard bounce'] });
+    expect(raw).toContain('1.조사완료');
     expect(raw).toContain('hard bounce');
     expect(raw.split('NULLIF').length - 1).toBeGreaterThanOrEqual(2);
   });
@@ -225,7 +221,7 @@ describe('listCampaignRecipientFacets — 깔때기 선택지 조회', () => {
       scope: 'real',
     });
 
-    expect(facets.groupValues.length).toBeLessThanOrEqual(200);
-    expect(facets.groupValues.length).toBeGreaterThan(0);
+    expect(facets.errorReasons.length).toBeLessThanOrEqual(200);
+    expect(facets.errorReasons.length).toBeGreaterThan(0);
   });
 });

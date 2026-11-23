@@ -32,7 +32,6 @@ import {
   attrsNaturalSortExprs,
   buildContactsFilterSql,
   defaultSortOrderExprs,
-  groupValueExpr,
   latestResultCodeExpr,
   latestResultUnsubscribedSql,
   linkClickStateExpr,
@@ -63,7 +62,6 @@ import type {
 import type {
   CampaignCandidateRow,
   CampaignExclusionCounts,
-  CampaignGroupFacet,
   CampaignRecipientRow,
   CampaignListSortKey,
   CampaignRow,
@@ -326,7 +324,6 @@ export interface ListCampaignRecipientsResult {
  * 빈 문자열은 NULL 과 같은 "없음" 으로 접는다 — 표가 둘 다 '—'/공백 으로 그리므로
  * 화면과 필터가 어긋나지 않게 하려면 여기서 합쳐야 한다.
  */
-const RECIPIENT_GROUP_EXPR = sql`NULLIF(${contactTargets.groupValue}, '')`;
 const RECIPIENT_ERROR_EXPR = sql`NULLIF(${mailRecipients.errorReason}, '')`;
 // 컨택결과는 조사 대상 목록과 같은 표현식을 공유한다 — 두 화면이 같은 값을 보여야 한다.
 // latestResultCodeExpr 는 "contact_targets"."id" 로 상관되므로 이 쿼리의 LEFT JOIN 별칭과 맞는다.
@@ -355,14 +352,10 @@ function buildRecipientFacetCond(expr: SQL, values: string[] | undefined): SQL |
 }
 
 export interface CampaignRecipientFacets {
-  /** 이 캠페인 수신자에 실제로 등장하는 그룹 값 (NULL 제외, 오름차순) */
-  groupValues: string[];
   /** 이 캠페인 수신자에 실제로 등장하는 반송/실패 사유 (NULL 제외, 오름차순) */
   errorReasons: string[];
   /** 이 캠페인 수신자에 실제로 등장하는 컨택결과 코드 (NULL 제외, 오름차순) */
   resultCodes: string[];
-  /** 그룹 없음 행이 존재하는지 — 빈 값 선택지 노출 판단용 */
-  hasEmptyGroup: boolean;
   /** 사유 없음 행이 존재하는지 */
   hasEmptyError: boolean;
   /** 컨택결과 없음 행이 존재하는지 */
@@ -395,7 +388,7 @@ export async function listCampaignRecipientFacets(args: {
   /**
    * 축 하나의 distinct 값 + 빈 값 존재 여부.
    *
-   * 축을 합쳐 한 번에 DISTINCT 하면 (그룹 × 사유 × 결과코드) 조합 수만큼 행이 나온다.
+   * 축을 합쳐 한 번에 DISTINCT 하면 (사유 × 결과코드) 조합 수만큼 행이 나온다.
    * 반송 사유처럼 행마다 거의 고유한 값이 섞이면 수신자 수만큼이 그대로 앱으로 넘어오므로,
    * 축별로 나눠 LIMIT 을 SQL 에 내려 전송량을 상한에 묶는다.
    *
@@ -426,17 +419,14 @@ export async function listCampaignRecipientFacets(args: {
     return { values, hasEmpty };
   };
 
-  const [group, error, result] = await Promise.all([
-    facetOf(RECIPIENT_GROUP_EXPR),
+  const [error, result] = await Promise.all([
     facetOf(RECIPIENT_ERROR_EXPR),
     facetOf(RECIPIENT_RESULT_EXPR),
   ]);
 
   return {
-    groupValues: group.values,
     errorReasons: error.values,
     resultCodes: result.values,
-    hasEmptyGroup: group.hasEmpty,
     hasEmptyError: error.hasEmpty,
     hasEmptyResult: result.hasEmpty,
   };
@@ -451,8 +441,6 @@ export async function listCampaignRecipients(args: {
   /** 필터할 status 목록. 빈 배열 또는 미지정 = 전체. */
   statuses?: MailRecipientStatus[];
   q?: string;
-  /** 깔때기 — contact_targets.group_value. FILTER_NONE_VALUE 는 그룹 없음(NULL). */
-  groupValues?: string[];
   /** 깔때기 — mail_recipients.error_reason. FILTER_NONE_VALUE 는 사유 없음(NULL/빈 문자열). */
   errorReasons?: string[];
   /** 깔때기 — 컨택 최신 회차 result_code. FILTER_NONE_VALUE 는 결과 없음(NULL). */
@@ -491,8 +479,6 @@ export async function listCampaignRecipients(args: {
     const escaped = escapeLikePattern(q);
     whereParts.push(sql`${mailRecipients.emailSnapshot} ILIKE ${'%' + escaped + '%'}`);
   }
-  const groupCond = buildRecipientFacetCond(RECIPIENT_GROUP_EXPR, args.groupValues);
-  if (groupCond) whereParts.push(groupCond);
   const errorCond = buildRecipientFacetCond(RECIPIENT_ERROR_EXPR, args.errorReasons);
   if (errorCond) whereParts.push(errorCond);
   const resultCond = buildRecipientFacetCond(RECIPIENT_RESULT_EXPR, args.resultCodes);
@@ -503,7 +489,7 @@ export async function listCampaignRecipients(args: {
     .select({ total: sql<number>`count(*)::int` })
     .from(mailRecipients)
     .innerJoin(mailCampaigns, eq(mailRecipients.campaignId, mailCampaigns.id))
-    // where 가 컨택 상관 조건(그룹·최근 결과코드)을 담을 수 있으므로 행 조회와 같은
+    // where 가 컨택 상관 조건(최근 결과코드)을 담을 수 있으므로 행 조회와 같은
     // 조인 집합을 가져야 한다. 빠뜨리면 PG 가 missing FROM-clause entry 로 거절한다.
     .leftJoin(contactTargets, eq(mailRecipients.contactTargetId, contactTargets.id))
     .where(where);
@@ -517,7 +503,6 @@ export async function listCampaignRecipients(args: {
       id: mailRecipients.id,
       contactTargetId: mailRecipients.contactTargetId,
       contactResid: contactTargets.resid,
-      contactGroupValue: contactTargets.groupValue,
       contactAttrs: contactTargets.attrs,
       contactAssignmentName: assignmentNameExpr(args.includeAssignment),
       contactLatestResultCode: sql<string | null>`${RECIPIENT_RESULT_EXPR}`,
@@ -555,7 +540,6 @@ export async function listCampaignRecipients(args: {
       id: r.id,
       contactTargetId: r.contactTargetId,
       contactResid: r.contactResid,
-      contactGroupValue: r.contactGroupValue,
       contactAttrs: (r.contactAttrs ?? {}) as Record<string, string>,
       contactPiiMasks: (r.contactTargetId && piiMasks.get(r.contactTargetId)) || {},
       contactAssignmentName: r.contactAssignmentName,
@@ -591,8 +575,6 @@ export interface CampaignCandidatesResult {
   page: number;
   /** 필터 base 안에서 자동 제외 정책에 걸린 인원 (사유별, 중복 없음) */
   exclusions: CampaignExclusionCounts;
-  /** 「그룹」 열 머리 필터의 선택지 — `includeGroupFacet` 을 켠 호출(위저드 화면)에만 실린다 */
-  groupFacet?: CampaignGroupFacet;
 }
 
 export const CAMPAIGN_SORT_KEYS: readonly CampaignSortKey[] = [
@@ -913,8 +895,6 @@ export async function previewCampaignCandidates(args: {
   piiMaskKeys?: readonly string[];
   /** 컨택원 이름을 행에 싣는가 — 컨택원 열을 메일 표시로 켠 비게스트 화면만 켠다. */
   includeAssignment?: boolean;
-  /** 「그룹」 열 머리 필터의 선택지를 함께 읽는가 — 위저드 화면만 켠다(id 만 모으는 호출은 읽지 않는다). */
-  includeGroupFacet?: boolean;
 }): Promise<CampaignCandidatesResult> {
   const pageSize = args.pageSize ?? DEFAULT_PAGE_SIZE;
   const [{ negative: negativeCodes }, bouncedContactIds, emailOrder] = await Promise.all([
@@ -932,7 +912,7 @@ export async function previewCampaignCandidates(args: {
     emailOrder,
   );
 
-  const [[countRow], exclusions, groupFacet] = await Promise.all([
+  const [[countRow], exclusions] = await Promise.all([
     db
       .select({ total: sql<number>`count(*)::int` })
       .from(contactTargets)
@@ -946,13 +926,6 @@ export async function previewCampaignCandidates(args: {
       bouncedContactIds,
       emailOrder,
     ),
-    args.includeGroupFacet
-      ? loadCandidateGroupFacet(
-          // 지금 걸린 조건·「미응답자만」은 빼고 센다 — 엑셀 오토필터처럼 고를 수 있는 값 전체를 보여 준다.
-          // 조건을 함께 걸면 한 값을 고르는 순간 나머지 선택지가 사라진다(수신자 표 깔때기와 같은 규칙).
-          buildCandidateWhere(args.surveyId, args.scope, [], false, negativeCodes, emailOrder),
-        )
-      : Promise.resolve(undefined),
   ]);
   const total = countRow?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -963,7 +936,6 @@ export async function previewCampaignCandidates(args: {
     .select({
       id: contactTargets.id,
       resid: contactTargets.resid,
-      groupValue: contactTargets.groupValue,
       attrs: contactTargets.attrs,
       assignmentName: assignmentNameExpr(args.includeAssignment).as('assignment_name'),
       respondedAt: contactTargets.respondedAt,
@@ -1000,7 +972,6 @@ export async function previewCampaignCandidates(args: {
       resid: r.resid,
       email: '', // candidate row 에서는 평문 비공개 — UI 는 emailMasked 만 표시
       emailMasked: maskMap.get(r.id) || EMAIL_DASH,
-      groupValue: r.groupValue,
       attrs: (r.attrs ?? {}) as Record<string, string>,
       piiMasks: piiMasks.get(r.id) ?? {},
       assignmentName: r.assignmentName,
@@ -1014,35 +985,6 @@ export async function previewCampaignCandidates(args: {
     total,
     page: clampedPage,
     exclusions,
-    ...(groupFacet ? { groupFacet } : {}),
-  };
-}
-
-/**
- * 위저드 미리보기 「그룹」 열 머리 필터의 선택지 — 발송 후보(자동 제외 정책을 지난 대상)에 실제로 있는 그룹 값.
- * 식은 필터 절과 같은 `groupValueExpr` 다(빈 글자 = 없음). 정렬·센티널 제외는 수신자 표 깔때기
- * (`listCampaignRecipientFacets`)와 같다 — NULLS FIRST 가 「없음」 판정을 LIMIT 에서 보호한다.
- * 상한을 넘으면 `truncated` 로 알린다(업체명을 분류 기준으로 둔 명단은 그룹이 수천 개다).
- */
-async function loadCandidateGroupFacet(where: SQL): Promise<CampaignGroupFacet> {
-  const rows = await db
-    .selectDistinct({ v: groupValueExpr })
-    .from(contactTargets)
-    .where(where)
-    // ORDER BY 1 (위치 지정) — 식을 다시 쓰면 DISTINCT select list 와 다른 식으로 취급돼 PG 가 거부한다.
-    .orderBy(sql`1 ASC NULLS FIRST`)
-    .limit(FACET_LIMIT + 2);
-
-  const present = rows.map((r) => r.v).filter((v): v is string => v != null);
-  return {
-    hasEmpty: rows.some((r) => r.v == null),
-    // 상한을 넘으면 앞 200개만 고를 수 있는 목록이 된다 — 자르지 않고 알려 화면이 검색 입력으로 바꾼다.
-    truncated: present.length > FACET_LIMIT,
-    values: present
-      // 센티널과 같은 실제 값은 선택지에서 뺀다 — 파서가 그것을 「없음」으로 승격시킨다.
-      .filter((v) => v !== FILTER_NONE_VALUE)
-      .sort((a, b) => a.localeCompare(b, 'ko', { numeric: true }))
-      .slice(0, FACET_LIMIT),
   };
 }
 
@@ -1117,7 +1059,6 @@ export async function listUnsubscribedContacts(args: {
     .select({
       id: contactTargets.id,
       resid: contactTargets.resid,
-      groupValue: contactTargets.groupValue,
       attrs: contactTargets.attrs,
       assignmentName: assignmentNameExpr(args.includeAssignment).as('assignment_name'),
       unsubscribedAt: contactTargets.unsubscribedAt,
@@ -1148,7 +1089,6 @@ export async function listUnsubscribedContacts(args: {
       id: r.id,
       resid: r.resid,
       emailMasked: maskMap.get(r.id) || EMAIL_DASH,
-      groupValue: r.groupValue,
       attrs: (r.attrs ?? {}) as Record<string, string>,
       piiMasks: piiMasks.get(r.id) ?? {},
       assignmentName: r.assignmentName,

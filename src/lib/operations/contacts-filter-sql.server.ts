@@ -165,13 +165,6 @@ export interface ClauseColumnRefs {
 // 「현재 컨택원」 — contact_targets 전용 컬럼이라 refs 주입과 무관하다 (응답 내역 파서는 미생성).
 const CONTACT_OWNER_COL = sql`"contact_targets".assignment_id`;
 
-/**
- * 그룹 값 — 빈 글자는 NULL 과 같은 「없음」으로 접는다. 단체 메일 위저드의 열 머리 필터(아래 in 절)와
- * 그 선택지 목록(campaigns-read)이 이 식 하나를 쓴다 — 갈리면 선택지에서 고른 값과 걸리는 행이 어긋난다.
- * contact_targets 전용 컬럼이라 refs 주입과 무관하다.
- */
-export const groupValueExpr = sql<string | null>`NULLIF("contact_targets".group_value, '')`;
-
 const CONTACT_TARGET_REFS: ClauseColumnRefs = {
   resid: sql`"contact_targets".resid`,
   attrs: sql`"contact_targets".attrs`,
@@ -270,11 +263,6 @@ export function buildClauseSql(
 
   if (cond.source === FILTER_SOURCE.EMAIL && cond.mode === 'boolean') {
     return mailStatusCondSql(cond.value);
-  }
-
-  if (cond.source === FILTER_SOURCE.GROUP && cond.mode === 'text') {
-    // 그룹 값이 많은 설문의 검색 입력 — 글자 부분 일치(체크박스는 위 in 분기).
-    return sql`${groupValueExpr} ILIKE '%' || ${escapeLikePattern(cond.value)} || '%'`;
   }
 
   if (cond.source === FILTER_SOURCE.LINK_CLICK && cond.mode === 'boolean') {
@@ -453,23 +441,6 @@ function buildInClauseSql(cond: FilterCondition, refs: ClauseColumnRefs): SQL {
       );
     }
     if (cond.includeNull === true) parts.push(sql`${CONTACT_OWNER_COL} IS NULL`);
-    return sql`(${sql.join(parts, sql` OR `)})`;
-  }
-
-  if (cond.source === FILTER_SOURCE.GROUP) {
-    if (cond.excludeNull === true) return sql`${groupValueExpr} IS NOT NULL`;
-    // 그룹 IN 목록과 그룹 없음(IS NULL)을 OR 로 묶는다 — NULL 은 IN 으로 표현 불가.
-    const parts: SQL[] = [];
-    if (values.length > 0) {
-      parts.push(
-        sql`${groupValueExpr} IN (${sql.join(
-          values.map((v) => sql`${v}`),
-          sql`, `,
-        )})`,
-      );
-    }
-    if (cond.includeNull === true) parts.push(sql`${groupValueExpr} IS NULL`);
-    if (parts.length === 0) return sql`FALSE`;
     return sql`(${sql.join(parts, sql` OR `)})`;
   }
 

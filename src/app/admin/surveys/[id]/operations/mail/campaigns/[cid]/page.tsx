@@ -99,15 +99,12 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
   ).filter(
     (e) =>
       e.mode === 'in' &&
-      (e.source === RECIPIENT_FILTER_SOURCE.GROUP ||
-        e.source === RECIPIENT_FILTER_SOURCE.ERROR ||
-        e.source === RECIPIENT_FILTER_SOURCE.RESULT),
+      (e.source === RECIPIENT_FILTER_SOURCE.ERROR || e.source === RECIPIENT_FILTER_SOURCE.RESULT),
   );
   const facetValuesOf = (source: string): string[] => {
     const entry = headerEntries.find((e) => e.source === source);
     return entry ? splitHeaderValues(entry.hv) : [];
   };
-  const groupValues = facetValuesOf(RECIPIENT_FILTER_SOURCE.GROUP);
   const errorReasons = facetValuesOf(RECIPIENT_FILTER_SOURCE.ERROR);
   const resultCodes = facetValuesOf(RECIPIENT_FILTER_SOURCE.RESULT);
 
@@ -132,7 +129,6 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
       pageSize: PAGE_SIZE,
       statuses,
       q,
-      groupValues,
       errorReasons,
       resultCodes,
       piiMaskKeys: mailPiiMaskKeys(mailColumns),
@@ -143,9 +139,6 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
   ]);
 
   // 깔때기 체크박스 선택지 — 빈 값 항목은 실제로 그런 행이 있을 때만 내민다.
-  const groupOptions = facets.hasEmptyGroup
-    ? withNoneOption(facets.groupValues.map((v) => ({ value: v, label: v })))
-    : facets.groupValues.map((v) => ({ value: v, label: v }));
   const errorOptions = facets.hasEmptyError
     ? withNoneOption(facets.errorReasons.map((v) => ({ value: v, label: v })))
     : facets.errorReasons.map((v) => ({ value: v, label: v }));
@@ -326,7 +319,6 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
         currentStatuses={statuses}
         currentQuery={q}
         headerEntries={headerEntries}
-        groupOptions={groupOptions}
         errorOptions={errorOptions}
         resultOptions={resultOptions}
         mailColumns={mailColumns}

@@ -21,7 +21,6 @@ function recipient(overrides: Partial<CampaignRecipientRow>): CampaignRecipientR
     id: 'r-1',
     contactTargetId: 'ct-1',
     contactResid: 1,
-    contactGroupValue: null,
     contactAttrs: {},
     contactPiiMasks: {},
     contactAssignmentName: null,
@@ -58,7 +57,6 @@ function renderTable(
         currentStatuses={[]}
         currentQuery=""
         headerEntries={[]}
-        groupOptions={[]}
         errorOptions={[]}
         resultOptions={[]}
         mailColumns={mailColumns}
@@ -94,10 +92,11 @@ describe('CampaignRecipientsTable 메일 표시 컬럼', () => {
     expect(columnCells('리스트 ID')).toEqual(['L-001', '—']);
   });
 
-  it('메일 표시 컬럼이 없으면 고정 10열 그대로다', () => {
+  it('메일 표시 컬럼이 없으면 고정 9열이다 — 그룹 칸은 없다', () => {
     renderTable([recipient({ contactAttrs: { 리스트ID: 'L-001' } })], []);
 
-    expect(headerLabels()).toHaveLength(10);
+    expect(headerLabels()).toHaveLength(9);
+    expect(headerLabels().some((l) => l.includes('그룹'))).toBe(false);
     expect(screen.queryByText('L-001')).not.toBeInTheDocument();
   });
 
@@ -116,7 +115,7 @@ describe('CampaignRecipientsTable 메일 표시 컬럼', () => {
   it('시스템ID 를 끄면 그 열이 빠진다', () => {
     renderTable([recipient({})], [], false);
 
-    expect(headerLabels()).toHaveLength(9);
+    expect(headerLabels()).toHaveLength(8);
     expect(headerLabels()).not.toContain('시스템ID');
   });
 });

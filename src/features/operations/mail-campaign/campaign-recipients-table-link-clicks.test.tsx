@@ -20,7 +20,6 @@ function recipient(overrides: Partial<CampaignRecipientRow>): CampaignRecipientR
     id: 'r-1',
     contactTargetId: 'ct-1',
     contactResid: 1,
-    contactGroupValue: null,
     contactAttrs: {},
     contactPiiMasks: {},
     contactAssignmentName: null,
@@ -53,7 +52,6 @@ function renderTable(rows: CampaignRecipientRow[]) {
         currentStatuses={[]}
         currentQuery=""
         headerEntries={[]}
-        groupOptions={[]}
         errorOptions={[]}
         resultOptions={[]}
         mailColumns={[]}

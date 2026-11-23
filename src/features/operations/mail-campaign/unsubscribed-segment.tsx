@@ -71,7 +71,6 @@ export function UnsubscribedSegment({
                     </th>
                   ))}
                   <th className="px-4 py-3">이메일</th>
-                  <th className="px-4 py-3">그룹</th>
                   <th className="px-4 py-3">경로</th>
                   <th className="px-4 py-3">해지 시각</th>
                   <th className="px-4 py-3 text-center">관리</th>
@@ -94,7 +93,6 @@ export function UnsubscribedSegment({
                         </td>
                       ))}
                       <td className="px-4 py-3 text-slate-900">{r.emailMasked}</td>
-                      <td className="px-4 py-3 text-slate-600">{r.groupValue ?? '—'}</td>
                       <td className="px-4 py-3 text-xs text-slate-500">
                         {[
                           r.unsubscribedAt ? '메일 해지' : null,

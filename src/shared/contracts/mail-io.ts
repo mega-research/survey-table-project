@@ -85,7 +85,6 @@ export interface CampaignRecipientRow {
   id: string;
   contactTargetId: string | null;
   contactResid: number | null;
-  contactGroupValue: string | null;
   /** 조사 대상 attrs 전체 — 컬럼 스킴의 showInMail 열을 표에 띄우기 위해 실어 보낸다 */
   contactAttrs: Record<string, string>;
   /** 메일 표시를 켠 개인정보 열의 마스킹 힌트 (column_key → 힌트). 켠 열이 없으면 빈 객체 */
@@ -114,7 +113,6 @@ export interface CampaignCandidateRow {
   resid: number;
   email: string;
   emailMasked: string;
-  groupValue: string | null;
   attrs: Record<string, string>;
   /** 메일 표시를 켠 개인정보 열의 마스킹 힌트 (column_key → 힌트). 켠 열이 없으면 빈 객체 */
   piiMasks: Record<string, string>;
@@ -138,7 +136,7 @@ export interface CampaignCandidateRow {
   linkClick: LinkClickState | null;
 }
 
-/** 미리보기 정렬 — 번호 / 응답여부 / 수신 상황 / 최근 결과코드. 이메일·그룹은 PII·비용 사유로 제외. */
+/** 미리보기 정렬 — 번호 / 응답여부 / 수신 상황 / 최근 결과코드. 이메일은 암호문이라 정렬이 없다. */
 export type CampaignSortKey = 'resid' | 'responded' | 'mailStatus' | 'resultCode';
 
 /**
@@ -160,27 +158,10 @@ export interface CampaignExclusionCounts {
   bounced: number;
 }
 
-/**
- * 단체 메일 위저드 미리보기 「그룹」 열 머리 필터의 선택지 — 발송 후보에 실제로 있는 그룹 값.
- * 지금 걸린 조건과 무관하게 후보 전체에서 뽑는다(한 값을 골라도 나머지 선택지가 남는다).
- */
-export interface CampaignGroupFacet {
-  /** 그룹 값(빈 값 제외, 숫자 인식 오름차순). `truncated` 면 일부뿐이라 선택지로 쓰지 않는다. */
-  values: string[];
-  /** 그룹이 빈 후보가 있는가 — 「— (없음)」 선택지를 낼지 */
-  hasEmpty: boolean;
-  /**
-   * 그룹 값이 상한을 넘었는가 — 업체명처럼 대상마다 다른 값을 분류 기준으로 둔 명단이다.
-   * 화면은 체크박스 대신 검색 입력을 낸다(명단 열 깔때기의 고유값 많음 폴백과 같다).
-   */
-  truncated: boolean;
-}
-
 export interface UnsubscribedContactRow {
   id: string;
   resid: number;
   emailMasked: string;
-  groupValue: string | null;
   attrs: Record<string, string>;
   /** 메일 표시를 켠 개인정보 열의 마스킹 힌트 (column_key → 힌트). 켠 열이 없으면 빈 객체 */
   piiMasks: Record<string, string>;
