@@ -14,6 +14,8 @@ import { expandHeaderGrid } from './expand-header-grid';
  *   5칸 이하 칸 안 라벨, 6칸 이상(구간 줄 없음)은 막대 아래 칸 이름 목록
  *   칸 줄이 둘이면(이름 줄 + 번호 줄) 칸 글자는 아래 줄, 이름은 번호뿐이 아닌 가장 가까운 줄(cellNameAt)
  * - 구간 줄: 그 밖(여러 칸을 묶었거나 일부 칸만 이름이 있다) — 구간 띠·양끝/가운데 라벨·선택값 표시
+ *   칸 글자가 빈 칸을 그 칸만 덮는 한 칸짜리 이름이 덮으면 그 이름이 칸 글자가 되고 구간에서는 빠진다
+ *   (머리에만 「미참여」를 적고 칸에는 컨트롤만 둔 척도 밖 보기 칸)
  *
  * 고정 문구는 없다. 모든 글자는 보기 칸의 평문 content 와 헤더에서만 읽는다 — exportLabel 은
  * 내보내기용이라 화면에 쓰지 않는다. 그릴 수 없으면 이유 코드와 함께 폴백을 돌려주고, 호출부는
@@ -283,24 +285,34 @@ export function projectScaleBar(input: ProjectScaleBarInput): ScaleBarProjection
       ? classifyHeaderLines(input.headerGrid, first, count)
       : columnLabelLines(columns, first, count);
   const cellLine = lastLine(lines, 'cells');
+  const bandLine = lastLine(lines, 'bands') ?? [];
 
+  // 칸 글자의 출처는 보기 칸 글자 → 칸 줄 → 그 칸만 덮는 한 칸짜리 구간 이름 순이다. 마지막은 머리에만
+  // 「미참여」를 적고 칸에는 컨트롤만 둔 척도 밖 보기 칸이다 — 그 이름은 구간이 아니라 칸의 이름이라
+  // 구간에서 뺀다(남기면 양끝 라벨·선택값 표시가 칸 글자를 되풀이하고 척도 끝 구간의 이름을 밀어낸다).
+  // 보기 칸 글자가 있는 칸은 종전대로 읽는다 — 이 출처는 전에 「칸 글자 없음」 폴백이던 막대에서만 쓰인다.
   const texts: string[] = [];
+  const namedByBand = new Set<number>();
   for (let i = 0; i < count; i += 1) {
     const own = normalizeLabel(targetCells[i]!.content ?? '');
     if (own !== '') {
       texts.push(own);
       continue;
     }
-    const fromHeader = cellLine?.[i]?.label ?? '';
-    if (fromHeader === '') return fallback('missing-text');
-    texts.push(fromHeader);
+    const fromCellLine = cellLine?.[i]?.label ?? '';
+    if (fromCellLine !== '') {
+      texts.push(fromCellLine);
+      continue;
+    }
+    const ownBand = bandLine.find((band) => band.start === i && band.span === 1);
+    if (!ownBand) return fallback('missing-text');
+    texts.push(ownBand.label);
+    namedByBand.add(i);
   }
 
-  const bands: ScaleBarBand[] = (lastLine(lines, 'bands') ?? []).map(({ label, start, span }) => ({
-    label,
-    start,
-    span,
-  }));
+  const bands: ScaleBarBand[] = bandLine
+    .filter((band) => !(band.span === 1 && namedByBand.has(band.start)))
+    .map(({ label, start, span }) => ({ label, start, span }));
   const bandIndexAt = (i: number): number | null => {
     const found = bands.findIndex((band) => i >= band.start && i < band.start + band.span);
     return found < 0 ? null : found;
