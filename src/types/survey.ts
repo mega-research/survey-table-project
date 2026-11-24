@@ -8,6 +8,7 @@ import type {
 } from '@/shared/contracts/survey';
 import type { InputType } from '@/types/input-type';
 import type { MobileTableDisplayMode } from '@/types/mobile-table-display';
+import type { ScaleSliderDirection } from '@/types/scale-slider';
 import type { SurveyLocale } from '@/types/survey-locale';
 
 // 타입 정의만 그대로 되내보낸다 — 정의는 각각 한 곳뿐이라 드리프트가 생길 수 없고,
@@ -958,6 +959,12 @@ export interface ChoiceGroup {
   // 적는다. 기본 꺼짐(한 칸짜리 정가운데 구간만 가운데 라벨). 양끝 이름이 길면 겹칠 수 있어 그룹마다 켠다.
   // 빌더 화면 없이 스크립트로 적는다. 판정은 choice-group-scale-bar 의 projectScaleBar.
   mobileScaleBarMiddleLabel?: boolean;
+  // 이 그룹을 척도 슬라이더(타일 줄 + 트랙)로 그린다 — 값이 있으면 켜진 것이고 그 값이 긍정 방향이다
+  // (어휘 @/types/scale-slider). 모바일 전용인 위 두 모양과 달리 웹과 모바일 둘 다에 적용한다. 보기 모양 넷은
+  // 서로 배타이고 읽기 우선순위는 슬라이더 → 척도 막대 → 원본 한 줄 → 세로 타일이다 — 읽기·쓰기는
+  // features/question-renderer/utils/choice-group-mobile-view. radio 그룹 전용(순위·체크박스 그룹에 적힌 값은
+  // 읽지 않는다).
+  scaleSlider?: ScaleSliderDirection;
 }
 
 export interface TableColumn {
