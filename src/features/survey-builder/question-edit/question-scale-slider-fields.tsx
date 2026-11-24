@@ -7,8 +7,16 @@ import { SlidersHorizontal } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import {
+  type QuestionScaleSliderDiagnosis,
+  RADIO_SLIDER_CRAMPED_TILE_MIN_TICKS,
+} from '@/features/survey-builder/lib/scale-slider-diagnostics';
+import { ScaleSliderDirectionField } from '@/features/survey-builder/scale-slider-direction-field';
+import {
+  ScaleSliderInfoNote,
+  ScaleSliderIssueAlert,
+} from '@/features/survey-builder/table-editor/scale-slider-guidance';
+import {
   DEFAULT_SCALE_SLIDER_DIRECTION,
-  SCALE_SLIDER_DIRECTIONS,
   type ScaleSliderDirection,
   isScaleSliderDirection,
 } from '@/types/scale-slider';
@@ -26,29 +34,34 @@ import type { Question } from '@/types/survey';
  *   `buildFormDataFromQuestion` 이 이 필드를 싣는다). 스토어에 따로 쓰지 않으므로 저장 머지 목록이 필요 없다.
  * - 다른 폼 값은 건드리지 않는다 — 보기 열 배치는 슬라이더로 그리는 동안 읽히지 않을 뿐 값은 남는다
  *   (슬라이더로 그릴 수 없는 문항은 그 배치로 그려진다).
- * - **어느 문항에 보일지는 부르는 쪽이 정한다**(문항 편집의 기본 탭 — 보통 라디오 문항).
- * - 방향은 두 값이라 보이는 native radio 묶음(`fieldset` + `legend`)으로 낸다. 라디오는 보이지 않게 두고
- *   바로 뒤의 라벨이 눌리는 자리다 — 고른 상태는 라디오의 `:checked` 로 칠한다.
+ * - **어느 문항에 보일지는 부르는 쪽이 정한다**(문항 편집의 기본 탭 — 보통 라디오 문항 · 그룹 없는 설명 테이블).
+ * - 방향 고르기는 묶음 편집과 같은 조각이다(scale-slider-direction-field).
+ * - **경고와 안내는 진단이 정한다**(`diagnosis` — scale-slider-diagnostics 의 `diagnoseQuestionScaleSlider`).
+ *   부르는 쪽이 편집 중인 폼 값으로 돌려 넘기고, 이 조각은 켜져 있을 때만 그 결과를 글자로 옮긴다. 못 그리는
+ *   것은 경고 상자, 그려지지만 알아 둘 것(휴대폰의 좁은 타일 · 답이 문항에 하나)은 막지 않는 안내 줄이다.
  */
-
-const DIRECTION_LABELS: Readonly<Record<ScaleSliderDirection, string>> = {
-  'positive-right': '오른쪽이 긍정',
-  'positive-left': '왼쪽이 긍정',
-};
 
 interface QuestionScaleSliderFieldsProps {
   formData: Partial<Question>;
   setFormData: React.Dispatch<React.SetStateAction<Partial<Question>>>;
+  /** 보기를 설명 테이블로 구성한 문항인가 — 켜면 표가 행 단위로 그려진다는 것을 스위치 설명에 적는다 */
+  tableMode?: boolean | undefined;
+  /** 편집 중인 문항의 슬라이더 진단. 없으면 경고·안내를 그리지 않는다 */
+  diagnosis?: QuestionScaleSliderDiagnosis | undefined;
 }
 
 export function QuestionScaleSliderFields({
   formData,
   setFormData,
+  tableMode = false,
+  diagnosis,
 }: QuestionScaleSliderFieldsProps) {
   const id = useId();
   const direction = isScaleSliderDirection(formData.scaleSlider) ? formData.scaleSlider : null;
   const write = (next: ScaleSliderDirection | null) =>
     setFormData((prev) => ({ ...prev, scaleSlider: next }));
+  // 문항 설정이 읽히는 문항의 진단만 쓴다. 아래에서 켜져 있을 때만 그리므로 끈 뒤의 진단은 보이지 않는다
+  const active = diagnosis && diagnosis.target !== null ? diagnosis : null;
 
   return (
     <div className="space-y-3 rounded-md border border-gray-200 bg-white p-3">
@@ -59,7 +72,9 @@ export function QuestionScaleSliderFields({
             척도 슬라이더로 그리기
           </Label>
           <p id={`${id}-switch-help`} className="text-xs text-gray-500">
-            보기를 타일 줄과 트랙으로 그립니다. 웹과 모바일 둘 다에 적용됩니다.
+            {tableMode
+              ? '보기 칸을 행마다 타일 줄과 트랙으로 그립니다. 웹과 모바일 둘 다에 적용되고, 표는 웹에서도 표 대신 행 단위로 그려집니다.'
+              : '보기를 타일 줄과 트랙으로 그립니다. 웹과 모바일 둘 다에 적용됩니다.'}
           </p>
         </div>
         <Switch
@@ -71,39 +86,28 @@ export function QuestionScaleSliderFields({
       </div>
 
       {direction !== null && (
-        <div className="border-t border-gray-200 pt-3">
-          <fieldset
-            aria-describedby={`${id}-direction-help`}
-            className="m-0 min-w-0 border-0 p-0"
-          >
-            <legend className="mb-1.5 p-0 text-xs font-medium text-gray-700">긍정 방향</legend>
-            <div className="inline-flex gap-0.5 rounded-lg bg-gray-100 p-0.5">
-              {SCALE_SLIDER_DIRECTIONS.map((value) => (
-                // relative — 숨긴 라디오가 제 칸 안에 머물러, 포커스가 갈 때 화면이 엉뚱한 곳으로 튀지 않는다
-                <span key={value} className="relative">
-                  <input
-                    type="radio"
-                    id={`${id}-${value}`}
-                    name={`${id}-direction`}
-                    value={value}
-                    checked={direction === value}
-                    onChange={() => write(value)}
-                    className="peer sr-only"
-                  />
-                  <label
-                    htmlFor={`${id}-${value}`}
-                    className="block cursor-pointer rounded-md border border-transparent px-3 py-1.5 text-xs text-gray-600 transition-colors select-none peer-checked:border-gray-300 peer-checked:bg-white peer-checked:font-semibold peer-checked:text-gray-900 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-blue-600 hover:text-gray-900 motion-reduce:transition-none"
-                  >
-                    {DIRECTION_LABELS[value]}
-                  </label>
-                </span>
-              ))}
-            </div>
-          </fieldset>
-          <p id={`${id}-direction-help`} className="mt-1.5 text-xs text-gray-500">
-            부정 쪽은 붉은색, 긍정 쪽은 푸른색으로 칠합니다. 보기의 점수로 추정하지 않으니 1점이
-            긍정인 척도는 「왼쪽이 긍정」을 고르세요.
-          </p>
+        <div className="space-y-2 border-t border-gray-200 pt-3">
+          <ScaleSliderDirectionField value={direction} onChange={write} />
+          {active && (
+            <ScaleSliderIssueAlert
+              kind={active.target === 'choice-table' ? 'table' : 'radio-options'}
+              issues={active.issues}
+              drawsNothing={active.drawsNothing}
+            />
+          )}
+          {active?.crampedNarrowTiles && (
+            <ScaleSliderInfoNote>
+              눈금이 {RADIO_SLIDER_CRAMPED_TILE_MIN_TICKS}개 이상이라 휴대폰에서는 타일 글자가 잘게
+              끊깁니다. 보기 라벨이 짧을수록 덜합니다.
+            </ScaleSliderInfoNote>
+          )}
+          {active?.sharedAnswerRows && (
+            <ScaleSliderInfoNote>
+              보기 그룹이 없는 표는 행이 여럿이어도 답이 문항에 하나입니다 — 한 행을 답하면 다른 행의
+              손잡이가 사라집니다. 행마다 따로 답받으려면 행마다 보기 그룹을 만들고, 보기 칸 편집의
+              보기 모양에서 「척도 슬라이더」를 고르세요.
+            </ScaleSliderInfoNote>
+          )}
         </div>
       )}
     </div>

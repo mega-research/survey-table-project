@@ -41,7 +41,8 @@ export interface ScaleBarIssue {
   rowLabels: string[];
 }
 
-function rowLabelOf(row: TableRow, index: number): string {
+/** 경고에 적는 행 이름 — 척도 슬라이더 진단(scale-slider-diagnostics)도 같은 이름을 쓴다 */
+export function scaleRowLabelOf(row: TableRow, index: number): string {
   const label = (row.label ?? '').trim();
   if (label) return label;
   const text = row.cells.find(
@@ -51,11 +52,15 @@ function rowLabelOf(row: TableRow, index: number): string {
   return text ? text.content!.trim() : `${index + 1}행`;
 }
 
-/** 폴백 행을 이유별로 모은다 — 이유는 처음 나온 순서 */
-export function collectScaleBarIssues(
-  failures: ReadonlyArray<{ reason: ScaleBarFallbackReason; rowLabel: string }>,
-): ScaleBarIssue[] {
-  const byReason = new Map<ScaleBarFallbackReason, string[]>();
+/**
+ * 폴백 행을 이유별로 모은다 — 이유는 처음 나온 순서. 문구는 부르는 쪽이 준다(척도 막대와 척도 슬라이더는
+ * 이유 코드가 같아도 뜻이 조금 달라 문구가 따로다).
+ */
+export function collectScaleFallbackIssues<Reason extends string>(
+  failures: ReadonlyArray<{ reason: Reason; rowLabel: string }>,
+  messages: Readonly<Record<Reason, string>>,
+): Array<{ reason: Reason; message: string; rowLabels: string[] }> {
+  const byReason = new Map<Reason, string[]>();
   for (const { reason, rowLabel } of failures) {
     const labels = byReason.get(reason) ?? [];
     if (!labels.includes(rowLabel)) labels.push(rowLabel);
@@ -63,9 +68,16 @@ export function collectScaleBarIssues(
   }
   return [...byReason].map(([reason, rowLabels]) => ({
     reason,
-    message: SCALE_BAR_FALLBACK_MESSAGES[reason],
+    message: messages[reason],
     rowLabels,
   }));
+}
+
+/** 척도 막대의 폴백 행을 이유별로 모은다 */
+export function collectScaleBarIssues(
+  failures: ReadonlyArray<{ reason: ScaleBarFallbackReason; rowLabel: string }>,
+): ScaleBarIssue[] {
+  return collectScaleFallbackIssues(failures, SCALE_BAR_FALLBACK_MESSAGES);
 }
 
 export interface DiagnoseChoiceGroupScaleBarInput {
@@ -99,7 +111,7 @@ export function diagnoseChoiceGroupScaleBar(
       row,
       targetCells,
     });
-    if (!result.ok) failures.push({ reason: result.reason, rowLabel: rowLabelOf(row, index) });
+    if (!result.ok) failures.push({ reason: result.reason, rowLabel: scaleRowLabelOf(row, index) });
   });
   return collectScaleBarIssues(failures);
 }
@@ -160,7 +172,7 @@ export function diagnoseRowScaleBars(input: DiagnoseRowScaleBarsInput): ScaleBar
     const authored = authoredById.get(rowQuestion.rowId);
     const rowLabel =
       rowQuestion.title.trim() ||
-      (authored ? rowLabelOf(authored.row, authored.index) : rowQuestion.rowId);
+      (authored ? scaleRowLabelOf(authored.row, authored.index) : rowQuestion.rowId);
     for (const fallback of fallbacks) failures.push({ reason: fallback.reason, rowLabel });
   }
   return collectScaleBarIssues(failures);
