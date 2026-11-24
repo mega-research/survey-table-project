@@ -550,7 +550,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
         </div>
       </div>
 
-      {/* 화면 폭에 맞춰 표 줄이기 — 좁은 화면(태블릿 세로 등)에서 가로 스크롤 대신 비율로 줄인다 */}
+      {/* 화면 폭에 맞춰 표 줄이기 — 패드 폭(768~1023px)에서 가로 스크롤 대신 비율로 줄인다 */}
       <div className="space-y-3 rounded-lg border border-gray-200 p-4">
         <div className="flex items-center justify-between">
           <div>
@@ -558,9 +558,9 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
               화면 폭에 맞춰 표 줄이기
             </Label>
             <p className="text-xs text-gray-500">
-              화면이 표보다 좁으면(태블릿 세로 등) 가로 스크롤 대신 열 비율대로 표를 줄입니다. 넓은
-              화면에서는 지정한 폭 그대로이고, 휴대폰은 모바일 표시 방식을 따릅니다. 켜면 좌측 고정
-              열은 쓰지 않습니다.
+              패드(창 폭 768~1023px)에서 표가 화면보다 넓으면 가로 스크롤 대신 열 비율대로 표를
+              줄입니다. PC(1024px 이상)는 지정한 폭 그대로이고, 휴대폰은 모바일 표시 방식을 따릅니다.
+              줄인 화면에서는 좌측 고정 열을 쓰지 않습니다.
             </p>
           </div>
           <label className="relative inline-flex cursor-pointer items-center">

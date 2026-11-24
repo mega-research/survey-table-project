@@ -22,8 +22,9 @@ export function calcTotalWidth(columns: TableColumn[]): number {
 /**
  * 표 grid 컨테이너의 폭 스타일. 헤더·본문·가상화 본문이 같은 값을 써야 열이 어긋나지 않는다.
  * - 끔(기본): 열 폭을 px 로 고정한다. 화면이 좁으면 표가 넘쳐 가로 스크롤이 된다.
- * - 켬(문항 설정 fitTableToWidth, 모바일 모드가 아닐 때): 열 폭을 비율(fr)로 바꿔 화면에 맞춰 줄고,
- *   넓은 화면에서는 지정한 총폭을 넘지 않는다. 표가 넘치지 않으므로 좌측 고정 열은 호출측이 끈다.
+ * - 켬(문항 설정 fitTableToWidth 를 켰고 창이 패드 폭일 때 — 판정은 `hooks/use-fit-table-to-width`):
+ *   열 폭을 비율(fr)로 바꿔 화면에 맞춰 줄고, 지정한 총폭을 넘지 않는다. 표가 넘치지 않으므로 좌측
+ *   고정 열은 호출측이 끈다. 데스크톱 폭에서는 켠 문항도 「끔」과 같이 그린다.
  */
 export function resolveTableGridSizing(
   columns: TableColumn[],
