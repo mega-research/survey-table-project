@@ -26,10 +26,12 @@ export const QUOTA_MID_SURVEY_CLOSED_FALLBACK = systemText('default.quotaMidSurv
 export function midSurveyClosedBody(
   serverMessage: string | null | undefined,
   locale: SurveyLocale | null = DEFAULT_SURVEY_LOCALE,
+  /** 언어 미정(`null`)일 때 쌓을 언어 — 그 설문이 제공하는 언어. 주지 않으면 어휘 전체 */
+  stackLocales?: readonly SurveyLocale[],
 ): string {
   return serverMessage && serverMessage.trim()
     ? serverMessage
-    : systemText('default.quotaMidSurveyClosed', locale);
+    : systemText('default.quotaMidSurveyClosed', locale, undefined, stackLocales);
 }
 
 /**

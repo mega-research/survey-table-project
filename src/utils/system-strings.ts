@@ -12,14 +12,14 @@
  *
  * ── 배선과 규칙 ──
  * - **시스템 글자 사전**: 응답 화면의 버튼·진행·필수/형식/범위/합계/품질 검증·입력칸 안내·순위형·표
- *   셀·드릴다운·스테퍼·이미지 크게 보기·조사표·완료/안내 화면 글자는 `src/utils/system-strings.ts` 의 ko·zh·en
+ *   셀·드릴다운·스테퍼·이미지 크게 보기·조사표·완료/안내 화면 글자는 `src/utils/system-strings.ts` 의 ko·zh·en·vi
  *   사전에서 나온다(`systemText(key, locale = 'ko', values?)`, 자리표시자 영문 `{name}`, 한국어 문장은 옮기기
  *   전 글자 그대로).
  * - 문구를 만드는 순수
  *   함수(`resolveRequiredMessage`·`collectNumericIssues`·`formatFailureMessage`·`textQualityViolation`·`midSurveyClosedBody`
  *   등)는 `locale` 인자(기본 `'ko'`)를 받는다.
  * - 저작자 문구(`requiredMessage`·합계 `errorMessage` 등)는 번역하지 않는다.
- * - **한 줄 글자(버튼·진행·필수 안내·토스트·입력칸 안내)는 미정이면 한국어**이고, 세 언어
+ * - **한 줄 글자(버튼·진행·필수 안내·토스트·입력칸 안내)는 미정이면 한국어**이고, 제공 언어
  *   쌓기(`systemTextLines` → `features/survey-response/system-text.tsx` 의 `SystemText`)는 언어가 정해지기 전
  *   전체 화면 안내(초대 필요·이미 응답함·일시중지·PC 안내 등)에만 쓴다 — 언어 페이지에는 버튼이 없기 때문이다.
  * - 이어가기·완료 후 재진입처럼 답을 읽을 수 있으면 그 언어 하나.
@@ -900,10 +900,306 @@ const EN: Dictionary = {
     'We are sorry. Recruitment for your group was completed while you were responding, so you cannot continue. Thank you for taking the time to take part.',
 };
 
+const VI: Dictionary = {
+  'nav.previous': 'Quay lại',
+  'nav.next': 'Tiếp theo',
+  'nav.submitting': 'Đang xử lý...',
+
+  'progress.answered': 'Đã trả lời {answered}/{total}',
+
+  'flow.requiredUnanswered': '* Vui lòng trả lời các câu hỏi bắt buộc',
+  'flow.reedit.before': 'Bạn được phép sửa câu trả lời. Sau khi sửa, bạn phải ',
+  'flow.reedit.emphasis': 'làm đến cuối và gửi lại',
+  'flow.reedit.after':
+    ' thì câu trả lời mới được ghi nhận là hoàn thành. Nếu thoát mà không gửi, khảo sát sẽ không được tính là hoàn thành.',
+  'flow.inviteInvalidAnonymous':
+    'Liên kết mời không hợp lệ, vì vậy bạn sẽ trả lời ở chế độ ẩn danh.',
+  'flow.resumed': 'Tiếp tục câu trả lời trước đó của bạn',
+  'flow.versionRebased': 'Khảo sát đã được cập nhật. Bạn sẽ tiếp tục ở phiên bản mới nhất.',
+
+  'screen.checking': 'Đang kiểm tra...',
+  'screen.loading.title': 'Đang tải khảo sát...',
+  'screen.loading.body': 'Vui lòng chờ trong giây lát.',
+  'screen.goHome': 'Về trang chủ',
+  'screen.inviteRequired.title': 'Cần có liên kết mời',
+  'screen.inviteRequired.body':
+    'Chỉ những người được mời mới có thể trả lời khảo sát này. Vui lòng mở lại bằng liên kết trong email hoặc tin nhắn bạn đã nhận.',
+  'screen.invalidInviteLink.title': 'Liên kết mời không hợp lệ',
+  'screen.invalidInviteLink.body':
+    'Liên kết mời không đúng hoặc không còn sử dụng được. Vui lòng liên hệ người phụ trách khảo sát.',
+  'screen.tooManyRequests.title': 'Vui lòng thử lại sau giây lát',
+  'screen.tooManyRequests.body':
+    'Hiện có quá nhiều lượt truy cập. Liên kết của bạn vẫn còn hiệu lực, vui lòng mở lại sau giây lát.',
+  'screen.invalidTestLink.title': 'Liên kết thử nghiệm không hợp lệ',
+  'screen.invalidTestLink.body':
+    'Chế độ thử nghiệm đã kết thúc hoặc liên kết này không còn sử dụng được.',
+  'screen.desktopOnly.title': 'Vui lòng mở trên máy tính',
+  'screen.desktopOnly.body':
+    'Khảo sát này cần xem phiếu khảo sát song song khi trả lời nên cần màn hình rộng.',
+  'screen.desktopOnly.hint':
+    'Mở cùng liên kết này bằng trình duyệt trên máy tính để tiếp tục. Màn hình này sẽ biến mất ngay khi cửa sổ đủ rộng.',
+
+  'completion.title': 'Đã hoàn thành!',
+  'completion.screenedOutTitle': 'Khảo sát kết thúc',
+  'completion.defaultMessage': 'Cảm ơn bạn đã tham gia khảo sát!',
+  'completion.completedAt': 'Thời gian hoàn thành: {time}',
+  'completion.startNew': 'Bắt đầu câu trả lời mới',
+
+  'endRedirect.waiting': 'Vui lòng chờ trong giây lát.',
+  'endRedirect.fallbackBefore': 'Nếu trang không tự chuyển, ',
+  'endRedirect.fallbackLink': 'vui lòng nhấn vào đây',
+  'endRedirect.fallbackAfter': '.',
+  'endRedirect.testNotice':
+    'Đây là câu trả lời thử nghiệm nên trang sẽ không chuyển. Câu trả lời thật sẽ chuyển đến địa chỉ bên dưới.',
+
+  'notice.contactEmail': 'Email liên hệ',
+  'notice.testVersionRepublished.title': 'Khảo sát đã được chỉnh sửa',
+  'notice.testVersionRepublished.body': 'Tải lại trang để tiếp tục từ phần đã thay đổi.',
+  'notice.responseConcluded.title': 'Khảo sát này đã được hoàn thành',
+  'notice.responseConcluded.body': 'Câu trả lời này đã được gửi. Cảm ơn bạn đã tham gia.',
+  'notice.invalidToken.title': 'Liên kết mời không đúng',
+  'notice.invalidToken.body':
+    'Liên kết này không hợp lệ hoặc đã hết hạn. Vui lòng liên hệ người phụ trách khảo sát.',
+  'notice.alreadyResponded.title': 'Bạn đã trả lời khảo sát này',
+  'notice.tokenAlreadyUsed.body':
+    'Đã có câu trả lời được gửi bằng liên kết mời này. Không được phép trả lời trùng lặp.',
+  'notice.deviceAlreadyResponded.body':
+    'Thiết bị này đã trả lời khảo sát này. Mỗi người chỉ được trả lời một lần.',
+  'notice.invalidTestToken.title': 'Liên kết thử nghiệm không hợp lệ',
+  'notice.invalidTestToken.body':
+    'Chế độ thử nghiệm đang tắt hoặc liên kết không đúng. Vui lòng sao chép lại liên kết thử nghiệm từ bảng điều hành.',
+  'notice.notAccepting.title': 'Hiện không nhận câu trả lời',
+  'notice.notAccepting.body':
+    'Khảo sát này hiện không nhận câu trả lời. Vui lòng kiểm tra lại liên kết hoặc liên hệ người phụ trách khảo sát.',
+  'notice.acknowledge': 'Tôi đã đọc và hiểu nội dung trên.',
+  'notice.acknowledgeRequired': 'Vui lòng đọc nội dung trên và đánh dấu vào ô.',
+
+  'validation.required': 'Vui lòng trả lời câu hỏi bắt buộc này.',
+  'validation.requiredCell': 'Còn ô bắt buộc chưa được trả lời',
+  'validation.distinct': 'Không thể chọn cùng một mục hai lần.',
+  'validation.distinctQuestion':
+    'Câu trả lời này trùng với câu hỏi khác. Vui lòng chọn phương án khác nhau.',
+  'validation.selectionMax': 'Bạn có thể chọn tối đa {max} mục. (Đang chọn {count} mục)',
+  'validation.rangeCells': 'Có ô chứa giá trị nằm ngoài phạm vi cho phép',
+  'validation.formatCells': 'Có ô nhập không đúng định dạng',
+  'validation.qualityCells': 'Có ô chưa đáp ứng yêu cầu trả lời (số ký tự hoặc nội dung)',
+  'validation.formulaMismatch':
+    'Giá trị bạn nhập không khớp với kết quả tính từ các giá trị đã nhập trước đó.',
+  'validation.range.min': 'Vui lòng nhập từ {min} trở lên',
+  'validation.range.max': 'Vui lòng nhập từ {max} trở xuống',
+  'validation.goToLocation': 'Đi tới vị trí',
+  'validation.sum.subjectCalc': 'Giá trị tính toán',
+  'validation.sum.subjectSelected': 'Tổng các ô đã chọn',
+  'validation.sum.subjectCalcResult': 'Kết quả tính toán',
+  'validation.sum.targetExpr': 'giá trị chuẩn',
+  'validation.sum.eq': '{subject} phải bằng {target} (hiện tại: {current})',
+  'validation.sum.ne': '{subject} không được bằng {target} (hiện tại: {current})',
+  'validation.sum.lte': '{subject} không được vượt quá {target} (hiện tại: {current})',
+  'validation.sum.gte': '{subject} phải từ {target} trở lên (hiện tại: {current})',
+  'validation.sum.lt': '{subject} phải nhỏ hơn {target} (hiện tại: {current})',
+  'validation.sum.gt': '{subject} phải lớn hơn {target} (hiện tại: {current})',
+  'validation.softWarning':
+    'Vui lòng kiểm tra lại giá trị đã nhập. Nếu đúng, bạn có thể tiếp tục.',
+  'validation.softWarningMore': 'và {count} mục khác',
+  'validation.filledCount.eq':
+    'Trong các ô đã chọn, phải nhập đúng {target} ô (hiện tại {count} ô)',
+  'validation.filledCount.ne':
+    'Trong các ô đã chọn, số ô đã nhập không được là {target} (hiện tại {count} ô)',
+  'validation.filledCount.gte':
+    'Trong các ô đã chọn, phải nhập ít nhất {target} ô (hiện tại {count} ô)',
+  'validation.filledCount.lte':
+    'Trong các ô đã chọn, chỉ được nhập tối đa {target} ô (hiện tại {count} ô)',
+  'validation.filledCount.gt':
+    'Trong các ô đã chọn, phải nhập nhiều hơn {target} ô (hiện tại {count} ô)',
+  'validation.filledCount.lt':
+    'Trong các ô đã chọn, phải nhập ít hơn {target} ô (hiện tại {count} ô)',
+  'validation.text.meaningless':
+    'Không chấp nhận câu trả lời chỉ gồm các chữ cái rời rạc hoặc chữ số. Vui lòng nhập nội dung.',
+  'validation.text.minLength':
+    'Vui lòng nhập ít nhất {min} ký tự. (hiện tại {current} ký tự, không tính khoảng trắng)',
+  'validation.text.maxLength': 'Vui lòng nhập tối đa {max} ký tự. (hiện tại {current} ký tự)',
+
+  'input.placeholder': 'Nhập câu trả lời...',
+  'input.placeholderNumber': 'Chỉ nhập số...',
+  'input.charLimit': '{max} ký tự',
+  'input.selectPlaceholder': 'Chọn...',
+  'input.otherPlaceholder': 'Vui lòng ghi rõ...',
+  'input.optionTextPlaceholder': 'Vui lòng ghi rõ',
+  'input.selectShort': 'Chọn',
+  'input.selectLevel': 'Chọn {label}',
+  'input.charLimitMax': 'Tối đa {max} ký tự',
+
+  'choice.selectedCountOf': 'Đã chọn {count}/{max}',
+  'choice.selectedCount': 'Đã chọn {count}',
+  'choice.minSelections': 'Vui lòng chọn ít nhất {min} mục',
+  'choice.maxReached': 'Đã đạt số lượng lựa chọn tối đa',
+  'choice.impliedOverMax':
+    'Phương án này được chọn cùng với các phương án khác nên vượt quá tối đa {max} mục. Vui lòng bỏ bớt lựa chọn trước.',
+
+  'a11y.requiredQuestion': 'Câu hỏi bắt buộc',
+
+  'ranking.rank': 'Hạng {rank}',
+  'ranking.selectRank': 'Chọn hạng {rank}',
+  'ranking.reset': 'Đặt lại thứ hạng',
+  'ranking.allRanked':
+    'Bạn đã chọn đủ đến hạng {positions}. Để thay đổi, hãy nhấn lại phương án đã chọn hoặc đặt lại thứ hạng.',
+  'ranking.other': 'Khác',
+  'ranking.otherDirect': 'Khác (vui lòng ghi rõ)',
+  'ranking.otherPlaceholder': 'Nhập nội dung khác...',
+  'ranking.detailAria': 'Nội dung chi tiết hạng {rank}',
+  'ranking.otherDetailAria': 'Nội dung khác của hạng {rank}',
+  'ranking.optionsGroup': 'Các phương án xếp hạng',
+  'ranking.limitHint': 'Có {count} phương án nên bạn có thể xếp tối đa đến hạng {positions}.',
+  'ranking.limitHintShort': '{count} phương án → tối đa hạng {positions}',
+  'ranking.optionImageAlt': 'Hình ảnh phương án xếp hạng',
+
+  'demand.blockCount': '{count} câu hỏi · đã trả lời {answered}',
+  'demand.itemCount': '{count} câu hỏi',
+  'demand.opinionToggle': 'Ý kiến (tự do)',
+  'demand.opinionPlaceholder': 'Vui lòng ghi ý kiến của bạn về câu hỏi này',
+
+  'tracking.defaultWaveLabel': 'đợt trước',
+  'tracking.same': 'Giống {wave}',
+  'tracking.changed': 'Đã thay đổi',
+  'tracking.prefilled': 'Câu trả lời của {wave} đã được điền sẵn',
+  'tracking.legend': 'Xác nhận thay đổi so với {wave}',
+  'tracking.required': 'Vui lòng chọn câu trả lời này có thay đổi hay không',
+  'tracking.unmodified.title': 'Có câu hỏi chưa được sửa',
+  'tracking.unmodified.body':
+    'Bạn cho biết các câu hỏi dưới đây đã thay đổi, nhưng câu trả lời vẫn giống với {wave}. Bạn vẫn có thể gửi như hiện tại.',
+  'tracking.unmodified.back': 'Quay lại kiểm tra',
+  'tracking.unmodified.submit': 'Gửi như hiện tại',
+
+  'toast.draftSaveFailed': 'Không thể lưu tạm câu trả lời. Vui lòng thử lại sau giây lát.',
+  'toast.submitFailed': 'Đã xảy ra lỗi khi gửi câu trả lời. Vui lòng thử lại.',
+
+  'document.previousPage': 'Trang trước',
+  'document.nextPage': 'Trang sau',
+  'document.pageNumber': 'Số trang',
+  'document.rendering': 'Đang hiển thị…',
+  'document.spanOff': 'Tắt xem liền trang',
+  'document.spanOn': 'Hiển thị nối trang sau — để xem câu hỏi nằm giữa hai trang',
+  'document.pageRange': 'Trang {from}–{to}',
+  'document.span': 'Xem liền trang',
+  'document.goToQuestion': 'Đi tới câu hỏi của vùng này',
+
+  'header.defaultNoticeTitle': 'Điều 33 Luật Thống kê (Bảo vệ bí mật)',
+  'header.defaultNoticeBody':
+    'Những thông tin biết được trong quá trình lập thống kê mà thuộc bí mật của cá nhân, pháp nhân hoặc tổ chức phải được bảo vệ.',
+  'header.defaultNoticeLine':
+    'Theo Điều 33 Luật Thống kê (Bảo vệ bí mật), nội dung trả lời của bạn chỉ được sử dụng cho mục đích lập thống kê.',
+  'header.markAlt': 'Dấu thống kê quốc gia',
+  'header.logoAlt': 'Logo khảo sát',
+
+  'media.enlarge': 'Phóng to {alt}',
+  'media.imageFallbackAlt': 'hình ảnh',
+  'media.viewerTitle': 'Xem ảnh phóng to',
+  'media.zoomIn': 'Phóng to',
+  'media.zoomOut': 'Thu nhỏ',
+  'media.watchVideo': 'Xem video',
+  'media.imageError': 'Lỗi hình ảnh',
+  'media.cellImageAlt': 'Hình ảnh trong ô',
+  'media.tableVideo': 'Video trong bảng',
+  'media.videoUnsupported': 'Trình duyệt của bạn không hỗ trợ phát video.',
+  'media.videoLinkError': 'Lỗi liên kết video',
+
+  'common.close': 'Đóng',
+  'common.cancel': 'Hủy',
+  'common.select': 'Chọn',
+
+  'mobile.details': 'Chi tiết',
+  'mobile.checkAnswerOf': 'Vui lòng kiểm tra câu trả lời cho "{title}".',
+  'mobile.checkAnswer': 'Vui lòng kiểm tra câu trả lời.',
+
+  'drilldown.showDescription': 'Xem mô tả',
+  'drilldown.displayCount': 'Hiển thị {count} mục',
+  'drilldown.matrixChoices': '{inputs} mục con · {total} phương án',
+  'drilldown.matrixInputs': '{inputs} mục con · {total} ô nhập',
+  'drilldown.listItems': '{count} mục',
+  'drilldown.inputs': '{count} ô nhập',
+  'drilldown.back': 'Quay lại',
+  'drilldown.previousSection': 'Phần trước',
+  'drilldown.nextSection': 'Phần sau',
+  'drilldown.toContents': 'Về mục lục',
+  'drilldown.previousItem': 'Mục trước',
+  'drilldown.nextItem': 'Mục sau',
+  'drilldown.overall': 'Tổng',
+  'drilldown.unit.cells': ' ô',
+  'drilldown.unit.items': ' mục',
+  'drilldown.unit.selections': ' lựa chọn',
+  'drilldown.itemFallback': 'Mục',
+  'drilldown.inputFallback': 'Nhập',
+  'drilldown.chooseItem': 'Chọn mục cần điền',
+
+  'stepper.chooseItems': 'Chọn các mục cần trả lời',
+  'stepper.count': '{count} mục',
+  'stepper.detailInput': 'Nhập chi tiết (đã chọn {count} mục)',
+  'stepper.chooseSubItems': 'Chọn các mục con',
+  'stepper.groups': 'Nhóm',
+  'stepper.backToSelection': 'Quay lại chọn mục',
+  'stepper.completedOf': 'Xong {completed} / {total}',
+
+  'table.addRow': 'Thêm dòng',
+  'table.removeLastRow': 'Xóa dòng cuối',
+  'table.addColumn': 'Thêm cột',
+  'table.removeLastColumn': 'Xóa cột cuối',
+  'table.maxRowsReached': 'Bạn có thể thêm tối đa {max}.',
+  'table.rowControls': 'Thêm hoặc xóa dòng',
+  'table.collapse': 'Thu gọn',
+  'table.expand': 'Mở rộng',
+  'table.selectItems': 'Chọn mục',
+  'table.selectedCount': 'Đã chọn {count}',
+  'table.selectItemsHint': 'Chọn các mục sẽ hiển thị trong bảng.',
+  'table.selectAll': 'Chọn tất cả',
+  'table.confirmCount': 'Xác nhận ({count})',
+  'table.scrollLeft': 'Cuộn sang trái',
+  'table.scrollRight': 'Cuộn sang phải',
+  'table.horizontalScroll': 'Cuộn ngang',
+
+  'cell.minSelections': 'Ít nhất {min}',
+  'cell.maxReached': 'Đã đạt tối đa',
+  'cell.choiceAria': 'Chọn phương án',
+  'cell.calcPreview': 'Giá trị tính toán',
+  'cell.rankingPreview': '(Ô xếp hạng · {count} phương án · {positions} hạng)',
+
+  'format.label.mobile': 'số điện thoại di động',
+  'format.label.phone': 'số điện thoại',
+  'format.label.biz_number': 'mã số đăng ký kinh doanh',
+  'format.label.corp_number': 'mã số đăng ký pháp nhân',
+  'format.label.email': 'địa chỉ email',
+  'format.label.date': 'ngày (YYYY.MM.DD)',
+  'format.notANumber.mobile': 'Vui lòng nhập số điện thoại di động bằng chữ số',
+  'format.notANumber.phone': 'Vui lòng nhập số điện thoại bằng chữ số',
+  'format.notANumber.biz_number': 'Vui lòng nhập mã số đăng ký kinh doanh bằng chữ số',
+  'format.notANumber.corp_number': 'Vui lòng nhập mã số đăng ký pháp nhân bằng chữ số',
+  'format.notANumber.email': 'Vui lòng nhập địa chỉ email bằng chữ số',
+  'format.notANumber.date': 'Vui lòng nhập ngày bằng chữ số',
+  'format.wrongLengthFixed.biz_number': 'Mã số đăng ký kinh doanh phải có {length} chữ số',
+  'format.wrongLengthFixed.corp_number': 'Mã số đăng ký pháp nhân phải có {length} chữ số',
+  'format.wrongLength': 'Số chữ số của {label} không đúng',
+  'format.unknownPrefixMobile': 'Đây không phải là số điện thoại di động',
+  'format.unknownPrefix': 'Số phải bắt đầu bằng mã vùng hoặc đầu số di động',
+  'format.checksum': 'Số kiểm tra của {label} không đúng. Vui lòng kiểm tra lại',
+  'format.malformed': 'Không đúng định dạng {label}',
+  'format.nonAscii': 'Địa chỉ email chỉ được dùng chữ cái tiếng Anh và chữ số',
+  'format.dateShape': 'Vui lòng nhập ngày theo dạng năm (4 chữ số), tháng, ngày, ví dụ 2025.01.31',
+  'format.invalidDate': 'Ngày này không tồn tại. Vui lòng kiểm tra lại',
+
+  'collapse.expand': 'Mở xem',
+  'collapse.collapse': 'Thu gọn',
+
+  'default.paused': 'Khảo sát đang tạm dừng. Vui lòng thử lại sau.',
+  'default.quotaClosed':
+    'Nhóm đối tượng của bạn đã đủ số lượng nên bạn không thể tham gia thêm. Cảm ơn bạn đã quan tâm.',
+  'default.quotaMidSurveyClosed':
+    'Rất tiếc. Trong lúc bạn đang trả lời, nhóm đối tượng của bạn đã đủ số lượng nên bạn không thể tiếp tục. Cảm ơn bạn đã dành thời gian tham gia.',
+};
+
 export const SYSTEM_STRINGS: Readonly<Record<SurveyLocale, Dictionary>> = {
   ko: KO,
   zh: ZH,
   en: EN,
+  vi: VI,
 };
 
 export type SystemStringValues = Readonly<Record<string, string | number>>;
@@ -916,15 +1212,18 @@ function fill(template: string, values: SystemStringValues | undefined): string 
 }
 
 /**
- * 한 언어의 문장 목록 — 언어가 정해지면 그 언어 하나, 미정(`null`)이면 한국어 · 中文 · English
- * 순으로 세 언어(같은 문장은 한 번). 언어가 정해지기 전 안내 화면이 세 언어를 위아래로 쌓는다.
+ * 한 언어의 문장 목록 — 언어가 정해지면 그 언어 하나, 미정(`null`)이면 `stackLocales` 의 언어를
+ * 어휘 순서대로(같은 문장은 한 번). 언어가 정해지기 전 안내 화면이 그 언어들을 위아래로 쌓는다.
+ * `stackLocales` 는 그 설문이 제공하는 언어(`resolveOfferedLocales`)다 — 한·영·베트남어 설문의
+ * 안내 화면에 중국어가 끼지 않는다. 주지 않으면 어휘 전체다.
  */
 export function systemTextLines(
   key: SystemStringKey,
   locale: SurveyLocale | null,
   values?: SystemStringValues,
+  stackLocales: readonly SurveyLocale[] = SURVEY_LOCALES,
 ): { locale: SurveyLocale; text: string }[] {
-  const locales = locale === null ? SURVEY_LOCALES : [locale];
+  const locales = locale === null ? SURVEY_LOCALES.filter((l) => stackLocales.includes(l)) : [locale];
   const seen = new Set<string>();
   const lines: { locale: SurveyLocale; text: string }[] = [];
   for (const l of locales) {
@@ -938,14 +1237,16 @@ export function systemTextLines(
 
 /**
  * 시스템 문장 하나. 언어를 주지 않으면 한국어 — 기존 호출부는 지금 문장 그대로다.
- * 미정(`null`)이면 세 언어를 줄바꿈으로 잇는다(줄바꿈을 살리는 자리에서 위아래로 쌓인다).
+ * 미정(`null`)이면 `stackLocales`(기본 어휘 전체)의 문장을 줄바꿈으로 잇는다(줄바꿈을 살리는
+ * 자리에서 위아래로 쌓인다).
  */
 export function systemText(
   key: SystemStringKey,
   locale: SurveyLocale | null = DEFAULT_SURVEY_LOCALE,
   values?: SystemStringValues,
+  stackLocales?: readonly SurveyLocale[],
 ): string {
-  return systemTextLines(key, locale, values)
+  return systemTextLines(key, locale, values, stackLocales)
     .map((line) => line.text)
     .join('\n');
 }

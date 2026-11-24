@@ -70,7 +70,7 @@ import { type PriorAnswers, hasPriorAnswer, priorAnswerText } from '@/lib/survey
 import { substituteTokens, substituteTokensInHtml } from '@/lib/survey/substitute-tokens';
 import { type InputFormat, isInputFormat } from '@/types/input-type';
 import { Question, QuestionOption } from '@/types/survey';
-import type { SurveyLocale } from '@/types/survey-locale';
+import { type SurveyLocale, isSurveyLocale } from '@/types/survey-locale';
 import { resolveChoicePrefill } from '@/utils/choice-prefill';
 import { isChoiceTableSource } from '@/utils/choice-source';
 import { systemText } from '@/utils/system-strings';
@@ -552,6 +552,8 @@ function RadioQuestion({
             />
             <label
               htmlFor={`${question.id}-${option.id}`}
+              // 언어 보기는 그 언어로 읽고 그린다(스크린리더 발음 · 베트남어·중국어 글꼴)
+              lang={isSurveyLocale(option.locale) ? option.locale : undefined}
               onClick={(e) => {
                 e.preventDefault();
                 handleOptionChange(option.value);
