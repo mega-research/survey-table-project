@@ -235,6 +235,7 @@ describe('보기 소스 표 — 좁은 폭의 척도 슬라이더(행 단위 배
     // 원본 표 조각은 없다 — 응답 칸이 전부 타일과 슬라이더에 들었다
     expect(within(block).queryByRole('grid')).not.toBeInTheDocument();
     // 한 행에 응답 묶음이 둘이라 슬라이더 머리에 그룹 이름이 선다
+    // 낭독 이름은 「행 제목, 그룹 이름」이다
     expect(within(slider()!).getByText('만족도')).toBeInTheDocument();
     expect(within(slider()!).getByRole('radiogroup')).toHaveAccessibleName(/ 만족도$/);
   });

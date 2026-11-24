@@ -134,7 +134,7 @@ function Harness({
   requiredRowIds = [],
 }: HarnessProps) {
   const [value, setValue] = useState<Record<string, unknown>>({});
-  const answered = (value.__choiceGroups ?? {}) as Record<string, unknown>;
+  const answered = (value['__choiceGroups'] ?? {}) as Record<string, unknown>;
   const errorCellIds = new Set(
     requiredRowIds
       .filter((rowId) => answered[`sat_${rowId}`] === undefined)

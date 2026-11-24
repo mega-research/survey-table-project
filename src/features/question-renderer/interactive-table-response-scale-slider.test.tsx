@@ -267,7 +267,7 @@ describe('표 문항 — 넓은 폭의 척도 슬라이더', () => {
 
   it('행에 응답 묶음이 여럿이면 슬라이더 머리에 묶음 이름을 두고, 하나뿐이면 행 제목이 이름이다', () => {
     const { unmount } = render(<Harness />);
-    // 낭독 이름은 「행 제목, 묶음 이름」이다 — 머리 줄에는 묶음 이름만 보인다
+    // 낭독 이름은 「행 제목, 묶음 이름」이다(행 제목 요소와 머리 줄을 함께 가리킨다) — 머리 줄에는 묶음 이름만 보인다
     expect(
       within(rowBlock('r1')).getByRole('radiogroup', { name: '1) 주차/접근성 만족도' }),
     ).toBeInTheDocument();
