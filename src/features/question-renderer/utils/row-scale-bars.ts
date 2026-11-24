@@ -15,10 +15,10 @@ import {
 import {
   type ScaleBarFallbackReason,
   type ScaleBarModel,
-  isScaleBarVisibleCell,
   projectScaleBar,
 } from './choice-group-scale-bar';
 import type { MobileRowWiseOriginalModel } from './mobile-row-wise-original';
+import { isScaleVisibleCell } from './scale-header-reading';
 
 /**
  * 「행별 척도」 모바일 표시 방식의 한 행 — 행별 원본 문항의 원본 표 조각 자리를 무엇으로 채우는지
@@ -29,6 +29,9 @@ import type { MobileRowWiseOriginalModel } from './mobile-row-wise-original';
  * 자체가 선택이라 막대다(이어진 묶음마다 하나). 막대를 못 그리면 그 묶음은 원본 한 줄로 떨어지고 이유가
  * 남는다(빌더 경고 재료). 나머지 응답 칸(입력칸 등)은 원래 형태 — 열 순서대로 이어진 열을 잘라 낸 원본
  * 표 조각이다. 막대 하나의 판정은 척도 막대 투영(choice-group-scale-bar) 그대로다.
+ *
+ * 보기 모양이 척도 슬라이더인 그룹은 슬라이더 조각이 생기기 전까지 원본 한 줄로 고른 그룹과 같이 그 그룹
+ * 열의 원본 조각이다 — 막대를 고른 것이 아니라 막대 폴백 이유는 남기지 않는다.
  */
 
 export interface RowScaleBar {
@@ -127,7 +130,7 @@ function collectChoiceUnits(input: ProjectRowScaleLayoutInput): ChoiceUnit[] {
   let run: ChoiceUnit | undefined;
   let prevIndex = -2;
   for (const [index, cell] of input.row.cells.entries()) {
-    if (cell.type !== 'choice_opt' || !isScaleBarVisibleCell(cell)) continue;
+    if (cell.type !== 'choice_opt' || !isScaleVisibleCell(cell)) continue;
     const group = cell.choiceGroupId ? groupById.get(cell.choiceGroupId) : undefined;
     if (group) {
       if (group.type !== 'radio' && group.type !== 'checkbox') continue;
@@ -187,7 +190,7 @@ export function projectRowScaleLayout(input: ProjectRowScaleLayoutInput): RowSca
       }
       fallbacks.push({ key: unit.key, group: unit.group, reason: projected.reason });
     }
-    // 원본 한 줄, 또는 막대를 못 그린 묶음 — 그 열만 잘라 낸 원본 조각
+    // 원본 한 줄 · 척도 슬라이더(아직 조각이 없다), 또는 막대를 못 그린 묶음 — 그 열만 잘라 낸 원본 조각
     drafts.push({ kind: 'piece', key: unit.key, cells: unit.cells });
   }
   // 막대도 타일도 없으면 행별 원본과 같다 — 반복 헤더 행까지 그리는 종전 조각이 낫다
@@ -223,7 +226,7 @@ export function projectRowScaleLayout(input: ProjectRowScaleLayoutInput): RowSca
     freeIndices = [];
     const hasAnswerCell = indices.some((index) => {
       const cell = row.cells[index];
-      return cell !== undefined && isScaleBarVisibleCell(cell) && PIECE_CELL_TYPES.has(cell.type);
+      return cell !== undefined && isScaleVisibleCell(cell) && PIECE_CELL_TYPES.has(cell.type);
     });
     if (!hasAnswerCell) return;
     const segment = pieceOf(`piece:${columns[indices[0]!]!.id}`, indices);
@@ -232,7 +235,7 @@ export function projectRowScaleLayout(input: ProjectRowScaleLayoutInput): RowSca
   // 행 앞쪽의 글자 열(첫 응답 칸 앞)은 조각에 넣지 않는다 — 행 제목이 이미 보인다. 응답 칸 사이·뒤의
   // 글자 열(단위 등)은 원래 형태 그대로 조각에 남는다.
   const firstAnswerIndex = row.cells.findIndex(
-    (cell) => isScaleBarVisibleCell(cell) && PIECE_CELL_TYPES.has(cell.type),
+    (cell) => isScaleVisibleCell(cell) && PIECE_CELL_TYPES.has(cell.type),
   );
   for (let index = Math.max(firstAnswerIndex, 0); index < columns.length; index += 1) {
     const draft = draftAtIndex.get(index);

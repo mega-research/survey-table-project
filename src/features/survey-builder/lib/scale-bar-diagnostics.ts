@@ -1,7 +1,6 @@
 import {
   SCALE_BAR_MAX_CELLS,
   type ScaleBarFallbackReason,
-  isScaleBarVisibleCell,
   projectScaleBar,
 } from '@/features/question-renderer/utils/choice-group-scale-bar';
 import { DEFAULT_TABLE_ANSWERABLE_CELL_TYPES } from '@/features/question-renderer/utils/classify-table';
@@ -10,6 +9,7 @@ import {
   type UngroupedSelectionType,
   projectRowWiseScaleLayouts,
 } from '@/features/question-renderer/utils/row-scale-bars';
+import { isScaleVisibleCell } from '@/features/question-renderer/utils/scale-header-reading';
 import type { ChoiceGroup, HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 
 /**
@@ -46,7 +46,7 @@ function rowLabelOf(row: TableRow, index: number): string {
   if (label) return label;
   const text = row.cells.find(
     (cell) =>
-      cell.type === 'text' && isScaleBarVisibleCell(cell) && (cell.content ?? '').trim() !== '',
+      cell.type === 'text' && isScaleVisibleCell(cell) && (cell.content ?? '').trim() !== '',
   );
   return text ? text.content!.trim() : `${index + 1}행`;
 }
@@ -89,7 +89,7 @@ export function diagnoseChoiceGroupScaleBar(
       (cell) =>
         cell.type === 'choice_opt' &&
         cell.choiceGroupId === group.id &&
-        isScaleBarVisibleCell(cell),
+        isScaleVisibleCell(cell),
     );
     if (targetCells.length === 0) return;
     const result = projectScaleBar({
