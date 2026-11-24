@@ -6,6 +6,7 @@ import { FileText } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useElementWidth } from '@/features/question-renderer/hooks/use-element-width';
+import { useFitTableToWidth } from '@/features/question-renderer/hooks/use-fit-table-to-width';
 import { useHorizontalScrollIndicators } from '@/features/question-renderer/hooks/use-horizontal-scroll-indicators';
 import { usePageStickyThreshold } from '@/features/question-renderer/hooks/use-page-sticky-threshold';
 import { useScrollLeftSync } from '@/features/question-renderer/hooks/use-scroll-left-sync';
@@ -23,7 +24,6 @@ import {
   fitTableMarker,
   resolveTableGridSizing,
 } from '@/features/question-renderer/utils/table-grid-utils';
-import { useMobileView } from '@/hooks/use-media-query';
 import { cn } from '@/lib/utils';
 import { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 import { getCellBackgroundStyle, getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
@@ -98,9 +98,8 @@ export const TablePreview = React.memo(function TablePreview({
   getCellInstanceId,
   applyCellBackground = true,
 }: TablePreviewProps) {
-  // 화면 폭에 맞춰 줄이기는 모바일 모드가 아닐 때만 — 휴대폰 원본 표까지 줄이면 칸이 찌그러진다
-  const isMobileView = useMobileView();
-  const fitToWidth = fitTableToWidth && !isMobileView;
+  // 화면 폭에 맞춰 줄이기는 패드 폭에서만 — 데스크톱은 지정한 px 그대로, 휴대폰은 모바일 표시 방식
+  const fitToWidth = useFitTableToWidth(fitTableToWidth);
 
   // 열 좌측 경계 누적 px — 스크롤 컨트롤의 "잘린 열 정렬" 페이징용
   const columnStops = useMemo(() => {

@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useBranchEvalCtx } from '@/features/question-renderer/contact-attrs-context';
 import { useDynamicRows } from '@/features/question-renderer/hooks/use-dynamic-rows';
 import { useElementWidth } from '@/features/question-renderer/hooks/use-element-width';
+import { useFitTableToWidth } from '@/features/question-renderer/hooks/use-fit-table-to-width';
 import { useStagedColumns } from '@/features/question-renderer/hooks/use-staged-columns';
 import { stagedColumnRevealScrollLeft } from '@/features/question-renderer/utils/staged-columns';
 import { useHorizontalScrollIndicators } from '@/features/question-renderer/hooks/use-horizontal-scroll-indicators';
@@ -903,8 +904,8 @@ function InteractiveTableResponseBody({
   }, [rendersHeaderGrid, tableHeaderGrid, visibleHeaderGrid, headerInputs]);
 
   // Grid 관련 계산
-  // 화면 폭에 맞춰 줄이기는 모바일 모드가 아닐 때만 — 휴대폰 원본 표까지 줄이면 칸이 찌그러진다
-  const fitToWidth = fitTableToWidth && !isMobileView;
+  // 화면 폭에 맞춰 줄이기는 패드 폭에서만 — 데스크톱은 지정한 px 그대로, 휴대폰은 모바일 표시 방식
+  const fitToWidth = useFitTableToWidth(fitTableToWidth);
   const gridSizing = useMemo(
     () => resolveTableGridSizing(visibleColumns, fitToWidth),
     [visibleColumns, fitToWidth],

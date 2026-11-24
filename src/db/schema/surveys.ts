@@ -284,7 +284,7 @@ export const questions = pgTable(
     // 좌측 고정 열 개수 (표를 그리는 문항 전용). NULL = 자동 판정, 0~3 = 명시 지정
     stickyColumnCount: smallint('sticky_column_count'),
 
-    // 화면 폭에 맞춰 표 줄이기 (표를 그리는 문항 전용, 0146). false = 지정 px 고정(기존), true = 좁은 화면에서 비율로 줄임
+    // 화면 폭에 맞춰 표 줄이기 (표를 그리는 문항 전용, 0146). false = 지정 px 고정(기존), true = 패드 폭(768~1023px)에서 비율로 줄임
     fitTableToWidth: boolean('fit_table_to_width').notNull().default(false),
 
     // 평균 산출 (척도 평균, 0147). true = 운영 콘솔 척도 평균 표에 이 문항의 단일값 변수가 줄로 나온다.
