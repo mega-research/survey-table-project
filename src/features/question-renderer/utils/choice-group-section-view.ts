@@ -1,3 +1,4 @@
+import type { ScaleSliderDirection } from '@/types/scale-slider';
 import type { ChoiceGroup } from '@/types/survey';
 
 import {
@@ -23,6 +24,11 @@ import { type ScaleSliderModel, projectScaleSlider } from './scale-slider';
  * **슬라이더를 그리는 호출부는 `projectChoiceGroupSectionViewWithSlider`**, 그리지 않는 호출부는
  * `projectChoiceGroupSectionView` 를 부른다(뒤쪽에서 슬라이더 그룹은 처음부터 원본 한 줄이다). 종류를
  * 타입으로 갈라, 슬라이더를 그릴 줄 모르는 호출부가 슬라이더 섹션을 받는 일이 없다.
+ *
+ * **그룹 없는 섹션의 슬라이더는 문항 설정이 켠다**(`ungroupedSliderDirection` — 그룹 없는 보기 소스 표).
+ * 종류가 따로다(`ungrouped-scale-slider`) — 그룹이 없어 머리 제목·키를 호출부가 달리 정해야 하고, 방향을
+ * 넘기지 않는 호출부(표 문항)에는 생기지 않는다. 그룹 없는 섹션에는 원본 한 줄 설정이 없어, 그 행에서 못
+ * 그리면 바로 세로 타일이다. 보기 그룹의 섹션은 이 값을 읽지 않는다.
  */
 export type ChoiceGroupSectionView =
   | { kind: 'scale-bar'; group: ChoiceGroup; model: ScaleBarModel }
@@ -32,11 +38,18 @@ export type ChoiceGroupSectionView =
 /** 슬라이더를 그리는 호출부의 섹션 — 종전 셋에 슬라이더가 더 있다 */
 export type ChoiceGroupSliderSectionView =
   | ChoiceGroupSectionView
-  | { kind: 'scale-slider'; group: ChoiceGroup; model: ScaleSliderModel };
+  | { kind: 'scale-slider'; group: ChoiceGroup; model: ScaleSliderModel }
+  /** 그룹 없는 섹션 — 문항 설정으로 켠 슬라이더 */
+  | { kind: 'ungrouped-scale-slider'; model: ScaleSliderModel };
 
 export interface ProjectChoiceGroupSectionViewInput extends ProjectChoiceGroupOriginalLineInput {
   /** 이 그룹의 선택 방식 — 쓰기와 같은 판정이어야 한다(복수 선택이면 막대 대신 폴백) */
   selectionType: ChoiceGroup['type'];
+}
+
+export interface ProjectChoiceGroupSliderSectionViewInput extends ProjectChoiceGroupSectionViewInput {
+  /** 그룹 없는 섹션의 슬라이더 방향 — 그룹 없는 보기 소스 표의 문항 설정. 없음·null 이면 꺼짐이다 */
+  ungroupedSliderDirection?: ScaleSliderDirection | null | undefined;
 }
 
 export function projectChoiceGroupSectionView(
@@ -63,11 +76,14 @@ export function projectChoiceGroupSectionView(
  * 그대로다(슬라이더 그룹은 원본 한 줄 → 세로 타일).
  */
 export function projectChoiceGroupSectionViewWithSlider(
-  input: ProjectChoiceGroupSectionViewInput,
+  input: ProjectChoiceGroupSliderSectionViewInput,
 ): ChoiceGroupSliderSectionView {
   const { group } = input;
-  const direction = resolveChoiceGroupSliderDirection(group);
-  if (group && direction !== null) {
+  // 보기 그룹은 그룹의 설정만, 그룹 없는 섹션은 문항 설정만 읽는다
+  const direction = group
+    ? resolveChoiceGroupSliderDirection(group)
+    : (input.ungroupedSliderDirection ?? null);
+  if (direction !== null) {
     const slider = projectScaleSlider({
       selectionType: input.selectionType,
       columns: input.columns,
@@ -76,7 +92,11 @@ export function projectChoiceGroupSectionViewWithSlider(
       targetCells: input.groupCells,
       direction,
     });
-    if (slider.ok) return { kind: 'scale-slider', group, model: slider.model };
+    if (slider.ok) {
+      return group
+        ? { kind: 'scale-slider', group, model: slider.model }
+        : { kind: 'ungrouped-scale-slider', model: slider.model };
+    }
   }
   return projectChoiceGroupSectionView(input);
 }
