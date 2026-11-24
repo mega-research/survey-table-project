@@ -46,6 +46,7 @@ import {
 } from '@/features/question-renderer/utils/implied-selection';
 import { resolveUngroupedSelectionType } from '@/features/question-renderer/utils/row-scale-bars';
 import { diagnoseChoiceGroupScaleBar } from '@/features/survey-builder/lib/scale-bar-diagnostics';
+import { diagnoseChoiceGroupScaleSlider } from '@/features/survey-builder/lib/scale-slider-diagnostics';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
 import {
@@ -521,6 +522,37 @@ export function CellContentModal({
       getLatestHeaderGrid,
       ownQuestion.tableColumns,
       ownQuestion.tableHeaderGrid,
+      scaleBarGroup,
+    ],
+  );
+  // 「척도 슬라이더」 폴백 진단 — 척도 막대와 같은 방식(편집 중 값을 반영한 표)이고 보기 모양이 척도
+  // 슬라이더일 때만 돈다. 그릴 수 있는 행이 표에 하나도 없는지도 함께 본다 — 표 배치 판정과 같은 재료라
+  // 편집 중인 그룹 목록 전체를 넘긴다. 라디오 그룹이 있는 표는 문항 설정의 방향을 읽지 않아 넘기지 않는다.
+  const scaleSliderDiagnosis = useMemo(
+    () =>
+      scaleBarGroup && resolveChoiceGroupMobileView(scaleBarGroup) === 'scale-slider'
+        ? diagnoseChoiceGroupScaleSlider({
+            groupId: scaleBarGroup.id,
+            rows: gatingRows.map((row) => ({
+              ...row,
+              cells: row.cells.map((c) => (c.id === cell.id ? buildUpdatedCell(form, cell) : c)),
+            })),
+            columns: getLatestColumns?.() ?? ownQuestion.tableColumns ?? [],
+            headerGrid: getLatestHeaderGrid?.() ?? ownQuestion.tableHeaderGrid ?? undefined,
+            choiceGroups: editChoiceGroups,
+            ungroupedSelectionType: resolveUngroupedSelectionType(parentQuestionType),
+          })
+        : undefined,
+    [
+      cell,
+      editChoiceGroups,
+      form,
+      gatingRows,
+      getLatestColumns,
+      getLatestHeaderGrid,
+      ownQuestion.tableColumns,
+      ownQuestion.tableHeaderGrid,
+      parentQuestionType,
       scaleBarGroup,
     ],
   );
@@ -1021,6 +1053,7 @@ export function CellContentModal({
               onChoiceGroupIdChange={setChoiceGroupId}
               onChoiceGroupsChange={setEditChoiceGroups}
               scaleBarIssues={scaleBarIssues}
+              scaleSliderDiagnosis={scaleSliderDiagnosis}
               questionRequired={ownQuestion.required}
               answerQuoteEnabled={answerQuoteEnabled}
               answerQuoteText={answerQuoteText}
