@@ -25,6 +25,8 @@ import { expandHeaderGrid } from './expand-header-grid';
  * - 위 줄에서 세로 병합으로 내려온 머리도 그 줄을 덮는 것으로 본다.
  * - 대상 칸은 이어진 열에 서 있어야 한다 — 그 판정(`locateScaleColumnRun`)도 여기에 있고, 이유 코드는
  *   두 투영이 같은 어휘로 쓴다.
+ * - 대상 열 밖의 한 열(슬라이더가 눈금 밖으로 뗀 보기)의 머리 이름은 `readOwnColumnHeaderName` 이 따로
+ *   읽는다 — 척도 막대는 그 칸을 막대 안에 두므로 쓰지 않는다.
  */
 
 /** 척도 판정이 보는 칸 — 숨김·병합으로 이어진 칸은 없는 칸이다. 행 판정·빌더 진단도 이 기준을 쓴다 */
@@ -255,4 +257,40 @@ export function readScaleHeader(input: ReadScaleHeaderInput): ScaleHeaderReading
     };
   });
   return { cells, bands };
+}
+
+export interface ReadOwnColumnHeaderNameInput {
+  /** 행의 셀과 인덱스가 맞는 열 — 표시 조건으로 걸러진 뒤의 열이어야 한다 */
+  columns: readonly TableColumn[];
+  /** columns 와 짝이 맞는(같이 걸러진) 헤더 격자 */
+  headerGrid?: HeaderCell[][] | undefined;
+  /** 읽을 열 자리(0부터) */
+  index: number;
+}
+
+/**
+ * **그 열만 덮는 한 칸짜리 머리 이름** — 없으면 undefined. 척도 슬라이더가 눈금 밖으로 뗀 보기(「평균에서
+ * 제외」)의 글자를 머리에서 읽을 때 쓴다. `readScaleHeader` 는 대상 열만 잘라 읽으므로 눈금 밖 열의 머리는
+ * 보지 않고, 그 칸 하나만 대상으로 부르면 그 칸을 덮는 머리가 「제목 줄」로 읽혀 버려진다.
+ *
+ * - 여러 열을 묶은 머리는 그 열의 이름이 아니다(묶음 제목이거나 구간이다).
+ * - 한 칸짜리 이름이 여러 줄에 있으면 보기에 가까운 아래 줄이고, 세로 병합으로 내려온 머리도 그 줄을 덮는다.
+ * - 다단 헤더가 없는 표는 열 제목을 읽는다. 있으면 열 제목은 읽지 않는다(`readScaleHeader` 와 같은 출처 규칙).
+ */
+export function readOwnColumnHeaderName(input: ReadOwnColumnHeaderNameInput): string | undefined {
+  const { columns, headerGrid, index } = input;
+  if (index < 0 || index >= columns.length) return undefined;
+  if (!headerGrid || headerGrid.length === 0) {
+    const label = normalizeScaleLabel(columns[index]?.label ?? '');
+    return label === '' ? undefined : label;
+  }
+  let found: { label: string; bottom: number } | undefined;
+  for (const item of expandHeaderGrid(headerGrid)) {
+    if (item.colSpan !== 1 || item.startCol - 1 !== index) continue;
+    const label = normalizeScaleLabel(item.cell.label ?? '');
+    if (label === '') continue;
+    const bottom = item.rowIdx + item.rowSpan;
+    if (!found || bottom > found.bottom) found = { label, bottom };
+  }
+  return found?.label;
 }
