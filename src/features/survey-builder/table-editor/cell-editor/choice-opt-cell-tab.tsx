@@ -22,7 +22,7 @@ import type { ScaleBarIssue } from '@/features/survey-builder/lib/scale-bar-diag
 import { NumberFormatFields } from '@/features/survey-builder/number-format-fields';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import { ScaleBarIssueAlert } from '@/features/survey-builder/table-editor/scale-bar-issue-alert';
-import { cn, generateId } from '@/lib/utils';
+import { generateId } from '@/lib/utils';
 import type { ScaleSliderDirection } from '@/types/scale-slider';
 import { isInputFormat } from '@/types/input-type';
 import type { InputType, NumberFormat, QuestionType } from '@/types/survey';
@@ -354,27 +354,20 @@ export function ChoiceOptCellTab({
           {currentSliderDirection !== null && (
             <fieldset className="min-w-0">
               <legend className="mb-1.5 text-xs font-medium text-gray-700">긍정 방향</legend>
-              <div className="inline-flex overflow-hidden rounded-md border border-gray-200">
-                {SLIDER_DIRECTION_CHOICES.map(({ direction, label }, index) => {
+              {/* 문항 설정의 긍정 방향(question-scale-slider-fields)과 같은 모양이다 — 같은 값을 고르는 두 자리다 */}
+              <div className="inline-flex gap-0.5 rounded-lg bg-gray-100 p-0.5">
+                {SLIDER_DIRECTION_CHOICES.map(({ direction, label }) => {
                   const inputId = `${sliderDirectionId}-${direction}`;
-                  const checked = currentSliderDirection === direction;
                   return (
-                    <label
-                      key={direction}
-                      htmlFor={inputId}
-                      className={cn(
-                        // 테두리 안쪽에 포커스 테 — 묶음이 모서리를 잘라(overflow-hidden) 바깥 테는 잘린다
-                        'cursor-pointer px-3 py-1 text-xs font-medium has-[:focus-visible]:outline-2 has-[:focus-visible]:-outline-offset-2 has-[:focus-visible]:outline-blue-600',
-                        index > 0 && 'border-l border-gray-200',
-                        checked ? 'bg-blue-50 text-blue-700' : 'bg-white text-gray-500',
-                      )}
-                    >
+                    // relative — 숨긴 라디오가 제 칸 안에 머물러, 포커스가 갈 때 화면이 엉뚱한 곳으로 튀지 않는다
+                    <span key={direction} className="relative">
                       <input
                         type="radio"
                         id={inputId}
                         name={sliderDirectionId}
-                        className="sr-only"
-                        checked={checked}
+                        value={direction}
+                        className="peer sr-only"
+                        checked={currentSliderDirection === direction}
                         onChange={() =>
                           onChoiceGroupsChange(
                             choiceGroups.map((g) =>
@@ -385,8 +378,13 @@ export function ChoiceOptCellTab({
                           )
                         }
                       />
-                      {label}
-                    </label>
+                      <label
+                        htmlFor={inputId}
+                        className="block cursor-pointer rounded-md border border-transparent px-3 py-1.5 text-xs text-gray-600 transition-colors select-none peer-checked:border-gray-300 peer-checked:bg-white peer-checked:font-semibold peer-checked:text-gray-900 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-blue-600 hover:text-gray-900 motion-reduce:transition-none"
+                      >
+                        {label}
+                      </label>
+                    </span>
                   );
                 })}
               </div>
