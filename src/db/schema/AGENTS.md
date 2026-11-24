@@ -80,6 +80,7 @@ questions                  # 개별 질문
 ├── hideColumnLabels, pageBreakBefore
 ├── stickyColumnCount            # 좌측 고정 열 개수 (NULL=자동 판정, 0~3=명시 지정)
 ├── fitTableToWidth              # 화면 폭에 맞춰 표 줄이기 (기본 false, 0146) — `src/features/AGENTS.md` 「질문 유형」의 좌측 고정 열 다음 항목
+├── scaleSlider                  # 슬라이더 방향 positive-right|positive-left (NULL=꺼짐, 0173 CHECK — 어휘 `@/types/scale-slider`, 늘리면 배열·check()·마이그레이션 셋을 함께. `tests/repo/scale-slider-question-column.test.ts` 가 대조). 값이 있으면 척도 슬라이더로 그리고 그 값이 긍정 방향이다. 보통 라디오 문항과 보기 그룹 없는 라디오 보기 소스 표만 읽는다 — 그룹이 있는 표는 choiceGroups 안 그룹의 `scaleSlider` 를 본다. `src/features/AGENTS.md` 「보기 모양과 척도 슬라이더」
 ├── scaleMeanEnabled             # 평균 산출 = 운영 콘솔 「척도 평균」의 「문항 선택」 (기본 false, 0147) — 그 표의 줄. radio·select·table 전용. 빌더는 쓰지 않는 콘솔 소유 컬럼(CONSOLE_OWNED_QUESTION_FIELDS), `src/features/AGENTS.md` 「질문 유형」
 ├── priorAnswerCondition (JSONB), priorAnswerDisabled  # 추적조사 — 문항별 이월값 불러오기 조건(0102, 참→거짓으로 뒤집히면 프리필 회수)·끄기(0103, 켜면 이월값을 깔지 않고 Raw includePriorAnswers 도 비운다)
 ├── noticeContent, noticeBgColor, requiresAcknowledgment  # 공지 (배경색: NULL=기본 파랑, 'none'=무색, hex=커스텀)
