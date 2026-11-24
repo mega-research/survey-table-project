@@ -377,6 +377,36 @@ describe('표 문항 — 슬라이더로 답한 값', () => {
   });
 });
 
+describe('표 문항 — 슬라이더의 필수 강조와 잠금', () => {
+  it('기존 오류 칸 집합에 든 묶음의 슬라이더만 강조되고 그 행 제목이 붉어진다', () => {
+    const errorCellIds = new Set(rows[1]!.cells.slice(3, 9).map((cell) => cell.id));
+    render(<Harness extra={{ errorCellIds }} />);
+    const invalidTrack = within(sliderOf('r2')!).getByTestId('scale-slider-track');
+    expect(invalidTrack).toHaveAttribute('data-invalid', 'true');
+    expect(within(sliderOf('r2')!).getByRole('radiogroup')).toHaveAttribute('aria-invalid', 'true');
+    expect(within(rowBlock('r2')).getByText('2) 도보통행 편의성')).toHaveClass('text-red-700');
+    const okTrack = within(sliderOf('r1')!).getByTestId('scale-slider-track');
+    expect(okTrack).not.toHaveAttribute('data-invalid', 'true');
+    expect(within(rowBlock('r1')).getByText('1) 주차/접근성')).not.toHaveClass('text-red-700');
+  });
+
+  it('잠긴 문항(fieldset disabled) 안에서는 눌러도 끌어도 값이 쓰이지 않는다', () => {
+    const onChangeSpy = vi.fn();
+    render(
+      <fieldset disabled>
+        <Harness onChangeSpy={onChangeSpy} />
+      </fieldset>,
+    );
+    const track = trackOf('r1');
+    press(track, TICK_X[3]!);
+    down(track, TICK_X[0]!);
+    move(track, TICK_X[4]!);
+    up(track, TICK_X[4]!);
+    expect(onChangeSpy).not.toHaveBeenCalled();
+    expect(valueOf()).toEqual({});
+  });
+});
+
 describe('표 문항 — 슬라이더로 그려지는 행이 없으면 지금과 같다', () => {
   it('설정이 없는 표는 넓은 폭에서 원본 표 그대로다', () => {
     render(<Harness satGroup={{}} />);
