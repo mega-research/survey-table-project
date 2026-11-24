@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { Fragment, useId, useState } from 'react';
 
 import { X } from 'lucide-react';
 
@@ -19,31 +19,59 @@ import { BranchRuleEditor } from '@/features/survey-builder/branch-rule-editor';
 import { ExcludeFromMeanSwitch } from '@/features/survey-builder/exclude-from-mean-switch';
 import { InputFormatSelect } from '@/features/survey-builder/input-format-select';
 import type { ScaleBarIssue } from '@/features/survey-builder/lib/scale-bar-diagnostics';
+import type { ChoiceGroupScaleSliderDiagnosis } from '@/features/survey-builder/lib/scale-slider-diagnostics';
 import { NumberFormatFields } from '@/features/survey-builder/number-format-fields';
+import { ScaleSliderDirectionField } from '@/features/survey-builder/scale-slider-direction-field';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import { ScaleBarIssueAlert } from '@/features/survey-builder/table-editor/scale-bar-issue-alert';
+import { ScaleSliderIssueAlert } from '@/features/survey-builder/table-editor/scale-slider-guidance';
 import { generateId } from '@/lib/utils';
-import type { ScaleSliderDirection } from '@/types/scale-slider';
 import { isInputFormat } from '@/types/input-type';
 import type { InputType, NumberFormat, QuestionType } from '@/types/survey';
 import { BranchRule, ChoiceGroup, Question } from '@/types/survey';
 import { issueGroupKey, nextGroupKey } from '@/utils/choice-group-helpers';
 import { DEFAULT_REQUIRED_MESSAGE } from '@/utils/required-message';
 
-/** 보기 모양 — 「척도 슬라이더」는 라디오 묶음에서만 고를 수 있다(canChoiceGroupUseScaleSlider) */
-const MOBILE_VIEW_CHOICES: ReadonlyArray<{ view: ChoiceGroupMobileView; label: string }> = [
-  { view: 'tiles', label: '세로 타일' },
-  { view: 'original-line', label: '원본 한 줄' },
-  { view: 'scale-bar', label: '척도 막대' },
-  { view: 'scale-slider', label: '척도 슬라이더' },
-];
+/** 모양이 적용되는 화면 — 앞의 셋은 모바일 전용, 척도 슬라이더만 웹에도 적용된다 */
+type ViewScope = 'mobile-only' | 'web-and-mobile';
 
-/** 척도 슬라이더의 긍정 방향 — 묶음의 `scaleSlider` 에 켬과 함께 적힌다(@/types/scale-slider) */
-const SLIDER_DIRECTION_CHOICES: ReadonlyArray<{ direction: ScaleSliderDirection; label: string }> =
-  [
-    { direction: 'positive-right', label: '오른쪽이 긍정' },
-    { direction: 'positive-left', label: '왼쪽이 긍정' },
-  ];
+const VIEW_SCOPE_LABELS: Readonly<Record<ViewScope, string>> = {
+  'mobile-only': '모바일만',
+  'web-and-mobile': '웹과 모바일',
+};
+
+/**
+ * 보기 모양 — 「척도 슬라이더」는 라디오 묶음에서만 고를 수 있다(canChoiceGroupUseScaleSlider).
+ * 모양마다 적용 범위와 한 줄 설명을 함께 둔다 — 버튼의 설명(`aria-describedby`)이자 버튼 아래 목록이다.
+ */
+const MOBILE_VIEW_CHOICES: ReadonlyArray<{
+  view: ChoiceGroupMobileView;
+  label: string;
+  scope: ViewScope;
+  description: string;
+}> = [
+  { view: 'tiles', label: '세로 타일', scope: 'mobile-only', description: '보기를 세로로 쌓습니다(기본).' },
+  {
+    view: 'original-line',
+    label: '원본 한 줄',
+    scope: 'mobile-only',
+    description: '이 그룹 열의 헤더와 보기 한 줄을 원본 표 조각(가로 스크롤)으로 보입니다.',
+  },
+  {
+    view: 'scale-bar',
+    label: '척도 막대',
+    scope: 'mobile-only',
+    description:
+      '화면 폭에 맞춘 막대(칸 글자 + 헤더 구간)로 보입니다. 11점 척도처럼 보기가 많은 그룹용이고, 막대로 그릴 수 없는 그룹은 원본 한 줄로 보입니다.',
+  },
+  {
+    view: 'scale-slider',
+    label: '척도 슬라이더',
+    scope: 'web-and-mobile',
+    description:
+      '타일 줄과 트랙으로 보입니다. 고르면 이 표는 웹에서도 표 대신 행 단위로 그려지고, 모바일도 표시 방식이 「행 단위 그룹 카드」가 아니면 행 단위로 그려집니다.',
+  },
+];
 
 interface ImpliedSelectionCell {
   cellId: string;
@@ -113,6 +141,11 @@ interface ChoiceOptCellTabProps {
    * 「척도 막대」일 때만 경고로 보인다. 응답 화면은 그 행을 원본 한 줄로 그린다.
    */
   scaleBarIssues?: readonly ScaleBarIssue[] | undefined;
+  /**
+   * 현재 그룹을 척도 슬라이더로 그릴 수 없는 행과 이유, 그리고 이 표에 그릴 수 있는 행이 있는지
+   * (diagnoseChoiceGroupScaleSlider) — 보기 모양이 「척도 슬라이더」일 때만 경고로 보인다.
+   */
+  scaleSliderDiagnosis?: ChoiceGroupScaleSliderDiagnosis | undefined;
   /** 질문 레벨 "필수 질문" 여부 — 그룹별 필수 토글의 상속 기본값 표시용 */
   questionRequired: boolean;
   /** 질문 단위 응답 인용 토글 — 켜졌을 때만 인용 문구 입력칸을 노출한다. */
@@ -154,6 +187,7 @@ export function ChoiceOptCellTab({
   onChoiceGroupIdChange,
   onChoiceGroupsChange,
   scaleBarIssues = [],
+  scaleSliderDiagnosis,
   questionRequired,
   answerQuoteEnabled = false,
   answerQuoteText,
@@ -173,7 +207,12 @@ export function ChoiceOptCellTab({
   const currentGroup = filteredGroups.find((g) => g.id === choiceGroupId);
   // 슬라이더로 고른 묶음이면 그 긍정 방향 — 방향 고르기를 보일지와 지금 값
   const currentSliderDirection = resolveChoiceGroupSliderDirection(currentGroup);
-  const sliderDirectionId = useId();
+  const currentView = resolveChoiceGroupMobileView(currentGroup);
+  // 이 묶음이 고를 수 있는 모양 — 버튼과 설명 목록이 같은 목록을 쓴다(고를 수 없는 모양은 적지 않는다)
+  const availableViews = MOBILE_VIEW_CHOICES.filter(
+    ({ view }) => view !== 'scale-slider' || canChoiceGroupUseScaleSlider(currentGroup),
+  );
+  const viewSectionId = useId();
 
   function handleTypeSelect(type: 'radio' | 'checkbox') {
     if (type === selectedType) return;
@@ -319,22 +358,26 @@ export function ChoiceOptCellTab({
         </div>
       )}
 
-      {/* 모바일 「행 단위 그룹 카드」에서 이 그룹을 그리는 모양 — 기본 세로 타일 */}
+      {/* 이 그룹을 그리는 모양 — 기본 세로 타일. 앞의 셋은 모바일에만, 척도 슬라이더는 웹과 모바일 둘 다에
+          적용된다. 어느 화면이 바뀌는지를 고르는 자리에서 알 수 있게 모양마다 적용 범위를 적는다 */}
       {currentGroup && currentGroup.type !== 'ranking' && (
-        <div className="space-y-1.5 rounded-md border border-gray-200 bg-gray-50 p-3">
-          <p className="text-sm font-medium">
-            모바일 그룹 카드에서 보기 모양 ({currentGroup.groupKey})
+        <div className="space-y-2 rounded-md border border-gray-200 bg-gray-50 p-3">
+          <p id={`${viewSectionId}-title`} className="text-sm font-medium">
+            보기 모양 ({currentGroup.groupKey})
           </p>
-          <div className="inline-flex overflow-hidden rounded-md border border-gray-200">
-            {MOBILE_VIEW_CHOICES.filter(
-              ({ view }) => view !== 'scale-slider' || canChoiceGroupUseScaleSlider(currentGroup),
-            ).map(({ view, label }, index) => {
-              const active = resolveChoiceGroupMobileView(currentGroup) === view;
+          <div
+            role="group"
+            aria-labelledby={`${viewSectionId}-title`}
+            className="inline-flex overflow-hidden rounded-md border border-gray-200"
+          >
+            {availableViews.map(({ view, label }, index) => {
+              const active = currentView === view;
               return (
                 <button
                   key={view}
                   type="button"
                   aria-pressed={active}
+                  aria-describedby={`${viewSectionId}-${view}`}
                   onClick={() =>
                     onChoiceGroupsChange(
                       choiceGroups.map((g) =>
@@ -349,57 +392,63 @@ export function ChoiceOptCellTab({
               );
             })}
           </div>
-          {/* 척도 슬라이더의 긍정 방향 — 슬라이더를 고른 묶음에만. 둘 중 하나라 native radio 묶음이다
-              (묶음 이름은 legend). 방향만 바꿀 때도 보기 모양 쓰기 한 곳을 지난다 */}
-          {currentSliderDirection !== null && (
-            <fieldset className="min-w-0">
-              <legend className="mb-1.5 text-xs font-medium text-gray-700">긍정 방향</legend>
-              {/* 문항 설정의 긍정 방향(question-scale-slider-fields)과 같은 모양이다 — 같은 값을 고르는 두 자리다 */}
-              <div className="inline-flex gap-0.5 rounded-lg bg-gray-100 p-0.5">
-                {SLIDER_DIRECTION_CHOICES.map(({ direction, label }) => {
-                  const inputId = `${sliderDirectionId}-${direction}`;
-                  return (
-                    // relative — 숨긴 라디오가 제 칸 안에 머물러, 포커스가 갈 때 화면이 엉뚱한 곳으로 튀지 않는다
-                    <span key={direction} className="relative">
-                      <input
-                        type="radio"
-                        id={inputId}
-                        name={sliderDirectionId}
-                        value={direction}
-                        className="peer sr-only"
-                        checked={currentSliderDirection === direction}
-                        onChange={() =>
-                          onChoiceGroupsChange(
-                            choiceGroups.map((g) =>
-                              g.id === choiceGroupId
-                                ? withChoiceGroupMobileView(g, 'scale-slider', direction)
-                                : g,
-                            ),
-                          )
-                        }
-                      />
-                      <label
-                        htmlFor={inputId}
-                        className="block cursor-pointer rounded-md border border-transparent px-3 py-1.5 text-xs text-gray-600 transition-colors select-none peer-checked:border-gray-300 peer-checked:bg-white peer-checked:font-semibold peer-checked:text-gray-900 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-blue-600 hover:text-gray-900 motion-reduce:transition-none"
-                      >
-                        {label}
-                      </label>
-                    </span>
-                  );
-                })}
-              </div>
-            </fieldset>
-          )}
+          {/* 모양마다 한 줄 — 이름 · 적용 범위 · 무엇으로 그리는지. 고른 모양의 줄은 짙게 */}
+          <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1 text-xs">
+            {availableViews.map(({ view, label, scope, description }) => {
+              const active = currentView === view;
+              return (
+                <Fragment key={view}>
+                  <dt className={active ? 'font-semibold text-gray-900' : 'text-gray-600'}>
+                    {label}
+                  </dt>
+                  <dd
+                    id={`${viewSectionId}-${view}`}
+                    className={active ? 'text-gray-700' : 'text-gray-500'}
+                  >
+                    {/* 범위 뒤의 빈칸은 글자다 — 낭독기가 범위와 설명을 붙여 읽지 않는다 */}
+                    <span
+                      className={`mr-0.5 inline-block rounded px-1 font-medium ${scope === 'web-and-mobile' ? 'bg-blue-100 text-blue-800' : 'bg-gray-200 text-gray-700'}`}
+                    >
+                      {VIEW_SCOPE_LABELS[scope]}
+                    </span>{' '}
+                    {description}
+                  </dd>
+                </Fragment>
+              );
+            })}
+          </dl>
           <p className="text-xs text-gray-500">
-            모바일 표시 방식이 「행 단위 그룹 카드」·「행별 척도」일 때 적용됩니다. 원본 한 줄은 이
-            그룹 열의 헤더 + 보기 한 줄을 원본 표 조각(가로 스크롤)으로, 척도 막대는 화면 폭에 맞춘
-            막대(칸 글자 + 헤더 구간)로 보여 줍니다 — 11점 척도처럼 보기가 많은 그룹용. 막대로 그릴
-            수 없는 그룹은 원본 한 줄로 보입니다.
+            모바일에만 적용되는 모양은 모바일 표시 방식이 「행 단위 그룹 카드」·「행별 척도」일 때
+            적용됩니다.
           </p>
-          {resolveChoiceGroupMobileView(currentGroup) === 'scale-bar' && (
+          {/* 척도 슬라이더의 긍정 방향 — 슬라이더를 고른 묶음에만. 방향만 바꿀 때도 보기 모양 쓰기 한 곳을 지난다 */}
+          {currentSliderDirection !== null && (
+            <div className="border-t border-gray-200 pt-2">
+              <ScaleSliderDirectionField
+                value={currentSliderDirection}
+                onChange={(direction) =>
+                  onChoiceGroupsChange(
+                    choiceGroups.map((g) =>
+                      g.id === choiceGroupId
+                        ? withChoiceGroupMobileView(g, 'scale-slider', direction)
+                        : g,
+                    ),
+                  )
+                }
+              />
+            </div>
+          )}
+          {currentView === 'scale-bar' && (
             <ScaleBarIssueAlert
               title="척도 막대로 그릴 수 없는 행이 있어 그 행은 원본 한 줄로 보입니다."
               issues={scaleBarIssues}
+            />
+          )}
+          {currentView === 'scale-slider' && scaleSliderDiagnosis && (
+            <ScaleSliderIssueAlert
+              kind="table"
+              issues={scaleSliderDiagnosis.issues}
+              drawsNothing={scaleSliderDiagnosis.drawsNothing}
             />
           )}
         </div>
@@ -528,6 +577,7 @@ export function ChoiceOptCellTab({
           id="choice-opt-exclude-from-mean"
           checked={excludeFromMean}
           onCheckedChange={onExcludeFromMeanChange}
+          scaleSliderNote
         />
       )}
 
