@@ -514,39 +514,56 @@ describe('projectScaleBar — 폴백(null + 이유 코드)', () => {
 });
 
 describe('resolveScaleBarAnchorLayout — 막대 아래 라벨 줄의 배치', () => {
-  it('10점 척도 — 가운데 구간(5·6번째 칸)의 중심이 한가운데라 양옆 자리가 같다', () => {
+  const CENTERED = 'minmax(0, 1fr) fit-content(40%) minmax(0, 1fr)';
+
+  it('10점 척도 — 가운데 구간(5·6번째 칸)이 줄의 한가운데라 세 자리 틀을 쓴다', () => {
     expect(
       resolveScaleBarAnchorLayout(
         { left: '매우 만족', middle: { label: '보통', index: 4, span: 2 }, right: '매우 불만족' },
         10,
       ),
-    ).toEqual({ gridColumn: '1 / 11', template: 'minmax(0, 5fr) fit-content(40%) minmax(0, 5fr)' });
+    ).toEqual({ kind: 'centered', gridColumn: '1 / 11', template: CENTERED });
   });
 
-  it('척도 밖 칸이 끝에 낀 막대 — 라벨 줄은 오른쪽 라벨의 끝 칸까지만 차지한다', () => {
+  it('척도 밖 칸이 끝에 낀 막대 — 라벨 줄은 오른쪽 라벨의 끝 칸까지만 차지하고, 그 안에서 가운데다', () => {
+    // 10점 + 「미참여」(폭이 다른 칸) — 그 칸은 라벨 줄 밖이라 한가운데 판정에 끼지 않는다
+    const uneven = [...Array<boolean>(10).fill(false), true];
     expect(
       resolveScaleBarAnchorLayout(
         { left: 'A', middle: { label: 'M', index: 4, span: 2 }, right: 'B', rightEnd: 9 },
         11,
-      ).gridColumn,
-    ).toBe('1 / 11');
-    expect(
-      resolveScaleBarAnchorLayout({ left: 'A', leftStart: 1, right: 'B' }, 11),
-    ).toEqual({ gridColumn: '2 / 12', template: null });
+        uneven,
+      ),
+    ).toEqual({ kind: 'centered', gridColumn: '1 / 11', template: CENTERED });
   });
 
-  it('가운데 구간이 한쪽으로 치우치면 양옆 자리를 그 중심 앞뒤 칸 수에 비례해 나눈다', () => {
-    // 7칸 중 3번째 칸(중심 2.5) — 앞 2.5칸 · 뒤 4.5칸
+  it('라벨 줄 안에 폭이 다른 칸이 있으면 라벨을 막대의 칸에 직접 붙인다 — 가운데 라벨은 제 구간 칸 아래', () => {
+    // 첫 칸이 「해당없음」(넓은 칸)인 11칸 — 줄의 한가운데가 6번째 칸의 가운데가 아니다
+    const uneven = [true, ...Array<boolean>(10).fill(false)];
     expect(
-      resolveScaleBarAnchorLayout({ left: 'A', middle: { label: 'M', index: 2 }, right: 'B' }, 7)
-        .template,
-    ).toBe('minmax(0, 2.5fr) fit-content(40%) minmax(0, 4.5fr)');
+      resolveScaleBarAnchorLayout(
+        { left: 'A', middle: { label: 'M', index: 5 }, right: 'B' },
+        11,
+        uneven,
+      ),
+    ).toEqual({ kind: 'zones', left: '1 / 6', middle: '6 / span 1', right: '7 / 12' });
   });
 
-  it('가운데 라벨이 없으면 틀이 없다 — 양끝 라벨만 양쪽으로 벌린다', () => {
+  it('가운데 구간이 한쪽으로 치우쳐도 칸에 직접 붙인다', () => {
+    // 7칸 중 3번째 칸 — 앞 2칸 · 뒤 4칸
+    expect(
+      resolveScaleBarAnchorLayout({ left: 'A', middle: { label: 'M', index: 2 }, right: 'B' }, 7),
+    ).toEqual({ kind: 'zones', left: '1 / 3', middle: '3 / span 1', right: '4 / 8' });
+  });
+
+  it('가운데 라벨이 없으면 양끝 라벨만 줄의 양쪽으로 벌린다', () => {
     expect(resolveScaleBarAnchorLayout({ left: 'A', right: 'B' }, 7)).toEqual({
+      kind: 'spread',
       gridColumn: '1 / 8',
-      template: null,
+    });
+    expect(resolveScaleBarAnchorLayout({ left: 'A', leftStart: 1, right: 'B' }, 11)).toEqual({
+      kind: 'spread',
+      gridColumn: '2 / 12',
     });
   });
 });

@@ -120,7 +120,11 @@ export const ChoiceGroupScaleBar = React.memo(function ChoiceGroupScaleBar({
       : `repeat(${count}, minmax(0, 1fr))`,
   };
   const { left, middle, right } = model.anchors;
-  const anchorLayout = resolveScaleBarAnchorLayout(model.anchors, count);
+  const anchorLayout = resolveScaleBarAnchorLayout(
+    model.anchors,
+    count,
+    minWidths.map((width) => width !== undefined),
+  );
   // 띠는 늘 그린다 — 헤더에 구간 줄이 없는 척도(칸마다 이름이 하나씩인 5점 등)는 칸마다 띠 하나다.
   // 구간 이름·선택값 표시는 여전히 헤더의 구간(model.bands)만 쓴다.
   const hasHeaderBands = model.bands.length > 0;
@@ -233,17 +237,16 @@ export const ChoiceGroupScaleBar = React.memo(function ChoiceGroupScaleBar({
           </div>
         }
         {hasAnchors && (
-          // 라벨은 글자 길이가 아니라 제 구간의 칸에 붙인다 — 라벨 줄은 막대와 같은 열 틀에서 왼쪽 라벨의 첫 칸부터
-          // 오른쪽 라벨의 끝 칸까지 차지한다(칸 폭이 달라져도 자리가 맞는다). 그 안에서 가운데 라벨은 구간
-          // 가운데에 두고 양끝 라벨이 남는 폭을 나눠 쓴다. 길면 줄을 바꾼다 — 한 줄로 겹쳐 놓으면 긴 번역
-          // 라벨이 서로를 덮는다(resolveScaleBarAnchorLayout).
+          // 라벨은 글자 길이가 아니라 제 구간의 칸에 붙인다 — 라벨 줄은 막대와 같은 열 틀을 써, 칸 폭이 달라져도
+          // 자리가 맞는다. 라벨끼리 겹쳐 놓지 않고 자리를 나눠 쓰며, 길면 줄을 바꾼다(한 줄로 겹쳐 놓으면 긴 번역
+          // 라벨이 서로를 덮는다). 세 배치는 resolveScaleBarAnchorLayout 이 정한다.
           <div
             aria-hidden
             data-testid="scale-bar-anchors"
             className="mt-1 grid text-[11px] leading-4 text-gray-900"
             style={columnsStyle}
           >
-            {anchorLayout.template !== null ? (
+            {anchorLayout.kind === 'centered' && (
               <div
                 data-testid="scale-bar-anchor-row"
                 className="grid gap-x-1.5"
@@ -262,7 +265,8 @@ export const ChoiceGroupScaleBar = React.memo(function ChoiceGroupScaleBar({
                   {right !== undefined ? text(right) : null}
                 </span>
               </div>
-            ) : (
+            )}
+            {anchorLayout.kind === 'spread' && (
               <div
                 data-testid="scale-bar-anchor-row"
                 className="flex justify-between gap-x-2"
@@ -275,6 +279,34 @@ export const ChoiceGroupScaleBar = React.memo(function ChoiceGroupScaleBar({
                   <span className="ml-auto min-w-0 text-right break-words">{text(right)}</span>
                 )}
               </div>
+            )}
+            {anchorLayout.kind === 'zones' && (
+              <>
+                {left !== undefined && (
+                  <span
+                    className="row-start-1 min-w-0 pr-1 text-left break-words"
+                    style={{ gridColumn: anchorLayout.left }}
+                  >
+                    {text(left)}
+                  </span>
+                )}
+                {middle !== undefined && (
+                  <span
+                    className="row-start-1 min-w-0 text-center break-words"
+                    style={{ gridColumn: anchorLayout.middle }}
+                  >
+                    {text(middle.label)}
+                  </span>
+                )}
+                {right !== undefined && (
+                  <span
+                    className="row-start-1 min-w-0 pl-1 text-right break-words"
+                    style={{ gridColumn: anchorLayout.right }}
+                  >
+                    {text(right)}
+                  </span>
+                )}
+              </>
             )}
           </div>
         )}
