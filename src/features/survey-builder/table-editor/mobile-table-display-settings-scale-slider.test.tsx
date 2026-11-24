@@ -113,3 +113,13 @@ describe('MobileTableDisplaySettings — 척도 슬라이더가 켜진 표', () 
     expect(screen.queryByRole('alert')).toBeNull();
   });
 });
+
+describe('MobileTableDisplaySettings — 「행별 척도」 설명의 보기 모양', () => {
+  afterEach(cleanup);
+
+  it('보기 모양 넷을 적는다 — 세로 타일 · 원본 한 줄 · 척도 막대 · 척도 슬라이더', () => {
+    render(<MobileTableDisplaySettings mode="auto" {...base} hasChoiceGroups />);
+    const option = screen.getByRole('radio', { name: '행별 척도' }).closest('label');
+    expect(option).toHaveTextContent('보기 모양(세로 타일 · 원본 한 줄 · 척도 막대 · 척도 슬라이더)');
+  });
+});
