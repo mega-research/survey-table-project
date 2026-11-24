@@ -26,7 +26,9 @@ import {
  *     눈금마다 타일 한 장이고 누를 수 있다. 한 눈금이라도 이름이 없으면 점 타일이 아니다(반쪽 타일 줄은
  *     빠진 눈금을 숨긴다).
  *   - `band`: 점 이름은 없고 구간이 있다. 구간마다 타일 한 장이고 누를 수 없으며, 폭은 덮는 눈금 수다.
- *     구간이 눈금 전부를 덮는다는 보장은 없다(양끝에만 이름이 있는 척도) — 타일은 `start` 자리에 놓는다.
+ *     **타일 상자는 구간이 눈금을 빠짐없이 덮을 때만 그린다**(`bandsCoverAllTicks`). 양끝에만 이름이 있는
+ *     11점처럼 덮지 못하는 척도는 구간 이름을 글자로만 둔다 — 좁은 폭에서 한 칸짜리 타일에 이름이 들어가지
+ *     않는다. 그 글자의 자리는 `resolveScaleSliderBandTextLayout` 이 정한다.
  *   - `none`: 이름도 구간도 없다(번호뿐인 척도).
  *   - 점 이름과 구간이 둘 다 있으면 점 타일이다. 구간은 `bands` 에 남아 고른 값 표시에만 쓰인다.
  * - **눈금 글자**(`mark`): 눈금 아래에 적는 칸 글자. 그 눈금의 타일 이름과 같으면 싣지 않는다(한 번만 보인다).
@@ -34,7 +36,9 @@ import {
  * - **쪽**(부정 · 중립 · 긍정)은 눈금 줄의 정가운데 기준이다. 눈금은 제 자리로, 구간은 구간의 가운데 자리로
  *   가른다. 정가운데면 중립이라 짝수 눈금에는 중립 눈금이 없다(정가운데에 놓인 구간은 짝수에서도 중립이다).
  *   긍정 방향이 왼쪽이면 뒤집는다. 방향은 색만 정한다 — 눈금 순서는 그대로다.
- * - **척도 밖 보기의 글자**: 그 칸의 글자, 비어 있으면 그 칸만 덮는 한 칸짜리 머리 이름.
+ * - **척도 밖 보기의 글자**: 그 칸의 글자, 비어 있으면 그 칸만 덮는 한 칸짜리 머리 이름. 칸 글자가 번호뿐이고
+ *   (「⑨」) 머리에 이름이 있으면(「모름」) 머리 이름이다 — 눈금은 번호와 이름을 둘 다 싣지만 체크는 글자가
+ *   하나뿐이라, 번호만 보이면 무엇을 고르는지 알 수 없다.
  * - **폴백**: 그릴 수 없으면 이유 코드를 돌려주고 호출부는 다음 모양(원본 한 줄)으로 그린다. 이유 코드는
  *   척도 막대와 같은 글자를 쓴다 — 빌더 경고가 이유별 문구로 옮긴다. 판정 순서도 막대와 같다.
  *   - 대상 칸(눈금 + 척도 밖 보기) 전체가 이어진 열에 서 있어야 하고, 그 안에서 눈금끼리도 이어져야 한다.
@@ -86,6 +90,11 @@ export interface ScaleSliderModel {
   offScale: ScaleSliderOffScaleChoice[];
   /** 고른 눈금의 「칸 글자 · 구간 이름」 표시를 쓰는가 — 구간이 있을 때 */
   showsSelectionLabel: boolean;
+  /**
+   * 구간이 눈금을 빠짐없이 덮는가 — 타일 종류가 `band` 일 때 타일 상자를 그릴지를 가른다. 덮지 못하면
+   * 구간 이름을 글자로만 둔다. 구간이 없으면 false.
+   */
+  bandsCoverAllTicks: boolean;
 }
 
 /** 척도 막대의 폴백 이유와 같은 글자다 — `cell-count` 는 여기서 눈금 수(2~13)를 뜻한다 */
@@ -134,6 +143,16 @@ function sideOf(
   return leftOfMiddle === (direction === 'positive-left') ? 'positive' : 'negative';
 }
 
+/** 구간이 첫 눈금부터 끝 눈금까지 틈 없이 이어지는가 */
+function coversAllTicks(bands: readonly ScaleSliderBand[], tickCount: number): boolean {
+  let next = 0;
+  for (const band of bands) {
+    if (band.start !== next) return false;
+    next = band.start + band.span;
+  }
+  return bands.length > 0 && next === tickCount;
+}
+
 function fallback(reason: ScaleSliderFallbackReason): ScaleSliderProjection {
   return { ok: false, reason };
 }
@@ -173,14 +192,17 @@ export function projectScaleSlider(input: ProjectScaleSliderInput): ScaleSliderP
   const offScale: ScaleSliderOffScaleChoice[] = [];
   for (const cell of offScaleCells) {
     const own = normalizeScaleLabel(cell.content ?? '');
-    const label =
-      own !== ''
-        ? own
-        : readOwnColumnHeaderName({
-            columns,
-            headerGrid: input.headerGrid,
-            index: row.cells.findIndex((c) => c.id === cell.id),
-          });
+    const ownIsName = own !== '' && !isNumberMarkLabel(own);
+    const headName = ownIsName
+      ? undefined
+      : readOwnColumnHeaderName({
+          columns,
+          headerGrid: input.headerGrid,
+          index: row.cells.findIndex((c) => c.id === cell.id),
+        });
+    // 칸 글자가 번호뿐이면 머리의 이름이 이긴다. 머리도 번호뿐이면 칸에 적힌 글자를 그대로 둔다
+    const headWins = headName !== undefined && (own === '' || !isNumberMarkLabel(headName));
+    const label = headWins ? headName : own !== '' ? own : undefined;
     if (label === undefined) return fallback('missing-text');
     offScale.push({ choiceId: cell.id, label });
   }
@@ -217,6 +239,49 @@ export function projectScaleSlider(input: ProjectScaleSliderInput): ScaleSliderP
 
   return {
     ok: true,
-    model: { tileKind, ticks, bands, offScale, showsSelectionLabel: bands.length > 0 },
+    model: {
+      tileKind,
+      ticks,
+      bands,
+      offScale,
+      showsSelectionLabel: bands.length > 0,
+      bandsCoverAllTicks: coversAllTicks(bands, count),
+    },
   };
+}
+
+/** 글자로만 두는 구간 이름 하나의 자리 — 눈금 열 `start` 부터 `span` 칸, 그 안에서 붙는 쪽 */
+export interface ScaleSliderBandTextPlacement {
+  /** 이름이 쓰는 첫 눈금 열(0부터) */
+  start: number;
+  /** 이름이 쓰는 눈금 열 수 */
+  span: number;
+  align: 'start' | 'center' | 'end';
+}
+
+/**
+ * 구간이 눈금 전부를 덮지 않는 척도에서 **구간 이름을 글자로만 둘 때의 자리**(구간 순서 그대로).
+ *
+ * - 첫 눈금에서 시작하는 구간은 왼쪽, 끝 눈금에서 끝나는 구간은 오른쪽, 그 밖은 구간 가운데에 붙는다.
+ * - 이름은 제 구간 옆의 빈 눈금까지 자리를 쓴다(한 칸에는 이름이 들어가지 않는다). 이웃 구간과의 빈 자리는
+ *   반씩 나누고(홀수면 가운데 한 칸은 비운다), 이웃이 없는 쪽은 척도 끝까지 쓴다.
+ * - 가운데 구간은 양옆으로 같은 만큼만 넓힌다 — 한쪽만 넓히면 이름이 제 구간의 가운데에서 벗어난다.
+ */
+export function resolveScaleSliderBandTextLayout(
+  bands: readonly ScaleSliderBand[],
+  tickCount: number,
+): ScaleSliderBandTextPlacement[] {
+  return bands.map((band, i) => {
+    const end = band.start + band.span;
+    const prev = bands[i - 1];
+    const next = bands[i + 1];
+    const leftRoom = prev ? Math.floor((band.start - (prev.start + prev.span)) / 2) : band.start;
+    const rightRoom = next ? Math.floor((next.start - end) / 2) : tickCount - end;
+    if (band.start === 0) return { start: 0, span: end + rightRoom, align: 'start' as const };
+    if (end === tickCount) {
+      return { start: band.start - leftRoom, span: band.span + leftRoom, align: 'end' as const };
+    }
+    const room = Math.min(leftRoom, rightRoom);
+    return { start: band.start - room, span: band.span + 2 * room, align: 'center' as const };
+  });
 }
