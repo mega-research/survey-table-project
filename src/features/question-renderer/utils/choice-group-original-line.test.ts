@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { projectChoiceGroupOriginalLine } from '@/features/question-renderer/utils/choice-group-original-line';
+import {
+  type ChoiceGroupOriginalLine,
+  projectChoiceGroupOriginalLine,
+  resolveWideTextInputFields,
+} from '@/features/question-renderer/utils/choice-group-original-line';
 import type { ChoiceGroup, HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 
 // 지원제도 표(해운물류 멘토 C4) 모양 — 구분·항목·활용 여부 2칸·만족도 11칸, 헤더 2단.
@@ -150,5 +154,64 @@ describe('projectChoiceGroupOriginalLine', () => {
     expect(
       projectChoiceGroupOriginalLine({ ...base, group: satGroup, columns: columns.slice(0, 5) }),
     ).toBeNull();
+  });
+});
+
+describe('resolveWideTextInputFields — 넓은 화면에서 라벨 + 넓은 입력칸으로 풀 조각', () => {
+  const input = (id: string, extra: Partial<TableCell> = {}): TableCell => ({
+    id,
+    type: 'input',
+    content: '',
+    ...extra,
+  });
+  const piece = (
+    cells: TableCell[],
+    extra: Partial<ChoiceGroupOriginalLine> = {},
+  ): ChoiceGroupOriginalLine => ({
+    columns: cells.map((cell) => ({ id: `col-${cell.id}`, label: `${cell.id} 열` })),
+    row: { id: 'r1', label: '', cells },
+    showColumnHeader: true,
+    ...extra,
+  });
+
+  it('칸이 전부 글자 입력칸이면 칸마다 열 이름과 함께 돌려준다', () => {
+    const memo = input('memo');
+    const note = input('note', { inputType: 'text' });
+    expect(resolveWideTextInputFields(piece([memo, note]))).toEqual([
+      { cell: memo, label: 'memo 열' },
+      { cell: note, label: 'note 열' },
+    ]);
+  });
+
+  it('형식 있는 입력칸이 끼면 조각으로 둔다 — 폭이 곧 뜻이다', () => {
+    expect(resolveWideTextInputFields(piece([input('n', { inputType: 'number' })]))).toBeNull();
+    expect(
+      resolveWideTextInputFields(piece([input('memo'), input('tel', { inputType: 'phone' })])),
+    ).toBeNull();
+  });
+
+  it('보기 칸·글자 칸이 섞인 조각은 조각으로 둔다', () => {
+    expect(resolveWideTextInputFields(piece([choice('u1', 'g-use'), input('memo')]))).toBeNull();
+    expect(
+      resolveWideTextInputFields(piece([{ id: 't', type: 'text', content: '단위' }, input('memo')])),
+    ).toBeNull();
+  });
+
+  it('숨은 칸·병합으로 이어진 칸은 세지 않고, 남는 칸이 없으면 조각으로 둔다', () => {
+    const memo = input('memo');
+    expect(
+      resolveWideTextInputFields(piece([{ ...choice('u1', 'g-use'), isHidden: true }, memo])),
+    ).toEqual([{ cell: memo, label: 'memo 열' }]);
+    expect(resolveWideTextInputFields(piece([{ ...memo, isHidden: true }]))).toBeNull();
+  });
+
+  it('머리를 숨긴 조각은 라벨이 비고, 다단 헤더가 있으면 그 열만 덮는 머리 이름을 읽는다', () => {
+    const memo = input('memo');
+    expect(resolveWideTextInputFields(piece([memo], { showColumnHeader: false }))).toEqual([
+      { cell: memo, label: '' },
+    ]);
+    expect(
+      resolveWideTextInputFields(piece([memo], { headerGrid: [[head('h-memo', '개선 의견', 1)]] })),
+    ).toEqual([{ cell: memo, label: '개선 의견' }]);
   });
 });

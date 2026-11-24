@@ -2,6 +2,7 @@ import type { ChoiceGroup, HeaderCell, TableCell, TableColumn, TableRow } from '
 import { recalculateColspansForVisibleColumns } from '@/utils/table-merge-helpers';
 
 import { resolveChoiceGroupMobileView } from './choice-group-mobile-view';
+import { readOwnColumnHeaderName } from './scale-header-reading';
 
 /**
  * 「행 단위 그룹 카드」의 보기 그룹 한 섹션을 **원본 표 조각**으로 그리기 위한 투영.
@@ -100,4 +101,37 @@ export function projectOriginalColumnPiece(
     ...(headerGrid.length > 0 ? { headerGrid } : {}),
     showColumnHeader,
   };
+}
+
+export interface WideTextInputField {
+  cell: TableCell;
+  /** 입력칸 위에 둘 글자 — 그 열만 덮는 머리 이름. 머리를 숨긴 조각이거나 이름이 없으면 빈 글자 */
+  label: string;
+}
+
+/**
+ * 넓은 화면의 행 단위 배치에서 원본 표 조각 대신 「라벨 + 넓은 입력칸」으로 풀어 그릴 칸들 — 조각의 칸이
+ * **전부 글자 입력칸**일 때만 돌려주고 아니면 null 이다(호출부는 조각 그대로 그린다).
+ *
+ * 척도 슬라이더 옆의 서술형 칸(「개선 의견」)이 원본 열 폭(200px 안팎)에 갇혀 긴 답이 잘려 보이던 것을
+ * 푼다. 형식 있는 입력(숫자·전화번호 등)은 폭이 곧 뜻이라 넓히지 않고, 글자 칸·보기 칸이 섞인 조각도
+ * 표의 짜임이 뜻이라 조각으로 둔다.
+ */
+export function resolveWideTextInputFields(
+  piece: ChoiceGroupOriginalLine,
+): WideTextInputField[] | null {
+  const cells = piece.row.cells.filter((cell) => !cell.isHidden && !cell._isContinuation);
+  if (cells.length === 0) return null;
+  const allFreeText = cells.every(
+    (cell) => cell.type === 'input' && (cell.inputType === undefined || cell.inputType === 'text'),
+  );
+  if (!allFreeText) return null;
+  return cells.map((cell) => {
+    const index = piece.row.cells.indexOf(cell);
+    const label = piece.showColumnHeader
+      ? (readOwnColumnHeaderName({ columns: piece.columns, headerGrid: piece.headerGrid, index }) ??
+        '')
+      : '';
+    return { cell, label };
+  });
 }

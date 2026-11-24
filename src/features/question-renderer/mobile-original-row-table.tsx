@@ -26,6 +26,8 @@ interface Props {
   resetScrollKey?: string | number | undefined;
   errorCellIds?: Set<string> | undefined;
   instanceScope?: string | undefined;
+  /** 표가 자리보다 좁을 때 놓이는 쪽 — 기본은 가운데, 넓은 화면의 행 단위 배치는 `start` */
+  align?: 'center' | 'start' | undefined;
 }
 
 export function MobileOriginalRowTable(props: Props) {
@@ -39,6 +41,7 @@ export function MobileOriginalRowTable(props: Props) {
     resetScrollKey,
     errorCellIds,
     instanceScope,
+    align,
   } = props;
   const { rows, interactiveRowId } = props;
   const attrs = useContactAttrs();
@@ -102,6 +105,7 @@ export function MobileOriginalRowTable(props: Props) {
       stickyHeader={false}
       preserveRowHeights
       applyCellBackground={false}
+      align={align}
     />
   );
 }
