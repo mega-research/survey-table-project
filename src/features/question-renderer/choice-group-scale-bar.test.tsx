@@ -206,8 +206,8 @@ describe('ChoiceGroupScaleBar — 글자가 긴 칸과 구간에 붙는 라벨',
     const row = screen.getByTestId('scale-bar-anchor-row');
     // 왼쪽 라벨의 첫 칸(1) ~ 오른쪽 라벨의 끝 칸(10) — 11번째 「미참여」 칸 아래는 비운다
     expect(row.style.gridColumn).toBe('1 / 11');
-    // 가운데 구간(5·6번째 칸)의 중심이 범위 한가운데라 양옆 자리가 같다
-    expect(row.style.gridTemplateColumns).toBe('minmax(0, 5fr) fit-content(40%) minmax(0, 5fr)');
+    // 가운데 구간(5·6번째 칸)이 그 범위의 한가운데라 양옆 자리가 같다
+    expect(row.style.gridTemplateColumns).toBe('minmax(0, 1fr) fit-content(40%) minmax(0, 1fr)');
     expect([...row.children].map((el) => el.textContent)).toEqual(['매우 만족', '보통', '매우 불만족']);
     expect(row.children[0]).toHaveClass('text-left');
     expect(row.children[1]).toHaveClass('text-center');
@@ -232,6 +232,22 @@ describe('ChoiceGroupScaleBar — 글자가 긴 칸과 구간에 붙는 라벨',
     expect(screen.getByTestId('scale-bar-anchors')).not.toHaveClass('h-4');
   });
 
+  it('줄 안에 폭이 다른 칸이 있으면 가운데 라벨을 제 구간 칸 아래에 직접 붙인다 — 다른 점수 아래로 밀리지 않는다', () => {
+    // 첫 칸이 「해당없음」(넓은 칸)인 11칸 척도 — 세 자리 틀의 한가운데는 6번째 칸의 가운데가 아니다
+    draw({
+      ...elevenPoint,
+      cells: elevenPoint.cells.map((cell, n) => (n === 0 ? { ...cell, text: '해당없음' } : cell)),
+    });
+    expect(screen.queryByTestId('scale-bar-anchor-row')).toBeNull();
+    expect(screen.getByText('보통').style.gridColumn).toBe('6 / span 1');
+    expect(screen.getByText('보통')).toHaveClass('text-center');
+    expect(screen.getByText('매우 불만족').style.gridColumn).toBe('1 / 6');
+    expect(screen.getByText('매우 만족').style.gridColumn).toBe('7 / 12');
+    for (const name of ['매우 불만족', '보통', '매우 만족']) {
+      expect(screen.getByText(name)).not.toHaveClass('whitespace-nowrap');
+    }
+  });
+
   it('가운데 라벨이 없으면 양끝 라벨을 양쪽으로 벌린다', () => {
     draw({ ...elevenPoint, anchors: { left: '전혀 아니다', right: '매우 그렇다' } });
     const row = screen.getByTestId('scale-bar-anchor-row');
@@ -248,7 +264,7 @@ describe('ChoiceGroupScaleBar — 글자가 긴 칸과 구간에 붙는 라벨',
     expect(template(screen.getByTestId('scale-bar-anchors'))).toBe(equal);
     const row = screen.getByTestId('scale-bar-anchor-row');
     expect(row.style.gridColumn).toBe('1 / 12');
-    expect(row.style.gridTemplateColumns).toBe('minmax(0, 5.5fr) fit-content(40%) minmax(0, 5.5fr)');
+    expect(row.style.gridTemplateColumns).toBe('minmax(0, 1fr) fit-content(40%) minmax(0, 1fr)');
     expect([...row.children].map((el) => el.textContent)).toEqual(['매우 불만족', '보통', '매우 만족']);
   });
 });

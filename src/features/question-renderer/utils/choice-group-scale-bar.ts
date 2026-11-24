@@ -149,37 +149,54 @@ function longTextWidth(text: string, count: number): number | undefined {
 /** 가운데 라벨이 쓸 수 있는 폭의 상한 — 넘으면 줄을 바꾼다(양끝 라벨의 자리를 남긴다) */
 const SCALE_BAR_MIDDLE_LABEL_MAX = '40%';
 
-export interface ScaleBarAnchorLayout {
-  /** 라벨 줄이 놓이는 칸 범위 — 막대와 같은 열 틀의 격자선(왼쪽 라벨의 첫 칸 ~ 오른쪽 라벨의 끝 칸) */
-  gridColumn: string;
-  /**
-   * 가운데 라벨이 있을 때의 세 자리 틀(왼쪽 · 가운데 · 오른쪽). 없으면 `null` — 양끝 라벨만 양쪽으로 벌린다.
-   * 양옆 자리는 가운데 구간의 중심 앞뒤 칸 수에 비례해, 가운데 라벨이 구간 가운데에 온다.
-   */
-  template: string | null;
-}
+/**
+ * 막대 아래 라벨 줄의 배치 — 격자선은 막대와 같은 열 틀의 것이다.
+ * - `spread`: 가운데 라벨이 없다. 라벨 줄(왼쪽 라벨의 첫 칸 ~ 오른쪽 라벨의 끝 칸) 안에서 양끝으로 벌린다.
+ * - `centered`: 가운데 구간이 라벨 줄의 한가운데다. 세 자리 틀(양옆 같은 폭 · 가운데는 글자만큼)이라 양끝 라벨이
+ *   남는 폭을 넉넉히 나눠 쓴다.
+ * - `zones`: 가운데 구간이 한쪽으로 치우쳤거나 줄 안에 폭이 다른 칸이 있다. 세 자리 틀의 한가운데가 구간의
+ *   가운데와 어긋나므로 라벨을 막대의 칸에 직접 붙인다 — 가운데 라벨은 제 구간 칸 아래, 양끝 라벨은 그 앞뒤 칸 아래.
+ */
+export type ScaleBarAnchorLayout =
+  | { kind: 'spread'; gridColumn: string }
+  | { kind: 'centered'; gridColumn: string; template: string }
+  | { kind: 'zones'; left: string; middle: string; right: string };
 
 /**
  * 막대 아래 라벨 줄의 배치. 라벨은 제 구간에 붙되(왼쪽은 구간 첫 칸에서, 오른쪽은 구간 끝 칸까지, 가운데는
- * 구간 가운데) **서로 겹치지 않게 남는 폭을 나눠 쓰고, 길면 줄을 바꾼다** — 전에는 한 줄로 겹쳐 놓아
+ * 구간 가운데) **서로 겹치지 않게 자리를 나눠 쓰고, 길면 줄을 바꾼다** — 전에는 한 줄로 겹쳐 놓아
  * 긴 번역 라벨(베트남어 「Tốt hơn nhiều so với kỳ vọng」)이 서로를 덮었다(2026-11-24). 한 줄에 들어가는
  * 라벨은 자리가 종전과 같다.
+ *
+ * `unevenCells` 는 칸마다 「폭이 다른 칸인가」(글자가 길어 최소 폭을 받은 칸 — `resolveScaleBarCellMinWidths`).
+ * 그런 칸이 라벨 줄 안에 있으면 줄의 한가운데가 가운데 구간의 가운데가 아니다.
  */
 export function resolveScaleBarAnchorLayout(
   anchors: ScaleBarModel['anchors'],
   count: number,
+  unevenCells: readonly boolean[] = [],
 ): ScaleBarAnchorLayout {
   const start = anchors.leftStart ?? 0;
   const end = anchors.rightEnd ?? count - 1;
   const gridColumn = `${start + 1} / ${end + 2}`;
-  if (!anchors.middle) return { gridColumn, template: null };
-  const center = anchors.middle.index + (anchors.middle.span ?? 1) / 2;
-  // 구간이 범위 끝에 붙어 있어도 옆 자리가 0 이 되지 않게 반 칸은 남긴다
-  const before = Math.max(center - start, 0.5);
-  const after = Math.max(end + 1 - center, 0.5);
+  const middle = anchors.middle;
+  if (!middle) return { kind: 'spread', gridColumn };
+  const span = middle.span ?? 1;
+  const before = middle.index - start;
+  const after = end - (middle.index + span - 1);
+  const even = !unevenCells.slice(start, end + 1).some(Boolean);
+  if (before === after && before >= 0 && even) {
+    return {
+      kind: 'centered',
+      gridColumn,
+      template: `minmax(0, 1fr) fit-content(${SCALE_BAR_MIDDLE_LABEL_MAX}) minmax(0, 1fr)`,
+    };
+  }
   return {
-    gridColumn,
-    template: `minmax(0, ${before}fr) fit-content(${SCALE_BAR_MIDDLE_LABEL_MAX}) minmax(0, ${after}fr)`,
+    kind: 'zones',
+    left: `${start + 1} / ${middle.index + 1}`,
+    middle: `${middle.index + 1} / span ${span}`,
+    right: `${middle.index + span + 1} / ${end + 2}`,
   };
 }
 
