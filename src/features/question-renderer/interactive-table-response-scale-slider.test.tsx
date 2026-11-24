@@ -267,7 +267,11 @@ describe('표 문항 — 넓은 폭의 척도 슬라이더', () => {
 
   it('행에 응답 묶음이 여럿이면 슬라이더 머리에 묶음 이름을 두고, 하나뿐이면 행 제목이 이름이다', () => {
     const { unmount } = render(<Harness />);
-    expect(within(rowBlock('r1')).getByRole('radiogroup', { name: '만족도' })).toBeInTheDocument();
+    // 낭독 이름은 「행 제목, 묶음 이름」이다 — 머리 줄에는 묶음 이름만 보인다
+    expect(
+      within(rowBlock('r1')).getByRole('radiogroup', { name: '1) 주차/접근성 만족도' }),
+    ).toBeInTheDocument();
+    expect(within(sliderOf('r1')!).getByText('만족도')).toBeInTheDocument();
     unmount();
 
     const onlyScale = rows.map((row) => ({ ...row, cells: [row.cells[0]!, ...row.cells.slice(3, 9)] }));
@@ -293,7 +297,9 @@ describe('표 문항 — 넓은 폭의 척도 슬라이더', () => {
     render(<Harness useGroup={SLIDER} />);
     const block = rowBlock('r1');
     const groups = within(block).getAllByRole('radiogroup');
-    expect(groups.map((group) => group.getAttribute('aria-label'))).toEqual(['활용 여부', '만족도']);
+    expect(groups).toHaveLength(2);
+    expect(groups[0]).toHaveAccessibleName('1) 주차/접근성 활용 여부');
+    expect(groups[1]).toHaveAccessibleName('1) 주차/접근성 만족도');
   });
 });
 

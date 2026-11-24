@@ -249,7 +249,8 @@ describe('보기 소스 표 — 넓은 폭의 척도 슬라이더', () => {
 
   it('한 행에 응답 묶음이 여럿이면 슬라이더 머리에 그룹 이름을 둔다', () => {
     render(<Harness q={question()} />);
-    expect(within(sliderOf('r1')!).getByRole('radiogroup', { name: '만족도' })).toBeInTheDocument();
+    // 낭독 이름은 「행 제목, 그룹 이름」이다 — 머리 줄에는 그룹 이름만 보인다
+    expect(within(sliderOf('r1')!).getByRole('radiogroup')).toHaveAccessibleName(/ 만족도$/);
     expect(within(sliderOf('r1')!).getByText('만족도')).toBeInTheDocument();
   });
 
