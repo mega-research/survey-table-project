@@ -11,11 +11,14 @@ import { Label } from '@/components/ui/label';
 import { cn, generateId } from '@/lib/utils';
 import { headerPath } from '@/features/question-renderer/utils/column-axis-cards';
 import { resolveUngroupedSelectionType } from '@/features/question-renderer/utils/row-scale-bars';
+import { resolveChoiceTableQuestionSliderDirection } from '@/features/question-renderer/utils/scale-slider-table-layout';
 import { isStagedColumnsActive } from '@/features/question-renderer/utils/staged-columns';
 import { diagnoseRowScaleBars } from '@/features/survey-builder/lib/scale-bar-diagnostics';
+import { summarizeTableScaleSlider } from '@/features/survey-builder/lib/scale-slider-diagnostics';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
 import { ChoiceGroup, DynamicRowGroupConfig, HeaderCell, QuestionConditionGroup, RowRepeatConfig, StagedRowsConfig, TableCell, TableColumn, TableRow } from '@/types/survey';
+import type { ScaleSliderDirection } from '@/types/scale-slider';
 import { pruneChoiceGroups } from '@/utils/choice-group-helpers';
 import {
   clampMobileDrilldownOmitLeadingColumns,
@@ -66,6 +69,12 @@ interface DynamicTableEditorProps {
    * 스토어가 아니라 편집 모달의 formData 에서 내려온다 — 저장 전 토글도 즉시 반영되어야 하기 때문.
    */
   answerQuoteEnabled?: boolean | undefined;
+  /**
+   * 문항 설정의 슬라이더 방향(「척도 슬라이더로 그리기」) — 그룹 없는 보기 소스 표가 읽는 값이다.
+   * 그 스위치는 편집 모달의 formData 에만 쓰므로 스토어가 아니라 여기로 내려온다(꺼졌으면 null).
+   * 모바일 표시 방식 옆 안내만 읽는다 — 이 에디터는 값을 쓰지 않는다.
+   */
+  questionScaleSlider?: ScaleSliderDirection | null | undefined;
   dynamicRowConfigs?: DynamicRowGroupConfig[] | undefined;
   /** 행 반복 설정 — 편집 표는 1벌만 그리고, 2벌 이후는 저장 구조에만 존재한다 */
   rowRepeatConfig?: RowRepeatConfig | null | undefined;
@@ -180,6 +189,34 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
       mobileDrilldownRepeatHeaderRange,
       mobileTableDisplayMode,
       mobileTableQuestion,
+      useMultiRowHeader,
+    ],
+  );
+  // 척도 슬라이더가 켜진 표인가, 그려지는 행이 있는가 — 모바일 표시 방식 옆 안내의 재료. 응답 화면의 표
+  // 배치 판정과 같은 함수를 편집 중인 표 구조에 돌린다. 보기 그룹은 스토어 값(셀 편집이 쓴다)이고, 그룹 없는
+  // 보기 소스 표의 방향은 문항 편집 폼의 값이다(저장 전이라 스토어의 방향은 읽지 않는다).
+  const questionScaleSlider = props.questionScaleSlider;
+  const scaleSliderSummary = useMemo(
+    () =>
+      mobileTableQuestion
+        ? summarizeTableScaleSlider({
+            rows: currentRows,
+            columns: currentColumns,
+            headerGrid: useMultiRowHeader ? currentHeaderGrid : undefined,
+            choiceGroups: mobileTableQuestion.choiceGroups ?? [],
+            ungroupedSelectionType: resolveUngroupedSelectionType(mobileTableQuestion.type),
+            ungroupedSliderDirection: resolveChoiceTableQuestionSliderDirection({
+              ...mobileTableQuestion,
+              scaleSlider: questionScaleSlider ?? null,
+            }),
+          })
+        : undefined,
+    [
+      currentColumns,
+      currentHeaderGrid,
+      currentRows,
+      mobileTableQuestion,
+      questionScaleSlider,
       useMultiRowHeader,
     ],
   );
@@ -665,6 +702,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
               questionType={mobileTableQuestion.type}
               hasChoiceGroups={(mobileTableQuestion.choiceGroups?.length ?? 0) > 0}
               rowScaleBarIssues={rowScaleBarIssues}
+              scaleSlider={scaleSliderSummary}
               mode={mobileTableDisplayMode}
               omitLeadingColumns={mobileDrilldownOmitLeadingColumns}
               columnCount={currentColumns.length}
