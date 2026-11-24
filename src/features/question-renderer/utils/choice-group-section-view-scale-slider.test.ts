@@ -66,12 +66,20 @@ describe('projectChoiceGroupSectionView — 척도 슬라이더 묶음(슬라이
   });
 });
 
+/** 슬라이더 방향이 적히지 않은 같은 묶음 */
+const plainGroup: ChoiceGroup = { id: 'g', groupKey: 'rad1', type: 'radio', label: '만족도' };
+
 function sliderView(
   overrides: Partial<ChoiceGroup> = {},
-  options: { groupCells?: readonly TableCell[]; row?: TableRow; selectionType?: ChoiceGroup['type'] } = {},
+  options: {
+    base?: ChoiceGroup;
+    groupCells?: readonly TableCell[];
+    row?: TableRow;
+    selectionType?: ChoiceGroup['type'];
+  } = {},
 ) {
   return projectChoiceGroupSectionViewWithSlider({
-    group: { ...group, ...overrides },
+    group: { ...(options.base ?? group), ...overrides },
     selectionType: options.selectionType ?? 'radio',
     columns,
     row: options.row ?? row,
@@ -116,10 +124,9 @@ describe('projectChoiceGroupSectionViewWithSlider — 척도 슬라이더 묶음
   });
 
   it('슬라이더가 아닌 묶음은 종전 사슬 그대로다', () => {
-    expect(sliderView({ scaleSlider: undefined }).kind).toBe('tiles');
-    expect(sliderView({ scaleSlider: undefined, mobileOriginalLine: true }).kind).toBe(
-      'original-line',
-    );
-    expect(sliderView({ scaleSlider: undefined, mobileScaleBar: true }).kind).toBe('scale-bar');
+    const plain = { base: plainGroup };
+    expect(sliderView({}, plain).kind).toBe('tiles');
+    expect(sliderView({ mobileOriginalLine: true }, plain).kind).toBe('original-line');
+    expect(sliderView({ mobileScaleBar: true }, plain).kind).toBe('scale-bar');
   });
 });

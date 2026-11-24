@@ -112,8 +112,8 @@ import { TableImageEnlargeProvider } from './table-image-enlarge';
 import { MobileRowGroupCards } from './mobile-row-group-cards';
 import { MobileRowWiseOriginalSheet, RowTileSection } from './mobile-row-wise-original-sheet';
 import {
-  type RowScaleLayout,
-  projectRowWiseScaleLayouts,
+  type RowSliderLayout,
+  projectRowWiseSliderLayouts,
   resolveUngroupedSelectionType,
 } from './utils/row-scale-bars';
 import { MobileTableDrilldown } from './mobile-table-drilldown';
@@ -123,6 +123,11 @@ import { MobileTableStepper } from './mobile-table-stepper';
 import { HEADER_SCROLL_CLASS, TableScrollControls, getScrollBehavior } from './table-scroll-controls';
 import { OptionTextBelowTable } from './option-text-below-table';
 import { StagedRowsButtons } from './staged-rows-buttons';
+import { TableChoiceGroupScaleSlider } from './table-choice-group-scale-slider';
+import {
+  resolveScaleSliderTableLayout,
+  tableHasScaleSliderRow,
+} from './utils/scale-slider-table-layout';
 import { VirtualizedTableGrid } from './virtualized-table-grid';
 
 const VIRTUALIZATION_THRESHOLD = 100;
@@ -754,9 +759,30 @@ function InteractiveTableResponseBody({
   );
   const mobileMode = displayOnlyFallsBack ? 'original' : authoredMobileMode;
   const useOriginalRowDetail = isMobileView && mobileMode === 'drilldown-original-row';
-  // 행별 원본 · 행별 척도 — 같은 시트 구조, 행 본문만 다르다
-  const usesRowWiseSheet = isMobileView && isRowWiseMobileTableDisplayMode(mobileMode);
-  const mobileUsesCards = isMobileView && mobileMode !== 'original';
+  // 척도 슬라이더 — 슬라이더로 그려지는 행이 있는 표는 넓은 폭에서도 표 대신 행 단위 배치로 그린다
+  // (scale-slider-table-layout). 그려지는 행은 표의 구조로 판정해, 답에 따라 배치가 오가지 않는다.
+  const hasScaleSliderRow = useMemo(
+    () =>
+      tableHasScaleSliderRow({
+        columns,
+        headerGrid: tableHeaderGrid,
+        rows,
+        choiceGroups: choiceGroups ?? [],
+        ungroupedSelectionType: resolveUngroupedSelectionType('table'),
+      }),
+    [choiceGroups, columns, rows, tableHeaderGrid],
+  );
+  const scaleSliderLayout = resolveScaleSliderTableLayout({
+    hasSliderRow: hasScaleSliderRow,
+    narrow: isMobileView,
+    mobileMode,
+  });
+  // 행별 원본 · 행별 척도 — 같은 시트 구조, 행 본문만 다르다. 슬라이더의 행 단위 배치도 이 시트다.
+  const usesRowWiseSheet =
+    scaleSliderLayout === 'row-wise' ||
+    (isMobileView && isRowWiseMobileTableDisplayMode(mobileMode));
+  // 격자 표가 아닌 화면인가 — 모바일 카드 계열, 그리고 폭과 무관한 슬라이더의 행 단위 배치
+  const usesCardLayout = usesRowWiseSheet || (isMobileView && mobileMode !== 'original');
   // 행 단위 그룹 카드는 보기 그룹 정의가 있어야 그린다 — 없으면 자동 카드로 떨어진다
   const hasChoiceGroupDefs = (choiceGroups?.length ?? 0) > 0;
   // 위반 셀 중 보기 셀은 그룹 덩어리 외곽선으로 — 보기 소스 표(choice-table-response)와 같은
@@ -869,7 +895,7 @@ function InteractiveTableResponseBody({
   // 머리글 입력칸 — 머리글을 그리는 화면(데스크톱 표·모바일 원본)에서만 본문 칸을 머리글로 올리고 그 행을 뺀다.
   // 카드 화면은 머리글이 없어 그 행을 그대로 그린다. 판정은 구조 전체로 한다 — 열 단계로 칸이 잠시 숨어도
   // 행이 본문에 글자만 남은 채 나타나지 않게.
-  const rendersHeaderGrid = !mobileUsesCards && !hideColumnLabels;
+  const rendersHeaderGrid = !usesCardLayout && !hideColumnLabels;
   const headerInputs = useMemo(
     () => resolveHeaderInputCells(tableHeaderGrid, rows, stagedRowsConfig),
     [tableHeaderGrid, rows, stagedRowsConfig],
@@ -987,7 +1013,7 @@ function InteractiveTableResponseBody({
   });
   // 버튼 줄이 묶음 바로 아래에 서는 화면인가 — 데스크톱 표(모바일의 「원본」 포함)에서
   // 보이는 묶음 행이 있을 때. 그 밖의 화면은 표 아래 버튼으로 폴백한다.
-  const stagedInDesktopTable = !mobileUsesCards && stagedControl !== null;
+  const stagedInDesktopTable = !usesCardLayout && stagedControl !== null;
   // 모바일 「항목 단위 카드」는 카드 목록이 버튼 자리를 직접 잡는다(블록마다).
   const stagedInItemCards = isMobileView && mobileMode === 'item-cards' && stagedRows.isActive;
   const stagedControlsInline = stagedInDesktopTable || stagedInItemCards;
@@ -1070,7 +1096,7 @@ function InteractiveTableResponseBody({
 
   // 가로 스크롤 인디케이터 (좌/우 섀도우·버튼 표시 여부)
   const { canScrollLeft, canScrollRight } = useHorizontalScrollIndicators(tableContainerRef, {
-    disabled: mobileUsesCards,
+    disabled: usesCardLayout,
     deps: [visibleColumns.length, displayRows.length],
   });
 
@@ -1078,13 +1104,13 @@ function InteractiveTableResponseBody({
   // 누적 sticky 너비 상한 계산에 사용. 카드 모드/비활성 시 측정 생략(0).
   const scrollViewportWidth = useElementWidth(
     tableContainerRef,
-    !enableSticky || mobileUsesCards || fitToWidth,
+    !enableSticky || usesCardLayout || fitToWidth,
   );
 
   // 좌측 sticky 열 판정 (카드 모드거나 비활성화면 비적용 — 모바일 원본 표 모드는 적용)
   const stickyInfo = useMemo<StickyLeftInfo | undefined>(() => {
     // 화면 폭에 맞춰 줄인 표는 넘치지 않아 고정할 이유가 없고, px 누적 오프셋이 비율로 줄어든 열과 어긋난다
-    if (!enableSticky || mobileUsesCards || fitToWidth) return undefined;
+    if (!enableSticky || usesCardLayout || fitToWidth) return undefined;
     // 좁은 뷰포트에서 넓은 텍스트 열이 sticky로 화면을 다 덮는 것을 방지.
     // 측정 전(0)에는 제한 없음(undefined) — 측정 직후 ResizeObserver가 재계산한다.
     const maxStickyWidth =
@@ -1092,7 +1118,7 @@ function InteractiveTableResponseBody({
     return computeStickyLeftColumns(visibleColumns, displayRows, maxStickyWidth, stickyColumnCount);
   }, [
     enableSticky,
-    mobileUsesCards,
+    usesCardLayout,
     fitToWidth,
     visibleColumns,
     displayRows,
@@ -1112,7 +1138,7 @@ function InteractiveTableResponseBody({
     if (!pendingColumnRevealScrollRef.current) return;
     pendingColumnRevealScrollRef.current = false;
     const container = tableContainerRef.current;
-    if (!container || mobileUsesCards || fitToWidth) return;
+    if (!container || usesCardLayout || fitToWidth) return;
     const left = stagedColumnRevealScrollLeft({
       visibleColumns,
       columnStops,
@@ -1122,7 +1148,7 @@ function InteractiveTableResponseBody({
       stickyWidth: stickyInfo ? (columnStops[stickyInfo.stickyColCount] ?? 0) : 0,
     });
     if (left !== null) container.scrollTo({ left, behavior: getScrollBehavior() });
-  }, [openColumnStep, openStepColumnIds, visibleColumns, columnStops, stickyInfo, mobileUsesCards, fitToWidth]);
+  }, [openColumnStep, openStepColumnIds, visibleColumns, columnStops, stickyInfo, usesCardLayout, fitToWidth]);
 
   // ── 가상화 여부 (hooks-rules: 빈 테이블 early return 이전에 계산) ──
   const shouldVirtualize = displayRows.length >= VIRTUALIZATION_THRESHOLD;
@@ -1136,7 +1162,7 @@ function InteractiveTableResponseBody({
   const pageSticky = usePageStickyThreshold(
     tableContainerRef,
     {
-      disabled: mobileUsesCards || !enableSticky,
+      disabled: usesCardLayout || !enableSticky,
       forced: shouldVirtualize,
     },
     [columns.length === 0 || rows.length === 0],
@@ -1146,7 +1172,7 @@ function InteractiveTableResponseBody({
   // 단일 컨테이너 모드는 헤더가 같은 컨테이너 안이라 동기화 자체가 불필요.
   // 헤더는 hideColumnLabels=false 일 때만 마운트되므로, 토글 시 리스너 재부착이
   // 필요하다(ref는 안 바뀌어 deps 없이는 effect가 재실행되지 않음).
-  useScrollLeftSync(headerScrollRef, tableContainerRef, mobileUsesCards || !pageSticky, [
+  useScrollLeftSync(headerScrollRef, tableContainerRef, usesCardLayout || !pageSticky, [
     hideColumnLabels,
   ]);
 
@@ -1368,17 +1394,21 @@ function InteractiveTableResponseBody({
     visibleColumns,
     visibleHeaderGrid,
   ]);
-  // 행별 척도 — 행마다 막대로 바꿀 수 있는지. 못 바꾸는 행은 원본 표 조각 그대로다.
+  // 행별 척도 — 행마다 막대·슬라이더로 바꿀 수 있는지. 못 바꾸는 행은 원본 표 조각 그대로다.
+  // 슬라이더의 행 단위 배치는 고른 표시 방식과 무관하게 「행별 척도」와 같이 그린다. 넓은 폭에서는
+  // 슬라이더가 아닌 보기 그룹을 제 보기 모양(세로 타일·척도 막대) 대신 원본 조각으로 낸다.
+  const rowWiseWide = !isMobileView;
   const rowScaleLayouts = useMemo(
     () =>
-      usesRowWiseSheet && mobileMode === 'row-wise-scale'
-        ? projectRowWiseScaleLayouts(
+      usesRowWiseSheet && (scaleSliderLayout === 'row-wise' || mobileMode === 'row-wise-scale')
+        ? projectRowWiseSliderLayouts(
             rowWiseOriginalModel,
             choiceGroups ?? [],
             resolveUngroupedSelectionType('table'),
+            { wide: rowWiseWide },
           )
-        : new Map<string, RowScaleLayout>(),
-    [choiceGroups, mobileMode, rowWiseOriginalModel, usesRowWiseSheet],
+        : new Map<string, RowSliderLayout>(),
+    [choiceGroups, mobileMode, rowWiseOriginalModel, rowWiseWide, scaleSliderLayout, usesRowWiseSheet],
   );
 
   // 셀 게이팅 컨트롤러 정의 탐색용 표 전체 셀 — 조건부로 숨은 행의 컨트롤러도 정의는 찾을 수
@@ -1723,6 +1753,30 @@ function InteractiveTableResponseBody({
                         />
                       ) : null
                     }
+                    // 슬라이더도 막대와 같은 보기 그룹 선택 쓰기다 — 끈 같은 문항과 응답 키·값이 같다
+                    renderScaleSlider={(slider, rowQuestion, { inputIdScope, sharesRow }) =>
+                      slider.group ? (
+                        <TableChoiceGroupScaleSlider
+                          questionId={questionId}
+                          group={slider.group}
+                          model={slider.model}
+                          cells={slider.cells}
+                          // 행 제목이 위에 있다 — 행에 응답 묶음이 여럿일 때만 그룹 이름으로 가른다
+                          label={
+                            sharesRow ? substituteTokens(slider.group.label, attrs, quotes) : ''
+                          }
+                          ariaLabel={
+                            sharesRow ? slider.group.label || rowQuestion.title : rowQuestion.title
+                          }
+                          invalid={slider.cells.some((cell) => errorCellIds?.has(cell.id))}
+                          narrow={isMobileView}
+                          value={value}
+                          onChange={mergedOnChange}
+                          inputIdScope={inputIdScope}
+                        />
+                      ) : null
+                    }
+                    wide={rowWiseWide}
                     renderCell={(cell, rowQuestion, inputIdScope, invalid, errorDescriptionId) => {
                       const sourceRowId =
                         rowQuestion.projection.sourceRowIdByCellId.get(cell.id) ??
@@ -1789,7 +1843,7 @@ function InteractiveTableResponseBody({
                   dynamicGroupPicker={dynamicGroupPicker}
                   choiceGroups={choiceGroups}
                 />
-              ) : mobileUsesCards ? (
+              ) : usesCardLayout ? (
                 useOriginalRowDetail || useDrilldown ? (
                   <MobileTableDrilldown
                     {...mobileTableProps}

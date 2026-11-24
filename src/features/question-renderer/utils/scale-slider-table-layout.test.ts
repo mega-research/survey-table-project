@@ -98,11 +98,12 @@ describe('tableHasScaleSliderRow — 슬라이더로 그려지는 행이 있는�
   });
 
   it('슬라이더 설정이 없으면 거짓이다 — 척도 막대·원본 한 줄 묶음은 세지 않는다', () => {
+    const plain: ChoiceGroup = { id: 'g-sat', groupKey: 'rad1', type: 'radio', label: '만족도' };
     for (const group of [
-      { ...SAT, scaleSlider: undefined },
-      { ...SAT, scaleSlider: undefined, mobileScaleBar: true },
-      { ...SAT, scaleSlider: undefined, mobileOriginalLine: true },
-    ] as ChoiceGroup[]) {
+      plain,
+      { ...plain, mobileScaleBar: true },
+      { ...plain, mobileOriginalLine: true },
+    ] satisfies ChoiceGroup[]) {
       expect(
         tableHasScaleSliderRow({ ...base, rows: [scaleRow('r1')], choiceGroups: [group] }),
       ).toBe(false);
