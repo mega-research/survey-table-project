@@ -102,6 +102,10 @@ function buildFormDataFromQuestion(question: Question): Partial<Question> {
     ...(question.mobileOptionsColumns !== undefined
       ? { mobileOptionsColumns: question.mobileOptionsColumns }
       : {}),
+    // 문항의 슬라이더 방향 — 싣지 않으면 켜진 문항을 열었을 때 스위치가 꺼져 보이고, 그대로 켜면 저장본의
+    // 방향이 기본 방향으로 덮인다. 꺼진 문항(키 없음·빌더가 끈 null)은 싣지 않는다: 폼이 건드리지 않은
+    // 필드는 부분 수정에서 「그대로 두기」여야 한다(끄기는 스위치가 null 을 적는다).
+    ...(question.scaleSlider != null ? { scaleSlider: question.scaleSlider } : {}),
     ...(question.rankingConfig !== undefined ? { rankingConfig: question.rankingConfig } : {}),
     ...(question.minSelections !== undefined ? { minSelections: question.minSelections } : {}),
     ...(question.maxSelections !== undefined ? { maxSelections: question.maxSelections } : {}),

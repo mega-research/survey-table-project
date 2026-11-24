@@ -142,6 +142,7 @@ function sideOf(
   const leftOfMiddle = doubledCenter < middle;
   return leftOfMiddle === (direction === 'positive-left') ? 'positive' : 'negative';
 }
+export { sideOf as resolveScaleSliderSide }; // 라디오 보기 투영(radio-option-scale-slider)이 같은 쪽 계산을 쓴다
 
 /** 구간이 첫 눈금부터 끝 눈금까지 틈 없이 이어지는가 */
 function coversAllTicks(bands: readonly ScaleSliderBand[], tickCount: number): boolean {
