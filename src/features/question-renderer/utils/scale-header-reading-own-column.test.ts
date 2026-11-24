@@ -80,7 +80,11 @@ describe('readOwnColumnHeaderName — 그 열만 덮는 한 칸짜리 머리 이
 
   it('글자가 빈 머리 칸은 건너뛰고 줄바꿈은 공백으로 잇는다', () => {
     const headerGrid = [
-      [head('h-item', '항목', 1, 2), head('h-scale', '만족도', 5), head('h-na', '이용한 적\n없음', 1)],
+      [
+        head('h-item', '항목', 1, 2),
+        head('h-scale', '만족도', 5),
+        head('h-na', '이용한 적\n없음', 1),
+      ],
       [
         head('h-1', '①', 1),
         head('h-2', '②', 1),
