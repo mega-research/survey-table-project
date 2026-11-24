@@ -61,7 +61,7 @@ const satCells = (rowId: string, groupId?: string): TableCell[] =>
     ...(groupId ? { choiceGroupId: groupId } : {}),
   }));
 
-const useCells = (): TableCell[] =>
+const usageCells = (): TableCell[] =>
   ['활용함', '활용 안함'].map((choiceLabel, n) => ({
     id: `u${n + 1}`,
     type: 'choice_opt',
@@ -109,7 +109,7 @@ function groupedQuestion({ withUsage = true, mode }: QuestionOptions = {}): Ques
         label: '1) 회의실 및 교통비 지원',
         cells: [
           { id: 'item', type: 'text', content: '1) 회의실 및 교통비 지원' },
-          ...(withUsage ? useCells() : []),
+          ...(withUsage ? usageCells() : []),
           ...satCells('r1', 'g-sat'),
         ],
       },
@@ -144,7 +144,7 @@ function ungroupedQuestion(mode?: Question['mobileTableDisplayMode']): Question 
 /** 필수 만족도 묶음이 비어 있는 동안 그 보기 칸을 미충족으로 넘긴다 — 답하면 문항 카드가 하듯 빠진다 */
 function Harness({ q, required = false }: { q: Question; required?: boolean }) {
   const [value, setValue] = useState<unknown>(undefined);
-  const answered = (value as Record<string, unknown> | undefined)?.rad2 !== undefined;
+  const answered = (value as { rad2?: unknown } | undefined)?.rad2 !== undefined;
   return (
     <ChoiceTableResponse
       question={q}

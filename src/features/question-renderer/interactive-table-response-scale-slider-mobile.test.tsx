@@ -216,6 +216,7 @@ describe('표 문항 — 좁은 폭의 척도 슬라이더: 행 단위 배치', 
     const tiles = within(block).getByRole('group', { name: '활용 여부' });
     expect(within(tiles).getAllByRole('radio')).toHaveLength(2);
     const slider = within(block).getByTestId('scale-slider-g-sat');
+    // 낭독 이름은 「행 제목, 묶음 이름」이다 — 머리 줄에는 묶음 이름만 보인다
     expect(within(slider).getByText('만족도')).toBeInTheDocument();
     expect(within(slider).getByRole('radiogroup')).toHaveAccessibleName(/ 만족도$/);
     expect(within(slider).getAllByRole('radio')).toHaveLength(11);
