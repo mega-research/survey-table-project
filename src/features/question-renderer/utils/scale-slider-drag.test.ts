@@ -66,6 +66,48 @@ describe('resolveNearestScaleSliderTick — 포인터 자리에서 가장 가까
   });
 });
 
+describe('resolveNearestScaleSliderTick — 누를 수 없는 눈금 건너뛰기', () => {
+  const among = (x: number, disabled: number[]) =>
+    resolveNearestScaleSliderTick({
+      x,
+      trackLeft: 100,
+      trackWidth: 500,
+      tickCount: 5,
+      isTickEnabled: (index) => !disabled.includes(index),
+    });
+
+  it('누를 수 있는 눈금 위에서는 판정이 그대로다', () => {
+    expect([150, 250, 350, 450, 550].map((x) => among(x, []))).toEqual([0, 1, 2, 3, 4]);
+    expect(among(150, [2])).toBe(0);
+    expect(among(450, [2])).toBe(3);
+  });
+
+  it('누를 수 없는 눈금 위에서는 포인터에서 가까운 쪽의 누를 수 있는 눈금이다', () => {
+    // 셋째 눈금(350)이 비활성 — 그 칸의 왼쪽 절반은 둘째, 오른쪽 절반은 넷째 눈금이 가깝다
+    expect(among(320, [2])).toBe(1);
+    expect(among(380, [2])).toBe(3);
+    // 둘째·셋째가 비활성 — 첫째(150)와 넷째(450)의 한가운데는 300
+    expect(among(240, [1, 2])).toBe(0);
+    expect(among(360, [1, 2])).toBe(3);
+  });
+
+  it('양쪽이 똑같이 멀면 오른쪽 눈금이다', () => {
+    expect(among(350, [2])).toBe(3);
+    expect(among(300, [1, 2])).toBe(3);
+  });
+
+  it('한쪽에만 누를 수 있는 눈금이 있으면 그쪽이다', () => {
+    expect(among(150, [0, 1])).toBe(2);
+    expect(among(-40, [0, 1])).toBe(2);
+    expect(among(550, [3, 4])).toBe(2);
+    expect(among(5000, [3, 4])).toBe(2);
+  });
+
+  it('누를 수 있는 눈금이 없으면 눈금을 정하지 않는다', () => {
+    expect(among(350, [0, 1, 2, 3, 4])).toBeNull();
+  });
+});
+
 describe('classifyScaleSliderGesture — 누르기인가 끌기인가', () => {
   it('문턱은 4px 이다', () => {
     expect(SCALE_SLIDER_DRAG_THRESHOLD_PX).toBe(4);
