@@ -3,6 +3,7 @@ import * as z from 'zod';
 import { INPUT_TYPES } from '@/types/input-type';
 import { MOBILE_TABLE_DISPLAY_MODES } from '@/types/mobile-table-display';
 import { QUESTION_TYPES } from '@/types/question-types';
+import { SCALE_SLIDER_DIRECTIONS } from '@/types/scale-slider';
 import type { Question } from '@/types/survey';
 
 import type {
@@ -72,6 +73,14 @@ const scaleMean = z.object({
   scaleMeanEnabled: z.boolean().optional(),
 });
 
+/**
+ * 문항의 슬라이더 방향 — radio 전용. 값 목록은 어휘 SSOT(@/types/scale-slider)에서 직접 받는다.
+ * 어휘에 없는 값은 꺼진 것으로 접지 않고 거부한다 — 모르는 방향으로 그리는 것보다 드러나는 편이 낫다.
+ */
+const scaleSlider = z.object({
+  scaleSlider: z.enum(SCALE_SLIDER_DIRECTIONS).nullable().optional(),
+});
+
 const optionList = z.object({
   options: z.custom<NonNullable<Question['options']>>().optional(),
   optionsColumns: z.number().optional(),
@@ -114,6 +123,7 @@ export const RadioQuestionSchema = base
   .extend(mobileTableDisplay.shape)
   .extend(choiceGroups.shape)
   .extend(scaleMean.shape)
+  .extend(scaleSlider.shape)
   .extend({
     type: z.literal('radio'),
     // 명단 값으로 보기를 미리 골라 잠근다(utils/choice-prefill) — 단답형과 같은 컬럼
@@ -232,6 +242,12 @@ export type QuestionEnumLeafGates = [
     MutuallyAssignable<
       z.output<typeof TextQuestionSchema>['inputType'],
       Question['inputType'] | undefined
+    >
+  >,
+  Expect<
+    MutuallyAssignable<
+      z.output<typeof RadioQuestionSchema>['scaleSlider'],
+      Question['scaleSlider'] | undefined
     >
   >,
 ];

@@ -49,6 +49,7 @@ export const PERSISTED_QUESTION_FIELDS = [
   'collapseButtonLabel',
   'collapseAttachToPrevious',
   'distinctGroup',
+  'scaleSlider',
   'piiEncrypted',
   'tableValidationRules',
   'sumConstraints',

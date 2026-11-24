@@ -110,6 +110,7 @@
     "0155_question_collapse_attach_previous",
     "0167_survey_list_title",
     "0170_mail_link_clicks",
-    "0171_question_distinct_group"
+    "0171_question_distinct_group",
+    "0173_question_scale_slider"
   ]
 }
