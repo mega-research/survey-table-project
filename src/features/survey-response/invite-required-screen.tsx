@@ -7,7 +7,7 @@ import { DEFAULT_SURVEY_LOCALE, type SurveyLocale } from '@/types/survey-locale'
 
 import { SystemText } from './system-text';
 
-/** 다국어 설문이면 현재 언어, 미정(`null`)이면 세 언어를 함께 보인다(CONTEXT.md 「다국어 설문」). */
+/** 다국어 설문이면 현재 언어, 미정(`null`)이면 그 설문이 제공하는 언어를 함께 보인다(CONTEXT.md 「다국어 설문」). */
 export function InviteRequiredScreen({
   locale = DEFAULT_SURVEY_LOCALE,
 }: {

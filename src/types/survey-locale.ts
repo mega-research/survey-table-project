@@ -4,7 +4,7 @@
  * 언어 문항의 보기(`QuestionOption.locale`)에 붙고, 응답 화면의 시스템 글자와 언어별 설문 글자가
  * 이 값으로 갈린다. 보기 필드라 `options` JSONB 안에 저장되어 DB 제약이 없다.
  */
-export const SURVEY_LOCALES = ['ko', 'zh', 'en'] as const;
+export const SURVEY_LOCALES = ['ko', 'zh', 'en', 'vi'] as const;
 
 export type SurveyLocale = (typeof SURVEY_LOCALES)[number];
 
@@ -23,11 +23,23 @@ export const SURVEY_LOCALE_LABELS: Record<SurveyLocale, string> = {
   ko: '한국어',
   zh: '中文',
   en: 'English',
+  vi: 'Tiếng Việt',
+};
+
+/**
+ * 「언어 변경」 링크에 쓰는 낱말 — 어느 언어를 고른 응답자든 읽을 수 있게 그 설문이 제공하는
+ * 언어의 낱말을 함께 쓴다(`languageSwitchLabel`). 현재 언어를 따라 바뀌는 시스템 글자가 아니다.
+ */
+export const LANGUAGE_SWITCH_WORDS: Record<SurveyLocale, string> = {
+  ko: '언어 변경',
+  zh: '语言',
+  en: 'Language',
+  vi: 'Ngôn ngữ',
 };
 
 /**
  * 한 줄짜리 시스템 글자(버튼·검증 문구·토스트)의 언어 — 미정(`null`)이면 한국어.
- * 세 언어를 위아래로 쌓는 것은 전체 화면 안내뿐이다(CONTEXT.md 「다국어 설문」).
+ * 여러 언어를 위아래로 쌓는 것은 전체 화면 안내뿐이다(CONTEXT.md 「다국어 설문」).
  */
 export function toInlineLocale(locale: SurveyLocale | null | undefined): SurveyLocale {
   return locale ?? DEFAULT_SURVEY_LOCALE;

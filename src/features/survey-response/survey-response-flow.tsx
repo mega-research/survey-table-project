@@ -93,7 +93,7 @@ import {
   SurveyErrorScreen,
   SurveyLoadingScreen,
 } from '@/features/survey-response/survey-response-screens';
-import { SystemText } from '@/features/survey-response/system-text';
+import { OfferedLocalesProvider, SystemText } from '@/features/survey-response/system-text';
 import { UnmodifiedChangedDialog } from '@/features/survey-response/unmodified-changed-dialog';
 import { useSyncLatestRef } from '@/hooks/use-latest-ref';
 import { useMediaQuery } from '@/hooks/use-media-query';
@@ -147,7 +147,11 @@ import {
   collectTableQuestionOptions,
   filterOptionTextsForSubmission,
 } from '@/utils/option-text-migration';
-import { resolveCurrentLocale } from '@/utils/survey-language';
+import {
+  languageSwitchLabel,
+  resolveCurrentLocale,
+  resolveOfferedLocales,
+} from '@/utils/survey-language';
 import { systemText } from '@/utils/system-strings';
 
 import { type CompletionOutcome, resolveCompletionScreen } from './lib/completion-screen';
@@ -160,12 +164,6 @@ import {
 type ResponsesMap = Record<string, unknown>;
 
 const EMPTY_ISSUES = new Map<string, NumericIssue[]>();
-
-/**
- * 「언어 변경」 링크 글자 — 어느 언어를 고른 응답자든 읽을 수 있게 세 언어를 늘 함께 쓴다
- * (PRD 「언어 변경」). 현재 언어를 따라 바뀌는 시스템 글자가 아니다.
- */
-const LANGUAGE_SWITCH_LABEL = '언어 변경 · 语言 · Language';
 
 export interface SurveyResponseFlowProps {
   mode?: 'public' | 'admin-edit' | 'preview';
@@ -376,7 +374,7 @@ function SurveyResponseFlowControl({
   });
 
   // 안내 화면의 언어 (CONTEXT.md 「다국어 설문」) — 설문을 읽은 뒤에는 언어 문항의 답에서
-  // 파생한다. 아직 답이 없는 다국어 설문은 미정(null)이라 세 언어를 함께 보인다.
+  // 파생한다. 아직 답이 없는 다국어 설문은 미정(null)이라 제공하는 언어를 함께 보인다.
   const noticeLocale = loader.loadedSurvey
     ? resolveCurrentLocale(
         loader.loadedSurvey.questions,
@@ -384,31 +382,47 @@ function SurveyResponseFlowControl({
         responses,
       )
     : DEFAULT_SURVEY_LOCALE;
+  // 이 설문이 제공하는 언어 — 미정일 때 안내 화면이 쌓는 언어다(아래 화면 전부에 내려 준다)
+  const loadedSurvey = loader.loadedSurvey;
+  const offeredLocales = useMemo(
+    () => resolveOfferedLocales(loadedSurvey?.questions ?? [], loadedSurvey?.groups ?? []),
+    [loadedSurvey],
+  );
 
   if (loader.isLoading) return <SurveyLoadingScreen />;
-  if (loader.showInviteRequired) return <InviteRequiredScreen locale={noticeLocale} />;
+  if (loader.showInviteRequired) {
+    return (
+      <OfferedLocalesProvider locales={offeredLocales}>
+        <InviteRequiredScreen locale={noticeLocale} />
+      </OfferedLocalesProvider>
+    );
+  }
   if (loader.control?.testSession === 'invalid') {
     return (
-      <InvalidTestLinkGate
-        surveyId={loader.loadedSurvey?.id}
-        inviteToken={inviteToken}
-        clearResponses={clearResponses}
-        locale={noticeLocale}
-      />
+      <OfferedLocalesProvider locales={offeredLocales}>
+        <InvalidTestLinkGate
+          surveyId={loader.loadedSurvey?.id}
+          inviteToken={inviteToken}
+          clearResponses={clearResponses}
+          locale={noticeLocale}
+        />
+      </OfferedLocalesProvider>
     );
   }
 
   const isTestSession = loader.control?.testSession === 'valid';
   if (loader.control?.isPaused && !isTestSession) {
     return (
-      <AlreadyRespondedView
-        reason="survey_paused"
-        surveyTitle={loader.loadedSurvey?.title ?? ''}
-        contactEmail={loader.loadedSurvey?.contactEmail ?? null}
-        // 비면 화면이 현재 언어의 기본 중단 문구로 폴백한다
-        customBody={loader.control.pausedMessage ?? null}
-        locale={noticeLocale}
-      />
+      <OfferedLocalesProvider locales={offeredLocales}>
+        <AlreadyRespondedView
+          reason="survey_paused"
+          surveyTitle={loader.loadedSurvey?.title ?? ''}
+          contactEmail={loader.loadedSurvey?.contactEmail ?? null}
+          // 비면 화면이 현재 언어의 기본 중단 문구로 폴백한다
+          customBody={loader.control.pausedMessage ?? null}
+          locale={noticeLocale}
+        />
+      </OfferedLocalesProvider>
     );
   }
   if (loader.loadError || !loader.loadedSurvey) {
@@ -416,20 +430,22 @@ function SurveyResponseFlowControl({
   }
 
   return (
-    <SurveyResponseFlowActive
-      flowProps={{
-        surveyIdentifier,
-        inviteToken: inviteTokenProp,
-        testToken: testTokenProp,
-        entryQuery,
-        mode,
-        ...(adminContext ? { adminContext } : {}),
-        ...(previewContext ? { previewContext } : {}),
-      }}
-      loader={{ ...loader, loadedSurvey: loader.loadedSurvey }}
-      responses={responses}
-      setResponses={setResponses}
-    />
+    <OfferedLocalesProvider locales={offeredLocales}>
+      <SurveyResponseFlowActive
+        flowProps={{
+          surveyIdentifier,
+          inviteToken: inviteTokenProp,
+          testToken: testTokenProp,
+          entryQuery,
+          mode,
+          ...(adminContext ? { adminContext } : {}),
+          ...(previewContext ? { previewContext } : {}),
+        }}
+        loader={{ ...loader, loadedSurvey: loader.loadedSurvey }}
+        responses={responses}
+        setResponses={setResponses}
+      />
+    </OfferedLocalesProvider>
   );
 }
 
@@ -629,6 +645,10 @@ function SurveyResponseFlowActive({
   // 콜백 안(쿼터 마감 문구·저장 실패 토스트)에서 읽는 시스템 글자 언어 — 의존성을 늘리지 않는다
   const systemLocaleRef = useRef(systemLocale);
   useSyncLatestRef(systemLocaleRef, systemLocale);
+  // 이 설문이 제공하는 언어 — 「언어 변경」 글자와, 언어 미정일 때 쌓는 기본 문구가 따른다
+  const offeredLocales = useMemo(() => resolveOfferedLocales(questions, groups), [questions, groups]);
+  const offeredLocalesRef = useRef(offeredLocales);
+  useSyncLatestRef(offeredLocalesRef, offeredLocales);
 
   // 응답 인용 — {{{이름}}} 채널로 소비되는 파생값. 저장하지 않는다.
   const answerQuotes = useMemo(
@@ -1111,7 +1131,9 @@ function SurveyResponseFlowActive({
       // 띄운다. 이미 다른 사유로 차단됐다면 그 사유를 유지한다.
       // 문구는 비어 있을 때만 채운다 — 쿼터 마감이 먼저 띄운 문구를 덮지 않는다.
       setQuotaClosedMessage(
-        (prev) => prev ?? midSurveyClosedBody(closedMessage, systemLocaleRef.current),
+        (prev) =>
+          prev ??
+          midSurveyClosedBody(closedMessage, systemLocaleRef.current, offeredLocalesRef.current),
       );
       setDuplicateStatus((prev) =>
         prev.kind === 'blocked' ? prev : { kind: 'blocked', reason: 'quota_closed' },
@@ -1904,6 +1926,7 @@ function SurveyResponseFlowActive({
             midSurveyClosedBody(
               res.midSurveyClosedMessage ?? res.closedMessage,
               systemLocaleRef.current,
+              offeredLocalesRef.current,
             ),
           );
           setDuplicateStatus({ kind: 'blocked', reason: 'quota_closed' });
@@ -2082,7 +2105,7 @@ function SurveyResponseFlowActive({
       return <InvalidTestLinkScreen locale={systemLocale} />;
     }
     // 응답 행을 읽은 재진입(이어가기·다른 화면에서 완료)이면 그 답의 언어 하나, 응답 행 없이
-    // 막힌 진입(이미 응답함 등)은 미정이라 세 언어를 함께 보인다.
+    // 막힌 진입(이미 응답함 등)은 미정이라 제공하는 언어를 함께 보인다.
     return (
       <AlreadyRespondedView
         reason={duplicateStatus.reason}
@@ -2169,7 +2192,7 @@ function SurveyResponseFlowActive({
   // 버튼이 바뀐 것처럼 보이는 혼란만 줬다 (2026-08-12 피드백).
   //
   // 한 줄짜리 시스템 글자는 현재 언어로, 미정이면 한국어다 — 언어 페이지는 언어 문항 하나뿐이라
-  // 버튼이 없고(04), 미정 상태에서 세 언어를 쌓는 것은 전체 화면 안내뿐이다.
+  // 버튼이 없고(04), 미정 상태에서 여러 언어를 쌓는 것은 전체 화면 안내뿐이다.
   const inlineLocale = toInlineLocale(systemLocale);
   const submitLabel = systemText('nav.next', inlineLocale);
   const submittingLabel = systemText('nav.submitting', inlineLocale);
@@ -2182,7 +2205,7 @@ function SurveyResponseFlowActive({
       onClick={goToLanguagePage}
       className="text-sm text-blue-600 underline-offset-2 hover:underline"
     >
-      {LANGUAGE_SWITCH_LABEL}
+      {languageSwitchLabel(offeredLocales)}
     </button>
   ) : null;
   // 진행 현황 밴드. **조사표를 끼는 설문에서는 두지 않는다** — 조사표를 나란히 보는

@@ -1,5 +1,11 @@
 import type { Question, QuestionGroup, QuestionOption } from '@/types/survey';
-import { DEFAULT_SURVEY_LOCALE, type SurveyLocale, isSurveyLocale } from '@/types/survey-locale';
+import {
+  DEFAULT_SURVEY_LOCALE,
+  LANGUAGE_SWITCH_WORDS,
+  SURVEY_LOCALES,
+  type SurveyLocale,
+  isSurveyLocale,
+} from '@/types/survey-locale';
 import { buildRenderSteps } from '@/utils/group-ordering';
 
 /**
@@ -88,6 +94,31 @@ export function resolveCurrentLocale(
   const selected = readSelectedValue(responses[languageQuestion.id]);
   if (selected === null) return null;
   return optionLocale(findOption(languageQuestion, selected));
+}
+
+/**
+ * 설문이 제공하는 언어 — 언어 문항의 보기에 붙은 언어를 어휘 순서(`SURVEY_LOCALES`)로. 다국어
+ * 설문이 아니면 한국어 하나다. 언어를 고르기 전 안내 화면이 쌓는 언어와 「언어 변경」 글자가
+ * 이 목록을 따른다 — 한·중·영 설문에 베트남어가, 한·영·베트남어 설문에 중국어가 끼지 않는다.
+ */
+export function resolveOfferedLocales(
+  questions: readonly Question[],
+  groups: readonly QuestionGroup[],
+): SurveyLocale[] {
+  const languageQuestion = findLanguageQuestion(questions, groups);
+  if (!languageQuestion) return [DEFAULT_SURVEY_LOCALE];
+  const offered = new Set((languageQuestion.options ?? []).map((o) => optionLocale(o)));
+  return SURVEY_LOCALES.filter((l) => offered.has(l));
+}
+
+/**
+ * 「언어 변경」 링크 글자 — 제공하는 언어의 낱말을 어휘 순서로 잇는다
+ * (한·중·영 설문은 「언어 변경 · 语言 · Language」, 한·영·베트남어는 「언어 변경 · Language · Ngôn ngữ」).
+ */
+export function languageSwitchLabel(offered: readonly SurveyLocale[]): string {
+  return SURVEY_LOCALES.filter((l) => offered.includes(l))
+    .map((l) => LANGUAGE_SWITCH_WORDS[l])
+    .join(' · ');
 }
 
 /**

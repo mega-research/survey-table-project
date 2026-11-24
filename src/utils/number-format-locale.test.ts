@@ -47,12 +47,22 @@ describe('formatUnitReading — 현재 언어의 금액 읽기', () => {
   });
 
   it('0·빈 값·부분 입력·percent 는 언어와 무관하게 null', () => {
-    for (const locale of ['zh', 'en'] as const) {
+    for (const locale of ['zh', 'en', 'vi'] as const) {
       expect(formatUnitReading('0', 'one', '元', locale)).toBeNull();
       expect(formatUnitReading('', 'one', '元', locale)).toBeNull();
       expect(formatUnitReading('-', 'one', '元', locale)).toBeNull();
       expect(formatUnitReading('50', 'percent', '%', locale)).toBeNull();
       expect(formatUnitReading('50', undefined, undefined, locale)).toBeNull();
     }
+  });
+
+  it('베트남어는 영어와 같은 규칙에 triệu·tỷ·nghìn tỷ 로 읽고 어절 앞을 띄운다', () => {
+    expect(formatUnitReading('1111111', 'one', 'đồng', 'vi')).toBe('1.11 triệu đồng');
+    expect(formatUnitReading('1500000000', 'one', 'đồng', 'vi')).toBe('1.5 tỷ đồng');
+    expect(formatUnitReading('2000000000000', 'one', 'đồng', 'vi')).toBe('2 nghìn tỷ đồng');
+    // 백만 미만은 콤마 숫자 + 어절
+    expect(formatUnitReading('999999', 'one', 'đồng', 'vi')).toBe('999,999 đồng');
+    // 어절이 없고 끊어 읽을 만큼 크지 않으면 읽기가 없다
+    expect(formatUnitReading('9999', 'one', undefined, 'vi')).toBeNull();
   });
 });

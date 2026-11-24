@@ -29,7 +29,7 @@ interface Props {
   /** 카드 맨 아래 — 종료 후 이동 안내(EndRedirectNotice) 자리. */
   footer?: ReactNode;
   /**
-   * 시스템 문장의 언어 (CONTEXT.md 「다국어 설문」). 미정(`null`)이면 세 언어를 함께 보인다 —
+   * 시스템 문장의 언어 (CONTEXT.md 「다국어 설문」). 미정(`null`)이면 그 설문이 제공하는 언어를 함께 보인다 —
    * 응답 행이 없어 언어 문항의 답을 읽지 못한 재진입. 저작자 문구(customBody)·설문 제목은 그대로.
    */
   locale?: SurveyLocale | null;

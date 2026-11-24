@@ -5,8 +5,10 @@ import type { Question, QuestionCondition, QuestionGroup, QuestionOption } from 
 import {
   findLanguageQuestion,
   isLanguageOnlyPage,
+  languageSwitchLabel,
   resolveCurrentLocale,
   resolveLanguageSetLocales,
+  resolveOfferedLocales,
 } from './survey-language';
 
 /**
@@ -213,5 +215,54 @@ describe('isLanguageOnlyPage', () => {
     expect(isLanguageOnlyPage([other], lang)).toBe(false);
     expect(isLanguageOnlyPage([lang], null)).toBe(false);
     expect(isLanguageOnlyPage([], lang)).toBe(false);
+  });
+});
+
+describe('resolveOfferedLocales — 설문이 제공하는 언어', () => {
+  it('다국어 설문이 아니면 한국어 하나다', () => {
+    expect(resolveOfferedLocales([Q('q1', 1, { options: [OPT('1'), OPT('2')] })], [])).toEqual(['ko']);
+  });
+
+  it('언어 문항 보기의 언어를 보기 순서가 아니라 어휘 순서로 낸다', () => {
+    const lang = Q('lang', 1, {
+      options: [
+        OPT('1', { locale: 'ko' }),
+        OPT('2', { locale: 'en' }),
+        OPT('3', { locale: 'zh' }),
+      ],
+    });
+    expect(resolveOfferedLocales([lang], [])).toEqual(['ko', 'zh', 'en']);
+  });
+
+  it('한·영·베트남어 설문은 중국어를 제공하지 않는다', () => {
+    const lang = Q('lang', 1, {
+      options: [
+        OPT('1', { locale: 'ko' }),
+        OPT('2', { locale: 'en' }),
+        OPT('3', { locale: 'vi' }),
+      ],
+    });
+    expect(resolveOfferedLocales([lang], [])).toEqual(['ko', 'en', 'vi']);
+  });
+
+  it('언어가 없는 보기·어휘 밖 언어는 세지 않는다', () => {
+    const lang = Q('lang', 1, {
+      options: [
+        OPT('1', { locale: 'ko' }),
+        OPT('2'),
+        OPT('3', { locale: 'fr' as never }),
+      ],
+    });
+    expect(resolveOfferedLocales([lang], [])).toEqual(['ko']);
+  });
+});
+
+describe('languageSwitchLabel — 「언어 변경」 글자', () => {
+  it('한·중·영 설문은 베트남어를 더하기 전 글자 그대로다', () => {
+    expect(languageSwitchLabel(['ko', 'zh', 'en'])).toBe('언어 변경 · 语言 · Language');
+  });
+
+  it('제공하는 언어의 낱말만 어휘 순서로 잇는다', () => {
+    expect(languageSwitchLabel(['vi', 'ko', 'en'])).toBe('언어 변경 · Language · Ngôn ngữ');
   });
 });
