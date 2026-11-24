@@ -1,7 +1,7 @@
 'use client';
 
 import { Check } from 'lucide-react';
-import React, { useRef, useState } from 'react';
+import React, { useId, useRef, useState } from 'react';
 
 import {
   useAnswerQuotes,
@@ -58,6 +58,13 @@ import { cn } from '@/lib/utils';
  *   전체에 선다. box-shadow 가 아니라 outline 으로 그린다 — 강제 색 모드에서 box-shadow 는 사라진다.
  * - **필수 강조**(`invalid`): 묶음이 오류 상태(`aria-invalid`)가 되고 트랙에 테두리, 머리 글자가 붉어진다.
  *   문구는 문항 단위 안내가 낸다. 답하면 호스트가 prop 을 내린다.
+ * - **낭독 이름**(라디오 묶음): 화면에 제목이 보이는 자리의 호스트는 그 요소의 id 를 준다(`ariaLabelledBy`) —
+ *   묶음이 그 요소를 이름으로 가리키고 `aria-label` 은 쓰지 않는다(보이는 글자와 낭독 이름이 갈릴 수 없다).
+ *   머리 줄 제목(`label`)까지 있으면 「받은 제목, 머리 줄 제목」 순서로 함께 가리킨다(한 행에 묶음이 여럿인
+ *   자리의 「행 제목, 묶음 이름」). 행 블록처럼 바깥 묶음이 같은 제목을 이름으로 가질 때는 호스트가 **같은
+ *   요소의 id** 를 준다. id 를 안 주면 글자로 받는다(`label` → `ariaLabel`) — 제목이 화면에 없는 자리다.
+ * - **오류 문구**: 호스트가 그린 문구 요소의 id 를 받아 설명으로 잇는다(`ariaDescribedBy`). **그 문구가
+ *   문서에 있는 동안만 준다** — 가리킨 글자는 숨겨져 있어도 읽히므로, 필수 강조가 꺼지면 호스트가 id 도 거둔다.
  * - **자리**: 트랙은 눈금 수만큼 같은 폭의 칸으로 나뉘고 눈금은 칸마다 한가운데에 선다(끌기 계산의 전제).
  *   타일 줄 · 구간 이름 · 눈금 글자가 같은 열 틀을 쓰고 열 사이 틈을 두지 않아(틈은 타일의 바깥 여백이다)
  *   눈금이 타일 가운데 바로 아래에 온다.
@@ -92,8 +99,19 @@ export interface ScaleSliderProps {
   model: ScaleSliderModel;
   /** 머리 줄에 보이는 제목 — 고른 값 표시와 나란히 둔다. 비면 `ariaLabel` 이 묶음 이름이다 */
   label: string;
-  /** 제목을 보이지 않는 자리(행 제목이 위에 따로 있는 행 단위 배치)의 낭독용 이름 — 묶음 이름·행 제목 */
+  /**
+   * 낭독용 이름 글자 — 이름이 될 제목이 화면에 없는 자리(제목을 숨긴 문항 · 제목 없는 행)에서만 쓰인다.
+   * `label` 이나 `ariaLabelledBy` 가 있으면 쓰지 않는다
+   */
   ariaLabel?: string | undefined;
+  /**
+   * 화면에 보이는 제목 요소의 id(행 제목 · 문항 제목). 주면 라디오 묶음이 그 요소를 이름으로 가리키고
+   * `ariaLabel` 은 쓰지 않는다. `label` 이 있으면 「이 제목, 머리 줄 제목」 순서로 함께 가리킨다.
+   * **문서에 실제로 있는 요소의 id 만 준다** — 없는 id 는 이름 없는 묶음이 된다
+   */
+  ariaLabelledBy?: string | undefined;
+  /** 설명·오류 문구 요소의 id — 라디오 묶음의 설명으로 잇는다. 그 문구가 문서에 있는 동안만 준다 */
+  ariaDescribedBy?: string | undefined;
   /** 고른 것의 id — 눈금이든 척도 밖 보기든. 없으면 답하기 전이다 */
   selectedChoiceId: string | undefined;
   /**
@@ -251,6 +269,8 @@ export const ScaleSlider = React.memo(function ScaleSlider({
   model,
   label,
   ariaLabel,
+  ariaLabelledBy,
+  ariaDescribedBy,
   selectedChoiceId,
   onToggleChoice,
   invalid,
@@ -261,6 +281,11 @@ export const ScaleSlider = React.memo(function ScaleSlider({
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
   const text = (raw: string) => substituteTokens(raw, attrs, quotes);
+  // 머리 줄 제목의 id — 호스트가 준 제목과 함께 이름으로 가리킬 때만 단다(안 받은 자리의 마크업은 그대로다)
+  const headerLabelId = useId();
+  const labelledBy = ariaLabelledBy
+    ? [ariaLabelledBy, label ? headerLabelId : ''].filter(Boolean).join(' ')
+    : undefined;
 
   const { ticks, bands, offScale } = model;
   const count = ticks.length;
@@ -462,9 +487,12 @@ export const ScaleSlider = React.memo(function ScaleSlider({
       <div
         ref={groupRef}
         role="radiogroup"
-        aria-label={label || text(ariaLabel ?? '')}
-        // 「다음」 뒤 미충족 필수 — 문구는 문항 단위 안내가 낸다
+        // 이름 — 보이는 제목을 받았으면 그 요소를 가리키고, 아니면 글자다. 둘을 겹쳐 쓰지 않는다
+        aria-labelledby={labelledBy}
+        aria-label={labelledBy ? undefined : label || text(ariaLabel ?? '')}
+        // 「다음」 뒤 미충족 필수 — 문구는 문항 단위 안내가 내고, 호스트가 그 요소의 id 를 주면 설명으로 잇는다
         aria-invalid={invalid || undefined}
+        aria-describedby={ariaDescribedBy || undefined}
         onKeyDown={handleKeyDown}
         // 타일 줄과 트랙은 첫 열의 폭을 함께 쓴다. 넓은 화면의 척도 밖 체크는 그 오른쪽 열이다
         className="grid items-center gap-x-5 gap-y-1.5"
@@ -482,6 +510,7 @@ export const ScaleSlider = React.memo(function ScaleSlider({
           >
             {label && (
               <p
+                id={labelledBy ? headerLabelId : undefined}
                 data-invalid={invalid || undefined}
                 className={cn(
                   'min-w-0 text-[0.8125rem] font-semibold',
