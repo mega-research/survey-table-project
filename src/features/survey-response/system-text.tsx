@@ -2,7 +2,7 @@
 
 import { type ReactNode, createContext, useContext } from 'react';
 
-import { SURVEY_LOCALES, type SurveyLocale } from '@/types/survey-locale';
+import { DEFAULT_SURVEY_LOCALE, SURVEY_LOCALES, type SurveyLocale } from '@/types/survey-locale';
 import {
   type SystemStringKey,
   type SystemStringValues,
@@ -24,6 +24,15 @@ export function OfferedLocalesProvider({
   children: ReactNode;
 }) {
   return <OfferedLocalesContext.Provider value={locales}>{children}</OfferedLocalesContext.Provider>;
+}
+
+/**
+ * 전체 화면 안내(완료·차단·PC 안내 등)의 루트에 다는 `lang` — 언어가 정해진 다국어 응답이면 그 언어다.
+ * 그 화면들은 `lang` 을 단 본문 컨테이너보다 앞에서 그려져, 달지 않으면 언어별 글꼴 규칙(`[lang|="vi"]`·`[lang|="zh"]`)
+ * 과 스크린리더 발음이 빠진다. 한국어(다국어 아닌 설문)와 미정은 달지 않는다 — 종전 화면 그대로이고, 미정은 줄마다 단다.
+ */
+export function screenLang(locale: SurveyLocale | null | undefined): SurveyLocale | undefined {
+  return locale && locale !== DEFAULT_SURVEY_LOCALE ? locale : undefined;
 }
 
 /**

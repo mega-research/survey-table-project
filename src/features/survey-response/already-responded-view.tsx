@@ -12,7 +12,7 @@ import { DEFAULT_PAUSED_MESSAGE } from '@/shared/lib/survey-control';
 import { DEFAULT_SURVEY_LOCALE, type SurveyLocale } from '@/types/survey-locale';
 import type { SystemStringKey } from '@/utils/system-strings';
 
-import { SystemText } from './system-text';
+import { SystemText, screenLang } from './system-text';
 
 /**
  * 세션 도중 이 응답이 (다른 화면 또는 재시도로) 이미 완료된 것을 발견했을 때의 안내 —
@@ -124,7 +124,7 @@ export function AlreadyRespondedView({
   const customText = resolveCustomBody(reason, customBody);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50">
+    <div lang={screenLang(locale)} className="flex min-h-screen items-center justify-center bg-gray-50">
       <Card className="mx-auto max-w-md">
         <CardContent className="p-8 text-center">
           {/* 제목 없는 케이스(quota_closed)는 에디터 미리보기와 동일한 배지 아이콘 + 문구만 */}
