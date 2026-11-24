@@ -28,7 +28,8 @@ import { ChoiceOptCell } from './cells/choice-opt-cell';
 import { TableChoiceGroupScaleBar } from './choice-group-scale-bar';
 import { MobileOptionCard } from './mobile-card-shared';
 import { MobileOriginalRowTable } from './mobile-original-row-table';
-import { projectChoiceGroupSectionView } from './utils/choice-group-section-view';
+import { TableChoiceGroupScaleSlider } from './table-choice-group-scale-slider';
+import { projectChoiceGroupSectionViewWithSlider } from './utils/choice-group-section-view';
 import { resolveChoiceGroupSectionLabel } from './utils/choice-group-section-label';
 
 interface MobileRowGroupCardsProps {
@@ -155,8 +156,8 @@ export const MobileRowGroupCards = React.memo(function MobileRowGroupCards({
               // 「다음」을 누른 뒤 미충족 필수 그룹은 섹션을 붉게 두른다 — 위반 셀 집합은 데스크톱
               // 표의 보기 그룹 외곽선과 같은 판정(collectUnfilledChoiceGroupCellIds)에서 온다.
               const unfilled = cells.some((cell) => errorCellIds?.has(cell.id));
-              // 그룹 보기 모양 — 척도 막대 / 원본 한 줄(막대 폴백 포함) / 세로 타일
-              const view = projectChoiceGroupSectionView({
+              // 그룹 보기 모양 — 척도 슬라이더 / 척도 막대 / 원본 한 줄(슬라이더·막대 폴백 포함) / 세로 타일
+              const view = projectChoiceGroupSectionViewWithSlider({
                 group,
                 selectionType: group.type,
                 columns: visibleColumns,
@@ -174,7 +175,21 @@ export const MobileRowGroupCards = React.memo(function MobileRowGroupCards({
                     unfilled && 'rounded-lg border border-red-300 bg-red-50/40 p-2',
                   )}
                 >
-                  {view.kind === 'scale-bar' ? (
+                  {view.kind === 'scale-slider' ? (
+                    // 슬라이더도 머리 줄에 섹션 제목과 고른 값 표시를 나란히 둔다. 이 카드는 좁은 화면 전용이다
+                    <TableChoiceGroupScaleSlider
+                      questionId={questionId}
+                      group={group}
+                      model={view.model}
+                      cells={cells}
+                      label={sectionLabel}
+                      invalid={unfilled}
+                      narrow
+                      value={value}
+                      onChange={onChange}
+                      inputIdScope={row.id}
+                    />
+                  ) : view.kind === 'scale-bar' ? (
                     // 막대는 머리 줄에 섹션 제목과 선택값 표시를 나란히 둔다
                     <TableChoiceGroupScaleBar
                       questionId={questionId}
@@ -197,7 +212,8 @@ export const MobileRowGroupCards = React.memo(function MobileRowGroupCards({
                       {sectionLabel}
                     </p>
                   ) : null}
-                  {view.kind === 'scale-bar' ? null : view.kind === 'original-line' ? (
+                  {view.kind === 'scale-slider' || view.kind === 'scale-bar' ? null : view.kind ===
+                    'original-line' ? (
                     <div data-testid={`choice-group-original-line-${group.id}`}>
                       <MobileOriginalRowTable
                         columns={view.line.columns}

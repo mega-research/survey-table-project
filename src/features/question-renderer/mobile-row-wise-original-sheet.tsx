@@ -9,7 +9,8 @@ import type {
 } from '@/features/question-renderer/utils/mobile-row-wise-original';
 import type {
   RowScaleBar,
-  RowScaleLayout,
+  RowScaleSlider,
+  RowSliderSegment,
 } from '@/features/question-renderer/utils/row-scale-bars';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
@@ -34,9 +35,11 @@ interface MobileRowWiseOriginalSheetProps {
   errorCellIds?: Set<string> | undefined;
   /**
    * 「행별 척도」 배치(projectRowWiseScaleLayouts) — 막대가 있는 행은 행 순서대로 막대와 원본 조각을
-   * 번갈아 그리고, 없는 행(segments null)은 종전 원본 표 조각 그대로다.
+   * 번갈아 그리고, 없는 행(segments null)은 종전 원본 표 조각 그대로다. 슬라이더를 그리는 호스트는
+   * 슬라이더 조각이 든 배치(projectRowWiseSliderLayouts)와 `renderScaleSlider` 를 함께 넘긴다.
    */
-  scaleLayoutByRowId?: ReadonlyMap<string, RowScaleLayout> | undefined;
+  scaleLayoutByRowId?:
+    ReadonlyMap<string, { segments: RowSliderSegment[] | null }> | undefined;
   /** 세로 타일 한 그룹 — 그룹 카드의 섹션과 같은 얼굴. 선택 채널이 문항마다 달라 호스트가 그린다 */
   renderGroupTiles?:
     | ((
@@ -54,6 +57,20 @@ interface MobileRowWiseOriginalSheetProps {
         context: ScaleBarRenderContext,
       ) => React.ReactNode)
     | undefined;
+  /** 척도 슬라이더 하나 — 막대와 같이 선택 채널이 문항마다 달라 호스트가 그린다 */
+  renderScaleSlider?:
+    | ((
+        slider: RowScaleSlider,
+        question: MobileRowWiseOriginalQuestion,
+        context: ScaleBarRenderContext,
+      ) => React.ReactNode)
+    | undefined;
+  /**
+   * 넓은 화면의 행 단위 배치 — 척도 슬라이더가 켜진 표는 넓은 폭에서도 이 시트로 그린다(이름의 `Mobile` 은
+   * 모바일 전용이던 때의 것이다). 줄의 안쪽 여백만 넓힌다. 판정은 호스트의 기존 모바일 판정 하나라, 여기에
+   * 폭 분기점을 따로 두지 않는다.
+   */
+  wide?: boolean | undefined;
 }
 
 export interface ScaleBarRenderContext {
@@ -70,6 +87,8 @@ export function MobileRowWiseOriginalSheet({
   scaleLayoutByRowId,
   renderGroupTiles,
   renderScaleBar,
+  renderScaleSlider,
+  wide = false,
 }: MobileRowWiseOriginalSheetProps) {
   const labelIdPrefix = useId();
   const locale = useInlineSurveyLocale();
@@ -98,7 +117,12 @@ export function MobileRowWiseOriginalSheet({
       {sections.map((section, sectionIndex) => (
         <section key={section.id} className={cn(sectionIndex > 0 && 'border-t-8 border-gray-100')}>
           {section.label ? (
-            <h3 className="border-b border-gray-200 bg-blue-50 px-4 py-3 text-base font-semibold text-blue-700">
+            <h3
+              className={cn(
+                'border-b border-gray-200 bg-blue-50 px-4 py-3 text-base font-semibold text-blue-700',
+                wide && 'px-6',
+              )}
+            >
               {section.label}
             </h3>
           ) : null}
@@ -122,6 +146,7 @@ export function MobileRowWiseOriginalSheet({
                     id={subgroupLabelId}
                     className={cn(
                       'bg-gray-50 px-4 py-2.5 text-sm font-semibold text-gray-700',
+                      wide && 'px-6',
                       subgroupHasError && 'text-red-700',
                     )}
                   >
@@ -171,7 +196,7 @@ export function MobileRowWiseOriginalSheet({
                           useSubgroupTitle ? subgroupLabelId : hasTitle ? labelId : undefined
                         }
                         data-row-question-id={question.rowId}
-                        className="space-y-3 px-3 py-4"
+                        className={cn('space-y-3 px-3 py-4', wide && 'px-5 py-5')}
                       >
                         {!useSubgroupTitle && hasTitle ? (
                           <h5
@@ -225,12 +250,20 @@ export function MobileRowWiseOriginalSheet({
                           );
                         })}
                         {question.hidesPiece ? null : segments && renderScaleBar && renderGroupTiles ? (
-                          // 행별 척도 — 그룹은 제 보기 모양(타일·원본 한 줄·막대), 나머지 응답 칸은 원본 조각
+                          // 행별 척도 — 그룹은 제 보기 모양(타일·원본 한 줄·막대·슬라이더), 나머지 응답 칸은 원본 조각
                           <div className="space-y-3">
                             {segments.map((segment) =>
                               segment.kind === 'bar' ? (
                                 <div key={segment.bar.key} className="px-1">
                                   {renderScaleBar(segment.bar, question, {
+                                    inputIdScope,
+                                    sharesRow: segments.length > 1,
+                                  })}
+                                </div>
+                              ) : segment.kind === 'slider' ? (
+                                // 슬라이더 조각은 슬라이더를 그리는 호스트의 배치에만 있다 — 그 호스트가 그리는 함수도 넘긴다
+                                <div key={segment.slider.key} className="px-1">
+                                  {renderScaleSlider?.(segment.slider, question, {
                                     inputIdScope,
                                     sharesRow: segments.length > 1,
                                   })}

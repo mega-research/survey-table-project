@@ -316,7 +316,12 @@ describe('projectRowScaleSliders — 한 행에서 슬라이더로 그려지는 
 
   it('슬라이더 설정이 없는 행은 둘 다 비어 있다', () => {
     const result = projectRowScaleSliders(
-      input({ choiceGroups: [USE, { ...SAT, scaleSlider: undefined, mobileScaleBar: true }] }),
+      input({
+        choiceGroups: [
+          USE,
+          { id: 'g-sat', groupKey: 'rad2', type: 'radio', label: '만족도', mobileScaleBar: true },
+        ],
+      }),
     );
     expect(result).toEqual({ sliders: [], fallbacks: [] });
   });
