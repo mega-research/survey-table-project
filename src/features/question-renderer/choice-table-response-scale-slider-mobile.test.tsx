@@ -172,10 +172,15 @@ describe('보기 소스 표 — 좁은 폭의 척도 슬라이더(행 단위 그
 
   it('트랙을 누르면 그룹 맵에 셀 id 가 들어가고, 다시 누르면 비워진다', () => {
     render(<Harness q={question('row-group-cards', { scaleSlider: 'positive-left' })} />);
+    expect(within(slider()!).queryByTestId('scale-slider-thumb')).not.toBeInTheDocument();
     press(track(), tickX(7));
     expect(valueOf()).toEqual({ rad2: 'sat7' });
+    // 고른 자리에 손잡이가 서고 그 눈금의 라디오가 골라진다
+    expect(within(slider()!).getByTestId('scale-slider-thumb')).toBeInTheDocument();
+    expect(within(slider()!).getAllByRole('radio')[7]).toBeChecked();
     press(track(), tickX(7));
     expect(valueOf()).toEqual({});
+    expect(within(slider()!).queryByTestId('scale-slider-thumb')).not.toBeInTheDocument();
   });
 
   it('척도 막대 필드가 함께 켜져 있어도 막대가 아니라 슬라이더다', () => {
