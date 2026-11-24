@@ -71,15 +71,27 @@ function scaleRow(id: string, title: string, edit: (cell: TableCell) => TableCel
     label: title,
     cells: [
       { id: `${id}-item`, type: 'text', content: title },
-      { id: `${id}-use1`, type: 'choice_opt', content: '①', choiceLabel: '활용함', choiceGroupId: 'g-use' },
-      { id: `${id}-use2`, type: 'choice_opt', content: '②', choiceLabel: '활용 안함', choiceGroupId: 'g-use' },
+      {
+        id: `${id}-use1`,
+        type: 'choice_opt',
+        content: '①',
+        choiceLabel: '활용함',
+        choiceGroupId: `g-use-${id}`,
+      },
+      {
+        id: `${id}-use2`,
+        type: 'choice_opt',
+        content: '②',
+        choiceLabel: '활용 안함',
+        choiceGroupId: `g-use-${id}`,
+      },
       ...CIRC.map((content, n) =>
         edit({
           id: `${id}-sat${n}`,
           type: 'choice_opt',
           content,
           choiceLabel: NAMES[n]!,
-          choiceGroupId: 'g-sat',
+          choiceGroupId: `g-sat-${id}`,
         }),
       ),
       {
@@ -87,7 +99,7 @@ function scaleRow(id: string, title: string, edit: (cell: TableCell) => TableCel
         type: 'choice_opt',
         content: '⑨',
         choiceLabel: '이용한 적 없음',
-        choiceGroupId: 'g-sat',
+        choiceGroupId: `g-sat-${id}`,
         excludeFromMean: true,
       },
       { id: `${id}-memo`, type: 'input', content: '' },
@@ -101,8 +113,19 @@ const rows: TableRow[] = [
   scaleRow('r3', '3) 화장실/휴게시설'),
 ];
 
-const USE: ChoiceGroup = { id: 'g-use', groupKey: 'rad1', type: 'radio', label: '활용 여부' };
-const SAT: ChoiceGroup = { id: 'g-sat', groupKey: 'rad2', type: 'radio', label: '만족도' };
+// 묶음 하나가 변수 하나다 — 행마다 「활용 여부」·「만족도」 묶음이 따로 있다(묶음 키 use_<행>·sat_<행>)
+const usageGroupOf = (rowId: string): ChoiceGroup => ({
+  id: `g-use-${rowId}`,
+  groupKey: `use_${rowId}`,
+  type: 'radio',
+  label: '활용 여부',
+});
+const satisfactionGroupOf = (rowId: string): ChoiceGroup => ({
+  id: `g-sat-${rowId}`,
+  groupKey: `sat_${rowId}`,
+  type: 'radio',
+  label: '만족도',
+});
 const SLIDER: Partial<ChoiceGroup> = { scaleSlider: 'positive-right' };
 
 interface HarnessProps {
@@ -129,10 +152,10 @@ function Harness({
         questionId="q1"
         columns={tableColumns}
         rows={tableRows}
-        choiceGroups={[
-          { ...USE, ...useGroup },
-          { ...SAT, ...satGroup },
-        ]}
+        choiceGroups={tableRows.flatMap((row) => [
+          { ...usageGroupOf(row.id), ...useGroup },
+          { ...satisfactionGroupOf(row.id), ...satGroup },
+        ])}
         mobileDrilldownOmitLeadingColumns={1}
         value={value}
         onChange={(next) => {
@@ -154,9 +177,14 @@ const sheet = () => screen.queryByTestId('mobile-row-wise-original-sheet');
 const tableGrids = () =>
   screen.queryAllByRole('grid').filter((grid) => !sheet()?.contains(grid));
 
-/** 그 행의 트랙 — 범위를 왼쪽 100px · 폭 500px 로 준다 */
+const sliderOf = (rowId: string) =>
+  within(rowBlock(rowId)).queryByTestId(`scale-slider-g-sat-${rowId}`);
+/** 화면에 그려진 만족도 슬라이더 수 */
+const sliderCount = () => document.querySelectorAll('[data-testid^="scale-slider-g-sat-"]').length;
+
+/** 그 행의 만족도 트랙 — 범위를 왼쪽 100px · 폭 500px 로 준다 */
 function trackOf(rowId: string): HTMLElement {
-  const track = within(rowBlock(rowId)).getByTestId('scale-slider-track');
+  const track = within(sliderOf(rowId)!).getByTestId('scale-slider-track');
   vi.spyOn(track, 'getBoundingClientRect').mockReturnValue({
     left: 100,
     right: 600,
@@ -190,7 +218,7 @@ describe('표 문항 — 넓은 폭의 척도 슬라이더', () => {
     for (const row of rows) {
       const block = rowBlock(row.id);
       expect(within(block).getByText(row.label)).toBeInTheDocument();
-      const slider = within(block).getByTestId('scale-slider-g-sat');
+      const slider = sliderOf(row.id)!;
       // 눈금 5개 + 척도 밖 체크 하나가 라디오 묶음 하나다
       expect(within(slider).getAllByRole('radio')).toHaveLength(6);
       expect(within(slider).getByTestId('scale-slider-off-scale')).toHaveTextContent(
@@ -203,7 +231,7 @@ describe('표 문항 — 넓은 폭의 척도 슬라이더', () => {
     for (const mode of MOBILE_TABLE_DISPLAY_MODES) {
       const { unmount } = render(<Harness extra={{ mobileTableDisplayMode: mode }} />);
       expect(sheet()).toBeInTheDocument();
-      expect(screen.getAllByTestId('scale-slider-g-sat')).toHaveLength(rows.length);
+      expect(sliderCount()).toBe(rows.length);
       unmount();
     }
   });
@@ -217,16 +245,16 @@ describe('표 문항 — 넓은 폭의 척도 슬라이더', () => {
     const block = rowBlock('r1');
     // 세로 타일 묶음도 척도 막대도 넓은 화면에 내지 않는다
     expect(within(block).queryByRole('group', { name: '활용 여부' })).not.toBeInTheDocument();
-    expect(screen.queryByTestId('choice-group-scale-bar-g-use')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('choice-group-scale-bar-g-use-r1')).not.toBeInTheDocument();
     // 원본 표 조각 — 열 머리와 그 묶음의 라디오 둘
     expect(within(block).getByText('활용함')).toBeInTheDocument();
-    const slider = within(block).getByTestId('scale-slider-g-sat');
+    const slider = sliderOf('r1')!;
     const pieceRadios = within(block)
       .getAllByRole('radio')
       .filter((radio) => !slider.contains(radio));
     expect(pieceRadios).toHaveLength(2);
     fireEvent.click(pieceRadios[1]!);
-    expect(valueOf()).toEqual({ __choiceGroups: { rad1: 'r1-use2' } });
+    expect(valueOf()).toEqual({ __choiceGroups: { use_r1: 'r1-use2' } });
   });
 
   it('묶음 밖 응답 칸은 같은 행 안의 원본 표 조각으로 남는다', () => {
@@ -254,6 +282,13 @@ describe('표 문항 — 넓은 폭의 척도 슬라이더', () => {
     expect(within(block).queryByText('만족도')).not.toBeInTheDocument();
   });
 
+  it('미응답 안내의 「위치로 이동」이 찾도록 슬라이더 줄에 그 묶음 첫 칸의 표식이 있다', () => {
+    render(<Harness />);
+    const target = document.querySelector<HTMLElement>('[data-cell-id="r2-sat0"]')!;
+    expect(target).toHaveAttribute('data-cell-instance-id', 'r2:r2:r2-sat0');
+    expect(target).toContainElement(sliderOf('r2'));
+  });
+
   it('한 행에 슬라이더 묶음이 둘이면 묶음 이름과 함께 위아래로 선다', () => {
     render(<Harness useGroup={SLIDER} />);
     const block = rowBlock('r1');
@@ -274,17 +309,17 @@ describe('표 문항 — 슬라이더로 답한 값', () => {
     expect(sheet()).not.toBeInTheDocument();
     fireEvent.click(document.querySelector('[data-cell-id="r1-sat3"] input[type="radio"]')!);
     expect(sliderValue).toEqual(valueOf());
-    expect(sliderValue).toEqual({ __choiceGroups: { rad2: 'r1-sat3' } });
+    expect(sliderValue).toEqual({ __choiceGroups: { sat_r1: 'r1-sat3' } });
   });
 
   it('고른 자리를 다시 누르면 그 키가 비워진다 — 끈 문항에서 다시 누른 것과 같다', () => {
     const slider = render(<Harness />);
     const track = trackOf('r1');
     press(track, TICK_X[1]!);
-    expect(valueOf()).toEqual({ __choiceGroups: { rad2: 'r1-sat1' } });
+    expect(valueOf()).toEqual({ __choiceGroups: { sat_r1: 'r1-sat1' } });
     press(track, TICK_X[1]!);
     const cleared = valueOf();
-    expect(cleared.__choiceGroups).not.toHaveProperty('rad2');
+    expect(cleared.__choiceGroups).not.toHaveProperty('sat_r1');
     slider.unmount();
 
     render(<Harness satGroup={{}} />);
@@ -294,23 +329,24 @@ describe('표 문항 — 슬라이더로 답한 값', () => {
     expect(cleared).toEqual(valueOf());
   });
 
-  it('행마다 따로 쓰인다 — 같은 묶음 키 아래 행의 칸 id 가 값이다', () => {
+  it('행마다 제 묶음 키에 따로 쓰인다 — 한 행을 답해도 다른 행의 답은 그대로다', () => {
     render(<Harness />);
+    press(trackOf('r1'), TICK_X[0]!);
     press(trackOf('r2'), TICK_X[4]!);
-    expect(valueOf()).toEqual({ __choiceGroups: { rad2: 'r2-sat4' } });
+    expect(valueOf()).toEqual({ __choiceGroups: { sat_r1: 'r1-sat0', sat_r2: 'r2-sat4' } });
     // 점 타일을 눌러도 같은 쓰기다
-    fireEvent.click(within(rowBlock('r2')).getByText('불만족', { selector: 'label *' }));
-    expect(valueOf()).toEqual({ __choiceGroups: { rad2: 'r2-sat1' } });
+    fireEvent.click(within(sliderOf('r2')!).getByText('불만족', { selector: 'label *' }));
+    expect(valueOf()).toEqual({ __choiceGroups: { sat_r1: 'r1-sat0', sat_r2: 'r2-sat1' } });
   });
 
   it('척도 밖 체크를 고르면 그 칸이 값이고, 눈금을 고르면 눈금으로 바뀐다', () => {
     render(<Harness />);
     const block = rowBlock('r3');
     fireEvent.click(within(block).getByRole('radio', { name: '이용한 적 없음' }));
-    expect(valueOf()).toEqual({ __choiceGroups: { rad2: 'r3-na' } });
+    expect(valueOf()).toEqual({ __choiceGroups: { sat_r3: 'r3-na' } });
     expect(within(block).queryByTestId('scale-slider-thumb')).not.toBeInTheDocument();
     press(trackOf('r3'), TICK_X[0]!);
-    expect(valueOf()).toEqual({ __choiceGroups: { rad2: 'r3-sat0' } });
+    expect(valueOf()).toEqual({ __choiceGroups: { sat_r3: 'r3-sat0' } });
   });
 
   it('끄는 동안에는 응답 상태가 바뀌지 않고 놓았을 때 한 번만 바뀐다', () => {
@@ -323,7 +359,7 @@ describe('표 문항 — 슬라이더로 답한 값', () => {
     expect(valueOf()).toEqual({});
     up(track, TICK_X[4]!);
     expect(onChangeSpy).toHaveBeenCalledTimes(1);
-    expect(valueOf()).toEqual({ __choiceGroups: { rad2: 'r1-sat4' } });
+    expect(valueOf()).toEqual({ __choiceGroups: { sat_r1: 'r1-sat4' } });
   });
 
   it('끌다가 고른 눈금에 다시 놓으면 응답 상태가 그대로다', () => {
@@ -337,7 +373,7 @@ describe('표 문항 — 슬라이더로 답한 값', () => {
     move(track, TICK_X[2]!);
     up(track, TICK_X[2]!);
     expect(onChangeSpy).not.toHaveBeenCalled();
-    expect(valueOf()).toEqual({ __choiceGroups: { rad2: 'r1-sat2' } });
+    expect(valueOf()).toEqual({ __choiceGroups: { sat_r1: 'r1-sat2' } });
   });
 });
 
@@ -346,7 +382,7 @@ describe('표 문항 — 슬라이더로 그려지는 행이 없으면 지금과
     render(<Harness satGroup={{}} />);
     expect(sheet()).not.toBeInTheDocument();
     expect(screen.getByRole('grid')).toBeInTheDocument();
-    expect(screen.queryByTestId('scale-slider-g-sat')).not.toBeInTheDocument();
+    expect(sliderCount()).toBe(0);
   });
 
   it('설정은 있는데 모든 행이 폴백이면 원본 표 그대로다', () => {
@@ -359,7 +395,7 @@ describe('표 문항 — 슬라이더로 그려지는 행이 없으면 지금과
     render(<Harness tableRows={failing} />);
     expect(sheet()).not.toBeInTheDocument();
     expect(screen.getByRole('grid')).toBeInTheDocument();
-    expect(screen.queryByTestId('scale-slider-g-sat')).not.toBeInTheDocument();
+    expect(sliderCount()).toBe(0);
   });
 
   it('일부 행만 폴백이면 행 단위 배치이고, 그 행은 원본 표 조각으로 그려진다', () => {
@@ -371,13 +407,13 @@ describe('표 문항 — 슬라이더로 그려지는 행이 없으면 지금과
     ];
     render(<Harness tableRows={mixed} />);
     expect(sheet()).toBeInTheDocument();
-    expect(within(rowBlock('r1')).getByTestId('scale-slider-g-sat')).toBeInTheDocument();
+    expect(sliderOf('r1')).toBeInTheDocument();
     const fallback = rowBlock('r2');
-    expect(within(fallback).queryByTestId('scale-slider-g-sat')).not.toBeInTheDocument();
+    expect(sliderOf('r2')).not.toBeInTheDocument();
     // 활용 여부 2 + 만족도 5 + 이용한 적 없음 1
     expect(within(fallback).getAllByRole('radio')).toHaveLength(8);
     fireEvent.click(fallback.querySelector('[data-cell-id="r2-sat2"] input[type="radio"]')!);
-    expect(valueOf()).toEqual({ __choiceGroups: { rad2: 'r2-sat2' } });
+    expect(valueOf()).toEqual({ __choiceGroups: { sat_r2: 'r2-sat2' } });
   });
 });
 
@@ -422,7 +458,7 @@ describe('표 문항 — 넓은 폭의 행 단위 배치가 「행별 척도」�
     );
     expect(sheet()).toBeInTheDocument();
     expect(rowBlock('r2')).toBeNull();
-    expect(screen.getAllByTestId('scale-slider-g-sat')).toHaveLength(2);
+    expect(sliderCount()).toBe(2);
     hidden.unmount();
 
     render(
@@ -431,7 +467,7 @@ describe('표 문항 — 넓은 폭의 행 단위 배치가 「행별 척도」�
         extra={{ allResponses: { [SOURCE_Q]: '있음' }, allQuestions: [sourceQuestion] }}
       />,
     );
-    expect(within(rowBlock('r2')).getByTestId('scale-slider-g-sat')).toBeInTheDocument();
+    expect(sliderOf('r2')).toBeInTheDocument();
   });
 
   it('행 차례로 열기 — 연 행만 그려지고 버튼은 배치 아래에 한 번 선다', () => {
@@ -459,7 +495,7 @@ describe('표 문항 — 넓은 폭의 행 단위 배치가 「행별 척도」�
         extra={{ stagedRowsConfig: config }}
       />,
     );
-    expect(screen.getAllByTestId('scale-slider-g-sat')).toHaveLength(3);
+    expect(sliderCount()).toBe(3);
     expect(rowBlock('m1')).not.toBeNull();
     expect(rowBlock('m2')).toBeNull();
     const buttons = screen.getAllByRole('button', { name: '항목 추가' });
@@ -501,7 +537,7 @@ describe('표 문항 — 넓은 폭의 행 단위 배치가 「행별 척도」�
         extra={{ rowRepeatConfig: config }}
       />,
     );
-    expect(screen.getAllByTestId('scale-slider-g-sat')).toHaveLength(3);
+    expect(sliderCount()).toBe(3);
     expect(rowBlock('rep')).not.toBeNull();
     expect(rowBlock(second.id)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /의견 추가/ }));

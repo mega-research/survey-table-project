@@ -261,8 +261,16 @@ export function MobileRowWiseOriginalSheet({
                                   })}
                                 </div>
                               ) : segment.kind === 'slider' ? (
-                                // 슬라이더 조각은 슬라이더를 그리는 호스트의 배치에만 있다 — 그 호스트가 그리는 함수도 넘긴다
-                                <div key={segment.slider.key} className="px-1">
+                                // 슬라이더 조각은 슬라이더를 그리는 호스트의 배치에만 있다 — 그 호스트가 그리는 함수도 넘긴다.
+                                // 조각 밖에 그리므로 첫 칸의 표식을 단다 — 미응답 안내의 「위치로 이동」이 이 줄을 찾는다
+                                // (넓은 폭의 긴 표에서 문항 맨 위로 떨어지면 어느 줄인지 다시 찾아야 한다).
+                                <div
+                                  key={segment.slider.key}
+                                  {...(segment.slider.cells[0]
+                                    ? issueTargetProps(segment.slider.cells[0])
+                                    : {})}
+                                  className="px-1"
+                                >
                                   {renderScaleSlider?.(segment.slider, question, {
                                     inputIdScope,
                                     sharesRow: segments.length > 1,
