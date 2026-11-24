@@ -20,6 +20,10 @@ import {
   usePriorAnswers,
   usePriorHighlight,
 } from '@/features/question-renderer/prior-answers-context';
+import {
+  RadioQuestionScaleSlider,
+  useRadioQuestionScaleSlider,
+} from '@/features/question-renderer/radio-question-scale-slider';
 import { RankingQuestion } from '@/features/question-renderer/ranking-question';
 import {
   ResponseSourcesProvider,
@@ -510,6 +514,24 @@ function RadioQuestion({
   const priorHighlight = usePriorHighlight();
 
   const isMobileView = useMobileView();
+
+  // 척도 슬라이더(문항 설정) — 켜져 있고 그릴 수 있으면 보기 목록 대신 슬라이더다. 그릴지는 렌더러의 조각이
+  // 정하고(빌더 미리보기 카드와 같은 판정), 쓰기는 위의 변경 처리 그대로라 값·잠금 규칙이 달라지지 않는다.
+  // 모델이 없으면(설정 없음·폴백) 아래 보기 목록이 지금과 똑같이 그려진다. 열 배치 설정은 여기서 읽지 않는다.
+  const sliderModel = useRadioQuestionScaleSlider(question);
+  if (sliderModel) {
+    const selectedValue = isOtherChoiceValue(value) ? value.selectedValue : value;
+    return (
+      <RadioQuestionScaleSlider
+        question={question}
+        model={sliderModel}
+        selectedValue={typeof selectedValue === 'string' ? selectedValue : null}
+        onToggleOption={handleOptionChange}
+        locked={isLocked}
+      />
+    );
+  }
+
   const effectiveColumns = isMobileView
     ? resolveMobileOptionsColumns(
         question.mobileOptionsColumns,

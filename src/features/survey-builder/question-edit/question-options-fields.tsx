@@ -31,6 +31,7 @@ import {
 } from '@/features/survey-builder/lib/language-question-diagnostics';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import { cn } from '@/lib/utils';
+import { isScaleSliderDirection } from '@/types/scale-slider';
 import { generateOptionCode } from '@/utils/option-code-generator';
 import type { Question, QuestionOption } from '@/types/survey';
 import { SURVEY_LOCALES, SURVEY_LOCALE_LABELS, isSurveyLocale } from '@/types/survey-locale';
@@ -90,6 +91,19 @@ export function QuestionOptionsFields({
     questions: questions.map((q) => (q.id === questionId ? { ...q, ...formData } : q)),
     groups: groups ?? [],
   });
+  // 문항 설정의 척도 슬라이더(CONTEXT.md 「척도 슬라이더」) — 읽는 쪽과 같이 라디오 문항에서만 켜진 것으로 본다
+  const drawsAsScaleSlider =
+    question.type === 'radio' && isScaleSliderDirection(formData.scaleSlider);
+  const optionsLayoutSelector = (
+    <OptionsLayoutSelector
+      value={formData.optionsColumns}
+      onChange={(next) => setFormData((prev) => ({ ...prev, optionsColumns: next }))}
+      align={formData.optionsAlign}
+      onAlignChange={(next) => setFormData((prev) => ({ ...prev, optionsAlign: next }))}
+      mobileValue={formData.mobileOptionsColumns}
+      onMobileChange={(next) => setFormData((prev) => ({ ...prev, mobileOptionsColumns: next }))}
+    />
+  );
   return (
     <>
   {needsOptions && (
@@ -160,19 +174,21 @@ export function QuestionOptionsFields({
         </p>
       ))}
 
-      {/* 응답 페이지에서 옵션 배치 방식 (select 는 드롭다운이라 의미 없어 숨김) */}
-      {question.type !== 'select' && (
-        <OptionsLayoutSelector
-          value={formData.optionsColumns}
-          onChange={(next) => setFormData((prev) => ({ ...prev, optionsColumns: next }))}
-          align={formData.optionsAlign}
-          onAlignChange={(next) => setFormData((prev) => ({ ...prev, optionsAlign: next }))}
-          mobileValue={formData.mobileOptionsColumns}
-          onMobileChange={(next) =>
-            setFormData((prev) => ({ ...prev, mobileOptionsColumns: next }))
-          }
-        />
-      )}
+      {/* 응답 페이지에서 옵션 배치 방식 (select 는 드롭다운이라 의미 없어 숨김).
+          척도 슬라이더를 켠 문항은 이 배치를 읽지 않는다 — 흐리게 두고 그 사실을 적되, 값은 지우지 않고
+          고칠 수도 있게 둔다(슬라이더로 그릴 수 없는 문항은 이 배치로 그려진다). */}
+      {question.type !== 'select' &&
+        (drawsAsScaleSlider ? (
+          <div className="space-y-1">
+            <div className="opacity-80">{optionsLayoutSelector}</div>
+            <p className="text-xs text-gray-500">
+              척도 슬라이더로 그리는 동안에는 옵션 배치를 쓰지 않습니다. 슬라이더로 그릴 수 없는
+              문항만 이 배치로 보입니다.
+            </p>
+          </div>
+        ) : (
+          optionsLayoutSelector
+        ))}
 
       <DndContext
         sensors={sensors}
@@ -198,8 +214,10 @@ export function QuestionOptionsFields({
                 isCheckboxQuestion={question.type === 'checkbox'}
                 isRadioQuestion={question.type === 'radio'}
                 showExcludeFromMean={
-                  (question.type === 'radio' || question.type === 'select') &&
-                  formData.scaleMeanEnabled === true
+                  ((question.type === 'radio' || question.type === 'select') &&
+                    formData.scaleMeanEnabled === true) ||
+                  // 슬라이더는 이 표시로 척도 밖 보기(체크)를 가른다 — 척도 평균이 꺼져 있어도 붙일 수 있어야 한다
+                  drawsAsScaleSlider
                 }
               />
             ))}
@@ -244,7 +262,10 @@ interface SortableOptionItemProps {
   isCheckboxQuestion: boolean;
   /** 라디오 문항일 때만 「언어」 선택을 보인다 — 언어 문항은 radio 뿐이다 */
   isRadioQuestion: boolean;
-  /** 척도 평균에 들어간(현황 「문항 선택」) 단일 선택 문항일 때만 「평균에서 제외」를 보인다 */
+  /**
+   * 「평균에서 제외」를 보이는가 — 척도 평균에 들어간(현황 「문항 선택」) 단일 선택 문항이거나, 척도 슬라이더를
+   * 켠 라디오 문항(이 표시가 붙은 보기는 눈금이 아니라 체크로 떨어진다)
+   */
   showExcludeFromMean: boolean;
 }
 
