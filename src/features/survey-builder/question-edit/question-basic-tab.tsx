@@ -30,6 +30,7 @@ import {
 import { MultiLevelSelectFields } from './multi-level-select-fields';
 import { QuestionOptionsFields } from './question-options-fields';
 import { QuestionPlaceholderFields } from './question-placeholder-fields';
+import { QuestionScaleSliderFields } from './question-scale-slider-fields';
 import { QuestionSpssFields } from './question-spss-fields';
 import { QuestionSelectionLimitFields } from './question-selection-limit-fields';
 import { QuestionTableFields } from './question-table-fields';
@@ -547,6 +548,12 @@ export function QuestionBasicTab({
             &quot;보기 옵션&quot; 탭에서 라벨/코드를 설정하세요.
           </p>
         </div>
+      )}
+
+      {/* 척도 슬라이더로 그리기 (CONTEXT.md 「척도 슬라이더」) — 문항 설정으로 켜는 곳은 보통 라디오 문항
+          (보기 목록)이다. 보기를 설명 테이블로 구성한 문항은 여기서 켜지 않는다. */}
+      {question.type === 'radio' && needsOptions && (
+        <QuestionScaleSliderFields formData={formData} setFormData={setFormData} />
       )}
 
       {/* 옵션 설정 (radio, checkbox, select) */}
