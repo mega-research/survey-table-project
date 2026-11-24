@@ -136,6 +136,21 @@ describe('AlreadyRespondedView', () => {
       expect(screen.queryByText('问卷已暂停。请稍后再试。')).not.toBeInTheDocument();
     });
 
+    it('언어가 정해진 다국어 응답이면 화면 루트에 그 언어의 lang 을 단다 (글꼴·스크린리더)', () => {
+      const { container } = render(
+        <AlreadyRespondedView
+          reason="survey_paused"
+          surveyTitle="테스트 설문"
+          contactEmail={null}
+          customBody={KO_DEFAULT}
+          locale="vi"
+        />,
+      );
+      const body = screen.getByText('Khảo sát đang tạm dừng. Vui lòng thử lại sau.');
+      expect(body.closest('[lang]')).toBe(container.firstElementChild);
+      expect(container.firstElementChild).toHaveAttribute('lang', 'vi');
+    });
+
     it('다국어 설문이 아니면(한국어) 글자 그대로 한 줄이다', () => {
       const { container } = render(
         <AlreadyRespondedView
