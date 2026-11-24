@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   type ProjectScaleBarInput,
   projectScaleBar,
+  resolveScaleBarAnchorLayout,
   resolveScaleBarBandTones,
   resolveScaleBarCellMinWidths,
 } from '@/features/question-renderer/utils/choice-group-scale-bar';
@@ -509,6 +510,44 @@ describe('projectScaleBar — 폴백(null + 이유 코드)', () => {
   it('보기 칸이 열과 짝이 안 맞는다', () => {
     const input = c4();
     expect(reasonOf({ ...input, columns: input.columns.slice(0, 5) })).toBe('non-contiguous');
+  });
+});
+
+describe('resolveScaleBarAnchorLayout — 막대 아래 라벨 줄의 배치', () => {
+  it('10점 척도 — 가운데 구간(5·6번째 칸)의 중심이 한가운데라 양옆 자리가 같다', () => {
+    expect(
+      resolveScaleBarAnchorLayout(
+        { left: '매우 만족', middle: { label: '보통', index: 4, span: 2 }, right: '매우 불만족' },
+        10,
+      ),
+    ).toEqual({ gridColumn: '1 / 11', template: 'minmax(0, 5fr) fit-content(40%) minmax(0, 5fr)' });
+  });
+
+  it('척도 밖 칸이 끝에 낀 막대 — 라벨 줄은 오른쪽 라벨의 끝 칸까지만 차지한다', () => {
+    expect(
+      resolveScaleBarAnchorLayout(
+        { left: 'A', middle: { label: 'M', index: 4, span: 2 }, right: 'B', rightEnd: 9 },
+        11,
+      ).gridColumn,
+    ).toBe('1 / 11');
+    expect(
+      resolveScaleBarAnchorLayout({ left: 'A', leftStart: 1, right: 'B' }, 11),
+    ).toEqual({ gridColumn: '2 / 12', template: null });
+  });
+
+  it('가운데 구간이 한쪽으로 치우치면 양옆 자리를 그 중심 앞뒤 칸 수에 비례해 나눈다', () => {
+    // 7칸 중 3번째 칸(중심 2.5) — 앞 2.5칸 · 뒤 4.5칸
+    expect(
+      resolveScaleBarAnchorLayout({ left: 'A', middle: { label: 'M', index: 2 }, right: 'B' }, 7)
+        .template,
+    ).toBe('minmax(0, 2.5fr) fit-content(40%) minmax(0, 4.5fr)');
+  });
+
+  it('가운데 라벨이 없으면 틀이 없다 — 양끝 라벨만 양쪽으로 벌린다', () => {
+    expect(resolveScaleBarAnchorLayout({ left: 'A', right: 'B' }, 7)).toEqual({
+      gridColumn: '1 / 8',
+      template: null,
+    });
   });
 });
 

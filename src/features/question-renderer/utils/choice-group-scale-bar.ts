@@ -48,7 +48,7 @@ export interface ScaleBarModel {
   bands: ScaleBarBand[];
   /**
    * 막대 아래 라벨 — 6칸 이상만. 라벨은 제 구간에 붙는다: 왼쪽은 구간 첫 칸에서 오른쪽으로, 오른쪽은
-   * 구간 끝 칸에서 왼쪽으로, 가운데는 구간 가운데에 둔다.
+   * 구간 끝 칸에서 왼쪽으로, 가운데는 구간 가운데에 둔다(배치는 `resolveScaleBarAnchorLayout`).
    * - `leftStart`·`rightEnd`: 라벨이 붙는 칸 — 막대의 첫 칸·끝 칸이면 싣지 않는다(척도 밖 보기 칸이
    *   끝에 낀 막대에서만 생긴다)
    * - `middle.index`: 가운데 구간의 첫 칸, `middle.span`: 그 구간의 칸 수(한 칸이면 싣지 않는다)
@@ -146,6 +146,43 @@ function longTextWidth(text: string, count: number): number | undefined {
  * 넓힐 칸이 많아 가장 좁은 화면에서 나머지 칸의 자리가 남지 않으면 아무 칸도 넓히지 않는다 — 최소 폭의 합이
  * 막대 폭을 넘으면 뒤쪽 칸이 화면 밖으로 밀려 누를 수 없게 된다. 그럴 때는 고르게 나누는 종전 모양이 낫다.
  */
+/** 가운데 라벨이 쓸 수 있는 폭의 상한 — 넘으면 줄을 바꾼다(양끝 라벨의 자리를 남긴다) */
+const SCALE_BAR_MIDDLE_LABEL_MAX = '40%';
+
+export interface ScaleBarAnchorLayout {
+  /** 라벨 줄이 놓이는 칸 범위 — 막대와 같은 열 틀의 격자선(왼쪽 라벨의 첫 칸 ~ 오른쪽 라벨의 끝 칸) */
+  gridColumn: string;
+  /**
+   * 가운데 라벨이 있을 때의 세 자리 틀(왼쪽 · 가운데 · 오른쪽). 없으면 `null` — 양끝 라벨만 양쪽으로 벌린다.
+   * 양옆 자리는 가운데 구간의 중심 앞뒤 칸 수에 비례해, 가운데 라벨이 구간 가운데에 온다.
+   */
+  template: string | null;
+}
+
+/**
+ * 막대 아래 라벨 줄의 배치. 라벨은 제 구간에 붙되(왼쪽은 구간 첫 칸에서, 오른쪽은 구간 끝 칸까지, 가운데는
+ * 구간 가운데) **서로 겹치지 않게 남는 폭을 나눠 쓰고, 길면 줄을 바꾼다** — 전에는 한 줄로 겹쳐 놓아
+ * 긴 번역 라벨(베트남어 「Tốt hơn nhiều so với kỳ vọng」)이 서로를 덮었다(2026-11-24). 한 줄에 들어가는
+ * 라벨은 자리가 종전과 같다.
+ */
+export function resolveScaleBarAnchorLayout(
+  anchors: ScaleBarModel['anchors'],
+  count: number,
+): ScaleBarAnchorLayout {
+  const start = anchors.leftStart ?? 0;
+  const end = anchors.rightEnd ?? count - 1;
+  const gridColumn = `${start + 1} / ${end + 2}`;
+  if (!anchors.middle) return { gridColumn, template: null };
+  const center = anchors.middle.index + (anchors.middle.span ?? 1) / 2;
+  // 구간이 범위 끝에 붙어 있어도 옆 자리가 0 이 되지 않게 반 칸은 남긴다
+  const before = Math.max(center - start, 0.5);
+  const after = Math.max(end + 1 - center, 0.5);
+  return {
+    gridColumn,
+    template: `minmax(0, ${before}fr) fit-content(${SCALE_BAR_MIDDLE_LABEL_MAX}) minmax(0, ${after}fr)`,
+  };
+}
+
 export function resolveScaleBarCellMinWidths(texts: readonly string[]): (number | undefined)[] {
   const widths = texts.map((text) => longTextWidth(text, texts.length));
   const widened = widths.filter((width): width is number => width !== undefined);

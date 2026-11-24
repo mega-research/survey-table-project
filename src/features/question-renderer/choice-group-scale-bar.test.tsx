@@ -175,7 +175,6 @@ describe('ChoiceGroupScaleBar — 글자가 긴 칸과 구간에 붙는 라벨',
       />,
     );
   const template = (el: Element) => (el as HTMLElement).style.gridTemplateColumns;
-  const anchor = (name: string) => screen.getByText(name).style;
 
   it('긴 글자 칸만 최소 폭을 갖고, 막대·띠·라벨이 같은 열 틀을 써 서로 어긋나지 않는다', () => {
     draw(withOffScale);
@@ -202,14 +201,44 @@ describe('ChoiceGroupScaleBar — 글자가 긴 칸과 구간에 붙는 라벨',
     attrs.value = {};
   });
 
-  it('라벨은 제 구간에 붙는다 — 오른쪽 라벨은 구간 끝 칸까지, 가운데 라벨은 구간 칸들 가운데', () => {
+  it('라벨 줄은 제 구간의 칸 범위에 붙는다 — 척도 밖 칸(미참여)은 빼고, 가운데 라벨은 구간 가운데', () => {
     draw(withOffScale);
-    expect(anchor('매우 만족').gridColumn).toBe('1 / -1');
-    expect(anchor('매우 만족').justifySelf).toBe('start');
-    expect(anchor('보통').gridColumn).toBe('5 / span 2');
-    expect(anchor('보통').justifySelf).toBe('center');
-    expect(anchor('매우 불만족').gridColumn).toBe('1 / 11');
-    expect(anchor('매우 불만족').justifySelf).toBe('end');
+    const row = screen.getByTestId('scale-bar-anchor-row');
+    // 왼쪽 라벨의 첫 칸(1) ~ 오른쪽 라벨의 끝 칸(10) — 11번째 「미참여」 칸 아래는 비운다
+    expect(row.style.gridColumn).toBe('1 / 11');
+    // 가운데 구간(5·6번째 칸)의 중심이 범위 한가운데라 양옆 자리가 같다
+    expect(row.style.gridTemplateColumns).toBe('minmax(0, 5fr) fit-content(40%) minmax(0, 5fr)');
+    expect([...row.children].map((el) => el.textContent)).toEqual(['매우 만족', '보통', '매우 불만족']);
+    expect(row.children[0]).toHaveClass('text-left');
+    expect(row.children[1]).toHaveClass('text-center');
+    expect(row.children[2]).toHaveClass('text-right');
+  });
+
+  it('긴 라벨은 한 줄로 겹쳐 놓지 않는다 — 제 자리 안에서 줄을 바꾼다', () => {
+    draw({
+      ...elevenPoint,
+      anchors: {
+        left: 'Tốt hơn nhiều so với kỳ vọng',
+        middle: { label: 'Bình thường', index: 5 },
+        right: 'Tệ hơn nhiều so với kỳ vọng',
+      },
+    });
+    const row = screen.getByTestId('scale-bar-anchor-row');
+    for (const el of row.children) {
+      expect(el).not.toHaveClass('whitespace-nowrap');
+      expect(el).toHaveClass('min-w-0');
+    }
+    // 라벨 줄의 높이를 한 줄로 못박지 않는다(줄이 늘면 아래 내용이 밀린다)
+    expect(screen.getByTestId('scale-bar-anchors')).not.toHaveClass('h-4');
+  });
+
+  it('가운데 라벨이 없으면 양끝 라벨을 양쪽으로 벌린다', () => {
+    draw({ ...elevenPoint, anchors: { left: '전혀 아니다', right: '매우 그렇다' } });
+    const row = screen.getByTestId('scale-bar-anchor-row');
+    expect(row.style.gridColumn).toBe('1 / 12');
+    expect(row.style.gridTemplateColumns).toBe('');
+    expect(row).toHaveClass('flex', 'justify-between');
+    expect([...row.children].map((el) => el.textContent)).toEqual(['전혀 아니다', '매우 그렇다']);
   });
 
   it('긴 글자 칸이 없는 막대는 종전과 같은 고른 열 틀이고 라벨 자리도 양끝·정가운데 칸이다', () => {
@@ -217,9 +246,9 @@ describe('ChoiceGroupScaleBar — 글자가 긴 칸과 구간에 붙는 라벨',
     const equal = 'repeat(11, minmax(0, 1fr))';
     expect(template(screen.getByTestId('scale-bar-strip'))).toBe(equal);
     expect(template(screen.getByTestId('scale-bar-anchors'))).toBe(equal);
-    expect(anchor('매우 불만족').gridColumn).toBe('1 / -1');
-    expect(anchor('보통').gridColumn).toBe('6 / span 1');
-    expect(anchor('매우 만족').gridColumn).toBe('1 / 12');
-    expect(anchor('매우 만족').justifySelf).toBe('end');
+    const row = screen.getByTestId('scale-bar-anchor-row');
+    expect(row.style.gridColumn).toBe('1 / 12');
+    expect(row.style.gridTemplateColumns).toBe('minmax(0, 5.5fr) fit-content(40%) minmax(0, 5.5fr)');
+    expect([...row.children].map((el) => el.textContent)).toEqual(['매우 불만족', '보통', '매우 만족']);
   });
 });

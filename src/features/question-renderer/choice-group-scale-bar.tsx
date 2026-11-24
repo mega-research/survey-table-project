@@ -11,6 +11,7 @@ import {
   type ScaleBarBandTone,
   type ScaleBarCell,
   type ScaleBarModel,
+  resolveScaleBarAnchorLayout,
   resolveScaleBarBandTones,
   resolveScaleBarCellMinWidths,
 } from '@/features/question-renderer/utils/choice-group-scale-bar';
@@ -119,8 +120,7 @@ export const ChoiceGroupScaleBar = React.memo(function ChoiceGroupScaleBar({
       : `repeat(${count}, minmax(0, 1fr))`,
   };
   const { left, middle, right } = model.anchors;
-  const leftStart = model.anchors.leftStart ?? 0;
-  const rightEnd = model.anchors.rightEnd ?? count - 1;
+  const anchorLayout = resolveScaleBarAnchorLayout(model.anchors, count);
   // 띠는 늘 그린다 — 헤더에 구간 줄이 없는 척도(칸마다 이름이 하나씩인 5점 등)는 칸마다 띠 하나다.
   // 구간 이름·선택값 표시는 여전히 헤더의 구간(model.bands)만 쓴다.
   const hasHeaderBands = model.bands.length > 0;
@@ -233,41 +233,48 @@ export const ChoiceGroupScaleBar = React.memo(function ChoiceGroupScaleBar({
           </div>
         }
         {hasAnchors && (
-          // 라벨은 글자 길이가 아니라 제 구간의 칸에 붙인다 — 왼쪽은 구간 첫 칸에서 오른쪽으로, 오른쪽은
-          // 구간 끝 칸에서 왼쪽으로 뻗고, 가운데는 구간 칸들 가운데에 둔다(양 끝 정렬이면 「보통」이 칸
-          // 사이로 밀린다). 막대와 같은 열 틀의 한 줄에 겹쳐 놓아, 칸 폭이 달라져도 자리가 맞는다.
+          // 라벨은 글자 길이가 아니라 제 구간의 칸에 붙인다 — 라벨 줄은 막대와 같은 열 틀에서 왼쪽 라벨의 첫 칸부터
+          // 오른쪽 라벨의 끝 칸까지 차지한다(칸 폭이 달라져도 자리가 맞는다). 그 안에서 가운데 라벨은 구간
+          // 가운데에 두고 양끝 라벨이 남는 폭을 나눠 쓴다. 길면 줄을 바꾼다 — 한 줄로 겹쳐 놓으면 긴 번역
+          // 라벨이 서로를 덮는다(resolveScaleBarAnchorLayout).
           <div
             aria-hidden
             data-testid="scale-bar-anchors"
-            className="mt-1 grid h-4 text-[11px] leading-4 text-gray-900"
+            className="mt-1 grid text-[11px] leading-4 text-gray-900"
             style={columnsStyle}
           >
-            {left !== undefined && (
-              <span
-                className="row-start-1 whitespace-nowrap"
-                style={{ gridColumn: `${leftStart + 1} / -1`, justifySelf: 'start' }}
-              >
-                {text(left)}
-              </span>
-            )}
-            {middle !== undefined && (
-              <span
-                className="row-start-1 whitespace-nowrap"
+            {anchorLayout.template !== null ? (
+              <div
+                data-testid="scale-bar-anchor-row"
+                className="grid gap-x-1.5"
                 style={{
-                  gridColumn: `${middle.index + 1} / span ${middle.span ?? 1}`,
-                  justifySelf: 'center',
+                  gridColumn: anchorLayout.gridColumn,
+                  gridTemplateColumns: anchorLayout.template,
                 }}
               >
-                {text(middle.label)}
-              </span>
-            )}
-            {right !== undefined && (
-              <span
-                className="row-start-1 whitespace-nowrap"
-                style={{ gridColumn: `1 / ${rightEnd + 2}`, justifySelf: 'end' }}
+                <span className="min-w-0 text-left break-words">
+                  {left !== undefined ? text(left) : null}
+                </span>
+                <span className="min-w-0 text-center break-words">
+                  {middle !== undefined ? text(middle.label) : null}
+                </span>
+                <span className="min-w-0 text-right break-words">
+                  {right !== undefined ? text(right) : null}
+                </span>
+              </div>
+            ) : (
+              <div
+                data-testid="scale-bar-anchor-row"
+                className="flex justify-between gap-x-2"
+                style={{ gridColumn: anchorLayout.gridColumn }}
               >
-                {text(right)}
-              </span>
+                {left !== undefined && (
+                  <span className="min-w-0 text-left break-words">{text(left)}</span>
+                )}
+                {right !== undefined && (
+                  <span className="ml-auto min-w-0 text-right break-words">{text(right)}</span>
+                )}
+              </div>
             )}
           </div>
         )}
