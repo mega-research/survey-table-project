@@ -1,6 +1,7 @@
 // 설문 구조 JSONB 계약 — surveys.response_header·group_name_design, survey_versions.snapshot, 보관함 질문 문서.
 // DB 스키마($type<>)·서버·UI 가 공유하는 어휘 — 런타임 의존 없음(리터럴 상수 제외).
 import type { MobileTableDisplayMode } from '@/types/mobile-table-display';
+import type { ScaleSliderDirection } from '@/types/scale-slider';
 import type {
   HeaderCell,
   InputType,
@@ -320,5 +321,6 @@ export interface QuestionData {
   collapseButtonLabel?: string | null;
   collapseAttachToPrevious?: boolean;
   distinctGroup?: string | null;
+  scaleSlider?: ScaleSliderDirection | null;
   sumConstraints?: SumConstraint[] | null;
 }
