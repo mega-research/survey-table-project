@@ -60,8 +60,12 @@ function isVisible(cell: TableCell): boolean {
  * 그대로 항상 보이고, 카드 안은 보기 그룹(축)별 섹션으로 나뉘어 세로 타일로 고른다. 같은 행의 입력 셀(단답·선택형)은
  * 섹션 아래에 라벨과 함께 온다 — 게이팅·상세기재는 InteractiveCell 이 셀 단위로 그대로 처리한다.
  *
+ * 섹션의 모양은 그룹의 보기 모양을 따른다(choice-group-section-view) — 척도 슬라이더 · 척도 막대 ·
+ * 원본 한 줄 · 세로 타일. 슬라이더와 막대는 그 행에서 못 그리면 원본 한 줄로 떨어진다. 척도 슬라이더가
+ * 켜진 표도 표시 방식이 「행 단위 그룹 카드」면 이 카드 안에서 그린다(scale-slider-table-layout).
+ *
  * 값은 ChoiceOptCell 이 `__choiceGroups` 에 쓴다 — 데스크톱 셀과 같은 컴포넌트의 타일 변형이라
- * 단독 선택·표 전체 범위·상세기재 규칙이 한 곳이다. 보기 셀이 없는 행(설명 행)은 카드가 되지
+ * 단독 선택·표 전체 범위·상세기재 규칙이 한 곳이다. 슬라이더·막대도 같은 그룹 선택 쓰기를 탄다. 보기 셀이 없는 행(설명 행)은 카드가 되지
  * 않는다. 표시 조건·동적 행은 호스트가 displayRows 로 이미 걸러 넘긴다.
  */
 export const MobileRowGroupCards = React.memo(function MobileRowGroupCards({
