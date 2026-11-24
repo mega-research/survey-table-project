@@ -358,6 +358,9 @@ export function GroupStepItem({
                 onDynamicRowSelectionChange={onDynamicRowSelectionChange}
                 showRequiredHighlight={showRequiredMessage}
                 requiredVisibleCellIds={choiceGroupVisibility.visibleCellIds}
+                // 위에 그린 제목 요소(이 영역의 이름과 같은 요소) — 척도 슬라이더의 라디오 묶음이 낭독 이름으로 가리킨다.
+                // 제목을 숨긴 문항에는 그 요소가 없어 넘기지 않는다(없는 id 를 가리키면 이름 없는 묶음이 된다)
+                titleElementId={q.hideTitle ? undefined : `q-label-${q.id}`}
               />
             </div>
           </fieldset>

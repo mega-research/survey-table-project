@@ -71,10 +71,13 @@ function RadioTestInput({
   question,
   value,
   onChange,
+  titleElementId,
 }: {
   question: Question;
   value: SingleChoiceResponse;
   onChange: (value: SingleChoiceResponse) => void;
+  /** 카드 머리의 제목 요소 id — 척도 슬라이더로 그릴 때의 낭독 이름. 보기 목록은 쓰지 않는다 */
+  titleElementId?: string | undefined;
 }) {
   const otherInput = isOtherChoiceValue(value) ? (value.otherValue ?? '') : '';
 
@@ -127,6 +130,7 @@ function RadioTestInput({
         model={sliderModel}
         selectedValue={typeof selectedValue === 'string' ? selectedValue : null}
         onToggleOption={handleOptionChange}
+        titleElementId={titleElementId}
       />
     );
   }
@@ -501,6 +505,7 @@ function QuestionTestInput({
   allQuestions,
   selectedDynamicRowIds,
   onDynamicRowSelectionChange,
+  titleElementId,
 }: {
   question: Question;
   value: unknown;
@@ -509,6 +514,7 @@ function QuestionTestInput({
   allQuestions: Question[];
   selectedDynamicRowIds: string[];
   onDynamicRowSelectionChange: (rowIds: string[]) => void;
+  titleElementId?: string | undefined;
 }) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
@@ -564,6 +570,7 @@ function QuestionTestInput({
           question={question}
           value={value as SingleChoiceResponse}
           onChange={onChange as (value: SingleChoiceResponse) => void}
+          titleElementId={titleElementId}
         />
       );
 
@@ -668,10 +675,16 @@ function QuestionTestInput({
 export function QuestionTestBody({
   question,
   lookups = [],
+  titleElementId,
 }: {
   question: Question;
   /** 분기 조건 우변 LUT 룩업 평가에 사용. currentSurvey.lookups 를 전달. */
   lookups?: SurveyLookup[];
+  /**
+   * 카드 껍데기가 그린 문항 제목 요소의 id — 척도 슬라이더로 그리는 라디오 문항이 라디오 묶음의 낭독
+   * 이름으로 가리킨다(응답 화면과 같은 규칙). 제목 요소 없이 본문만 그리는 자리는 넘기지 않는다.
+   */
+  titleElementId?: string | undefined;
 }) {
   const testResponse = useTestResponseStore((s) => s.testResponses[question.id]);
   const updateTestResponse = useTestResponseStore((s) => s.updateTestResponse);
@@ -764,6 +777,7 @@ export function QuestionTestBody({
               allQuestions={allQuestions}
               selectedDynamicRowIds={selectedDynamicRowIds}
               onDynamicRowSelectionChange={handleDynamicRowSelectionChange}
+              titleElementId={titleElementId}
             />
           )}
         </div>
