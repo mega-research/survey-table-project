@@ -54,6 +54,10 @@ import {
  * - 슬라이더도 막대도 타일도 없는 행은 종전과 같이 행 전체가 원본 표 조각이다(segments null).
  * - 한 행에서 슬라이더로 그려지는 묶음만 알면 되는 자리(표 배치 판정 · 빌더 진단)는
  *   `projectRowScaleSliders` 를 쓴다 — 조각을 자르지 않는다.
+ * - **그룹 없는 묶음의 슬라이더는 문항 설정이 켠다**(`ungroupedSliderDirection`). 그룹 없는 보기 소스 표에는
+ *   그룹별 설정이 없어서다. 단위는 막대와 같다 — 이어진 묶음마다 하나. 보기 그룹은 이 값을 읽지 않는다
+ *   (그룹의 방향만). 어느 문항에서 이 값을 넘길지는 호출부가 한 곳의 판정으로 정한다
+ *   (scale-slider-table-layout 의 `resolveChoiceTableQuestionSliderDirection`).
  */
 
 export interface RowScaleBar {
@@ -129,6 +133,11 @@ export interface ProjectRowScaleLayoutInput {
    * 표 문항의 그룹 없는 보기 칸은 답할 수 없는 칸이라 막대로 만들지 않는다.
    */
   ungroupedSelectionType: UngroupedSelectionType;
+  /**
+   * 그룹 없는 묶음의 슬라이더 방향 — 그룹 없는 보기 소스 표의 문항 설정. 없음·null 이면 그룹 없는 묶음은
+   * 슬라이더가 아니다(지금과 같다). 슬라이더를 그리지 않는 호출부는 읽지 않는다.
+   */
+  ungroupedSliderDirection?: ScaleSliderDirection | null | undefined;
 }
 
 export interface ProjectRowSliderLayoutInput extends ProjectRowScaleLayoutInput {
@@ -181,7 +190,12 @@ type Draft =
 /** 묶음 투영의 재료 — 조각을 자르지 않는 자리(슬라이더로 그려지는 묶음만 볼 때)도 이것만 있으면 된다 */
 type ChoiceUnitInput = Pick<
   ProjectRowScaleLayoutInput,
-  'columns' | 'barHeaderGrid' | 'row' | 'choiceGroups' | 'ungroupedSelectionType'
+  | 'columns'
+  | 'barHeaderGrid'
+  | 'row'
+  | 'choiceGroups'
+  | 'ungroupedSelectionType'
+  | 'ungroupedSliderDirection'
 >;
 
 /**
@@ -225,9 +239,13 @@ function collectChoiceUnits(input: ChoiceUnitInput): ChoiceUnit[] {
   return units;
 }
 
-/** 묶음의 슬라이더 방향 — 슬라이더로 고른 보기 그룹만. 그룹 없는 묶음에는 그룹별 설정이 없다 */
-function sliderDirectionOf(unit: ChoiceUnit): ScaleSliderDirection | null {
-  return unit.group ? resolveChoiceGroupSliderDirection(unit.group) : null;
+/**
+ * 묶음의 슬라이더 방향 — 보기 그룹은 그룹의 설정, 그룹 없는 묶음은 문항 설정(호출부가 넘긴다).
+ * 그룹이 있는 묶음은 문항 설정을 읽지 않는다.
+ */
+function sliderDirectionOf(unit: ChoiceUnit, input: ChoiceUnitInput): ScaleSliderDirection | null {
+  if (unit.group) return resolveChoiceGroupSliderDirection(unit.group);
+  return input.ungroupedSliderDirection ?? null;
 }
 
 /** 묶음 하나를 슬라이더로 — 판정은 척도 슬라이더 투영(scale-slider) 그대로다 */
@@ -263,7 +281,7 @@ export function projectRowScaleSliders(input: ChoiceUnitInput): {
   const sliders: RowScaleSlider[] = [];
   const fallbacks: RowScaleSliderFallback[] = [];
   for (const unit of collectChoiceUnits(input)) {
-    const direction = sliderDirectionOf(unit);
+    const direction = sliderDirectionOf(unit, input);
     if (direction === null) continue;
     const projected = projectUnitSlider(unit, direction, input);
     if (projected.ok) sliders.push(projected.slider);
@@ -298,7 +316,7 @@ function buildRowLayout(
   const sliderFallbacks: RowScaleSliderFallback[] = [];
   const drafts: Draft[] = [];
   for (const unit of collectChoiceUnits(input)) {
-    const direction = sliderMode ? sliderDirectionOf(unit) : null;
+    const direction = sliderMode ? sliderDirectionOf(unit, input) : null;
     if (direction !== null) {
       const projected = projectUnitSlider(unit, direction, input);
       if (projected.ok) {
@@ -435,10 +453,18 @@ export function projectRowWiseSliderLayouts(
   model: MobileRowWiseOriginalModel,
   choiceGroups: readonly ChoiceGroup[],
   ungroupedSelectionType: UngroupedSelectionType,
-  options: { wide: boolean },
+  options: {
+    wide: boolean;
+    /** 그룹 없는 묶음의 슬라이더 방향 — 그룹 없는 보기 소스 표의 문항 설정(없으면 꺼짐) */
+    ungroupedSliderDirection?: ScaleSliderDirection | null | undefined;
+  },
 ): Map<string, RowSliderLayout> {
   return projectRowWiseLayouts(model, choiceGroups, ungroupedSelectionType, (input) =>
-    projectRowSliderLayout({ ...input, wide: options.wide }),
+    projectRowSliderLayout({
+      ...input,
+      wide: options.wide,
+      ungroupedSliderDirection: options.ungroupedSliderDirection,
+    }),
   );
 }
 
