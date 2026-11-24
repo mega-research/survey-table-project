@@ -3,14 +3,21 @@ import { useState } from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
+import { MOBILE_TABLE_DISPLAY_MODES } from '@/types/mobile-table-display';
 import type { ChoiceGroup, Question } from '@/types/survey';
 
 import { ChoiceTableResponse } from './choice-table-response';
 
 /**
- * 보기 소스 표(radio 문항 + 내장 표) — 보기 모양이 「척도 슬라이더」인 보기 그룹. 슬라이더를 그릴 수 있기
- * 전까지는 표 문항과 같이 원본 한 줄로 그리고, 선택 쓰기는 이 문항의 그룹 맵 그대로다.
- * 슬라이더 조각이 생기면 이 파일의 기대가 바뀐다.
+ * 보기 소스 표(radio 문항 + 내장 표) — 좁은 폭에서 보기 모양이 「척도 슬라이더」인 보기 그룹
+ * (CONTEXT.md 「척도 슬라이더」).
+ *
+ * 표시 방식이 「행 단위 그룹 카드」면 그 카드 안에서, 그 밖에는 무엇을 골랐든 행 단위 배치(「행별 척도」와
+ * 같이)로 그린다. 다른 그룹은 제 보기 모양 그대로다. 선택 쓰기는 이 문항의 그룹 맵 그대로다.
+ * 넓은 폭은 `-scale-slider`, 그룹 없는 표(문항 설정)는 `-scale-slider-ungrouped` 파일이 본다.
+ *
+ * jsdom 은 배치를 계산하지 않으므로 트랙 범위는 테스트가 준다(왼쪽 100px · 폭 550px). 눈금 11개면 칸
+ * 하나가 50px 이고 n번째 눈금은 125 + 50n 에 선다.
  */
 
 const view = vi.hoisted(() => ({ mobile: true }));
@@ -112,55 +119,145 @@ const valueOf = () => JSON.parse(screen.getByTestId('value').textContent!);
 const rowBlock = (rowId: string) =>
   document.querySelector<HTMLElement>(`[data-row-question-id="${rowId}"]`)!;
 
-describe('보기 소스 표 — 척도 슬라이더를 고른 그룹(슬라이더 조각이 생기기 전)', () => {
-  it('「행 단위 그룹 카드」: 그 그룹을 원본 한 줄로 그리고 다른 그룹은 세로 타일 그대로다', () => {
+const slider = () => screen.queryByTestId('scale-slider-g-sat');
+
+/** 만족도 트랙 — 범위를 왼쪽 100px · 폭 550px 로 준다(눈금 11개, 칸 하나 50px) */
+function track(): HTMLElement {
+  const el = within(slider()!).getByTestId('scale-slider-track');
+  vi.spyOn(el, 'getBoundingClientRect').mockReturnValue({
+    left: 100,
+    right: 650,
+    width: 550,
+    top: 0,
+    bottom: 32,
+    height: 32,
+    x: 100,
+    y: 0,
+    toJSON: () => ({}),
+  });
+  return el;
+}
+const tickX = (n: number) => 125 + 50 * n;
+const press = (el: HTMLElement, x: number) => {
+  fireEvent.pointerDown(el, { pointerId: 1, button: 0, clientX: x });
+  fireEvent.pointerUp(el, { pointerId: 1, button: 0, clientX: x });
+};
+
+/** 상세 기재 보기가 낀 만족도 그룹 — 슬라이더로 그릴 수 없다 */
+function fallbackQuestion(mode: Question['mobileTableDisplayMode']): Question {
+  const q = question(mode);
+  q.tableRowsData = q.tableRowsData!.map((row) => ({
+    ...row,
+    cells: row.cells.map((cell) => (cell.id === 'sat10' ? { ...cell, allowTextInput: true } : cell)),
+  }));
+  return q;
+}
+
+describe('보기 소스 표 — 좁은 폭의 척도 슬라이더(행 단위 그룹 카드)', () => {
+  it('그 카드 안에서 슬라이더로 그리고 다른 그룹은 세로 타일 그대로다', () => {
     render(<Harness q={question('row-group-cards')} />);
-    const line = screen.getByTestId('choice-group-original-line-g-sat');
-    for (const label of ['만족도', '매우 불만족', '보통', '매우 만족']) {
-      expect(within(line).getByText(label)).toBeInTheDocument();
-    }
-    expect(within(line).getAllByRole('radio')).toHaveLength(11);
+    expect(screen.queryByTestId('mobile-row-wise-original-sheet')).not.toBeInTheDocument();
+    const section = screen.getByTestId('choice-group-section-g-sat');
+    expect(within(section).getByTestId('scale-slider-g-sat')).toBeInTheDocument();
+    expect(within(section).getAllByRole('radio')).toHaveLength(11);
+    // 머리 줄의 섹션 제목과 구간 타일
+    expect(within(section).getByText('만족도')).toBeInTheDocument();
+    expect(section.querySelectorAll('[data-tile="band"]')).toHaveLength(5);
+    expect(screen.queryByTestId('choice-group-original-line-g-sat')).not.toBeInTheDocument();
     expect(screen.queryByTestId('choice-group-scale-bar-g-sat')).not.toBeInTheDocument();
+    // 다른 그룹은 세로 타일
     expect(screen.queryByTestId('choice-group-original-line-g-use')).not.toBeInTheDocument();
     expect(screen.getByText('활용 안함', { selector: 'span' })).toBeInTheDocument();
   });
 
-  it('「행 단위 그룹 카드」: 한 줄의 칸을 누르면 그룹 맵에 셀 id 가 들어간다', () => {
+  it('트랙을 누르면 그룹 맵에 셀 id 가 들어가고, 다시 누르면 비워진다', () => {
     render(<Harness q={question('row-group-cards', { scaleSlider: 'positive-left' })} />);
-    fireEvent.click(within(screen.getByTestId('choice-group-original-line-g-sat')).getByText('⑦'));
+    press(track(), tickX(7));
     expect(valueOf()).toEqual({ rad2: 'sat7' });
+    press(track(), tickX(7));
+    expect(valueOf()).toEqual({});
   });
 
-  it('「행 단위 그룹 카드」: 척도 막대 필드가 함께 켜져 있어도 막대가 아니라 원본 한 줄이다', () => {
+  it('척도 막대 필드가 함께 켜져 있어도 막대가 아니라 슬라이더다', () => {
     render(
       <Harness
         q={question('row-group-cards', { scaleSlider: 'positive-right', mobileScaleBar: true })}
       />,
     );
-    expect(screen.getByTestId('choice-group-original-line-g-sat')).toBeInTheDocument();
+    expect(slider()).toBeInTheDocument();
     expect(screen.queryByTestId('choice-group-scale-bar-g-sat')).not.toBeInTheDocument();
   });
 
-  it('「행별 척도」: 그 그룹 열의 원본 표 조각으로 그리고 같은 그룹 맵으로 저장된다', () => {
+  it('미충족 필수 그룹의 슬라이더가 강조된다', () => {
+    const q = question('row-group-cards');
+    render(
+      <ChoiceTableResponse
+        question={q}
+        value={undefined}
+        onChange={() => {}}
+        unfilledGroupCellIds={new Set(CIRC.map((_, n) => `sat${n}`))}
+      />,
+    );
+    expect(within(slider()!).getByRole('radiogroup')).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('슬라이더로 그릴 수 없는 그룹은 종전 사슬대로 원본 한 줄이다', () => {
+    render(<Harness q={fallbackQuestion('row-group-cards')} />);
+    expect(slider()).not.toBeInTheDocument();
+    expect(screen.getByTestId('choice-group-original-line-g-sat')).toBeInTheDocument();
+  });
+});
+
+describe('보기 소스 표 — 좁은 폭의 척도 슬라이더(행 단위 배치)', () => {
+  it('표시 방식이 「행 단위 그룹 카드」가 아니면 무엇이든 행 단위 배치다', () => {
+    for (const mode of MOBILE_TABLE_DISPLAY_MODES) {
+      if (mode === 'row-group-cards') continue;
+      const { unmount } = render(<Harness q={question(mode)} />);
+      expect(screen.getByTestId('mobile-row-wise-original-sheet'), mode).toBeInTheDocument();
+      expect(within(rowBlock('r1')).getByTestId('scale-slider-g-sat'), mode).toBeInTheDocument();
+      unmount();
+    }
+  });
+
+  it('「행별 척도」: 슬라이더 그룹은 슬라이더, 다른 그룹은 제 보기 모양(세로 타일)이다', () => {
     render(<Harness q={question('row-wise-scale')} />);
     const block = rowBlock('r1');
     expect(screen.queryByTestId('choice-group-scale-bar-g-sat')).not.toBeInTheDocument();
     const tiles = within(block).getByRole('group', { name: '활용 여부' });
     expect(within(tiles).getAllByRole('radio')).toHaveLength(2);
-    expect(within(block).queryByRole('group', { name: '만족도' })).not.toBeInTheDocument();
-    const pieceRadios = within(block)
-      .getAllByRole('radio')
-      .filter((radio) => !tiles.contains(radio));
-    expect(pieceRadios).toHaveLength(11);
-    fireEvent.click(pieceRadios[7]!);
-    expect(valueOf()).toEqual({ rad2: 'sat7' });
+    const sliderRadios = within(slider()!).getAllByRole('radio');
+    expect(sliderRadios).toHaveLength(11);
+    // 원본 표 조각은 없다 — 응답 칸이 전부 타일과 슬라이더에 들었다
+    expect(within(block).queryByRole('grid')).not.toBeInTheDocument();
+    // 한 행에 응답 묶음이 둘이라 슬라이더 머리에 그룹 이름이 선다
+    expect(within(slider()!).getByRole('radiogroup', { name: '만족도' })).toBeInTheDocument();
   });
 
-  it('데스크톱 폭에서는 원본 표 그대로다', () => {
-    view.mobile = false;
+  it('같은 그룹 맵으로 저장된다 — 타일로 고른 그룹과 슬라이더로 고른 그룹이 한 맵에 든다', () => {
     render(<Harness q={question('row-wise-scale')} />);
+    fireEvent.click(screen.getByText('활용함', { selector: 'span' }));
+    press(track(), tickX(7));
+    expect(valueOf()).toEqual({ rad1: 'u1', rad2: 'sat7' });
+  });
+
+  it('슬라이더로 그려지는 행이 없으면 고른 표시 방식 그대로다', () => {
+    // 「행별 척도」 — 못 그린 그룹은 그 그룹 열의 원본 조각
+    const scale = render(<Harness q={fallbackQuestion('row-wise-scale')} />);
+    expect(screen.getByTestId('mobile-row-wise-original-sheet')).toBeInTheDocument();
+    expect(slider()).not.toBeInTheDocument();
+    expect(within(rowBlock('r1')).getAllByRole('grid')).toHaveLength(1);
+    scale.unmount();
+
+    // 「행 단위 카드」 — 행 단위 배치로 바뀌지 않는다
+    render(<Harness q={fallbackQuestion('row-cards')} />);
     expect(screen.queryByTestId('mobile-row-wise-original-sheet')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('choice-group-original-line-g-sat')).not.toBeInTheDocument();
-    expect(screen.getAllByRole('radio')).toHaveLength(13);
+    expect(screen.getByTestId('row-card-r1')).toBeInTheDocument();
+  });
+
+  it('슬라이더 설정이 없는 표는 좁은 폭에서도 고른 표시 방식 그대로다', () => {
+    render(<Harness q={question('row-cards', {})} />);
+    expect(screen.queryByTestId('mobile-row-wise-original-sheet')).not.toBeInTheDocument();
+    expect(screen.getByTestId('row-card-r1')).toBeInTheDocument();
+    expect(slider()).not.toBeInTheDocument();
   });
 });
