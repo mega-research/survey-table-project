@@ -193,6 +193,7 @@ export function mapQuestionRow(q: QuestionRow): QuestionType {
     ...(q.collapseButtonLabel != null ? { collapseButtonLabel: q.collapseButtonLabel } : {}),
     ...(q.collapseAttachToPrevious ? { collapseAttachToPrevious: true } : {}),
     ...(q.distinctGroup != null ? { distinctGroup: q.distinctGroup } : {}),
+    ...(q.scaleSlider != null ? { scaleSlider: q.scaleSlider } : {}),
     ...(q.sumConstraints != null
       ? { sumConstraints: q.sumConstraints as NonNullable<QuestionType['sumConstraints']> }
       : {}),

@@ -123,6 +123,8 @@ function toQuestionRow(question: SurveyType['questions'][number], surveyId: stri
     collapseButtonLabel: question.collapseButtonLabel ?? null,
     collapseAttachToPrevious: question.collapseAttachToPrevious ?? false,
     distinctGroup: question.distinctGroup ?? null,
+    // 빌더 저장은 문항을 통째로 다시 쓴다 — 키가 없으면 꺼진 것이다
+    scaleSlider: question.scaleSlider ?? null,
     sumConstraints: question.sumConstraints as NewQuestion['sumConstraints'],
     dynamicRowConfigs:
       question.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
@@ -201,6 +203,7 @@ const QUESTION_UPSERT_SET = {
   collapseButtonLabel: sql`excluded.collapse_button_label`,
   collapseAttachToPrevious: sql`excluded.collapse_attach_previous`,
   distinctGroup: sql`excluded.distinct_group`,
+  scaleSlider: sql`excluded.scale_slider`,
   sumConstraints: sql`excluded.sum_constraints`,
   dynamicRowConfigs: sql`excluded.dynamic_row_config`,
   rowRepeatConfig: sql`excluded.row_repeat_config`,

@@ -24,6 +24,7 @@ import {
   isTableQuestion,
   isTextQuestion,
   isTextareaQuestion,
+  normalizeQuestion,
   toFlatQuestion,
 } from '@/lib/question';
 import type { QuestionVariant } from '@/lib/question';
@@ -127,6 +128,7 @@ describe('유형별 필드 매트릭스 (실측 박제)', () => {
         'choiceGroups',
         'scaleMeanEnabled',
         'defaultValueTemplate',
+        'scaleSlider',
       ]),
     );
   });
@@ -188,6 +190,39 @@ describe('유형별 필드 매트릭스 (실측 박제)', () => {
     expect(shapeKeys(NoticeQuestionSchema)).toEqual(
       sorted([...BASE_KEYS, 'noticeContent', 'requiresAcknowledgment']),
     );
+  });
+});
+
+describe('문항의 슬라이더 방향 — 라디오 문항 전용 필드', () => {
+  it.each(['positive-right', 'positive-left'] as const)(
+    '라디오 문항의 %s 는 strict parse 를 지나도 남는다',
+    (direction) => {
+      const question = makeQuestion.radio({ scaleSlider: direction });
+      expect(QuestionVariantSchema.parse(question)).toEqual(question);
+    },
+  );
+
+  it('라디오가 아닌 유형에 실려 온 값은 strict parse 가 걷어 낸다', () => {
+    for (const question of makeAllQuestionVariants()) {
+      if (question.type === 'radio') continue;
+      const parsed = QuestionVariantSchema.parse({ ...question, scaleSlider: 'positive-right' });
+      expect('scaleSlider' in parsed, `${question.type} 에 남으면 안 된다`).toBe(false);
+    }
+  });
+
+  it('어휘에 없는 값은 strict parse 가 거부한다', () => {
+    const question = { ...makeQuestion.radio(), scaleSlider: 'sideways' };
+    expect(QuestionVariantSchema.safeParse(question).success).toBe(false);
+  });
+
+  it('꺼진 값(null)은 strict 정규화에서 키째 빠진다', () => {
+    const normalized = normalizeQuestion({ ...makeQuestion.radio(), scaleSlider: null }, 'strict');
+    expect('scaleSlider' in normalized).toBe(false);
+  });
+
+  it('보관함·스냅샷 읽기(보존 모드)는 값을 건드리지 않는다', () => {
+    const stored = { ...makeQuestion.radio(), scaleSlider: 'positive-left' };
+    expect(normalizeQuestion(stored)).toEqual(stored);
   });
 });
 

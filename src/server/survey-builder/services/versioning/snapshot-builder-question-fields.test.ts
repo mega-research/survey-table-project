@@ -76,6 +76,7 @@ const SENTINEL = {
   collapseButtonLabel: '코드표 보기',
   collapseAttachToPrevious: true,
   distinctGroup: 'leave',
+  scaleSlider: 'positive-left',
   piiEncrypted: true,
   tableValidationRules: [],
   sumConstraints: [],
@@ -132,5 +133,34 @@ describe('발행 스냅샷 — 영속 필드 전수 대조', () => {
     const row = SENTINEL as unknown as Record<string, unknown>;
     const uncovered = READ_FIELDS.filter((field) => row[field] == null);
     expect(uncovered).toEqual([]);
+  });
+});
+
+describe('발행 스냅샷 — 문항의 슬라이더 방향', () => {
+  const snapshotQuestion = (question: Question) =>
+    buildSurveySnapshot({
+      id: 's1',
+      title: '설문',
+      questions: [question],
+      groups: [],
+      settings: { isPublic: true, allowMultipleResponses: false, showProgressBar: true },
+      lookups: [],
+    } as never).questions[0] as unknown as Record<string, unknown>;
+
+  const radio = { id: 'q1', type: 'radio', title: '추천 의향', required: true, order: 1 };
+
+  it.each(['positive-right', 'positive-left'] as const)('%s 를 그대로 얼린다', (direction) => {
+    const frozen = snapshotQuestion({ ...radio, scaleSlider: direction } as unknown as Question);
+    expect(frozen['scaleSlider']).toBe(direction);
+  });
+
+  it('꺼진 문항은 저장되는 스냅샷이 한 글자도 달라지지 않는다 — null 이 실려 와도 싣지 않는다', () => {
+    const before = JSON.stringify(snapshotQuestion(radio as unknown as Question));
+    const cleared = JSON.stringify(
+      snapshotQuestion({ ...radio, scaleSlider: null } as unknown as Question),
+    );
+
+    expect(cleared).toBe(before);
+    expect(cleared).not.toContain('scaleSlider');
   });
 });
