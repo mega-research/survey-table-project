@@ -167,6 +167,7 @@ describe('projectScaleSlider — 타일 세 가지', () => {
       0, 0, 0, 0, 0, 1, 1, 1, 2, 2, 2, 2, 2,
     ]);
     expect(model.showsSelectionLabel).toBe(true);
+    expect(model.bandsCoverAllTicks).toBe(true);
   });
 
   it('번호뿐인 11점은 타일이 없고 눈금 글자 11개만 있다', () => {
@@ -176,6 +177,7 @@ describe('projectScaleSlider — 타일 세 가지', () => {
     expect(model.ticks.map((tick) => tick.mark)).toEqual(marks(0, 11));
     expect(model.ticks.map((tick) => tick.name)).toEqual(blank(11).map(() => undefined));
     expect(model.showsSelectionLabel).toBe(false);
+    expect(model.bandsCoverAllTicks).toBe(false);
   });
 
   it('점 이름과 구간이 함께 있는 7점은 점 타일이고, 구간은 고른 값 표시의 재료로 남는다', () => {
@@ -201,7 +203,7 @@ describe('projectScaleSlider — 타일 세 가지', () => {
     expect(model.showsSelectionLabel).toBe(true);
   });
 
-  it('이름이 일부 눈금에만 있으면 점 타일이 아니다 — 양끝에만 이름이 있는 척도는 그 이름이 구간 타일이다', () => {
+  it('이름이 일부 눈금에만 있으면 점 타일이 아니다 — 양끝에만 이름이 있는 척도는 그 이름이 구간이지만 눈금을 다 덮지 못한다', () => {
     const model = modelOf(
       table({
         cells: ticks(marks(1, 5)),
@@ -215,6 +217,34 @@ describe('projectScaleSlider — 타일 세 가지', () => {
     ]);
     expect(model.ticks.map((tick) => tick.name)).toEqual(blank(5).map(() => undefined));
     expect(model.ticks.map((tick) => tick.mark)).toEqual(marks(1, 5));
+    // 타일 상자를 그릴 수 없는 구간이다 — 그리는 쪽이 이름을 글자로만 둔다
+    expect(model.bandsCoverAllTicks).toBe(false);
+  });
+
+  it('구간이 눈금을 빠짐없이 덮는가를 싣는다 — 가운데가 비거나 한쪽 끝이 비면 덮지 못한 것이다', () => {
+    const cover = (heads: HeaderCell[]) =>
+      modelOf(
+        table({ cells: ticks(marks(0, 11)), headerGrid: [[head('h-item', '항목', 1), ...heads]] }),
+      ).bandsCoverAllTicks;
+    expect(cover([head('a', '낮음', 4), head('b', '중간', 3), head('c', '높음', 4)])).toBe(true);
+    // 양끝과 한가운데에만 이름 — 사이가 빈다
+    expect(
+      cover([
+        head('a', '전혀 없다', 1),
+        head('g1', '', 4),
+        head('b', '보통', 1),
+        head('g2', '', 4),
+        head('c', '매우 많다', 1),
+      ]),
+    ).toBe(false);
+    // 왼쪽 구간만 — 오른쪽 끝이 빈다
+    expect(cover([head('a', '낮음', 5), head('g', '', 6)])).toBe(false);
+  });
+
+  it('점 타일이어도 구간이 눈금을 다 덮는가는 구간만 보고 싣는다', () => {
+    const model = modelOf(table({ cells: ticks(FIVE_NAMES), headerGrid: titleOnly(5) }));
+    expect(model.tileKind).toBe('point');
+    expect(model.bandsCoverAllTicks).toBe(false);
   });
 
   it('칸 글자가 이름인 눈금이 일부뿐이고 구간도 없으면 타일이 없다 — 그 이름은 눈금 글자로만 보인다', () => {
@@ -289,6 +319,43 @@ describe('projectScaleSlider — 척도 밖 보기', () => {
       }),
     );
     expect(model.offScale).toEqual([{ choiceId: 'dk', label: '잘 모르겠음' }]);
+  });
+
+  it('칸 글자가 번호뿐이고 그 칸만 덮는 머리 이름이 있으면 머리 이름이 글자다 — 체크 옆에 번호만 보이지 않는다', () => {
+    const model = modelOf(
+      table({
+        cells: [...ticks(marks(1, 5)), off('dk', '⑨')],
+        columnLabels: [...FIVE_NAMES, '모름'],
+      }),
+    );
+    expect(model.offScale).toEqual([{ choiceId: 'dk', label: '모름' }]);
+  });
+
+  it('칸 글자가 번호뿐이어도 머리 이름이 없거나 머리도 번호뿐이면 칸 글자 그대로다', () => {
+    const noHead = modelOf(
+      table({
+        cells: [...ticks(marks(1, 5)), off('dk', '⑨')],
+        columnLabels: [...FIVE_NAMES, ''],
+      }),
+    );
+    expect(noHead.offScale).toEqual([{ choiceId: 'dk', label: '⑨' }]);
+    const numberHead = modelOf(
+      table({
+        cells: [...ticks(marks(1, 5)), off('dk', '⑨')],
+        columnLabels: [...FIVE_NAMES, '9'],
+      }),
+    );
+    expect(numberHead.offScale).toEqual([{ choiceId: 'dk', label: '⑨' }]);
+  });
+
+  it('칸 글자가 비었으면 머리가 번호뿐이어도 그것이 글자다', () => {
+    const model = modelOf(
+      table({
+        cells: [...ticks(marks(1, 5)), off('dk', '')],
+        columnLabels: [...FIVE_NAMES, '9'],
+      }),
+    );
+    expect(model.offScale).toEqual([{ choiceId: 'dk', label: '9' }]);
   });
 
   it('척도 밖 보기의 머리 이름은 눈금의 구간이 되지 않는다', () => {
