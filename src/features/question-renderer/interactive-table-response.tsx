@@ -125,7 +125,7 @@ import { OptionTextBelowTable } from './option-text-below-table';
 import { StagedRowsButtons } from './staged-rows-buttons';
 import { TableChoiceGroupScaleSlider } from './table-choice-group-scale-slider';
 import {
-  resolveScaleSliderTableLayout,
+  resolveRenderedTableDisplay,
   tableHasScaleSliderRow,
 } from './utils/scale-slider-table-layout';
 import { VirtualizedTableGrid } from './virtualized-table-grid';
@@ -757,8 +757,7 @@ function InteractiveTableResponseBody({
     () => displayOnlyTableNeedsOriginal(rows, authoredMobileMode),
     [rows, authoredMobileMode],
   );
-  const mobileMode = displayOnlyFallsBack ? 'original' : authoredMobileMode;
-  const useOriginalRowDetail = isMobileView && mobileMode === 'drilldown-original-row';
+  const requestedMobileMode = displayOnlyFallsBack ? 'original' : authoredMobileMode;
   // 척도 슬라이더 — 슬라이더로 그려지는 행이 있는 표는 넓은 폭에서도 표 대신 행 단위 배치로 그린다
   // (scale-slider-table-layout). 그려지는 행은 표의 구조로 판정해, 답에 따라 배치가 오가지 않는다.
   const hasScaleSliderRow = useMemo(
@@ -772,17 +771,20 @@ function InteractiveTableResponseBody({
       }),
     [choiceGroups, columns, rows, tableHeaderGrid],
   );
-  const scaleSliderLayout = resolveScaleSliderTableLayout({
+  // 지금 유효한 표시 방식 — **아래의 방식별 분기·파생값은 저작 값(requestedMobileMode)이 아니라 이 값만
+  // 읽는다.** 슬라이더가 행 단위 배치로 가져간 화면에서 저작 값을 직접 읽으면 그 방식의 전용 장치가 샌다
+  // (「항목 단위 카드」의 행 추가 버튼이 사라졌다 — scale-slider-table-layout 머리 주석).
+  // activeMode 는 화면을 실제로 정하는 방식이고, 넓은 화면의 격자 표면 null 이다.
+  const { mode: renderedMode, activeMode } = resolveRenderedTableDisplay({
     hasSliderRow: hasScaleSliderRow,
     narrow: isMobileView,
-    mobileMode,
+    mobileMode: requestedMobileMode,
   });
+  const useOriginalRowDetail = activeMode === 'drilldown-original-row';
   // 행별 원본 · 행별 척도 — 같은 시트 구조, 행 본문만 다르다. 슬라이더의 행 단위 배치도 이 시트다.
-  const usesRowWiseSheet =
-    scaleSliderLayout === 'row-wise' ||
-    (isMobileView && isRowWiseMobileTableDisplayMode(mobileMode));
+  const usesRowWiseSheet = activeMode !== null && isRowWiseMobileTableDisplayMode(activeMode);
   // 격자 표가 아닌 화면인가 — 모바일 카드 계열, 그리고 폭과 무관한 슬라이더의 행 단위 배치
-  const usesCardLayout = usesRowWiseSheet || (isMobileView && mobileMode !== 'original');
+  const usesCardLayout = activeMode !== null && activeMode !== 'original';
   // 행 단위 그룹 카드는 보기 그룹 정의가 있어야 그린다 — 없으면 자동 카드로 떨어진다
   const hasChoiceGroupDefs = (choiceGroups?.length ?? 0) > 0;
   // 위반 셀 중 보기 셀은 그룹 덩어리 외곽선으로 — 보기 소스 표(choice-table-response)와 같은
@@ -797,8 +799,9 @@ function InteractiveTableResponseBody({
     }
     return ids.size > 0 ? buildChoiceGroupOutline(rows, ids) : undefined;
   }, [errorCellIds, hasChoiceGroupDefs, rows]);
-  const rendersFullOriginalTable = mobileMode === 'original';
-  const applyCellBackground = !(isMobileView && mobileMode === 'original');
+  // 「원본」으로 둔 표의 좌우 여백 — 폭과 무관하게 읽는다(넓은 화면의 격자 표도 같은 여백 클래스를 쓴다)
+  const rendersFullOriginalTable = renderedMode === 'original';
+  const applyCellBackground = activeMode !== 'original';
 
   // 열·행 조건 평가는 allResponses 를 그대로 의존한다.
   // 예전에는 displayCondition.conditions 의 sourceQuestionId 만 모아 만든 부분집합 JSON 을
@@ -1014,8 +1017,9 @@ function InteractiveTableResponseBody({
   // 버튼 줄이 묶음 바로 아래에 서는 화면인가 — 데스크톱 표(모바일의 「원본」 포함)에서
   // 보이는 묶음 행이 있을 때. 그 밖의 화면은 표 아래 버튼으로 폴백한다.
   const stagedInDesktopTable = !usesCardLayout && stagedControl !== null;
-  // 모바일 「항목 단위 카드」는 카드 목록이 버튼 자리를 직접 잡는다(블록마다).
-  const stagedInItemCards = isMobileView && mobileMode === 'item-cards' && stagedRows.isActive;
+  // 모바일 「항목 단위 카드」는 카드 목록이 버튼 자리를 직접 잡는다(블록마다). 항목 카드가 실제로
+  // 그려질 때만이다 — 슬라이더가 행 단위 배치로 가져간 표는 표 아래 버튼으로 폴백한다.
+  const stagedInItemCards = activeMode === 'item-cards' && stagedRows.isActive;
   const stagedControlsInline = stagedInDesktopTable || stagedInItemCards;
   const stagedItemCardControls = useMemo(
     () =>
@@ -1400,7 +1404,7 @@ function InteractiveTableResponseBody({
   const rowWiseWide = !isMobileView;
   const rowScaleLayouts = useMemo(
     () =>
-      usesRowWiseSheet && (scaleSliderLayout === 'row-wise' || mobileMode === 'row-wise-scale')
+      activeMode === 'row-wise-scale'
         ? projectRowWiseSliderLayouts(
             rowWiseOriginalModel,
             choiceGroups ?? [],
@@ -1408,7 +1412,7 @@ function InteractiveTableResponseBody({
             { wide: rowWiseWide },
           )
         : new Map<string, RowSliderLayout>(),
-    [choiceGroups, mobileMode, rowWiseOriginalModel, rowWiseWide, scaleSliderLayout, usesRowWiseSheet],
+    [activeMode, choiceGroups, rowWiseOriginalModel, rowWiseWide],
   );
 
   // 셀 게이팅 컨트롤러 정의 탐색용 표 전체 셀 — 조건부로 숨은 행의 컨트롤러도 정의는 찾을 수
@@ -1814,7 +1818,7 @@ function InteractiveTableResponseBody({
                     }}
                   />
                 </div>
-              ) : isMobileView && mobileMode === 'row-group-cards' && hasChoiceGroupDefs ? (
+              ) : activeMode === 'row-group-cards' && hasChoiceGroupDefs ? (
                 <MobileRowGroupCards
                   questionId={questionId}
                   displayRows={displayRows}
@@ -1827,7 +1831,7 @@ function InteractiveTableResponseBody({
                   errorCellIds={errorCellIds}
                   dynamicGroupPicker={dynamicGroupPicker}
                 />
-              ) : isMobileView && mobileMode === 'item-cards' ? (
+              ) : activeMode === 'item-cards' ? (
                 <MobileItemCards
                   questionId={questionId}
                   displayRows={displayRows}
@@ -1841,7 +1845,7 @@ function InteractiveTableResponseBody({
                   dynamicGroupPicker={dynamicGroupPicker}
                   afterRows={stagedItemCardControls}
                 />
-              ) : isMobileView && mobileMode === 'axis-cards' ? (
+              ) : activeMode === 'axis-cards' ? (
                 // 테이블 유형의 축 = 열. 보기 소스 표의 축 단위 카드(보기 그룹 = 축)는 choice-table-response 몫
                 <MobileColumnAxisCards
                   questionId={questionId}
