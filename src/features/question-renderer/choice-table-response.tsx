@@ -59,9 +59,9 @@ import {
   resolveUngroupedSelectionType,
 } from './utils/row-scale-bars';
 import {
+  choiceTableHasScaleSliderRow,
   resolveChoiceTableQuestionSliderDirection,
-  resolveScaleSliderTableLayout,
-  tableHasScaleSliderRow,
+  resolveRenderedTableDisplay,
 } from './utils/scale-slider-table-layout';
 import { collectChoiceOptCells, resolveChoiceOptions } from '@/utils/choice-source';
 import {
@@ -136,10 +136,12 @@ interface ChoiceTableResponseProps {
  * - **켜는 설정은 표마다 하나다.** 보기 그룹이 있는 표는 그룹의 보기 모양, 그룹 없는 라디오 표는 문항 설정
  *   (`Question.scaleSlider`)이다. 그룹이 있는 표는 문항 설정이 켜져 있어도 읽지 않는다 — 어느 표가 문항
  *   설정을 읽는지는 `resolveChoiceTableQuestionSliderDirection` 한 곳이 정한다(빌더의 스위치도 같은 판정).
- * - **배치는 표 문항과 같은 판정이다**(`resolveScaleSliderTableLayout`). 슬라이더로 그려지는 행이 있으면
+ * - **배치는 표 문항과 같은 판정이다**(`resolveRenderedTableDisplay`). 슬라이더로 그려지는 행이 있으면
  *   넓은 폭에서도 원본 표 대신 행 단위 배치(행별 원본·행별 척도와 같은 시트)로 그리고, 좁은 폭은 「행 단위
  *   그룹 카드」만 그 카드 안에서, 나머지 표시 방식은 전부 행 단위 배치다. 그려지는 행이 없으면(설정이
  *   없거나 모든 행이 폴백) 화면은 한 글자도 달라지지 않는다.
+ * - **표시 방식별 분기는 그 판정이 낸 「지금 유효한 표시 방식」(`activeMode`)만 견준다** — 문항의 저작
+ *   값을 직접 읽으면 슬라이더가 가져간 화면에 그 방식의 전용 장치가 샌다.
  * - **선택 쓰기는 이 호스트의 기존 토글이다.** 그룹 표는 그룹 맵에 보기 칸 id, 그룹 없는 표는 보기 칸 id
  *   하나 — 슬라이더를 끈 같은 문항과 응답 모양이 같다. 고른 자리를 다시 누르면 비워진다(척도 막대와 같다).
  *   슬라이더는 끄는 동안 토글을 부르지 않고 손을 뗄 때 한 번만 부른다.
@@ -1404,31 +1406,22 @@ function ChoiceTableResponseBody({
     );
   };
 
-  const mobileMode = resolveMobileTableDisplayMode(question);
   // 척도 슬라이더 — 슬라이더로 그려지는 행이 있는 표는 넓은 폭에서도 표 대신 행 단위 배치로 그린다
   // (scale-slider-table-layout, 표 문항과 같은 판정). 그려지는 행은 표의 구조로 판정해, 답에 따라 배치가
   // 오가지 않는다.
   // (메모의 재료는 문항 하나다 — 방향을 바깥 변수로 받으면 React Compiler 가 이 메모를 보존하지 못한다.)
-  const hasScaleSliderRow = useMemo(
-    () =>
-      tableHasScaleSliderRow({
-        columns: question.tableColumns ?? EMPTY_COLUMNS,
-        headerGrid: question.tableHeaderGrid ?? undefined,
-        rows: question.tableRowsData ?? EMPTY_ROWS,
-        choiceGroups: question.choiceGroups ?? EMPTY_CHOICE_GROUPS,
-        ungroupedSelectionType: resolveUngroupedSelectionType(question.type),
-        ungroupedSliderDirection: resolveChoiceTableQuestionSliderDirection(question),
-      }),
-    [question],
-  );
-  const scaleSliderLayout = resolveScaleSliderTableLayout({
+  const hasScaleSliderRow = useMemo(() => choiceTableHasScaleSliderRow(question), [question]);
+  // 지금 유효한 표시 방식 — **아래의 방식별 분기는 문항의 저작 값이 아니라 이 값만 읽는다.** 슬라이더가
+  // 행 단위 배치로 가져간 화면에서 저작 값을 직접 읽으면 그 방식의 전용 장치가 샌다
+  // (scale-slider-table-layout 머리 주석). 넓은 화면의 원본 표면 null 이다. 문항 카드(group-step-item)도
+  // 같은 판정(resolveChoiceTableRenderedDisplay)으로 이 값을 읽는다.
+  const { activeMode } = resolveRenderedTableDisplay({
     hasSliderRow: hasScaleSliderRow,
     narrow: isMobile,
-    mobileMode,
+    mobileMode: resolveMobileTableDisplayMode(question),
   });
   // 행별 원본 · 행별 척도 — 같은 시트 구조, 행 본문만 다르다. 슬라이더의 행 단위 배치도 이 시트다.
-  const usesRowWiseSheet =
-    scaleSliderLayout === 'row-wise' || (isMobile && isRowWiseMobileTableDisplayMode(mobileMode));
+  const usesRowWiseSheet = activeMode !== null && isRowWiseMobileTableDisplayMode(activeMode);
   const rowWiseOriginalModel = useMemo(() => {
     if (!usesRowWiseSheet) return { sections: [] };
     const columns = question.tableColumns ?? [];
@@ -1473,8 +1466,7 @@ function ChoiceTableResponseBody({
   // 슬라이더의 행 단위 배치는 고른 표시 방식과 무관하게 「행별 척도」와 같이 그린다. 넓은 폭에서는
   // 슬라이더가 아닌 보기 그룹을 제 보기 모양(세로 타일·척도 막대) 대신 원본 조각으로 낸다.
   const rowWiseWide = !isMobile;
-  const projectsRowScaleLayouts =
-    usesRowWiseSheet && (scaleSliderLayout === 'row-wise' || mobileMode === 'row-wise-scale');
+  const projectsRowScaleLayouts = activeMode === 'row-wise-scale';
   const rowScaleLayouts = useMemo(
     () =>
       projectsRowScaleLayouts
@@ -1698,7 +1690,7 @@ function ChoiceTableResponseBody({
     );
   }
 
-  if (isMobile && mobileMode === 'drilldown-original-row') {
+  if (activeMode === 'drilldown-original-row') {
     return withDynamicRowSelector(
       <ChoiceTableDrilldown
         question={question}
@@ -1713,22 +1705,19 @@ function ChoiceTableResponseBody({
     );
   }
 
-  if (isMobile && mobileMode === 'axis-cards') {
+  if (activeMode === 'axis-cards') {
     return withDynamicRowSelector(renderAxisCards());
   }
 
-  if (
-    isMobile &&
-    (mobileMode === 'auto' || mobileMode === 'row-cards' || mobileMode === 'row-group-cards')
-  ) {
+  if (activeMode === 'auto' || activeMode === 'row-cards' || activeMode === 'row-group-cards') {
     // 카드도 보이는 격자의 행을 쓴다 — 조건이 참이 된 행(병역특례 여부·기타 상세 기재)이 카드로
     // 나오고, 숨은 행은 카드로 나오지 않는다. 자동 카드가 전 행을 그리던 시절에는 데스크톱에서
     // 숨은 행의 보기를 모바일 응답자가 고를 수 있었다 — 그 선택은 저장 경계에서 지워진다.
     return withDynamicRowSelector(
       renderMobileOptionCards(
-        mobileMode !== 'auto',
+        activeMode !== 'auto',
         rowWiseLayout.rows,
-        mobileMode === 'row-group-cards',
+        activeMode === 'row-group-cards',
       ),
     );
   }
