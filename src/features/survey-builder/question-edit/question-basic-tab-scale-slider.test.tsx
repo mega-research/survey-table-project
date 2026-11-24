@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 // 무거운 자식(TipTap 에디터 / 표 에디터)은 대체한다 — 보려는 것은 문항 설정의 「척도 슬라이더로 그리기」가
@@ -25,6 +25,7 @@ import {
   createUpdateOptionWithParent,
   createUpdateSelectLevel,
 } from '@/features/survey-builder/question-option-helpers';
+import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import type { Question } from '@/types/survey';
 
 function Harness({ question, initial }: { question: Question; initial: Partial<Question> }) {
@@ -86,12 +87,40 @@ const optionsForm = (extra: Partial<Question> = {}): Partial<Question> => ({
   ...extra,
 });
 
+/** 보기를 설명 테이블로 구성한 문항의 폼 — 보기 칸이 이어진 한 행(그룹 없음) */
+const tableForm = (extra: Partial<Question> = {}): Partial<Question> => ({
+  title: '추천 의향',
+  options: [],
+  tableColumns: [
+    { id: 'c1', label: '항목' },
+    { id: 'c2', label: '없다' },
+    { id: 'c3', label: '있다' },
+  ],
+  tableRowsData: [
+    {
+      id: 'r1',
+      label: '추천 의향',
+      cells: [
+        { id: 'r1-item', type: 'text', content: '추천 의향' },
+        { id: 'r1-o1', type: 'choice_opt', content: '①', choiceLabel: '없다' },
+        { id: 'r1-o2', type: 'choice_opt', content: '②', choiceLabel: '있다' },
+      ],
+    },
+  ],
+  ...extra,
+});
+
 const form = () => JSON.parse(screen.getByTestId('form').textContent ?? '{}') as Partial<Question>;
 const sliderSwitch = () => screen.queryByRole('switch', { name: '척도 슬라이더로 그리기' });
 const layoutNote = () => screen.queryByText(/척도 슬라이더로 그리는 동안/);
 
 describe('QuestionBasicTab — 문항 설정의 「척도 슬라이더로 그리기」', () => {
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    useSurveyBuilderStore.setState((state) => ({
+      currentSurvey: { ...state.currentSurvey, questions: [] },
+    }));
+  });
 
   it('보통 라디오 문항(보기 목록)에서 스위치가 보인다', () => {
     render(<Harness question={question('radio')} initial={optionsForm()} />);
@@ -107,21 +136,63 @@ describe('QuestionBasicTab — 문항 설정의 「척도 슬라이더로 그리
     }
   });
 
-  it('보기를 설명 테이블로 구성한 라디오 문항에는 스위치가 없다', () => {
+  it('보기를 설명 테이블로 구성한 라디오 문항도 보기 그룹이 없으면 스위치가 보인다', () => {
+    render(<Harness question={question('radio')} initial={tableForm()} />);
+    expect(sliderSwitch()).not.toBeNull();
+    fireEvent.click(sliderSwitch()!);
+    expect(form().scaleSlider).toBe('positive-right');
+  });
+
+  it('설명 테이블에 라디오 보기 그룹이 있으면 스위치가 없다 — 그 표는 그룹의 보기 모양으로 켠다', () => {
     render(
       <Harness
         question={question('radio')}
-        initial={{
-          title: '추천 의향',
-          options: [],
-          tableColumns: [
-            { id: 'c1', label: '항목' },
-            { id: 'c2', label: '선택' },
-          ],
-          tableRowsData: [],
-        }}
+        initial={tableForm({
+          choiceGroups: [{ id: 'g1', groupKey: 'rad1', type: 'radio', label: '만족도' }],
+        })}
       />,
     );
+    expect(sliderSwitch()).toBeNull();
+  });
+
+  it('체크박스 보기 그룹만 있어도 스위치가 없다 — 응답 화면이 문항 설정을 읽지 않는 표다', () => {
+    render(
+      <Harness
+        question={question('radio')}
+        initial={tableForm({
+          choiceGroups: [{ id: 'g1', groupKey: 'chk1', type: 'checkbox', label: '경험' }],
+        })}
+      />,
+    );
+    expect(sliderSwitch()).toBeNull();
+  });
+
+  it('보기 그룹은 스토어의 값이 먼저다 — 셀 편집이 스토어에만 쓴 그룹이 생기면 스위치가 사라진다', () => {
+    const stored = { ...question('radio'), ...tableForm() } as Question;
+    useSurveyBuilderStore.setState((state) => ({
+      currentSurvey: { ...state.currentSurvey, questions: [stored] },
+    }));
+    render(<Harness question={question('radio')} initial={tableForm()} />);
+    expect(sliderSwitch()).not.toBeNull();
+
+    act(() => {
+      useSurveyBuilderStore.setState((state) => ({
+        currentSurvey: {
+          ...state.currentSurvey,
+          questions: [
+            {
+              ...stored,
+              choiceGroups: [{ id: 'g1', groupKey: 'rad1', type: 'radio', label: '만족도' }],
+            } as Question,
+          ],
+        },
+      }));
+    });
+    expect(sliderSwitch()).toBeNull();
+  });
+
+  it('설명 테이블로 구성한 체크박스 문항에는 스위치가 없다', () => {
+    render(<Harness question={question('checkbox')} initial={tableForm()} />);
     expect(sliderSwitch()).toBeNull();
   });
 
