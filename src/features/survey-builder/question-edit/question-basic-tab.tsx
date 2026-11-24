@@ -34,6 +34,7 @@ import { QuestionScaleSliderFields } from './question-scale-slider-fields';
 import { QuestionSpssFields } from './question-spss-fields';
 import { QuestionSelectionLimitFields } from './question-selection-limit-fields';
 import { QuestionTableFields } from './question-table-fields';
+import { diagnoseQuestionScaleSlider } from '@/features/survey-builder/lib/scale-slider-diagnostics';
 import { RankingConfigEditorForQuestion } from '@/features/survey-builder/ranking-config-editor';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
@@ -214,6 +215,20 @@ export function QuestionBasicTab({
           type: question.type,
           choiceGroups: storeChoiceGroups ?? formData.choiceGroups,
         })));
+  // 스위치 아래의 폴백 경고·안내 — 편집 중인 폼 값(보기 · 표 구조 · 방향)과 스토어의 보기 그룹으로 응답
+  // 화면과 같은 투영을 돌린다. 저장 전의 보기·칸 변경도 곧바로 반영된다. 스위치가 보이지 않는 문항은 돌지 않는다.
+  const scaleSliderDiagnosis = useMemo(
+    () =>
+      showQuestionScaleSlider
+        ? diagnoseQuestionScaleSlider({
+            ...question,
+            ...formData,
+            type: question.type,
+            choiceGroups: storeChoiceGroups ?? formData.choiceGroups,
+          } as Question)
+        : undefined,
+    [formData, question, showQuestionScaleSlider, storeChoiceGroups],
+  );
 
   // 토큰 prefill(defaultValueTemplate)이 설정되면 숫자 초기값(emptyDefault)은 비활성 — prefill 우선
   const hasTokenPrefill = (formData.defaultValueTemplate ?? '').trim().length > 0;
@@ -570,7 +585,12 @@ export function QuestionBasicTab({
           (보기 목록)과, 보기 그룹이 없는 설명 테이블이다. 보기 그룹이 있는 설명 테이블은 보기 칸 편집의
           보기 모양에서 그룹마다 켠다. */}
       {showQuestionScaleSlider && (
-        <QuestionScaleSliderFields formData={formData} setFormData={setFormData} />
+        <QuestionScaleSliderFields
+          formData={formData}
+          setFormData={setFormData}
+          tableMode={isChoiceTableMode}
+          diagnosis={scaleSliderDiagnosis}
+        />
       )}
 
       {/* 옵션 설정 (radio, checkbox, select) */}
