@@ -60,6 +60,9 @@ export function QuestionTableFields({
         questionCode={formData.questionCode}
         questionTitle={formData.title}
         answerQuoteEnabled={answerQuoteEnabled}
+        // 문항 설정의 슬라이더 방향 — 폼에만 있는 값(저장 전)이라 스토어가 아니라 여기서 내린다.
+        // 모바일 표시 방식 옆 안내가 응답 화면과 같은 판정을 돌리는 재료다. 꺼진 문항은 null.
+        questionScaleSlider={formData.scaleSlider ?? null}
         dynamicRowConfigs={formData.dynamicRowConfigs}
         rowRepeatConfig={formData.rowRepeatConfig}
         stagedRowsConfig={formData.stagedRowsConfig}

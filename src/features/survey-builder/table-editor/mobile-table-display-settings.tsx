@@ -11,7 +11,12 @@ import {
   normalizeItemCardBlockColumns,
   parseItemCardBlockColumnsText,
 } from '@/features/question-renderer/utils/item-card-blocks';
+import {
+  type ScaleSliderTableLayout,
+  resolveScaleSliderTableLayout,
+} from '@/features/question-renderer/utils/scale-slider-table-layout';
 import type { ScaleBarIssue } from '@/features/survey-builder/lib/scale-bar-diagnostics';
+import type { TableScaleSliderSummary } from '@/features/survey-builder/lib/scale-slider-diagnostics';
 import { cn } from '@/lib/utils';
 import type { MobileTableDisplayMode } from '@/types/mobile-table-display';
 import {
@@ -25,6 +30,7 @@ import {
 } from '@/utils/mobile-table-display-mode';
 
 import { ScaleBarIssueAlert } from './scale-bar-issue-alert';
+import { ScaleSliderInfoNote } from './scale-slider-guidance';
 
 interface MobileTableDisplaySettingsValue {
   mode: MobileTableDisplayMode;
@@ -54,7 +60,25 @@ interface MobileTableDisplaySettingsProps {
    * 그 모드를 골랐을 때만 경고로 보인다.
    */
   rowScaleBarIssues?: readonly ScaleBarIssue[] | undefined;
+  /**
+   * 이 표에 척도 슬라이더가 켜져 있는지와 그려지는 행이 있는지(summarizeTableScaleSlider). 켜져 있으면
+   * 고른 표시 방식보다 슬라이더의 배치가 앞선다는 안내를 보이고, 행 단위 배치의 설정(앞쪽 열 제외 수 ·
+   * 반복 헤더 범위)을 표시 방식과 무관하게 보인다. 표시 방식 선택은 막지 않는다. 없으면 지금 화면 그대로다.
+   */
+  scaleSlider?: TableScaleSliderSummary | undefined;
 }
+
+/**
+ * 척도 슬라이더가 켜진 표의 배치 안내 — 응답 화면의 표 배치 판정(좁은 화면 기준) 결과마다 한 줄.
+ * 넓은 화면은 그려지는 행이 있으면 언제나 행 단위 배치다.
+ */
+const SLIDER_LAYOUT_LEADS: Readonly<Record<ScaleSliderTableLayout, string>> = {
+  'row-wise': '척도 슬라이더가 켜져 있어 웹과 모바일 모두 행 단위로 그려집니다.',
+  'row-group-cards':
+    '척도 슬라이더가 켜져 있어 모바일은 「행 단위 그룹 카드」 안에서, 웹은 행 단위로 그려집니다.',
+  unchanged:
+    '척도 슬라이더가 켜져 있지만 슬라이더로 그릴 수 있는 행이 없어 화면이 바뀌지 않습니다. 이유는 슬라이더를 켠 자리(보기 칸 편집의 보기 모양 · 문항 설정)의 경고에 있습니다.',
+};
 
 const OPTIONS: Array<{ value: MobileTableDisplayMode; label: string; description: string }> = [
   {
@@ -121,6 +145,7 @@ export function MobileTableDisplaySettings({
   questionType,
   hasChoiceGroups = false,
   rowScaleBarIssues = [],
+  scaleSlider,
 }: MobileTableDisplaySettingsProps) {
   const isChoiceSourceTable = questionType === 'radio' || questionType === 'checkbox';
   const visibleOptions = OPTIONS.filter((option) => {
@@ -138,6 +163,24 @@ export function MobileTableDisplaySettings({
     if (option.value === 'item-cards') return questionType === 'table';
     return true;
   });
+  // 척도 슬라이더가 켜진 표 — 응답 화면과 같은 표 배치 판정으로 좁은 화면·넓은 화면의 배치를 읽는다.
+  // 꺼진 표(재료 없음 · enabled 거짓)는 null 이라 아래 안내·입력 조건이 전부 지금 화면 그대로다.
+  const sliderLayout =
+    scaleSlider?.enabled === true
+      ? resolveScaleSliderTableLayout({
+          hasSliderRow: scaleSlider.hasSliderRow,
+          narrow: true,
+          mobileMode: mode,
+        })
+      : null;
+  // 넓은 화면의 행 단위 배치는 고른 표시 방식과 무관하게 앞쪽 열 제외 수 · 반복 헤더 범위를 읽는다
+  const sliderDrawsRowWiseOnWide =
+    scaleSlider?.enabled === true &&
+    resolveScaleSliderTableLayout({
+      hasSliderRow: scaleSlider.hasSliderRow,
+      narrow: false,
+      mobileMode: mode,
+    }) === 'row-wise';
   const normalizedCount = clampMobileDrilldownOmitLeadingColumns(omitLeadingColumns, columnCount);
   const committedRange = resolveMobileDrilldownRepeatHeaderRange({
     mobileDrilldownRepeatHeaderStartRow: repeatHeaderStartRow,
@@ -251,6 +294,27 @@ export function MobileTableDisplaySettings({
           );
         })}
       </div>
+      {sliderLayout !== null ? (
+        <div data-testid="scale-slider-layout-note" className="space-y-1">
+          <ScaleSliderInfoNote>{SLIDER_LAYOUT_LEADS[sliderLayout]}</ScaleSliderInfoNote>
+          {sliderLayout !== 'unchanged' ? (
+            // pl-5 — 줄 글자가 위 안내 글자(아이콘 폭 + 간격)와 같은 자리에서 시작하고 점은 아이콘 아래에 선다
+            <ul className="list-disc space-y-0.5 pl-5 text-xs text-gray-600">
+              {sliderLayout === 'row-wise' && mode !== 'row-wise-scale' ? (
+                <li>
+                  모바일은 고른 표시 방식 대신 「행별 척도」처럼 그려져, 슬라이더가 아닌 보기 그룹은
+                  제 보기 모양(기본 세로 타일)으로 보입니다.
+                </li>
+              ) : null}
+              <li>
+                웹의 행 단위 배치에는 좌측 고정 열 · 화면 폭에 맞춰 표 줄이기 · 상세 기재 입력칸을 표
+                아래에 · 머리글 입력칸이 적용되지 않고, 슬라이더가 아닌 보기 그룹은 원본 표 조각으로
+                보입니다.
+              </li>
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
       {mode === 'row-wise-scale' ? (
         <ScaleBarIssueAlert
           title="척도 막대로 고른 그룹 중 막대로 그릴 수 없는 행이 있어 그 행에서는 원본 표 조각으로 보입니다."
@@ -302,8 +366,15 @@ export function MobileTableDisplaySettings({
           )}
         </div>
       ) : null}
-      {mode === 'drilldown-original-row' || isRowWiseMobileTableDisplayMode(mode) ? (
+      {mode === 'drilldown-original-row' ||
+      isRowWiseMobileTableDisplayMode(mode) ||
+      sliderDrawsRowWiseOnWide ? (
         <div className="grid max-w-xl gap-3 sm:grid-cols-2">
+          {sliderDrawsRowWiseOnWide ? (
+            <p className="text-xs text-gray-600 sm:col-span-2">
+              척도 슬라이더의 행 단위 배치(웹 포함)도 이 두 값을 읽습니다.
+            </p>
+          ) : null}
           <div className="space-y-1.5">
             <Label htmlFor="mobile-drilldown-omit-leading">상세에서 제외할 앞쪽 열 수</Label>
             <Input
