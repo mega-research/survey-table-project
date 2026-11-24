@@ -30,7 +30,10 @@ import type { Question } from '@/types/survey';
  * - **프리필 잠금**(`locked`)은 호스트의 기존 판정을 모든 보기의 비활성으로 넘긴다. 이월 잠금은 문항을 감싼
  *   `fieldset disabled` 가 슬라이더 안쪽 native radio 에 그대로 먹는다 — 잠금 prop 을 따로 뚫지 않는다.
  * - 슬라이더로 그리는 동안 보기 열 배치 설정(웹·모바일)과 보기에 지정한 배경색·글자색은 읽지 않는다.
- * - 문항 제목은 문항 카드가 이미 그리므로 머리 줄(`label`)은 비우고 낭독용 이름으로만 넘긴다.
+ * - 문항 제목은 문항 카드가 이미 그리므로 머리 줄(`label`)은 비운다. **낭독 이름은 그 제목 요소다** — 호스트가
+ *   카드에 그린 제목 요소의 id(`titleElementId`)를 넘기면 슬라이더의 라디오 묶음이 그 요소를 가리킨다. 제목을
+ *   숨긴 문항이나 제목 요소 없이 본문만 그리는 자리는 id 를 넘기지 않고, 그때는 제목 글자가 이름이다.
+ *   보통 라디오 문항에는 필수 강조를 넘기지 않으므로 오류 문구도 잇지 않는다(보기 목록과 같다).
  * - 좁은 화면 판정은 기존 모바일 판정(`useMobileView`)이다. 두 호스트가 같은 값을 쓰도록 여기서 읽는다.
  */
 
@@ -57,6 +60,11 @@ export interface RadioQuestionScaleSliderProps {
   onToggleOption: (optionValue: string, optionId: string) => void;
   /** 프리필 잠금 — 호스트의 기존 판정. 모든 보기를 비활성으로 넘긴다 */
   locked?: boolean | undefined;
+  /**
+   * 문항 카드가 화면에 그린 제목 요소의 id — 슬라이더 묶음의 낭독 이름이 된다. **그 요소가 문서에 있을 때만
+   * 넘긴다**(제목을 숨긴 문항·제목 없이 본문만 그리는 자리는 넘기지 않는다 — 그때는 제목 글자가 이름이다).
+   */
+  titleElementId?: string | undefined;
 }
 
 export function RadioQuestionScaleSlider({
@@ -65,6 +73,7 @@ export function RadioQuestionScaleSlider({
   selectedValue,
   onToggleOption,
   locked,
+  titleElementId,
 }: RadioQuestionScaleSliderProps) {
   const narrow = useMobileView();
   const options = question.options ?? [];
@@ -86,6 +95,8 @@ export function RadioQuestionScaleSlider({
       sliderId={question.id}
       model={model}
       label=""
+      ariaLabelledBy={titleElementId}
+      // 제목 요소가 없는 자리의 이름 — 가리킬 id 를 받으면 슬라이더가 이 글자를 쓰지 않는다
       ariaLabel={question.title}
       selectedChoiceId={selectedChoiceId}
       onToggleChoice={handleToggleChoice}
