@@ -77,6 +77,17 @@ export interface ScaleBarRenderContext {
   inputIdScope: string;
   /** 행에 막대·타일·조각이 여럿이다 — 머리에 그룹 이름을 보여 가른다(하나면 행 제목으로 족하다) */
   sharesRow: boolean;
+  /**
+   * 이 행의 보이는 제목 요소의 id — 행 블록(`role="group"`)이 이름으로 가리키는 바로 그 요소다(행 제목, 하위
+   * 그룹 머리와 글자가 같은 행이면 그 머리). 척도 슬라이더가 라디오 묶음의 이름으로 같은 요소를 가리킨다.
+   * 제목이 없는 행이면 없다 — 그때 호스트는 낭독용 글자를 넘긴다.
+   */
+  titleId?: string | undefined;
+  /**
+   * 이 행의 낭독용 오류 문구 요소의 id — 행에 오류 칸이 있어 문구를 그린 동안만 있다. 슬라이더 호스트는
+   * **제 묶음이 걸렸을 때만** 넘긴다(같은 행의 다른 칸이 걸린 것을 슬라이더의 설명으로 읽히지 않게).
+   */
+  errorDescriptionId?: string | undefined;
 }
 
 export function MobileRowWiseOriginalSheet({
@@ -168,6 +179,12 @@ export function MobileRowWiseOriginalSheet({
                     ].some((cell) => errorCellIds?.has(cell.id));
                     const inputIdScope = question.rowId;
                     const errorDescriptionId = hasError ? `${labelId}-error` : undefined;
+                    // 행 블록의 이름이 되는 제목 요소 — 슬라이더의 라디오 묶음도 이 id 를 가리킨다
+                    const titleId = useSubgroupTitle
+                      ? subgroupLabelId
+                      : hasTitle
+                        ? labelId
+                        : undefined;
                     const segments =
                       renderScaleBar && renderGroupTiles
                         ? scaleLayoutByRowId?.get(question.rowId)?.segments
@@ -192,9 +209,7 @@ export function MobileRowWiseOriginalSheet({
                       <div
                         key={question.rowId}
                         role="group"
-                        aria-labelledby={
-                          useSubgroupTitle ? subgroupLabelId : hasTitle ? labelId : undefined
-                        }
+                        aria-labelledby={titleId}
                         data-row-question-id={question.rowId}
                         className={cn('space-y-3 px-3 py-4', wide && 'px-5 py-5')}
                       >
@@ -274,6 +289,8 @@ export function MobileRowWiseOriginalSheet({
                                   {renderScaleSlider?.(segment.slider, question, {
                                     inputIdScope,
                                     sharesRow: segments.length > 1,
+                                    titleId,
+                                    errorDescriptionId,
                                   })}
                                 </div>
                               ) : segment.kind === 'tiles' ? (

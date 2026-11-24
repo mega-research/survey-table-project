@@ -169,8 +169,9 @@ describe('표 문항 — 좁은 폭의 척도 슬라이더: 「행 단위 그룹
     for (const label of ['매우 불만족', '불만족', '보통', '만족', '매우 만족']) {
       expect(within(slider).getByText(label)).toBeInTheDocument();
     }
-    // 머리 줄에 섹션 제목(그룹 이름)이 선다
-    expect(within(slider).getByRole('radiogroup', { name: '만족도' })).toBeInTheDocument();
+    // 머리 줄에 섹션 제목(그룹 이름)이 선다 — 낭독 이름은 「카드 제목, 섹션 제목」이다
+    expect(within(slider).getByText('만족도')).toBeInTheDocument();
+    expect(within(slider).getByRole('radiogroup')).toHaveAccessibleName(/ 만족도$/);
     expect(screen.queryByTestId('choice-group-original-line-g-sat')).not.toBeInTheDocument();
     expect(screen.queryByTestId('choice-group-scale-bar-g-sat')).not.toBeInTheDocument();
     expect(screen.queryByTestId('scale-slider-g-use')).not.toBeInTheDocument();
@@ -215,7 +216,8 @@ describe('표 문항 — 좁은 폭의 척도 슬라이더: 행 단위 배치', 
     const tiles = within(block).getByRole('group', { name: '활용 여부' });
     expect(within(tiles).getAllByRole('radio')).toHaveLength(2);
     const slider = within(block).getByTestId('scale-slider-g-sat');
-    expect(within(slider).getByRole('radiogroup', { name: '만족도' })).toBeInTheDocument();
+    expect(within(slider).getByText('만족도')).toBeInTheDocument();
+    expect(within(slider).getByRole('radiogroup')).toHaveAccessibleName(/ 만족도$/);
     expect(within(slider).getAllByRole('radio')).toHaveLength(11);
     press(trackIn(block), tickX(7));
     expect(valueOf()).toEqual({ __choiceGroups: { rad2: 'sat7' } });

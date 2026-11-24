@@ -1754,8 +1754,16 @@ function InteractiveTableResponseBody({
                       ) : null
                     }
                     // 슬라이더도 막대와 같은 보기 그룹 선택 쓰기다 — 끈 같은 문항과 응답 키·값이 같다
-                    renderScaleSlider={(slider, rowQuestion, { inputIdScope, sharesRow }) =>
-                      slider.group ? (
+                    // 낭독 이름은 화면에 보이는 행 제목 요소다(머리에 그룹 이름이 있으면 슬라이더가 뒤에 잇는다).
+                    // 필수인데 답하지 않은 묶음에는 그 행의 낭독용 오류 문구를 잇는다 — 답하면 둘 다 풀린다.
+                    renderScaleSlider={(
+                      slider,
+                      rowQuestion,
+                      { inputIdScope, sharesRow, titleId, errorDescriptionId },
+                    ) => {
+                      if (!slider.group) return null;
+                      const unfilled = slider.cells.some((cell) => errorCellIds?.has(cell.id));
+                      return (
                         <TableChoiceGroupScaleSlider
                           questionId={questionId}
                           group={slider.group}
@@ -1765,17 +1773,20 @@ function InteractiveTableResponseBody({
                           label={
                             sharesRow ? substituteTokens(slider.group.label, attrs, quotes) : ''
                           }
+                          ariaLabelledBy={titleId}
+                          // 제목 없는 행 — 가리킬 요소가 없어 글자로 넘긴다
                           ariaLabel={
                             sharesRow ? slider.group.label || rowQuestion.title : rowQuestion.title
                           }
-                          invalid={slider.cells.some((cell) => errorCellIds?.has(cell.id))}
+                          ariaDescribedBy={unfilled ? errorDescriptionId : undefined}
+                          invalid={unfilled}
                           narrow={isMobileView}
                           value={value}
                           onChange={mergedOnChange}
                           inputIdScope={inputIdScope}
                         />
-                      ) : null
-                    }
+                      );
+                    }}
                     wide={rowWiseWide}
                     renderCell={(cell, rowQuestion, inputIdScope, invalid, errorDescriptionId) => {
                       const sourceRowId =
