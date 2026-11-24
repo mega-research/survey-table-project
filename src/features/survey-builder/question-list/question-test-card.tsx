@@ -15,6 +15,10 @@ import {
   OPTION_TEXT_BARE_INPUT_CLS,
   OptionTextRow,
 } from '@/features/question-renderer/option-text-row';
+import {
+  RadioQuestionScaleSlider,
+  useRadioQuestionScaleSlider,
+} from '@/features/question-renderer/radio-question-scale-slider';
 import { RankingQuestion } from '@/features/question-renderer/ranking-question';
 import { ResponseSourcesProvider } from '@/features/question-renderer/response-sources';
 import { UserDefinedMultiLevelSelect } from '@/features/question-renderer/user-defined-multi-level-select';
@@ -111,6 +115,21 @@ function RadioTestInput({
     }
     return value === optionValue;
   };
+
+  // 척도 슬라이더(문항 설정) — 응답 화면의 라디오 문항과 같은 조각을 부른다(그릴지의 판정이 한 곳).
+  // 모델이 없으면(설정 없음·폴백) 아래 보기 목록이 지금과 똑같이 그려진다.
+  const sliderModel = useRadioQuestionScaleSlider(question);
+  if (sliderModel) {
+    const selectedValue = isOtherChoiceValue(value) ? value.selectedValue : value;
+    return (
+      <RadioQuestionScaleSlider
+        question={question}
+        model={sliderModel}
+        selectedValue={typeof selectedValue === 'string' ? selectedValue : null}
+        onToggleOption={handleOptionChange}
+      />
+    );
+  }
 
   const layout = getOptionsLayout(question.optionsColumns, question.optionsAlign);
 
