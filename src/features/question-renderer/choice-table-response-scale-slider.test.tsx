@@ -235,14 +235,16 @@ describe('보기 소스 표 — 넓은 폭의 척도 슬라이더', () => {
     }
   });
 
-  it('슬라이더가 아닌 보기 그룹과 그룹 밖 입력칸은 같은 행 안의 원본 표 조각으로 남는다', () => {
+  it('슬라이더가 아닌 보기 그룹은 같은 행 안의 원본 표 조각으로, 그룹 밖 글자 입력칸은 열 이름 + 넓은 입력칸으로 선다', () => {
     render(<Harness q={question()} />);
     const block = rowBlock('r1');
     const pieces = within(block).getAllByRole('grid');
-    // 활용 여부 2칸이 조각 하나, 슬라이더 뒤의 입력칸이 조각 하나
-    expect(pieces).toHaveLength(2);
+    // 활용 여부 2칸이 조각 하나 — 슬라이더 뒤의 입력칸은 조각 밖이다(열 폭에 갇히지 않는다)
+    expect(pieces).toHaveLength(1);
     expect(within(pieces[0]!).getAllByRole('radio')).toHaveLength(2);
-    expect(within(pieces[1]!).getByRole('textbox')).toBeInTheDocument();
+    const field = block.querySelector<HTMLElement>('[data-wide-text-cell="r1-memo"]')!;
+    expect(within(field).getByRole('textbox')).toBeInTheDocument();
+    expect(within(block).getByRole('group', { name: '개선 의견' })).toBe(field);
     // 세로 타일로 그리지 않는다 — 타일 묶음(role group, 이름 = 그룹 이름)이 없다
     expect(within(block).queryByRole('group', { name: '활용 여부' })).not.toBeInTheDocument();
   });

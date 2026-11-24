@@ -257,12 +257,29 @@ describe('표 문항 — 넓은 폭의 척도 슬라이더', () => {
     expect(valueOf()).toEqual({ __choiceGroups: { use_r1: 'r1-use2' } });
   });
 
-  it('묶음 밖 응답 칸은 같은 행 안의 원본 표 조각으로 남는다', () => {
+  it('묶음 밖 글자 입력칸은 같은 행 안에 표 조각이 아니라 열 이름 + 넓은 입력칸으로 선다', () => {
     render(<Harness />);
     const block = rowBlock('r2');
-    const memo = within(block).getByRole('textbox');
+    const field = block.querySelector<HTMLElement>('[data-wide-text-cell="r2-memo"]')!;
+    // 원본 표 조각(격자) 밖이다 — 열 폭(200px)에 갇히지 않는다
+    expect(field.closest('[role="grid"]')).toBeNull();
+    expect(within(block).getByRole('group', { name: '개선 의견' })).toBe(field);
+    const memo = within(field).getByRole('textbox');
     fireEvent.change(memo, { target: { value: '회의실 예약이 어렵습니다' } });
     expect(valueOf()).toEqual({ 'r2-memo': '회의실 예약이 어렵습니다' });
+  });
+
+  it('형식 있는 입력칸은 폭이 곧 뜻이라 원본 표 조각으로 남는다', () => {
+    const numericRows = rows.map((row) => ({
+      ...row,
+      cells: row.cells.map((cell) =>
+        cell.id.endsWith('-memo') ? { ...cell, inputType: 'number' as const } : cell,
+      ),
+    }));
+    render(<Harness tableRows={numericRows} />);
+    const block = rowBlock('r2');
+    expect(block.querySelector('[data-wide-text-cell]')).toBeNull();
+    expect(within(block).getByRole('textbox').closest('[role="grid"]')).not.toBeNull();
   });
 
   it('행에 응답 묶음이 여럿이면 슬라이더 머리에 묶음 이름을 두고, 하나뿐이면 행 제목이 이름이다', () => {

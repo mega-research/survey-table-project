@@ -3,6 +3,10 @@
 import { useId } from 'react';
 import type React from 'react';
 
+import {
+  type ChoiceGroupOriginalLine,
+  resolveWideTextInputFields,
+} from '@/features/question-renderer/utils/choice-group-original-line';
 import type {
   MobileRowWiseOriginalModel,
   MobileRowWiseOriginalQuestion,
@@ -67,8 +71,9 @@ interface MobileRowWiseOriginalSheetProps {
     | undefined;
   /**
    * 넓은 화면의 행 단위 배치 — 척도 슬라이더가 켜진 표는 넓은 폭에서도 이 시트로 그린다(이름의 `Mobile` 은
-   * 모바일 전용이던 때의 것이다). 줄의 안쪽 여백만 넓힌다. 판정은 호스트의 기존 모바일 판정 하나라, 여기에
-   * 폭 분기점을 따로 두지 않는다.
+   * 모바일 전용이던 때의 것이다). 줄의 안쪽 여백을 넓히고, 원본 표 조각을 가운데가 아니라 왼쪽에 붙이며(같은
+   * 줄의 슬라이더·행 제목과 축을 맞춘다), 글자 입력칸뿐인 조각은 「라벨 + 넓은 입력칸」으로 푼다(폭 상한은
+   * 슬라이더와 같다). 판정은 호스트의 기존 모바일 판정 하나라, 여기에 폭 분기점을 따로 두지 않는다.
    */
   wide?: boolean | undefined;
 }
@@ -205,6 +210,65 @@ export function MobileRowWiseOriginalSheet({
                         errorCellIds?.has(cell.id) ? errorDescriptionId : undefined,
                       );
 
+                    // 원본 표 조각 하나 — 넓은 화면에서는 왼쪽에 붙이고, 글자 입력칸뿐이면 라벨 + 넓은 입력칸으로 푼다
+                    const renderOriginalPiece = (
+                      key: string,
+                      piece: ChoiceGroupOriginalLine,
+                    ) => {
+                      const textFields = wide ? resolveWideTextInputFields(piece) : null;
+                      if (textFields) {
+                        return (
+                          <div key={key} className="max-w-[860px] space-y-2 px-1">
+                            {textFields.map(({ cell, label }) => {
+                              // 화면 폭으로 그린다 — 원본 표 칸에 맞춘 고정 너비(inputWidth)는 여기서 뜻이 없다
+                              const wideCell = { ...cell };
+                              delete wideCell.inputWidth;
+                              // 입력칸의 id 는 칸 렌더러가 정해 라벨로 직접 잇지 못한다 — 묶음의 이름으로 건다
+                              const fieldLabelId = `${labelId}-${cell.id}-wide`;
+                              return (
+                                <div
+                                  key={cell.id}
+                                  {...(label ? { role: 'group', 'aria-labelledby': fieldLabelId } : {})}
+                                  data-wide-text-cell={cell.id}
+                                  {...issueTargetProps(cell)}
+                                  className={cn(
+                                    'space-y-1',
+                                    errorCellIds?.has(cell.id) && 'rounded-lg ring-2 ring-red-300',
+                                  )}
+                                >
+                                  {label ? (
+                                    <p
+                                      id={fieldLabelId}
+                                      className="text-[13px] font-semibold text-gray-600"
+                                    >
+                                      {substituteTokens(label, attrs, quotes)}
+                                    </p>
+                                  ) : null}
+                                  {renderPieceCell(wideCell)}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      }
+                      return (
+                        <div key={key} className={cn(wide && 'px-1')}>
+                          <MobileOriginalRowTable
+                            columns={piece.columns}
+                            rows={[piece.row]}
+                            interactiveRowId={piece.row.id}
+                            headerGrid={piece.headerGrid}
+                            hideColumnLabels={!piece.showColumnHeader}
+                            choiceControlType={choiceControlType}
+                            errorCellIds={errorCellIds}
+                            instanceScope={`${question.rowId}:${key}`}
+                            renderCell={renderPieceCell}
+                            align={wide ? 'start' : 'center'}
+                          />
+                        </div>
+                      );
+                    };
+
                     return (
                       <div
                         key={question.rowId}
@@ -301,18 +365,7 @@ export function MobileRowWiseOriginalSheet({
                                   })}
                                 </div>
                               ) : (
-                                <MobileOriginalRowTable
-                                  key={segment.key}
-                                  columns={segment.piece.columns}
-                                  rows={[segment.piece.row]}
-                                  interactiveRowId={segment.piece.row.id}
-                                  headerGrid={segment.piece.headerGrid}
-                                  hideColumnLabels={!segment.piece.showColumnHeader}
-                                  choiceControlType={choiceControlType}
-                                  errorCellIds={errorCellIds}
-                                  instanceScope={`${question.rowId}:${segment.key}`}
-                                  renderCell={renderPieceCell}
-                                />
+                                renderOriginalPiece(segment.key, segment.piece)
                               ),
                             )}
                           </div>
@@ -327,6 +380,7 @@ export function MobileRowWiseOriginalSheet({
                             errorCellIds={errorCellIds}
                             instanceScope={question.rowId}
                             renderCell={renderPieceCell}
+                            align={wide ? 'start' : 'center'}
                           />
                         )}
                       </div>

@@ -75,6 +75,11 @@ interface TablePreviewProps {
   getCellInstanceId?: ((cell: TableCell, row: TableRow) => string) | undefined;
   /** 데스크톱 표에서만 셀별 배경색을 렌더한다. 모바일 원본 표는 기존 배경을 보존한다. */
   applyCellBackground?: boolean | undefined;
+  /**
+   * 표가 자리보다 좁을 때 놓이는 쪽 — 기본은 가운데. 넓은 화면의 행 단위 배치는 `start` 로 왼쪽에 붙인다
+   * (같은 줄의 척도 슬라이더·행 제목이 왼쪽 정렬이라 가운데에 두면 축이 둘이 된다).
+   */
+  align?: 'center' | 'start' | undefined;
 }
 
 export const TablePreview = React.memo(function TablePreview({
@@ -97,7 +102,9 @@ export const TablePreview = React.memo(function TablePreview({
   errorCellIds,
   getCellInstanceId,
   applyCellBackground = true,
+  align = 'center',
 }: TablePreviewProps) {
+  const alignClass = align === 'start' ? undefined : 'mx-auto';
   // 화면 폭에 맞춰 줄이기는 모바일 모드가 아닐 때만 — 휴대폰 원본 표까지 줄이면 칸이 찌그러진다
   const isMobileView = useMobileView();
   const fitToWidth = fitTableToWidth && !isMobileView;
@@ -301,7 +308,10 @@ export const TablePreview = React.memo(function TablePreview({
                   <div ref={headerScrollRef} className={cn(HEADER_SCROLL_CLASS, 'px-0')}>
                     <div
                       role="rowgroup"
-                      className="mx-auto rounded-t-md border-t border-r border-l border-gray-400 bg-gray-50 text-base"
+                      className={cn(
+                      alignClass,
+                      'rounded-t-md border-t border-r border-l border-gray-400 bg-gray-50 text-base',
+                    )}
                       style={gridContainerStyle}
                     >
                       {renderHeaderCells()}
@@ -350,7 +360,10 @@ export const TablePreview = React.memo(function TablePreview({
                   <div
                     key="in-scroll-header"
                     role="rowgroup"
-                    className="mx-auto rounded-t-md border-t border-r border-l border-gray-400 bg-gray-50 text-base"
+                    className={cn(
+                      alignClass,
+                      'rounded-t-md border-t border-r border-l border-gray-400 bg-gray-50 text-base',
+                    )}
                     style={gridContainerStyle}
                   >
                     {renderHeaderCells()}
@@ -361,7 +374,8 @@ export const TablePreview = React.memo(function TablePreview({
                   {...fitTableMarker(fitToWidth)}
                   role="rowgroup"
                   className={cn(
-                    'mx-auto rounded-b-md border-r border-l border-gray-400 bg-white text-base',
+                    alignClass,
+                    'rounded-b-md border-r border-l border-gray-400 bg-white text-base',
                     hideColumnLabels && 'rounded-t-md border-t',
                   )}
                   style={gridContainerStyle}
