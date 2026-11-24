@@ -136,16 +136,6 @@ function longTextWidth(text: string, count: number): number | undefined {
   return width > REFERENCE_BAR_WIDTH_PX / count ? width : undefined;
 }
 
-/**
- * 막대 칸마다의 최소 폭(px) — 칸 글자가 고르게 나눈 칸 폭에 들어가지 않을 만큼 길 때만 값이 있다(「미참여」).
- * 막대는 그 칸을 글자만큼 넓히고 나머지 칸이 그만큼 좁아진다. 번호·짧은 낱말 칸과 칸이 넉넉한 막대는 없다.
- *
- * **화면에 보이는 글자**를 넘긴다 — 명단 토큰·응답 인용은 치환한 뒤의 글자여야 한다(토큰 이름의 길이로 재면
- * 보이는 글자와 무관하게 칸이 넓어진다). 그래서 투영(projectScaleBar)이 아니라 그리는 쪽이 부른다.
- *
- * 넓힐 칸이 많아 가장 좁은 화면에서 나머지 칸의 자리가 남지 않으면 아무 칸도 넓히지 않는다 — 최소 폭의 합이
- * 막대 폭을 넘으면 뒤쪽 칸이 화면 밖으로 밀려 누를 수 없게 된다. 그럴 때는 고르게 나누는 종전 모양이 낫다.
- */
 /** 가운데 라벨이 쓸 수 있는 폭의 상한 — 넘으면 줄을 바꾼다(양끝 라벨의 자리를 남긴다) */
 const SCALE_BAR_MIDDLE_LABEL_MAX = '40%';
 
@@ -200,6 +190,16 @@ export function resolveScaleBarAnchorLayout(
   };
 }
 
+/**
+ * 막대 칸마다의 최소 폭(px) — 칸 글자가 고르게 나눈 칸 폭에 들어가지 않을 만큼 길 때만 값이 있다(「미참여」).
+ * 막대는 그 칸을 글자만큼 넓히고 나머지 칸이 그만큼 좁아진다. 번호·짧은 낱말 칸과 칸이 넉넉한 막대는 없다.
+ *
+ * **화면에 보이는 글자**를 넘긴다 — 명단 토큰·응답 인용은 치환한 뒤의 글자여야 한다(토큰 이름의 길이로 재면
+ * 보이는 글자와 무관하게 칸이 넓어진다). 그래서 투영(projectScaleBar)이 아니라 그리는 쪽이 부른다.
+ *
+ * 넓힐 칸이 많아 가장 좁은 화면에서 나머지 칸의 자리가 남지 않으면 아무 칸도 넓히지 않는다 — 최소 폭의 합이
+ * 막대 폭을 넘으면 뒤쪽 칸이 화면 밖으로 밀려 누를 수 없게 된다. 그럴 때는 고르게 나누는 종전 모양이 낫다.
+ */
 export function resolveScaleBarCellMinWidths(texts: readonly string[]): (number | undefined)[] {
   const widths = texts.map((text) => longTextWidth(text, texts.length));
   const widened = widths.filter((width): width is number => width !== undefined);
