@@ -821,7 +821,7 @@ describe('ScaleSlider — 좁은 화면', () => {
     const group = screen.getByRole('radiogroup');
     const checks = screen.getByTestId('scale-slider-off-scale');
     // 트랙과 같은 열 — 옆 열을 두지 않아 트랙이 짧아지지 않는다
-    expect(group.style.gridTemplateColumns).toBe('minmax(0, 860px)');
+    expect(group.style.gridTemplateColumns).toBe('minmax(0, 1fr)');
     expect(checks.dataset['placement']).toBe('below');
     expect(
       screen.getByTestId('scale-slider-track').compareDocumentPosition(checks) &
@@ -831,7 +831,7 @@ describe('ScaleSlider — 좁은 화면', () => {
     cleanup();
     // 넓은 화면에서는 트랙 오른쪽 같은 줄이다
     draw(twoOff);
-    expect(screen.getByRole('radiogroup').style.gridTemplateColumns).toBe('minmax(0, 860px) auto');
+    expect(screen.getByRole('radiogroup').style.gridTemplateColumns).toBe('minmax(0, 1fr) auto');
     expect(screen.getByTestId('scale-slider-off-scale').dataset['placement']).toBe('beside');
   });
 

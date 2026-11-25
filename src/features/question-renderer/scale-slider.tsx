@@ -494,10 +494,11 @@ export const ScaleSlider = React.memo(function ScaleSlider({
         aria-invalid={invalid || undefined}
         aria-describedby={ariaDescribedBy || undefined}
         onKeyDown={handleKeyDown}
-        // 타일 줄과 트랙은 첫 열의 폭을 함께 쓴다. 넓은 화면의 척도 밖 체크는 그 오른쪽 열이다
+        // 타일 줄과 트랙은 첫 열의 폭을 함께 쓴다. 넓은 화면의 척도 밖 체크는 그 오른쪽 열이다.
+        // 첫 열은 자리를 꽉 채운다 — 폭 상한(860px)을 두었더니 넓은 문항 카드에서 오른쪽이 비었다(2026-11-25)
         className="grid items-center gap-x-5 gap-y-1.5"
         style={{
-          gridTemplateColumns: checksBeside ? 'minmax(0, 860px) auto' : 'minmax(0, 860px)',
+          gridTemplateColumns: checksBeside ? 'minmax(0, 1fr) auto' : 'minmax(0, 1fr)',
         }}
       >
         {hasHeader && (
