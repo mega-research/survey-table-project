@@ -4,6 +4,7 @@ import type { HeaderCell, TableColumn } from '@/types/survey';
 import {
   applyHeaderBulkStyle,
   getCommonHeaderStyle,
+  withHeaderRightBorder,
   withHeaderStyle,
 } from '@/features/survey-builder/table-editor/utils/header-style';
 
@@ -25,6 +26,7 @@ describe('applyHeaderBulkStyle', () => {
       textBold: true,
       backgroundColor: 'abc',
       textColor: '',
+      hideRightBorder: false,
     });
 
     expect(result.columns).not.toBe(columns);
@@ -56,6 +58,7 @@ describe('applyHeaderBulkStyle', () => {
       textBold: false,
       backgroundColor: '',
       textColor: '',
+      hideRightBorder: false,
     });
 
     expect(result.columns.every((column) => (
@@ -71,6 +74,7 @@ describe('applyHeaderBulkStyle', () => {
       textBold: true,
       backgroundColor: '#123456',
       textColor: '',
+      hideRightBorder: false,
     });
 
     expect(result.headerGrid).toBeUndefined();
@@ -82,11 +86,13 @@ describe('applyHeaderBulkStyle', () => {
       textBold: true,
       backgroundColor: '#ABCDEF',
       textColor: '',
+      hideRightBorder: false,
     });
     expect(getCommonHeaderStyle(uniform.columns, uniform.headerGrid)).toEqual({
       textBold: true,
       backgroundColor: '#ABCDEF',
       textColor: '',
+      hideRightBorder: false,
       isMixed: false,
       styledCount: 5,
     });
@@ -98,6 +104,7 @@ describe('applyHeaderBulkStyle', () => {
       textBold: false,
       backgroundColor: '',
       textColor: '',
+      hideRightBorder: false,
       isMixed: true,
       styledCount: 1,
     });
@@ -134,6 +141,7 @@ describe('getCommonHeaderStyle 혼합 판정', () => {
       textBold: false,
       backgroundColor: '',
       textColor: '',
+      hideRightBorder: false,
       isMixed: false,
       styledCount: 0,
     });
@@ -144,6 +152,7 @@ describe('getCommonHeaderStyle 혼합 판정', () => {
       textBold: false,
       backgroundColor: '',
       textColor: '',
+      hideRightBorder: false,
       isMixed: true,
       styledCount: 1,
     });
@@ -154,6 +163,7 @@ describe('getCommonHeaderStyle 혼합 판정', () => {
       textBold: true,
       backgroundColor: '',
       textColor: '',
+      hideRightBorder: false,
       isMixed: false,
       styledCount: 1,
     });
@@ -164,6 +174,7 @@ describe('getCommonHeaderStyle 혼합 판정', () => {
       textBold: false,
       backgroundColor: '#AABBCC',
       textColor: '',
+      hideRightBorder: false,
       isMixed: false,
       styledCount: 1,
     });
@@ -174,8 +185,58 @@ describe('getCommonHeaderStyle 혼합 판정', () => {
       textBold: false,
       backgroundColor: '',
       textColor: '',
+      hideRightBorder: false,
       isMixed: false,
       styledCount: 0,
+    });
+  });
+});
+
+describe('머리글 오른쪽 세로선 숨김', () => {
+  const base = { textBold: false, backgroundColor: '', textColor: '' };
+
+  it('withHeaderRightBorder 는 켜면 필드를 적고 끄면 지운다 — 다른 스타일은 그대로다', () => {
+    const cell: HeaderCell = { id: 'h2', label: '성별', colspan: 1, rowspan: 1, textBold: true };
+    const hidden = withHeaderRightBorder(cell, true);
+    expect(hidden).toEqual({ ...cell, hideRightBorder: true });
+    expect(withHeaderRightBorder(hidden, false)).toEqual(cell);
+    // 원본은 바꾸지 않는다
+    expect(cell).not.toHaveProperty('hideRightBorder');
+  });
+
+  it('굵기·색을 고쳐도 오른쪽 세로선 숨김은 그대로다', () => {
+    const cell: HeaderCell = { id: 'h2', label: '성별', colspan: 1, rowspan: 1, hideRightBorder: true };
+    expect(withHeaderStyle(cell, { ...base, backgroundColor: '#AABBCC' })).toEqual({
+      ...cell,
+      backgroundColor: '#AABBCC',
+    });
+  });
+
+  it('전체 적용으로 켜면 열과 다단 헤더 칸 전부에 적히고, 끄면 전부에서 지워진다', () => {
+    const on = applyHeaderBulkStyle(columns, grid, { ...base, hideRightBorder: true });
+    expect(on.columns.every((column) => column.hideRightBorder === true)).toBe(true);
+    expect(on.headerGrid?.flat().every((cell) => cell.hideRightBorder === true)).toBe(true);
+
+    const off = applyHeaderBulkStyle(on.columns, on.headerGrid, { ...base, hideRightBorder: false });
+    expect(off.columns).toEqual(columns);
+    expect(off.headerGrid).toEqual(grid);
+  });
+
+  it('공통 스타일은 숨김이 전부 같을 때만 그 값을 내고, 일부만 켜져 있으면 섞인 것으로 본다', () => {
+    const allOn = applyHeaderBulkStyle(columns, grid, { ...base, hideRightBorder: true });
+    expect(getCommonHeaderStyle(allOn.columns, allOn.headerGrid)).toMatchObject({
+      hideRightBorder: true,
+      isMixed: false,
+      styledCount: 5,
+    });
+
+    const someOn = grid.map((row) =>
+      row.map((cell) => (cell.id === 'h2' ? { ...cell, hideRightBorder: true } : cell)),
+    );
+    expect(getCommonHeaderStyle(columns, someOn)).toMatchObject({
+      hideRightBorder: false,
+      isMixed: true,
+      styledCount: 1,
     });
   });
 });

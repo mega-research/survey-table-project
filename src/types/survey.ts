@@ -974,6 +974,11 @@ export interface TableColumn {
   textBold?: boolean;
   backgroundColor?: string;
   textColor?: string;
+  /**
+   * 머리글 오른쪽 세로선 숨김 — 응답 화면·미리보기에서 이 열 머리글과 오른쪽 머리글 사이 선을 그리지 않는다
+   * (다단 헤더가 없는 표의 한 줄 머리글). 빌더 편집 화면은 경계를 그대로 보인다. `HeaderCell.hideRightBorder` 와 같다.
+   */
+  hideRightBorder?: boolean;
   width?: number; // 열 너비 (픽셀 단위)
   minWidth?: number; // 최소 너비
   // 컬럼 헤더 병합 관련 속성
@@ -1015,6 +1020,13 @@ export interface HeaderCell {
   textColor?: string;
   colspan: number; // 가로 병합 (기본 1)
   rowspan: number; // 세로 병합 (기본 1)
+  /**
+   * 오른쪽 세로선 숨김 — 응답 화면·미리보기에서 이 머리글 칸과 오른쪽 칸 사이 선을 그리지 않는다
+   * (「전혀 만족하지 않음 | … | 보통 | … | 매우 만족함」을 끊김 없는 한 줄로). 빌더 편집 격자는 칸 경계를
+   * 보여야 병합·선택이 되므로 그대로 그린다. 표의 마지막 열에 닿는 칸은 지우지 않는다 — 표의 오른쪽 끝선이다.
+   * 클래스는 `features/question-renderer/utils/table-grid-utils` 의 `getHeaderRightBorderClass` 하나.
+   */
+  hideRightBorder?: boolean;
   /**
    * 머리글 입력칸 — 같은 표 본문의 입력칸 하나를 이 머리글 자리에 그린다(「기타(원료명 직접 작성)」).
    * 값은 그 본문 칸 키에 그대로 산다(저장·검증·내보내기 무변경). 판정·올린 행은

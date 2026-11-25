@@ -1,7 +1,13 @@
 import type { HeaderCell, TableColumn } from '@/types/survey';
 import { type CellStyleValues, normalizeCellHexColor } from '@/utils/cell-style';
 
-export type HeaderBulkStyle = CellStyleValues;
+/** 머리글 한 칸의 굵기·색 — 칸마다 고치는 자리가 쓴다 */
+export type HeaderCellStyle = CellStyleValues;
+
+/** 전체 헤더 스타일 — 굵기·색에 오른쪽 세로선 숨김을 더한 네 축. 적용하면 모든 머리글이 이 값이 된다 */
+export interface HeaderBulkStyle extends CellStyleValues {
+  hideRightBorder: boolean;
+}
 
 export interface AppliedHeaderStyle {
   columns: TableColumn[];
@@ -11,7 +17,7 @@ export interface AppliedHeaderStyle {
 export interface HeaderStyleState extends HeaderBulkStyle {
   /** 헤더 간 스타일이 균일하지 않은지 */
   isMixed: boolean;
-  /** 배경색·글자색·굵게 중 하나라도 지정된 헤더 수 */
+  /** 배경색·글자색·굵게·오른쪽 세로선 숨김 중 하나라도 지정된 헤더 수 */
   styledCount: number;
 }
 
@@ -19,11 +25,23 @@ const EMPTY_STYLE: HeaderBulkStyle = {
   textBold: false,
   backgroundColor: '',
   textColor: '',
+  hideRightBorder: false,
 };
+
+/** 오른쪽 세로선 숨김을 켜고 끈다 — 끄면 키를 지운다(JSONB 에 false 를 남기지 않는다) */
+export function withHeaderRightBorder<T extends TableColumn | HeaderCell>(
+  value: T,
+  hidden: boolean,
+): T {
+  const next = { ...value };
+  if (hidden) next.hideRightBorder = true;
+  else delete next.hideRightBorder;
+  return next;
+}
 
 export function withHeaderStyle<T extends TableColumn | HeaderCell>(
   value: T,
-  style: HeaderBulkStyle,
+  style: HeaderCellStyle,
 ): T {
   const next = { ...value };
   if (style.textBold) next.textBold = true;
@@ -54,11 +72,14 @@ export function applyHeaderBulkStyle(
     textBold: style.textBold,
     backgroundColor: normalizeStyleColor(style.backgroundColor, '배경색'),
     textColor: normalizeStyleColor(style.textColor, '글자색'),
+    hideRightBorder: style.hideRightBorder,
   };
+  const apply = <T extends TableColumn | HeaderCell>(header: T): T =>
+    withHeaderRightBorder(withHeaderStyle(header, normalized), normalized.hideRightBorder);
 
   return {
-    columns: columns.map((column) => withHeaderStyle(column, normalized)),
-    headerGrid: headerGrid?.map((row) => row.map((cell) => withHeaderStyle(cell, normalized))),
+    columns: columns.map(apply),
+    headerGrid: headerGrid?.map((row) => row.map(apply)),
   };
 }
 
@@ -77,6 +98,7 @@ export function getCommonHeaderStyle(
     header.textBold === true
     || Boolean(header.backgroundColor)
     || Boolean(header.textColor)
+    || header.hideRightBorder === true
   )).length;
 
   const first = headers[0];
@@ -88,11 +110,13 @@ export function getCommonHeaderStyle(
     textBold: first.textBold === true,
     backgroundColor: first.backgroundColor ?? '',
     textColor: first.textColor ?? '',
+    hideRightBorder: first.hideRightBorder === true,
   };
   const isUniform = headers.every((header) => (
     (header.textBold === true) === common.textBold
     && (header.backgroundColor ?? '') === common.backgroundColor
     && (header.textColor ?? '') === common.textColor
+    && (header.hideRightBorder === true) === common.hideRightBorder
   ));
 
   return isUniform

@@ -44,6 +44,7 @@ import {
   computeStickyLeftColumns,
   getAlignmentClasses,
   getCellBorderClasses,
+  getHeaderRightBorderClass,
   getGridCellAria,
   getHeaderCellStickyStyle,
   fitTableMarker,
@@ -386,6 +387,12 @@ function HeaderCells({
           ...getCellTextStyle(cell),
         };
 
+        const rightBorderClass = getHeaderRightBorderClass(
+          cell,
+          startCol + colSpan - 1,
+          visibleColumns.length,
+        );
+
         // 머리글 입력칸 — 본문 칸을 이 자리에 그린다. data-cell-id 로 오류 「위치로 이동」·링이 본문 칸과 같다.
         const inputCell = headerInputCells?.get(cell.id);
         if (inputCell && renderHeaderInput) {
@@ -395,6 +402,7 @@ function HeaderCells({
               className={cn(
                 HEADER_CELL_BASE_CLASS,
                 'px-2',
+                rightBorderClass,
                 errorCellIds?.has(inputCell.id) && 'ring-2 ring-red-300 ring-inset',
               )}
               style={style}
@@ -410,7 +418,12 @@ function HeaderCells({
           return (
             <div
               key={cell.id}
-              className={cn(HEADER_CELL_BASE_CLASS, getCellTextClassName(cell), 'gap-2')}
+              className={cn(
+                HEADER_CELL_BASE_CLASS,
+                getCellTextClassName(cell),
+                'gap-2',
+                rightBorderClass,
+              )}
               style={style}
               {...getGridCellAria('columnheader', colSpan, rowSpan)}
             >
@@ -423,7 +436,7 @@ function HeaderCells({
         return (
           <div
             key={cell.id}
-            className={cn(HEADER_CELL_BASE_CLASS, getCellTextClassName(cell))}
+            className={cn(HEADER_CELL_BASE_CLASS, getCellTextClassName(cell), rightBorderClass)}
             style={style}
             {...getGridCellAria('columnheader', colSpan, rowSpan)}
           >
@@ -470,7 +483,11 @@ function HeaderCells({
     return (
       <div
         key={column.id}
-        className={cn(HEADER_CELL_BASE_CLASS, getCellTextClassName(column))}
+        className={cn(
+          HEADER_CELL_BASE_CLASS,
+          getCellTextClassName(column),
+          getHeaderRightBorderClass(column, startCol + cs - 1, visibleColumns.length),
+        )}
         style={style}
         {...getGridCellAria('columnheader', cs)}
       >

@@ -228,6 +228,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
     moveColumn,
     updateColumnLabel,
     updateColumnStyle,
+    updateColumnRightBorder,
     updateColumnExportOmit,
     updateColumnReveal,
     updateColumnCode,
@@ -810,6 +811,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
                 hasQuestions={hasQuestions}
                 onUpdateColumnLabel={updateColumnLabel}
                 onUpdateColumnStyle={updateColumnStyle}
+                onUpdateColumnRightBorder={updateColumnRightBorder}
                 onUpdateColumnExportOmit={updateColumnExportOmit}
                 onUpdateColumnReveal={updateColumnReveal}
                 onUpdateColumnCode={updateColumnCode}
