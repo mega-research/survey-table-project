@@ -157,3 +157,65 @@ describe('HeaderGridEditor 헤더 스타일 보존', () => {
     expect(screen.getByDisplayValue('편집할 헤더')).toHaveClass('bg-transparent');
   });
 });
+
+describe('HeaderGridEditor 오른쪽 세로선 숨김의 병합·분할', () => {
+  const select = (from: HTMLElement, to: HTMLElement = from) => {
+    fireEvent.mouseDown(from, { detail: 1 });
+    if (to !== from) fireEvent.mouseEnter(to);
+    fireEvent.mouseUp(to);
+  };
+
+  it('병합한 칸은 영역의 오른쪽 끝 칸의 숨김 설정을 따른다 — 그 칸이 그리던 선이다', () => {
+    const { unmount } = render(
+      <HeaderGridHarness
+        initialGrid={[
+          [
+            { id: 'header-1', label: '첫째', colspan: 1, rowspan: 1, hideRightBorder: true },
+            { id: 'header-2', label: '둘째', colspan: 1, rowspan: 1 },
+          ],
+        ]}
+      />,
+    );
+    select(screen.getByText('첫째').parentElement!, screen.getByText('둘째').parentElement!);
+    fireEvent.click(screen.getByRole('button', { name: '병합' }));
+    // 왼쪽 칸에만 켜져 있었다 — 그 선은 병합으로 사라졌고, 병합 칸의 오른쪽 선은 켜진 적이 없다
+    expect(getRenderedGrid()[0]![0]).not.toHaveProperty('hideRightBorder');
+    unmount();
+
+    render(
+      <HeaderGridHarness
+        initialGrid={[
+          [
+            { id: 'header-1', label: '첫째', colspan: 1, rowspan: 1 },
+            { id: 'header-2', label: '둘째', colspan: 1, rowspan: 1, hideRightBorder: true },
+          ],
+        ]}
+      />,
+    );
+    select(screen.getByText('첫째').parentElement!, screen.getByText('둘째').parentElement!);
+    fireEvent.click(screen.getByRole('button', { name: '병합' }));
+    expect(getRenderedGrid()[0]![0]).toEqual(
+      expect.objectContaining({ label: '첫째', colspan: 2, hideRightBorder: true }),
+    );
+  });
+
+  it('분할하면 숨김은 오른쪽 끝 열의 칸에만 남는다 — 안쪽 선이 함께 사라지지 않는다', () => {
+    render(
+      <HeaderGridHarness
+        initialGrid={[
+          [{ id: 'header-1', label: '병합 헤더', colspan: 2, rowspan: 2, hideRightBorder: true }],
+          [],
+        ]}
+      />,
+    );
+    select(screen.getByText('병합 헤더').parentElement!);
+    fireEvent.click(screen.getByRole('button', { name: '분할' }));
+
+    const grid = getRenderedGrid();
+    expect(grid.map((row) => row.map((cell) => cell.hideRightBorder === true))).toEqual([
+      [false, true],
+      [false, true],
+    ]);
+  });
+});
+

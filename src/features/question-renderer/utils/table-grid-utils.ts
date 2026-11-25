@@ -154,6 +154,25 @@ export function getCellBorderClasses(cell: Pick<TableCell, 'hideRightBorder'>): 
   return cn('border-b border-gray-400', !cell.hideRightBorder && 'border-r');
 }
 
+/**
+ * 머리글 칸의 오른쪽 세로선 숨김 — `hideRightBorder` 를 켠 머리글 칸(다단 헤더 칸·한 줄 머리글의 열)에
+ * 오른쪽 선을 지우는 클래스를 준다(응답 화면·미리보기 공용. 빌더 편집 격자는 경계를 보여야 해서 쓰지 않는다).
+ * 머리글 칸의 기본 클래스 뒤에 `cn` 으로 붙인다.
+ *
+ * 표의 마지막 열에 닿는 칸은 지우지 않는다 — 화면 폭에 맞춰 줄인 표는 마지막 칸이 표의 오른쪽 끝선을 그리므로
+ * 지우면 표가 열린 채로 보인다. 일괄로 모든 머리글에 켜도 끝선은 남는다.
+ *
+ * @param endColumn 이 칸이 덮는 마지막 열(1부터)
+ * @param columnCount 지금 그려지는 열 수
+ */
+export function getHeaderRightBorderClass(
+  header: { hideRightBorder?: boolean | undefined },
+  endColumn: number,
+  columnCount: number,
+): string | undefined {
+  return header.hideRightBorder === true && endColumn < columnCount ? 'border-r-0' : undefined;
+}
+
 const V_JUSTIFY_MAP = {
   top: 'justify-start',
   middle: 'justify-center',

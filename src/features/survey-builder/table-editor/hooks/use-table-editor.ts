@@ -15,7 +15,13 @@ import {
   TableColumn,
   TableRow,
 } from '@/types/survey';
-import { type HeaderBulkStyle, applyHeaderBulkStyle, withHeaderStyle } from '@/features/survey-builder/table-editor/utils/header-style';
+import {
+  type HeaderBulkStyle,
+  type HeaderCellStyle,
+  applyHeaderBulkStyle,
+  withHeaderRightBorder,
+  withHeaderStyle,
+} from '@/features/survey-builder/table-editor/utils/header-style';
 import { remapGatingValues } from '@/features/survey-builder/utils/option-value-remap';
 import { mapGateLeaves } from '@/utils/cell-gate-tree';
 import { hasExistingOtherRankingCell } from '@/utils/ranking-source';
@@ -621,7 +627,7 @@ export function useTableEditor({
 
   // 스타일 변경은 타이핑이 아니므로 debounce 없이 즉시 커밋한다.
   const updateColumnStyle = useCallback(
-    (columnIndex: number, style: HeaderBulkStyle) => {
+    (columnIndex: number, style: HeaderCellStyle) => {
       // 열 코드 등 label/code debounce가 예약되어 있으면 취소한다 — 아래 즉시 알림이 같은
       // ref 를 실어 보내므로 뒤늦은 중복 알림만 막는다.
       if (pendingChangeRef.current) {
@@ -637,6 +643,26 @@ export function useTableEditor({
 
       const updatedColumns = currentColumnsRef.current.map((col, index) =>
         index === columnIndex ? withHeaderStyle(col, style) : col,
+      );
+      commitColumns(updatedColumns);
+      notifyChange(currentTitleRef.current, updatedColumns, currentRowsRef.current);
+    },
+    [commitColumns, notifyChange],
+  );
+
+  // 머리글 오른쪽 세로선 숨김 — 스위치라 스타일과 같이 즉시 커밋한다
+  const updateColumnRightBorder = useCallback(
+    (columnIndex: number, hidden: boolean) => {
+      if (pendingChangeRef.current) {
+        clearTimeout(pendingChangeRef.current);
+        pendingChangeRef.current = null;
+      }
+      if (pendingRowsSyncRef.current) {
+        pendingRowsSyncRef.current = false;
+        setCurrentRows(currentRowsRef.current);
+      }
+      const updatedColumns = currentColumnsRef.current.map((col, index) =>
+        index === columnIndex ? withHeaderRightBorder(col, hidden) : col,
       );
       commitColumns(updatedColumns);
       notifyChange(currentTitleRef.current, updatedColumns, currentRowsRef.current);
@@ -1591,6 +1617,7 @@ export function useTableEditor({
       moveRow,
       updateColumnLabel,
       updateColumnStyle,
+      updateColumnRightBorder,
       updateColumnExportOmit,
       updateColumnReveal,
       updateColumnCode,

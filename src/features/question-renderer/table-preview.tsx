@@ -19,6 +19,7 @@ import {
   computeStickyLeftColumns,
   getAlignmentClasses,
   getCellBorderClasses,
+  getHeaderRightBorderClass,
   getGridCellAria,
   getHeaderCellStickyStyle,
   fitTableMarker,
@@ -221,7 +222,11 @@ export const TablePreview = React.memo(function TablePreview({
           return (
             <div
               key={cell.id}
-              className={cn(HEADER_CELL_CLASS, getCellTextClassName(cell))}
+              className={cn(
+                HEADER_CELL_CLASS,
+                getCellTextClassName(cell),
+                getHeaderRightBorderClass(cell, startCol + colSpan - 1, columns.length),
+              )}
               style={style}
               {...getGridCellAria('columnheader', colSpan, rowSpan)}
             >
@@ -249,7 +254,11 @@ export const TablePreview = React.memo(function TablePreview({
       return (
         <div
           key={column.id}
-          className={cn(HEADER_CELL_CLASS, getCellTextClassName(column))}
+          className={cn(
+            HEADER_CELL_CLASS,
+            getCellTextClassName(column),
+            getHeaderRightBorderClass(column, startCol + cs - 1, columns.length),
+          )}
           style={style}
           {...getGridCellAria('columnheader', cs)}
         >

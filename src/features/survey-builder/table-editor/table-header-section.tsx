@@ -25,10 +25,11 @@ import {
   getCellTextStyle,
   toCellStyleFieldProps,
 } from '@/utils/cell-style';
-import type { HeaderBulkStyle } from '@/features/survey-builder/table-editor/utils/header-style';
+import type { HeaderCellStyle } from '@/features/survey-builder/table-editor/utils/header-style';
 import { getGridSpanStyle } from '@/features/question-renderer/utils/table-grid-utils';
 
 import { CellStyleFields } from './cell-style-fields';
+import { HeaderRightBorderField } from './header-right-border-field';
 import { useDebouncedInput } from './hooks/use-debounced-input';
 
 // ── 공통 스타일 상수 ──
@@ -49,7 +50,9 @@ interface ColumnHeaderCallbacks {
   onUnmergeColumnHeader: (columnIndex: number) => void;
   onSetEditingColumnWidth: (value: EditingColumnWidth) => void;
   onColumnWidthChange: (columnIndex: number, width: number) => void;
-  onUpdateColumnStyle: (columnIndex: number, style: HeaderBulkStyle) => void;
+  onUpdateColumnStyle: (columnIndex: number, style: HeaderCellStyle) => void;
+  /** 머리글 오른쪽 세로선 숨김 — 안 넘기면 스위치를 그리지 않는다 */
+  onUpdateColumnRightBorder?: ((columnIndex: number, hidden: boolean) => void) | undefined;
   onOpenColumnConditionModal?: ((columnIndex: number) => void) | undefined;
   /** 안 쓴 열 빼기 — 응답 전체에서 아무도 안 채우면 내보내기에서 이 열을 뺀다 */
   onUpdateColumnExportOmit?: ((columnIndex: number, omit: boolean) => void) | undefined;
@@ -91,6 +94,7 @@ const ColumnHeader = React.memo(function ColumnHeader({
   onSetEditingColumnWidth,
   onColumnWidthChange,
   onUpdateColumnStyle,
+  onUpdateColumnRightBorder,
   onOpenColumnConditionModal,
   onUpdateColumnExportOmit,
   onUpdateColumnReveal,
@@ -294,6 +298,14 @@ const ColumnHeader = React.memo(function ColumnHeader({
                     onUpdateColumnStyle(columnIndex, style)
                   ))}
                 />
+                {onUpdateColumnRightBorder && (
+                  <div className="mt-4">
+                    <HeaderRightBorderField
+                      checked={column.hideRightBorder === true}
+                      onCheckedChange={(hidden) => onUpdateColumnRightBorder(columnIndex, hidden)}
+                    />
+                  </div>
+                )}
               </PopoverContent>
             </Popover>
 
@@ -389,6 +401,7 @@ export const TableHeaderSection = React.memo(function TableHeaderSection({
   onSetEditingColumnWidth,
   onColumnWidthChange,
   onUpdateColumnStyle,
+  onUpdateColumnRightBorder,
   onOpenColumnConditionModal,
   onUpdateColumnExportOmit,
   onUpdateColumnReveal,
@@ -429,6 +442,7 @@ export const TableHeaderSection = React.memo(function TableHeaderSection({
             onSetEditingColumnWidth={onSetEditingColumnWidth}
             onColumnWidthChange={onColumnWidthChange}
             onUpdateColumnStyle={onUpdateColumnStyle}
+            onUpdateColumnRightBorder={onUpdateColumnRightBorder}
             onOpenColumnConditionModal={onOpenColumnConditionModal}
             onUpdateColumnExportOmit={onUpdateColumnExportOmit}
             onUpdateColumnReveal={onUpdateColumnReveal}
