@@ -661,7 +661,8 @@ export function HeaderGridEditor({
                 ) : (
                   <span
                     className={cn(
-                      'whitespace-pre-line',
+                      // 응답 화면·미리보기와 같이 줄바꿈과 연속 공백을 적은 그대로 그린다
+                      'whitespace-pre-wrap',
                       cell.label ? 'text-gray-800' : 'text-gray-400 italic',
                       getCellTextClassName(cell),
                     )}

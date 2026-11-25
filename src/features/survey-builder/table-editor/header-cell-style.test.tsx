@@ -531,3 +531,16 @@ describe('머리글 오른쪽 세로선 숨김', () => {
     expect(screen.getByRole('switch', { name: '오른쪽 세로선 숨김' })).toBeChecked();
   });
 });
+
+describe('HeaderGridEditor 머리글 글자의 공백', () => {
+  it('편집 격자도 연속 공백을 적은 그대로 그린다 — 응답 화면과 같은 값', () => {
+    const dots: HeaderCell[][] = [
+      [{ id: 'h1', label: '•     •     •', colspan: 1, rowspan: 1 }],
+    ];
+    render(<HeaderGridEditor headerGrid={dots} columnCount={1} onChange={vi.fn()} />);
+
+    const label = screen.getByText((_, el) => el?.textContent === '•     •     •' && el.tagName === 'SPAN');
+    expect(label).toHaveClass('whitespace-pre-wrap');
+  });
+});
+

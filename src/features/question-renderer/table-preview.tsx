@@ -35,8 +35,10 @@ import { HEADER_SCROLL_CLASS, TableScrollControls } from './table-scroll-control
 
 // text-base: rowgroup 컨테이너의 text-sm 상속을 끊는다 — 척도형(라디오/체크박스/랭킹)
 // 테이블은 응답 선택지 라벨이 헤더에 실리므로 본문(14px)보다 큰 16px 로 읽혀야 한다.
+// whitespace-pre-wrap: 머리글의 줄바꿈과 연속 공백을 적은 그대로 그린다(「•     •     •」 — 본문 글자 칸과 같다).
+// 공백을 합치는 pre-line 이면 편집을 끝내는 순간 간격이 줄어 막힌 것처럼 보인다. 응답 화면 머리글도 같은 값이다.
 const HEADER_CELL_CLASS =
-  'flex items-center justify-center border-r border-b border-gray-400 bg-gray-50 px-4 py-3 text-center text-base font-medium whitespace-pre-line';
+  'flex items-center justify-center border-r border-b border-gray-400 bg-gray-50 px-4 py-3 text-center text-base font-medium whitespace-pre-wrap';
 
 const EMPTY_LABEL = <span className="text-sm text-gray-400 italic" />;
 
