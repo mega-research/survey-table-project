@@ -32,6 +32,7 @@ import type {
   ResponseStatus,
 } from '@/shared/contracts/survey-response';
 import { MOBILE_TABLE_DISPLAY_MODES } from '@/types/mobile-table-display';
+import { SCALE_SLIDER_DIRECTIONS } from '@/types/scale-slider';
 import type {
   ChoiceGroup,
   DynamicRowGroupConfig,
@@ -267,6 +268,10 @@ export const questions = pgTable(
     collapseAttachToPrevious: boolean('collapse_attach_previous').notNull().default(false),
     // 문항 사이의 중복 불가 묶음 이름 (0171). NULL·공백 = 없음. 같은 이름의 단일 선택 문항끼리 같은 보기를 못 고른다
     distinctGroup: text('distinct_group'),
+    // 문항의 슬라이더 방향 (0173). NULL = 꺼짐. 값이 있으면 척도 슬라이더로 그리고 그 값이 긍정 방향이다.
+    // 보통 라디오 문항과 묶음 없는 보기 소스 표만 읽는다 — 묶음이 있는 표는 묶음(choice_groups) 설정만 본다.
+    // { enum } 은 타입 전용이라 아래 check() 와 마이그레이션 CHECK 가 따로 있다 (어휘 @/types/scale-slider)
+    scaleSlider: text('scale_slider', { enum: SCALE_SLIDER_DIRECTIONS }),
 
     // 단답형·장문형 개인정보 암호화 토글 — 응답값을 encryptPii 암호문으로 저장 (ADR-0012)
     piiEncrypted: boolean('pii_encrypted').default(false).notNull(),
@@ -340,6 +345,10 @@ export const questions = pgTable(
     check(
       'questions_mobile_table_display_mode_check',
       sql`${table.mobileTableDisplayMode} in ('auto', 'drilldown-original-row', 'row-wise-original', 'row-wise-scale', 'row-cards', 'row-group-cards', 'axis-cards', 'item-cards', 'original')`,
+    ),
+    check(
+      'questions_scale_slider_check',
+      sql`${table.scaleSlider} is null or ${table.scaleSlider} in ('positive-right', 'positive-left')`,
     ),
     check(
       'questions_input_rows_range',

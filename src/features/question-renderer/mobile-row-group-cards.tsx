@@ -1,6 +1,6 @@
 'use client';
 
-import React, { type ReactNode, useMemo } from 'react';
+import React, { type ReactNode, useId, useMemo } from 'react';
 
 import {
   useAnswerQuotes,
@@ -21,6 +21,7 @@ import { cn } from '@/lib/utils';
 import type { ChoiceGroup, HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 import { groupChoiceCellsByGroup } from '@/utils/choice-group-helpers';
+import { systemText } from '@/utils/system-strings';
 
 import { CellText, resolveCellTextHtml } from './cell-text';
 import { InteractiveCell } from './cells';
@@ -28,7 +29,9 @@ import { ChoiceOptCell } from './cells/choice-opt-cell';
 import { TableChoiceGroupScaleBar } from './choice-group-scale-bar';
 import { MobileOptionCard } from './mobile-card-shared';
 import { MobileOriginalRowTable } from './mobile-original-row-table';
-import { projectChoiceGroupSectionView } from './utils/choice-group-section-view';
+import { useInlineSurveyLocale } from './survey-locale-context';
+import { TableChoiceGroupScaleSlider } from './table-choice-group-scale-slider';
+import { projectChoiceGroupSectionViewWithSlider } from './utils/choice-group-section-view';
 import { resolveChoiceGroupSectionLabel } from './utils/choice-group-section-label';
 
 interface MobileRowGroupCardsProps {
@@ -59,8 +62,17 @@ function isVisible(cell: TableCell): boolean {
  * 그대로 항상 보이고, 카드 안은 보기 그룹(축)별 섹션으로 나뉘어 세로 타일로 고른다. 같은 행의 입력 셀(단답·선택형)은
  * 섹션 아래에 라벨과 함께 온다 — 게이팅·상세기재는 InteractiveCell 이 셀 단위로 그대로 처리한다.
  *
+ * 섹션의 모양은 그룹의 보기 모양을 따른다(choice-group-section-view) — 척도 슬라이더 · 척도 막대 ·
+ * 원본 한 줄 · 세로 타일. 슬라이더와 막대는 그 행에서 못 그리면 원본 한 줄로 떨어진다. 척도 슬라이더가
+ * 켜진 표도 표시 방식이 「행 단위 그룹 카드」면 이 카드 안에서 그린다(scale-slider-table-layout).
+ *
+ * 슬라이더가 서는 카드는 제목에 id 를 달아 슬라이더의 라디오 묶음이 「카드 제목, 섹션 제목」을 낭독 이름으로
+ * 가리키게 하고, 미충족 필수 슬라이더 섹션이 있으면 카드에 낭독용 오류 문구를 하나 두어 그 묶음의 설명으로
+ * 잇는다(행 단위 배치의 행 제목·오류 문구와 같은 구실). **슬라이더가 없는 카드의 마크업은 그대로다** — id 도
+ * 문구도 더하지 않는다.
+ *
  * 값은 ChoiceOptCell 이 `__choiceGroups` 에 쓴다 — 데스크톱 셀과 같은 컴포넌트의 타일 변형이라
- * 단독 선택·표 전체 범위·상세기재 규칙이 한 곳이다. 보기 셀이 없는 행(설명 행)은 카드가 되지
+ * 단독 선택·표 전체 범위·상세기재 규칙이 한 곳이다. 슬라이더·막대도 같은 그룹 선택 쓰기를 탄다. 보기 셀이 없는 행(설명 행)은 카드가 되지
  * 않는다. 표시 조건·동적 행은 호스트가 displayRows 로 이미 걸러 넘긴다.
  */
 export const MobileRowGroupCards = React.memo(function MobileRowGroupCards({
@@ -77,12 +89,14 @@ export const MobileRowGroupCards = React.memo(function MobileRowGroupCards({
 }: MobileRowGroupCardsProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
+  const locale = useInlineSurveyLocale();
+  const cardIdPrefix = useId();
   const groupById = useMemo(
     () => new Map(choiceGroups.map((group) => [group.id, group])),
     [choiceGroups],
   );
 
-  const cards = displayRows.flatMap((row) => {
+  const cards = displayRows.flatMap((row, rowIndex) => {
     const choiceCells = row.cells.filter((cell) => {
       if (cell.type !== 'choice_opt' || !isVisible(cell)) return false;
       const group = cell.choiceGroupId ? groupById.get(cell.choiceGroupId) : undefined;
@@ -114,9 +128,39 @@ export const MobileRowGroupCards = React.memo(function MobileRowGroupCards({
     const radioBuckets = buildRadioGroupBuckets(row);
     const choiceCellIds = new Set(choiceCells.map((cell) => cell.id));
 
+    // 그룹 보기 모양 — 척도 슬라이더 / 척도 막대 / 원본 한 줄(슬라이더·막대 폴백 포함) / 세로 타일.
+    // 섹션을 그리기 전에 정한다 — 슬라이더가 서는 카드인지가 카드 제목의 id 와 낭독용 오류 문구를 정한다
+    const sections = groupChoiceCellsByGroup(choiceCells).flatMap(({ groupId, cells }) => {
+      const group = groupId ? groupById.get(groupId) : undefined;
+      if (!group) return [];
+      const view = projectChoiceGroupSectionViewWithSlider({
+        group,
+        selectionType: group.type,
+        columns: visibleColumns,
+        headerGrid: visibleHeaderGrid,
+        hideColumnLabels,
+        row,
+        groupCells: cells,
+      });
+      // 「다음」을 누른 뒤 미충족 필수 그룹은 섹션을 붉게 두른다 — 위반 셀 집합은 데스크톱
+      // 표의 보기 그룹 외곽선과 같은 판정(collectUnfilledChoiceGroupCellIds)에서 온다.
+      const unfilled = cells.some((cell) => errorCellIds?.has(cell.id));
+      return [{ group, cells, view, unfilled }];
+    });
+    const sliderSections = sections.filter((section) => section.view.kind === 'scale-slider');
+    // 슬라이더의 낭독 이름이 가리킬 카드 제목 — 슬라이더가 서고 제목 글자가 있을 때만 id 를 단다
+    const cardTitle = cardLabel.replace(/\s+/g, ' ').trim();
+    const cardTitleId =
+      sliderSections.length > 0 && cardTitle ? `${cardIdPrefix}-${rowIndex}-title` : undefined;
+    // 미충족 필수 슬라이더 섹션이 있는 동안만 낭독용 오류 문구를 둔다(행 단위 배치의 행마다 문구와 같다)
+    const cardErrorId = sliderSections.some((section) => section.unfilled)
+      ? `${cardIdPrefix}-${rowIndex}-error`
+      : undefined;
+
     return [
       <MobileOptionCard
         key={row.id}
+        labelId={cardTitleId}
         // 행 단위 카드와 같은 고정 머리 — 구분 셀을 줄 단위로 제목·설명으로 가르지 않고
         // 서식본(contentHtml)까지 그대로 둔다. 둘째 줄을 회색 설명으로 내리면 셀 편집기에서
         // 준 강조가 사라지고, 긴 카드를 스크롤할 때 어느 행인지 놓친다.
@@ -142,9 +186,14 @@ export const MobileRowGroupCards = React.memo(function MobileRowGroupCards({
               hasMobileDisplayCells(displayCells) && 'border-t border-gray-100 pt-3',
             )}
           >
-            {groupChoiceCellsByGroup(choiceCells).map(({ groupId, cells }) => {
-              const group = groupId ? groupById.get(groupId) : undefined;
-              if (!group) return null;
+            {cardErrorId ? (
+              <p id={cardErrorId} className="sr-only">
+                {cardTitle
+                  ? systemText('mobile.checkAnswerOf', locale, { title: cardTitle })
+                  : systemText('mobile.checkAnswer', locale)}
+              </p>
+            ) : null}
+            {sections.map(({ group, cells, view, unfilled }) => {
               const colIndex = row.cells.findIndex((cell) => cell.id === cells[0]!.id);
               const columnLabel = (visibleColumns[colIndex]?.label ?? '').trim();
               const sectionLabel = resolveChoiceGroupSectionLabel(
@@ -152,19 +201,6 @@ export const MobileRowGroupCards = React.memo(function MobileRowGroupCards({
                 headerText,
                 columnLabel ? substituteTokens(columnLabel, attrs, quotes) : '',
               );
-              // 「다음」을 누른 뒤 미충족 필수 그룹은 섹션을 붉게 두른다 — 위반 셀 집합은 데스크톱
-              // 표의 보기 그룹 외곽선과 같은 판정(collectUnfilledChoiceGroupCellIds)에서 온다.
-              const unfilled = cells.some((cell) => errorCellIds?.has(cell.id));
-              // 그룹 보기 모양 — 척도 막대 / 원본 한 줄(막대 폴백 포함) / 세로 타일
-              const view = projectChoiceGroupSectionView({
-                group,
-                selectionType: group.type,
-                columns: visibleColumns,
-                headerGrid: visibleHeaderGrid,
-                hideColumnLabels,
-                row,
-                groupCells: cells,
-              });
               return (
                 <div
                   key={group.id}
@@ -174,7 +210,24 @@ export const MobileRowGroupCards = React.memo(function MobileRowGroupCards({
                     unfilled && 'rounded-lg border border-red-300 bg-red-50/40 p-2',
                   )}
                 >
-                  {view.kind === 'scale-bar' ? (
+                  {view.kind === 'scale-slider' ? (
+                    // 슬라이더도 머리 줄에 섹션 제목과 고른 값 표시를 나란히 둔다. 이 카드는 좁은 화면 전용이다.
+                    // 낭독 이름은 「카드 제목, 섹션 제목」이고, 미충족이면 카드의 낭독용 오류 문구를 잇는다
+                    <TableChoiceGroupScaleSlider
+                      questionId={questionId}
+                      group={group}
+                      model={view.model}
+                      cells={cells}
+                      label={sectionLabel}
+                      ariaLabelledBy={cardTitleId}
+                      ariaDescribedBy={unfilled ? cardErrorId : undefined}
+                      invalid={unfilled}
+                      narrow
+                      value={value}
+                      onChange={onChange}
+                      inputIdScope={row.id}
+                    />
+                  ) : view.kind === 'scale-bar' ? (
                     // 막대는 머리 줄에 섹션 제목과 선택값 표시를 나란히 둔다
                     <TableChoiceGroupScaleBar
                       questionId={questionId}
@@ -197,7 +250,8 @@ export const MobileRowGroupCards = React.memo(function MobileRowGroupCards({
                       {sectionLabel}
                     </p>
                   ) : null}
-                  {view.kind === 'scale-bar' ? null : view.kind === 'original-line' ? (
+                  {view.kind === 'scale-slider' || view.kind === 'scale-bar' ? null : view.kind ===
+                    'original-line' ? (
                     <div data-testid={`choice-group-original-line-${group.id}`}>
                       <MobileOriginalRowTable
                         columns={view.line.columns}

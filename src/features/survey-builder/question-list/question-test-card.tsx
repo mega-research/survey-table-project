@@ -15,6 +15,10 @@ import {
   OPTION_TEXT_BARE_INPUT_CLS,
   OptionTextRow,
 } from '@/features/question-renderer/option-text-row';
+import {
+  RadioQuestionScaleSlider,
+  useRadioQuestionScaleSlider,
+} from '@/features/question-renderer/radio-question-scale-slider';
 import { RankingQuestion } from '@/features/question-renderer/ranking-question';
 import { ResponseSourcesProvider } from '@/features/question-renderer/response-sources';
 import { UserDefinedMultiLevelSelect } from '@/features/question-renderer/user-defined-multi-level-select';
@@ -67,10 +71,13 @@ function RadioTestInput({
   question,
   value,
   onChange,
+  titleElementId,
 }: {
   question: Question;
   value: SingleChoiceResponse;
   onChange: (value: SingleChoiceResponse) => void;
+  /** 카드 머리의 제목 요소 id — 척도 슬라이더로 그릴 때의 낭독 이름. 보기 목록은 쓰지 않는다 */
+  titleElementId?: string | undefined;
 }) {
   const otherInput = isOtherChoiceValue(value) ? (value.otherValue ?? '') : '';
 
@@ -111,6 +118,22 @@ function RadioTestInput({
     }
     return value === optionValue;
   };
+
+  // 척도 슬라이더(문항 설정) — 응답 화면의 라디오 문항과 같은 조각을 부른다(그릴지의 판정이 한 곳).
+  // 모델이 없으면(설정 없음·폴백) 아래 보기 목록이 지금과 똑같이 그려진다.
+  const sliderModel = useRadioQuestionScaleSlider(question);
+  if (sliderModel) {
+    const selectedValue = isOtherChoiceValue(value) ? value.selectedValue : value;
+    return (
+      <RadioQuestionScaleSlider
+        question={question}
+        model={sliderModel}
+        selectedValue={typeof selectedValue === 'string' ? selectedValue : null}
+        onToggleOption={handleOptionChange}
+        titleElementId={titleElementId}
+      />
+    );
+  }
 
   const layout = getOptionsLayout(question.optionsColumns, question.optionsAlign);
 
@@ -482,6 +505,7 @@ function QuestionTestInput({
   allQuestions,
   selectedDynamicRowIds,
   onDynamicRowSelectionChange,
+  titleElementId,
 }: {
   question: Question;
   value: unknown;
@@ -490,6 +514,7 @@ function QuestionTestInput({
   allQuestions: Question[];
   selectedDynamicRowIds: string[];
   onDynamicRowSelectionChange: (rowIds: string[]) => void;
+  titleElementId?: string | undefined;
 }) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
@@ -545,6 +570,7 @@ function QuestionTestInput({
           question={question}
           value={value as SingleChoiceResponse}
           onChange={onChange as (value: SingleChoiceResponse) => void}
+          titleElementId={titleElementId}
         />
       );
 
@@ -649,10 +675,16 @@ function QuestionTestInput({
 export function QuestionTestBody({
   question,
   lookups = [],
+  titleElementId,
 }: {
   question: Question;
   /** 분기 조건 우변 LUT 룩업 평가에 사용. currentSurvey.lookups 를 전달. */
   lookups?: SurveyLookup[];
+  /**
+   * 카드 껍데기가 그린 문항 제목 요소의 id — 척도 슬라이더로 그리는 라디오 문항이 라디오 묶음의 낭독
+   * 이름으로 가리킨다(응답 화면과 같은 규칙). 제목 요소 없이 본문만 그리는 자리는 넘기지 않는다.
+   */
+  titleElementId?: string | undefined;
 }) {
   const testResponse = useTestResponseStore((s) => s.testResponses[question.id]);
   const updateTestResponse = useTestResponseStore((s) => s.updateTestResponse);
@@ -745,6 +777,7 @@ export function QuestionTestBody({
               allQuestions={allQuestions}
               selectedDynamicRowIds={selectedDynamicRowIds}
               onDynamicRowSelectionChange={handleDynamicRowSelectionChange}
+              titleElementId={titleElementId}
             />
           )}
         </div>

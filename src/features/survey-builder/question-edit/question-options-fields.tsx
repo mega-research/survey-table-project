@@ -1,5 +1,7 @@
 'use client';
 
+import { useId } from 'react';
+
 import type { DragEndEvent } from '@dnd-kit/core';
 import type { useSensors } from '@dnd-kit/core';
 
@@ -31,6 +33,7 @@ import {
 } from '@/features/survey-builder/lib/language-question-diagnostics';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import { cn } from '@/lib/utils';
+import { isScaleSliderDirection } from '@/types/scale-slider';
 import { generateOptionCode } from '@/utils/option-code-generator';
 import type { Question, QuestionOption } from '@/types/survey';
 import { SURVEY_LOCALES, SURVEY_LOCALE_LABELS, isSurveyLocale } from '@/types/survey-locale';
@@ -90,6 +93,20 @@ export function QuestionOptionsFields({
     questions: questions.map((q) => (q.id === questionId ? { ...q, ...formData } : q)),
     groups: groups ?? [],
   });
+  // 문항 설정의 척도 슬라이더(CONTEXT.md 「척도 슬라이더」) — 읽는 쪽과 같이 라디오 문항에서만 켜진 것으로 본다
+  const drawsAsScaleSlider =
+    question.type === 'radio' && isScaleSliderDirection(formData.scaleSlider);
+  const excludeFromMeanNoteId = useId();
+  const optionsLayoutSelector = (
+    <OptionsLayoutSelector
+      value={formData.optionsColumns}
+      onChange={(next) => setFormData((prev) => ({ ...prev, optionsColumns: next }))}
+      align={formData.optionsAlign}
+      onAlignChange={(next) => setFormData((prev) => ({ ...prev, optionsAlign: next }))}
+      mobileValue={formData.mobileOptionsColumns}
+      onMobileChange={(next) => setFormData((prev) => ({ ...prev, mobileOptionsColumns: next }))}
+    />
+  );
   return (
     <>
   {needsOptions && (
@@ -160,18 +177,28 @@ export function QuestionOptionsFields({
         </p>
       ))}
 
-      {/* 응답 페이지에서 옵션 배치 방식 (select 는 드롭다운이라 의미 없어 숨김) */}
-      {question.type !== 'select' && (
-        <OptionsLayoutSelector
-          value={formData.optionsColumns}
-          onChange={(next) => setFormData((prev) => ({ ...prev, optionsColumns: next }))}
-          align={formData.optionsAlign}
-          onAlignChange={(next) => setFormData((prev) => ({ ...prev, optionsAlign: next }))}
-          mobileValue={formData.mobileOptionsColumns}
-          onMobileChange={(next) =>
-            setFormData((prev) => ({ ...prev, mobileOptionsColumns: next }))
-          }
-        />
+      {/* 응답 페이지에서 옵션 배치 방식 (select 는 드롭다운이라 의미 없어 숨김).
+          척도 슬라이더를 켠 문항은 이 배치를 읽지 않는다 — 흐리게 두고 그 사실을 적되, 값은 지우지 않고
+          고칠 수도 있게 둔다(슬라이더로 그릴 수 없는 문항은 이 배치로 그려진다). */}
+      {question.type !== 'select' &&
+        (drawsAsScaleSlider ? (
+          <div className="space-y-1">
+            <div className="opacity-80">{optionsLayoutSelector}</div>
+            <p className="text-xs text-gray-500">
+              척도 슬라이더로 그리는 동안에는 옵션 배치를 쓰지 않습니다. 슬라이더로 그릴 수 없는
+              문항만 이 배치로 보입니다.
+            </p>
+          </div>
+        ) : (
+          optionsLayoutSelector
+        ))}
+
+      {/* 「평균 제외」가 슬라이더에서 하는 일 — 슬라이더를 켠 문항에만. 보기마다의 체크가 이 줄을 설명으로 잇는다 */}
+      {drawsAsScaleSlider && (
+        <p id={excludeFromMeanNoteId} className="text-xs text-gray-500">
+          「평균 제외」를 체크한 보기는 척도 슬라이더에서는 눈금이 아니라 트랙 옆 체크로 떨어집니다.
+          「모름 · 해당 없음」처럼 점수가 아닌 보기에 씁니다.
+        </p>
       )}
 
       <DndContext
@@ -198,9 +225,12 @@ export function QuestionOptionsFields({
                 isCheckboxQuestion={question.type === 'checkbox'}
                 isRadioQuestion={question.type === 'radio'}
                 showExcludeFromMean={
-                  (question.type === 'radio' || question.type === 'select') &&
-                  formData.scaleMeanEnabled === true
+                  ((question.type === 'radio' || question.type === 'select') &&
+                    formData.scaleMeanEnabled === true) ||
+                  // 슬라이더는 이 표시로 척도 밖 보기(체크)를 가른다 — 척도 평균이 꺼져 있어도 붙일 수 있어야 한다
+                  drawsAsScaleSlider
                 }
+                excludeFromMeanDescribedBy={drawsAsScaleSlider ? excludeFromMeanNoteId : undefined}
               />
             ))}
           </div>
@@ -244,8 +274,13 @@ interface SortableOptionItemProps {
   isCheckboxQuestion: boolean;
   /** 라디오 문항일 때만 「언어」 선택을 보인다 — 언어 문항은 radio 뿐이다 */
   isRadioQuestion: boolean;
-  /** 척도 평균에 들어간(현황 「문항 선택」) 단일 선택 문항일 때만 「평균에서 제외」를 보인다 */
+  /**
+   * 「평균에서 제외」를 보이는가 — 척도 평균에 들어간(현황 「문항 선택」) 단일 선택 문항이거나, 척도 슬라이더를
+   * 켠 라디오 문항(이 표시가 붙은 보기는 눈금이 아니라 체크로 떨어진다)
+   */
   showExcludeFromMean: boolean;
+  /** 「평균에서 제외」 체크의 설명 줄 id — 슬라이더를 켠 문항에서 「체크로 떨어진다」는 문구를 잇는다 */
+  excludeFromMeanDescribedBy?: string | undefined;
 }
 
 function SortableOptionItem({
@@ -263,6 +298,7 @@ function SortableOptionItem({
   isCheckboxQuestion,
   isRadioQuestion,
   showExcludeFromMean,
+  excludeFromMeanDescribedBy,
 }: SortableOptionItemProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: option.id,
@@ -338,6 +374,7 @@ function SortableOptionItem({
             <input
               type="checkbox"
               aria-label="평균에서 제외"
+              aria-describedby={excludeFromMeanDescribedBy}
               checked={option.excludeFromMean === true}
               onChange={(e) =>
                 e.target.checked

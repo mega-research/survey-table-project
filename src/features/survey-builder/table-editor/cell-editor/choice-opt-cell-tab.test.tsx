@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -404,6 +404,131 @@ describe('ChoiceOptCellTab — 모바일 그룹 카드 보기 모양(세로 타�
   it('그룹이 없는 셀에서는 보이지 않는다', () => {
     render(<ChoiceOptCellTab {...makeProps({ choiceGroups: [rad1] })} />);
     expect(screen.queryByRole('button', { name: '척도 막대' })).not.toBeInTheDocument();
+  });
+});
+
+describe('ChoiceOptCellTab — 보기 모양 「척도 슬라이더」와 긍정 방향', () => {
+  const choiceButton = (name: string) => screen.getByRole('button', { name });
+  const direction = () => screen.queryByRole('group', { name: '긍정 방향' });
+  const cb1: ChoiceGroup = { id: 'g3', groupKey: 'cb1', type: 'checkbox', label: '이용 경험' };
+
+  it('라디오 묶음에서 네 번째 보기 모양으로 보이고, 고르면 묶음에 기본 방향(오른쪽이 긍정)이 적힌다', async () => {
+    const onChoiceGroupsChange = vi.fn();
+    render(
+      <ChoiceOptCellTab
+        {...makeProps({ choiceGroups: [rad1, rad2], choiceGroupId: 'g2', onChoiceGroupsChange })}
+      />,
+    );
+    expect(choiceButton('척도 슬라이더')).toHaveAttribute('aria-pressed', 'false');
+    expect(direction()).not.toBeInTheDocument();
+    await userEvent.click(choiceButton('척도 슬라이더'));
+    expect(onChoiceGroupsChange).toHaveBeenCalledWith([
+      rad1,
+      { ...rad2, scaleSlider: 'positive-right' },
+    ]);
+  });
+
+  it('다른 모양을 고른 묶음에서 슬라이더를 고르면 그 모양의 필드는 지워진다', async () => {
+    const onChoiceGroupsChange = vi.fn();
+    render(
+      <ChoiceOptCellTab
+        {...makeProps({
+          choiceGroups: [rad1, { ...rad2, mobileScaleBar: true }],
+          choiceGroupId: 'g2',
+          onChoiceGroupsChange,
+        })}
+      />,
+    );
+    await userEvent.click(choiceButton('척도 슬라이더'));
+    expect(onChoiceGroupsChange).toHaveBeenCalledWith([
+      rad1,
+      { ...rad2, scaleSlider: 'positive-right' },
+    ]);
+  });
+
+  it('슬라이더 묶음에는 긍정 방향 고르기가 서고 적힌 방향이 골라져 있다', () => {
+    render(
+      <ChoiceOptCellTab
+        {...makeProps({
+          choiceGroups: [rad1, { ...rad2, scaleSlider: 'positive-left' }],
+          choiceGroupId: 'g2',
+        })}
+      />,
+    );
+    expect(choiceButton('척도 슬라이더')).toHaveAttribute('aria-pressed', 'true');
+    const group = direction()!;
+    expect(within(group).getByRole('radio', { name: '왼쪽이 긍정' })).toBeChecked();
+    expect(within(group).getByRole('radio', { name: '오른쪽이 긍정' })).not.toBeChecked();
+  });
+
+  it('방향을 바꾸면 그 묶음의 값만 바뀐다', async () => {
+    const onChoiceGroupsChange = vi.fn();
+    const slider: ChoiceGroup = { ...rad2, required: true, scaleSlider: 'positive-right' };
+    render(
+      <ChoiceOptCellTab
+        {...makeProps({ choiceGroups: [rad1, slider], choiceGroupId: 'g2', onChoiceGroupsChange })}
+      />,
+    );
+    await userEvent.click(within(direction()!).getByRole('radio', { name: '왼쪽이 긍정' }));
+    expect(onChoiceGroupsChange).toHaveBeenCalledWith([
+      rad1,
+      { ...slider, scaleSlider: 'positive-left' },
+    ]);
+  });
+
+  it('다른 모양으로 돌아가면 방향이 지워진다', async () => {
+    const onChoiceGroupsChange = vi.fn();
+    render(
+      <ChoiceOptCellTab
+        {...makeProps({
+          choiceGroups: [rad1, { ...rad2, scaleSlider: 'positive-left' }],
+          choiceGroupId: 'g2',
+          onChoiceGroupsChange,
+        })}
+      />,
+    );
+    await userEvent.click(choiceButton('세로 타일'));
+    expect(onChoiceGroupsChange).toHaveBeenLastCalledWith([rad1, rad2]);
+    await userEvent.click(choiceButton('척도 막대'));
+    expect(onChoiceGroupsChange).toHaveBeenLastCalledWith([rad1, { ...rad2, mobileScaleBar: true }]);
+  });
+
+  it('체크박스 묶음에는 나오지 않는다 — 나머지 세 모양은 그대로다', () => {
+    render(
+      <ChoiceOptCellTab {...makeProps({ choiceGroups: [rad1, cb1], choiceGroupId: 'g3' })} />,
+    );
+    expect(choiceButton('척도 막대')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '척도 슬라이더' })).not.toBeInTheDocument();
+    expect(direction()).not.toBeInTheDocument();
+  });
+
+  it('체크박스 묶음에 방향이 남아 있어도 슬라이더로 읽지 않는다', () => {
+    render(
+      <ChoiceOptCellTab
+        {...makeProps({
+          choiceGroups: [{ ...cb1, scaleSlider: 'positive-right' }],
+          choiceGroupId: 'g3',
+        })}
+      />,
+    );
+    expect(choiceButton('세로 타일')).toHaveAttribute('aria-pressed', 'true');
+    expect(direction()).not.toBeInTheDocument();
+  });
+
+  it('보기 소스 표(radio 문항)의 라디오 묶음에서도 고를 수 있다', async () => {
+    const onChoiceGroupsChange = vi.fn();
+    render(
+      <ChoiceOptCellTab
+        {...makeProps({
+          parentQuestionType: 'radio',
+          choiceGroups: [rad1],
+          choiceGroupId: 'g1',
+          onChoiceGroupsChange,
+        })}
+      />,
+    );
+    await userEvent.click(choiceButton('척도 슬라이더'));
+    expect(onChoiceGroupsChange).toHaveBeenCalledWith([{ ...rad1, scaleSlider: 'positive-right' }]);
   });
 });
 

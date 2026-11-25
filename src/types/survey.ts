@@ -8,6 +8,7 @@ import type {
 } from '@/shared/contracts/survey';
 import type { InputType } from '@/types/input-type';
 import type { MobileTableDisplayMode } from '@/types/mobile-table-display';
+import type { ScaleSliderDirection } from '@/types/scale-slider';
 import type { SurveyLocale } from '@/types/survey-locale';
 
 // 타입 정의만 그대로 되내보낸다 — 정의는 각각 한 곳뿐이라 드리프트가 생길 수 없고,
@@ -958,6 +959,12 @@ export interface ChoiceGroup {
   // 적는다. 기본 꺼짐(한 칸짜리 정가운데 구간만 가운데 라벨). 양끝 이름이 길면 겹칠 수 있어 그룹마다 켠다.
   // 빌더 화면 없이 스크립트로 적는다. 판정은 choice-group-scale-bar 의 projectScaleBar.
   mobileScaleBarMiddleLabel?: boolean;
+  // 이 그룹을 척도 슬라이더(타일 줄 + 트랙)로 그린다 — 값이 있으면 켜진 것이고 그 값이 긍정 방향이다
+  // (어휘 @/types/scale-slider). 모바일 전용인 위 두 모양과 달리 웹과 모바일 둘 다에 적용한다. 보기 모양 넷은
+  // 서로 배타이고 읽기 우선순위는 슬라이더 → 척도 막대 → 원본 한 줄 → 세로 타일이다 — 읽기·쓰기는
+  // features/question-renderer/utils/choice-group-mobile-view. radio 그룹 전용(순위·체크박스 그룹에 적힌 값은
+  // 읽지 않는다).
+  scaleSlider?: ScaleSliderDirection;
 }
 
 export interface TableColumn {
@@ -1123,6 +1130,14 @@ export interface Question {
    * 빌더 편집 칸은 없다(스크립트로 적는다).
    */
   distinctGroup?: string | null;
+  /**
+   * 문항의 슬라이더 방향 (0173, CONTEXT.md 「척도 슬라이더」). 값이 있으면 이 문항을 척도 슬라이더로 그리고 그 값이
+   * 긍정 방향이다. 없음·null = 꺼짐(기존 화면). 읽는 곳은 둘뿐이다 — 보통 라디오 문항(보기 목록)과, 묶음 없는
+   * 보기 소스 표의 보기 칸. 묶음이 있는 표는 묶음의 `ChoiceGroup.scaleSlider` 만 보고 이 값을 읽지 않는다.
+   * 값·저장 모양·검증·내보내기는 바꾸지 않는다(모양만). null 은 「끄기」다 — 문항 부분 수정에서 싣지 않은 것
+   * (그대로 두기)과 구별하려고 받는다. 로드한 문항에는 null 이 실리지 않는다(꺼진 문항은 키가 없다).
+   */
+  scaleSlider?: ScaleSliderDirection | null;
   // 단답형·장문형 입력칸 줄 수 (0124). 미지정 = 유형 기본(단답형 한 줄, 장문형 4줄).
   // 단답형에서 2 이상이면 여러 줄 칸. 숫자 모드·입력 형식은 한 줄 고정(표 input 셀 inputRows 와 같은 규칙).
   inputRows?: number | null;

@@ -117,6 +117,7 @@ interface SnapshotQuestion {
   collapseButtonLabel?: Question['collapseButtonLabel'] | undefined;
   collapseAttachToPrevious?: boolean | undefined;
   distinctGroup?: Question['distinctGroup'] | undefined;
+  scaleSlider?: NonNullable<Question['scaleSlider']> | undefined;
   sumConstraints?: Question['sumConstraints'] | undefined;
   answerQuoteEnabled?: boolean | undefined;
   answerQuoteName?: string | undefined;
@@ -218,6 +219,8 @@ export function buildSurveySnapshot(
       collapseButtonLabel: q.collapseButtonLabel,
       collapseAttachToPrevious: q.collapseAttachToPrevious,
       distinctGroup: q.distinctGroup,
+      // 꺼진 값은 싣지 않는다 — null 이 실려 와도 키를 남기지 않아 꺼진 문항의 스냅샷이 그대로다
+      scaleSlider: q.scaleSlider ?? undefined,
       sumConstraints: q.sumConstraints,
       answerQuoteEnabled: q.answerQuoteEnabled,
       answerQuoteName: q.answerQuoteName,

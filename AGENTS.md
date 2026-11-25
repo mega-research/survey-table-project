@@ -12,25 +12,25 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 (각 폴더의 `CLAUDE.md` 는 그 파일의 심볼릭 링크). Claude Code 는 그 폴더의 파일을 읽을 때 자동으로
 싣지만, 다른 도구는 아니므로 **해당 영역을 만지기 전에 직접 읽을 것.**
 
-| 작업 영역                                                                                   | 읽을 문서                                        |
-| ------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| 운영 콘솔 라우트 트리 · 응답 진입 경로(초대 링크·짧은 링크) · API 엔드포인트                | `src/app/AGENTS.md`                              |
-| 운영 집계·파티션 · 진척 보고 분류 키                                                        | `src/server/operations/AGENTS.md`                |
-| 메일 발송 주소·대체 발송 · 회신 전달(받은 메일 넘기기)                                      | `src/server/mail/AGENTS.md`                      |
-| procedure 베이스·인증과 권한(게스트·보기 전용 게스트) · 테스트 모드·테스트 버전             | `src/server/AGENTS.md`                           |
-| 쿼터                                                                                        | `src/server/quota/AGENTS.md`                     |
-| 문항 수요조사 (조사표·영역 앵커·분할 레이아웃)                                              | `src/server/survey-document/AGENTS.md`           |
-| R2 파일 수명주기                                                                            | `src/server/storage-lifecycle/AGENTS.md`         |
-| 조사 대상 — 이월 응답 임포트 · 컨택원 배정 · 필터 해석 · ID 목록 검색 · 대상 정보 수정 현황 | `src/server/contacts/AGENTS.md`                  |
-| 운영 콘솔 필터 바 구조                                                                      | `src/features/operations/AGENTS.md`              |
-| DB 스키마 (테이블·컬럼·관계)                                                                | `src/db/schema/AGENTS.md`                        |
-| 마이그레이션 번호 고르기·배열 순서·배포 전후 · DB 드리프트 점검                             | `supabase/AGENTS.md`                             |
-| 질문 유형·셀 타입·테이블 검증 규칙 · 행 반복·차례로 열기 · 다국어 설문                      | `src/features/AGENTS.md`                         |
-| 숨은 답 지우기 — 저장 경계 순서·조건 평가 컨텍스트·경로 밖 문항·표의 숨은 칸                | `src/lib/survey/AGENTS.md`                       |
-| 레이트리밋 · 로깅 · Sentry                                                                  | `src/lib/AGENTS.md`                              |
-| 기능 개발 체크리스트 (스펙·리뷰·완료 보고)                                                  | `.agents/skills/write-change-checklist/SKILL.md` |
-| 도메인 용어                                                                                 | `CONTEXT.md`                                     |
-| 결정 배경                                                                                   | `docs/adr/`                                      |
+| 작업 영역                                                                                        | 읽을 문서                                        |
+| ------------------------------------------------------------------------------------------------ | ------------------------------------------------ |
+| 운영 콘솔 라우트 트리 · 응답 진입 경로(초대 링크·짧은 링크) · API 엔드포인트                     | `src/app/AGENTS.md`                              |
+| 운영 집계·파티션 · 진척 보고 분류 키                                                             | `src/server/operations/AGENTS.md`                |
+| 메일 발송 주소·대체 발송 · 회신 전달(받은 메일 넘기기)                                           | `src/server/mail/AGENTS.md`                      |
+| procedure 베이스·인증과 권한(게스트·보기 전용 게스트) · 테스트 모드·테스트 버전                  | `src/server/AGENTS.md`                           |
+| 쿼터                                                                                             | `src/server/quota/AGENTS.md`                     |
+| 문항 수요조사 (조사표·영역 앵커·분할 레이아웃)                                                   | `src/server/survey-document/AGENTS.md`           |
+| R2 파일 수명주기                                                                                 | `src/server/storage-lifecycle/AGENTS.md`         |
+| 조사 대상 — 이월 응답 임포트 · 컨택원 배정 · 필터 해석 · ID 목록 검색 · 대상 정보 수정 현황      | `src/server/contacts/AGENTS.md`                  |
+| 운영 콘솔 필터 바 구조                                                                           | `src/features/operations/AGENTS.md`              |
+| DB 스키마 (테이블·컬럼·관계)                                                                     | `src/db/schema/AGENTS.md`                        |
+| 마이그레이션 번호 고르기·배열 순서·배포 전후 · DB 드리프트 점검                                  | `supabase/AGENTS.md`                             |
+| 질문 유형·셀 타입·테이블 검증 규칙 · 행 반복·차례로 열기 · 보기 모양·척도 슬라이더 · 다국어 설문 | `src/features/AGENTS.md`                         |
+| 숨은 답 지우기 — 저장 경계 순서·조건 평가 컨텍스트·경로 밖 문항·표의 숨은 칸                     | `src/lib/survey/AGENTS.md`                       |
+| 레이트리밋 · 로깅 · Sentry                                                                       | `src/lib/AGENTS.md`                              |
+| 기능 개발 체크리스트 (스펙·리뷰·완료 보고)                                                       | `.agents/skills/write-change-checklist/SKILL.md` |
+| 도메인 용어                                                                                      | `CONTEXT.md`                                     |
+| 결정 배경                                                                                        | `docs/adr/`                                      |
 
 **변경 이력은 어느 문서에도 쌓지 않는다** — git log 와 ADR 이 그 자리다. 크기 상한(루트 4.5만·영역 3만 자)과 이 표의 등재는 `tests/repo/agent-docs-size.test.ts` 가 강제한다. 새 상세 절은 루트가 아니라
 해당 영역 문서에 쓴다.

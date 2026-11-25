@@ -59,6 +59,7 @@ const SENTINEL_ROW: Record<string, unknown> = {
   collapseButtonLabel: '코드표 보기',
   collapseAttachToPrevious: true,
   distinctGroup: 'leave',
+  scaleSlider: 'positive-left',
   piiEncrypted: true,
   tableValidationRules: [],
   sumConstraints: [],
@@ -105,6 +106,23 @@ describe('mapQuestionRow — 영속 필드 전수 매핑', () => {
       (field) => SENTINEL_ROW[field] === undefined || SENTINEL_ROW[field] === null,
     );
     expect(uncovered).toEqual([]);
+  });
+});
+
+describe('mapQuestionRow — 문항의 슬라이더 방향', () => {
+  it.each(['positive-right', 'positive-left'] as const)('%s 를 그대로 싣는다', (direction) => {
+    const mapped = mapQuestionRow({ ...SENTINEL_ROW, scaleSlider: direction } as never);
+    expect(mapped.scaleSlider).toBe(direction);
+  });
+
+  it('꺼진 값(NULL)은 키째 싣지 않는다 — 값이 없는 기존 문항의 로드 결과가 그대로다', () => {
+    const withoutColumn = { ...SENTINEL_ROW };
+    delete withoutColumn['scaleSlider'];
+    const before = mapQuestionRow(withoutColumn as never);
+    const after = mapQuestionRow({ ...SENTINEL_ROW, scaleSlider: null } as never);
+
+    expect('scaleSlider' in after).toBe(false);
+    expect(after).toEqual(before);
   });
 });
 
