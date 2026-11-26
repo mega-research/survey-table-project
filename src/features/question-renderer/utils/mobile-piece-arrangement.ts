@@ -165,17 +165,24 @@ function mirrorHeaderGrid(headerGrid: HeaderCell[][], a: number, b: number): Hea
   return rows.map((row) => row.sort((left, right) => left.start - right.start).map((it) => it.cell));
 }
 
-/** 응답 행의 양끝에 이어 붙은 「평균에서 제외」 칸을 뺀, 뒤집을 구간 [a, b) */
+/**
+ * 응답 행의 양끝에 이어 붙은 「평균에서 제외」 칸을 뺀, 뒤집을 구간 [a, b).
+ * 칸이 아니라 덩어리(가로로 합친 칸 + 덮은 자리)로 센다 — 합친 제외 칸의 덮은 자리는 숨은 칸이라 그 칸만 보면
+ * 고정 구간이 거기서 끊기고, 합친 칸이 통째로 반대편 끝으로 옮겨진다.
+ */
 function resolveReverseRange(interactiveRow: TableRow, columnCount: number): Span {
-  const isPinned = (index: number) => {
-    const cell = interactiveRow.cells[index];
-    return cell !== undefined && !cell.isHidden && !cell._isContinuation && cell.excludeFromMean === true;
+  const cells = interactiveRow.cells.slice(0, columnCount);
+  const units = unitSpans(cells, cellUnitLength);
+  const isPinned = (unit: Span) => {
+    const cell = cells[unit.start]!;
+    return !cell.isHidden && !cell._isContinuation && cell.excludeFromMean === true;
   };
-  let start = 0;
-  while (start < columnCount && isPinned(start)) start += 1;
-  let end = columnCount;
-  while (end > start && isPinned(end - 1)) end -= 1;
-  return { start, end };
+  let first = 0;
+  while (first < units.length && isPinned(units[first]!)) first += 1;
+  let last = units.length;
+  while (last > first && isPinned(units[last - 1]!)) last -= 1;
+  if (first >= last) return { start: 0, end: 0 };
+  return { start: units[first]!.start, end: units[last - 1]!.end };
 }
 
 function hasMergedAcrossPinned(piece: MobilePiece, a: number, b: number): boolean {

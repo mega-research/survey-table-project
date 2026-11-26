@@ -24,6 +24,7 @@ import {
   getGridCellAria,
   getHeaderCellStickyStyle,
   fitTableMarker,
+  narrowCellsMarker,
   resolveTableGridSizing,
 } from '@/features/question-renderer/utils/table-grid-utils';
 import { cn } from '@/lib/utils';
@@ -442,6 +443,7 @@ export const TablePreview = React.memo(function TablePreview({
                 <div
                   key="table-body"
                   {...fitTableMarker(fitToWidth)}
+                  {...narrowCellsMarker(narrowCells)}
                   role="rowgroup"
                   className={cn(
                     alignClass,

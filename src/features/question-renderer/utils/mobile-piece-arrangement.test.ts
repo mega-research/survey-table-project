@@ -189,6 +189,43 @@ describe('arrangeMobilePiece — 좌우 반전', () => {
     ]);
   });
 
+  it('가로로 합친 「평균에서 제외」 칸이 오른쪽 끝에 있어도 제자리다 — 덮은 자리까지 고정 구간이다', () => {
+    const piece: MobilePiece = {
+      columns: ['c1', 'c2', 'c3', 'c4'].map((id) => col(id)),
+      rows: [
+        row('r1', [
+          choice('a'),
+          choice('b'),
+          choice('na', { excludeFromMean: true, colspan: 2 }),
+          choice('가림', { isHidden: true }),
+        ]),
+      ],
+      interactiveRowId: 'r1',
+    };
+    const result = arrangeMobilePiece(piece, { reverseColumns: true });
+    expect(cellIds(result.piece)).toEqual(['b', 'a', 'na', '가림']);
+    expect(result.reversed).toBe(true);
+    expect(result.reverseFallback).toBeNull();
+  });
+
+  it('가로로 합친 「평균에서 제외」 칸이 왼쪽 끝에 있어도 통째로 제자리다', () => {
+    const piece: MobilePiece = {
+      columns: ['c1', 'c2', 'c3', 'c4'].map((id) => col(id)),
+      rows: [
+        row('r1', [
+          choice('na', { excludeFromMean: true, colspan: 2 }),
+          choice('가림', { isHidden: true }),
+          choice('a'),
+          choice('b'),
+        ]),
+      ],
+      interactiveRowId: 'r1',
+    };
+    const result = arrangeMobilePiece(piece, { reverseColumns: true });
+    expect(cellIds(result.piece)).toEqual(['na', '가림', 'b', 'a']);
+    expect(result.reverseFallback).toBeNull();
+  });
+
   it('반복 헤더 행도 응답 행과 같은 순서로 뒤집힌다', () => {
     const piece: MobilePiece = {
       columns: ['c1', 'c2', 'c3'].map((id) => col(id)),
