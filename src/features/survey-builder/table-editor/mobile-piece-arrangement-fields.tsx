@@ -99,7 +99,8 @@ export function MobilePieceArrangementFields({
           </Select>
           <p id={`${id}-per-view-help`} className="text-xs text-gray-500">
             화면 폭을 이 수로 나눠 칸 폭을 정합니다. 11점 척도에 6칸이면 처음 화면에 가운데 점수까지
-            보입니다. 보기 칸만 있는 행에 적용됩니다.
+            보입니다. 칸이 누르기 어렵게 좁아지는 작은 폰(폭 320px 급)에서는 칸 수를 줄여 보입니다.
+            보기 칸만 있는 행에 적용됩니다.
           </p>
         </div>
       </div>

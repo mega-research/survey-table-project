@@ -5,6 +5,7 @@ import type { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/surve
 import { expandHeaderGrid } from './expand-header-grid';
 import {
   type MobilePiece,
+  MOBILE_PIECE_MIN_CELL_PX,
   arrangeMobilePiece,
   resolveHeaderOverflowDirections,
   resolvePieceFitColumnWidth,
@@ -540,5 +541,32 @@ describe('resolvePieceFitColumnWidth — 자리 폭을 나눈 칸 폭', () => {
 
   it.each([0, 1, -5, Number.NaN])('자리 폭을 못 쟀으면(%s) null 이다', (slot) => {
     expect(resolvePieceFitColumnWidth(slot, { columnsPerView: 6, divisor: 6 })).toBeNull();
+  });
+
+  it('좁은 폰(자리 폭 238 — 320px 폰)에서 6칸은 칸이 누름 최소 폭보다 좁아져 다섯 칸으로 줄인다', () => {
+    const width = resolvePieceFitColumnWidth(238, { columnsPerView: 6, divisor: 6 })!;
+    expect(width).toBeGreaterThanOrEqual(MOBILE_PIECE_MIN_CELL_PX);
+    expect(width * 5 + 1).toBeCloseTo(238, 6);
+  });
+
+  it.each([
+    [278, 6], // 360px 폰 — 46px 남짓이라 여섯 칸 그대로
+    [267, 6], // 349px — 44.3px, 아슬하게 여섯 칸
+    [264, 5], // 43.8px 이 되므로 다섯 칸
+    [238, 5], // 320px 폰
+    [190, 4],
+  ])('자리 폭 %i · 6칸 → 한 화면에 %i칸', (slot, visible) => {
+    const width = resolvePieceFitColumnWidth(slot, { columnsPerView: 6, divisor: 6 })!;
+    expect(Math.round((slot - 1) / width)).toBe(visible);
+    expect(width).toBeGreaterThanOrEqual(MOBILE_PIECE_MIN_CELL_PX);
+  });
+
+  it('고른 칸 수로도 칸이 넉넉하면 줄이지 않는다', () => {
+    const width = resolvePieceFitColumnWidth(238, { columnsPerView: 4, divisor: 4 })!;
+    expect(width * 4 + 1).toBeCloseTo(238, 6);
+  });
+
+  it('한 칸도 최소 폭이 안 되는 자리에서는 한 칸으로 그린다', () => {
+    expect(resolvePieceFitColumnWidth(40, { columnsPerView: 6, divisor: 6 })).toBeCloseTo(39, 6);
   });
 });

@@ -24,6 +24,8 @@
  *   라디오·체크박스 칸(행렬 척도). 입력 칸·드롭다운·순위·보기가 여럿 든 칸이 섞이면 균등 폭이 맞지 않아
  *   원본 폭 그대로다(폴백 `non-choice-answer-cell`).
  * - 나누는 수는 `min(칸 수, 조각 열 수)` — 열이 적으면 자리를 꽉 채운다. 실제 px 는 그리는 쪽이 자리 폭으로 낸다.
+ * - 좁은 폰에서 칸이 누름 최소 폭(44px)보다 좁아지면 칸 수를 줄여 그린다(`resolvePieceFitColumnWidth`) — 320px 폰은
+ *   6칸을 골라도 다섯 칸이다.
  *
  * 머리 글자 넘김 방향(`resolveHeaderOverflowDirections`)
  * - 한 화면 칸 수가 적용된 조각에서 머리 글자가 칸에 안 들어갈 때 넘길 쪽 = 이웃과의 세로선이 숨겨진 쪽.
@@ -330,11 +332,22 @@ export function resolveHeaderOverflowDirections(
 const PIECE_LEFT_BORDER_PX = 1;
 
 /**
+ * 칸의 최소 폭(px) — 손가락으로 누르는 컨트롤의 최소 크기(44px)다. 보기 라벨의 누름 영역이 이 폭이라, 칸이
+ * 이보다 좁으면 이웃 칸의 누름 영역과 겹친다.
+ */
+export const MOBILE_PIECE_MIN_CELL_PX = 44;
+
+/**
  * 한 화면 칸 수가 적용된 조각의 칸 폭(px) — 자리 폭에서 왼쪽 테두리를 빼고 나눈다. 그래야 N번째 칸의 오른쪽
  * 선이 자리 끝에 정확히 온다(테두리를 빼지 않으면 N번째 칸이 1px 잘려 흐림 띠 아래로 들어간다).
- * 자리 폭을 아직 못 쟀으면(0) null — 그리는 쪽은 원본 폭으로 둔다.
+ *
+ * **고른 칸 수로 나눈 칸이 최소 폭보다 좁아지는 자리에서는 칸 수를 줄인다** — 320px 폰(자리 약 238px)에서
+ * 6칸은 39.5px 이라 다섯 칸(47.4px)으로 그린다. 360px 폰(자리 약 278px)부터는 6칸 그대로다. 한 칸도 최소 폭이
+ * 안 되는 자리는 한 칸이다. 자리 폭을 아직 못 쟀으면(0) null — 그리는 쪽은 원본 폭으로 둔다.
  */
 export function resolvePieceFitColumnWidth(slotWidth: number, fit: MobilePieceFit): number | null {
   if (!Number.isFinite(slotWidth) || slotWidth <= PIECE_LEFT_BORDER_PX) return null;
-  return (slotWidth - PIECE_LEFT_BORDER_PX) / fit.divisor;
+  const usable = slotWidth - PIECE_LEFT_BORDER_PX;
+  const roomyColumns = Math.max(1, Math.floor(usable / MOBILE_PIECE_MIN_CELL_PX));
+  return usable / Math.min(fit.divisor, roomyColumns);
 }

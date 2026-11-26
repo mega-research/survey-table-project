@@ -133,6 +133,14 @@ describe('원본 표 조각 — 조각 한 화면 칸 수', () => {
     for (const width of bodyTrackWidths()) expect(width).toBeCloseTo(307 / 6, 3);
   });
 
+  it('좁은 폰(자리 폭 238)에서는 6칸을 골라도 다섯 칸이 자리를 채운다 — 칸이 누름 최소 폭보다 좁아지지 않는다', () => {
+    slot.width = 238;
+    renderPiece({ columnsPerView: 6 });
+    const widths = bodyTrackWidths();
+    for (const width of widths) expect(width).toBeCloseTo(237 / 5, 3);
+    expect(widths.slice(0, 5).reduce((sum, w) => sum + w, 0) + 1).toBeCloseTo(238, 3);
+  });
+
   it('머리 격자도 본문과 같은 열 폭을 쓴다', () => {
     renderPiece({ columnsPerView: 6 });
     const header = screen.getAllByRole('columnheader')[0]!.parentElement!;
