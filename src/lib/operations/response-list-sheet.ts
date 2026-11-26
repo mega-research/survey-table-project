@@ -1,6 +1,13 @@
 import { formatExcelDateTime } from '@/lib/analytics/raw-export-helpers';
 import { formatPlatformKo } from '@/lib/operations/parse-ua';
-import { answerKeyOf, entryKeyOf, formatIpHash } from '@/lib/operations/profile-columns-format';
+import {
+  answerKeyOf,
+  entryKeyOf,
+  formatIpHash,
+  RESPONSE_LINK_TYPE_LABELS,
+  profileGroupText,
+  responseLinkTypeOf,
+} from '@/lib/operations/profile-columns-format';
 import {
   type StepLocation,
   formatTotalTime,
@@ -78,7 +85,12 @@ function columnsOf(input: ResponseListSheetInput): SheetColumn[] {
       case 'sys.resid':
         return hasContacts ? [{ header: c.label, value: (r) => r.resid ?? '' }] : [];
       case 'sys.group':
-        return [{ header: c.label, value: (r) => r.groupValue ?? '공개링크' }];
+        return [{ header: c.label, value: (r) => profileGroupText(r) ?? '' }];
+      case 'sys.linkType':
+        // 조사 대상이 없는 설문은 전부 공개 링크라 열을 내지 않는다 — 시스템ID 열과 같은 규칙
+        return hasContacts
+          ? [{ header: c.label, value: (r) => RESPONSE_LINK_TYPE_LABELS[responseLinkTypeOf(r)] }]
+          : [];
       case 'sys.platform':
         return [{ header: c.label, value: (r) => formatPlatformKo(r.platform) }];
       case 'sys.browser':

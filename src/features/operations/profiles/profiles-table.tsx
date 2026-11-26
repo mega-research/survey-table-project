@@ -11,9 +11,14 @@ import { useSearchParamsMutator } from '@/features/operations/hooks/use-search-p
 import { formatPlatformKo } from '@/lib/operations/parse-ua';
 import {
   ENTRY_PARAM_DISPLAY_LEN,
+  LINK_TYPE_FILTER_SOURCE,
+  RESPONSE_LINK_TYPES,
+  RESPONSE_LINK_TYPE_LABELS,
   answerKeyOf,
   entryKeyOf,
   formatIpHash,
+  profileGroupText,
+  responseLinkTypeOf,
 } from '@/lib/operations/profile-columns-format';
 import {
   type ProfilesView,
@@ -55,6 +60,11 @@ const STATUS_FUNNEL_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'quotaful_out', label: '쿼터마감' },
   { value: 'bad', label: '불량' },
 ];
+
+/** 응답 경로 헤더 깔때기 고정 옵션 — 칸에 적히는 글자와 같은 사전. */
+const LINK_TYPE_FUNNEL_OPTIONS: Array<{ value: string; label: string }> = RESPONSE_LINK_TYPES.map(
+  (value) => ({ value, label: RESPONSE_LINK_TYPE_LABELS[value] }),
+);
 
 interface Props {
   rows: ProfilesRow[];
@@ -275,9 +285,19 @@ export function ProfilesTable({
         case 'sys.group':
           return {
             id: 'group',
-            accessorFn: (r: DisplayRow) => r.groupValue ?? '공개링크',
+            // 그룹 값이 없어도 조사 대상과 이어진 응답은 「공개링크」로 적지 않는다(profileGroupText)
+            accessorFn: (r: DisplayRow) => profileGroupText(r) ?? '—',
             header: c.label,
             meta: meta('left', true),
+          };
+        case 'sys.linkType':
+          // 조사 대상이 없는 설문은 전부 공개 링크라 열을 그리지 않는다 — 시스템ID 열·엑셀과 같은 규칙
+          if (!hasContacts) return null;
+          return {
+            id: 'linkType',
+            accessorFn: (r: DisplayRow) => RESPONSE_LINK_TYPE_LABELS[responseLinkTypeOf(r)],
+            header: c.label,
+            meta: { ...meta('center', false), filterSource: LINK_TYPE_FILTER_SOURCE },
           };
         case 'sys.platform':
           return {
@@ -495,7 +515,9 @@ export function ProfilesTable({
                                     if (p.get('status') !== 'deleted') p.delete('status');
                                   },
                                 }
-                              : {})}
+                              : m.filterSource === LINK_TYPE_FILTER_SOURCE
+                                ? { fixedOptions: LINK_TYPE_FUNNEL_OPTIONS }
+                                : {})}
                           />
                         )}
                       </span>
