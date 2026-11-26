@@ -325,3 +325,16 @@ export function resolveHeaderOverflowDirections(
   });
   return result;
 }
+
+/** 조각 격자의 왼쪽 테두리(px) — 첫 칸이 이만큼 밀려 시작한다 */
+const PIECE_LEFT_BORDER_PX = 1;
+
+/**
+ * 한 화면 칸 수가 적용된 조각의 칸 폭(px) — 자리 폭에서 왼쪽 테두리를 빼고 나눈다. 그래야 N번째 칸의 오른쪽
+ * 선이 자리 끝에 정확히 온다(테두리를 빼지 않으면 N번째 칸이 1px 잘려 흐림 띠 아래로 들어간다).
+ * 자리 폭을 아직 못 쟀으면(0) null — 그리는 쪽은 원본 폭으로 둔다.
+ */
+export function resolvePieceFitColumnWidth(slotWidth: number, fit: MobilePieceFit): number | null {
+  if (!Number.isFinite(slotWidth) || slotWidth <= PIECE_LEFT_BORDER_PX) return null;
+  return (slotWidth - PIECE_LEFT_BORDER_PX) / fit.divisor;
+}
