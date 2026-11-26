@@ -178,6 +178,15 @@ describe('원본 표 조각 — 조각 한 화면 칸 수', () => {
     expect(firstBodyCell().className).not.toMatch(/(^|\s)p-3(\s|$)/);
   });
 
+  it('좁은 칸 모드의 본문에만 표식이 붙는다 — 글자 없는 보기 칸의 높이 보정이 여기에만 걸린다', () => {
+    const { unmount } = renderPiece({ columnsPerView: 6 });
+    expect(firstBodyCell().parentElement).toHaveAttribute('data-narrow-cells');
+    unmount();
+
+    renderPiece({ reverseColumns: true });
+    expect(firstBodyCell().parentElement).not.toHaveAttribute('data-narrow-cells');
+  });
+
   it('반전과 함께 켜면 처음 여섯 칸이 ⑩ ~ ⑤ 다', () => {
     renderPiece({ columnsPerView: 6, reverseColumns: true });
     const ids = [...document.querySelectorAll<HTMLElement>('[data-cell-id]')].map(
