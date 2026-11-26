@@ -31,7 +31,11 @@ import type {
   ResponseEditChange,
   ResponseStatus,
 } from '@/shared/contracts/survey-response';
-import { MOBILE_TABLE_DISPLAY_MODES } from '@/types/mobile-table-display';
+import {
+  MOBILE_PIECE_COLUMNS_PER_VIEW_MAX,
+  MOBILE_PIECE_COLUMNS_PER_VIEW_MIN,
+  MOBILE_TABLE_DISPLAY_MODES,
+} from '@/types/mobile-table-display';
 import { SCALE_SLIDER_DIRECTIONS } from '@/types/scale-slider';
 import type {
   ChoiceGroup,
@@ -317,6 +321,12 @@ export const questions = pgTable(
       'mobile_drilldown_repeat_header_start_row',
     ).default(0),
     mobileDrilldownRepeatHeaderEndRow: integer('mobile_drilldown_repeat_header_end_row').default(0),
+    // 조각 좌우 반전 · 조각 한 화면 칸 수 (0174) — 좁은 화면의 원본 표 조각에만 적용하는 표현 설정.
+    // 반전 false·칸 수 NULL = 꺼짐(기존 문항 전부). 칸 수 범위는 @/types/mobile-table-display 가 SSOT.
+    mobileDrilldownReverseColumns: boolean('mobile_drilldown_reverse_columns')
+      .notNull()
+      .default(false),
+    mobileDrilldownColumnsPerView: integer('mobile_drilldown_columns_per_view'),
     // 「항목 단위 카드」 블록 시작 열 (1부터). NULL = 블록 없음 (0131)
     mobileItemCardBlockColumns: jsonb('mobile_item_card_block_columns').$type<number[]>(),
 
@@ -351,6 +361,10 @@ export const questions = pgTable(
     check(
       'questions_scale_slider_check',
       sql`${table.scaleSlider} is null or ${table.scaleSlider} in ('positive-right', 'positive-left')`,
+    ),
+    check(
+      'questions_mobile_drilldown_columns_per_view_check',
+      sql`${table.mobileDrilldownColumnsPerView} is null or (${table.mobileDrilldownColumnsPerView} >= ${sql.raw(String(MOBILE_PIECE_COLUMNS_PER_VIEW_MIN))} and ${table.mobileDrilldownColumnsPerView} <= ${sql.raw(String(MOBILE_PIECE_COLUMNS_PER_VIEW_MAX))})`,
     ),
     check(
       'questions_input_rows_range',

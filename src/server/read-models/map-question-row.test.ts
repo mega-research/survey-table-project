@@ -75,6 +75,8 @@ const SENTINEL_ROW: Record<string, unknown> = {
   mobileDrilldownOmitLeadingColumns: 1,
   mobileDrilldownRepeatHeaderStartRow: 0,
   mobileDrilldownRepeatHeaderEndRow: 0,
+  mobileDrilldownReverseColumns: true,
+  mobileDrilldownColumnsPerView: 6,
   mobileItemCardBlockColumns: [1, 5],
   hideTitle: true,
   pageBreakBefore: true,
@@ -137,5 +139,33 @@ describe('mapQuestionRow — 보기 필드 보존', () => {
       ],
     } as never);
     expect(mapped.options?.map((o) => o.locale)).toEqual(['ko', 'zh']);
+  });
+});
+
+describe('mapQuestionRow — 조각 좌우 반전 · 조각 한 화면 칸 수', () => {
+  it('켠 값을 그대로 싣는다', () => {
+    const mapped = mapQuestionRow({
+      ...SENTINEL_ROW,
+      mobileDrilldownReverseColumns: true,
+      mobileDrilldownColumnsPerView: 5,
+    } as never);
+    expect(mapped.mobileDrilldownReverseColumns).toBe(true);
+    expect(mapped.mobileDrilldownColumnsPerView).toBe(5);
+  });
+
+  it('꺼진 값(false · NULL)은 키째 싣지 않는다 — 기존 문항의 로드 결과가 그대로다', () => {
+    const withoutColumns = { ...SENTINEL_ROW };
+    delete withoutColumns['mobileDrilldownReverseColumns'];
+    delete withoutColumns['mobileDrilldownColumnsPerView'];
+    const before = mapQuestionRow(withoutColumns as never);
+    const after = mapQuestionRow({
+      ...SENTINEL_ROW,
+      mobileDrilldownReverseColumns: false,
+      mobileDrilldownColumnsPerView: null,
+    } as never);
+
+    expect('mobileDrilldownReverseColumns' in after).toBe(false);
+    expect('mobileDrilldownColumnsPerView' in after).toBe(false);
+    expect(after).toEqual(before);
   });
 });

@@ -69,3 +69,25 @@ export function isMobileTableDisplayMode(value: unknown): value is MobileTableDi
   return typeof value === 'string'
     && (MOBILE_TABLE_DISPLAY_MODES as readonly string[]).includes(value);
 }
+
+/**
+ * 조각 한 화면 칸 수(`Question.mobileDrilldownColumnsPerView`)의 범위 — 값 범위의 SSOT.
+ *
+ * 좁은 화면의 원본 표 조각에서 자리 폭을 이 수로 나눠 칸 폭을 정한다(끔 = null, 원본 열 폭 그대로).
+ * 상한이 6 인 이유: 360px 폰에서 조각이 쓰는 폭이 약 278px 이라 6칸이면 칸이 46px 남짓이고, 보기 라벨의
+ * 최소 누름 폭이 44px 이다. 범위를 바꾸면 이 상수와 함께 문항 컬럼의 스키마 check() · 마이그레이션 CHECK 를
+ * 고친다(루트 AGENTS.md 주의사항 1) — 셋의 대조는 tests/repo/mobile-piece-columns-per-view-column.test.ts.
+ * 이미 적용된 마이그레이션은 고치지 말고 새 마이그레이션에서 제약을 갈아끼운다.
+ */
+export const MOBILE_PIECE_COLUMNS_PER_VIEW_MIN = 3;
+export const MOBILE_PIECE_COLUMNS_PER_VIEW_MAX = 6;
+
+/** 범위 안의 정수만 켜진 값이다 — 그 밖(없음·null·범위 밖·소수)은 꺼진 것으로 읽는다 */
+export function resolveMobilePieceColumnsPerView(value: unknown): number | null {
+  return typeof value === 'number'
+    && Number.isInteger(value)
+    && value >= MOBILE_PIECE_COLUMNS_PER_VIEW_MIN
+    && value <= MOBILE_PIECE_COLUMNS_PER_VIEW_MAX
+    ? value
+    : null;
+}

@@ -139,6 +139,8 @@ function toQuestionRow(question: SurveyType['questions'][number], surveyId: stri
     mobileDrilldownOmitLeadingColumns: question.mobileDrilldownOmitLeadingColumns,
     mobileDrilldownRepeatHeaderStartRow: question.mobileDrilldownRepeatHeaderStartRow,
     mobileDrilldownRepeatHeaderEndRow: question.mobileDrilldownRepeatHeaderEndRow,
+    mobileDrilldownReverseColumns: question.mobileDrilldownReverseColumns ?? false,
+    mobileDrilldownColumnsPerView: question.mobileDrilldownColumnsPerView ?? null,
     mobileItemCardBlockColumns: question.mobileItemCardBlockColumns ?? null,
     hideTitle: question.hideTitle,
     displayCondition: question.displayCondition as NewQuestion['displayCondition'],
@@ -219,6 +221,8 @@ const QUESTION_UPSERT_SET = {
     sql`excluded.mobile_drilldown_repeat_header_start_row`,
   mobileDrilldownRepeatHeaderEndRow:
     sql`excluded.mobile_drilldown_repeat_header_end_row`,
+  mobileDrilldownReverseColumns: sql`excluded.mobile_drilldown_reverse_columns`,
+  mobileDrilldownColumnsPerView: sql`excluded.mobile_drilldown_columns_per_view`,
   mobileItemCardBlockColumns: sql`excluded.mobile_item_card_block_columns`,
   hideTitle: sql`excluded.hide_title`,
   displayCondition: sql`excluded.display_condition`,

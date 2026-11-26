@@ -446,6 +446,8 @@ export async function duplicateSurvey(
         mobileDrilldownOmitLeadingColumns: question.mobileDrilldownOmitLeadingColumns,
         mobileDrilldownRepeatHeaderStartRow: question.mobileDrilldownRepeatHeaderStartRow,
         mobileDrilldownRepeatHeaderEndRow: question.mobileDrilldownRepeatHeaderEndRow,
+        mobileDrilldownReverseColumns: question.mobileDrilldownReverseColumns ?? false,
+        mobileDrilldownColumnsPerView: question.mobileDrilldownColumnsPerView ?? null,
         mobileItemCardBlockColumns: question.mobileItemCardBlockColumns ?? null,
         hideTitle: question.hideTitle,
         pageBreakBefore: question.pageBreakBefore,
