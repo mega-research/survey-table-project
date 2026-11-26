@@ -66,6 +66,7 @@ import {
 } from '@/lib/question/row-repeat';
 import { collectTableCells } from '@/lib/survey/cell-gating';
 import { cn } from '@/lib/utils';
+import { resolveMobilePieceColumnsPerView } from '@/types/mobile-table-display';
 import {
   ChoiceGroup,
   DynamicRowGroupConfig,
@@ -1695,6 +1696,14 @@ function InteractiveTableResponseBody({
     </div>
   ) : null;
 
+  // 한 화면 칸 수를 켠 문항은 좁은 화면에서 표 카드의 좌우 여백을 걷는다 — 보기 소스 표(이 여백이 없다)와
+  // 조각의 자리 폭이 같아져, 같은 폰에서 같은 칸까지 보인다(360px 폰: 254px → 278px, 5칸 → 6칸).
+  // 켜지 않은 문항과 넓은 화면은 그대로다.
+  const widensPieceSlot =
+    isMobileView &&
+    (usesRowWiseSheet || useOriginalRowDetail) &&
+    resolveMobilePieceColumnsPerView(mobileDrilldownColumnsPerView) !== null;
+
   return (
     <ChoiceGroupsProvider value={choiceGroups ?? null}>
       <GatingTableCellsProvider value={gatingTableCells} visibleCellIds={visibleCellIds}>
@@ -1714,6 +1723,7 @@ function InteractiveTableResponseBody({
                   ? 'p-3 sm:p-4'
                   : 'p-3 pt-0 sm:p-4 sm:pt-1'
                 : 'p-0 sm:px-6',
+              widensPieceSlot && 'px-0 sm:px-0',
             )}
           >
             {/* 열 차례로 열기 — 열은 머리 쪽에서 오른쪽으로 늘어나므로 버튼을 표 위 오른쪽에 둔다.

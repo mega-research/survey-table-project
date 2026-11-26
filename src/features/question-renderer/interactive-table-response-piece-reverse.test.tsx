@@ -231,3 +231,46 @@ describe('표 문항 — 조각 좌우 반전이 적용되지 않는 곳', () =>
     expect(barLabels()).toEqual(off);
   });
 });
+
+describe('표 문항 — 한 화면 칸 수를 켜면 표 카드의 좌우 여백을 걷는다', () => {
+  /** 표 카드의 안쪽 상자 — 표를 감싼 조상 가운데 카드 여백 클래스를 가진 것 */
+  const cardContent = (marker: RegExp) => {
+    let el: HTMLElement | null =
+      document.querySelector<HTMLElement>('[data-cell-id]')?.parentElement ?? null;
+    while (el && !marker.test(el.className)) el = el.parentElement;
+    if (!el) throw new Error('표 카드의 안쪽 상자가 없다');
+    return el;
+  };
+  const MOBILE_CARD = /(^|\s)p-3(\s|$)/;
+  const DESKTOP_CARD = /sm:px-6/;
+  const PerViewHarness = ({ perView }: { perView?: number | null | undefined }) => (
+    <InteractiveTableResponse
+      questionId="q1"
+      columns={columns}
+      rows={rows}
+      tableHeaderGrid={headerGrid}
+      choiceGroups={groups()}
+      mobileTableDisplayMode="row-wise-original"
+      mobileDrilldownOmitLeadingColumns={1}
+      mobileDrilldownColumnsPerView={perView}
+      value={{}}
+      onChange={() => {}}
+    />
+  );
+
+  it('켠 문항은 좁은 화면에서 좌우 여백이 없다 — 보기 소스 표와 조각의 자리 폭이 같아진다', () => {
+    render(<PerViewHarness perView={6} />);
+    expect(cardContent(MOBILE_CARD).className).toMatch(/(^|\s)px-0(\s|$)/);
+  });
+
+  it.each([undefined, null, 9])('꺼진 문항(%s)은 여백이 지금 그대로다', (perView) => {
+    render(<PerViewHarness perView={perView} />);
+    expect(cardContent(MOBILE_CARD).className).not.toMatch(/(^|\s)px-0(\s|$)/);
+  });
+
+  it('넓은 화면에서는 켜도 여백이 그대로다', () => {
+    view.mobile = false;
+    render(<PerViewHarness perView={6} />);
+    expect(cardContent(DESKTOP_CARD).className).not.toMatch(/(^|\s)px-0(\s|$)/);
+  });
+});
