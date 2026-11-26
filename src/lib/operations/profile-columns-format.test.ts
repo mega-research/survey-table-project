@@ -10,6 +10,8 @@ import {
   hydrateProfileColumns,
   pickResponseSignals,
   PROFILE_SYS_COLUMNS,
+  profileGroupText,
+  responseLinkTypeOf,
   selectRawExportContactColumns,
   visibleProfileColumns,
   withoutAdminOnlyProfileColumns,
@@ -36,6 +38,7 @@ describe('hydrateProfileColumns', () => {
       'sys.idx',
       'sys.resid',
       'sys.group',
+      'sys.linkType',
       'sys.platform',
       'sys.browser',
       'sys.status',
@@ -285,5 +288,26 @@ describe('selectRawExportContactColumns', () => {
     };
     expect(selectRawExportContactColumns(contactScheme, profileScheme)).toEqual([]);
     expect(selectRawExportContactColumns(null, profileScheme)).toEqual([]);
+  });
+});
+
+describe('responseLinkTypeOf — 응답 경로', () => {
+  it('조사 대상과 이어진 응답은 개별 링크, 아니면 공개 링크다', () => {
+    expect(responseLinkTypeOf({ contactTargetId: 'ct-1' })).toBe('invite');
+    expect(responseLinkTypeOf({ contactTargetId: null })).toBe('public');
+  });
+});
+
+describe('profileGroupText — 조사 대상 그룹 칸', () => {
+  it('그룹 값이 있으면 그 값을 낸다', () => {
+    expect(profileGroupText({ groupValue: '서울', contactTargetId: 'ct-1' })).toBe('서울');
+  });
+
+  it('조사 대상과 이어졌는데 그룹 값이 없으면 비운다 — 공개 링크로 적지 않는다', () => {
+    expect(profileGroupText({ groupValue: null, contactTargetId: 'ct-1' })).toBeNull();
+  });
+
+  it('조사 대상과 이어지지 않은 응답만 공개링크로 적는다', () => {
+    expect(profileGroupText({ groupValue: null, contactTargetId: null })).toBe('공개링크');
   });
 });

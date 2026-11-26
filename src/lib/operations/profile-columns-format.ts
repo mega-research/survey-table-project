@@ -42,6 +42,39 @@ export function entryKeyOf(key: string): string | null {
   return key.startsWith(ENTRY_PREFIX) ? key.slice(ENTRY_PREFIX.length) : null;
 }
 
+/**
+ * 응답 경로 — 그 응답이 조사 대상의 개별 링크로 들어왔는가(`invite`), 공개 링크로 들어왔는가(`public`).
+ * 따로 저장하는 값이 아니라 응답이 조사 대상과 이어져 있는가로 판정한다(시스템ID 열과 같은 기준).
+ * 그래서 명단을 지워 연결이 끊긴 응답은 공개 링크로 보인다.
+ */
+export const RESPONSE_LINK_TYPES = ['invite', 'public'] as const;
+export type ResponseLinkType = (typeof RESPONSE_LINK_TYPES)[number];
+
+export const RESPONSE_LINK_TYPE_LABELS: Record<ResponseLinkType, string> = {
+  invite: '개별링크',
+  public: '공개링크',
+};
+
+/** 응답 경로 열의 헤더 깔때기 source (`hcol`) — 열 키는 `sys.linkType`. */
+export const LINK_TYPE_FILTER_SOURCE = 'linkType';
+
+export function responseLinkTypeOf(row: { contactTargetId: string | null }): ResponseLinkType {
+  return row.contactTargetId === null ? 'public' : 'invite';
+}
+
+/**
+ * 「조사 대상 그룹」 칸의 글자 — 그룹 값(명단 대분류). 값이 없을 때 공개 링크 응답만 「공개링크」로 적고,
+ * 조사 대상과 이어진 응답은 null(화면 「—」· 엑셀 빈칸)이다. 전에는 그룹 값이 없으면 전부 「공개링크」라
+ * 대분류 없이 올린 명단·한 명씩 추가한 대상의 개별 링크 응답까지 공개 링크로 읽혔다.
+ */
+export function profileGroupText(row: {
+  groupValue: string | null;
+  contactTargetId: string | null;
+}): string | null {
+  if (row.groupValue !== null) return row.groupValue;
+  return row.contactTargetId === null ? RESPONSE_LINK_TYPE_LABELS.public : null;
+}
+
 interface SysColumnDef {
   key: string;
   label: string;
@@ -50,7 +83,8 @@ interface SysColumnDef {
 }
 
 /**
- * 시스템 컬럼 풀 — 기존 응답 내역 테이블 9컬럼 + 접속 식별값 셋(기본 숨김). 순서가 기본 순서.
+ * 시스템 컬럼 풀 — 기존 응답 내역 테이블 9컬럼 + 응답 경로 + 접속 식별값 셋(기본 숨김). 순서가 기본 순서.
+ * 시스템ID·응답 경로 열은 조사 대상이 있는 설문에만 그린다(화면·엑셀이 각자 hasContacts 로 뺀다).
  *
  * 접속 식별값은 중복 응답 차단이 보는 세 값이다. 화면 이름은 코드·DB 이름과 다르다(2026-11-16):
  * `deviceId`(device_id)는 기기 번호가 아니라 그 브라우저 저장소에 심은 무작위 번호라 「브라우저 ID」,
@@ -61,6 +95,7 @@ export const PROFILE_SYS_COLUMNS: readonly SysColumnDef[] = [
   { key: 'sys.idx', label: '순번' },
   { key: 'sys.resid', label: RESID_DEFAULT_LABEL },
   { key: 'sys.group', label: '조사 대상 그룹' },
+  { key: 'sys.linkType', label: '응답 경로' },
   { key: 'sys.platform', label: '접속 단말' },
   { key: 'sys.browser', label: '브라우저' },
   { key: 'sys.status', label: '상태' },

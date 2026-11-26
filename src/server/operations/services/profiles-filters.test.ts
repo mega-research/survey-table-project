@@ -254,6 +254,20 @@ describe('parseProfilesHeaderFiltersFromUrl — 헤더 깔때기', () => {
     ]);
   });
 
+  it('linkType in — 개별·공개 두 값만 통과하고, 남는 값이 없으면 조건을 걸지 않는다', () => {
+    const result = parseProfilesHeaderFiltersFromUrl(
+      'linkType',
+      'in',
+      `public${SEP}maybe`,
+      candidates,
+    );
+    expect(result).toEqual([
+      { op: null, condition: { source: 'linkType', mode: 'in', value: '', values: ['public'] } },
+    ]);
+    expect(parseProfilesHeaderFiltersFromUrl('linkType', 'in', 'maybe', candidates)).toEqual([]);
+    expect(parseProfilesHeaderFiltersFromUrl('linkType', 'text', 'public', candidates)).toEqual([]);
+  });
+
   it('attrs in / pii exact 는 공용 파서에 위임된다', () => {
     const attrs = parseProfilesHeaderFiltersFromUrl('attrs.전시회명', 'in', `A${SEP}B`, candidates);
     expect(attrs[0]?.condition).toMatchObject({ mode: 'in', values: ['A', 'B'] });
@@ -304,5 +318,30 @@ describe('buildProfilesFilterSql — 응답 내역 절 SQL', () => {
     expect(query.sql).toContain('"numbered"."contact_resid"');
     expect(query.sql).toContain('"numbered"."contact_attrs"');
     expect(query.sql).not.toContain('"contact_targets".attrs');
+  });
+});
+
+describe('buildProfilesFilterSql — 응답 경로', () => {
+  const sqlOf = (values: string[]) =>
+    dialect.sqlToQuery(
+      buildProfilesFilterSql(
+        [{ op: null, condition: { source: 'linkType', mode: 'in', value: '', values } }],
+        COLS,
+      ),
+    ).sql;
+
+  it('개별 링크는 조사 대상과 이어진 응답, 공개 링크는 이어지지 않은 응답이다', () => {
+    expect(sqlOf(['invite'])).toContain('"numbered"."contact_target_id" IS NOT NULL');
+    expect(sqlOf(['public'])).toContain('"numbered"."contact_target_id" IS NULL');
+  });
+
+  it('둘 다 고르면 거르지 않는다', () => {
+    const both = sqlOf(['invite', 'public']);
+    expect(both).not.toContain('contact_target_id');
+    expect(both).toContain('TRUE');
+  });
+
+  it('고른 값이 없으면 0건이다 — 전체가 새지 않는다', () => {
+    expect(sqlOf([])).toContain('FALSE');
   });
 });
