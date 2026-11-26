@@ -66,6 +66,7 @@ import {
 } from '@/lib/question/row-repeat';
 import { collectTableCells } from '@/lib/survey/cell-gating';
 import { cn } from '@/lib/utils';
+import { resolveMobilePieceColumnsPerView } from '@/types/mobile-table-display';
 import {
   ChoiceGroup,
   DynamicRowGroupConfig,
@@ -624,6 +625,10 @@ interface InteractiveTableResponseProps {
   mobileDrilldownOmitLeadingColumns?: number | undefined;
   mobileDrilldownRepeatHeaderStartRow?: number | null | undefined;
   mobileDrilldownRepeatHeaderEndRow?: number | null | undefined;
+  /** 조각 좌우 반전 — 좁은 화면의 원본 표 조각에서 열을 작성 순서의 반대로 그린다 */
+  mobileDrilldownReverseColumns?: boolean | undefined;
+  /** 조각 한 화면 칸 수 — 좁은 화면의 원본 표 조각에서 자리 폭을 이 수로 나눠 칸 폭을 정한다 */
+  mobileDrilldownColumnsPerView?: number | null | undefined;
   /** 「항목 단위 카드」 블록 시작 열(1부터, 작성 열 순서). 비면 블록 없이 행 순서 */
   mobileItemCardBlockColumns?: number[] | null | undefined;
   /** 헤더·좌측 열 sticky 동작 활성화. 기본 true. 빌더 프리뷰 등에서 끌 수 있음 */
@@ -738,6 +743,8 @@ function InteractiveTableResponseBody({
   mobileDrilldownOmitLeadingColumns,
   mobileDrilldownRepeatHeaderStartRow,
   mobileDrilldownRepeatHeaderEndRow,
+  mobileDrilldownReverseColumns,
+  mobileDrilldownColumnsPerView,
   mobileItemCardBlockColumns,
   enableSticky = true,
   choiceGroups,
@@ -1652,6 +1659,11 @@ function InteractiveTableResponseBody({
     mobileDrilldownRepeatHeaderEndRow,
     answerableCellTypes: mobileAnswerableCellTypes,
   };
+  // 조각 좌우 반전 · 조각 한 화면 칸 수 — 원본 표 조각을 그리는 두 호스트(행별 원본 시트 · 선택 행 원본 보기)가 받는다
+  const pieceSettings = {
+    reverseColumns: mobileDrilldownReverseColumns,
+    columnsPerView: mobileDrilldownColumnsPerView,
+  };
 
   // 동적 행 그룹 선택 버튼 목록 — 행별 원본 문항·행 단위 그룹 카드가 카드 목록 위에 같이 둔다
   const dynamicGroupPicker = hasDynamicRows ? (
@@ -1684,6 +1696,14 @@ function InteractiveTableResponseBody({
     </div>
   ) : null;
 
+  // 한 화면 칸 수를 켠 문항은 좁은 화면에서 표 카드의 좌우 여백을 걷는다 — 보기 소스 표(이 여백이 없다)와
+  // 조각의 자리 폭이 같아져, 같은 폰에서 같은 칸까지 보인다(360px 폰: 254px → 278px, 5칸 → 6칸).
+  // 켜지 않은 문항과 넓은 화면은 그대로다.
+  const widensPieceSlot =
+    isMobileView &&
+    (usesRowWiseSheet || useOriginalRowDetail) &&
+    resolveMobilePieceColumnsPerView(mobileDrilldownColumnsPerView) !== null;
+
   return (
     <ChoiceGroupsProvider value={choiceGroups ?? null}>
       <GatingTableCellsProvider value={gatingTableCells} visibleCellIds={visibleCellIds}>
@@ -1703,6 +1723,7 @@ function InteractiveTableResponseBody({
                   ? 'p-3 sm:p-4'
                   : 'p-3 pt-0 sm:p-4 sm:pt-1'
                 : 'p-0 sm:px-6',
+              widensPieceSlot && 'px-0 sm:px-0',
             )}
           >
             {/* 열 차례로 열기 — 열은 머리 쪽에서 오른쪽으로 늘어나므로 버튼을 표 위 오른쪽에 둔다.
@@ -1809,6 +1830,7 @@ function InteractiveTableResponseBody({
                       );
                     }}
                     wide={rowWiseWide}
+                    pieceSettings={pieceSettings}
                     renderCell={(cell, rowQuestion, inputIdScope, invalid, errorDescriptionId) => {
                       const sourceRowId =
                         rowQuestion.projection.sourceRowIdByCellId.get(cell.id) ??
@@ -1882,6 +1904,7 @@ function InteractiveTableResponseBody({
                     authoredColumns={columns}
                     navigateToCellRef={drilldownNavigateRef}
                     detailMode={useOriginalRowDetail ? 'original-row' : 'legacy'}
+                    pieceSettings={pieceSettings}
                     omitLeadingAuthoredColumns={clampMobileDrilldownOmitLeadingColumns(
                       mobileDrilldownOmitLeadingColumns,
                       columns.length,

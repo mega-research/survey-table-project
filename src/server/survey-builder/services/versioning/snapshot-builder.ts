@@ -92,6 +92,8 @@ interface SnapshotQuestion {
   mobileDrilldownOmitLeadingColumns?: number | undefined;
   mobileDrilldownRepeatHeaderStartRow?: number | null | undefined;
   mobileDrilldownRepeatHeaderEndRow?: number | null | undefined;
+  mobileDrilldownReverseColumns?: boolean | undefined;
+  mobileDrilldownColumnsPerView?: number | undefined;
   mobileItemCardBlockColumns?: number[] | null | undefined;
   hideTitle?: boolean | undefined;
   pageBreakBefore?: boolean | undefined;
@@ -199,6 +201,9 @@ export function buildSurveySnapshot(
       mobileDrilldownOmitLeadingColumns: q.mobileDrilldownOmitLeadingColumns,
       mobileDrilldownRepeatHeaderStartRow: q.mobileDrilldownRepeatHeaderStartRow,
       mobileDrilldownRepeatHeaderEndRow: q.mobileDrilldownRepeatHeaderEndRow,
+      // 꺼진 값은 싣지 않는다 — false·null 이 실려 와도 키를 남기지 않아 꺼진 문항의 스냅샷이 그대로다
+      mobileDrilldownReverseColumns: q.mobileDrilldownReverseColumns || undefined,
+      mobileDrilldownColumnsPerView: q.mobileDrilldownColumnsPerView ?? undefined,
       mobileItemCardBlockColumns: q.mobileItemCardBlockColumns,
       hideTitle: q.hideTitle,
       pageBreakBefore: q.pageBreakBefore,

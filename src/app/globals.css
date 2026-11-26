@@ -829,6 +829,13 @@ html {
     min-width: fit-content;
   }
 }
+/* 좁은 칸 모드의 원본 표 조각(조각 한 화면 칸 수, 본문 표식 data-narrow-cells): 글자 없는 보기 칸의 컨트롤 줄에
+   라벨 한 줄 높이(text-base × leading-relaxed)를 준다. 이름을 머리에만 둔 「해당없음」 칸은 라벨 줄이 없어 줄
+   상자가 6px 낮고, 세로 가운데 정렬에서 컨트롤이 이웃 칸보다 3px 낮게 선다. 표식 밖의 표(PC · 한 화면 칸 수를
+   켜지 않은 문항)는 건드리지 않는다 — 컨트롤 자리와 행 높이가 그대로다. */
+[data-narrow-cells] .choice-opt-bare-control {
+  min-height: 1.625rem;
+}
 /* 모바일 카드 안에서는 뷰포트 폭과 무관하게 --options-grid-cols 적용 */
 .mobile-row-card .options-grid {
   grid-template-columns: var(--options-grid-cols, minmax(0, 1fr));

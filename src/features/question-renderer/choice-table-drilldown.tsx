@@ -244,6 +244,10 @@ export function ChoiceTableDrilldown({
         headerGrid={projection.headerGrid}
         hideColumnLabels={!projection.showColumnHeader}
         scrollLeftRef={horizontalScrollRef}
+        pieceSettings={{
+          reverseColumns: question.mobileDrilldownReverseColumns,
+          columnsPerView: question.mobileDrilldownColumnsPerView,
+        }}
         choiceControlType={(cell) =>
           isGroupedChoiceQuestion(question)
             ? getGroupTypeOfCell(question, cell.id)

@@ -330,6 +330,8 @@ export async function commitCellEdit({
               mobileDrilldownOmitLeadingColumns: question.mobileDrilldownOmitLeadingColumns,
               mobileDrilldownRepeatHeaderStartRow: question.mobileDrilldownRepeatHeaderStartRow,
               mobileDrilldownRepeatHeaderEndRow: question.mobileDrilldownRepeatHeaderEndRow,
+              mobileDrilldownReverseColumns: question.mobileDrilldownReverseColumns,
+              mobileDrilldownColumnsPerView: question.mobileDrilldownColumnsPerView,
               mobileItemCardBlockColumns: question.mobileItemCardBlockColumns,
               hideTitle: question.hideTitle,
               pageBreakBefore: question.pageBreakBefore,

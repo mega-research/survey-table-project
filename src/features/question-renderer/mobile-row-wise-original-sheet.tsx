@@ -7,6 +7,7 @@ import {
   type ChoiceGroupOriginalLine,
   resolveWideTextInputFields,
 } from '@/features/question-renderer/utils/choice-group-original-line';
+import type { MobilePieceSettings } from '@/features/question-renderer/utils/mobile-piece-arrangement';
 import type {
   MobileRowWiseOriginalModel,
   MobileRowWiseOriginalQuestion,
@@ -76,6 +77,11 @@ interface MobileRowWiseOriginalSheetProps {
    * 꽉 채운다). 판정은 호스트의 기존 모바일 판정 하나라, 여기에 폭 분기점을 따로 두지 않는다.
    */
   wide?: boolean | undefined;
+  /**
+   * 조각 좌우 반전 · 조각 한 화면 칸 수 — 좁은 화면에서 한 행을 통째로 그리는 원본 표 조각에만 적용한다.
+   * 넓은 화면의 행 단위 배치(`wide`)와, 막대·슬라이더 사이에 끼는 원본 한 줄 조각에는 넘기지 않는다.
+   */
+  pieceSettings?: MobilePieceSettings | undefined;
 }
 
 export interface ScaleBarRenderContext {
@@ -105,6 +111,7 @@ export function MobileRowWiseOriginalSheet({
   renderScaleBar,
   renderScaleSlider,
   wide = false,
+  pieceSettings,
 }: MobileRowWiseOriginalSheetProps) {
   const labelIdPrefix = useId();
   const locale = useInlineSurveyLocale();
@@ -381,6 +388,7 @@ export function MobileRowWiseOriginalSheet({
                             instanceScope={question.rowId}
                             renderCell={renderPieceCell}
                             align={wide ? 'start' : 'center'}
+                            pieceSettings={wide ? undefined : pieceSettings}
                           />
                         )}
                       </div>

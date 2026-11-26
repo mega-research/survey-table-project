@@ -1194,6 +1194,17 @@ export interface Question {
   mobileDrilldownOmitLeadingColumns?: number;
   mobileDrilldownRepeatHeaderStartRow?: number | null;
   mobileDrilldownRepeatHeaderEndRow?: number | null;
+  /**
+   * 조각 좌우 반전 — 좁은 화면의 원본 표 조각에서 열을 작성 순서의 반대로 그린다(평균에서 제외하는 보기 칸이
+   * 조각 양끝에 있으면 그 칸은 제자리). 표 구조·응답값·PC 화면은 그대로다. 끔/미지정 = 작성 순서.
+   * 판정은 features/question-renderer/utils/mobile-piece-arrangement.
+   */
+  mobileDrilldownReverseColumns?: boolean;
+  /**
+   * 조각 한 화면 칸 수 — 좁은 화면의 원본 표 조각에서 자리 폭을 이 수로 나눠 칸 폭을 정한다.
+   * 범위는 `@/types/mobile-table-display`. null/미지정 = 원본 열 폭 그대로. 빌더 스토어에는 「비움」으로 null 이 온다.
+   */
+  mobileDrilldownColumnsPerView?: number | null;
   // 「항목 단위 카드」 블록 시작 열(1부터, 작성 열 순서) — 좌우로 붙은 표를 모바일에서 블록마다 차례로 세운다.
   // 비어 있으면 블록 없이 행 순서 그대로다 (CONTEXT.md "블록 단위로 세우기")
   mobileItemCardBlockColumns?: number[] | null;

@@ -84,6 +84,8 @@ const MOBILE_TABLE_DISPLAY_KEYS = [
   'mobileDrilldownOmitLeadingColumns',
   'mobileDrilldownRepeatHeaderStartRow',
   'mobileDrilldownRepeatHeaderEndRow',
+  'mobileDrilldownReverseColumns',
+  'mobileDrilldownColumnsPerView',
   'mobileItemCardBlockColumns',
 ];
 
@@ -348,5 +350,41 @@ describe('분류 가드', () => {
     expect(() => assertNeverQuestionType('file-upload' as never)).toThrow(
       '처리되지 않은 질문 유형',
     );
+  });
+});
+
+describe('조각 좌우 반전 · 조각 한 화면 칸 수 — 표를 그리는 문항의 모바일 표시 필드', () => {
+  it.each([3, 4, 5, 6])('칸 수 %i 는 strict parse 를 지나도 남는다', (count) => {
+    const question = makeQuestion.table({
+      mobileDrilldownReverseColumns: true,
+      mobileDrilldownColumnsPerView: count,
+    });
+    expect(QuestionVariantSchema.parse(question)).toEqual(question);
+  });
+
+  it.each([2, 7, 4.5, -1])('범위 밖 칸 수 %s 는 strict parse 가 거부한다', (count) => {
+    const question = { ...makeQuestion.table(), mobileDrilldownColumnsPerView: count };
+    expect(QuestionVariantSchema.safeParse(question).success).toBe(false);
+  });
+
+  it('꺼진 칸 수(null)는 strict 정규화에서 키째 빠진다', () => {
+    const normalized = normalizeQuestion(
+      { ...makeQuestion.table(), mobileDrilldownColumnsPerView: null },
+      'strict',
+    );
+    expect('mobileDrilldownColumnsPerView' in normalized).toBe(false);
+  });
+
+  it('표를 그리지 않는 유형에 실려 온 값은 strict parse 가 걷어 낸다', () => {
+    for (const question of makeAllQuestionVariants()) {
+      if (['radio', 'checkbox', 'table'].includes(question.type)) continue;
+      const parsed = QuestionVariantSchema.parse({
+        ...question,
+        mobileDrilldownReverseColumns: true,
+        mobileDrilldownColumnsPerView: 6,
+      });
+      expect('mobileDrilldownReverseColumns' in parsed, `${question.type}`).toBe(false);
+      expect('mobileDrilldownColumnsPerView' in parsed, `${question.type}`).toBe(false);
+    }
   });
 });

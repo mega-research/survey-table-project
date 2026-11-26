@@ -67,6 +67,14 @@ export function fitTableMarker(fitToWidth: boolean): { 'data-fit-table'?: '' } {
   return fitToWidth ? { 'data-fit-table': '' } : {};
 }
 
+/**
+ * 좁은 칸 모드(조각 한 화면 칸 수)의 본문 표식 — globals.css 가 이 표식 안에서만 글자 없는 보기 칸의 컨트롤
+ * 줄에 라벨 한 줄 높이를 준다(`[data-narrow-cells] .choice-opt-bare-control`). 표식이 없는 표는 그대로다.
+ */
+export function narrowCellsMarker(narrowCells: boolean): { 'data-narrow-cells'?: '' } {
+  return narrowCells ? { 'data-narrow-cells': '' } : {};
+}
+
 // ── 응답 페이지 컨테이너 폭 판정 ──
 
 /** 표 총폭이 이 값(px)을 넘으면 응답 페이지 컨테이너를 넓게(1280px) 편다. */

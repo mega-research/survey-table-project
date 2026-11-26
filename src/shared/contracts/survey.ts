@@ -304,6 +304,8 @@ export interface QuestionData {
   mobileDrilldownOmitLeadingColumns?: number;
   mobileDrilldownRepeatHeaderStartRow?: number | null;
   mobileDrilldownRepeatHeaderEndRow?: number | null;
+  mobileDrilldownReverseColumns?: boolean;
+  mobileDrilldownColumnsPerView?: number | null;
   mobileItemCardBlockColumns?: number[] | null;
   hideTitle?: boolean;
   pageBreakBefore?: boolean;

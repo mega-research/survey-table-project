@@ -64,6 +64,8 @@ export const PERSISTED_QUESTION_FIELDS = [
   'mobileDrilldownOmitLeadingColumns',
   'mobileDrilldownRepeatHeaderStartRow',
   'mobileDrilldownRepeatHeaderEndRow',
+  'mobileDrilldownReverseColumns',
+  'mobileDrilldownColumnsPerView',
   'mobileItemCardBlockColumns',
   'hideTitle',
   'pageBreakBefore',

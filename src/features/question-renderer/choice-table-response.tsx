@@ -1683,6 +1683,10 @@ function ChoiceTableResponseBody({
             );
           }}
           wide={rowWiseWide}
+          pieceSettings={{
+            reverseColumns: question.mobileDrilldownReverseColumns,
+            columnsPerView: question.mobileDrilldownColumnsPerView,
+          }}
         />
         {counter}
         {dynamicRowModal}

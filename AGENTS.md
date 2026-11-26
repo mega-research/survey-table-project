@@ -417,7 +417,7 @@ lib 은 도메인의 집이 아니라 **소유자를 특정할 수 없는 것들
 
 16. **자격미달은 제출 시점에만 정해지지 않는다**: 관리자 응답 수정(`saveAdminEdit`)이 종결 응답(completed·screened_out)에 대해 `detectScreenOut` 을 다시 돌려 `completed ⇄ screened_out` 을 양방향으로 오간다(2026-09-21). 판정 재료는 평문 `finalResponses`(숨은 문항 strip → 게이팅 strip → calc 재계산 **이후**, PII 암호화 **이전**)여야 분기 매칭이 성립한다. `in_progress` 는 응답자 세션 중이라, `quotaful_out`·`bad` 는 자격미달과 다른 축의 종결이라 재판정하지 않는다. 스냅샷을 못 얻으면 재판정을 건너뛰고 기존 상태를 보존한다(calc 재계산과 같은 fail-safe). 바뀐 문항이 없어도 확정·재판정한다 — 판정은 응답 확정의 `screenedOut` 이다.
 
-17. **`useEffectEvent` 를 `React.memo`·`forwardRef` 컴포넌트 안에 쓰지 말 것**: React 19.2.3 은 그런 컴포넌트의 `useEffectEvent` 를 갱신하지 않아 이벤트가 첫 렌더 값을 계속 읽는다(dev·prod 둘 다). 컴포넌트 단위로 걸리므로 그 컴포넌트가 부르는 훅 안에 숨어 있어도 같다. ref 가 필요하면 forwardRef 대신 React 19 의 `ref` prop 을, memo 가 필요하면 바깥 컴포넌트를 memo 로 두고 안쪽은 일반 함수 컴포넌트로 둔다. `tests/repo/effect-event-in-memo.test.ts` 가 막는다 — **React 를 올리면 제약이 풀렸는지 확인하고 그 테스트를 지울 것.**
+17. **`useEffectEvent` 를 `React.memo`·`forwardRef` 컴포넌트 안에 쓰지 말 것**: React 19.2.3 은 그런 컴포넌트의 `useEffectEvent` 를 갱신하지 않아 이벤트가 첫 렌더 값을 계속 읽는다. 19.3.1 에서는 고쳐졌다(2026-11-26 `package.json` 을 19.3.1 로 올리며 시험) — 다만 **운영 화면은 `package.json` 의 React 가 아니라 Next 가 내장한 React 로 돈다**(App Router). 내장 판에서는 확인하지 못했으므로 제약을 그대로 둔다. 컴포넌트 단위로 걸리므로 그 컴포넌트가 부르는 훅 안에 숨어 있어도 같다. ref 가 필요하면 forwardRef 대신 React 19 의 `ref` prop 을, memo 가 필요하면 바깥 컴포넌트를 memo 로 두고 안쪽은 일반 함수 컴포넌트로 둔다. `tests/repo/effect-event-in-memo.test.ts` 가 막는다 — **Next 를 올려 내장 React 에서도 풀린 것을 확인하면 그 테스트를 지울 것.**
 
 ---
 

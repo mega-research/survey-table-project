@@ -76,6 +76,8 @@ questions                  # 개별 질문
 ├── mobileOriginalTable, mobileTableDisplayMode,  # 표시 방식 auto|drilldown-original-row|row-wise-original|row-wise-scale|row-cards|row-group-cards|axis-cards|item-cards|original (0129 CHECK — 어휘를 늘리면 배열·check()·마이그레이션 셋을 함께, 루트 AGENTS.md 주의사항 1). 방식별 규칙은 `types/mobile-table-display.ts` 머리 주석과 CONTEXT.md 방식별 용어 절
 │   mobileDrilldownOmitLeadingColumns,
 │   mobileDrilldownRepeatHeaderStartRow/EndRow      # 모바일 표 렌더
+│   mobileDrilldownReverseColumns,                  # 조각 좌우 반전 (기본 false, 0174) · 조각 한 화면 칸 수 (NULL=원본 열 폭, 3~6 CHECK — 범위는 `@/types/mobile-table-display`,
+│   mobileDrilldownColumnsPerView                   #   `tests/repo/mobile-piece-columns-per-view-column.test.ts` 가 대조). 좁은 화면의 원본 표 조각에만 적용 — `src/features/AGENTS.md`
 ├── mobileItemCardBlockColumns (JSONB)  # 「항목 단위 카드」 블록 시작 열 번호 배열(1부터, 작성 열 순서, NULL=블록 없음, 0131). 경계는 저작자가 적는다(자동 추정 없음) — CONTEXT.md 「블록 단위로 세우기」
 ├── hideColumnLabels, pageBreakBefore
 ├── stickyColumnCount            # 좌측 고정 열 개수 (NULL=자동 판정, 0~3=명시 지정)

@@ -11,6 +11,7 @@ import { useHorizontalScrollIndicators } from '@/features/question-renderer/hook
 import { usePageStickyThreshold } from '@/features/question-renderer/hooks/use-page-sticky-threshold';
 import { useScrollLeftSync } from '@/features/question-renderer/hooks/use-scroll-left-sync';
 import { expandHeaderGrid } from '@/features/question-renderer/utils/expand-header-grid';
+import type { HeaderOverflowDirection } from '@/features/question-renderer/utils/mobile-piece-arrangement';
 import {
   HEADER_ROW_MIN_HEIGHT,
   STICKY_BODY_Z,
@@ -23,6 +24,7 @@ import {
   getGridCellAria,
   getHeaderCellStickyStyle,
   fitTableMarker,
+  narrowCellsMarker,
   resolveTableGridSizing,
 } from '@/features/question-renderer/utils/table-grid-utils';
 import { cn } from '@/lib/utils';
@@ -83,7 +85,38 @@ interface TablePreviewProps {
    * (같은 줄의 척도 슬라이더·행 제목이 왼쪽 정렬이라 가운데에 두면 축이 둘이 된다).
    */
   align?: 'center' | 'start' | undefined;
+  /**
+   * 좁은 칸 모드 — 조각 한 화면 칸 수가 적용된 원본 표 조각 전용(칸 폭 46px 안팎). 칸 안쪽 좌우 여백을 줄이고,
+   * 흐림 띠를 좁혀 마지막으로 보이는 칸을 덮지 않게 하며, 좌측 고정 열을 쓰지 않는다(균등 폭이라 고정할 이름
+   * 열이 없고 px 누적 오프셋도 뜻이 없다). 열 폭 자체는 호출자가 `columns[].width` 로 넘긴다.
+   */
+  narrowCells?: boolean | undefined;
+  /**
+   * 머리 글자를 넘길 방향(머리 칸 id → 방향, 다단 헤더가 없으면 열 id) — 좁은 칸 모드에서 글자가 칸에
+   * 들어가지 않을 때만 그 방향으로 넘겨 그린다. 판정은 utils/mobile-piece-arrangement 의
+   * `resolveHeaderOverflowDirections`.
+   */
+  headerOverflow?: ReadonlyMap<string, HeaderOverflowDirection> | undefined;
 }
+
+/** 좁은 칸 모드의 머리 칸 — 좌우 여백과 글자 크기를 줄인다(46px 칸에 16px 여백이면 글자 자리가 14px 뿐이다) */
+const NARROW_HEADER_CELL_CLASS = 'px-1 text-sm';
+
+/**
+ * 머리 글자 넘김 — 글자가 칸에 들어가면 지금처럼 가운데, 넘치면 세로선이 숨겨진 이웃 쪽으로 넘겨 그린다.
+ * 측정 없이 CSS 로 가른다: 안쪽 글자 상자의 폭이 `min-content`(가장 긴 낱말)이고 `min-width: 100%` 다.
+ * 가장 긴 낱말이 칸에 들어가면 상자가 칸을 채워 지금처럼 가운데 정렬·낱말 단위 줄바꿈이고, 안 들어가면 상자가
+ * 그 낱말만큼만 커지며 붙인 쪽의 반대로 흘러나간다(넘치는 양이 가장 적다). 낱말 안에서는 꺾지 않는다
+ * (`word-break: keep-all`) — 꺾으면 한 글자씩 세로로 선다. 중국어판은 전역 규칙이 낱말 단위를 풀어 지금처럼
+ * 칸 안에서 꺾인다. 넘친 글자가 뒤따르는 이웃 칸의 배경에 덮이지 않게 칸을 한 층 올린다.
+ */
+const HEADER_OVERFLOW_CELL_CLASS: Record<Exclude<HeaderOverflowDirection, 'none'>, string> = {
+  right: 'relative z-[1] justify-start',
+  left: 'relative z-[1] justify-end',
+  both: 'relative z-[1] justify-center',
+};
+const HEADER_OVERFLOW_TEXT_CLASS =
+  'inline-block w-min min-w-full shrink-0 text-center break-keep whitespace-pre-wrap';
 
 export const TablePreview = React.memo(function TablePreview({
   tableTitle,
@@ -106,6 +139,8 @@ export const TablePreview = React.memo(function TablePreview({
   getCellInstanceId,
   applyCellBackground = true,
   align = 'center',
+  narrowCells = false,
+  headerOverflow,
 }: TablePreviewProps) {
   const alignClass = align === 'start' ? undefined : 'mx-auto';
   // 화면 폭에 맞춰 줄이기는 패드 폭에서만 — 데스크톱은 지정한 px 그대로, 휴대폰은 모바일 표시 방식
@@ -177,11 +212,11 @@ export const TablePreview = React.memo(function TablePreview({
 
   const stickyInfo = useMemo<StickyLeftInfo | undefined>(() => {
     // 화면 폭에 맞춰 줄인 표는 넘치지 않아 고정할 이유가 없고, px 누적 오프셋이 비율로 줄어든 열과 어긋난다
-    if (columns.length === 0 || fitToWidth) return undefined;
+    if (columns.length === 0 || fitToWidth || narrowCells) return undefined;
     const maxStickyWidth =
       scrollViewportWidth > 0 ? scrollViewportWidth * STICKY_MAX_VIEWPORT_RATIO : undefined;
     return computeStickyLeftColumns(columns, rows, maxStickyWidth, stickyColumnCount);
-  }, [columns, rows, scrollViewportWidth, stickyColumnCount, fitToWidth]);
+  }, [columns, rows, scrollViewportWidth, stickyColumnCount, fitToWidth, narrowCells]);
 
   const gridContainerStyle = useMemo<React.CSSProperties>(
     () => ({ display: 'grid', ...resolveTableGridSizing(columns, fitToWidth) }),
@@ -204,6 +239,26 @@ export const TablePreview = React.memo(function TablePreview({
 
   const minHeight = stickyInfo && stickyInfo.stickyColCount > 0 ? HEADER_ROW_MIN_HEIGHT : undefined;
   const stickyCount = stickyInfo?.stickyColCount ?? 0;
+
+  // 좁은 칸 모드의 머리 칸 — 여백·글자 크기, 그리고 넘길 방향이 정해진 칸은 넘김 클래스
+  const narrowHeaderClass = (headerId: string) => {
+    if (!narrowCells) return undefined;
+    const direction = headerOverflow?.get(headerId) ?? 'none';
+    return cn(
+      NARROW_HEADER_CELL_CLASS,
+      direction !== 'none' && HEADER_OVERFLOW_CELL_CLASS[direction],
+    );
+  };
+  const renderHeaderLabel = (headerId: string, label: string) => {
+    if (!label) return EMPTY_LABEL;
+    const direction = narrowCells ? (headerOverflow?.get(headerId) ?? 'none') : 'none';
+    if (direction === 'none') return label;
+    return (
+      <span className={HEADER_OVERFLOW_TEXT_CLASS} data-header-overflow={direction}>
+        {label}
+      </span>
+    );
+  };
 
   // 헤더 셀 렌더 — 다단계(tableHeaderGrid) 또는 단일 행(fallback). sticky 적용 포함.
   const renderHeaderCells = () => {
@@ -228,11 +283,12 @@ export const TablePreview = React.memo(function TablePreview({
                 HEADER_CELL_CLASS,
                 getCellTextClassName(cell),
                 getHeaderRightBorderClass(cell, startCol + colSpan - 1, columns.length),
+                narrowHeaderClass(cell.id),
               )}
               style={style}
               {...getGridCellAria('columnheader', colSpan, rowSpan)}
             >
-              {cell.label || EMPTY_LABEL}
+              {renderHeaderLabel(cell.id, cell.label)}
             </div>
           );
         },
@@ -260,11 +316,12 @@ export const TablePreview = React.memo(function TablePreview({
             HEADER_CELL_CLASS,
             getCellTextClassName(column),
             getHeaderRightBorderClass(column, startCol + cs - 1, columns.length),
+            narrowHeaderClass(column.id),
           )}
           style={style}
           {...getGridCellAria('columnheader', cs)}
         >
-          {column.label || EMPTY_LABEL}
+          {renderHeaderLabel(column.id, column.label)}
         </div>
       );
     });
@@ -331,13 +388,19 @@ export const TablePreview = React.memo(function TablePreview({
                   {canScrollRight && (
                     <div
                       aria-hidden="true"
-                      className="pointer-events-none absolute inset-y-0 right-0 z-20 w-12 transform-gpu bg-gradient-to-l from-gray-50 via-gray-50/60 to-transparent print:hidden"
+                      className={cn(
+                        'pointer-events-none absolute inset-y-0 right-0 z-20 transform-gpu bg-gradient-to-l from-gray-50 via-gray-50/60 to-transparent print:hidden',
+                        narrowCells ? 'w-3' : 'w-12',
+                      )}
                     />
                   )}
                   {canScrollLeft && (
                     <div
                       aria-hidden="true"
-                      className="pointer-events-none absolute inset-y-0 left-0 z-20 w-6 transform-gpu bg-gradient-to-r from-gray-50/80 to-transparent print:hidden"
+                      className={cn(
+                        'pointer-events-none absolute inset-y-0 left-0 z-20 transform-gpu bg-gradient-to-r from-gray-50/80 to-transparent print:hidden',
+                        narrowCells ? 'w-3' : 'w-6',
+                      )}
                     />
                   )}
                 </div>
@@ -382,6 +445,7 @@ export const TablePreview = React.memo(function TablePreview({
                 <div
                   key="table-body"
                   {...fitTableMarker(fitToWidth)}
+                  {...narrowCellsMarker(narrowCells)}
                   role="rowgroup"
                   className={cn(
                     alignClass,
@@ -425,7 +489,9 @@ export const TablePreview = React.memo(function TablePreview({
                         <div
                           key={`${row.id}:${cell.id}`}
                           className={cn(
-                            'min-w-0 bg-white p-3',
+                            'min-w-0 bg-white',
+                            // 좁은 칸 모드 — 46px 안팎의 칸에 컨트롤과 번호가 들어가게 좌우 여백을 줄인다
+                            narrowCells ? 'px-0.5 py-3' : 'p-3',
                             getCellBorderClasses(cell),
                             getAlignmentClasses(cell.horizontalAlign, cell.verticalAlign),
                             errorCellIds?.has(cell.id) && 'ring-2 ring-red-300 ring-inset',
@@ -466,13 +532,20 @@ export const TablePreview = React.memo(function TablePreview({
               {canScrollRight && (
                 <div
                   aria-hidden="true"
-                  className="pointer-events-none absolute inset-y-0 right-0 z-20 w-12 transform-gpu bg-gradient-to-l from-black/10 to-transparent print:hidden"
+                  // 좁은 칸 모드 — 띠가 넓으면 마지막으로 보이는 칸을 통째로 덮는다
+                  className={cn(
+                    'pointer-events-none absolute inset-y-0 right-0 z-20 transform-gpu bg-gradient-to-l from-black/10 to-transparent print:hidden',
+                    narrowCells ? 'w-3' : 'w-12',
+                  )}
                 />
               )}
               {canScrollLeft && (
                 <div
                   aria-hidden="true"
-                  className="pointer-events-none absolute inset-y-0 left-0 z-20 w-6 transform-gpu bg-gradient-to-r from-black/10 to-transparent print:hidden"
+                  className={cn(
+                    'pointer-events-none absolute inset-y-0 left-0 z-20 transform-gpu bg-gradient-to-r from-black/10 to-transparent print:hidden',
+                    narrowCells ? 'w-3' : 'w-6',
+                  )}
                 />
               )}
             </div>
