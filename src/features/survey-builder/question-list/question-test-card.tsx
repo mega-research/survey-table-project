@@ -642,6 +642,8 @@ function QuestionTestInput({
           {...(question.mobileDrilldownRepeatHeaderEndRow !== undefined
             ? { mobileDrilldownRepeatHeaderEndRow: question.mobileDrilldownRepeatHeaderEndRow }
             : {})}
+          mobileDrilldownReverseColumns={question.mobileDrilldownReverseColumns}
+          mobileDrilldownColumnsPerView={question.mobileDrilldownColumnsPerView}
         />
       ) : (
         <div className="py-4 text-center text-gray-500">테이블이 구성되지 않았습니다.</div>
