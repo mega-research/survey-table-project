@@ -439,6 +439,8 @@ function QuestionInputControl({
           {...(question.mobileDrilldownRepeatHeaderEndRow !== undefined
             ? { mobileDrilldownRepeatHeaderEndRow: question.mobileDrilldownRepeatHeaderEndRow }
             : {})}
+          mobileDrilldownReverseColumns={question.mobileDrilldownReverseColumns}
+          mobileDrilldownColumnsPerView={question.mobileDrilldownColumnsPerView}
           {...(question.mobileItemCardBlockColumns != null
             ? { mobileItemCardBlockColumns: question.mobileItemCardBlockColumns }
             : {})}

@@ -44,6 +44,7 @@ import { useGatingTableCells } from './cells/gating-table-cells-context';
 import { DisplayCellContent } from './mobile-display-cells';
 import { MobileDrilldownShell, getSectionIdentity } from './mobile-drilldown-shell';
 import { MobileOriginalRowTable } from './mobile-original-row-table';
+import type { MobilePieceSettings } from './utils/mobile-piece-arrangement';
 
 interface MobileTableDrilldownProps {
   questionId: string;
@@ -73,6 +74,8 @@ interface MobileTableDrilldownProps {
   answerableCellTypes?: readonly TableCell['type'][] | undefined;
   mobileDrilldownRepeatHeaderStartRow?: number | null | undefined;
   mobileDrilldownRepeatHeaderEndRow?: number | null | undefined;
+  /** 조각 좌우 반전 · 조각 한 화면 칸 수 — 선택 행 원본 보기의 원본 표 조각에 적용한다 */
+  pieceSettings?: MobilePieceSettings | undefined;
 }
 
 // ── 메인 컴포넌트 ──
@@ -95,6 +98,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
   answerableCellTypes,
   mobileDrilldownRepeatHeaderStartRow,
   mobileDrilldownRepeatHeaderEndRow,
+  pieceSettings,
 }: MobileTableDrilldownProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
@@ -578,6 +582,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
         headerGrid={projection.headerGrid}
         hideColumnLabels={!projection.showColumnHeader}
         scrollLeftRef={horizontalScrollRef}
+        pieceSettings={pieceSettings}
         errorCellIds={errorCellIds}
         renderCell={(cell) => {
           const sourceRowId = projection.sourceRowIdByCellId.get(cell.id) ?? leaf.rowId;
