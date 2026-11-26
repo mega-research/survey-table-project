@@ -111,6 +111,7 @@
     "0167_survey_list_title",
     "0170_mail_link_clicks",
     "0171_question_distinct_group",
-    "0173_question_scale_slider"
+    "0173_question_scale_slider",
+    "0174_question_mobile_piece_arrangement"
   ]
 }

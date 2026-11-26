@@ -79,6 +79,8 @@ type MobileTableDisplayFields = Pick<
   | 'mobileDrilldownOmitLeadingColumns'
   | 'mobileDrilldownRepeatHeaderStartRow'
   | 'mobileDrilldownRepeatHeaderEndRow'
+  | 'mobileDrilldownReverseColumns'
+  | 'mobileDrilldownColumnsPerView'
   | 'mobileItemCardBlockColumns'
 >;
 

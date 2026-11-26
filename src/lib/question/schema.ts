@@ -1,7 +1,11 @@
 import * as z from 'zod';
 
 import { INPUT_TYPES } from '@/types/input-type';
-import { MOBILE_TABLE_DISPLAY_MODES } from '@/types/mobile-table-display';
+import {
+  MOBILE_PIECE_COLUMNS_PER_VIEW_MAX,
+  MOBILE_PIECE_COLUMNS_PER_VIEW_MIN,
+  MOBILE_TABLE_DISPLAY_MODES,
+} from '@/types/mobile-table-display';
 import { QUESTION_TYPES } from '@/types/question-types';
 import { SCALE_SLIDER_DIRECTIONS } from '@/types/scale-slider';
 import type { Question } from '@/types/survey';
@@ -95,6 +99,14 @@ const mobileTableDisplay = z.object({
   mobileDrilldownOmitLeadingColumns: z.number().int().min(0).optional(),
   mobileDrilldownRepeatHeaderStartRow: z.number().int().min(0).nullable().optional(),
   mobileDrilldownRepeatHeaderEndRow: z.number().int().min(0).nullable().optional(),
+  mobileDrilldownReverseColumns: z.boolean().optional(),
+  mobileDrilldownColumnsPerView: z
+    .number()
+    .int()
+    .min(MOBILE_PIECE_COLUMNS_PER_VIEW_MIN)
+    .max(MOBILE_PIECE_COLUMNS_PER_VIEW_MAX)
+    .nullable()
+    .optional(),
   mobileItemCardBlockColumns: z.array(z.number().int().min(1)).nullable().optional(),
 });
 
