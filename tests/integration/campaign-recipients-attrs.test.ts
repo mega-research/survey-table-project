@@ -21,6 +21,8 @@ function buildChain() {
       const tail = {
         orderBy: () => tail,
         limit: () => tail,
+        // 쪽에 실린 수신자의 링크 클릭 조회 — 이 테스트의 수신자는 누른 것이 없다.
+        groupBy: () => Promise.resolve([]),
         offset: () => Promise.resolve(state.rows),
         then: (resolve: (v: unknown) => unknown) =>
           Promise.resolve([{ total: state.rows.length }]).then(resolve),
@@ -45,7 +47,6 @@ function recipientRow(overrides: Record<string, unknown>) {
     id: 'r-1',
     contactTargetId: 'ct-1',
     contactResid: 7,
-    contactGroupValue: null,
     contactLatestResultCode: null,
     contactUnsubscribedAt: null,
     email: 'someone@example.com',

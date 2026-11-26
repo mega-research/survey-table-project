@@ -4,13 +4,18 @@ import { and, eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactTargets, surveys } from '@/db/schema';
+import { isShownInMail } from '@/lib/contacts/mail-display-columns';
 import { normalizeContactColumnScheme } from '@/lib/operations/contacts-format';
 import {
   targetScopeCondition,
   type OperationsDataScope,
 } from '@/server/data-scope';
 import { FILTER_NONE_VALUE, FILTER_SOURCE } from '@/lib/operations/filter-shared';
-import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share-scope';
+import {
+  type FieldworkShare,
+  shareHiddenAttrsKey,
+  shareTargetCondition,
+} from '@/server/fieldwork-share-scope';
 import { hydrateProfileColumns } from '@/lib/operations/profile-columns-format';
 import { getProfileColumnScheme } from '@/server/read-models/profile-column-scheme';
 
@@ -47,7 +52,8 @@ export interface ListContactAttrValuesResult {
 }
 
 /**
- * 컬럼 스킴 화이트리스트 검증: 보이는(hidden 아님) attrs 컬럼만 허용.
+ * 컬럼 스킴 화이트리스트 검증: 어느 표에든 보이는 attrs 컬럼만 허용 — 조사 대상 목록(hidden 아님) ·
+ * 단체 메일 미리보기(메일 표시) · 응답 내역 표시 스킴.
  * attrs JSONB 는 임의 key 를 담으므로 URL 직접 조작으로 스킴 밖 key 를 열거하는 것을 막는다.
  */
 export async function assertAttrColumnAllowed(
@@ -66,7 +72,10 @@ export async function assertAttrColumnAllowed(
   // getContactColumnScheme 를 거치지 않고 직접 읽는 경로라 같은 JSONB 보정이 필요하다.
   const scheme = normalizeContactColumnScheme(schemeRow?.scheme ?? null);
   const source = `${FILTER_SOURCE.ATTRS_PREFIX}${attrsKey}`;
-  let allowed = scheme?.columns.some((c) => c.source === source && !c.hidden) ?? false;
+  // 메일 표시는 조사 대상 목록의 hidden 과 독립이다 — 목록에서 숨기고 단체 메일 미리보기에만 올린 열도
+  // 그 표의 깔때기가 값을 읽는다(`isShownInMail`).
+  let allowed =
+    scheme?.columns.some((c) => c.source === source && (!c.hidden || isShownInMail(c))) ?? false;
   if (!allowed) {
     // 응답 내역 표시 스킴은 조사 대상 스킴과 독립적으로 attrs 컬럼을 표시할 수 있다 —
     // 조사 대상에선 숨기고 응답 내역에서만 표시한 컬럼의 깔때기 distinct 조회를
@@ -94,6 +103,8 @@ export async function listContactAttrValues(
   input: ListContactAttrValuesInput,
 ): Promise<ListContactAttrValuesResult> {
   const { surveyId, attrsKey, scope, share } = input;
+  // 범위를 가르는 열은 범위 게스트에게 없는 열이다 — 스킴 밖 열과 같은 거부로 접는다.
+  if (shareHiddenAttrsKey(share) === attrsKey) throw new ForbiddenAttrColumnError(attrsKey);
   await assertAttrColumnAllowed(surveyId, attrsKey, scope);
 
   const valueExpr = sql<string>`${contactTargets.attrs} ->> ${attrsKey}`;
@@ -154,6 +165,8 @@ export async function countNonNumericAttrValues(
   input: ListContactAttrValuesInput,
 ): Promise<number> {
   const { surveyId, attrsKey, scope, share } = input;
+  // 범위를 가르는 열은 범위 게스트에게 없는 열이다 — 스킴 밖 열과 같은 거부로 접는다.
+  if (shareHiddenAttrsKey(share) === attrsKey) throw new ForbiddenAttrColumnError(attrsKey);
   await assertAttrColumnAllowed(surveyId, attrsKey, scope);
   const valueExpr = sql<string>`${contactTargets.attrs} ->> ${attrsKey}`;
   const [row] = await db

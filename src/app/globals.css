@@ -497,6 +497,15 @@
     "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
 }
 
+/* 베트남어 글자의 글꼴 — Wanted Sans 에는 베트남어 글자(ơ·ư·ế·ộ …)가 대부분 없어 그 글자만 다음 글꼴로
+   넘어가 한 낱말이 두 글꼴로 갈린다. 베트남어판(lang=vi) 안에서는 베트남어를 다 가진 기기 글꼴을 앞에
+   둔다 — 섞여 나오는 한글은 기기 글꼴이나 뒤의 Wanted Sans 가 받는다. 다른 언어 화면은 그대로다. */
+[lang|="vi"] {
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial,
+    "Wanted Sans Variable", "Wanted Sans", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+}
+
 /* 중국어 줄바꿈 — body 의 keep-all(한국어 어절 보존)은 띄어쓰기 없는 중국어 문장을 끊을 수 없는 한 단어로
    본다. 카드·표의 칸이 그 문장 길이(min-content)만큼 넓어져 페이지가 화면보다 넓어지고, 화면 폭에 붙은
    하단 바의 「다음」이 오른쪽 밖으로 밀렸다(2026-10-29). 중국어판 안에서는 글자 사이에서 끊는다 — 칸에
@@ -859,6 +868,13 @@ html {
     flex: 0 0 calc((100% - (var(--options-grid-n, 1) - 1) * 1rem) / var(--options-grid-n, 1));
     min-width: fit-content;
   }
+}
+/* 좁은 칸 모드의 원본 표 조각(조각 한 화면 칸 수, 본문 표식 data-narrow-cells): 글자 없는 보기 칸의 컨트롤 줄에
+   라벨 한 줄 높이(text-base × leading-relaxed)를 준다. 이름을 머리에만 둔 「해당없음」 칸은 라벨 줄이 없어 줄
+   상자가 6px 낮고, 세로 가운데 정렬에서 컨트롤이 이웃 칸보다 3px 낮게 선다. 표식 밖의 표(PC · 한 화면 칸 수를
+   켜지 않은 문항)는 건드리지 않는다 — 컨트롤 자리와 행 높이가 그대로다. */
+[data-narrow-cells] .choice-opt-bare-control {
+  min-height: 1.625rem;
 }
 /* 모바일 카드 안에서는 뷰포트 폭과 무관하게 --options-grid-cols 적용 */
 .mobile-row-card .options-grid {

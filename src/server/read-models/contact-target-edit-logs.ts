@@ -22,10 +22,15 @@ export const CONTACT_TARGET_EDIT_LOG_LIMIT = 200;
  */
 export function visibleContactTargetEditChanges(
   changes: ContactTargetEditChange[],
-  viewer: { isGuest: boolean },
+  viewer: { isGuest: boolean; hiddenAttrsKey?: string | null },
 ): ContactTargetEditChange[] {
   if (!viewer.isGuest) return changes;
-  return changes.filter((c) => c.kind !== 'assignment');
+  // 담당 범위를 가르는 열의 변경(관리자가 대상을 다른 업체로 옮긴 기록)도 범위 게스트에게는 싣지 않는다 —
+  // 그 값에 다른 업체 이름이 들어 있다.
+  const hiddenKey = viewer.hiddenAttrsKey ?? null;
+  return changes.filter(
+    (c) => c.kind !== 'assignment' && !(c.kind === 'attr' && hiddenKey !== null && c.key === hiddenKey),
+  );
 }
 
 /**
@@ -40,6 +45,8 @@ export async function getContactTargetEditLogs(
   scope: OperationsDataScope,
   viewer: {
     isGuest: boolean;
+    /** 담당 범위를 가르는 명단 열(`shareHiddenAttrsKey`) — 그 열의 변경은 싣지 않는다. 가릴 열이 없으면 null. */
+    hiddenAttrsKey?: string | null;
     /**
      * 내부 콘솔만 넘긴다 — 링크가 남긴 줄(`edited_by = link:<id>`)의 기록자를 「외주 · <링크 이름>」
      * 으로 읽는다(fieldwork-multi-company 티켓 02). 없으면 저장된 글자(「외주」) 그대로다.

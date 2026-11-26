@@ -25,9 +25,12 @@ Sentry.init({
   // 스택에 우리 번들 프레임이 없고 응답 진행에도 영향이 없어 이슈만 어지럽힌다.
   // - __firefox__: Firefox iOS 계열(Brave iOS 포함)의 읽기 모드 주입 스크립트
   // - window.ethereum: Brave 지갑·MetaMask 등 지갑 확장 주입
+  // - Object Not Found Matching Id: 메일 링크를 여는 윈도우 프로그램의 내장 브라우저(Outlook 링크 검사 등,
+  //   CefSharp)가 페이지에 심는 스크립트의 오류. 초대 링크(/i/…)에서 Error 가 아닌 글자로 던져진다(2026-11-25)
   ignoreErrors: [
     /__firefox__/,
     /window\.ethereum/,
+    /Object Not Found Matching Id:\d+, MethodName:\w+, ParamCount:\d+/,
     /ResizeObserver loop (limit exceeded|completed with undelivered notifications)/,
   ],
   denyUrls: [

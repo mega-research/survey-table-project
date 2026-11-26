@@ -2,7 +2,7 @@ import { ORPCError } from '@orpc/server';
 import * as z from 'zod';
 
 import { isExternalActor } from '@/server/data-scope';
-import { resolveFieldworkShare } from '@/server/fieldwork-share-scope';
+import { FIELDWORK_SHARE_ALL, resolveFieldworkShare } from '@/server/fieldwork-share-scope';
 import { requireScopedAccount, scoped } from '@/server/orpc';
 import { accountAttribution, attributionOf } from '@/server/survey-access';
 import { assertScopedSurveyCapabilityRpc } from '@/server/rpc-survey-access';
@@ -75,11 +75,13 @@ const create = scoped
   .handler(async ({ context, input }) => {
     await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'mail.send');
     // 인증된 context 에서 1회 파생 — 서비스가 auth 를 재조회하지 않는다.
+    // 단체 발송은 계정만 지나는 표면이다(외주 링크에는 단건 발송만 열린다) — 여기 오는 발송자는 전체를 본다.
     return svc
       .createCampaign(
         input,
         accountAttribution(requireScopedAccount(context).id),
         isExternalActor(context.actor),
+        { share: FIELDWORK_SHARE_ALL },
       )
       .catch(rethrowCampaignRefusal);
   });

@@ -9,6 +9,7 @@ import { getCurrentUser } from '@/lib/auth';
 import { isRscRateLimited } from '@/lib/rate-limit/rsc-guard';
 import { loadPreviewContactSeed } from '@/server/contacts/services/preview-contact';
 import { loadOperationsDataScope } from '@/server/data-scope';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 import {
   getSurveyById,
   getSurveyByPreviewToken,
@@ -91,6 +92,8 @@ export default async function PublicSurveyPreviewPage({ params }: PageProps) {
     surveyId: survey.id,
     isTest,
     structure: preview.survey,
+    // 공개 미리보기는 토큰으로 연다 — 담당 범위(외주 링크의 축)를 걸 열람자가 없다.
+    share: FIELDWORK_SHARE_ALL,
   });
 
   return (

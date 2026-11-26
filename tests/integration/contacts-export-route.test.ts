@@ -70,6 +70,7 @@ beforeEach(() => {
       progressPct: null,
       responseStatus: null,
       latestMailStatus: null,
+      linkClick: null,
     },
   ]);
 });
@@ -123,6 +124,7 @@ describe('GET /api/surveys/[surveyId]/contacts/export', () => {
         progressPct: null,
         responseStatus: null,
         latestMailStatus: null,
+        linkClick: null,
       })),
     );
     const res = await GET(makeRequest('?cols=system.resid'), params);

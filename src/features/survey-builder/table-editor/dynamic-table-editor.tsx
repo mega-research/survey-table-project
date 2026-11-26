@@ -11,11 +11,15 @@ import { Label } from '@/components/ui/label';
 import { cn, generateId } from '@/lib/utils';
 import { headerPath } from '@/features/question-renderer/utils/column-axis-cards';
 import { resolveUngroupedSelectionType } from '@/features/question-renderer/utils/row-scale-bars';
+import { resolveChoiceTableQuestionSliderDirection } from '@/features/question-renderer/utils/scale-slider-table-layout';
 import { isStagedColumnsActive } from '@/features/question-renderer/utils/staged-columns';
+import { diagnoseMobilePieceArrangement } from '@/features/survey-builder/lib/mobile-piece-diagnostics';
 import { diagnoseRowScaleBars } from '@/features/survey-builder/lib/scale-bar-diagnostics';
+import { summarizeTableScaleSlider } from '@/features/survey-builder/lib/scale-slider-diagnostics';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
 import { ChoiceGroup, DynamicRowGroupConfig, HeaderCell, QuestionConditionGroup, RowRepeatConfig, StagedRowsConfig, TableCell, TableColumn, TableRow } from '@/types/survey';
+import type { ScaleSliderDirection } from '@/types/scale-slider';
 import { pruneChoiceGroups } from '@/utils/choice-group-helpers';
 import {
   clampMobileDrilldownOmitLeadingColumns,
@@ -66,6 +70,12 @@ interface DynamicTableEditorProps {
    * 스토어가 아니라 편집 모달의 formData 에서 내려온다 — 저장 전 토글도 즉시 반영되어야 하기 때문.
    */
   answerQuoteEnabled?: boolean | undefined;
+  /**
+   * 문항 설정의 슬라이더 방향(「척도 슬라이더로 그리기」) — 그룹 없는 보기 소스 표가 읽는 값이다.
+   * 그 스위치는 편집 모달의 formData 에만 쓰므로 스토어가 아니라 여기로 내려온다(꺼졌으면 null).
+   * 모바일 표시 방식 옆 안내만 읽는다 — 이 에디터는 값을 쓰지 않는다.
+   */
+  questionScaleSlider?: ScaleSliderDirection | null | undefined;
   dynamicRowConfigs?: DynamicRowGroupConfig[] | undefined;
   /** 행 반복 설정 — 편집 표는 1벌만 그리고, 2벌 이후는 저장 구조에만 존재한다 */
   rowRepeatConfig?: RowRepeatConfig | null | undefined;
@@ -183,6 +193,65 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
       useMultiRowHeader,
     ],
   );
+  // 조각 좌우 반전 · 조각 한 화면 칸 수의 폴백 진단 — 응답 화면과 같은 행별 모델·재배치 판정으로,
+  // 편집 중인 표 구조 기준이다. 켠 설정이 없으면 진단이 빈 목록을 낸다.
+  const pieceReverseColumns = mobileTableQuestion?.mobileDrilldownReverseColumns === true;
+  const pieceColumnsPerView = mobileTableQuestion?.mobileDrilldownColumnsPerView ?? null;
+  const pieceIssues = useMemo(
+    () =>
+      mobileTableQuestion
+        ? diagnoseMobilePieceArrangement({
+            rows: currentRows,
+            columns: currentColumns,
+            headerGrid: useMultiRowHeader ? currentHeaderGrid : undefined,
+            hideColumnLabels: mobileTableQuestion.hideColumnLabels ?? false,
+            omitLeadingColumns: mobileDrilldownOmitLeadingColumns,
+            repeatHeaderStartRow: mobileDrilldownRepeatHeaderRange?.startRow ?? null,
+            repeatHeaderEndRow: mobileDrilldownRepeatHeaderRange?.endRow ?? null,
+            reverseColumns: pieceReverseColumns,
+            columnsPerView: pieceColumnsPerView,
+          })
+        : [],
+    [
+      currentColumns,
+      currentHeaderGrid,
+      currentRows,
+      mobileDrilldownOmitLeadingColumns,
+      mobileDrilldownRepeatHeaderRange,
+      mobileTableQuestion,
+      pieceColumnsPerView,
+      pieceReverseColumns,
+      useMultiRowHeader,
+    ],
+  );
+  // 척도 슬라이더가 켜진 표인가, 그려지는 행이 있는가 — 모바일 표시 방식 옆 안내의 재료. 응답 화면의 표
+  // 배치 판정과 같은 함수를 편집 중인 표 구조에 돌린다. 보기 그룹은 스토어 값(셀 편집이 쓴다)이고, 그룹 없는
+  // 보기 소스 표의 방향은 문항 편집 폼의 값이다(저장 전이라 스토어의 방향은 읽지 않는다).
+  const questionScaleSlider = props.questionScaleSlider;
+  const scaleSliderSummary = useMemo(
+    () =>
+      mobileTableQuestion
+        ? summarizeTableScaleSlider({
+            rows: currentRows,
+            columns: currentColumns,
+            headerGrid: useMultiRowHeader ? currentHeaderGrid : undefined,
+            choiceGroups: mobileTableQuestion.choiceGroups ?? [],
+            ungroupedSelectionType: resolveUngroupedSelectionType(mobileTableQuestion.type),
+            ungroupedSliderDirection: resolveChoiceTableQuestionSliderDirection({
+              ...mobileTableQuestion,
+              scaleSlider: questionScaleSlider ?? null,
+            }),
+          })
+        : undefined,
+    [
+      currentColumns,
+      currentHeaderGrid,
+      currentRows,
+      mobileTableQuestion,
+      questionScaleSlider,
+      useMultiRowHeader,
+    ],
+  );
 
   const {
     updateTitle,
@@ -191,6 +260,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
     moveColumn,
     updateColumnLabel,
     updateColumnStyle,
+    updateColumnRightBorder,
     updateColumnExportOmit,
     updateColumnReveal,
     updateColumnCode,
@@ -550,7 +620,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
         </div>
       </div>
 
-      {/* 화면 폭에 맞춰 표 줄이기 — 좁은 화면(태블릿 세로 등)에서 가로 스크롤 대신 비율로 줄인다 */}
+      {/* 화면 폭에 맞춰 표 줄이기 — 패드 폭(768~1023px)에서 가로 스크롤 대신 비율로 줄인다 */}
       <div className="space-y-3 rounded-lg border border-gray-200 p-4">
         <div className="flex items-center justify-between">
           <div>
@@ -558,9 +628,9 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
               화면 폭에 맞춰 표 줄이기
             </Label>
             <p className="text-xs text-gray-500">
-              화면이 표보다 좁으면(태블릿 세로 등) 가로 스크롤 대신 열 비율대로 표를 줄입니다. 넓은
-              화면에서는 지정한 폭 그대로이고, 휴대폰은 모바일 표시 방식을 따릅니다. 켜면 좌측 고정
-              열은 쓰지 않습니다.
+              패드(창 폭 768~1023px)에서 표가 화면보다 넓으면 가로 스크롤 대신 열 비율대로 표를
+              줄입니다. PC(1024px 이상)는 지정한 폭 그대로이고, 휴대폰은 모바일 표시 방식을 따릅니다.
+              줄인 화면에서는 좌측 고정 열을 쓰지 않습니다.
             </p>
           </div>
           <label className="relative inline-flex cursor-pointer items-center">
@@ -665,6 +735,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
               questionType={mobileTableQuestion.type}
               hasChoiceGroups={(mobileTableQuestion.choiceGroups?.length ?? 0) > 0}
               rowScaleBarIssues={rowScaleBarIssues}
+              scaleSlider={scaleSliderSummary}
               mode={mobileTableDisplayMode}
               omitLeadingColumns={mobileDrilldownOmitLeadingColumns}
               columnCount={currentColumns.length}
@@ -693,6 +764,21 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
                   mobileDrilldownRepeatHeaderStartRow: repeatHeaderStartRow,
                   mobileDrilldownRepeatHeaderEndRow: repeatHeaderEndRow,
                   mobileItemCardBlockColumns: itemCardBlockColumns,
+                });
+              }}
+              pieceReverseColumns={pieceReverseColumns}
+              pieceColumnsPerView={pieceColumnsPerView}
+              pieceIssues={pieceIssues}
+              onPieceChange={({ reverseColumns, columnsPerView }) => {
+                if (!editingQuestionId) return;
+                // 끌 때도 키를 지우지 않고 false · null 을 적는다 — 부분 수정은 없는 키를 「그대로 두기」로 읽는다
+                silentUpdateQuestion(editingQuestionId, {
+                  ...(reverseColumns !== undefined
+                    ? { mobileDrilldownReverseColumns: reverseColumns }
+                    : {}),
+                  ...(columnsPerView !== undefined
+                    ? { mobileDrilldownColumnsPerView: columnsPerView }
+                    : {}),
                 });
               }}
             />
@@ -772,6 +858,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
                 hasQuestions={hasQuestions}
                 onUpdateColumnLabel={updateColumnLabel}
                 onUpdateColumnStyle={updateColumnStyle}
+                onUpdateColumnRightBorder={updateColumnRightBorder}
                 onUpdateColumnExportOmit={updateColumnExportOmit}
                 onUpdateColumnReveal={updateColumnReveal}
                 onUpdateColumnCode={updateColumnCode}

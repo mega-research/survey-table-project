@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useBranchEvalCtx } from '@/features/question-renderer/contact-attrs-context';
 import { useDynamicRows } from '@/features/question-renderer/hooks/use-dynamic-rows';
 import { useElementWidth } from '@/features/question-renderer/hooks/use-element-width';
+import { useFitTableToWidth } from '@/features/question-renderer/hooks/use-fit-table-to-width';
 import { useStagedColumns } from '@/features/question-renderer/hooks/use-staged-columns';
 import { stagedColumnRevealScrollLeft } from '@/features/question-renderer/utils/staged-columns';
 import { useHorizontalScrollIndicators } from '@/features/question-renderer/hooks/use-horizontal-scroll-indicators';
@@ -43,6 +44,7 @@ import {
   computeStickyLeftColumns,
   getAlignmentClasses,
   getCellBorderClasses,
+  getHeaderRightBorderClass,
   getGridCellAria,
   getHeaderCellStickyStyle,
   fitTableMarker,
@@ -64,6 +66,7 @@ import {
 } from '@/lib/question/row-repeat';
 import { collectTableCells } from '@/lib/survey/cell-gating';
 import { cn } from '@/lib/utils';
+import { resolveMobilePieceColumnsPerView } from '@/types/mobile-table-display';
 import {
   ChoiceGroup,
   DynamicRowGroupConfig,
@@ -111,8 +114,8 @@ import { TableImageEnlargeProvider } from './table-image-enlarge';
 import { MobileRowGroupCards } from './mobile-row-group-cards';
 import { MobileRowWiseOriginalSheet, RowTileSection } from './mobile-row-wise-original-sheet';
 import {
-  type RowScaleLayout,
-  projectRowWiseScaleLayouts,
+  type RowSliderLayout,
+  projectRowWiseSliderLayouts,
   resolveUngroupedSelectionType,
 } from './utils/row-scale-bars';
 import { MobileTableDrilldown } from './mobile-table-drilldown';
@@ -122,6 +125,11 @@ import { MobileTableStepper } from './mobile-table-stepper';
 import { HEADER_SCROLL_CLASS, TableScrollControls, getScrollBehavior } from './table-scroll-controls';
 import { OptionTextBelowTable } from './option-text-below-table';
 import { StagedRowsButtons } from './staged-rows-buttons';
+import { TableChoiceGroupScaleSlider } from './table-choice-group-scale-slider';
+import {
+  resolveRenderedTableDisplay,
+  tableHasScaleSliderRow,
+} from './utils/scale-slider-table-layout';
 import { VirtualizedTableGrid } from './virtualized-table-grid';
 
 const VIRTUALIZATION_THRESHOLD = 100;
@@ -160,7 +168,7 @@ function displayOnlyTableNeedsOriginal(rows: TableRow[], mode: MobileTableDispla
 
 // text-base: 헤더는 척도 라벨 등 응답 판단 정보가 실리므로 16px 고정 (TablePreview 와 동일)
 const HEADER_CELL_BASE_CLASS =
-  'flex min-w-0 items-center justify-center border-r border-b border-gray-400 bg-gray-50 px-3 py-2 text-center text-base font-semibold whitespace-pre-line text-gray-800 [overflow-wrap:anywhere]';
+  'flex min-w-0 items-center justify-center border-r border-b border-gray-400 bg-gray-50 px-3 py-2 text-center text-base font-semibold whitespace-pre-wrap text-gray-800 [overflow-wrap:anywhere]';
 
 // ── 행 반복 버튼 (표 아래) ──
 
@@ -380,6 +388,12 @@ function HeaderCells({
           ...getCellTextStyle(cell),
         };
 
+        const rightBorderClass = getHeaderRightBorderClass(
+          cell,
+          startCol + colSpan - 1,
+          visibleColumns.length,
+        );
+
         // 머리글 입력칸 — 본문 칸을 이 자리에 그린다. data-cell-id 로 오류 「위치로 이동」·링이 본문 칸과 같다.
         const inputCell = headerInputCells?.get(cell.id);
         if (inputCell && renderHeaderInput) {
@@ -389,6 +403,7 @@ function HeaderCells({
               className={cn(
                 HEADER_CELL_BASE_CLASS,
                 'px-2',
+                rightBorderClass,
                 errorCellIds?.has(inputCell.id) && 'ring-2 ring-red-300 ring-inset',
               )}
               style={style}
@@ -404,7 +419,12 @@ function HeaderCells({
           return (
             <div
               key={cell.id}
-              className={cn(HEADER_CELL_BASE_CLASS, getCellTextClassName(cell), 'gap-2')}
+              className={cn(
+                HEADER_CELL_BASE_CLASS,
+                getCellTextClassName(cell),
+                'gap-2',
+                rightBorderClass,
+              )}
               style={style}
               {...getGridCellAria('columnheader', colSpan, rowSpan)}
             >
@@ -417,7 +437,7 @@ function HeaderCells({
         return (
           <div
             key={cell.id}
-            className={cn(HEADER_CELL_BASE_CLASS, getCellTextClassName(cell))}
+            className={cn(HEADER_CELL_BASE_CLASS, getCellTextClassName(cell), rightBorderClass)}
             style={style}
             {...getGridCellAria('columnheader', colSpan, rowSpan)}
           >
@@ -464,7 +484,11 @@ function HeaderCells({
     return (
       <div
         key={column.id}
-        className={cn(HEADER_CELL_BASE_CLASS, getCellTextClassName(column))}
+        className={cn(
+          HEADER_CELL_BASE_CLASS,
+          getCellTextClassName(column),
+          getHeaderRightBorderClass(column, startCol + cs - 1, visibleColumns.length),
+        )}
         style={style}
         {...getGridCellAria('columnheader', cs)}
       >
@@ -601,6 +625,10 @@ interface InteractiveTableResponseProps {
   mobileDrilldownOmitLeadingColumns?: number | undefined;
   mobileDrilldownRepeatHeaderStartRow?: number | null | undefined;
   mobileDrilldownRepeatHeaderEndRow?: number | null | undefined;
+  /** 조각 좌우 반전 — 좁은 화면의 원본 표 조각에서 열을 작성 순서의 반대로 그린다 */
+  mobileDrilldownReverseColumns?: boolean | undefined;
+  /** 조각 한 화면 칸 수 — 좁은 화면의 원본 표 조각에서 자리 폭을 이 수로 나눠 칸 폭을 정한다 */
+  mobileDrilldownColumnsPerView?: number | null | undefined;
   /** 「항목 단위 카드」 블록 시작 열(1부터, 작성 열 순서). 비면 블록 없이 행 순서 */
   mobileItemCardBlockColumns?: number[] | null | undefined;
   /** 헤더·좌측 열 sticky 동작 활성화. 기본 true. 빌더 프리뷰 등에서 끌 수 있음 */
@@ -715,6 +743,8 @@ function InteractiveTableResponseBody({
   mobileDrilldownOmitLeadingColumns,
   mobileDrilldownRepeatHeaderStartRow,
   mobileDrilldownRepeatHeaderEndRow,
+  mobileDrilldownReverseColumns,
+  mobileDrilldownColumnsPerView,
   mobileItemCardBlockColumns,
   enableSticky = true,
   choiceGroups,
@@ -751,11 +781,34 @@ function InteractiveTableResponseBody({
     () => displayOnlyTableNeedsOriginal(rows, authoredMobileMode),
     [rows, authoredMobileMode],
   );
-  const mobileMode = displayOnlyFallsBack ? 'original' : authoredMobileMode;
-  const useOriginalRowDetail = isMobileView && mobileMode === 'drilldown-original-row';
-  // 행별 원본 · 행별 척도 — 같은 시트 구조, 행 본문만 다르다
-  const usesRowWiseSheet = isMobileView && isRowWiseMobileTableDisplayMode(mobileMode);
-  const mobileUsesCards = isMobileView && mobileMode !== 'original';
+  const requestedMobileMode = displayOnlyFallsBack ? 'original' : authoredMobileMode;
+  // 척도 슬라이더 — 슬라이더로 그려지는 행이 있는 표는 넓은 폭에서도 표 대신 행 단위 배치로 그린다
+  // (scale-slider-table-layout). 그려지는 행은 표의 구조로 판정해, 답에 따라 배치가 오가지 않는다.
+  const hasScaleSliderRow = useMemo(
+    () =>
+      tableHasScaleSliderRow({
+        columns,
+        headerGrid: tableHeaderGrid,
+        rows,
+        choiceGroups: choiceGroups ?? [],
+        ungroupedSelectionType: resolveUngroupedSelectionType('table'),
+      }),
+    [choiceGroups, columns, rows, tableHeaderGrid],
+  );
+  // 지금 유효한 표시 방식 — **아래의 방식별 분기·파생값은 저작 값(requestedMobileMode)이 아니라 이 값만
+  // 읽는다.** 슬라이더가 행 단위 배치로 가져간 화면에서 저작 값을 직접 읽으면 그 방식의 전용 장치가 샌다
+  // (「항목 단위 카드」의 행 추가 버튼이 사라졌다 — scale-slider-table-layout 머리 주석).
+  // activeMode 는 화면을 실제로 정하는 방식이고, 넓은 화면의 격자 표면 null 이다.
+  const { mode: renderedMode, activeMode } = resolveRenderedTableDisplay({
+    hasSliderRow: hasScaleSliderRow,
+    narrow: isMobileView,
+    mobileMode: requestedMobileMode,
+  });
+  const useOriginalRowDetail = activeMode === 'drilldown-original-row';
+  // 행별 원본 · 행별 척도 — 같은 시트 구조, 행 본문만 다르다. 슬라이더의 행 단위 배치도 이 시트다.
+  const usesRowWiseSheet = activeMode !== null && isRowWiseMobileTableDisplayMode(activeMode);
+  // 격자 표가 아닌 화면인가 — 모바일 카드 계열, 그리고 폭과 무관한 슬라이더의 행 단위 배치
+  const usesCardLayout = activeMode !== null && activeMode !== 'original';
   // 행 단위 그룹 카드는 보기 그룹 정의가 있어야 그린다 — 없으면 자동 카드로 떨어진다
   const hasChoiceGroupDefs = (choiceGroups?.length ?? 0) > 0;
   // 위반 셀 중 보기 셀은 그룹 덩어리 외곽선으로 — 보기 소스 표(choice-table-response)와 같은
@@ -770,8 +823,9 @@ function InteractiveTableResponseBody({
     }
     return ids.size > 0 ? buildChoiceGroupOutline(rows, ids) : undefined;
   }, [errorCellIds, hasChoiceGroupDefs, rows]);
-  const rendersFullOriginalTable = mobileMode === 'original';
-  const applyCellBackground = !(isMobileView && mobileMode === 'original');
+  // 「원본」으로 둔 표의 좌우 여백 — 폭과 무관하게 읽는다(넓은 화면의 격자 표도 같은 여백 클래스를 쓴다)
+  const rendersFullOriginalTable = renderedMode === 'original';
+  const applyCellBackground = activeMode !== 'original';
 
   // 열·행 조건 평가는 allResponses 를 그대로 의존한다.
   // 예전에는 displayCondition.conditions 의 sourceQuestionId 만 모아 만든 부분집합 JSON 을
@@ -868,7 +922,7 @@ function InteractiveTableResponseBody({
   // 머리글 입력칸 — 머리글을 그리는 화면(데스크톱 표·모바일 원본)에서만 본문 칸을 머리글로 올리고 그 행을 뺀다.
   // 카드 화면은 머리글이 없어 그 행을 그대로 그린다. 판정은 구조 전체로 한다 — 열 단계로 칸이 잠시 숨어도
   // 행이 본문에 글자만 남은 채 나타나지 않게.
-  const rendersHeaderGrid = !mobileUsesCards && !hideColumnLabels;
+  const rendersHeaderGrid = !usesCardLayout && !hideColumnLabels;
   const headerInputs = useMemo(
     () => resolveHeaderInputCells(tableHeaderGrid, rows, stagedRowsConfig),
     [tableHeaderGrid, rows, stagedRowsConfig],
@@ -903,8 +957,8 @@ function InteractiveTableResponseBody({
   }, [rendersHeaderGrid, tableHeaderGrid, visibleHeaderGrid, headerInputs]);
 
   // Grid 관련 계산
-  // 화면 폭에 맞춰 줄이기는 모바일 모드가 아닐 때만 — 휴대폰 원본 표까지 줄이면 칸이 찌그러진다
-  const fitToWidth = fitTableToWidth && !isMobileView;
+  // 화면 폭에 맞춰 줄이기는 패드 폭에서만 — 데스크톱은 지정한 px 그대로, 휴대폰은 모바일 표시 방식
+  const fitToWidth = useFitTableToWidth(fitTableToWidth);
   const gridSizing = useMemo(
     () => resolveTableGridSizing(visibleColumns, fitToWidth),
     [visibleColumns, fitToWidth],
@@ -986,9 +1040,10 @@ function InteractiveTableResponseBody({
   });
   // 버튼 줄이 묶음 바로 아래에 서는 화면인가 — 데스크톱 표(모바일의 「원본」 포함)에서
   // 보이는 묶음 행이 있을 때. 그 밖의 화면은 표 아래 버튼으로 폴백한다.
-  const stagedInDesktopTable = !mobileUsesCards && stagedControl !== null;
-  // 모바일 「항목 단위 카드」는 카드 목록이 버튼 자리를 직접 잡는다(블록마다).
-  const stagedInItemCards = isMobileView && mobileMode === 'item-cards' && stagedRows.isActive;
+  const stagedInDesktopTable = !usesCardLayout && stagedControl !== null;
+  // 모바일 「항목 단위 카드」는 카드 목록이 버튼 자리를 직접 잡는다(블록마다). 항목 카드가 실제로
+  // 그려질 때만이다 — 슬라이더가 행 단위 배치로 가져간 표는 표 아래 버튼으로 폴백한다.
+  const stagedInItemCards = activeMode === 'item-cards' && stagedRows.isActive;
   const stagedControlsInline = stagedInDesktopTable || stagedInItemCards;
   const stagedItemCardControls = useMemo(
     () =>
@@ -1069,7 +1124,7 @@ function InteractiveTableResponseBody({
 
   // 가로 스크롤 인디케이터 (좌/우 섀도우·버튼 표시 여부)
   const { canScrollLeft, canScrollRight } = useHorizontalScrollIndicators(tableContainerRef, {
-    disabled: mobileUsesCards,
+    disabled: usesCardLayout,
     deps: [visibleColumns.length, displayRows.length],
   });
 
@@ -1077,13 +1132,13 @@ function InteractiveTableResponseBody({
   // 누적 sticky 너비 상한 계산에 사용. 카드 모드/비활성 시 측정 생략(0).
   const scrollViewportWidth = useElementWidth(
     tableContainerRef,
-    !enableSticky || mobileUsesCards || fitToWidth,
+    !enableSticky || usesCardLayout || fitToWidth,
   );
 
   // 좌측 sticky 열 판정 (카드 모드거나 비활성화면 비적용 — 모바일 원본 표 모드는 적용)
   const stickyInfo = useMemo<StickyLeftInfo | undefined>(() => {
     // 화면 폭에 맞춰 줄인 표는 넘치지 않아 고정할 이유가 없고, px 누적 오프셋이 비율로 줄어든 열과 어긋난다
-    if (!enableSticky || mobileUsesCards || fitToWidth) return undefined;
+    if (!enableSticky || usesCardLayout || fitToWidth) return undefined;
     // 좁은 뷰포트에서 넓은 텍스트 열이 sticky로 화면을 다 덮는 것을 방지.
     // 측정 전(0)에는 제한 없음(undefined) — 측정 직후 ResizeObserver가 재계산한다.
     const maxStickyWidth =
@@ -1091,7 +1146,7 @@ function InteractiveTableResponseBody({
     return computeStickyLeftColumns(visibleColumns, displayRows, maxStickyWidth, stickyColumnCount);
   }, [
     enableSticky,
-    mobileUsesCards,
+    usesCardLayout,
     fitToWidth,
     visibleColumns,
     displayRows,
@@ -1111,7 +1166,7 @@ function InteractiveTableResponseBody({
     if (!pendingColumnRevealScrollRef.current) return;
     pendingColumnRevealScrollRef.current = false;
     const container = tableContainerRef.current;
-    if (!container || mobileUsesCards || fitToWidth) return;
+    if (!container || usesCardLayout || fitToWidth) return;
     const left = stagedColumnRevealScrollLeft({
       visibleColumns,
       columnStops,
@@ -1121,7 +1176,7 @@ function InteractiveTableResponseBody({
       stickyWidth: stickyInfo ? (columnStops[stickyInfo.stickyColCount] ?? 0) : 0,
     });
     if (left !== null) container.scrollTo({ left, behavior: getScrollBehavior() });
-  }, [openColumnStep, openStepColumnIds, visibleColumns, columnStops, stickyInfo, mobileUsesCards, fitToWidth]);
+  }, [openColumnStep, openStepColumnIds, visibleColumns, columnStops, stickyInfo, usesCardLayout, fitToWidth]);
 
   // ── 가상화 여부 (hooks-rules: 빈 테이블 early return 이전에 계산) ──
   const shouldVirtualize = displayRows.length >= VIRTUALIZATION_THRESHOLD;
@@ -1135,7 +1190,7 @@ function InteractiveTableResponseBody({
   const pageSticky = usePageStickyThreshold(
     tableContainerRef,
     {
-      disabled: mobileUsesCards || !enableSticky,
+      disabled: usesCardLayout || !enableSticky,
       forced: shouldVirtualize,
     },
     [columns.length === 0 || rows.length === 0],
@@ -1145,7 +1200,7 @@ function InteractiveTableResponseBody({
   // 단일 컨테이너 모드는 헤더가 같은 컨테이너 안이라 동기화 자체가 불필요.
   // 헤더는 hideColumnLabels=false 일 때만 마운트되므로, 토글 시 리스너 재부착이
   // 필요하다(ref는 안 바뀌어 deps 없이는 effect가 재실행되지 않음).
-  useScrollLeftSync(headerScrollRef, tableContainerRef, mobileUsesCards || !pageSticky, [
+  useScrollLeftSync(headerScrollRef, tableContainerRef, usesCardLayout || !pageSticky, [
     hideColumnLabels,
   ]);
 
@@ -1367,17 +1422,21 @@ function InteractiveTableResponseBody({
     visibleColumns,
     visibleHeaderGrid,
   ]);
-  // 행별 척도 — 행마다 막대로 바꿀 수 있는지. 못 바꾸는 행은 원본 표 조각 그대로다.
+  // 행별 척도 — 행마다 막대·슬라이더로 바꿀 수 있는지. 못 바꾸는 행은 원본 표 조각 그대로다.
+  // 슬라이더의 행 단위 배치는 고른 표시 방식과 무관하게 「행별 척도」와 같이 그린다. 넓은 폭에서는
+  // 슬라이더가 아닌 보기 그룹을 제 보기 모양(세로 타일·척도 막대) 대신 원본 조각으로 낸다.
+  const rowWiseWide = !isMobileView;
   const rowScaleLayouts = useMemo(
     () =>
-      usesRowWiseSheet && mobileMode === 'row-wise-scale'
-        ? projectRowWiseScaleLayouts(
+      activeMode === 'row-wise-scale'
+        ? projectRowWiseSliderLayouts(
             rowWiseOriginalModel,
             choiceGroups ?? [],
             resolveUngroupedSelectionType('table'),
+            { wide: rowWiseWide },
           )
-        : new Map<string, RowScaleLayout>(),
-    [choiceGroups, mobileMode, rowWiseOriginalModel, usesRowWiseSheet],
+        : new Map<string, RowSliderLayout>(),
+    [activeMode, choiceGroups, rowWiseOriginalModel, rowWiseWide],
   );
 
   // 셀 게이팅 컨트롤러 정의 탐색용 표 전체 셀 — 조건부로 숨은 행의 컨트롤러도 정의는 찾을 수
@@ -1600,6 +1659,11 @@ function InteractiveTableResponseBody({
     mobileDrilldownRepeatHeaderEndRow,
     answerableCellTypes: mobileAnswerableCellTypes,
   };
+  // 조각 좌우 반전 · 조각 한 화면 칸 수 — 원본 표 조각을 그리는 두 호스트(행별 원본 시트 · 선택 행 원본 보기)가 받는다
+  const pieceSettings = {
+    reverseColumns: mobileDrilldownReverseColumns,
+    columnsPerView: mobileDrilldownColumnsPerView,
+  };
 
   // 동적 행 그룹 선택 버튼 목록 — 행별 원본 문항·행 단위 그룹 카드가 카드 목록 위에 같이 둔다
   const dynamicGroupPicker = hasDynamicRows ? (
@@ -1632,6 +1696,14 @@ function InteractiveTableResponseBody({
     </div>
   ) : null;
 
+  // 한 화면 칸 수를 켠 문항은 좁은 화면에서 표 카드의 좌우 여백을 걷는다 — 보기 소스 표(이 여백이 없다)와
+  // 조각의 자리 폭이 같아져, 같은 폰에서 같은 칸까지 보인다(360px 폰: 254px → 278px, 5칸 → 6칸).
+  // 켜지 않은 문항과 넓은 화면은 그대로다.
+  const widensPieceSlot =
+    isMobileView &&
+    (usesRowWiseSheet || useOriginalRowDetail) &&
+    resolveMobilePieceColumnsPerView(mobileDrilldownColumnsPerView) !== null;
+
   return (
     <ChoiceGroupsProvider value={choiceGroups ?? null}>
       <GatingTableCellsProvider value={gatingTableCells} visibleCellIds={visibleCellIds}>
@@ -1651,6 +1723,7 @@ function InteractiveTableResponseBody({
                   ? 'p-3 sm:p-4'
                   : 'p-3 pt-0 sm:p-4 sm:pt-1'
                 : 'p-0 sm:px-6',
+              widensPieceSlot && 'px-0 sm:px-0',
             )}
           >
             {/* 열 차례로 열기 — 열은 머리 쪽에서 오른쪽으로 늘어나므로 버튼을 표 위 오른쪽에 둔다.
@@ -1722,6 +1795,42 @@ function InteractiveTableResponseBody({
                         />
                       ) : null
                     }
+                    // 슬라이더도 막대와 같은 보기 그룹 선택 쓰기다 — 끈 같은 문항과 응답 키·값이 같다
+                    // 낭독 이름은 화면에 보이는 행 제목 요소다(머리에 그룹 이름이 있으면 슬라이더가 뒤에 잇는다).
+                    // 필수인데 답하지 않은 묶음에는 그 행의 낭독용 오류 문구를 잇는다 — 답하면 둘 다 풀린다.
+                    renderScaleSlider={(
+                      slider,
+                      rowQuestion,
+                      { inputIdScope, sharesRow, titleId, errorDescriptionId },
+                    ) => {
+                      if (!slider.group) return null;
+                      const unfilled = slider.cells.some((cell) => errorCellIds?.has(cell.id));
+                      return (
+                        <TableChoiceGroupScaleSlider
+                          questionId={questionId}
+                          group={slider.group}
+                          model={slider.model}
+                          cells={slider.cells}
+                          // 행 제목이 위에 있다 — 행에 응답 묶음이 여럿일 때만 그룹 이름으로 가른다
+                          label={
+                            sharesRow ? substituteTokens(slider.group.label, attrs, quotes) : ''
+                          }
+                          ariaLabelledBy={titleId}
+                          // 제목 없는 행 — 가리킬 요소가 없어 글자로 넘긴다
+                          ariaLabel={
+                            sharesRow ? slider.group.label || rowQuestion.title : rowQuestion.title
+                          }
+                          ariaDescribedBy={unfilled ? errorDescriptionId : undefined}
+                          invalid={unfilled}
+                          narrow={isMobileView}
+                          value={value}
+                          onChange={mergedOnChange}
+                          inputIdScope={inputIdScope}
+                        />
+                      );
+                    }}
+                    wide={rowWiseWide}
+                    pieceSettings={pieceSettings}
                     renderCell={(cell, rowQuestion, inputIdScope, invalid, errorDescriptionId) => {
                       const sourceRowId =
                         rowQuestion.projection.sourceRowIdByCellId.get(cell.id) ??
@@ -1748,7 +1857,7 @@ function InteractiveTableResponseBody({
                     }}
                   />
                 </div>
-              ) : isMobileView && mobileMode === 'row-group-cards' && hasChoiceGroupDefs ? (
+              ) : activeMode === 'row-group-cards' && hasChoiceGroupDefs ? (
                 <MobileRowGroupCards
                   questionId={questionId}
                   displayRows={displayRows}
@@ -1761,7 +1870,7 @@ function InteractiveTableResponseBody({
                   errorCellIds={errorCellIds}
                   dynamicGroupPicker={dynamicGroupPicker}
                 />
-              ) : isMobileView && mobileMode === 'item-cards' ? (
+              ) : activeMode === 'item-cards' ? (
                 <MobileItemCards
                   questionId={questionId}
                   displayRows={displayRows}
@@ -1775,7 +1884,7 @@ function InteractiveTableResponseBody({
                   dynamicGroupPicker={dynamicGroupPicker}
                   afterRows={stagedItemCardControls}
                 />
-              ) : isMobileView && mobileMode === 'axis-cards' ? (
+              ) : activeMode === 'axis-cards' ? (
                 // 테이블 유형의 축 = 열. 보기 소스 표의 축 단위 카드(보기 그룹 = 축)는 choice-table-response 몫
                 <MobileColumnAxisCards
                   questionId={questionId}
@@ -1788,13 +1897,14 @@ function InteractiveTableResponseBody({
                   dynamicGroupPicker={dynamicGroupPicker}
                   choiceGroups={choiceGroups}
                 />
-              ) : mobileUsesCards ? (
+              ) : usesCardLayout ? (
                 useOriginalRowDetail || useDrilldown ? (
                   <MobileTableDrilldown
                     {...mobileTableProps}
                     authoredColumns={columns}
                     navigateToCellRef={drilldownNavigateRef}
                     detailMode={useOriginalRowDetail ? 'original-row' : 'legacy'}
+                    pieceSettings={pieceSettings}
                     omitLeadingAuthoredColumns={clampMobileDrilldownOmitLeadingColumns(
                       mobileDrilldownOmitLeadingColumns,
                       columns.length,

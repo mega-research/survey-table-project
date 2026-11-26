@@ -6,6 +6,7 @@
  * tableValidationRules(분기 전용, utils/branch-logic.ts)와 완전히 별개다.
  * 응답 shape: 단답형 = raw 숫자 문자열, 테이블 = { [cellId]: value } 평면 객체.
  */
+import { hasDistinctQuestionViolation } from '@/features/question-renderer/utils/distinct-question-group';
 import { findDistinctViolations } from '@/features/question-renderer/utils/distinct-select-group';
 import { optionTextTargetId } from '@/features/question-renderer/utils/option-text-target';
 import { stagedColumnOptionalCellIds } from '@/features/question-renderer/utils/staged-columns';
@@ -100,7 +101,7 @@ export interface NumericIssue {
     | 'text-quality'
     /** 체크박스 최대 선택 개수 초과 — 상한이 다른 문항 응답을 따라갈 때만 생긴다 */
     | 'selection-max'
-    /** 중복 불가 묶음 — 같은 묶음의 선택 칸 둘 이상이 같은 보기를 골랐다 */
+    /** 중복 불가 묶음 — 같은 묶음의 선택 칸(또는 단일 선택 문항) 둘 이상이 같은 보기를 골랐다 */
     | 'distinct';
   message: string;
   /** 위반 셀 id (테이블 전용 — 셀 하이라이트용) */
@@ -126,6 +127,12 @@ export interface NumericValidationCtx {
    * 글자 그대로 같으면 응답자가 손대지 않은 것이므로 검사하지 않는다. 미전달 시 전부 검사.
    */
   priorAnswers?: PriorAnswers | null;
+  /**
+   * 응답자가 실제로 밟는 경로 위에 보이는 문항(`collectTraversedQuestionIds`). 문항 사이의 중복 불가 묶음이
+   * 비교 상대를 여기로 좁힌다 — 분기로 건너뛴 쪽의 답은 화면이 즉시 지우지 않아 응답에 남아 있고, 그 답과
+   * 겹친다고 막으면 응답자가 볼 수 없는 문항 때문에 막힌다. 미전달 시 응답에 답이 있는 문항 전부와 비교한다.
+   */
+  traversedQuestionIds?: ReadonlySet<string> | undefined;
 }
 
 function isEmptyCellValue(v: unknown): boolean {
@@ -1068,6 +1075,19 @@ export function collectNumericIssues(
     issues.push(...collectChoiceTableInputCellIssues(question, ctx, locale));
     const selectionMax = selectionMaxIssue(question, visibleResponse, ctx, locale);
     if (selectionMax) issues.push(selectionMax);
+    // 문항 사이의 중복 불가 묶음 — 화면에서는 막지 않으므로 여기가 유일한 차단 지점이다.
+    if (
+      ctx &&
+      hasDistinctQuestionViolation(
+        question,
+        response,
+        ctx.allQuestions,
+        ctx.allResponses,
+        ctx.traversedQuestionIds,
+      )
+    ) {
+      issues.push({ kind: 'distinct', message: systemText('validation.distinctQuestion', locale) });
+    }
     return issues;
   }
   const cellValues =

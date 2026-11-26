@@ -35,7 +35,12 @@ import {
   getFirstTestTargetSample,
 } from '@/server/read-models/contact-sample';
 import { isExternalActor, loadOperationsDataScope } from '@/server/data-scope';
-import { FIELDWORK_SHARE_ALL, resolveFieldworkShare } from '@/server/fieldwork-share-scope';
+import {
+  FIELDWORK_SHARE_ALL,
+  isShareRestricted,
+  resolveFieldworkShare,
+  withoutShareAttr,
+} from '@/server/fieldwork-share-scope';
 import { InternalFailure } from '@/server/internal-failure';
 import type { Actor } from '@/server/survey-access';
 
@@ -63,11 +68,19 @@ async function loadTestLinkSample(surveyId: string, actor: Actor | undefined) {
  * inviteUrl 은 NEXT_PUBLIC_APP_URL 기준으로 서버에서 빌드 (window.origin 사용 시
  * localhost 미리보기 / 실제 발송 도메인 불일치 문제 발생).
  * 컨택 0건이면 null.
+ *
+ * 담당 범위는 주체에서 풀어 쓴다 — 범위에 묶인 주체는 **지목한 대상**(단건 발송 미리보기)만 표본으로 받고 그 대상이
+ * 범위 밖이면 null 이다(없는 대상과 같다). 대상을 지목하지 않은 호출(템플릿 편집기)은 그 주체에게 표본을
+ * 주지 않는다 — 「첫 대상」이 남의 범위일 수 있다.
  */
 export async function getMailPreviewSample(
   input: GetMailPreviewSampleInput,
   actor?: Actor,
 ): Promise<GetMailPreviewSampleOutput> {
+  // 담당 범위는 주체에서 — 범위 밖 대상은 없는 대상과 같은 null(티켓 05). 주체 없이 부르면 설문 전체다.
+  const share = actor ? resolveFieldworkShare(actor, input.surveyId) : FIELDWORK_SHARE_ALL;
+  // 대상을 지목하지 않은 호출(템플릿 편집기)은 범위에 묶인 주체에게 표본을 주지 않는다 — 「첫 대상」이 남의 범위일 수 있다.
+  if (!input.contactTargetId && isShareRestricted(share)) return null;
   // 대상을 지목한 미리보기(단건 발송)는 그 대상 그대로다 — 테스트 대상자로 바꾸지 않는다.
   const testTarget = input.contactTargetId
     ? null
@@ -76,8 +89,6 @@ export async function getMailPreviewSample(
   if (!sample) {
     // 주체를 받으면 그것으로 파티션을 정한다 — 외주 실사 링크에는 세션 계정이 없다(ADR-0027).
     const scope = await loadOperationsDataScope(input.surveyId, actor);
-    // 담당 범위도 같은 주체에서 — 범위 밖 대상은 없는 대상과 같은 null(티켓 05). 주체 없이 부르면 설문 전체다.
-    const share = actor ? resolveFieldworkShare(actor, input.surveyId) : FIELDWORK_SHARE_ALL;
     sample = input.contactTargetId
       ? await getContactSampleById(input.surveyId, input.contactTargetId, scope, share)
       : await getFirstContactSample(input.surveyId, scope);
@@ -93,7 +104,8 @@ export async function getMailPreviewSample(
   const inviteUrl = buildInviteUrl(sample.inviteCode, baseUrl);
 
   return {
-    attrs: sample.attrs,
+    // 범위를 가르는 열의 값은 범위 게스트에게 내리지 않는다(메일 변수 미리보기에도 쓰지 않는 값이다).
+    attrs: withoutShareAttr(sample.attrs, share),
     inviteUrl,
     email: sample.email,
     resid: sample.resid,

@@ -9,12 +9,15 @@ import type { TableCell } from '@/types/survey';
 /** 행·축 카드의 공통 외곽과 고정 헤더. 보기의 묶음·선택 규칙은 호출부가 소유한다. */
 export function MobileSectionCard({
   title,
+  titleId,
   children,
   testId,
   headerTestId,
   errorMessage,
 }: {
   title: ReactNode;
+  /** 제목 요소의 id — 카드 안의 묶음이 이 제목을 낭독 이름으로 가리킬 때만 준다(안 주면 id 를 달지 않는다) */
+  titleId?: string | undefined;
   children: ReactNode;
   testId?: string | undefined;
   headerTestId?: string | undefined;
@@ -38,6 +41,7 @@ export function MobileSectionCard({
         >
           {title && (
             <div
+              id={titleId}
               className={cn(
                 'text-[17px] leading-snug font-bold whitespace-pre-line',
                 errorMessage ? 'text-red-600' : 'text-gray-900',
@@ -57,6 +61,8 @@ export function MobileSectionCard({
 export interface MobileOptionCardProps {
   /** 카드 헤더 라벨 */
   label: ReactNode;
+  /** 헤더 라벨 요소의 id — 고정 머리 카드(`variant="section"`)에서만 쓴다. 안 주면 id 를 달지 않는다 */
+  labelId?: string | undefined;
   /** 행의 전체 셀 — 표시 셀(text/image/video)만 자동 추출해 렌더 */
   cells: TableCell[];
   /** 선택/입력 컨트롤 슬롯 (체크박스/라디오 등). 클릭은 onToggle 로 전파되지 않음 */
@@ -74,6 +80,7 @@ export interface MobileOptionCardProps {
 
 export function MobileOptionCard({
   label,
+  labelId,
   cells,
   control,
   footer,
@@ -85,7 +92,12 @@ export function MobileOptionCard({
 }: MobileOptionCardProps) {
   if (variant === 'section') {
     return (
-      <MobileSectionCard title={label} testId={testId} headerTestId="row-card-header">
+      <MobileSectionCard
+        title={label}
+        titleId={labelId}
+        testId={testId}
+        headerTestId="row-card-header"
+      >
         <MobileDisplayCells cells={cells} />
         {footer}
       </MobileSectionCard>

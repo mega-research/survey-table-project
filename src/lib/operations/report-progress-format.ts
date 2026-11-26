@@ -92,6 +92,74 @@ export function formatProgressGroupKey(key: ProgressGroupKey): string {
   return key.kind === 'attrs' ? key.key : `${SYSTEM_GROUP_KEY_PREFIX}${key.key}`;
 }
 
+/**
+ * 표시 열 중 지금 켜진 분류 기준과 겹치지 않는 것만 남긴다.
+ *
+ * 분류 기준으로 묶은 열은 그 값이 이미 기준 칸에 나온다 — 「표시」까지 켜 둔 열을 그대로 그리면
+ * 같은 값이 두 번 보인다. 칩으로 꺼 둔 기준은 묶는 축이 아니므로 표시 열(대표값)로 남는다.
+ * 시스템 기준은 명단 attrs 가 아니라 이름이 같아도 다른 열이다.
+ */
+export function metaColumnsOutsideGroupKeys<T extends { key: string }>(
+  columns: readonly T[],
+  activeGroupKeys: readonly ProgressGroupKey[],
+): T[] {
+  const grouped = new Set(activeGroupKeys.filter((k) => k.kind === 'attrs').map((k) => k.key));
+  return columns.filter((c) => !grouped.has(c.key));
+}
+
+/**
+ * 분류 기준의 이름 — 진척률 컬럼 설정에서 고친 라벨이 먼저다.
+ *
+ * 그 화면은 열마다 라벨과 분류 기준을 한 줄에서 함께 고치므로, 거기서 고친 라벨이 칩·표 머리·
+ * 제목에 그대로 나와야 한다. 비웠거나 저장한 적 없는 열은 조사 대상 목록의 라벨로 돌아간다.
+ */
+export function progressCriterionLabel(
+  columns: ReadonlyArray<{ key: string; label: string }>,
+  key: string,
+  contactLabel: string,
+): string {
+  return columns.find((c) => c.key === key)?.label.trim() || contactLabel;
+}
+
+/**
+ * 표시 열 정렬 주소(`meta:<키>`)가 지금 켜진 분류 기준을 가리키면 그 기준의 정렬(`group:<키>`)로 읽는다.
+ *
+ * 분류 기준과 겹치는 표시 열은 그리지 않으므로(`metaColumnsOutsideGroupKeys`) 그 열의 정렬 주소는
+ * 갈 곳이 없어 기본 정렬로 떨어진다 — 같은 값이 기준 칸에 그대로 있으니 그쪽 정렬로 잇는다.
+ * 저장해 둔 주소와, 표시 열로 정렬한 채 그 칩을 켜는 경우 둘 다다.
+ */
+export function remapGroupedMetaSort(
+  sort: string | undefined,
+  activeGroupKeys: readonly ProgressGroupKey[],
+): string | undefined {
+  if (!sort?.startsWith('meta:')) return sort;
+  const key = sort.slice(5);
+  const grouped = activeGroupKeys.some((k) => k.kind === 'attrs' && k.key === key);
+  return grouped ? `group:${formatProgressGroupKey({ kind: 'attrs', key })}` : sort;
+}
+
+/**
+ * 주소에 정렬이 없을 때 이 표가 따를 정렬 — 조사 대상 목록의 기본 정렬 열(컬럼 설정의 「기본 정렬」)이
+ * 이 표에 나와 있으면 그 열 오름차순이다. 담당자가 「이 ID 순서가 우리 명단의 순서」라고 정해 둔 열이므로
+ * 그룹(전시회 등)을 늘어놓는 표도 같은 순서로 연다.
+ *
+ * 그 열이 켜진 분류 기준이면 기준 칸의 정렬(`group:<키>`), 표시 열이면 그 열의 정렬(`meta:<키>`)이다.
+ * 기본 정렬 열을 정하지 않았거나 그 열이 이 표에 없으면 null — 호출부가 종전 기본(응답률 내림차순)을 쓴다.
+ * 머리글을 눌러 바꾼 정렬(주소의 `sort`)이 있으면 이 함수를 부르지 않는다.
+ */
+export function progressDefaultSort(
+  defaultSortAttrsKey: string | null,
+  activeGroupKeys: readonly ProgressGroupKey[],
+  metaKeys: readonly string[],
+): ProgressSortKey | null {
+  if (defaultSortAttrsKey === null) return null;
+  const grouped = activeGroupKeys.find(
+    (k) => k.kind === 'attrs' && k.key === defaultSortAttrsKey,
+  );
+  if (grouped) return `group:${formatProgressGroupKey(grouped)}`;
+  return metaKeys.includes(defaultSortAttrsKey) ? `meta:${defaultSortAttrsKey}` : null;
+}
+
 export type ProgressSortKey =
   | 'firstResid'
   | 'groupLabel'

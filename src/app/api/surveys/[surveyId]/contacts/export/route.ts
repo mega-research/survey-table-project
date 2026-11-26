@@ -94,6 +94,7 @@ async function handleContactsExport(
       latestResultCode: r.latestResultCode,
       latestAttemptNo: r.latestAttemptNo,
       latestMailStatus: r.latestMailStatus,
+      linkClick: r.linkClick,
       progressPct: r.progressPct,
       responseStatus: r.responseStatus,
       inviteCode: r.inviteCode,

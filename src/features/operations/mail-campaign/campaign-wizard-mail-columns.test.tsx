@@ -32,7 +32,6 @@ function candidate(overrides: Partial<CampaignCandidateRow>): CampaignCandidateR
     resid: 1,
     email: '',
     emailMasked: 'lsj...@meg...',
-    groupValue: '메가리서치',
     attrs: {},
     piiMasks: {},
     assignmentName: null,
@@ -41,6 +40,7 @@ function candidate(overrides: Partial<CampaignCandidateRow>): CampaignCandidateR
     progressPct: null,
     latestResultCode: null,
     latestMailStatus: null,
+    linkClick: null,
     ...overrides,
   };
 }
@@ -94,6 +94,23 @@ function columnCells(label: string): string[] {
 }
 
 describe('CampaignWizard 메일 표시 컬럼', () => {
+  it('메일 표시 열마다 깔때기가 붙는다 — 명단 열·개인정보 열·컨택원', () => {
+    renderWizard(
+      [candidate({ id: 'ct-1', resid: 1, attrs: { 전시회: 'A' } })],
+      [
+        { key: '전시회', label: '전시회명', kind: 'attrs' },
+        { key: '담당자', label: '담당자', kind: 'pii' },
+        { key: 'contact_owner', label: '컨택원', kind: 'owner' },
+      ],
+    );
+
+    expect(screen.getByRole('button', { name: '전시회명 필터' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '담당자 필터' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '컨택원 필터' })).toBeInTheDocument();
+    // 머리 글자는 그대로다 — 깔때기는 글자 없는 버튼이다.
+    expect(headerLabels()).toContain('전시회명');
+  });
+
   it('시스템ID 다음 헤더로 붙고, 행마다 attrs 값을 그린다 — 값이 없으면 —', () => {
     renderWizard(
       [
@@ -108,10 +125,12 @@ describe('CampaignWizard 메일 표시 컬럼', () => {
     expect(columnCells('리스트 ID')).toEqual(['L-001', '—']);
   });
 
-  it('메일 표시 컬럼이 없으면 기존 7열 그대로다', () => {
+  it('메일 표시 컬럼이 없으면 고정 7열이다 — 그룹 칸은 없다', () => {
     renderWizard([candidate({ attrs: { 리스트ID: 'L-001' } })], []);
 
     expect(headerLabels()).toHaveLength(7);
+    // 그룹(업로드 때 대분류의 사본)은 현재 분류 기준과 어긋날 수 있어 메일 표에서 뺐다 — 분류는 메일 표시 열로 본다.
+    expect(headerLabels().some((l) => l.includes('그룹'))).toBe(false);
     expect(screen.queryByText('L-001')).not.toBeInTheDocument();
   });
 

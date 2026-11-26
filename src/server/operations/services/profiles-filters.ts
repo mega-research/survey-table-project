@@ -14,7 +14,12 @@ import {
   escapeLikePattern,
 } from '@/lib/operations/filter-shared';
 import { type AnswerChoiceMap, matchChoiceValues } from '@/lib/operations/profile-answer-choices';
-import { answerKeyOf, entryKeyOf } from '@/lib/operations/profile-columns-format';
+import {
+  LINK_TYPE_FILTER_SOURCE,
+  RESPONSE_LINK_TYPES,
+  answerKeyOf,
+  entryKeyOf,
+} from '@/lib/operations/profile-columns-format';
 import { STATUS_FILTERS } from '@/lib/operations/profiles-format';
 import { parseIdListInput } from '@/lib/operations/range-list';
 import {
@@ -38,7 +43,7 @@ export const PROFILES_EXTRA_CANDIDATES: ColumnCandidate[] = [
  *
  * 검색바(col/q/op)·헤더 깔때기(hcol/hm/hv) URL 어휘와 절 결합 규칙(AND/OR,
  * 괄호 그룹화)은 contacts-filter-parse / contacts-filter-sql 을 그대로 쓰고,
- * 응답 내역 전용 source(idx/browser/status/entry.*)만 훅으로 끼운다.
+ * 응답 내역 전용 source(idx/browser/status/linkType/entry.*)만 훅으로 끼운다.
  * ==========================================================================*/
 
 /** 응답 내역엔 결과코드 컬럼이 없다 — 공용 파서의 resultCodes 자리 채움용. */
@@ -120,6 +125,14 @@ function profilesParseHooks(candidates: ColumnCandidate[]): ParseExtraHooks {
         const values = splitHeaderValues(hv).filter((v) => PROFILES_STATUS_VALUES.has(v));
         if (values.length === 0) return null;
         return { source: 'status', mode: 'in', value: '', values };
+      }
+      if (col === LINK_TYPE_FILTER_SOURCE) {
+        if (mode !== 'in') return null;
+        const values = splitHeaderValues(hv).filter((v) =>
+          (RESPONSE_LINK_TYPES as readonly string[]).includes(v),
+        );
+        if (values.length === 0) return null;
+        return { source: LINK_TYPE_FILTER_SOURCE, mode: 'in', value: '', values };
       }
       if (col === 'idx' || col === 'browser') {
         if (mode !== 'text') return null;
@@ -274,6 +287,17 @@ function profilesExtraCondSql(
       sql`, `,
     );
     return sql`${cols.status} IN (${inList})`;
+  }
+  if (cond.source === LINK_TYPE_FILTER_SOURCE && cond.mode === 'in') {
+    // 응답 경로 — 조사 대상과 이어진 응답이 개별 링크다(lib 의 responseLinkTypeOf 와 같은 기준).
+    // cols.contactTargetId 는 조인된 조사 대상의 id 라, 같은 설문·같은 파티션에서 맞은 것만 채워진다.
+    const values = new Set(cond.values ?? []);
+    const invite = values.has('invite');
+    const open = values.has('public');
+    if (invite && open) return sql`TRUE`;
+    if (invite) return sql`${cols.contactTargetId} IS NOT NULL`;
+    if (open) return sql`${cols.contactTargetId} IS NULL`;
+    return sql`FALSE`;
   }
   return null;
 }

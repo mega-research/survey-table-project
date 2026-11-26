@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { loadPreviewContactSeed } from './preview-contact';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 // 「설문 보기」가 싣는 첫 번째 조사 대상 — 파티션 안 resid 최소, 개인정보 열은 설문이 읽는 열만.
 const limitMock = vi.fn();
@@ -48,7 +49,7 @@ describe('loadPreviewContactSeed', () => {
 
   it('조사 대상이 없으면 null — 미리보기는 지금처럼 빈 명단 값으로 열린다', async () => {
     limitMock.mockResolvedValue([]);
-    expect(await loadPreviewContactSeed({ surveyId: SURVEY, isTest: false, structure: {} })).toBeNull();
+    expect(await loadPreviewContactSeed({ share: FIELDWORK_SHARE_ALL, surveyId: SURVEY, isTest: false, structure: {} })).toBeNull();
     expect(appendContactPii).not.toHaveBeenCalled();
   });
 
@@ -57,7 +58,7 @@ describe('loadPreviewContactSeed', () => {
     appendContactPii.mockResolvedValue({ 업체명: '메가', 대표자명: '홍길동' });
     lookupPriorAnswersByContactTarget.mockResolvedValue({ q1: '작년 값' });
 
-    const seed = await loadPreviewContactSeed({ surveyId: SURVEY, isTest: true, structure: {} });
+    const seed = await loadPreviewContactSeed({ share: FIELDWORK_SHARE_ALL, surveyId: SURVEY, isTest: true, structure: {} });
 
     expect(calls.orderBy).toBeDefined();
     expect(seed).toEqual({
@@ -74,9 +75,9 @@ describe('loadPreviewContactSeed', () => {
     appendContactPii.mockResolvedValue({});
     lookupPriorAnswersByContactTarget.mockResolvedValue(null);
 
-    await loadPreviewContactSeed({ surveyId: SURVEY, isTest: false, structure: {} });
+    await loadPreviewContactSeed({ share: FIELDWORK_SHARE_ALL, surveyId: SURVEY, isTest: false, structure: {} });
     const withoutResid = JSON.stringify(calls.where, whereReplacer);
-    await loadPreviewContactSeed({ surveyId: SURVEY, isTest: false, structure: {}, resid: 9 });
+    await loadPreviewContactSeed({ share: FIELDWORK_SHARE_ALL, surveyId: SURVEY, isTest: false, structure: {}, resid: 9 });
     const withResid = JSON.stringify(calls.where, whereReplacer);
 
     expect(withoutResid).not.toContain('col:resid');
@@ -88,7 +89,7 @@ describe('loadPreviewContactSeed', () => {
     appendContactPii.mockResolvedValue({});
     lookupPriorAnswersByContactTarget.mockResolvedValue(null);
 
-    await loadPreviewContactSeed({
+    await loadPreviewContactSeed({ share: FIELDWORK_SHARE_ALL,
       surveyId: SURVEY,
       isTest: false,
       structure: { questions: [{ title: '{{대표자명 || 업체명}} 님' }] },

@@ -137,7 +137,11 @@ async function handleExport(
 
     // 0. 응답 내역 목록 xlsx — 응답 내역 화면의 열 그대로 한 시트. 답은 싣지 않는다(response-list-load).
     if (type === 'response-list') {
-      const loaded = await loadResponseListTable(surveyId, scope, { maskPii });
+      const loaded = await loadResponseListTable(surveyId, scope, {
+        maskPii,
+        // 고객 계정(시작일시·소요시간을 감추는 열람 주체)은 이 주소를 지나지 않는다 — export.download 는 내부 계정의 칸이다.
+        forClient: false,
+      });
       if (loaded.kind === 'too_many') {
         return NextResponse.json(
           { error: `응답이 ${MAX_EXPORT_RESPONSES.toLocaleString()}건을 초과하여 내보내기할 수 없습니다. (현재 ${loaded.total.toLocaleString()}건)` },

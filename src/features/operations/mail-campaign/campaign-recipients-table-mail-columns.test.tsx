@@ -21,7 +21,6 @@ function recipient(overrides: Partial<CampaignRecipientRow>): CampaignRecipientR
     id: 'r-1',
     contactTargetId: 'ct-1',
     contactResid: 1,
-    contactGroupValue: null,
     contactAttrs: {},
     contactPiiMasks: {},
     contactAssignmentName: null,
@@ -36,6 +35,7 @@ function recipient(overrides: Partial<CampaignRecipientRow>): CampaignRecipientR
     openedAt: null,
     bouncedAt: null,
     complainedAt: null,
+    linkClicks: [],
     ...overrides,
   };
 }
@@ -44,6 +44,7 @@ function renderTable(
   rows: CampaignRecipientRow[],
   mailColumns: MailDisplayColumn[],
   showResid = true,
+  droppedFilterCount = 0,
 ) {
   return render(
     <QueryClientProvider client={new QueryClient()}>
@@ -57,7 +58,7 @@ function renderTable(
         currentStatuses={[]}
         currentQuery=""
         headerEntries={[]}
-        groupOptions={[]}
+        droppedFilterCount={droppedFilterCount}
         errorOptions={[]}
         resultOptions={[]}
         mailColumns={mailColumns}
@@ -93,10 +94,11 @@ describe('CampaignRecipientsTable 메일 표시 컬럼', () => {
     expect(columnCells('리스트 ID')).toEqual(['L-001', '—']);
   });
 
-  it('메일 표시 컬럼이 없으면 기존 9열 그대로다', () => {
+  it('메일 표시 컬럼이 없으면 고정 9열이다 — 그룹 칸은 없다', () => {
     renderTable([recipient({ contactAttrs: { 리스트ID: 'L-001' } })], []);
 
     expect(headerLabels()).toHaveLength(9);
+    expect(headerLabels().some((l) => l.includes('그룹'))).toBe(false);
     expect(screen.queryByText('L-001')).not.toBeInTheDocument();
   });
 
@@ -117,5 +119,14 @@ describe('CampaignRecipientsTable 메일 표시 컬럼', () => {
 
     expect(headerLabels()).toHaveLength(8);
     expect(headerLabels()).not.toContain('시스템ID');
+  });
+  it('주소의 조건이 빠졌으면 명단이 넓다고 경고한다 — 없어진 그룹 조건이 든 옛 주소', () => {
+    renderTable([recipient({ id: 'r-1' })], [], true, 1);
+    expect(screen.getByRole('alert')).toHaveTextContent('적용할 수 없는 조건 1개가 빠져');
+  });
+
+  it('빠진 조건이 없으면 경고가 없다', () => {
+    renderTable([recipient({ id: 'r-1' })], []);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });

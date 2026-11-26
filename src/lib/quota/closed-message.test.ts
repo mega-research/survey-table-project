@@ -13,6 +13,14 @@ describe('midSurveyClosedBody', () => {
     expect(midSurveyClosedBody(null)).toBe(QUOTA_MID_SURVEY_CLOSED_FALLBACK);
     expect(midSurveyClosedBody('  ', 'zh')).toMatch(/^非常抱歉/);
   });
+
+  it('언어가 미정이면 그 설문이 제공하는 언어의 기본 문구만 쌓는다', () => {
+    const lines = midSurveyClosedBody(null, null, ['ko', 'en', 'vi']).split('\n');
+    expect(lines).toHaveLength(3);
+    expect(lines[0]).toBe(QUOTA_MID_SURVEY_CLOSED_FALLBACK);
+    expect(lines[1]).toMatch(/^We are sorry/);
+    expect(lines[2]).toMatch(/^Rất tiếc/);
+  });
 });
 
 describe('resolveMidSurveyClosedMessage', () => {

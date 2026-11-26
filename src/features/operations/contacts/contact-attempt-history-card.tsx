@@ -10,10 +10,11 @@ import { Button } from '@/components/ui/button';
 import { LocalDateTime } from '@/components/ui/local-date-time';
 import { useAutoFadeMessage } from '@/features/operations/hooks/use-auto-fade-message';
 import { getErrorMessage } from '@/lib/get-error-message';
-import { resultCodeToneClass } from '@/lib/operations/contacts-shared';
 import type { ContactResultCode } from '@/shared/contracts/contacts';
 import type { ContactAttemptRow } from '@/shared/contracts/contacts-io';
 import { client } from '@/shared/lib/rpc';
+
+import { resultCodeToneClass } from './result-code-tone';
 
 interface ContactAttemptHistoryCardProps {
   contactTargetId: string;

@@ -150,6 +150,74 @@ describe('QuestionEditModal 모바일 표시 설정 롤백', () => {
     expect(getQuestion()?.mobileDrilldownRepeatHeaderEndRow).toBeNull();
   });
 
+  it('조각 좌우 반전 · 한 화면 칸 수 — 편집기가 스토어에 쓴 값이 저장 payload 에 실린다', async () => {
+    render(<ModalHarness />);
+
+    act(() => {
+      useSurveyBuilderStore.getState().silentUpdateQuestion('q1', {
+        mobileDrilldownReverseColumns: true,
+        mobileDrilldownColumnsPerView: 6,
+      });
+    });
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    await waitFor(() => expect(updateQuestionMock).toHaveBeenCalled());
+    expect(updateQuestionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          mobileDrilldownReverseColumns: true,
+          mobileDrilldownColumnsPerView: 6,
+        }),
+      }),
+    );
+    expect(getQuestion()?.mobileDrilldownReverseColumns).toBe(true);
+    expect(getQuestion()?.mobileDrilldownColumnsPerView).toBe(6);
+  });
+
+  it('조각 좌우 반전 · 한 화면 칸 수 — 끈 값(false · null)이 옛 값으로 되돌아가지 않고 저장된다', async () => {
+    useSurveyBuilderStore.getState().silentUpdateQuestion('q1', {
+      mobileDrilldownReverseColumns: true,
+      mobileDrilldownColumnsPerView: 6,
+    });
+    render(<ModalHarness />);
+
+    act(() => {
+      useSurveyBuilderStore.getState().silentUpdateQuestion('q1', {
+        mobileDrilldownReverseColumns: false,
+        mobileDrilldownColumnsPerView: null,
+      });
+    });
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    await waitFor(() => expect(updateQuestionMock).toHaveBeenCalled());
+    expect(updateQuestionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          mobileDrilldownReverseColumns: false,
+          mobileDrilldownColumnsPerView: null,
+        }),
+      }),
+    );
+    expect(getQuestion()?.mobileDrilldownReverseColumns).toBe(false);
+    expect(getQuestion()?.mobileDrilldownColumnsPerView).toBeNull();
+  });
+
+  it('조각 좌우 반전 · 한 화면 칸 수 — 취소하면 없던 값은 없던 채로 돌아간다', () => {
+    render(<ModalHarness />);
+
+    act(() => {
+      useSurveyBuilderStore.getState().silentUpdateQuestion('q1', {
+        mobileDrilldownReverseColumns: true,
+        mobileDrilldownColumnsPerView: 6,
+      });
+    });
+    fireEvent.click(screen.getByRole('button', { name: '취소' }));
+
+    const restored = getQuestion();
+    expect(Object.hasOwn(restored ?? {}, 'mobileDrilldownReverseColumns')).toBe(false);
+    expect(Object.hasOwn(restored ?? {}, 'mobileDrilldownColumnsPerView')).toBe(false);
+  });
+
   it('Ctrl/Cmd+S는 저장하지 않고 Escape는 모달을 닫지 않는다', () => {
     render(<ModalHarness />);
     expect(screen.queryByText('저장: Ctrl+S')).toBeNull();

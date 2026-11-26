@@ -27,6 +27,7 @@ type QuestionBase = Pick<
   | 'titleHtml'
   | 'collapseButtonLabel'
   | 'collapseAttachToPrevious'
+  | 'distinctGroup'
   | 'description'
   | 'required'
   | 'groupId'
@@ -52,6 +53,12 @@ type EmbeddedTableFields = Pick<
   | 'exportCellOrder'
 >;
 
+/**
+ * 문항의 슬라이더 방향 — radio 전용. 보통 라디오 문항(보기 목록)과 묶음 없는 보기 소스 표(radio + 내장 표)가
+ * 읽는다. 묶음이 있는 표·table 유형은 묶음(choiceGroups) 안의 방향을 쓰므로 이 필드를 갖지 않는다.
+ */
+type ScaleSliderFields = Pick<Question, 'scaleSlider'>;
+
 /** 평균 산출(척도 평균) — 단일값 변수를 내는 radio/select/table 3유형 전용. */
 type ScaleMeanFields = Pick<Question, 'scaleMeanEnabled'>;
 
@@ -72,6 +79,8 @@ type MobileTableDisplayFields = Pick<
   | 'mobileDrilldownOmitLeadingColumns'
   | 'mobileDrilldownRepeatHeaderStartRow'
   | 'mobileDrilldownRepeatHeaderEndRow'
+  | 'mobileDrilldownReverseColumns'
+  | 'mobileDrilldownColumnsPerView'
   | 'mobileItemCardBlockColumns'
 >;
 
@@ -106,6 +115,7 @@ export interface RadioQuestion
     MobileTableDisplayFields,
     ChoiceGroupFields,
     ScaleMeanFields,
+    ScaleSliderFields,
     Pick<Question, 'defaultValueTemplate'> {
   type: 'radio';
 }

@@ -102,6 +102,10 @@ function buildFormDataFromQuestion(question: Question): Partial<Question> {
     ...(question.mobileOptionsColumns !== undefined
       ? { mobileOptionsColumns: question.mobileOptionsColumns }
       : {}),
+    // 문항의 슬라이더 방향 — 싣지 않으면 켜진 문항을 열었을 때 스위치가 꺼져 보이고, 그대로 켜면 저장본의
+    // 방향이 기본 방향으로 덮인다. 꺼진 문항(키 없음·빌더가 끈 null)은 싣지 않는다: 폼이 건드리지 않은
+    // 필드는 부분 수정에서 「그대로 두기」여야 한다(끄기는 스위치가 null 을 적는다).
+    ...(question.scaleSlider != null ? { scaleSlider: question.scaleSlider } : {}),
     ...(question.rankingConfig !== undefined ? { rankingConfig: question.rankingConfig } : {}),
     ...(question.minSelections !== undefined ? { minSelections: question.minSelections } : {}),
     ...(question.maxSelections !== undefined ? { maxSelections: question.maxSelections } : {}),
@@ -211,6 +215,8 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
     let originalMobileDrilldownOmitLeadingColumns: Question['mobileDrilldownOmitLeadingColumns'];
     let originalMobileDrilldownRepeatHeaderStartRow: Question['mobileDrilldownRepeatHeaderStartRow'];
     let originalMobileDrilldownRepeatHeaderEndRow: Question['mobileDrilldownRepeatHeaderEndRow'];
+    let originalMobileDrilldownReverseColumns: Question['mobileDrilldownReverseColumns'];
+    let originalMobileDrilldownColumnsPerView: Question['mobileDrilldownColumnsPerView'];
     let originalExportCellOrder: Question['exportCellOrder'];
     let originalStickyColumnCount: Question['stickyColumnCount'];
     let originalFitTableToWidth: Question['fitTableToWidth'];
@@ -225,6 +231,8 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
       originalMobileDrilldownOmitLeadingColumns = q?.mobileDrilldownOmitLeadingColumns;
       originalMobileDrilldownRepeatHeaderStartRow = q?.mobileDrilldownRepeatHeaderStartRow;
       originalMobileDrilldownRepeatHeaderEndRow = q?.mobileDrilldownRepeatHeaderEndRow;
+      originalMobileDrilldownReverseColumns = q?.mobileDrilldownReverseColumns;
+      originalMobileDrilldownColumnsPerView = q?.mobileDrilldownColumnsPerView;
       originalExportCellOrder = q?.exportCellOrder;
       originalStickyColumnCount = q?.stickyColumnCount;
       originalFitTableToWidth = q?.fitTableToWidth;
@@ -264,6 +272,18 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                 } else {
                   restoredQuestion.mobileDrilldownRepeatHeaderEndRow =
                     originalMobileDrilldownRepeatHeaderEndRow;
+                }
+                if (originalMobileDrilldownReverseColumns === undefined) {
+                  delete restoredQuestion.mobileDrilldownReverseColumns;
+                } else {
+                  restoredQuestion.mobileDrilldownReverseColumns =
+                    originalMobileDrilldownReverseColumns;
+                }
+                if (originalMobileDrilldownColumnsPerView === undefined) {
+                  delete restoredQuestion.mobileDrilldownColumnsPerView;
+                } else {
+                  restoredQuestion.mobileDrilldownColumnsPerView =
+                    originalMobileDrilldownColumnsPerView;
                 }
                 if (originalExportCellOrder === undefined) {
                   delete restoredQuestion.exportCellOrder;
@@ -496,6 +516,12 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
       ...(storeQuestion?.mobileDrilldownRepeatHeaderEndRow !== undefined
         ? { mobileDrilldownRepeatHeaderEndRow: storeQuestion.mobileDrilldownRepeatHeaderEndRow }
         : {}),
+      ...(storeQuestion?.mobileDrilldownReverseColumns !== undefined
+        ? { mobileDrilldownReverseColumns: storeQuestion.mobileDrilldownReverseColumns }
+        : {}),
+      ...(storeQuestion?.mobileDrilldownColumnsPerView !== undefined
+        ? { mobileDrilldownColumnsPerView: storeQuestion.mobileDrilldownColumnsPerView }
+        : {}),
       ...(storeQuestion?.choiceGroups !== undefined
         ? { choiceGroups: storeQuestion.choiceGroups }
         : {}),
@@ -652,6 +678,15 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                   : question?.collapseButtonLabel,
               collapseAttachToPrevious:
                 currentFormData.collapseAttachToPrevious ?? question?.collapseAttachToPrevious,
+              // 문항 사이의 중복 불가 묶음은 편집 칸이 없어 formData 가 소유하지 않는다(스크립트로 적는다) —
+              // 저장본의 값을 그대로 실어 모달 저장이 묶음을 지우지 않게 한다.
+              distinctGroup: question?.distinctGroup,
+              // 문항의 슬라이더 방향 — null = 끄기가 유효값이므로 ?? 폴백 금지. 폼이 건드리지 않았으면
+              // 저장본의 값을 그대로 실어 복제본·보관함에서 꺼낸 문항의 CREATE 가 방향을 떨어뜨리지 않게 한다.
+              scaleSlider:
+                currentFormData.scaleSlider !== undefined
+                  ? currentFormData.scaleSlider
+                  : question?.scaleSlider,
               // pageBreakBefore 는 질문 목록의 가위 토글로 store 에만 쓰여 formData 가
               // 소유하지 않는다 — hideColumnLabels 와 동일한 silent drop 방지 머지.
               pageBreakBefore: currentFormData.pageBreakBefore ?? question?.pageBreakBefore,
@@ -687,6 +722,14 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                 currentFormData.mobileDrilldownRepeatHeaderEndRow !== undefined
                   ? currentFormData.mobileDrilldownRepeatHeaderEndRow
                   : question?.mobileDrilldownRepeatHeaderEndRow,
+              mobileDrilldownReverseColumns:
+                currentFormData.mobileDrilldownReverseColumns ??
+                question?.mobileDrilldownReverseColumns,
+              // 「비움」은 null 이다 — ?? 로 받으면 null 이 옛 값으로 되돌아간다
+              mobileDrilldownColumnsPerView:
+                currentFormData.mobileDrilldownColumnsPerView !== undefined
+                  ? currentFormData.mobileDrilldownColumnsPerView
+                  : question?.mobileDrilldownColumnsPerView,
               questionCode: currentFormData.questionCode || question?.questionCode,
               isCustomSpssVarName:
                 currentFormData.isCustomSpssVarName ?? question?.isCustomSpssVarName,

@@ -58,6 +58,8 @@ const SENTINEL_ROW: Record<string, unknown> = {
   titleHtml: '<p><strong>질문</strong></p>',
   collapseButtonLabel: '코드표 보기',
   collapseAttachToPrevious: true,
+  distinctGroup: 'leave',
+  scaleSlider: 'positive-left',
   piiEncrypted: true,
   tableValidationRules: [],
   sumConstraints: [],
@@ -73,6 +75,8 @@ const SENTINEL_ROW: Record<string, unknown> = {
   mobileDrilldownOmitLeadingColumns: 1,
   mobileDrilldownRepeatHeaderStartRow: 0,
   mobileDrilldownRepeatHeaderEndRow: 0,
+  mobileDrilldownReverseColumns: true,
+  mobileDrilldownColumnsPerView: 6,
   mobileItemCardBlockColumns: [1, 5],
   hideTitle: true,
   pageBreakBefore: true,
@@ -107,6 +111,23 @@ describe('mapQuestionRow — 영속 필드 전수 매핑', () => {
   });
 });
 
+describe('mapQuestionRow — 문항의 슬라이더 방향', () => {
+  it.each(['positive-right', 'positive-left'] as const)('%s 를 그대로 싣는다', (direction) => {
+    const mapped = mapQuestionRow({ ...SENTINEL_ROW, scaleSlider: direction } as never);
+    expect(mapped.scaleSlider).toBe(direction);
+  });
+
+  it('꺼진 값(NULL)은 키째 싣지 않는다 — 값이 없는 기존 문항의 로드 결과가 그대로다', () => {
+    const withoutColumn = { ...SENTINEL_ROW };
+    delete withoutColumn['scaleSlider'];
+    const before = mapQuestionRow(withoutColumn as never);
+    const after = mapQuestionRow({ ...SENTINEL_ROW, scaleSlider: null } as never);
+
+    expect('scaleSlider' in after).toBe(false);
+    expect(after).toEqual(before);
+  });
+});
+
 describe('mapQuestionRow — 보기 필드 보존', () => {
   it('언어 보기의 locale 이 옵션 코드 복원을 지나도 남는다 (CONTEXT.md 「언어 문항」)', () => {
     const mapped = mapQuestionRow({
@@ -118,5 +139,33 @@ describe('mapQuestionRow — 보기 필드 보존', () => {
       ],
     } as never);
     expect(mapped.options?.map((o) => o.locale)).toEqual(['ko', 'zh']);
+  });
+});
+
+describe('mapQuestionRow — 조각 좌우 반전 · 조각 한 화면 칸 수', () => {
+  it('켠 값을 그대로 싣는다', () => {
+    const mapped = mapQuestionRow({
+      ...SENTINEL_ROW,
+      mobileDrilldownReverseColumns: true,
+      mobileDrilldownColumnsPerView: 5,
+    } as never);
+    expect(mapped.mobileDrilldownReverseColumns).toBe(true);
+    expect(mapped.mobileDrilldownColumnsPerView).toBe(5);
+  });
+
+  it('꺼진 값(false · NULL)은 키째 싣지 않는다 — 기존 문항의 로드 결과가 그대로다', () => {
+    const withoutColumns = { ...SENTINEL_ROW };
+    delete withoutColumns['mobileDrilldownReverseColumns'];
+    delete withoutColumns['mobileDrilldownColumnsPerView'];
+    const before = mapQuestionRow(withoutColumns as never);
+    const after = mapQuestionRow({
+      ...SENTINEL_ROW,
+      mobileDrilldownReverseColumns: false,
+      mobileDrilldownColumnsPerView: null,
+    } as never);
+
+    expect('mobileDrilldownReverseColumns' in after).toBe(false);
+    expect('mobileDrilldownColumnsPerView' in after).toBe(false);
+    expect(after).toEqual(before);
   });
 });

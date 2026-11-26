@@ -37,6 +37,9 @@ vi.mock('@/server/read-models/profile-column-scheme', () => ({
       { key: 'pii.담당자', label: '담당자', order: 3 },
       { key: 'pii.연락처', label: '연락처', order: 4 },
       { key: 'sys.status', label: '상태', order: 5 },
+      // 관리자가 켜 둔 접속 식별값 열 — 게스트 파일에는 나가지 않아야 한다
+      { key: 'sys.deviceId', label: '브라우저 ID', order: 6 },
+      { key: 'sys.fpHash', label: '기기 사양', order: 7 },
     ],
   })),
   getProfileEntryParamNames: vi.fn(async () => []),
@@ -78,6 +81,8 @@ const ROW = {
   attrs: null,
   contactTargetId: 't1',
   ipHash: null,
+  deviceId: '5cce2545',
+  fpHash: 'ec7b3f35',
   entryParams: null,
   isTest: false,
 };
@@ -95,7 +100,7 @@ beforeEach(() => {
 
 describe('loadResponseListTable', () => {
   it('화면 기본과 같은 조건으로 전부 읽는다 — 필터 없이 순번 내림차순, 휴지통 제외', async () => {
-    await loadResponseListTable('s1', 'real', { maskPii: false });
+    await loadResponseListTable('s1', 'real', { maskPii: false, forClient: false });
     expect(listMock).toHaveBeenCalledWith(
       expect.objectContaining({
         surveyId: 's1',
@@ -121,7 +126,7 @@ describe('loadResponseListTable', () => {
 
   /** 첫 줄을 머리 → 값으로 — 컬럼 설정에 없는 기본 열은 화면처럼 뒤에 붙으므로 이름으로 찾는다. */
   async function firstRow(maskPii: boolean): Promise<Record<string, string | number>> {
-    const result = await loadResponseListTable('s1', 'real', { maskPii });
+    const result = await loadResponseListTable('s1', 'real', { maskPii, forClient: false });
     if (result.kind !== 'ok') throw new Error('ok 가 아니다');
     return Object.fromEntries(result.headers.map((h, i) => [h, result.rows[0]![i]!]));
   }
@@ -136,6 +141,21 @@ describe('loadResponseListTable', () => {
       상태: '완료',
       '마지막 응답 문항': '',
     });
+  });
+
+  it('브라우저 ID·기기 사양 열은 관리자 파일에만 나간다 — 게스트 파일은 열도 없고 값도 읽지 않는다', async () => {
+    expect(await firstRow(false)).toMatchObject({ '브라우저 ID': '5cce2545', '기기 사양': 'ec7b3f35' });
+    expect(listMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ includeBrowserSignals: true }),
+    );
+
+    const guest = await loadResponseListTable('s1', 'real', { maskPii: true, forClient: false });
+    if (guest.kind !== 'ok') throw new Error('ok 가 아니다');
+    expect(guest.headers).not.toContain('브라우저 ID');
+    expect(guest.headers).not.toContain('기기 사양');
+    expect(listMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ includeBrowserSignals: false }),
+    );
   });
 
   it('게스트가 받는 목록은 암호화 저장 응답값 열과 명단 개인정보 열만 가린다', async () => {
@@ -168,20 +188,35 @@ describe('loadResponseListTable', () => {
         return { r1: { 'answer.q1': '홍길동상회' }, r2: { 'answer.q1': '메가유업' } };
       },
     );
-    const guest = await loadResponseListTable('s1', 'real', { maskPii: true });
+    const guest = await loadResponseListTable('s1', 'real', { maskPii: true, forClient: false });
     if (guest.kind !== 'ok') throw new Error('ok 가 아니다');
     const at = guest.headers.indexOf('기업명');
     expect(guest.rows.map((r) => r[at])).toEqual(['홍길동상*', '메가유업']);
 
     // 관리자는 종전대로 평문
-    const admin = await loadResponseListTable('s1', 'real', { maskPii: false });
+    const admin = await loadResponseListTable('s1', 'real', { maskPii: false, forClient: false });
     if (admin.kind !== 'ok') throw new Error('ok 가 아니다');
     expect(admin.rows.map((r) => r[at])).toEqual(['홍길동상회', '메가유업']);
   });
 
+  it('고객 계정이 받는 목록에는 시작일시·소요시간 열이 없고 종료일시는 남는다', async () => {
+    const admin = await loadResponseListTable('s1', 'real', { maskPii: false, forClient: false });
+    if (admin.kind !== 'ok') throw new Error('ok 가 아니다');
+    expect(admin.headers).toEqual(expect.arrayContaining(['시작일시', '종료일시', '소요시간']));
+
+    const client = await loadResponseListTable('s1', 'real', { maskPii: true, forClient: true });
+    if (client.kind !== 'ok') throw new Error('ok 가 아니다');
+    expect(client.headers).not.toContain('시작일시');
+    expect(client.headers).not.toContain('소요시간');
+    expect(client.headers).toContain('종료일시');
+    // 열이 빠진 만큼 값 줄도 짧다 — 머리와 값이 어긋나지 않는다
+    expect(client.rows[0]).toHaveLength(client.headers.length);
+    expect(client.rows[0]).not.toContain('10분');
+  });
+
   it('응답이 한도를 넘으면 읽지 않고 알린다', async () => {
     listMock.mockResolvedValue({ rows: [], total: 10001, page: 1 });
-    await expect(loadResponseListTable('s1', 'real', { maskPii: true })).resolves.toEqual({
+    await expect(loadResponseListTable('s1', 'real', { maskPii: true, forClient: false })).resolves.toEqual({
       kind: 'too_many',
       total: 10001,
     });

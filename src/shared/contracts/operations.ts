@@ -27,7 +27,7 @@ export interface ProfileColumnScheme {
 export interface ProfileColumnDef {
   /**
    * 컬럼 식별자.
-   * - `sys.<id>`: 시스템 컬럼 (idx/resid/group/platform/browser/status/startedAt/completedAt/totalSeconds/ipHash)
+   * - `sys.<id>`: 시스템 컬럼 (idx/resid/group/platform/browser/status/startedAt/completedAt/totalSeconds/ipHash/deviceId/fpHash)
    * - `attrs.<key>`: 컨택 attrs 값
    * - `pii.<key>`: 컨택 PII (목록 렌더 시 복호화 표시)
    * - `entry.<name>`: 들어온 링크로 받은 이어 넘길 값

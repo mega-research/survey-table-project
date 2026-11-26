@@ -445,7 +445,7 @@ describe('listResponsesForProfiles — negative exclusion', () => {
   it('negative ct 의 응답 → 목록에서 가림', async () => {
     seedResponseWithContact();                       // 보임
     seedResponseWithContact({ negative: true });     // 가림
-    const result = await listResponsesForProfiles({
+    const result = await listResponsesForProfiles({ share: FIELDWORK_SHARE_ALL,
       surveyId: SURVEY_ID,
       page: 1,
       pageSize: 100,
@@ -455,7 +455,6 @@ describe('listResponsesForProfiles — negative exclusion', () => {
       dir: 'desc',
       view: 'active',
       scope: 'real',
-      share: FIELDWORK_SHARE_ALL,
     });
     expect(result.total).toBe(1);
   });
@@ -463,7 +462,7 @@ describe('listResponsesForProfiles — negative exclusion', () => {
   it('unsubscribed ct 의 응답 → 목록에서 가림', async () => {
     seedResponseWithContact();
     seedResponseWithContact({ unsubscribed: true });
-    const result = await listResponsesForProfiles({
+    const result = await listResponsesForProfiles({ share: FIELDWORK_SHARE_ALL,
       surveyId: SURVEY_ID,
       page: 1,
       pageSize: 100,
@@ -473,7 +472,6 @@ describe('listResponsesForProfiles — negative exclusion', () => {
       dir: 'desc',
       view: 'active',
       scope: 'real',
-      share: FIELDWORK_SHARE_ALL,
     });
     expect(result.total).toBe(1);
   });
@@ -481,7 +479,7 @@ describe('listResponsesForProfiles — negative exclusion', () => {
   it('익명 응답 [contact_target_id IS NULL] → 자동 통과', async () => {
     seedResponseWithContact({ anonymous: true });
     seedResponseWithContact({ negative: true });
-    const result = await listResponsesForProfiles({
+    const result = await listResponsesForProfiles({ share: FIELDWORK_SHARE_ALL,
       surveyId: SURVEY_ID,
       page: 1,
       pageSize: 100,
@@ -491,7 +489,6 @@ describe('listResponsesForProfiles — negative exclusion', () => {
       dir: 'desc',
       view: 'active',
       scope: 'real',
-      share: FIELDWORK_SHARE_ALL,
     });
     expect(result.total).toBe(1);
   });
@@ -500,7 +497,7 @@ describe('listResponsesForProfiles — negative exclusion', () => {
     seedResponseWithContact();
     seedResponseWithContact();
     seedResponseWithContact({ negative: true });
-    const result = await listResponsesForProfiles({
+    const result = await listResponsesForProfiles({ share: FIELDWORK_SHARE_ALL,
       surveyId: SURVEY_ID,
       page: 1,
       pageSize: 100,
@@ -510,7 +507,6 @@ describe('listResponsesForProfiles — negative exclusion', () => {
       dir: 'desc',
       view: 'active',
       scope: 'real',
-      share: FIELDWORK_SHARE_ALL,
     });
     expect(result.total).toBe(2);
     expect(result.rows.map((r) => r.idx).sort()).toEqual([1, 2]);
@@ -537,7 +533,7 @@ describe('listResponsesForProfiles — negative exclusion', () => {
       isTest: false,
     });
 
-    const result = await listResponsesForProfiles({
+    const result = await listResponsesForProfiles({ share: FIELDWORK_SHARE_ALL,
       surveyId: SURVEY_ID,
       page: 1,
       pageSize: 100,
@@ -547,7 +543,6 @@ describe('listResponsesForProfiles — negative exclusion', () => {
       dir: 'desc',
       view: 'active',
       scope: 'real',
-      share: FIELDWORK_SHARE_ALL,
     });
 
     expect(result.total).toBe(1);
@@ -574,7 +569,7 @@ describe('listResponsesForProfiles — negative exclusion', () => {
       isTest: false,
     });
 
-    const result = await listResponsesForProfiles({
+    const result = await listResponsesForProfiles({ share: FIELDWORK_SHARE_ALL,
       surveyId: SURVEY_ID,
       page: 1,
       pageSize: 100,
@@ -584,7 +579,6 @@ describe('listResponsesForProfiles — negative exclusion', () => {
       dir: 'desc',
       view: 'active',
       scope: 'real',
-      share: FIELDWORK_SHARE_ALL,
     });
 
     expect(result.total).toBe(1);
@@ -659,7 +653,7 @@ describe('listResponsesForProfiles — negative exclusion', () => {
       isTest: false,
     });
 
-    const result = await listResponsesForProfiles({
+    const result = await listResponsesForProfiles({ share: FIELDWORK_SHARE_ALL,
       surveyId: SURVEY_ID,
       page: 1,
       pageSize: 100,
@@ -679,7 +673,6 @@ describe('listResponsesForProfiles — negative exclusion', () => {
       dir: 'desc',
       view: 'active',
       scope: 'real',
-      share: FIELDWORK_SHARE_ALL,
     });
 
     expect(result.total).toBe(0);
@@ -706,7 +699,7 @@ describe('listResponsesForProfiles — negative exclusion', () => {
       isTest: false,
     });
 
-    const result = await listResponsesForProfiles({
+    const result = await listResponsesForProfiles({ share: FIELDWORK_SHARE_ALL,
       surveyId: SURVEY_ID,
       page: 1,
       pageSize: 100,
@@ -726,7 +719,6 @@ describe('listResponsesForProfiles — negative exclusion', () => {
       dir: 'desc',
       view: 'active',
       scope: 'real',
-      share: FIELDWORK_SHARE_ALL,
     });
 
     expect(result.total).toBe(0);
@@ -745,7 +737,7 @@ describe('listResponsesForProfiles — 서버 데이터 scope', () => {
   it('real scope → isTest=false 응답만 노출', async () => {
     seedResponseWithContact();
     seedResponseWithContact({ isTest: true });
-    const result = await listResponsesForProfiles({
+    const result = await listResponsesForProfiles({ share: FIELDWORK_SHARE_ALL,
       surveyId: SURVEY_ID,
       page: 1,
       pageSize: 100,
@@ -755,7 +747,6 @@ describe('listResponsesForProfiles — 서버 데이터 scope', () => {
       dir: 'desc',
       view: 'active',
       scope: 'real',
-      share: FIELDWORK_SHARE_ALL,
     });
     expect(result.total).toBe(1);
     expect(result.rows.every((r) => !r.isTest)).toBe(true);
@@ -764,7 +755,7 @@ describe('listResponsesForProfiles — 서버 데이터 scope', () => {
   it('test scope → isTest=true 응답만 노출', async () => {
     seedResponseWithContact();
     seedResponseWithContact({ isTest: true });
-    const result = await listResponsesForProfiles({
+    const result = await listResponsesForProfiles({ share: FIELDWORK_SHARE_ALL,
       surveyId: SURVEY_ID,
       page: 1,
       pageSize: 100,
@@ -774,7 +765,6 @@ describe('listResponsesForProfiles — 서버 데이터 scope', () => {
       dir: 'desc',
       view: 'active',
       scope: 'test',
-      share: FIELDWORK_SHARE_ALL,
     });
     expect(result.total).toBe(1);
     expect(result.rows.every((r) => r.isTest)).toBe(true);

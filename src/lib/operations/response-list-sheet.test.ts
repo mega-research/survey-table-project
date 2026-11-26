@@ -26,6 +26,8 @@ function row(over: Partial<ProfilesRow>): ProfilesRow {
     attrs: null,
     contactTargetId: null,
     ipHash: null,
+    deviceId: null,
+    fpHash: null,
     entryParams: null,
     isTest: false,
     ...over,
@@ -143,5 +145,68 @@ describe('buildResponseListTable', () => {
       '업체명',
       '담당자',
     ]);
+  });
+
+  it('접속 식별값 열(IP 해시·브라우저 ID·기기 사양)은 화면처럼 앞 8자만 싣는다', () => {
+    const table = buildResponseListTable({
+      columns: [
+        col('sys.ipHash', 'IP 해시', 0),
+        col('sys.deviceId', '브라우저 ID', 1),
+        col('sys.fpHash', '기기 사양', 2),
+      ],
+      rows: [
+        row({
+          ipHash: '1b2f67f8aaaaaaaaaaaaaaaa',
+          deviceId: '5cce2545-1111-4222-8333-444444444444',
+          fpHash: 'ec7b3f35bbbbbbbbbbbbbbbb',
+        }),
+        row({ id: 'r2' }),
+      ],
+      stepLocations: {},
+      hasContacts: false,
+      piiByTarget: {},
+      answerValues: {},
+    });
+
+    expect(table.headers).toEqual(['IP 해시', '브라우저 ID', '기기 사양']);
+    expect(table.rows[0]).toEqual(['1b2f67f8', '5cce2545', 'ec7b3f35']);
+    // 값이 없는 응답(저장소가 막힌 브라우저 등)은 화면과 같은 빈 표시
+    expect(table.rows[1]).toEqual(['—', '—', '—']);
+  });
+
+  it('그룹 칸은 조사 대상과 이어진 응답이면 그룹 값이 없어도 공개링크로 적지 않는다', () => {
+    const table = buildResponseListTable({
+      columns: [col('sys.group', '조사 대상 그룹', 0)],
+      rows: [
+        row({ id: 'r1', groupValue: '서울', contactTargetId: 'ct-1' }),
+        row({ id: 'r2', groupValue: null, contactTargetId: 'ct-2' }),
+        row({ id: 'r3', groupValue: null, contactTargetId: null }),
+      ],
+      stepLocations: {},
+      hasContacts: true,
+      piiByTarget: {},
+      answerValues: {},
+    });
+    expect(table.rows).toEqual([['서울'], [''], ['공개링크']]);
+  });
+
+  it('응답 경로 열은 개별링크·공개링크로 내고, 조사 대상이 없는 설문에서는 열을 내지 않는다', () => {
+    const input = {
+      columns: [col('sys.idx', '순번', 0), col('sys.linkType', '응답 경로', 1)],
+      rows: [
+        row({ id: 'r1', idx: 1, contactTargetId: 'ct-1' }),
+        row({ id: 'r2', idx: 2, contactTargetId: null }),
+      ],
+      stepLocations: {},
+      piiByTarget: {},
+      answerValues: {},
+    };
+    const withContacts = buildResponseListTable({ ...input, hasContacts: true });
+    expect(withContacts.headers).toEqual(['순번', '응답 경로']);
+    expect(withContacts.rows).toEqual([
+      [1, '개별링크'],
+      [2, '공개링크'],
+    ]);
+    expect(buildResponseListTable({ ...input, hasContacts: false }).headers).toEqual(['순번']);
   });
 });

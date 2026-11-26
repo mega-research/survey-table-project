@@ -4,6 +4,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ChoiceGroupScaleBar } from '@/features/question-renderer/choice-group-scale-bar';
 import type { ScaleBarModel } from '@/features/question-renderer/utils/choice-group-scale-bar';
 
+const attrs = vi.hoisted(() => ({ value: {} as Record<string, string> }));
+vi.mock('@/features/question-renderer/contact-attrs-context', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/features/question-renderer/contact-attrs-context')>()),
+  useContactAttrs: () => attrs.value,
+  useAnswerQuotes: () => ({}),
+}));
+
 /** 헤더에 구간 줄이 없는 5점 척도 — 칸마다 이름이 하나씩이라 구간(bands)이 비어 있다 */
 const fivePoint: ScaleBarModel = {
   cells: ['①', '②', '③', '④', '⑤'].map((text, n) => ({
@@ -114,5 +121,150 @@ describe('ChoiceGroupScaleBar — 칸 이름 목록(6칸 이상, 칸마다 이�
       />,
     );
     expect(screen.queryByTestId('scale-bar-legend')).toBeNull();
+  });
+});
+
+describe('ChoiceGroupScaleBar — 글자가 긴 칸과 구간에 붙는 라벨', () => {
+  afterEach(cleanup);
+
+  const DESC = ['⑩', '⑨', '⑧', '⑦', '⑥', '⑤', '④', '③', '②', '①'];
+  const bandIndexOf = (n: number) => (n < 2 ? 0 : n === 4 || n === 5 ? 1 : n >= 8 ? 2 : null);
+  /** 청암대 재학생 문31 — ⑩~① 뒤에 「미참여」 한 칸. 끝 칸에는 구간 이름이 없다 */
+  const withOffScale: ScaleBarModel = {
+    cells: [
+      ...DESC.map((text, n) => ({ cellId: `c${n}`, text, bandIndex: bandIndexOf(n) })),
+      { cellId: 'c10', text: '미참여', bandIndex: null },
+    ],
+    bands: [
+      { label: '매우 만족', start: 0, span: 2 },
+      { label: '보통', start: 4, span: 2 },
+      { label: '매우 불만족', start: 8, span: 2 },
+    ],
+    anchors: {
+      left: '매우 만족',
+      middle: { label: '보통', index: 4, span: 2 },
+      right: '매우 불만족',
+      rightEnd: 9,
+    },
+    showsSelectionLabel: true,
+  };
+  const elevenPoint: ScaleBarModel = {
+    cells: ['⓪', ...DESC.slice().reverse()].map((text, n) => ({
+      cellId: `c${n}`,
+      text,
+      bandIndex: n === 0 ? 0 : n === 5 ? 1 : n === 10 ? 2 : null,
+    })),
+    bands: [
+      { label: '매우 불만족', start: 0, span: 1 },
+      { label: '보통', start: 5, span: 1 },
+      { label: '매우 만족', start: 10, span: 1 },
+    ],
+    anchors: { left: '매우 불만족', middle: { label: '보통', index: 5 }, right: '매우 만족' },
+    showsSelectionLabel: true,
+  };
+  const draw = (model: ScaleBarModel) =>
+    render(
+      <ChoiceGroupScaleBar
+        questionId="q1"
+        barId="g1"
+        model={model}
+        label=""
+        ariaLabel="만족도"
+        selectedCellId={undefined}
+        onToggleCell={() => {}}
+      />,
+    );
+  const template = (el: Element) => (el as HTMLElement).style.gridTemplateColumns;
+
+  it('긴 글자 칸만 최소 폭을 갖고, 막대·띠·라벨이 같은 열 틀을 써 서로 어긋나지 않는다', () => {
+    draw(withOffScale);
+    const expected = [...Array(10).fill('minmax(0, 1fr)'), 'minmax(45px, 1fr)'].join(' ');
+    const bar = screen.getByRole('radio', { name: /미참여/ }).closest('label')!.parentElement!;
+    expect(template(bar)).toBe(expected);
+    expect(template(screen.getByTestId('scale-bar-strip'))).toBe(expected);
+    expect(template(screen.getByTestId('scale-bar-anchors'))).toBe(expected);
+  });
+
+  it('칸 폭은 화면에 보이는 글자로 잰다 — 명단 토큰은 치환한 값이 기준이다', () => {
+    const tokenCell = (raw: string): ScaleBarModel => ({
+      ...withOffScale,
+      cells: [...withOffScale.cells.slice(0, 10), { cellId: 'c10', text: raw, bandIndex: null }],
+    });
+    attrs.value = { 긴이름의명단열: '모름', 짧음: '해당없음' };
+    // 토큰 이름은 길지만 보이는 글자(「모름」)는 짧다 — 넓히지 않는다
+    draw(tokenCell('{{긴이름의명단열}}'));
+    expect(template(screen.getByTestId('scale-bar-strip'))).toBe('repeat(11, minmax(0, 1fr))');
+    cleanup();
+    // 토큰 이름은 짧지만 보이는 글자(「해당없음」)는 길다 — 넓힌다
+    draw(tokenCell('{{짧음}}'));
+    expect(template(screen.getByTestId('scale-bar-strip'))).toContain('minmax(58px, 1fr)');
+    attrs.value = {};
+  });
+
+  it('라벨 줄은 제 구간의 칸 범위에 붙는다 — 척도 밖 칸(미참여)은 빼고, 가운데 라벨은 구간 가운데', () => {
+    draw(withOffScale);
+    const row = screen.getByTestId('scale-bar-anchor-row');
+    // 왼쪽 라벨의 첫 칸(1) ~ 오른쪽 라벨의 끝 칸(10) — 11번째 「미참여」 칸 아래는 비운다
+    expect(row.style.gridColumn).toBe('1 / 11');
+    // 가운데 구간(5·6번째 칸)이 그 범위의 한가운데라 양옆 자리가 같다
+    expect(row.style.gridTemplateColumns).toBe('minmax(0, 1fr) fit-content(40%) minmax(0, 1fr)');
+    expect([...row.children].map((el) => el.textContent)).toEqual(['매우 만족', '보통', '매우 불만족']);
+    expect(row.children[0]).toHaveClass('text-left');
+    expect(row.children[1]).toHaveClass('text-center');
+    expect(row.children[2]).toHaveClass('text-right');
+  });
+
+  it('긴 라벨은 한 줄로 겹쳐 놓지 않는다 — 제 자리 안에서 줄을 바꾼다', () => {
+    draw({
+      ...elevenPoint,
+      anchors: {
+        left: 'Tốt hơn nhiều so với kỳ vọng',
+        middle: { label: 'Bình thường', index: 5 },
+        right: 'Tệ hơn nhiều so với kỳ vọng',
+      },
+    });
+    const row = screen.getByTestId('scale-bar-anchor-row');
+    for (const el of row.children) {
+      expect(el).not.toHaveClass('whitespace-nowrap');
+      expect(el).toHaveClass('min-w-0');
+    }
+    // 라벨 줄의 높이를 한 줄로 못박지 않는다(줄이 늘면 아래 내용이 밀린다)
+    expect(screen.getByTestId('scale-bar-anchors')).not.toHaveClass('h-4');
+  });
+
+  it('줄 안에 폭이 다른 칸이 있으면 가운데 라벨을 제 구간 칸 아래에 직접 붙인다 — 다른 점수 아래로 밀리지 않는다', () => {
+    // 첫 칸이 「해당없음」(넓은 칸)인 11칸 척도 — 세 자리 틀의 한가운데는 6번째 칸의 가운데가 아니다
+    draw({
+      ...elevenPoint,
+      cells: elevenPoint.cells.map((cell, n) => (n === 0 ? { ...cell, text: '해당없음' } : cell)),
+    });
+    expect(screen.queryByTestId('scale-bar-anchor-row')).toBeNull();
+    expect(screen.getByText('보통').style.gridColumn).toBe('6 / span 1');
+    expect(screen.getByText('보통')).toHaveClass('text-center');
+    expect(screen.getByText('매우 불만족').style.gridColumn).toBe('1 / 6');
+    expect(screen.getByText('매우 만족').style.gridColumn).toBe('7 / 12');
+    for (const name of ['매우 불만족', '보통', '매우 만족']) {
+      expect(screen.getByText(name)).not.toHaveClass('whitespace-nowrap');
+    }
+  });
+
+  it('가운데 라벨이 없으면 양끝 라벨을 양쪽으로 벌린다', () => {
+    draw({ ...elevenPoint, anchors: { left: '전혀 아니다', right: '매우 그렇다' } });
+    const row = screen.getByTestId('scale-bar-anchor-row');
+    expect(row.style.gridColumn).toBe('1 / 12');
+    expect(row.style.gridTemplateColumns).toBe('');
+    expect(row).toHaveClass('flex', 'justify-between');
+    expect([...row.children].map((el) => el.textContent)).toEqual(['전혀 아니다', '매우 그렇다']);
+  });
+
+  it('긴 글자 칸이 없는 막대는 종전과 같은 고른 열 틀이고 라벨 자리도 양끝·정가운데 칸이다', () => {
+    draw(elevenPoint);
+    const equal = 'repeat(11, minmax(0, 1fr))';
+    expect(template(screen.getByTestId('scale-bar-strip'))).toBe(equal);
+    expect(template(screen.getByTestId('scale-bar-anchors'))).toBe(equal);
+    const row = screen.getByTestId('scale-bar-anchor-row');
+    expect(row.style.gridColumn).toBe('1 / 12');
+    expect(row.style.gridTemplateColumns).toBe('minmax(0, 1fr) fit-content(40%) minmax(0, 1fr)');
+    expect([...row.children].map((el) => el.textContent)).toEqual(['매우 불만족', '보통', '매우 만족']);
   });
 });

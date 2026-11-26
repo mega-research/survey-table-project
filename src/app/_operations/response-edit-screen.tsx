@@ -13,7 +13,7 @@ import { loadRespondentContactAttrs } from '@/server/read-models/respondent-cont
 import { collectReferencedContactKeys } from '@/lib/contacts/respondent-pii';
 import { isResponseExcluded } from '@/server/operations/services/profiles';
 import { testFlagForScope, type OperationsDataScope } from '@/server/data-scope';
-import type { FieldworkShare } from '@/server/fieldwork-share-scope';
+import { type FieldworkShare, withoutShareAttr } from '@/server/fieldwork-share-scope';
 import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
 import { normalizeQuestions } from '@/lib/question/normalize';
 import { toFlatQuestion } from '@/lib/question/variants';
@@ -183,7 +183,8 @@ export async function ResponseEditScreen({
         responseId={responseId}
         initialResponses={initialResponses}
         versionSnapshot={version?.snapshot ?? null}
-        initialContactAttrs={contactAttrs}
+        // 범위를 가르는 열의 값은 범위 게스트의 화면(RSC props)에 싣지 않는다.
+        initialContactAttrs={withoutShareAttr(contactAttrs, share)}
         initialPriorAnswers={priorAnswers}
         documentView={documentView}
         idx={idx}

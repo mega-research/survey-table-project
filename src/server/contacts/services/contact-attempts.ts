@@ -48,6 +48,8 @@ async function lockTargetInCurrentScope(
         eq(contactTargets.id, contactTargetId),
         eq(contactTargets.surveyId, surveyId),
         eq(contactTargets.isTest, isTest),
+        // 담당 범위도 같은 잠금 조회의 조건이다 — 범위 밖 대상은 없는 대상과 똑같이 NOT_FOUND 다
+        // (권한 없음과 없음을 가르지 않는다). 회차 추가·수정·삭제가 모두 이 잠금을 먼저 지난다.
         shareTargetCondition(share),
       ),
     )

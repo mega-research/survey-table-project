@@ -193,10 +193,10 @@ function visibleColumns(
 /**
  * 실사 표에서 빼는 컬럼.
  *
- * 메일 축은 실사에게 항상 차단이라(스펙 §8) 열조차 두지 않는다. `contact_owner` 는 운영
+ * 메일 축(수신 상황·링크 클릭)은 실사에게 항상 차단이라(스펙 §8) 열조차 두지 않는다. `contact_owner` 는 운영
  * 콘솔에서도 자리만 있는 컬럼이다 — 실사 표에서까지 빈 열을 그릴 이유가 없다.
  */
-const HIDDEN_SOURCES = new Set(['system.email_count', 'system.contact_owner']);
+const HIDDEN_SOURCES = new Set(['system.email_count', 'system.link_click', 'system.contact_owner']);
 
 type SourceRow = Awaited<ReturnType<typeof listContactsForSurvey>>['rows'][number];
 

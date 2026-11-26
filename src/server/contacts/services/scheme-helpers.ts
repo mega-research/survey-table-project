@@ -61,6 +61,7 @@ export async function sanitizeAttrsAgainstPii(
 const OPERATION_COLUMN_SOURCES = new Set([
   'system.contact_result',
   'system.email_count',
+  'system.link_click',
   'system.web',
   'system.contact_owner',
 ]);

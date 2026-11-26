@@ -46,7 +46,8 @@ async function resolveAssignmentFilter(
 ): Promise<ResolvedContactFilter<'write'>> {
   const ctx = await loadContactFilterContext(surveyId, scope, {
     isExternal: false,
-    surface: 'contacts',
+    surface: 'assignments',
+    // 컨택원 배정은 내부 계정 전용이다(procedure 가 authed) — 담당 범위 축이 없다.
     share: FIELDWORK_SHARE_ALL,
     executor,
   });
@@ -207,7 +208,7 @@ export async function listAssignmentMatches(
   // resolveAssignmentFilter 와 같은 해석 — 기본 정렬 열을 읽으려고 컨텍스트(스킴)를 여기서 쥔다.
   const ctx = await loadContactFilterContext(input.surveyId, scope, {
     isExternal: false,
-    surface: 'contacts',
+    surface: 'assignments',
     share: FIELDWORK_SHARE_ALL,
   });
   const filter = await resolveContactFilter(ctx, { clauses: input.clauses }, { mode: 'write' });

@@ -43,8 +43,12 @@ const add = scoped
   .handler(async ({ context, input }) => {
     // 대상 추가는 명단 관리다 — 실사원의 회차 쓰기(writeAttempts)와 갈라 manage 를 요구한다.
     await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'contacts.manage');
-    // 인증된 context 에서 1회 파생 — 서비스가 auth 를 재조회하지 않는다.
-    return svc.addContactTarget(input, isExternalActor(context.actor));
+    // 인증된 context 에서 1회 파생 — 서비스가 auth 를 재조회하지 않는다. 범위도 주체에서 푼다.
+    return svc.addContactTarget(
+      input,
+      isExternalActor(context.actor),
+      resolveFieldworkShare(context.actor, input.surveyId),
+    );
   });
 
 const update = scoped
@@ -54,7 +58,13 @@ const update = scoped
     await assertScopedSurveyCapabilityRpc(context.actor, input.surveyId, 'contacts.manage');
     // 편집자도 인증된 context 에서 넘긴다 — 「대상 정보 수정 현황」의 누가.
     await svc
-      .updateContactTarget(input, isExternalActor(context.actor), contactEditorOfContext(context))
+      .updateContactTarget(
+        input,
+        isExternalActor(context.actor),
+        contactEditorOfContext(context),
+        // 범위 밖 대상은 없는 대상과 같은 NOT_FOUND 다 — 범위는 어느 쓰기든 주체에서 푼다.
+        resolveFieldworkShare(context.actor, input.surveyId),
+      )
       .catch(rethrowContactNotFound);
     return { ok: true as const };
   });

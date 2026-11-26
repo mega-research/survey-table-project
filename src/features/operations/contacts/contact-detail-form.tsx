@@ -53,7 +53,6 @@ interface ContactDetailFormProps {
   basePath: string;
   scheme: ContactColumnScheme;
   resultCodes: ContactResultCode[];
-  systemFieldKeys?: { group?: string };
   /** 편집 모드: 기존 조사 대상 정보. 신규 모드: undefined. */
   initial?: {
     id: string;
@@ -104,7 +103,6 @@ export function ContactDetailForm({
   basePath,
   scheme,
   resultCodes,
-  systemFieldKeys,
   initial,
   mailHistory = [],
   editLogs = [],
@@ -288,7 +286,6 @@ export function ContactDetailForm({
     // React Compiler 는 try 본문의 conditional spread·논리연산·optional call 을 낮추지
     // 못한다. 페이로드 조각과 ref 스냅샷·편집 대상을 try 밖에서 확정해 두고 안에서는 값만 쓴다.
     const piiPatch = updatesForAction !== undefined ? { piiUpdates: updatesForAction } : {};
-    const systemFieldsPatch = systemFieldKeys !== undefined ? { systemFieldKeys } : {};
     const editTarget = isEdit && initial ? initial : null;
     startTransition(async () => {
       try {
@@ -315,7 +312,6 @@ export function ContactDetailForm({
             ...piiPatch,
             memo,
             contactMethod,
-            ...systemFieldsPatch,
           });
           // I2: localScheme 이 prop scheme 과 다르면 컬럼 스킴도 함께 저장
           if (!schemeEqual(localScheme, scheme)) {
@@ -336,7 +332,6 @@ export function ContactDetailForm({
             ...piiPatch,
             memo,
             contactMethod,
-            ...systemFieldsPatch,
           });
           // 신규 저장 성공 → 방금 만든 대상의 상세 페이지로 이동.
           // new 페이지에 머물면 폼 입력이 남아 isDirty 가 계속 true → 목록 이동 시

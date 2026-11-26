@@ -20,7 +20,6 @@ function row(overrides: Partial<UnsubscribedContactRow>): UnsubscribedContactRow
     id: 'ct-1',
     resid: 1,
     emailMasked: 'lsj...@meg...',
-    groupValue: null,
     attrs: {},
     piiMasks: {},
     assignmentName: null,
@@ -73,10 +72,11 @@ describe('UnsubscribedSegment 메일 표시 컬럼', () => {
     expect(columnCells('리스트 ID')).toEqual(['L-001', '—']);
   });
 
-  it('메일 표시 컬럼이 없으면 기존 6열 그대로다', () => {
+  it('메일 표시 컬럼이 없으면 고정 5열이다 — 그룹 칸은 없다', () => {
     renderSegment([row({ attrs: { 리스트ID: 'L-001' } })], []);
 
-    expect(headerLabels()).toHaveLength(6);
+    expect(headerLabels()).toHaveLength(5);
+    expect(headerLabels().some((l) => l.includes('그룹'))).toBe(false);
     expect(screen.queryByText('L-001')).not.toBeInTheDocument();
   });
 
@@ -95,7 +95,7 @@ describe('UnsubscribedSegment 메일 표시 컬럼', () => {
   it('시스템ID 를 끄면 그 열이 빠진다', () => {
     renderSegment([row({})], [], false);
 
-    expect(headerLabels()).toHaveLength(5);
+    expect(headerLabels()).toHaveLength(4);
     expect(headerLabels()).not.toContain('시스템ID');
   });
 });

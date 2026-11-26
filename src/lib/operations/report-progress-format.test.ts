@@ -2,6 +2,10 @@ import { describe, it, expect } from 'vitest';
 import {
   formatProgressGroupKey,
   parseProgressGroupKey,
+  metaColumnsOutsideGroupKeys,
+  progressCriterionLabel,
+  progressDefaultSort,
+  remapGroupedMetaSort,
   computeRate,
   toneFromRate,
   sortGroupRows,
@@ -136,5 +140,104 @@ describe('parseProgressGroupKey / formatProgressGroupKey', () => {
 
   it('빈 문자열은 키가 아니다', () => {
     expect(parseProgressGroupKey('')).toBeNull();
+  });
+});
+
+describe('metaColumnsOutsideGroupKeys', () => {
+  const columns = [{ key: 'Q0' }, { key: 'Q0_1' }, { key: '개최기간' }];
+
+  it('분류 기준으로 이미 나오는 열은 표시 열에서 뺀다 — 같은 값이 두 번 보이지 않게', () => {
+    expect(
+      metaColumnsOutsideGroupKeys(columns, [
+        { kind: 'attrs', key: 'Q0' },
+        { kind: 'attrs', key: 'Q0_1' },
+      ]),
+    ).toEqual([{ key: '개최기간' }]);
+  });
+
+  it('칩으로 꺼 둔 분류 기준의 열은 표시 열로 남는다', () => {
+    expect(metaColumnsOutsideGroupKeys(columns, [{ kind: 'attrs', key: 'Q0' }])).toEqual([
+      { key: 'Q0_1' },
+      { key: '개최기간' },
+    ]);
+  });
+
+  it('분류 기준이 없으면 그대로다', () => {
+    expect(metaColumnsOutsideGroupKeys(columns, [])).toEqual(columns);
+  });
+
+  it('시스템 기준은 이름이 같은 명단 열을 빼지 않는다', () => {
+    const withOwner = [{ key: 'contact_owner' }, { key: 'Q0' }];
+    expect(
+      metaColumnsOutsideGroupKeys(withOwner, [{ kind: 'system', key: 'contact_owner' }]),
+    ).toEqual(withOwner);
+  });
+});
+
+describe('progressCriterionLabel', () => {
+  const columns = [
+    { key: 'Q0', label: '국내전시회명' },
+    { key: 'Q0_1', label: '  ' },
+  ];
+
+  it('진척률 컬럼 설정에서 고친 라벨을 분류 기준 이름으로 쓴다', () => {
+    expect(progressCriterionLabel(columns, 'Q0', 'Q0')).toBe('국내전시회명');
+  });
+
+  it('라벨을 비웠으면 조사 대상 목록의 라벨로 돌아간다', () => {
+    expect(progressCriterionLabel(columns, 'Q0_1', 'Q0_1')).toBe('Q0_1');
+  });
+
+  it('진척률 컬럼 설정을 저장한 적 없는 열은 조사 대상 목록의 라벨이다', () => {
+    expect(progressCriterionLabel(columns, '개최기간', '개최 기간')).toBe('개최 기간');
+  });
+});
+
+describe('remapGroupedMetaSort', () => {
+  const active = [{ kind: 'attrs' as const, key: 'Q0' }];
+
+  it('표시 열 정렬이 켜진 분류 기준을 가리키면 그 기준의 정렬로 읽는다', () => {
+    expect(remapGroupedMetaSort('meta:Q0', active)).toBe('group:Q0');
+  });
+
+  it('분류 기준이 아닌 표시 열·다른 정렬은 그대로다', () => {
+    expect(remapGroupedMetaSort('meta:개최기간', active)).toBe('meta:개최기간');
+    expect(remapGroupedMetaSort('listCount', active)).toBe('listCount');
+    expect(remapGroupedMetaSort(undefined, active)).toBeUndefined();
+  });
+
+  it('칩으로 꺼 둔 기준이면 표시 열 정렬 그대로다', () => {
+    expect(remapGroupedMetaSort('meta:Q0', [])).toBe('meta:Q0');
+  });
+
+  it('시스템 기준은 이름이 같은 표시 열의 정렬을 가져가지 않는다', () => {
+    expect(
+      remapGroupedMetaSort('meta:contact_owner', [{ kind: 'system', key: 'contact_owner' }]),
+    ).toBe('meta:contact_owner');
+  });
+});
+
+describe('progressDefaultSort', () => {
+  it('기본 정렬 열이 표시 열로 나와 있으면 그 열의 정렬이다', () => {
+    expect(progressDefaultSort('전시회ID', [{ kind: 'attrs', key: '국내전시회명' }], ['전시회ID'])).toBe(
+      'meta:전시회ID',
+    );
+  });
+
+  it('기본 정렬 열이 켜진 분류 기준이면 기준 칸의 정렬이다 — 표시 열 목록에 없어도 된다', () => {
+    expect(progressDefaultSort('전시회ID', [{ kind: 'attrs', key: '전시회ID' }], [])).toBe(
+      'group:전시회ID',
+    );
+  });
+
+  it('기본 정렬 열을 정하지 않았거나 그 열이 이 표에 없으면 null — 종전 기본을 쓴다', () => {
+    expect(progressDefaultSort(null, [], ['전시회ID'])).toBeNull();
+    expect(progressDefaultSort('전시회ID', [{ kind: 'attrs', key: '국내전시회명' }], ['담당자'])).toBeNull();
+  });
+
+  it('이름이 같은 시스템 기준은 명단 열이 아니다', () => {
+    expect(
+      progressDefaultSort('contact_owner', [{ kind: 'system', key: 'contact_owner' }], []),
+    ).toBeNull();
   });
 });

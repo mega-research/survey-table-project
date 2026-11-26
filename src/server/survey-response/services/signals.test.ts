@@ -77,6 +77,14 @@ describe('computeSignals', () => {
     expect(r.deviceId).toBe('dev-uuid-1');
   });
 
+  it('ipHash 는 종전 식(IP 뒤에 솔트를 붙인 sha256) 그대로다 — 이미 저장된 응답 해시와 맞아야 한다', async () => {
+    // printf '%s' '203.0.113.7test-salt-do-not-use-in-prod' | shasum -a 256
+    const { computeSignals } = await import('./signals');
+    const h = new Headers({ 'x-real-ip': '203.0.113.7', 'user-agent': 'ua' });
+    const r = computeSignals(h, { screen: '', tz: '', lang: '', platform: '', deviceId: null });
+    expect(r.ipHash).toBe('51dbb777aefab8a023dfb19fb1b0bda8ef91ed03d5494f256c8613d1a1a3dfd1');
+  });
+
   it('IP가 null이면 ipHash도 null', async () => {
     const { computeSignals } = await import('./signals');
     const h = new Headers({ 'user-agent': 'X' });

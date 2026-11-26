@@ -8,6 +8,7 @@ import type {
 } from '@/shared/contracts/survey';
 import type { InputType } from '@/types/input-type';
 import type { MobileTableDisplayMode } from '@/types/mobile-table-display';
+import type { ScaleSliderDirection } from '@/types/scale-slider';
 import type { SurveyLocale } from '@/types/survey-locale';
 
 // 타입 정의만 그대로 되내보낸다 — 정의는 각각 한 곳뿐이라 드리프트가 생길 수 없고,
@@ -706,6 +707,13 @@ export interface TableCell {
    */
   optionTextInCell?: boolean;
   /**
+   * 제목 아래 입력칸 — input 셀 전용. 모바일 「행별 원본」·「행별 척도」에서 이 칸이 그 줄 조각의 유일한 응답
+   * 칸이면 원본 표 조각(가로로 미는 표)을 그리지 않고 행 제목 바로 아래에 화면 폭으로 그린다(척도 표 맨 아래
+   * 서술형 줄). 조각에 다른 응답 칸이 남는 줄에서는 읽지 않는다. 기본 꺼짐, 빌더 화면 없이 스크립트로 적는다.
+   * 판정은 question-renderer/utils/mobile-row-wise-original.
+   */
+  mobileBelowRowTitle?: boolean;
+  /**
    * 중복 불가 묶음 이름 (선택 칸 전용). 같은 이름의 선택 칸끼리는 같은 보기를 두 번 고를 수 없다 —
    * 다른 칸이 고른 보기는 목록에 비활성으로 남고, 이미 들어온 중복은 차단형 검증이 막는다.
    * 열·행 배치와 무관하게 이름만으로 묶는다 (CONTEXT.md "중복 불가 묶음").
@@ -947,6 +955,16 @@ export interface ChoiceGroup {
   // 라벨)로 그린다. mobileOriginalLine 과 배타 — 읽기·쓰기는 features/question-renderer/utils/
   // choice-group-mobile-view, 판정은 choice-group-scale-bar. 그릴 수 없으면 원본 한 줄로 폴백한다.
   mobileScaleBar?: boolean;
+  // 척도 막대의 가운데 구간 이름 — 척도 한가운데의 여러 칸짜리 구간 이름(10점 척도의 「보통」)도 그 띠 아래에
+  // 적는다. 기본 꺼짐(한 칸짜리 정가운데 구간만 가운데 라벨). 양끝 이름이 길면 겹칠 수 있어 그룹마다 켠다.
+  // 빌더 화면 없이 스크립트로 적는다. 판정은 choice-group-scale-bar 의 projectScaleBar.
+  mobileScaleBarMiddleLabel?: boolean;
+  // 이 그룹을 척도 슬라이더(타일 줄 + 트랙)로 그린다 — 값이 있으면 켜진 것이고 그 값이 긍정 방향이다
+  // (어휘 @/types/scale-slider). 모바일 전용인 위 두 모양과 달리 웹과 모바일 둘 다에 적용한다. 보기 모양 넷은
+  // 서로 배타이고 읽기 우선순위는 슬라이더 → 척도 막대 → 원본 한 줄 → 세로 타일이다 — 읽기·쓰기는
+  // features/question-renderer/utils/choice-group-mobile-view. radio 그룹 전용(순위·체크박스 그룹에 적힌 값은
+  // 읽지 않는다).
+  scaleSlider?: ScaleSliderDirection;
 }
 
 export interface TableColumn {
@@ -956,6 +974,11 @@ export interface TableColumn {
   textBold?: boolean;
   backgroundColor?: string;
   textColor?: string;
+  /**
+   * 머리글 오른쪽 세로선 숨김 — 응답 화면·미리보기에서 이 열 머리글과 오른쪽 머리글 사이 선을 그리지 않는다
+   * (다단 헤더가 없는 표의 한 줄 머리글). 빌더 편집 화면은 경계를 그대로 보인다. `HeaderCell.hideRightBorder` 와 같다.
+   */
+  hideRightBorder?: boolean;
   width?: number; // 열 너비 (픽셀 단위)
   minWidth?: number; // 최소 너비
   // 컬럼 헤더 병합 관련 속성
@@ -997,6 +1020,13 @@ export interface HeaderCell {
   textColor?: string;
   colspan: number; // 가로 병합 (기본 1)
   rowspan: number; // 세로 병합 (기본 1)
+  /**
+   * 오른쪽 세로선 숨김 — 응답 화면·미리보기에서 이 머리글 칸과 오른쪽 칸 사이 선을 그리지 않는다
+   * (「전혀 만족하지 않음 | … | 보통 | … | 매우 만족함」을 끊김 없는 한 줄로). 빌더 편집 격자는 칸 경계를
+   * 보여야 병합·선택이 되므로 그대로 그린다. 표의 마지막 열에 닿는 칸은 지우지 않는다 — 표의 오른쪽 끝선이다.
+   * 클래스는 `features/question-renderer/utils/table-grid-utils` 의 `getHeaderRightBorderClass` 하나.
+   */
+  hideRightBorder?: boolean;
   /**
    * 머리글 입력칸 — 같은 표 본문의 입력칸 하나를 이 머리글 자리에 그린다(「기타(원료명 직접 작성)」).
    * 값은 그 본문 칸 키에 그대로 산다(저장·검증·내보내기 무변경). 판정·올린 행은
@@ -1105,6 +1135,21 @@ export interface Question {
    * 제자리에 그린다(survey-response `groupAttachedItems`).
    */
   collapseAttachToPrevious?: boolean;
+  /**
+   * 문항 사이의 중복 불가 묶음 이름 (0171, CONTEXT.md 「중복 불가 묶음」). 같은 이름을 적은 단일 선택 문항(radio·select,
+   * 보기를 직접 가진 문항)끼리 같은 보기를 고른 채 「다음」으로 넘어갈 수 없다(「가장 만족」·「가장 불만족」 한 쌍).
+   * 화면에서는 막지 않고 차단 검증만 건다. NULL·공백 = 없음. 판정은 `question-renderer/utils/distinct-question-group`.
+   * 빌더 편집 칸은 없다(스크립트로 적는다).
+   */
+  distinctGroup?: string | null;
+  /**
+   * 문항의 슬라이더 방향 (0173, CONTEXT.md 「척도 슬라이더」). 값이 있으면 이 문항을 척도 슬라이더로 그리고 그 값이
+   * 긍정 방향이다. 없음·null = 꺼짐(기존 화면). 읽는 곳은 둘뿐이다 — 보통 라디오 문항(보기 목록)과, 묶음 없는
+   * 보기 소스 표의 보기 칸. 묶음이 있는 표는 묶음의 `ChoiceGroup.scaleSlider` 만 보고 이 값을 읽지 않는다.
+   * 값·저장 모양·검증·내보내기는 바꾸지 않는다(모양만). null 은 「끄기」다 — 문항 부분 수정에서 싣지 않은 것
+   * (그대로 두기)과 구별하려고 받는다. 로드한 문항에는 null 이 실리지 않는다(꺼진 문항은 키가 없다).
+   */
+  scaleSlider?: ScaleSliderDirection | null;
   // 단답형·장문형 입력칸 줄 수 (0124). 미지정 = 유형 기본(단답형 한 줄, 장문형 4줄).
   // 단답형에서 2 이상이면 여러 줄 칸. 숫자 모드·입력 형식은 한 줄 고정(표 input 셀 inputRows 와 같은 규칙).
   inputRows?: number | null;
@@ -1130,8 +1175,8 @@ export interface Question {
    */
   stickyColumnCount?: number | null;
   /**
-   * 화면 폭에 맞춰 표 줄이기 (표를 그리는 문항 전용). 켜면 모바일 모드가 아닐 때 열 폭을 비율로 바꿔
-   * 좁은 화면에 맞춰 줄이고 넓은 화면에서는 지정 총폭을 넘지 않는다. 끔/미지정 = 지정 px 고정(기존).
+   * 화면 폭에 맞춰 표 줄이기 (표를 그리는 문항 전용). 켜면 패드 폭(768~1023px)에서 열 폭을 비율로 바꿔
+   * 화면에 맞춰 줄인다. 데스크톱(1024px 이상)은 켜 두어도 지정 px 그대로다. 끔/미지정 = 지정 px 고정(기존).
    */
   fitTableToWidth?: boolean;
   /**
@@ -1149,6 +1194,17 @@ export interface Question {
   mobileDrilldownOmitLeadingColumns?: number;
   mobileDrilldownRepeatHeaderStartRow?: number | null;
   mobileDrilldownRepeatHeaderEndRow?: number | null;
+  /**
+   * 조각 좌우 반전 — 좁은 화면의 원본 표 조각에서 열을 작성 순서의 반대로 그린다(평균에서 제외하는 보기 칸이
+   * 조각 양끝에 있으면 그 칸은 제자리). 표 구조·응답값·PC 화면은 그대로다. 끔/미지정 = 작성 순서.
+   * 판정은 features/question-renderer/utils/mobile-piece-arrangement.
+   */
+  mobileDrilldownReverseColumns?: boolean;
+  /**
+   * 조각 한 화면 칸 수 — 좁은 화면의 원본 표 조각에서 자리 폭을 이 수로 나눠 칸 폭을 정한다.
+   * 범위는 `@/types/mobile-table-display`. null/미지정 = 원본 열 폭 그대로. 빌더 스토어에는 「비움」으로 null 이 온다.
+   */
+  mobileDrilldownColumnsPerView?: number | null;
   // 「항목 단위 카드」 블록 시작 열(1부터, 작성 열 순서) — 좌우로 붙은 표를 모바일에서 블록마다 차례로 세운다.
   // 비어 있으면 블록 없이 행 순서 그대로다 (CONTEXT.md "블록 단위로 세우기")
   mobileItemCardBlockColumns?: number[] | null;

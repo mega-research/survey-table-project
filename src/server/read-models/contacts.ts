@@ -45,7 +45,9 @@ import {
 } from '@/lib/operations/contacts-format';
 import {
   attrsNaturalSortExprs,
+  naturalTextSortExprs,
   effectiveMailStatusExpr,
+  linkClickStateExpr,
   latestResultCodeExpr,
   mailStatusRankExpr,
   matchedResponseSubquery,
@@ -72,8 +74,13 @@ import type {
   ResponseEditLogRow,
 } from '@/shared/contracts/contacts-io';
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
+import type { LinkClickState } from '@/shared/contracts/mail-io';
 
-import { type FieldworkShare, shareTargetCondition } from '../fieldwork-share-scope';
+import {
+  type FieldworkShare,
+  shareTargetCondition,
+  withoutShareAttr,
+} from '../fieldwork-share-scope';
 import { type ResolvedContactFilter, resolvedContactFilterSql } from './contact-filter-resolution';
 import type { FieldworkLinkNames } from './fieldwork-link-names';
 
@@ -245,12 +252,15 @@ export async function listContactsForSurvey(args: ListContactsArgs): Promise<Lis
               orderExpr(assignmentNameExpr, dir),
               asc(contactTargets.resid),
             ]
-          : [
-              orderExpr(
-                SYSTEM_SORT_MAP[sort as keyof typeof SYSTEM_SORT_MAP] ?? contactTargets.resid,
-                dir,
-              ),
-            ];
+          : sort === 'group'
+            ? // 그룹도 명단에서 온 글자 값이다 — 명단 열과 같은 자연 정렬(숫자로 된 그룹명은 숫자순).
+              naturalTextSortExprs(sql`${contactTargets.groupValue}`).map((c) => orderExpr(c, dir))
+            : [
+                orderExpr(
+                  SYSTEM_SORT_MAP[sort as keyof typeof SYSTEM_SORT_MAP] ?? contactTargets.resid,
+                  dir,
+                ),
+              ];
 
   const dataRows = await db
     .select({
@@ -267,6 +277,7 @@ export async function listContactsForSurvey(args: ListContactsArgs): Promise<Lis
       responseStatus: responseStatusExpr.as('response_status'),
       latestMailStatus: effectiveMailStatusExpr.as('latest_mail_status'),
       unsubscribedAt: contactTargets.unsubscribedAt,
+      linkClick: linkClickStateExpr.as('link_click'),
       assignmentId: contactTargets.assignmentId,
       assignmentName: assignmentNameExpr.as('assignment_name'),
     })
@@ -288,7 +299,8 @@ export async function listContactsForSurvey(args: ListContactsArgs): Promise<Lis
     id: r.id,
     resid: r.resid,
     groupValue: r.groupValue,
-    attrs: (r.attrs ?? {}) as Record<string, string>,
+    // 범위를 가르는 열의 값은 범위 게스트의 화면에 싣지 않는다(열도 스킴에서 빠져 있다).
+    attrs: withoutShareAttr((r.attrs ?? {}) as Record<string, string>, filter.share),
     piiMaskHints: maskHintsMap.get(r.id) ?? {},
     ...(plainMap ? { piiPlain: plainMap.get(r.id) ?? {} } : {}),
     latestResultCode: r.latestResultCode,
@@ -298,6 +310,7 @@ export async function listContactsForSurvey(args: ListContactsArgs): Promise<Lis
     responseStatus: r.responseStatus,
     latestMailStatus: r.latestMailStatus,
     unsubscribedAt: r.unsubscribedAt,
+    linkClick: r.linkClick,
     inviteToken: r.inviteToken,
     createdAt: r.createdAt,
     assignment:
@@ -322,6 +335,7 @@ export interface ContactExportSourceRow {
   progressPct: number | null;
   responseStatus: string | null;
   latestMailStatus: MailRecipientStatus | null;
+  linkClick: LinkClickState | null;
 }
 
 /**
@@ -344,6 +358,7 @@ export async function listContactsForExport(
       progressPct: progressPctExpr.as('progress_pct'),
       responseStatus: responseStatusExpr.as('response_status'),
       latestMailStatus: effectiveMailStatusExpr.as('latest_mail_status'),
+      linkClick: linkClickStateExpr.as('link_click'),
     })
     .from(contactTargets)
     .where(and(eq(contactTargets.surveyId, surveyId), targetScopeCondition(scope)))
@@ -402,14 +417,16 @@ export const getContactColumnScheme = cache(
 
 /**
  * 필터 컬럼 후보 생성 — 조사대상목록·단체 메일 마법사 공유.
- * 맨 앞 "전체"(system.all) + system.resid / contact_result / web / email_count + attrs.* + pii.*.
+ * 맨 앞 "전체"(system.all) + system.resid / contact_result / web / email_count / link_click + attrs.* + pii.*.
  *
+ * 「링크 클릭」(system.link_click)은 includeLinkClick 을 켠 표면(조사 대상 목록·단체 메일 위저드)만 받는다 —
+ * 컨택원 교체 적용 조건과 응답 내역은 받지 않는다(범위 밖). 켜지 않으면 빠지는 쪽이 기본이다.
  * 「현재 컨택원」(system.contact_owner)은 includeContactOwner 를 켠 표면(조사 대상 목록·컨택원
  * 수정·단체 메일 위저드)만 받는다 — 셋 다 외부 주체에게는 끈다. 응답 내역은 받지 않는다.
  */
 export function buildColumnCandidates(
   scheme: ContactColumnScheme | null,
-  opts: { includeContactOwner?: boolean } = {},
+  opts: { includeContactOwner?: boolean; includeLinkClick?: boolean } = {},
 ): ColumnCandidateWithPii[] {
   const columns = (scheme?.columns ?? [])
     .filter(
@@ -418,6 +435,7 @@ export function buildColumnCandidates(
         c.source === FILTER_SOURCE.CONTACT_RESULT ||
         c.source === FILTER_SOURCE.WEB ||
         c.source === FILTER_SOURCE.EMAIL ||
+        (opts.includeLinkClick === true && c.source === FILTER_SOURCE.LINK_CLICK) ||
         (opts.includeContactOwner === true && c.source === FILTER_SOURCE.CONTACT_OWNER) ||
         c.source.startsWith(FILTER_SOURCE.ATTRS_PREFIX) ||
         c.source.startsWith(FILTER_SOURCE.PII_PREFIX),
@@ -464,7 +482,6 @@ export interface ContactDetailResult {
 
 /**
  * 컨택 단건 편집 페이지용 — 컨택 본체 + 회차 이력 (최근순).
- * 본인 survey 의 컨택만 조회 (surveyId guard 호출자가 책임).
  */
 export async function getContactDetailById(
   id: string,
@@ -547,7 +564,8 @@ export async function getContactDetailById(
   return {
     contact: {
       ...contact,
-      attrs: (contact.attrs ?? {}) as Record<string, string>,
+      // 범위를 가르는 열의 값은 범위 게스트에게 내리지 않는다 — 저장 때 서비스가 다시 찍는다(`withShareStamp`).
+      attrs: withoutShareAttr((contact.attrs ?? {}) as Record<string, string>, share),
       piiDecrypted,
       contactMethod: contact.contactMethod as ContactMethod | null,
     },

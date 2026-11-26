@@ -92,6 +92,8 @@ interface SnapshotQuestion {
   mobileDrilldownOmitLeadingColumns?: number | undefined;
   mobileDrilldownRepeatHeaderStartRow?: number | null | undefined;
   mobileDrilldownRepeatHeaderEndRow?: number | null | undefined;
+  mobileDrilldownReverseColumns?: boolean | undefined;
+  mobileDrilldownColumnsPerView?: number | undefined;
   mobileItemCardBlockColumns?: number[] | null | undefined;
   hideTitle?: boolean | undefined;
   pageBreakBefore?: boolean | undefined;
@@ -116,6 +118,8 @@ interface SnapshotQuestion {
   titleHtml?: Question['titleHtml'] | undefined;
   collapseButtonLabel?: Question['collapseButtonLabel'] | undefined;
   collapseAttachToPrevious?: boolean | undefined;
+  distinctGroup?: Question['distinctGroup'] | undefined;
+  scaleSlider?: NonNullable<Question['scaleSlider']> | undefined;
   sumConstraints?: Question['sumConstraints'] | undefined;
   answerQuoteEnabled?: boolean | undefined;
   answerQuoteName?: string | undefined;
@@ -197,6 +201,9 @@ export function buildSurveySnapshot(
       mobileDrilldownOmitLeadingColumns: q.mobileDrilldownOmitLeadingColumns,
       mobileDrilldownRepeatHeaderStartRow: q.mobileDrilldownRepeatHeaderStartRow,
       mobileDrilldownRepeatHeaderEndRow: q.mobileDrilldownRepeatHeaderEndRow,
+      // 꺼진 값은 싣지 않는다 — false·null 이 실려 와도 키를 남기지 않아 꺼진 문항의 스냅샷이 그대로다
+      mobileDrilldownReverseColumns: q.mobileDrilldownReverseColumns || undefined,
+      mobileDrilldownColumnsPerView: q.mobileDrilldownColumnsPerView ?? undefined,
       mobileItemCardBlockColumns: q.mobileItemCardBlockColumns,
       hideTitle: q.hideTitle,
       pageBreakBefore: q.pageBreakBefore,
@@ -216,6 +223,9 @@ export function buildSurveySnapshot(
       titleHtml: q.titleHtml,
       collapseButtonLabel: q.collapseButtonLabel,
       collapseAttachToPrevious: q.collapseAttachToPrevious,
+      distinctGroup: q.distinctGroup,
+      // 꺼진 값은 싣지 않는다 — null 이 실려 와도 키를 남기지 않아 꺼진 문항의 스냅샷이 그대로다
+      scaleSlider: q.scaleSlider ?? undefined,
       sumConstraints: q.sumConstraints,
       answerQuoteEnabled: q.answerQuoteEnabled,
       answerQuoteName: q.answerQuoteName,

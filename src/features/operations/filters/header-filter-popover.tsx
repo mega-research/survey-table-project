@@ -56,6 +56,11 @@ interface Props {
    */
   fixedOptions?: Array<{ value: string; label: string }>;
   /**
+   * 적용할 값(hv)의 길이 한도. 넘으면 적용하지 않고 줄이라고 알린다 — 조건을 다른 입력(캠페인 스냅샷)으로
+   * 다시 보내는 화면이 그 입력의 한도를 넘는 조건을 걸지 않게 한다. 지정하지 않으면 제한 없음.
+   */
+  maxValueLength?: number;
+  /**
    * 적용 시 URL 파라미터 추가 조작 (예: 응답 내역 status 깔때기 적용 시 상단
    * 상태 select 의 'status' 제거 — 남겨두면 모순 AND 로 0건이 된다).
    * 클라이언트 컴포넌트에서만 넘길 수 있다 — 서버 컴포넌트는 아래 두 prop 을 쓴다.
@@ -105,6 +110,7 @@ export function HeaderFilterPopover({
   label,
   resultCodeOptions = [],
   fixedOptions,
+  maxValueLength,
   onApplyParams,
   renameOnApply,
   resetParams,
@@ -128,6 +134,8 @@ export function HeaderFilterPopover({
   // 위 토글의 여집합 — 값이 있는 행만. 둘은 서로를 끈다 (동시에 켜면 0건).
   const [excludeEmpty, setExcludeEmpty] = useState(false);
   const [confirmEntry, setConfirmEntry] = useState<HeaderFilterEntry | null>(null);
+  // 길이 한도를 넘겨 적용하지 못했다 — 선택·입력을 바꾸면 지운다.
+  const [tooLong, setTooLong] = useState(false);
 
   const attrsKey = kind === 'attrs' ? source.slice(FILTER_SOURCE.ATTRS_PREFIX.length) : null;
   const { data, isPending, isError } = useQuery({
@@ -169,6 +177,7 @@ export function HeaderFilterPopover({
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next);
+    setTooLong(false);
     if (!next) return;
     // 열 때 현재 URL 상태로 로컬 상태 초기화.
     if (activeEntry?.mode === 'in') {
@@ -187,6 +196,7 @@ export function HeaderFilterPopover({
   };
 
   const toggleValue = (value: string, checked: boolean) => {
+    setTooLong(false);
     setSelected((prev) => {
       const next = new Set(prev);
       if (checked) next.add(value);
@@ -237,6 +247,10 @@ export function HeaderFilterPopover({
 
   const handleApply = () => {
     const entry = buildEntry();
+    if (entry && maxValueLength != null && entry.hv.length > maxValueLength) {
+      setTooLong(true);
+      return;
+    }
     if (entry && hasBuilderFilterParams(new URLSearchParams(searchParams.toString()))) {
       setConfirmEntry(entry);
       return;
@@ -303,7 +317,10 @@ export function HeaderFilterPopover({
               )}
               <Input
                 value={textValue}
-                onChange={(e) => setTextValue(e.target.value)}
+                onChange={(e) => {
+                  setTooLong(false);
+                  setTextValue(e.target.value);
+                }}
                 placeholder={placeholderFor(source)}
                 className="h-8 text-sm normal-case"
                 disabled={emptyOnly || excludeEmpty}
@@ -338,6 +355,12 @@ export function HeaderFilterPopover({
                 <span>{FILTER_NOT_NONE_TOGGLE_LABEL}</span>
               </label>
             </div>
+          )}
+
+          {tooLong && (
+            <p role="alert" className="mt-2 text-xs normal-case text-red-600">
+              고른 값이 너무 많습니다. 선택을 줄여 주세요.
+            </p>
           )}
 
           <div className="mt-3 flex items-center justify-between">

@@ -17,6 +17,7 @@ import { getContactTargetEditLogs } from '@/server/read-models/contact-target-ed
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 
 import { backendPid, waitForLockWaitersBehind } from '../helpers/lock-waiters';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 // 요청 밖이라 쿠키가 없다 — 콘솔은 실데이터 파티션을 본다(server/data-scope).
 vi.mock('next/headers', () => ({
@@ -92,7 +93,7 @@ run('대상 정보 수정 현황 (real DB)', () => {
         attrs: { 사업자등록증기업명: '아리오나트', 명단기업명: '아리오나트', 지역: '서울' },
       },
       false,
-      editor,
+      editor, FIELDWORK_SHARE_ALL,
     );
 
     const logs = await logsOf(targetId);
@@ -122,7 +123,7 @@ run('대상 정보 수정 현황 (real DB)', () => {
     await updateContactTarget(
       { id: targetId, surveyId, attrs: { 지역: '서울' }, memo: '메모', contactMethod: null },
       false,
-      editor,
+      editor, FIELDWORK_SHARE_ALL,
     );
 
     expect(await logsOf(targetId)).toEqual([]);
@@ -150,13 +151,13 @@ run('대상 정보 수정 현황 (real DB)', () => {
     const saveBusan = updateContactTarget(
       { id: targetId, surveyId, attrs: { 지역: '부산' } },
       false,
-      { id: 'a', email: 'a@local' },
+      { id: 'a', email: 'a@local' }, FIELDWORK_SHARE_ALL,
     );
     await waitForLockWaitersBehind(holderPid, 1, '첫 저장이 대상 잠금 뒤에 줄 서지 않았다');
     const saveDaegu = updateContactTarget(
       { id: targetId, surveyId, attrs: { 지역: '대구' } },
       false,
-      { id: 'b', email: 'b@local' },
+      { id: 'b', email: 'b@local' }, FIELDWORK_SHARE_ALL,
     );
     await waitForLockWaitersBehind(holderPid, 2, '두 번째 저장이 줄 서지 않았다');
     release();
@@ -196,7 +197,7 @@ run('대상 정보 수정 현황 (real DB)', () => {
         updateContactTarget(
           { id: targetId, surveyId, attrs: { 지역: '부산' }, memo: '새 메모' },
           false,
-          editor,
+          editor, FIELDWORK_SHARE_ALL,
         ),
       ).rejects.toThrow();
     } finally {

@@ -30,6 +30,7 @@ import { ContactsFilterBar } from '@/features/operations/contacts/contacts-filte
 import { FilterResetButton } from '@/features/operations/filters/filter-reset-button';
 import { HeaderFilterPopover } from '@/features/operations/filters/header-filter-popover';
 import { StatusPill } from '@/features/operations/profiles/status-pill';
+import { LinkClickMark } from '@/features/operations/link-click-mark';
 import { RecipientStatusBadge } from '@/features/operations/mail-campaign/recipient-status-badge';
 import {
   PAGER_ELLIPSIS_CLASS,
@@ -62,7 +63,11 @@ import type {
 import {
   CAMPAIGN_HEADER_FILTER_COLUMNS,
   FILTER_SOURCE,
+  HEADER_FILTER_VALUE_MAX_LENGTH,
+  LINK_CLICK_COLUMN_LABEL,
+  LINK_CLICK_FILTER_OPTIONS,
   MAIL_FILTER_OPTIONS,
+  withNoneOption,
 } from '@/lib/operations/filter-shared';
 import { internalOperationsPaths } from '@/utils/operations-paths';
 
@@ -491,22 +496,30 @@ export function CampaignWizard({
                   const columnSortKey = c.kind === 'attrs' ? (`attrs.${c.key}` as const) : null;
                   return (
                     <th key={`${c.kind}.${c.key}`} className="px-3 py-2">
-                      {columnSortKey !== null && columnSortKey === defaultSortKey ? (
-                        <SortHeader
+                      <span className="inline-flex items-center gap-1">
+                        {columnSortKey !== null && columnSortKey === defaultSortKey ? (
+                          <SortHeader
+                            label={c.label}
+                            sortKey={columnSortKey}
+                            activeSort={sort}
+                            dir={dir}
+                            onSort={changeSort}
+                          />
+                        ) : (
+                          c.label
+                        )}
+                        <PreviewHeaderFilter
+                          surveyId={surveyId}
+                          source={mailColumnFilterSource(c)}
                           label={c.label}
-                          sortKey={columnSortKey}
-                          activeSort={sort}
-                          dir={dir}
-                          onSort={changeSort}
+                          resultCodeOptions={resultCodeOptions}
+                          assignmentOptions={assignmentOptions}
                         />
-                      ) : (
-                        c.label
-                      )}
+                      </span>
                     </th>
                   );
                 })}
                 <th className="px-3 py-2">이메일</th>
-                <th className="px-3 py-2">그룹</th>
                 <th className="px-3 py-2">
                   <span className="inline-flex items-center gap-1">
                     <SortHeader label="응답" sortKey="responded" activeSort={sort} dir={dir} onSort={changeSort} />
@@ -529,6 +542,19 @@ export function CampaignWizard({
                     <PreviewHeaderFilter
                       surveyId={surveyId}
                       source={FILTER_SOURCE.EMAIL}
+                      resultCodeOptions={resultCodeOptions}
+                    />
+                  </span>
+                </th>
+                <th
+                  className="px-3 py-2"
+                  title="어느 발송 회차에서든 메일의 설문 링크를 눌렀는가 — 눌렀다는 것이지 응답했다는 것은 아닙니다"
+                >
+                  <span className="inline-flex items-center gap-1">
+                    {LINK_CLICK_COLUMN_LABEL}
+                    <PreviewHeaderFilter
+                      surveyId={surveyId}
+                      source={FILTER_SOURCE.LINK_CLICK}
                       resultCodeOptions={resultCodeOptions}
                     />
                   </span>
@@ -580,7 +606,6 @@ export function CampaignWizard({
                       </td>
                     ))}
                     <td className="px-3 py-2 text-slate-900">{r.emailMasked}</td>
-                    <td className="px-3 py-2 text-slate-600">{r.groupValue ?? '—'}</td>
                     <td className="px-3 py-2 text-xs">
                       <ResponseCell status={r.responseStatus} progressPct={r.progressPct} />
                     </td>
@@ -590,6 +615,9 @@ export function CampaignWizard({
                       ) : (
                         <span className="text-slate-400">—</span>
                       )}
+                    </td>
+                    <td className="px-3 py-2 text-xs">
+                      <LinkClickMark state={r.linkClick} />
                     </td>
                     <td className="px-3 py-2 text-xs text-slate-600">
                       {r.latestResultCode ?? '—'}
@@ -780,30 +808,62 @@ function ResponseCell({
   return <StatusPill pill={pill} />;
 }
 
+/** 메일 표시 열의 깔때기 source — 조사 대상 목록의 같은 열과 같은 값이라 서버가 같은 후보로 해석한다. */
+function mailColumnFilterSource(column: MailDisplayColumn): string {
+  if (column.kind === 'owner') return FILTER_SOURCE.CONTACT_OWNER;
+  return column.kind === 'pii'
+    ? `${FILTER_SOURCE.PII_PREFIX}${column.key}`
+    : `${FILTER_SOURCE.ATTRS_PREFIX}${column.key}`;
+}
+
 /**
  * 미리보기 표 헤더의 깔때기 필터 — 조사 대상 목록과 같은 HeaderFilterPopover 를
- * 그대로 쓴다 (URL hcol/hm/hv 직렬화·빌더 상호배타 경고 포함). 라벨은 서버 파싱
- * 후보와 같은 목록(CAMPAIGN_HEADER_FILTER_COLUMNS)에서 가져와 한 곳에서만 관리한다.
+ * 그대로 쓴다 (URL hcol/hm/hv 직렬화·빌더 상호배타 경고 포함). 고정 열의 라벨은 서버 파싱
+ * 후보와 같은 목록(CAMPAIGN_HEADER_FILTER_COLUMNS)에서 가져오고, 메일 표시 열은 그 열의 라벨을 넘긴다.
  */
 function PreviewHeaderFilter({
   surveyId,
   source,
+  label: labelOverride,
   resultCodeOptions,
+  assignmentOptions = [],
 }: {
   surveyId: string;
   source: string;
+  label?: string;
   resultCodeOptions: ContactResultCode[];
+  assignmentOptions?: ContactAssignmentOption[];
 }) {
-  const label = CAMPAIGN_HEADER_FILTER_COLUMNS.find((c) => c.source === source)?.label ?? source;
+  const label =
+    labelOverride ??
+    CAMPAIGN_HEADER_FILTER_COLUMNS.find((c) => c.source === source)?.label ??
+    source;
   return (
     <HeaderFilterPopover
       surveyId={surveyId}
       source={source}
       label={label}
-      // system.email_count 는 popover 의 kind 분기에 없어 고정 옵션 주입이 필요하다.
+      // 이 화면의 조건은 캠페인 스냅샷으로 다시 나간다(필터 결과 전체 선택·발송) — 스냅샷이 받는 길이까지만.
+      maxValueLength={HEADER_FILTER_VALUE_MAX_LENGTH}
+      // system.email_count · 컨택원은 popover 의 kind 분기에 없어 고정 옵션 주입이 필요하다.
       {...(source === FILTER_SOURCE.EMAIL
         ? {
             fixedOptions: MAIL_FILTER_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+          }
+        : {})}
+      {...(source === FILTER_SOURCE.LINK_CLICK
+        ? {
+            fixedOptions: LINK_CLICK_FILTER_OPTIONS.map((o) => ({
+              value: o.value,
+              label: o.label,
+            })),
+          }
+        : {})}
+      {...(source === FILTER_SOURCE.CONTACT_OWNER
+        ? {
+            fixedOptions: withNoneOption(
+              assignmentOptions.map((o) => ({ value: o.id, label: o.name })),
+            ),
           }
         : {})}
       resultCodeOptions={resultCodeOptions}

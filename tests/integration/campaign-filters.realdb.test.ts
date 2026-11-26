@@ -42,7 +42,7 @@ run('캠페인 필터 실 DB 왕복', () => {
     await db.delete(surveys).where(eq(surveys.id, surveyId));
   });
 
-  it('그룹·최근 결과코드·메모 깔때기가 실제 PG 에서 실행된다 (count 포함)', async () => {
+  it('최근 결과코드·메모 깔때기가 실제 PG 에서 실행된다 (count 포함)', async () => {
     const campaignId = randomUUID();
     const targetA = randomUUID();
     const targetB = randomUUID();
@@ -89,17 +89,6 @@ run('캠페인 필터 실 DB 왕복', () => {
     ]);
 
     const base = { surveyId, campaignId, scope: 'real' as const };
-
-    const byGroup = await listCampaignRecipients({ ...base, groupValues: ['모바일'] });
-    expect(byGroup.total).toBe(1);
-    expect(byGroup.rows.map((r) => r.contactResid)).toEqual([1]);
-
-    const byEmptyGroup = await listCampaignRecipients({
-      ...base,
-      groupValues: [FILTER_NONE_VALUE],
-    });
-    expect(byEmptyGroup.total).toBe(1);
-    expect(byEmptyGroup.rows.map((r) => r.contactResid)).toEqual([2]);
 
     const byResult = await listCampaignRecipients({ ...base, resultCodes: ['1.조사완료'] });
     expect(byResult.total).toBe(1);

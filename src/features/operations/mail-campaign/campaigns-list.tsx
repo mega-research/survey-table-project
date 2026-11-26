@@ -75,6 +75,12 @@ export function CampaignsList({ surveyId, rows, total, page, pageSize }: Props) 
               <th className="px-3 py-3 text-right">발송대상수</th>
               <th className="px-3 py-3 text-right">성공</th>
               <th className="px-3 py-3 text-right">열람</th>
+              <th
+                className="px-3 py-3 text-right"
+                title="메일의 설문 링크를 누른 수신자 수 — 눌렀다는 것이지 응답했다는 것은 아닙니다"
+              >
+                클릭
+              </th>
               <th className="px-3 py-3 text-right">미열람</th>
               <th className="px-3 py-3 text-right">미전달</th>
               <th className="px-3 py-3 text-right">진행중</th>
@@ -142,6 +148,11 @@ export function CampaignsList({ surveyId, rows, total, page, pageSize }: Props) 
                   <td>
                     <Link href={detailHref} className="block px-3 py-3 text-right tabular-nums">
                       {num(r.openedCount)}
+                    </Link>
+                  </td>
+                  <td>
+                    <Link href={detailHref} className="block px-3 py-3 text-right tabular-nums">
+                      {num(r.clickedCount)}
                     </Link>
                   </td>
                   <td>

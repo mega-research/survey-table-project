@@ -6,6 +6,7 @@ import {
   contactAttempts,
   contactTargets,
   mailCampaigns,
+  mailLinkClicks,
   mailRecipients,
   mailTemplates,
 } from '@/db/schema';
@@ -32,6 +33,7 @@ import {
   defaultSortOrderExprs,
   latestResultCodeExpr,
   latestResultUnsubscribedSql,
+  linkClickStateExpr,
   matchedResponseSubquery,
 } from '@/lib/operations/contacts-filter-sql.server';
 import {
@@ -55,6 +57,7 @@ import type {
   MailAttachment,
   MailCampaignKind,
   MailCampaignStatus,
+  MailLinkKind,
   MailRecipientStatus,
 } from '@/shared/contracts/mail';
 import type {
@@ -65,6 +68,7 @@ import type {
   CampaignRow,
   CampaignSortDir,
   CampaignSortKey,
+  RecipientLinkClick,
   UnsubscribedContactRow,
 } from '@/shared/contracts/mail-io';
 
@@ -85,6 +89,20 @@ const DEFAULT_PAGE_SIZE = 20;
 // ─────────────────────────────────────────────────────────────────────────────
 // 단체 메일 list (메인 페이지)
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 회차에서 메일의 설문 링크를 누른 수신자 수 — 사람 수다(같은 사람이 여러 번 눌러도 1). 보관된 수신자는 뺀다
+ * (다른 집계 열과 같은 범위). 집계 열을 두지 않고 조회할 때 센다 — 클릭 줄과 어긋날 수 없다.
+ * outer correlation 은 qualifier 를 직접 박는다(`contacts-filter-sql.server` 의 latestResultCodeExpr 주석 참고).
+ */
+const campaignSurveyLinkClickedCountExpr = sql<number>`(
+  SELECT count(DISTINCT mail_link_clicks.recipient_id)::int
+  FROM mail_link_clicks
+  INNER JOIN mail_recipients ON mail_recipients.id = mail_link_clicks.recipient_id
+  WHERE mail_recipients.campaign_id = "mail_campaigns"."id"
+    AND mail_recipients.archived_at IS NULL
+    AND mail_link_clicks.link_kind = 'survey'
+)`;
 
 export interface ListCampaignsResult {
   rows: CampaignRow[];
@@ -131,6 +149,7 @@ export async function listCampaignsForSurvey(args: {
       sentCount: mailCampaigns.sentCount,
       deliveredCount: mailCampaigns.deliveredCount,
       openedCount: mailCampaigns.openedCount,
+      clickedCount: campaignSurveyLinkClickedCountExpr.as('clicked_count'),
       bouncedCount: mailCampaigns.bouncedCount,
       complainedCount: mailCampaigns.complainedCount,
       failedCount: mailCampaigns.failedCount,
@@ -306,7 +325,6 @@ export interface ListCampaignRecipientsResult {
  * 빈 문자열은 NULL 과 같은 "없음" 으로 접는다 — 표가 둘 다 '—'/공백 으로 그리므로
  * 화면과 필터가 어긋나지 않게 하려면 여기서 합쳐야 한다.
  */
-const RECIPIENT_GROUP_EXPR = sql`NULLIF(${contactTargets.groupValue}, '')`;
 const RECIPIENT_ERROR_EXPR = sql`NULLIF(${mailRecipients.errorReason}, '')`;
 // 컨택결과는 조사 대상 목록과 같은 표현식을 공유한다 — 두 화면이 같은 값을 보여야 한다.
 // latestResultCodeExpr 는 "contact_targets"."id" 로 상관되므로 이 쿼리의 LEFT JOIN 별칭과 맞는다.
@@ -335,14 +353,10 @@ function buildRecipientFacetCond(expr: SQL, values: string[] | undefined): SQL |
 }
 
 export interface CampaignRecipientFacets {
-  /** 이 캠페인 수신자에 실제로 등장하는 그룹 값 (NULL 제외, 오름차순) */
-  groupValues: string[];
   /** 이 캠페인 수신자에 실제로 등장하는 반송/실패 사유 (NULL 제외, 오름차순) */
   errorReasons: string[];
   /** 이 캠페인 수신자에 실제로 등장하는 컨택결과 코드 (NULL 제외, 오름차순) */
   resultCodes: string[];
-  /** 그룹 없음 행이 존재하는지 — 빈 값 선택지 노출 판단용 */
-  hasEmptyGroup: boolean;
   /** 사유 없음 행이 존재하는지 */
   hasEmptyError: boolean;
   /** 컨택결과 없음 행이 존재하는지 */
@@ -375,7 +389,7 @@ export async function listCampaignRecipientFacets(args: {
   /**
    * 축 하나의 distinct 값 + 빈 값 존재 여부.
    *
-   * 축을 합쳐 한 번에 DISTINCT 하면 (그룹 × 사유 × 결과코드) 조합 수만큼 행이 나온다.
+   * 축을 합쳐 한 번에 DISTINCT 하면 (사유 × 결과코드) 조합 수만큼 행이 나온다.
    * 반송 사유처럼 행마다 거의 고유한 값이 섞이면 수신자 수만큼이 그대로 앱으로 넘어오므로,
    * 축별로 나눠 LIMIT 을 SQL 에 내려 전송량을 상한에 묶는다.
    *
@@ -400,22 +414,20 @@ export async function listCampaignRecipientFacets(args: {
       // 센티널과 같은 실제 값은 선택지에서 제외한다 — 노출하면 파서가 빈 값으로 승격시켜
       // 화면에 보이는 값과 다른 행이 걸린다 (FILTER_NONE_VALUE 주석 참조).
       .filter((v): v is string => v != null && v !== FILTER_NONE_VALUE)
-      .sort((a, b) => a.localeCompare(b, 'ko-KR'))
+      // 숫자 인식 정렬 — 조사 대상 목록의 깔때기 값 목록(contact-attr-values)과 같은 순서
+      .sort((a, b) => a.localeCompare(b, 'ko', { numeric: true }))
       .slice(0, FACET_LIMIT);
     return { values, hasEmpty };
   };
 
-  const [group, error, result] = await Promise.all([
-    facetOf(RECIPIENT_GROUP_EXPR),
+  const [error, result] = await Promise.all([
     facetOf(RECIPIENT_ERROR_EXPR),
     facetOf(RECIPIENT_RESULT_EXPR),
   ]);
 
   return {
-    groupValues: group.values,
     errorReasons: error.values,
     resultCodes: result.values,
-    hasEmptyGroup: group.hasEmpty,
     hasEmptyError: error.hasEmpty,
     hasEmptyResult: result.hasEmpty,
   };
@@ -430,8 +442,6 @@ export async function listCampaignRecipients(args: {
   /** 필터할 status 목록. 빈 배열 또는 미지정 = 전체. */
   statuses?: MailRecipientStatus[];
   q?: string;
-  /** 깔때기 — contact_targets.group_value. FILTER_NONE_VALUE 는 그룹 없음(NULL). */
-  groupValues?: string[];
   /** 깔때기 — mail_recipients.error_reason. FILTER_NONE_VALUE 는 사유 없음(NULL/빈 문자열). */
   errorReasons?: string[];
   /** 깔때기 — 컨택 최신 회차 result_code. FILTER_NONE_VALUE 는 결과 없음(NULL). */
@@ -470,8 +480,6 @@ export async function listCampaignRecipients(args: {
     const escaped = escapeLikePattern(q);
     whereParts.push(sql`${mailRecipients.emailSnapshot} ILIKE ${'%' + escaped + '%'}`);
   }
-  const groupCond = buildRecipientFacetCond(RECIPIENT_GROUP_EXPR, args.groupValues);
-  if (groupCond) whereParts.push(groupCond);
   const errorCond = buildRecipientFacetCond(RECIPIENT_ERROR_EXPR, args.errorReasons);
   if (errorCond) whereParts.push(errorCond);
   const resultCond = buildRecipientFacetCond(RECIPIENT_RESULT_EXPR, args.resultCodes);
@@ -482,7 +490,7 @@ export async function listCampaignRecipients(args: {
     .select({ total: sql<number>`count(*)::int` })
     .from(mailRecipients)
     .innerJoin(mailCampaigns, eq(mailRecipients.campaignId, mailCampaigns.id))
-    // where 가 컨택 상관 조건(그룹·최근 결과코드)을 담을 수 있으므로 행 조회와 같은
+    // where 가 컨택 상관 조건(최근 결과코드)을 담을 수 있으므로 행 조회와 같은
     // 조인 집합을 가져야 한다. 빠뜨리면 PG 가 missing FROM-clause entry 로 거절한다.
     .leftJoin(contactTargets, eq(mailRecipients.contactTargetId, contactTargets.id))
     .where(where);
@@ -496,7 +504,6 @@ export async function listCampaignRecipients(args: {
       id: mailRecipients.id,
       contactTargetId: mailRecipients.contactTargetId,
       contactResid: contactTargets.resid,
-      contactGroupValue: contactTargets.groupValue,
       contactAttrs: contactTargets.attrs,
       contactAssignmentName: assignmentNameExpr(args.includeAssignment),
       contactLatestResultCode: sql<string | null>`${RECIPIENT_RESULT_EXPR}`,
@@ -521,17 +528,19 @@ export async function listCampaignRecipients(args: {
     .limit(pageSize)
     .offset(offset);
 
-  const piiMasks = await fetchPiiMasks(
-    rows.flatMap((r) => (r.contactTargetId ? [r.contactTargetId] : [])),
-    args.piiMaskKeys,
-  );
+  const [piiMasks, linkClicks] = await Promise.all([
+    fetchPiiMasks(
+      rows.flatMap((r) => (r.contactTargetId ? [r.contactTargetId] : [])),
+      args.piiMaskKeys,
+    ),
+    fetchRecipientLinkClicks(rows.map((r) => r.id)),
+  ]);
 
   return {
     rows: rows.map((r) => ({
       id: r.id,
       contactTargetId: r.contactTargetId,
       contactResid: r.contactResid,
-      contactGroupValue: r.contactGroupValue,
       contactAttrs: (r.contactAttrs ?? {}) as Record<string, string>,
       contactPiiMasks: (r.contactTargetId && piiMasks.get(r.contactTargetId)) || {},
       contactAssignmentName: r.contactAssignmentName,
@@ -546,6 +555,7 @@ export async function listCampaignRecipients(args: {
       openedAt: r.openedAt,
       bouncedAt: r.bouncedAt,
       complainedAt: r.complainedAt,
+      linkClicks: linkClicks.get(r.id) ?? [],
     })),
     total,
     page: clampedPage,
@@ -760,6 +770,45 @@ async function fetchEmailMaskHints(
 
 const EMAIL_DASH = '—';
 
+/** 수신자 표에서 링크 종류가 서는 순서 — 설문 링크 · 수신거부 · 그 밖의 링크. */
+const LINK_KIND_DISPLAY_ORDER: Record<MailLinkKind, number> = { survey: 0, unsubscribe: 1, other: 2 };
+
+/**
+ * 수신자들이 누른 링크 — 수신자 id → (링크 종류, 주소)별 첫 클릭 시각 (CONTEXT.md 「링크 클릭」).
+ * 표의 한 쪽에 실린 수신자 id 만 받아 한 번에 읽는다. 어느 수신자를 볼 수 있는가는 호출부(수신자 표 조회)가
+ * 이미 걸렀다 — 여기는 그 id 의 클릭만 읽는다. IP 해시·브라우저 정보는 읽지 않는다(화면에 나가지 않는다).
+ */
+async function fetchRecipientLinkClicks(
+  recipientIds: readonly string[],
+): Promise<Map<string, RecipientLinkClick[]>> {
+  const result = new Map<string, RecipientLinkClick[]>();
+  if (recipientIds.length === 0) return result;
+  const rows = await db
+    .select({
+      recipientId: mailLinkClicks.recipientId,
+      kind: mailLinkClicks.linkKind,
+      url: mailLinkClicks.linkUrl,
+      // min() 은 드라이버가 글자로 돌려준다 — Date 로 되읽는다(컬럼 select 와 달리 매퍼가 붙지 않는다).
+      firstClickedAt: sql<string>`min(${mailLinkClicks.clickedAt})`,
+    })
+    .from(mailLinkClicks)
+    .where(inArray(mailLinkClicks.recipientId, [...recipientIds]))
+    .groupBy(mailLinkClicks.recipientId, mailLinkClicks.linkKind, mailLinkClicks.linkUrl);
+  for (const row of rows) {
+    const clicks = result.get(row.recipientId) ?? [];
+    clicks.push({ kind: row.kind, url: row.url, firstClickedAt: new Date(row.firstClickedAt) });
+    result.set(row.recipientId, clicks);
+  }
+  for (const clicks of result.values()) {
+    clicks.sort(
+      (a, b) =>
+        LINK_KIND_DISPLAY_ORDER[a.kind] - LINK_KIND_DISPLAY_ORDER[b.kind] ||
+        a.firstClickedAt.getTime() - b.firstClickedAt.getTime(),
+    );
+  }
+  return result;
+}
+
 /**
  * 메일 표시를 켠 개인정보 열의 마스킹 힌트 — 조사 대상 목록과 같은 값(평문 복호화 없음).
  * 켠 열이 없으면 조회하지 않는다. 결과는 contact_id → (column_key → 힌트), 힌트가 없는 칸은 뺀다.
@@ -888,7 +937,6 @@ export async function previewCampaignCandidates(args: {
     .select({
       id: contactTargets.id,
       resid: contactTargets.resid,
-      groupValue: contactTargets.groupValue,
       attrs: contactTargets.attrs,
       assignmentName: assignmentNameExpr(args.includeAssignment).as('assignment_name'),
       respondedAt: contactTargets.respondedAt,
@@ -902,6 +950,8 @@ export async function previewCampaignCandidates(args: {
       ),
       latestResultCode: latestResultCodeExpr.as('latest_result_code'),
       latestMailStatus: latestMailStatusExpr(args.scope).as('latest_mail_status'),
+      // 조사 대상 목록과 같은 식 — 필터(조사 대상 필터 해석)도 이 식으로 거른다.
+      linkClick: linkClickStateExpr.as('link_click'),
     })
     .from(contactTargets)
     .where(where)
@@ -923,7 +973,6 @@ export async function previewCampaignCandidates(args: {
       resid: r.resid,
       email: '', // candidate row 에서는 평문 비공개 — UI 는 emailMasked 만 표시
       emailMasked: maskMap.get(r.id) || EMAIL_DASH,
-      groupValue: r.groupValue,
       attrs: (r.attrs ?? {}) as Record<string, string>,
       piiMasks: piiMasks.get(r.id) ?? {},
       assignmentName: r.assignmentName,
@@ -932,6 +981,7 @@ export async function previewCampaignCandidates(args: {
       progressPct: r.progressPct,
       latestResultCode: r.latestResultCode,
       latestMailStatus: r.latestMailStatus,
+      linkClick: r.linkClick,
     })),
     total,
     page: clampedPage,
@@ -1010,7 +1060,6 @@ export async function listUnsubscribedContacts(args: {
     .select({
       id: contactTargets.id,
       resid: contactTargets.resid,
-      groupValue: contactTargets.groupValue,
       attrs: contactTargets.attrs,
       assignmentName: assignmentNameExpr(args.includeAssignment).as('assignment_name'),
       unsubscribedAt: contactTargets.unsubscribedAt,
@@ -1041,7 +1090,6 @@ export async function listUnsubscribedContacts(args: {
       id: r.id,
       resid: r.resid,
       emailMasked: maskMap.get(r.id) || EMAIL_DASH,
-      groupValue: r.groupValue,
       attrs: (r.attrs ?? {}) as Record<string, string>,
       piiMasks: piiMasks.get(r.id) ?? {},
       assignmentName: r.assignmentName,

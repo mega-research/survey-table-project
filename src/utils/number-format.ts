@@ -205,17 +205,32 @@ function readChinese(n: number): string {
   return String(n);
 }
 
-const ENGLISH_SCALES: Array<{ value: number; label: string }> = [
+type ReadingScale = { value: number; label: string };
+
+const ENGLISH_SCALES: ReadingScale[] = [
   { value: 1e12, label: 'trillion' },
   { value: 1e9, label: 'billion' },
   { value: 1e6, label: 'million' },
 ];
 
-/** 영어 읽기 — 백만 이상만 million·billion·trillion 으로, 소수 둘째 자리까지 (1,111,111 → 1.11 million) */
-function readEnglish(total: number): string | null {
-  for (let i = ENGLISH_SCALES.length - 1; i >= 0; i--) {
-    const scale = ENGLISH_SCALES[i]!;
-    const next = ENGLISH_SCALES[i - 1];
+/** 베트남어도 영어처럼 백만(triệu)·십억(tỷ)·조(nghìn tỷ)로 끊는다 */
+const VIETNAMESE_SCALES: ReadingScale[] = [
+  { value: 1e12, label: 'nghìn tỷ' },
+  { value: 1e9, label: 'tỷ' },
+  { value: 1e6, label: 'triệu' },
+];
+
+/** 백만 단위로 끊어 읽는 언어의 낱말 — 여기 있는 언어는 어절 앞을 띄운다 */
+const MILLION_SCALES: Partial<Record<SurveyLocale, ReadingScale[]>> = {
+  en: ENGLISH_SCALES,
+  vi: VIETNAMESE_SCALES,
+};
+
+/** 백만 단위 읽기 — 백만 이상만 million·billion·trillion 으로, 소수 둘째 자리까지 (1,111,111 → 1.11 million) */
+function readByMillions(total: number, scales: ReadingScale[]): string | null {
+  for (let i = scales.length - 1; i >= 0; i--) {
+    const scale = scales[i]!;
+    const next = scales[i - 1];
     if (total < scale.value) continue;
     const rounded = Number((total / scale.value).toFixed(2));
     // 999,999,999 가 「1000 million」 이 되지 않게 반올림 뒤 1000 이면 다음 단위로
@@ -231,8 +246,9 @@ function readEnglish(total: number): string | null {
 /**
  * 입력칸 아래 읽기 — 현재 언어를 따른다. 한국어(기본)는 `formatKoreanUnitReading` 그대로라 다국어가 아닌
  * 설문은 한 글자도 바뀌지 않는다. 중국어는 万·亿 로 끊고(`111万1111元`), 영어는 백만 이상을
- * million·billion·trillion 으로 읽고 어절 앞을 띄운다(`1.11 million USD`). 만(영어는 백만) 미만은 세 언어 모두
- * 콤마 숫자 + 어절이고, 0·빈 값·부분 입력·percent 는 null 이다.
+ * million·billion·trillion 으로 읽고 어절 앞을 띄운다(`1.11 million USD`). 베트남어는 영어와 같은 규칙에
+ * 낱말만 triệu·tỷ·nghìn tỷ 다(`1.11 triệu đồng` — 입력칸의 콤마 자릿수 표기에 맞춰 소수점은 점 그대로).
+ * 만(영어·베트남어는 백만) 미만은 어느 언어든 콤마 숫자 + 어절이고, 0·빈 값·부분 입력·percent 는 null 이다.
  */
 export function formatUnitReading(
   raw: string,
@@ -242,7 +258,8 @@ export function formatUnitReading(
 ): string | null {
   if (locale === 'ko') return formatKoreanUnitReading(raw, unit, suffix);
   const sfx = (suffix ?? '').trim();
-  const join = (body: string) => (locale === 'en' && sfx ? `${body} ${sfx}` : body + sfx);
+  const millionScales = MILLION_SCALES[locale];
+  const join = (body: string) => (millionScales && sfx ? `${body} ${sfx}` : body + sfx);
   const n = parseNumericInput(raw);
   if (n === null || n === 0) return null;
   const commaWithSuffix = () => (sfx ? join(formatWithComma(raw)) : null);
@@ -252,13 +269,13 @@ export function formatUnitReading(
 
   const total = Math.abs(n) * multiplier;
   const sign = n < 0 ? '-' : '';
-  const reading = locale === 'en' ? readEnglish(total) : total >= 1e4 ? '' : null;
+  const reading = millionScales ? readByMillions(total, millionScales) : total >= 1e4 ? '' : null;
   if (reading === null) {
     // 끊어 읽을 만큼 크지 않다 — 일 단위는 입력 그대로라 어절이 있을 때만, 배수 단위는 환산한 총량을 콤마로
     if (unit === 'one') return commaWithSuffix();
     return join(sign + formatWithComma(String(Math.round(total * 1e9) / 1e9)));
   }
-  if (locale === 'en') return join(sign + reading);
+  if (millionScales) return join(sign + reading);
   const intPart = Math.floor(total);
   const frac = Math.round((total - intPart) * 1e9) / 1e9;
   const fracText = frac > 0 ? String(frac).slice(1) : '';

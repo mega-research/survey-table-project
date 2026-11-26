@@ -20,6 +20,7 @@ import {
   FIELDWORK_SHARE_ALL,
   type FieldworkShare,
   shareTargetCondition,
+  withoutShareColumn,
 } from '@/server/fieldwork-share-scope';
 import type { ContactResultCode } from '@/shared/contracts/contacts';
 import type { ContactAssignmentOption } from '@/shared/contracts/contacts-io';
@@ -52,7 +53,7 @@ import {
  * - **조사 대상 필터 해석** (2026-10-19): 조사 대상 목록 · 단체 메일 위저드 · `fetchCandidateIds` · 교체
  *   적용(미리보기·오른쪽 목록 포함) · 컨택원 수정 화면이 `server/read-models/contact-filter-resolution.ts` 한
  *   곳으로 조건을 읽는다.
- * - `loadContactFilterContext(surveyId, scope, { isGuest, surface: 'contacts' | 'mail', executor? })` 가
+ * - `loadContactFilterContext(surveyId, scope, { isGuest, surface: 'contacts' | 'mail' | 'assignments', share, executor? })` 가
  *   스킴(게스트면 컨택원 열 제거)·결과코드·컨택원 선택지(게스트면 빈 배열)·검색바 후보·열 머리 후보(`mail` 이면
  *   미리보기 고정 열 `CAMPAIGN_HEADER_FILTER_COLUMNS` 를 덧붙임)를 읽고 — 페이지는 같은 컨텍스트를 UI props
  *   에도 쓴다 — `resolveContactFilter(ctx, input, { mode })` 가 ID 목록을 읽어 해석한다.
@@ -97,7 +98,12 @@ import {
  *   지우게)로 담으면 파서가 헤더 체크박스와 같은 in 절로 읽는다(컨택원 수정 화면 오른쪽 값 목록이 만든다).
  */
 
-export type ContactFilterSurface = 'contacts' | 'mail';
+/**
+ * 필터를 거는 표면. `assignments`(컨택원 수정 화면과 교체 적용)는 조사 대상 목록과 같되 「링크 클릭」 조건을
+ * 받지 않는다 — 범위 밖으로 정한 자리다(`.scratch/mail-link-click/PRD.md`). 후보에서 빠지므로 화면에 나오지 않고,
+ * 직접 들어온 조건은 write 해석이 해석 불가로 거부한다.
+ */
+export type ContactFilterSurface = 'contacts' | 'mail' | 'assignments';
 export type ContactFilterMode = 'read' | 'write';
 
 declare const contextBrand: unique symbol;
@@ -192,8 +198,14 @@ export async function loadContactFilterContext(
     isExternal ? Promise.resolve([]) : listAssignmentOptions(surveyId, scope, executor),
   ]);
   const ownerScheme = isExternal ? withoutContactOwnerColumn(loadedScheme) : loadedScheme;
-  const scheme = canViewMail ? ownerScheme : withoutMailColumns(ownerScheme);
-  const columnCandidates = buildColumnCandidates(scheme, { includeContactOwner: !isExternal });
+  // 범위를 가르는 열도 범위에 묶인 주체에게는 없는 열이다 — 목록 열·검색 후보·열 머리 필터에서 함께 빠진다.
+  const visibleScheme = withoutShareColumn(ownerScheme, share);
+  const scheme = canViewMail ? visibleScheme : withoutMailColumns(visibleScheme);
+  const columnCandidates = buildColumnCandidates(scheme, {
+    includeContactOwner: !isExternal,
+    // 링크 클릭은 메일 축이다 — 메일 축을 못 보는 주체와 컨택원 수정 화면(`assignments`)에는 후보로 올리지 않는다.
+    includeLinkClick: surface !== 'assignments' && canViewMail,
+  });
   // 단체 메일 미리보기 표는 고정 열이라 깔때기 후보도 스킴과 무관하게 고정 목록을 얹는다.
   const headerCandidates =
     surface === 'mail'
@@ -341,7 +353,7 @@ export function resolveContactFilterWith<M extends ContactFilterMode>(
 }
 
 /**
- * 메일 축 열을 뺀 스킴 — 없으면 그대로 없다.
+ * 메일 축 열(「수신 상황」·「링크 클릭」)을 뺀 스킴 — 없으면 그대로 없다.
  *
  * 스킴은 JSONB 문서라 얕은 사본으로 충분하다(컬럼 배열만 갈아 끼운다). 원본을 건드리면
  * `getContactColumnScheme` 의 React cache 가 같은 요청 안의 다른 소비자에게 깎인 스킴을
@@ -351,7 +363,11 @@ function withoutMailColumns(
   scheme: NormalizedContactColumnScheme | null,
 ): NormalizedContactColumnScheme | null {
   if (!scheme) return scheme;
-  const columns = scheme.columns.filter((column) => column.source !== FILTER_SOURCE.EMAIL);
+  // 링크 클릭도 메일 축이다 — 메일 열과 함께 뺀다.
+  const columns = scheme.columns.filter(
+    (column) =>
+      column.source !== FILTER_SOURCE.EMAIL && column.source !== FILTER_SOURCE.LINK_CLICK,
+  );
   return columns.length === scheme.columns.length ? scheme : { ...scheme, columns };
 }
 

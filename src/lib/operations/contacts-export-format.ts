@@ -1,5 +1,7 @@
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
+import type { LinkClickState } from '@/shared/contracts/mail-io';
+import { LINK_CLICK_COLUMN_LABEL, linkClickLabel } from '@/lib/operations/filter-shared';
 import { recipientStatusMeta } from '@/lib/operations/recipient-status';
 import { formatExportStatusLabel } from '@/lib/operations/profiles-format';
 import { buildInviteUrl } from '@/lib/survey-url';
@@ -16,6 +18,7 @@ export const INVITE_URL_SOURCE = 'system.invite_url';
 const EXTRA_SOURCE_LABELS: Record<string, string> = {
   'system.contact_result': '컨택결과',
   'system.email_count': '메일 상태',
+  'system.link_click': LINK_CLICK_COLUMN_LABEL,
   'system.web': '응답 상태',
   [INVITE_URL_SOURCE]: '초대링크',
 };
@@ -88,6 +91,7 @@ export interface ContactExportRowData {
   latestResultCode: string | null;
   latestAttemptNo: number | null;
   latestMailStatus: MailRecipientStatus | null;
+  linkClick: LinkClickState | null;
   progressPct: number | null;
   /** 매칭 응답 status (completed/in_progress/drop 등). 응답 없으면 null */
   responseStatus: string | null;
@@ -109,6 +113,7 @@ export function formatExportCell(
   if (source === 'system.email_count') {
     return row.latestMailStatus ? recipientStatusMeta(row.latestMailStatus).label : '';
   }
+  if (source === 'system.link_click') return linkClickLabel(row.linkClick);
   if (source === 'system.web') {
     // 엑셀 공용 상태 어휘(formatExportStatusLabel) — 완료는 라벨만, 미완료(진행중·이탈 등)는
     // 진행율 % 부속 표기. 응답 없으면 빈 문자열.

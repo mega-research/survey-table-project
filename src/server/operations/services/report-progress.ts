@@ -8,6 +8,7 @@ import { contactTargets } from '@/db/schema/contacts';
 import { surveys } from '@/db/schema/surveys';
 import type { ProgressColumnScheme } from '@/shared/contracts/operations';
 import { normalizeContactColumnScheme } from '@/lib/operations/contacts-format';
+import { naturalTextSortExprs } from '@/lib/operations/contacts-filter-sql.server';
 import { isUnsubscribeResultCode } from '@/lib/operations/filter-shared';
 import {
   type OperationsDataScope,
@@ -237,13 +238,15 @@ function groupKeyCount(groupByKeys: ProgressGroupKey[] | undefined): number {
 /**
  * 분류 기준 하나의 SQL 조각.
  * - value: base 서브쿼리(ctt)에서 그룹 키를 내는 식 — GROUP BY·행 식별의 기준
- * - label: 그룹 키 컬럼 → 표시 값 (null = 미분류 — 표가 nullLabel 로 그린다)
+ * - label: 그룹 키 컬럼 → 표시 값 (null = 값 없음 — 표가 줄표나 nullLabel 로 그린다)
  * - sort: 그룹 키 컬럼 → 정렬 값 (null 은 NULLS LAST 로 끝)
  */
 interface GroupKeySql {
   value: SQL;
   label: (col: SQL) => SQL;
   sort: (col: SQL) => SQL;
+  /** 정렬 값이 명단의 글자 값인가 — 글자로 올라온 숫자를 숫자순으로 세운다(자연 정렬). */
+  sortsAsText: boolean;
   nullLabel: string;
 }
 
@@ -256,6 +259,7 @@ function groupKeySql(key: ProgressGroupKey | null): GroupKeySql {
       value: sql`ctt.group_value`,
       label: (col) => col,
       sort: (col) => col,
+      sortsAsText: true,
       nullLabel: UNCLASSIFIED_LABEL,
     };
   }
@@ -265,6 +269,7 @@ function groupKeySql(key: ProgressGroupKey | null): GroupKeySql {
       value: sql`NULLIF(ctt.attrs->>${key.key}, '')`,
       label: (col) => col,
       sort: (col) => col,
+      sortsAsText: true,
       nullLabel: UNCLASSIFIED_LABEL,
     };
   }
@@ -279,6 +284,7 @@ function systemGroupKeySql(key: ProgressSystemGroupKey): GroupKeySql {
         value: sql`ctt.assignment_id`,
         label: (col) => sql`(SELECT ca.name FROM contact_assignments ca WHERE ca.id = ${col})`,
         sort: (col) => sql`(SELECT ca."order" FROM contact_assignments ca WHERE ca.id = ${col})`,
+        sortsAsText: false,
         nullLabel: '(배정 없음)',
       };
     default: {
@@ -360,23 +366,33 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
     .map((k, i) => sql`MIN(ct.attrs->>${k}) AS ${sql.identifier(`meta_${i}`)}`)
     .reduce<ReturnType<typeof sql>>((acc, cur, i) => (i === 0 ? cur : sql`${acc}, ${cur}`), sql``);
 
-  let sortExpr;
+  // 정렬 식 — 명단의 글자 값(표시 열·명단 열 분류 기준)은 조사 대상 목록과 같은 자연 정렬로 세운다:
+  // 글자로 올라온 숫자는 숫자순(1, 2, 10), 숫자가 아닌 값은 그 뒤에 글자순. 글자순만 쓰면 1, 10, 11, 2 가 된다.
+  // 사용자 입력(키)은 SQL 에 직접 박히지 않는다 — 인덱스로 해석한 inner alias 만 raw 임베드.
+  const fallbackSort = [sql.raw(SORT_COL_MAP.responseRate)];
+  let sortExprs: SQL[];
   if (sort.startsWith('meta:')) {
-    const key = sort.slice(5);
-    const idx = metaKeys.indexOf(key);
-    sortExpr = idx >= 0 ? sql.raw(`meta_${idx}`) : sql.raw(SORT_COL_MAP.responseRate);
+    const idx = metaKeys.indexOf(sort.slice(5));
+    sortExprs = idx >= 0 ? naturalTextSortExprs(sql.raw(`meta_${idx}`)) : fallbackSort;
   } else if (sort.startsWith('group:')) {
-    // group:<분류 키> — 활성 기준 키를 인덱스로 해석 후 inner alias 만 raw 임베드.
-    // 사용자 입력(키)은 SQL 에 직접 박히지 않는다.
+    // group:<분류 키> — 활성 기준 키를 인덱스로 해석.
     const idx = (groupByKeys ?? []).map(formatProgressGroupKey).indexOf(sort.slice(6));
-    sortExpr =
-      idx >= 0 && idx < keyCount ? sql.raw(`group_sort_${idx}`) : sql.raw(SORT_COL_MAP.responseRate);
+    if (idx >= 0 && idx < keyCount) {
+      const col = sql.raw(`group_sort_${idx}`);
+      sortExprs = keySqls[idx]?.sortsAsText ? naturalTextSortExprs(col) : [col];
+    } else {
+      sortExprs = fallbackSort;
+    }
   } else {
     const mapped =
       SORT_COL_MAP[sort as Exclude<ProgressSortKey, `meta:${string}` | `group:${string}`>];
-    sortExpr = sql.raw(mapped ?? SORT_COL_MAP.responseRate);
+    sortExprs = [sql.raw(mapped ?? SORT_COL_MAP.responseRate)];
   }
   const dirSql = dir === 'asc' ? sql.raw('ASC') : sql.raw('DESC');
+  const orderBySql = sql.join(
+    sortExprs.map((expr) => sql`${expr} ${dirSql} NULLS LAST`),
+    sql`, `,
+  );
 
   const filterSql = buildFilterSql(condition);
 
@@ -391,10 +407,19 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
   const groupLabelParts = keySqls
     .map((k, i) => sql`COALESCE(${k.label(groupKeyCol(i))}, ${k.nullLabel})`)
     .reduce((acc, cur) => sql`${acc}, ${cur}`);
-  // ORDER BY 안정 tiebreaker — 그룹 값 컬럼 전체 (동률 시 결정적 순서)
-  const tiebreaker = Array.from({ length: keyCount }, (_, i) =>
-    sql.raw(`group_sort_${i} NULLS LAST, group_raw_${i} NULLS LAST`),
-  ).reduce((acc, cur) => sql`${acc}, ${cur}`);
+  // ORDER BY 안정 tiebreaker — 그룹 값 컬럼 전체 (동률 시 결정적 순서). 명단의 글자 값은 여기서도
+  // 자연 정렬이다 — 응답률이 같은 그룹(0% 여럿 등)이 1, 10, 2 로 서지 않게.
+  const tiebreaker = sql.join(
+    keySqls.flatMap((k, i) => {
+      const sortCol = sql.raw(`group_sort_${i}`);
+      const sortExprsOfKey = k.sortsAsText ? naturalTextSortExprs(sortCol) : [sortCol];
+      return [
+        ...sortExprsOfKey.map((expr) => sql`${expr} NULLS LAST`),
+        sql.raw(`group_raw_${i} NULLS LAST`),
+      ];
+    }),
+    sql`, `,
+  );
 
   const result = await db.execute(sql`
     SELECT * FROM (
@@ -413,7 +438,7 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
         AND ${filterSql}
         GROUP BY ${buildGroupByClause(keyCount)}
     ) sub
-    ORDER BY ${sortExpr} ${dirSql} NULLS LAST, ${tiebreaker}
+    ORDER BY ${orderBySql}, ${tiebreaker}
     LIMIT ${size} OFFSET ${offset}
   `);
 

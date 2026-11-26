@@ -28,7 +28,7 @@ import { useClauseDraft } from '@/features/operations/contacts/use-clause-draft'
 import { ValueWidget } from '@/features/operations/contacts/value-widget';
 import { FilterBarCore } from '@/features/operations/filters/filter-bar-core';
 import { getErrorMessage } from '@/lib/get-error-message';
-import { type ColumnCandidate, FILTER_SOURCE } from '@/lib/operations/filter-shared';
+import { type ColumnCandidate, defaultFilterValueForSource } from '@/lib/operations/filter-shared';
 import type { ContactAssignmentClause, ContactResultCode } from '@/shared/contracts/contacts';
 import type { ContactAssignmentOption } from '@/shared/contracts/contacts-io';
 import { client } from '@/shared/lib/rpc';
@@ -212,7 +212,8 @@ export function AssignmentEditor({
               onRowFocus={setFocusedRowId}
               columnCandidates={columnCandidates}
               ariaLabel="배정할 대상 조건"
-              defaultValueForSource={(source) => (source === FILTER_SOURCE.WEB ? 'completed' : '')}
+              // 선택 상자 열(web·메일)의 기본값을 비워 두면 화면에는 골라진 것처럼 보이는데 조건이 빠진다.
+              defaultValueForSource={defaultFilterValueForSource}
               renderValueWidget={({ source, value, onChange, inputId }) => (
                 <div className="min-w-0 flex-1">
                   <ValueWidget

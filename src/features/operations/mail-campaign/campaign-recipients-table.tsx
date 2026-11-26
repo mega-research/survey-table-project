@@ -13,9 +13,10 @@ import {
 import { PagerJump } from '@/features/operations/pager-jump';
 import { buildPageItems, pageBlockNavTargets } from '@/features/operations/table-primitives';
 import { type MailDisplayColumn, mailColumnValue } from '@/lib/contacts/mail-display-columns';
-import type { MailRecipientStatus } from '@/shared/contracts/mail';
-import type { CampaignRecipientRow } from '@/shared/contracts/mail-io';
+import { MAIL_LINK_KIND_LABEL, type MailRecipientStatus } from '@/shared/contracts/mail';
+import type { CampaignRecipientRow, RecipientLinkClick } from '@/shared/contracts/mail-io';
 import {
+  LINK_CLICK_COLUMN_LABEL,
   RECIPIENT_FILTER_LABEL,
   RECIPIENT_FILTER_SOURCE,
   isUnsubscribeResultCode,
@@ -37,8 +38,11 @@ interface Props {
   currentQuery: string;
   /** 활성 깔때기(hcol/hm/hv) — 칩·검색 링크가 유실시키지 않도록 함께 실어 나른다. */
   headerEntries: HeaderFilterEntry[];
-  /** 그룹 깔때기 체크박스 선택지 (이 캠페인 수신자에 실제로 등장하는 값) */
-  groupOptions: Array<{ value: string; label: string }>;
+  /**
+   * 주소에 실렸지만 이 표가 받지 못해 빠진 열 머리 조건 수(없어진 그룹 조건 등). 0 보다 크면 명단이
+   * 원래 조건보다 넓으므로 경고한다.
+   */
+  droppedFilterCount?: number;
   /** 메모(반송/실패 사유) 깔때기 체크박스 선택지 */
   errorOptions: Array<{ value: string; label: string }>;
   /** 최근 결과코드 깔때기 체크박스 선택지 */
@@ -113,7 +117,7 @@ export function CampaignRecipientsTable({
   currentStatuses,
   currentQuery,
   headerEntries,
-  groupOptions,
+  droppedFilterCount = 0,
   errorOptions,
   resultOptions,
   mailColumns,
@@ -187,6 +191,16 @@ export function CampaignRecipientsTable({
         </form>
       </div>
 
+      {droppedFilterCount > 0 ? (
+        <p
+          role="alert"
+          className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+        >
+          적용할 수 없는 조건 {droppedFilterCount}개가 빠져 아래 명단이 원래 조건보다 넓습니다(없어진 그룹
+          칸 등). 필요한 조건을 다시 걸어 주세요.
+        </p>
+      ) : null}
+
       <div className="flex flex-wrap gap-1.5">
         <Link
           href={hrefFor({ statuses: [], q: currentQuery })}
@@ -224,7 +238,7 @@ export function CampaignRecipientsTable({
         </Card>
       ) : (
         <Card className="overflow-x-auto">
-          <table className="w-full min-w-[900px]">
+          <table className="w-full min-w-[1040px]">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50 text-left text-xs font-medium tracking-wide text-gray-500 uppercase">
                 {showResid ? <th className="px-3 py-2">시스템ID</th> : null}
@@ -234,23 +248,16 @@ export function CampaignRecipientsTable({
                   </th>
                 ))}
                 <th className="px-3 py-2">이메일</th>
-                <th className="px-3 py-2">
-                  <span className="inline-flex items-center gap-1">
-                    {RECIPIENT_FILTER_LABEL[RECIPIENT_FILTER_SOURCE.GROUP]}
-                    <HeaderFilterPopover
-                      surveyId={surveyId}
-                      source={RECIPIENT_FILTER_SOURCE.GROUP}
-                      label={RECIPIENT_FILTER_LABEL[RECIPIENT_FILTER_SOURCE.GROUP] ?? '그룹'}
-                      renameOnApply={LEGACY_SEARCH_RENAME}
-                      resetParams={RECIPIENT_RESET_PARAMS}
-                      fixedOptions={groupOptions}
-                    />
-                  </span>
-                </th>
                 <th className="px-3 py-2">상태</th>
                 <th className="px-3 py-2">발송</th>
                 <th className="px-3 py-2">전달</th>
                 <th className="px-3 py-2">열람</th>
+                <th
+                  className="px-3 py-2"
+                  title="메일 본문에서 누른 링크와 처음 누른 시각 — 눌렀다는 것이지 응답했다는 것은 아닙니다"
+                >
+                  {LINK_CLICK_COLUMN_LABEL}
+                </th>
                 <th className="px-3 py-2">
                   <span className="inline-flex items-center gap-1">
                     {RECIPIENT_FILTER_LABEL[RECIPIENT_FILTER_SOURCE.RESULT]}
@@ -297,7 +304,6 @@ export function CampaignRecipientsTable({
                       </td>
                     ))}
                     <td className="px-3 py-2 text-slate-900">{r.emailMasked}</td>
-                    <td className="px-3 py-2 text-slate-600">{r.contactGroupValue ?? '—'}</td>
                     <td className="px-3 py-2">
                       <div className="flex flex-wrap items-center gap-1">
                         <RecipientStatusBadge status={r.status} />
@@ -326,6 +332,9 @@ export function CampaignRecipientsTable({
                     </td>
                     <td className="px-3 py-2 text-xs text-slate-500">
                       <LocalDateTime value={r.openedAt} />
+                    </td>
+                    <td className="px-3 py-2 text-xs text-slate-500">
+                      <RecipientLinkClicks clicks={r.linkClicks} />
                     </td>
                     <td className="px-3 py-2 text-xs text-slate-600">
                       {r.latestResultCode ?? '—'}
@@ -407,6 +416,33 @@ export function CampaignRecipientsTable({
         </div>
       ) : null}
     </section>
+  );
+}
+
+/**
+ * 수신자가 누른 링크 — 줄마다 링크 종류와 처음 누른 시각(CONTEXT.md 「링크 클릭」).
+ * 그 밖의 링크는 종류 대신 주소를 보인다. 주소는 글자로만 그린다 — 수신자가 받은 주소라 개인별 값이 실렸을 수 있고
+ * 담당자가 눌러 볼 이유가 없다. 긴 주소는 칸 폭에서 자르고 전체는 title 로 본다.
+ */
+function RecipientLinkClicks({ clicks }: { clicks: RecipientLinkClick[] }) {
+  if (clicks.length === 0) return <>—</>;
+  return (
+    <ul className="space-y-0.5">
+      {clicks.map((c) => (
+        <li key={`${c.kind}:${c.url ?? ''}`} className="flex items-baseline gap-1.5">
+          {c.kind === 'other' ? (
+            <span className="max-w-[220px] truncate text-slate-600" title={c.url ?? undefined}>
+              {c.url}
+            </span>
+          ) : (
+            <span className={c.kind === 'survey' ? 'font-medium text-slate-900' : 'text-slate-600'}>
+              {MAIL_LINK_KIND_LABEL[c.kind]}
+            </span>
+          )}
+          <LocalDateTime value={c.firstClickedAt} className="shrink-0 tabular-nums" />
+        </li>
+      ))}
+    </ul>
   );
 }
 

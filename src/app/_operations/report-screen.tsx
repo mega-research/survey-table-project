@@ -6,16 +6,25 @@ import {
 } from '@/features/operations/report/progress-group-by-tabs';
 import { ProgressTable } from '@/features/operations/report/progress-table';
 import { resolveGroupCriteria } from '@/lib/contacts/group-levels';
-import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts-format';
+import { resolveDefaultSortKey } from '@/lib/contacts/default-sort';
+import { attrsKeyOf, residColumnLabel } from '@/lib/operations/contacts-format';
 import { listAssignmentOptions } from '@/server/read-models/contact-assignment-options';
 import { type ColumnCandidateWithPii, FILTER_SOURCE } from '@/lib/operations/filter-shared';
 import type { OperationsDataScope } from '@/server/data-scope';
-import type { FieldworkShare } from '@/server/fieldwork-share-scope';
+import {
+  type FieldworkShare,
+  shareHiddenAttrsKey,
+  withoutShareColumn,
+} from '@/server/fieldwork-share-scope';
 import { parseConditionFromUrl } from '@/server/operations/services/progress-filters';
 import {
   EMPTY_PROGRESS_TOTALS,
   formatProgressGroupKey,
+  metaColumnsOutsideGroupKeys,
   parseProgressSort,
+  progressCriterionLabel,
+  progressDefaultSort,
+  remapGroupedMetaSort,
   resolveActiveGroupKeys,
   type ProgressGroupKey,
   type SortDir,
@@ -33,7 +42,7 @@ import type { SurveyCapability } from '@/shared/contracts/workspace';
 /** 분류 기준 칩 하나 — key 는 주소·정렬에 실리는 직렬화된 태그 키. */
 interface GroupCriterion extends GroupByOption {
   groupKey: ProgressGroupKey;
-  /** 값 없는 그룹 표기 (기본 「(미분류)」) */
+  /** 값 없는 그룹 표기 — 없으면 표가 줄표로 그린다 */
   nullLabel?: string;
 }
 
@@ -89,21 +98,26 @@ export async function ReportProgressScreen({
   const pageRaw = Number(sp.page);
   const page = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1;
   const size = 20;
-  const dir: SortDir = sp.dir === 'asc' ? 'asc' : 'desc';
 
   // contactScheme 은 pii blindIndex 계산용 piiType 매핑에 필요. getContactColumnScheme 가
   // cache() 로 RSC pass dedupe 되어 있어 getProgressGroupLabel 내부 lookup 과 같은 query 를 공유한다.
-  const [scheme, groupLabel, contactScheme] = await Promise.all([
+  const [loadedScheme, groupLabel, loadedContactScheme] = await Promise.all([
     getProgressColumnScheme(surveyId),
     getProgressGroupLabel(surveyId, scope),
     getContactColumnScheme(surveyId, scope),
   ]);
+  // 범위를 가르는 명단 열은 범위에 묶인 주체에게 없는 열이다 — 표시 열·분류 기준·검색 후보에서 함께 빠진다
+  // (외주 링크의 범위는 명단 열이 아니라 따로 둔 표라 지금은 빠지는 열이 없다).
+  const hiddenAttrsKey = shareHiddenAttrsKey(share);
+  const contactScheme = withoutShareColumn(loadedContactScheme, share);
+  const scheme =
+    hiddenAttrsKey === null
+      ? loadedScheme
+      : { ...loadedScheme, columns: loadedScheme.columns.filter((c) => c.key !== hiddenAttrsKey) };
   // 컨택원은 내부 실사 운영 정보 — 외부 주체에게는 분류 기준 칩이 없다.
   const hasAssignments =
     includeContactOwner && (await listAssignmentOptions(surveyId, scope)).length > 0;
-  const visibleColumns = scheme.columns.filter((c) => !c.hidden).sort((a, b) => a.order - b.order);
-  // metaKeys 에서 빈 문자열 방어 — `attrs->>''` 는 SQL legal 이지만 의미 없음.
-  const metaKeys = visibleColumns.map((c) => c.key).filter((k) => k.length > 0);
+  const shownColumns = scheme.columns.filter((c) => !c.hidden).sort((a, b) => a.order - b.order);
 
   // 후보: system.resid + attrs.* + pii.* 만. 그 외 system.* 은 이번 슬라이스 제외.
   const columnCandidates: ColumnCandidateWithPii[] = (contactScheme?.columns ?? [])
@@ -124,13 +138,17 @@ export async function ReportProgressScreen({
   const condition = parseConditionFromUrl(rawCol, rawQ, columnCandidates);
 
   // 분류 기준 후보 — 컬럼 설정의 레벨 슬롯 배정을 레벨 순서(대>중>소>세부)로.
-  // 라벨은 컬럼 설정에서 편집한 헤더 라벨(엑셀 헤더 시드)을 그대로 사용.
+  // 라벨은 진척률 컬럼 설정에서 고친 것이 먼저고, 없으면 조사 대상 목록의 라벨(엑셀 헤더 시드)이다.
   // 「컨택원」 칩은 컨택원이 하나라도 있을 때 맨 끝에 나오고 처음에는 꺼져 있다 — 보던 진척
   // 보고가 컨택원이 생겼다고 갑자기 바뀌지 않게 (defaultOff).
   const groupByCriteria: GroupCriterion[] = [
     ...resolveGroupCriteria(contactScheme).map((c) => {
       const groupKey: ProgressGroupKey = { kind: 'attrs', key: c.key };
-      return { key: formatProgressGroupKey(groupKey), label: c.label, groupKey };
+      return {
+        key: formatProgressGroupKey(groupKey),
+        label: progressCriterionLabel(scheme.columns, c.key, c.label),
+        groupKey,
+      };
     }),
     ...(hasAssignments
       ? [
@@ -157,18 +175,37 @@ export async function ReportProgressScreen({
   );
   const activeKeys = activeCriteria.map((c) => c.key);
   const activeGroupKeys = activeCriteria.map((c) => c.groupKey);
+  // 분류 기준으로 이미 나오는 열은 표시 열에서 뺀다 — 같은 값이 두 번 보이지 않게.
+  const visibleColumns = metaColumnsOutsideGroupKeys(shownColumns, activeGroupKeys);
+  // metaKeys 에서 빈 문자열 방어 — `attrs->>''` 는 SQL legal 이지만 의미 없음.
+  const metaKeys = visibleColumns.map((c) => c.key).filter((k) => k.length > 0);
   const titleLabel =
     activeCriteria.length > 0 ? activeCriteria.map((c) => c.label).join('·') : groupLabel;
-  const parsedSort = parseProgressSort(sp.sort, metaKeys, activeKeys);
+  // 분류 기준이 된 열의 옛 표시 열 정렬 주소는 그 기준의 정렬로 잇는다.
+  const parsedSort = parseProgressSort(
+    remapGroupedMetaSort(sp.sort, activeGroupKeys),
+    metaKeys,
+    activeKeys,
+  );
+  // 주소에 정렬이 없으면 조사 대상 목록의 기본 정렬 열을 따른다(이 표에 나와 있을 때) — 그 열 오름차순.
+  // 없으면 종전 기본(응답률 내림차순)이다.
+  const defaultSortKey = resolveDefaultSortKey(contactScheme);
+  const followedSort = sp.sort
+    ? null
+    : progressDefaultSort(
+        defaultSortKey === 'resid' ? null : attrsKeyOf(defaultSortKey),
+        activeGroupKeys,
+        metaKeys,
+      );
+  const dir: SortDir = followedSort !== null || sp.dir === 'asc' ? 'asc' : 'desc';
   // 시스템ID 컬럼 비표시 시 firstResid 정렬은 보이지 않는 컬럼 정렬이 되므로 기본값 폴백.
   const showResid = scheme.showResid ?? true;
-  const sort = !showResid && parsedSort === 'firstResid' ? 'responseRate' : parsedSort;
+  const sort =
+    followedSort ?? (!showResid && parsedSort === 'firstResid' ? 'responseRate' : parsedSort);
 
   // ProgressTable 의 # 컬럼 헤더 — contactColumns 의 system.resid 라벨 사용.
   // 스킴에 없거나 라벨이 비어있으면 기본 라벨 폴백.
-  const residLabel =
-    contactScheme?.columns.find((c) => c.source === FILTER_SOURCE.RESID)?.label?.trim() ||
-    RESID_DEFAULT_LABEL;
+  const residLabel = residColumnLabel(contactScheme);
 
   // 조사 대상 0건 빠른 검출 — getProgressTotals 보다 훨씬 가벼움.
   const isEmpty = (await countContactTargets(surveyId, scope, share)) === 0;

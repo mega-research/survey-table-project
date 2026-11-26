@@ -203,7 +203,7 @@ describe('sendSingleCampaign 가드', () => {
       },
       { accountUserId: 'admin-1', fieldworkLinkId: null },
       false,
-      { kind: 'single' },
+      { kind: 'single', share: FIELDWORK_SHARE_ALL },
     );
     expect(res).toEqual({ campaignId: 'camp-1', queuedCount: 1, skippedCount: 0 });
   });

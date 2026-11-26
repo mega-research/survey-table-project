@@ -14,6 +14,7 @@ import type {
   ContactUploadMode,
 } from '@/shared/contracts/contacts';
 import type { MailCampaignKind, MailRecipientStatus } from '@/shared/contracts/mail';
+import type { LinkClickState } from '@/shared/contracts/mail-io';
 import type { ResponseEditChange } from '@/shared/contracts/survey-response';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -255,6 +256,11 @@ export interface ContactsRow {
    * 필터·정렬과 같은 표현식(effectiveMailStatusExpr) 기준.
    */
   latestMailStatus: MailRecipientStatus | null;
+  /**
+   * 링크 클릭 상태 — 어느 발송 회차에서든 메일의 설문 링크를 눌렀으면 'clicked', 발송 이력은 있는데 누르지
+   * 않았으면 'not_clicked', 발송 이력이 없으면 null. 필터와 같은 식(linkClickStateExpr).
+   */
+  linkClick: LinkClickState | null;
   /**
    * 초대 토큰 — 그 사람의 응답 화면 주소다.
    *

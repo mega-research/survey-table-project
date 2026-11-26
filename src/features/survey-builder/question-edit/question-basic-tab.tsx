@@ -30,13 +30,16 @@ import {
 import { MultiLevelSelectFields } from './multi-level-select-fields';
 import { QuestionOptionsFields } from './question-options-fields';
 import { QuestionPlaceholderFields } from './question-placeholder-fields';
+import { QuestionScaleSliderFields } from './question-scale-slider-fields';
 import { QuestionSpssFields } from './question-spss-fields';
 import { QuestionSelectionLimitFields } from './question-selection-limit-fields';
 import { QuestionTableFields } from './question-table-fields';
+import { diagnoseQuestionScaleSlider } from '@/features/survey-builder/lib/scale-slider-diagnostics';
 import { RankingConfigEditorForQuestion } from '@/features/survey-builder/ranking-config-editor';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
 import { plainTextToCellHtml } from '@/features/survey-builder/table-editor/cell-editor/utils/cell-rich-text';
+import { canChoiceTableUseQuestionScaleSlider } from '@/features/question-renderer/utils/scale-slider-table-layout';
 import { titleHtmlHasMarks } from '@/lib/survey/question-title-html';
 import { generateId } from '@/lib/utils';
 import { flattenGroupTree } from '@/utils/group-ordering';
@@ -197,6 +200,35 @@ export function QuestionBasicTab({
     isOptionListType(question.type) && !isRankingTableSource && !isChoiceTableMode;
   // 자체 내장 테이블 편집기 노출 조건: table 타입 자체 OR ranking 테이블 소스 OR radio/checkbox 설명 테이블 모드
   const showTableEditor = question.type === 'table' || isRankingTableSource || isChoiceTableMode;
+  // 문항 설정의 「척도 슬라이더로 그리기」를 보일지 — 라디오 문항이면서 보통 보기 목록이거나, 설명 테이블에
+  // 라디오·체크박스 보기 그룹이 없을 때다. 그룹이 있는 표는 그룹의 보기 모양으로 켜고 응답 화면이 문항
+  // 설정을 읽지 않는다 — 판정은 응답 화면과 같은 함수다(갈리면 켜도 아무 일이 없는 스위치가 보인다).
+  // 보기 그룹은 폼이 아니라 스토어가 소유한다(셀 편집의 silentUpdateQuestion 경로) — 스토어 값이 먼저다.
+  const storeChoiceGroups = useSurveyBuilderStore(
+    (s) => s.currentSurvey.questions.find((q) => q.id === questionId)?.choiceGroups,
+  );
+  const showQuestionScaleSlider =
+    question.type === 'radio' &&
+    (needsOptions ||
+      (isChoiceTableMode &&
+        canChoiceTableUseQuestionScaleSlider({
+          type: question.type,
+          choiceGroups: storeChoiceGroups ?? formData.choiceGroups,
+        })));
+  // 스위치 아래의 폴백 경고·안내 — 편집 중인 폼 값(보기 · 표 구조 · 방향)과 스토어의 보기 그룹으로 응답
+  // 화면과 같은 투영을 돌린다. 저장 전의 보기·칸 변경도 곧바로 반영된다. 스위치가 보이지 않는 문항은 돌지 않는다.
+  const scaleSliderDiagnosis = useMemo(
+    () =>
+      showQuestionScaleSlider
+        ? diagnoseQuestionScaleSlider({
+            ...question,
+            ...formData,
+            type: question.type,
+            choiceGroups: storeChoiceGroups ?? formData.choiceGroups,
+          } as Question)
+        : undefined,
+    [formData, question, showQuestionScaleSlider, storeChoiceGroups],
+  );
 
   // 토큰 prefill(defaultValueTemplate)이 설정되면 숫자 초기값(emptyDefault)은 비활성 — prefill 우선
   const hasTokenPrefill = (formData.defaultValueTemplate ?? '').trim().length > 0;
@@ -547,6 +579,18 @@ export function QuestionBasicTab({
             &quot;보기 옵션&quot; 탭에서 라벨/코드를 설정하세요.
           </p>
         </div>
+      )}
+
+      {/* 척도 슬라이더로 그리기 (CONTEXT.md 「척도 슬라이더」) — 문항 설정으로 켜는 곳은 보통 라디오 문항
+          (보기 목록)과, 보기 그룹이 없는 설명 테이블이다. 보기 그룹이 있는 설명 테이블은 보기 칸 편집의
+          보기 모양에서 그룹마다 켠다. */}
+      {showQuestionScaleSlider && (
+        <QuestionScaleSliderFields
+          formData={formData}
+          setFormData={setFormData}
+          tableMode={isChoiceTableMode}
+          diagnosis={scaleSliderDiagnosis}
+        />
       )}
 
       {/* 옵션 설정 (radio, checkbox, select) */}

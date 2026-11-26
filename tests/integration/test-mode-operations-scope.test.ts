@@ -154,10 +154,9 @@ describe('운영 응답 범위', () => {
   it.each(SCOPE_CASES)('report는 contact와 response를 모두 %s scope로 제한한다', async (scope, isTest) => {
     const { getProgressRows } = await import('@/server/operations/services/report-progress');
 
-    await getProgressRows({
+    await getProgressRows({ share: FIELDWORK_SHARE_ALL,
       surveyId: `report-${scope}`,
       scope,
-      share: FIELDWORK_SHARE_ALL,
       condition: null,
       page: 1,
       size: 20,

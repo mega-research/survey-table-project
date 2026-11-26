@@ -11,6 +11,7 @@ import {
 import { usePriorAnswers } from '@/features/question-renderer/prior-answers-context';
 import { RootGroupNameBadge } from '@/features/question-renderer/root-group-name-badge';
 import { VALIDATION_NOTICE_ATTRIBUTE } from '@/features/question-renderer/scroll-to-issue';
+import { resolveChoiceTableRenderedDisplay } from '@/features/question-renderer/utils/scale-slider-table-layout';
 import { useInlineSurveyLocale } from '@/features/question-renderer/survey-locale-context';
 import { ChangeConfirmControl } from '@/features/survey-response/change-confirm-control';
 import {
@@ -176,11 +177,16 @@ export function GroupStepItem({
   // 마지막 카드 아래에 둘이 겹친다. 문구는 여전히 그 상자 몫이라 아래 <p> 는 생략한다.
   const isMobile = useMobileView();
   const locale = useInlineSurveyLocale();
-  // 보기 소스 표의 축 단위 카드만 해당한다 — 테이블 유형의 축 단위 카드(열 = 축)는 카드별 상자가 없다
-  const axisCardsOnMobile =
-    isMobile &&
-    q.mobileTableDisplayMode === 'axis-cards' &&
-    (q.type === 'radio' || q.type === 'checkbox');
+  // 보기 소스 표의 축 단위 카드만 해당한다 — 테이블 유형의 축 단위 카드(열 = 축)는 카드별 상자가 없다.
+  // 축 단위 카드가 **실제로 그려질 때만**이다: 저작 값이 아니라 호스트와 같은 판정이 낸 유효한 표시 방식을
+  // 읽는다. 척도 슬라이더가 행 단위 배치로 가져간 표는 카드별 상자가 없어, 여기서 거두면 안내가 어디에도 없다.
+  const axisCardsOnMobile = useMemo(
+    () =>
+      isMobile &&
+      (q.type === 'radio' || q.type === 'checkbox') &&
+      resolveChoiceTableRenderedDisplay(q, isMobile).activeMode === 'axis-cards',
+    [q, isMobile],
+  );
   const { visibleIssues, requiredMessageInBanner } = useMemo(() => {
     const groupIssues: NumericIssue[] = showRequiredMessage
       ? collectUnfilledChoiceGroupIssues(q, responses[q.id], choiceGroupVisibility, locale).map(
@@ -358,6 +364,9 @@ export function GroupStepItem({
                 onDynamicRowSelectionChange={onDynamicRowSelectionChange}
                 showRequiredHighlight={showRequiredMessage}
                 requiredVisibleCellIds={choiceGroupVisibility.visibleCellIds}
+                // 위에 그린 제목 요소(이 영역의 이름과 같은 요소) — 척도 슬라이더의 라디오 묶음이 낭독 이름으로 가리킨다.
+                // 제목을 숨긴 문항에는 그 요소가 없어 넘기지 않는다(없는 id 를 가리키면 이름 없는 묶음이 된다)
+                titleElementId={q.hideTitle ? undefined : `q-label-${q.id}`}
               />
             </div>
           </fieldset>

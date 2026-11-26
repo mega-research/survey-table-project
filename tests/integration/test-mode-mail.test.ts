@@ -170,6 +170,7 @@ vi.mock('@/server/read-models/result-code-statuses', () => ({
 
 import { createCampaign } from '@/server/mail/services/campaigns';
 import { CampaignsList } from '@/features/operations/mail-campaign/campaigns-list';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 // 이 브라우저가 「테스트 모드로 보기」를 켠 상태 — 전역 테스트 모드가 켜지면 콘솔이 테스트 파티션을 본다.
 // (쿠키가 없으면 전역 플래그가 켜져 있어도 실데이터다 — server/data-scope)
@@ -212,7 +213,7 @@ describe('테스트 모드 메일 캠페인 생성', () => {
     state.surveyMode = true;
     state.targets = [{ id: TEST_ID, surveyId: SURVEY_ID, isTest: true }];
 
-    await createCampaign(input([TEST_ID]), { accountUserId: USER_ID, fieldworkLinkId: null }, false);
+    await createCampaign(input([TEST_ID]), { accountUserId: USER_ID, fieldworkLinkId: null }, false, { share: FIELDWORK_SHARE_ALL });
 
     expect(state.surveyShareLocks).toBe(1);
     expect(state.executeQueries[0]?.sql).toContain('next_campaign_run_number');
@@ -231,7 +232,7 @@ describe('테스트 모드 메일 캠페인 생성', () => {
     state.surveyMode = false;
     state.targets = [{ id: TEST_ID, surveyId: SURVEY_ID, isTest: true }];
 
-    await expect(createCampaign(input([TEST_ID]), { accountUserId: USER_ID, fieldworkLinkId: null }, false)).rejects.toThrow('화면을 새로고침');
+    await expect(createCampaign(input([TEST_ID]), { accountUserId: USER_ID, fieldworkLinkId: null }, false, { share: FIELDWORK_SHARE_ALL })).rejects.toThrow('화면을 새로고침');
     expect(state.campaignValues).toBeNull();
     expect(state.recipientIds).toEqual([]);
   });
@@ -243,7 +244,7 @@ describe('테스트 모드 메일 캠페인 생성', () => {
       { id: REAL_ID, surveyId: SURVEY_ID, isTest: false },
     ];
 
-    await expect(createCampaign(input([TEST_ID, REAL_ID]), { accountUserId: USER_ID, fieldworkLinkId: null }, false)).rejects.toThrow(
+    await expect(createCampaign(input([TEST_ID, REAL_ID]), { accountUserId: USER_ID, fieldworkLinkId: null }, false, { share: FIELDWORK_SHARE_ALL })).rejects.toThrow(
       '화면을 새로고침',
     );
     expect(state.campaignValues).toBeNull();
@@ -257,7 +258,7 @@ describe('테스트 모드 메일 캠페인 생성', () => {
       { id: OTHER_SURVEY_TARGET_ID, surveyId: OTHER_SURVEY_ID, isTest: false },
     ];
 
-    await createCampaign(input([REAL_ID], '  1차 안내  '), { accountUserId: USER_ID, fieldworkLinkId: null }, false);
+    await createCampaign(input([REAL_ID], '  1차 안내  '), { accountUserId: USER_ID, fieldworkLinkId: null }, false, { share: FIELDWORK_SHARE_ALL });
 
     expect(state.executeQueries[0]?.params).toContain(false);
     expect(state.campaignValues).toMatchObject({
@@ -276,7 +277,7 @@ describe('테스트 모드 메일 캠페인 생성', () => {
       { id: OTHER_SURVEY_TARGET_ID, surveyId: OTHER_SURVEY_ID, isTest: true },
     ];
 
-    await createCampaign(input([TEST_ID]), { accountUserId: USER_ID, fieldworkLinkId: null }, false);
+    await createCampaign(input([TEST_ID]), { accountUserId: USER_ID, fieldworkLinkId: null }, false, { share: FIELDWORK_SHARE_ALL });
 
     expect(state.recipientIds).toEqual([TEST_ID]);
   });
@@ -289,7 +290,7 @@ describe('테스트 모드 메일 캠페인 생성', () => {
     ];
 
     await expect(
-      createCampaign(input([TEST_ID, OTHER_SURVEY_TARGET_ID]), { accountUserId: USER_ID, fieldworkLinkId: null }, false),
+      createCampaign(input([TEST_ID, OTHER_SURVEY_TARGET_ID]), { accountUserId: USER_ID, fieldworkLinkId: null }, false, { share: FIELDWORK_SHARE_ALL }),
     ).rejects.toThrow('화면을 새로고침');
     expect(state.campaignValues).toBeNull();
   });
@@ -299,7 +300,7 @@ describe('테스트 모드 메일 캠페인 생성', () => {
     state.templateSubject = ' [TEST] [TEST] 설문 참여 ';
     state.targets = [{ id: TEST_ID, surveyId: SURVEY_ID, isTest: true }];
 
-    await createCampaign(input([TEST_ID], ' [TEST] [TEST] 1차 안내 '), { accountUserId: USER_ID, fieldworkLinkId: null }, false);
+    await createCampaign(input([TEST_ID], ' [TEST] [TEST] 1차 안내 '), { accountUserId: USER_ID, fieldworkLinkId: null }, false, { share: FIELDWORK_SHARE_ALL });
 
     expect(state.campaignValues?.['title']).toBe('[TEST] 1차 안내');
     // subject는 접두어 정규화 대상이 아님 — 템플릿 원문 그대로 스냅샷 (5a73506b)
@@ -325,6 +326,7 @@ describe('테스트 캠페인 목록', () => {
           sentCount: 0,
           deliveredCount: 0,
           openedCount: 0,
+          clickedCount: 0,
           bouncedCount: 0,
           complainedCount: 0,
           failedCount: 0,

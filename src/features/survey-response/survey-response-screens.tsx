@@ -11,7 +11,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { DEFAULT_SURVEY_LOCALE, type SurveyLocale, toInlineLocale } from '@/types/survey-locale';
 import type { SystemStringKey } from '@/utils/system-strings';
 
-import { SystemText } from './system-text';
+import { SystemText, screenLang } from './system-text';
 
 /**
  * 설문 응답 흐름의 전체 화면 early-return 상태 컴포넌트들.
@@ -19,7 +19,7 @@ import { SystemText } from './system-text';
  * SurveyResponseFlow 의 hook 스코프 밖이므로 hook 호출 순서에 영향이 없다.
  *
  * 다국어 설문(CONTEXT.md 「다국어 설문」)이면 `locale` 로 현재 언어를 받는다. 미정(`null`)이면
- * 세 언어를 위아래로 함께 보인다. 기본은 한국어 — 설문을 모르는 자리(라우트 로딩·짧은 링크)와
+ * 그 설문이 제공하는 언어를 위아래로 함께 보인다. 기본은 한국어 — 설문을 모르는 자리(라우트 로딩·짧은 링크)와
  * 다국어 아닌 설문은 지금 글자 그대로다.
  */
 
@@ -28,7 +28,7 @@ type ScreenLocale = SurveyLocale | null;
 // 로딩 중
 export function SurveyLoadingScreen({ locale = DEFAULT_SURVEY_LOCALE }: { locale?: ScreenLocale }) {
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-gray-50">
+    <div lang={screenLang(locale)} className="flex min-h-dvh items-center justify-center bg-gray-50">
       <Card className="mx-auto max-w-md">
         <CardContent className="p-8 text-center">
           <Loader2 className="mx-auto mb-4 h-12 w-12 animate-spin text-blue-500" />
@@ -108,7 +108,7 @@ function InvalidLinkScreen({
   locale: ScreenLocale;
 }) {
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-gray-50 px-4">
+    <div lang={screenLang(locale)} className="flex min-h-dvh items-center justify-center bg-gray-50 px-4">
       <Card className="w-full max-w-md">
         <CardContent className="p-8 text-center">
           <AlertCircle className="mx-auto mb-4 h-12 w-12 text-amber-500" />
@@ -187,7 +187,7 @@ export function InvalidTestLinkScreen({
  */
 export function DesktopOnlyScreen({ locale = DEFAULT_SURVEY_LOCALE }: { locale?: ScreenLocale }) {
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-gray-50 px-4">
+    <div lang={screenLang(locale)} className="flex min-h-dvh items-center justify-center bg-gray-50 px-4">
       <Card className="w-full max-w-md">
         <CardContent className="p-8 text-center">
           <Monitor className="mx-auto mb-4 h-12 w-12 text-blue-500" />
@@ -226,7 +226,7 @@ export function SurveyCompletedScreen({
   onStartNew?: () => void;
 }) {
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-gray-50">
+    <div lang={screenLang(locale)} className="flex min-h-dvh items-center justify-center bg-gray-50">
       <Card className="mx-auto max-w-md">
         <CardContent className="p-8 text-center">
           <CheckCircle className="mx-auto mb-4 h-16 w-16 text-green-500" />
@@ -274,7 +274,7 @@ export function EndRedirectingScreen({
   // 한 문장 안에 링크가 끼므로 미정이면 한국어 — 이 화면은 응답을 마친 뒤라 언어가 정해져 있다
   const lineLocale = toInlineLocale(locale);
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-gray-50 px-4 text-center">
+    <div lang={screenLang(locale)} className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-gray-50 px-4 text-center">
       <Loader2 className="h-8 w-8 animate-spin text-blue-500" aria-hidden />
       <p className="text-gray-700">
         <SystemText k="endRedirect.waiting" locale={lineLocale} />

@@ -307,10 +307,9 @@ describe('getProgressRows — 그룹별 excludedCount', () => {
       { groupValue: 'B', responded: true },
       { groupValue: 'B', attempts: ['수신거부'] },
     ]);
-    const rows = await getProgressRows({
+    const rows = await getProgressRows({ share: FIELDWORK_SHARE_ALL,
       surveyId: SURVEY_ID,
       scope: 'real',
-      share: FIELDWORK_SHARE_ALL,
       condition: null,
       page: 1,
       size: 100,

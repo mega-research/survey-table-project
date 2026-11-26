@@ -46,7 +46,7 @@ describe('contacts.targets procedures', () => {
       'sv-1',
       'contacts.manage',
     );
-    expect(svc.addContactTarget).toHaveBeenCalledWith(input, false);
+    expect(svc.addContactTarget).toHaveBeenCalledWith(input, false, { kind: 'all' });
     expect(res).toEqual({ id: 'ct-1', resid: 42 });
   });
 
@@ -62,10 +62,12 @@ describe('contacts.targets procedures', () => {
       'contacts.manage',
     );
     // 편집자는 인증된 context 에서 넘긴다 — 「대상 정보 수정 현황」의 누가.
-    expect(svc.updateContactTarget).toHaveBeenCalledWith(input, false, {
-      id: 'admin-1',
-      email: 'a@b.com',
-    });
+    expect(svc.updateContactTarget).toHaveBeenCalledWith(
+      input,
+      false,
+      { id: 'admin-1', email: 'a@b.com' },
+      { kind: 'all' },
+    );
     expect(res).toEqual({ ok: true });
   });
 
@@ -141,7 +143,7 @@ describe('contacts.targets procedures', () => {
     );
     const input = { surveyId: 'sv-1', attrs: { name: '홍길동' } };
     const res = await client.targets.add(input);
-    expect(svc.addContactTarget).toHaveBeenCalledWith(input, true);
+    expect(svc.addContactTarget).toHaveBeenCalledWith(input, true, { kind: 'all' });
     expect(res).toEqual({ id: 'ct-1', resid: 42 });
   });
 

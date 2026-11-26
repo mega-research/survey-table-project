@@ -3,8 +3,13 @@ import * as z from 'zod';
 import type { NewQuestion, Question } from '@/db/schema';
 import type { PersistedQuestionField } from '@/db/schema/question-persisted-fields';
 import { INPUT_TYPES } from '@/types/input-type';
-import { MOBILE_TABLE_DISPLAY_MODES } from '@/types/mobile-table-display';
+import {
+  MOBILE_PIECE_COLUMNS_PER_VIEW_MAX,
+  MOBILE_PIECE_COLUMNS_PER_VIEW_MIN,
+  MOBILE_TABLE_DISPLAY_MODES,
+} from '@/types/mobile-table-display';
 import { QUESTION_TYPES } from '@/types/question-types';
+import { SCALE_SLIDER_DIRECTIONS } from '@/types/scale-slider';
 import type { Question as QuestionType } from '@/types/survey';
 
 /**
@@ -66,6 +71,9 @@ export const CreateQuestionInput = z.object({
   titleHtml: z.string().nullable().optional(),
   collapseButtonLabel: z.string().max(200).nullable().optional(),
   collapseAttachToPrevious: z.boolean().optional(),
+  distinctGroup: z.string().max(100).nullable().optional(),
+  // 문항의 슬라이더 방향 — 어휘 밖 값은 여기서 거부한다. null = 끄기
+  scaleSlider: z.enum(SCALE_SLIDER_DIRECTIONS).nullable().optional(),
   sumConstraints: z.custom<QuestionType['sumConstraints']>().optional(),
   displayCondition: z.custom<QuestionType['displayCondition']>().optional(),
   priorAnswerCondition: z.custom<QuestionType['priorAnswerCondition']>().optional(),
@@ -82,6 +90,14 @@ export const CreateQuestionInput = z.object({
   mobileDrilldownOmitLeadingColumns: z.number().int().min(0).optional(),
   mobileDrilldownRepeatHeaderStartRow: z.number().int().min(0).nullable().optional(),
   mobileDrilldownRepeatHeaderEndRow: z.number().int().min(0).nullable().optional(),
+  mobileDrilldownReverseColumns: z.boolean().optional(),
+  mobileDrilldownColumnsPerView: z
+    .number()
+    .int()
+    .min(MOBILE_PIECE_COLUMNS_PER_VIEW_MIN)
+    .max(MOBILE_PIECE_COLUMNS_PER_VIEW_MAX)
+    .nullable()
+    .optional(),
   mobileItemCardBlockColumns: z.array(z.number().int().min(1)).nullable().optional(),
   hideTitle: z.boolean().optional(),
   pageBreakBefore: z.boolean().optional(),
@@ -144,6 +160,9 @@ export const UpdateQuestionData = z.object({
   titleHtml: z.string().nullable().optional(),
   collapseButtonLabel: z.string().max(200).nullable().optional(),
   collapseAttachToPrevious: z.boolean().optional(),
+  distinctGroup: z.string().max(100).nullable().optional(),
+  // 문항의 슬라이더 방향 — 어휘 밖 값은 여기서 거부한다. null = 끄기
+  scaleSlider: z.enum(SCALE_SLIDER_DIRECTIONS).nullable().optional(),
   sumConstraints: z.custom<QuestionType['sumConstraints']>().optional(),
   dynamicRowConfigs: z.custom<QuestionType['dynamicRowConfigs']>().optional(),
   rowRepeatConfig: z.custom<QuestionType['rowRepeatConfig']>().optional(),
@@ -157,6 +176,14 @@ export const UpdateQuestionData = z.object({
   mobileDrilldownOmitLeadingColumns: z.number().int().min(0).optional(),
   mobileDrilldownRepeatHeaderStartRow: z.number().int().min(0).nullable().optional(),
   mobileDrilldownRepeatHeaderEndRow: z.number().int().min(0).nullable().optional(),
+  mobileDrilldownReverseColumns: z.boolean().optional(),
+  mobileDrilldownColumnsPerView: z
+    .number()
+    .int()
+    .min(MOBILE_PIECE_COLUMNS_PER_VIEW_MIN)
+    .max(MOBILE_PIECE_COLUMNS_PER_VIEW_MAX)
+    .nullable()
+    .optional(),
   mobileItemCardBlockColumns: z.array(z.number().int().min(1)).nullable().optional(),
   hideTitle: z.boolean().optional(),
   pageBreakBefore: z.boolean().optional(),

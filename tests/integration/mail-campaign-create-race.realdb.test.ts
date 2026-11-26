@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { db } from '@/db';
 import { createCampaign } from '@/server/mail/services/campaigns';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 // 이 브라우저가 「테스트 데이터 보기」를 켠 상태 — 전역 테스트 모드가 켜지면 콘솔이 테스트 파티션을 본다.
 // (쿠키가 없으면 전역 플래그가 켜져 있어도 실데이터다 — server/data-scope)
@@ -553,6 +554,7 @@ run('메일 캠페인 생성 DB 경쟁', () => {
           campaignInput(fixture, fixture.testTargetId, 'test-a'),
           { accountUserId: randomUUID(), fieldworkLinkId: null },
           false,
+          { share: FIELDWORK_SHARE_ALL },
         ));
         creations.push(firstCreation);
         const firstIdentity = await observedTransactions.identityAt(0);
@@ -562,6 +564,7 @@ run('메일 캠페인 생성 DB 경쟁', () => {
           campaignInput(fixture, fixture.testTargetId, 'test-b'),
           { accountUserId: randomUUID(), fieldworkLinkId: null },
           false,
+          { share: FIELDWORK_SHARE_ALL },
         ));
         creations.push(secondCreation);
         const secondIdentity = await observedTransactions.identityAt(1);
@@ -601,6 +604,7 @@ run('메일 캠페인 생성 DB 경쟁', () => {
             campaignInput(fixture, fixture.realTargetId, 'real-a'),
             { accountUserId: randomUUID(), fieldworkLinkId: null },
             false,
+            { share: FIELDWORK_SHARE_ALL },
           ));
           await withTimeout(
             realCreation,
@@ -651,6 +655,7 @@ run('메일 캠페인 생성 DB 경쟁', () => {
           campaignInput(fixture, fixture.testTargetId, 'locked-test'),
           { accountUserId: randomUUID(), fieldworkLinkId: null },
           false,
+          { share: FIELDWORK_SHARE_ALL },
         ));
         operations.push(creation);
         const creationIdentity = await observedTransactions.identityAt(0);
@@ -716,6 +721,7 @@ run('메일 캠페인 생성 DB 경쟁', () => {
             campaignInput(fixture, fixture.testTargetId, 'stale-test'),
             { accountUserId: randomUUID(), fieldworkLinkId: null },
             false,
+            { share: FIELDWORK_SHARE_ALL },
           ));
           await withTimeout(
             expect(staleCreation).rejects.toThrow('화면을 새로고침'),

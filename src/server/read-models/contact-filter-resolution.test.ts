@@ -253,6 +253,34 @@ describe('조사 대상 필터 해석 — 후보와 합치기', () => {
   });
 });
 
+describe('조사 대상 필터 해석 — 없어진 「그룹」 조건이 든 옛 스냅샷', () => {
+  // 2026-11-23 하루 동안 위저드에 그룹 깔때기(system.group)가 있었고 그 조건으로 만든 회차가 있다.
+  // 그룹 칸을 뺀 뒤 그 회차의 「미응답자 재발송」은 조건을 조용히 버리지 않고 알려야 한다.
+  const mail = () =>
+    ctx({
+      columnCandidates: CANDIDATES,
+      headerCandidates: [...CANDIDATES, { source: 'system.web', label: '응답' }],
+    });
+  const input = {
+    headerClauses: [
+      { source: 'system.web', mode: 'in', hv: 'none' },
+      { source: 'system.group', mode: 'in', hv: '참가업체(국내)' },
+    ],
+  };
+
+  it('읽기 해석은 그 조건을 빼고 빠진 조건으로 알린다 — 위저드가 경고하고 자동 전체 선택을 하지 않는다', () => {
+    const r = resolveContactFilterWith(mail(), input, NO_LISTS, 'read');
+    expect(r.clauses.map((c) => c.condition.source)).toEqual(['system.web']);
+    expect(r.unresolved).toEqual([{ part: 'header', index: 1, reason: 'unparseable' }]);
+  });
+
+  it('쓰기 해석(필터 결과 전체 선택)은 거부한다', () => {
+    expect(() => resolveContactFilterWith(mail(), input, NO_LISTS, 'write')).toThrow(
+      /열 머리 필터 2/,
+    );
+  });
+});
+
 describe('contactFilterInputFromUrl', () => {
   it('평행 배열을 짧은 쪽 기준으로 묶는다', () => {
     expect(

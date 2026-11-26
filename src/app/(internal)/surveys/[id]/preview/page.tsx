@@ -13,6 +13,7 @@ import { assertSurveyConsolePageAccess } from '@/server/page-survey-access';
 import { isExternalViewer } from '@/lib/auth/external-viewer';
 import { loadPreviewContactSeed } from '@/server/contacts/services/preview-contact';
 import { loadOperationsDataScope } from '@/server/data-scope';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 import { CopyPreviewLinkButton } from './copy-preview-link-button';
 
@@ -91,6 +92,8 @@ export default async function SurveyPreviewPage({ params }: PageProps) {
     surveyId,
     isTest: (await loadOperationsDataScope(surveyId)) === 'test',
     structure: preview.survey,
+    // 이 화면은 계정만 지난다 — 담당 범위는 외주 링크의 축이라 여기는 설문 전체다.
+    share: FIELDWORK_SHARE_ALL,
   });
 
   return (

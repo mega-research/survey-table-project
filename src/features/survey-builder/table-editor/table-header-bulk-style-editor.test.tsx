@@ -84,7 +84,7 @@ function TableEditorHarness({
       </button>
       <button
         type="button"
-        onClick={() => actions.applyHeaderStyle({ textBold: true, backgroundColor: '#DDEEFF', textColor: '' })}
+        onClick={() => actions.applyHeaderStyle({ textBold: true, backgroundColor: '#DDEEFF', textColor: '', hideRightBorder: false })}
       >
         헤더 스타일 적용
       </button>

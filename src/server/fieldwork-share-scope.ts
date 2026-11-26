@@ -53,6 +53,41 @@ export function isShareRestricted(share: FieldworkShare): boolean {
   return share.kind !== 'all';
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 범위 열 — 운영판(게스트 계정 + 명단 열 값)과 소비자 줄을 맞추는 자리
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 운영판의 담당 범위는 명단 열 값으로 가르므로 그 열 자체를 범위 게스트에게 감추고(스킴·명단 값), 게스트가 만드는
+// 대상에 그 열 값을 찍는다. 외주 링크의 담당 범위는 명단 열이 아니라 따로 둔 표(`fieldwork_link_shares`)라
+// 감출 열도 찍을 값도 없다 — 아래 넷은 그래서 아무것도 하지 않는다. 소비자(목록·상세·응답 내역·값 목록)의
+// 호출 줄을 두 판이 같게 두려고 이름과 모양만 맞춘다. 범위를 명단 열로 가르는 주체가 생기면 여기서 채운다.
+
+/** 범위를 가진 주체가 만드는 대상에 찍을 명단 값 — 링크 범위에는 없다(대상×링크 표가 범위다). */
+export function shareAttrStamp(_share: FieldworkShare): { attrsKey: string; value: string } | null {
+  return null;
+}
+
+/** 범위를 가진 주체에게 감출 명단 열 이름 — 링크 범위에는 없다. */
+export function shareHiddenAttrsKey(_share: FieldworkShare): string | null {
+  return null;
+}
+
+/** 범위 열을 뺀 컬럼 스킴 — 링크 범위에는 감출 열이 없어 그대로 돌려준다. */
+export function withoutShareColumn<T extends { columns: ReadonlyArray<{ source: string }> }>(
+  scheme: T | null,
+  _share: FieldworkShare,
+): T | null {
+  return scheme;
+}
+
+/** 범위 열 값을 뺀 명단 값 — 링크 범위에는 감출 열이 없어 그대로 돌려준다. */
+export function withoutShareAttr<T extends Record<string, string> | null | undefined>(
+  attrs: T,
+  _share: FieldworkShare,
+): T {
+  return attrs;
+}
+
 /**
  * 조사 대상 id 칸에 거는 술어 — `all` 이면 `undefined`(drizzle `and()` 가 건너뛴다).
  *

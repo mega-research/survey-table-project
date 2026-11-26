@@ -20,6 +20,7 @@ import {
 import type { HeaderBulkStyle, HeaderStyleState } from '@/features/survey-builder/table-editor/utils/header-style';
 
 import { CellStyleFields } from './cell-style-fields';
+import { HeaderRightBorderField } from './header-right-border-field';
 
 interface HeaderBulkStyleDialogProps {
   open: boolean;
@@ -41,6 +42,7 @@ export function HeaderBulkStyleDialog({
     initialStyle.textBold,
     initialStyle.backgroundColor,
     initialStyle.textColor,
+    initialStyle.hideRightBorder,
   ].join(':');
 
   return (
@@ -66,6 +68,7 @@ function HeaderBulkStyleForm({
     textBold: initialTextBold,
     backgroundColor: initialBackgroundColor,
     textColor: initialTextColor,
+    hideRightBorder: initialHideRightBorder,
     isMixed,
     styledCount,
   } = initialStyle;
@@ -74,6 +77,7 @@ function HeaderBulkStyleForm({
   const [backgroundColorDraft, setBackgroundColorDraft] = useState(initialBackgroundColor);
   const [textColor, setTextColor] = useState(initialTextColor);
   const [textColorDraft, setTextColorDraft] = useState(initialTextColor);
+  const [hideRightBorder, setHideRightBorder] = useState(initialHideRightBorder);
   const [error, setError] = useState<string>();
   const [confirming, setConfirming] = useState(false);
 
@@ -110,6 +114,7 @@ function HeaderBulkStyleForm({
       textBold,
       backgroundColor: normalizedBackgroundColor ?? '',
       textColor: normalizedTextColor ?? '',
+      hideRightBorder,
     });
     onOpenChange(false);
   };
@@ -142,6 +147,15 @@ function HeaderBulkStyleForm({
         }}
         error={error}
         onInvalidColor={() => setError(COLOR_ERROR)}
+      />
+
+      <HeaderRightBorderField
+        bulk
+        checked={hideRightBorder}
+        onCheckedChange={(value) => {
+          setHideRightBorder(value);
+          setConfirming(false);
+        }}
       />
 
       <div

@@ -23,6 +23,7 @@ export interface ContactColumnDef {
     | 'system.resid'
     | 'system.contact_result'
     | 'system.email_count'
+    | 'system.link_click'
     | 'system.web'
     | 'system.contact_owner'
     | `pii.${string}`;

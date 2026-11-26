@@ -246,3 +246,71 @@ describe('buildMobileRowWiseOriginalModel — 구분 열 없이 보기만 놓인
     expect(model.sections[0]!.subgroups[0]!.questions[0]!.rowId).toBe('scale');
   });
 });
+
+describe('buildMobileRowWiseOriginalModel — 제목 아래 입력칸(mobileBelowRowTitle)', () => {
+  // 청암대 재학생 문31 모양 — 척도 표 맨 아래 서술형 줄. 질문 글자가 앞쪽 두 열을, 입력칸이 나머지 열을 덮는다.
+  const essayRow = (inputOverrides: Partial<TableCell> = {}): TableRow => ({
+    id: 'essay',
+    label: '서술형',
+    cells: [
+      text('q-title', '가장 유익했던 프로그램을 적어 주세요.', { colspan: 2 }),
+      text('q-hidden', '', { isHidden: true }),
+      input('q-input', '', { colspan: 2, ...inputOverrides }),
+      text('q-hidden-2', '', { isHidden: true }),
+    ],
+  });
+  const build = (row: TableRow) =>
+    buildMobileRowWiseOriginalModel({
+      authoredColumns: columns,
+      authoredRows: [row],
+      visibleColumns: columns,
+      displayRows: [row],
+      hideColumnLabels: false,
+      settings: { omitLeadingAuthoredColumns: 2 },
+    }).sections.flatMap((s) => s.subgroups.flatMap((g) => g.questions))[0]!;
+
+  it('표식을 켠 입력칸이 그 줄의 유일한 응답 칸이면 조각을 그리지 않고 제목 아래에 둔다', () => {
+    const question = build(essayRow({ mobileBelowRowTitle: true }));
+    expect(question.belowTitleCells.map((c) => c.id)).toEqual(['q-input']);
+    expect(question.hidesPiece).toBe(true);
+    expect(question.title).toBe('가장 유익했던 프로그램을 적어 주세요.');
+  });
+
+  it('표식이 없으면 종전대로 원본 표 조각이다', () => {
+    const question = build(essayRow());
+    expect(question.belowTitleCells).toEqual([]);
+    expect(question.hidesPiece).toBe(false);
+  });
+
+  it('같은 줄 조각에 표식 없는 응답 칸이 남으면 표식을 무시한다 — 조각을 지우면 그 칸을 채울 수 없다', () => {
+    const mixed: TableRow = {
+      id: 'mixed',
+      label: '혼합',
+      cells: [
+        text('m-section', '구분'),
+        text('m-title', '기타'),
+        input('m-a', 'A', { mobileBelowRowTitle: true }),
+        input('m-b', 'B'),
+      ],
+    };
+    const question = build(mixed);
+    expect(question.belowTitleCells).toEqual([]);
+    expect(question.hidesPiece).toBe(false);
+  });
+
+  it('입력 칸이 아닌 응답 칸의 표식은 읽지 않는다', () => {
+    const selectRow: TableRow = {
+      id: 'select',
+      label: '선택',
+      cells: [
+        text('s-section', '구분'),
+        text('s-title', '고르기'),
+        { id: 's-select', type: 'select', content: '', colspan: 2, mobileBelowRowTitle: true },
+        text('s-hidden', '', { isHidden: true }),
+      ],
+    };
+    const question = build(selectRow);
+    expect(question.belowTitleCells).toEqual([]);
+    expect(question.hidesPiece).toBe(false);
+  });
+});

@@ -5,8 +5,7 @@ import {
   type ContactDetailPermissions,
 } from '@/features/operations/contacts/contact-detail-permissions';
 import { ContactDetailForm } from '@/features/operations/contacts/contact-detail-form';
-import { attrsKeyOf } from '@/lib/operations/contacts-format';
-import { extractSystemFieldKeys } from '@/lib/operations/contacts-shared';
+import { attrsKeyOf, residColumnLabel } from '@/lib/operations/contacts-format';
 import type { OperationsDataScope } from '@/server/data-scope';
 import type { FieldworkShare } from '@/server/fieldwork-share-scope';
 import { getMailTemplatesBySurvey } from '@/server/mail/services/templates';
@@ -185,7 +184,7 @@ export async function ContactDetailScreen({
     <main className="mx-auto max-w-7xl px-6 py-6">
       <div className="mb-4">
         <h2 className="text-xl font-bold text-gray-900">
-          조사 대상 단건 편집 — resid {detail.contact.resid}
+          조사 대상 단건 편집 — {residColumnLabel(scheme)} {detail.contact.resid}
         </h2>
         <p className="text-sm text-slate-500">
           {groupLabel}
@@ -198,7 +197,6 @@ export async function ContactDetailScreen({
         basePath={basePath}
         scheme={scheme}
         resultCodes={resultCodes}
-        systemFieldKeys={extractSystemFieldKeys(scheme)}
         mailHistory={mailHistory}
         editLogs={editLogs}
         targetEditLogs={targetEditLogs}

@@ -11,7 +11,9 @@ import {
   type ScaleBarBandTone,
   type ScaleBarCell,
   type ScaleBarModel,
+  resolveScaleBarAnchorLayout,
   resolveScaleBarBandTones,
+  resolveScaleBarCellMinWidths,
 } from '@/features/question-renderer/utils/choice-group-scale-bar';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
@@ -105,8 +107,24 @@ export const ChoiceGroupScaleBar = React.memo(function ChoiceGroupScaleBar({
   const selectedBand = selected?.bandIndex ?? null;
   const bandLabelOf = (cell: ScaleBarCell) =>
     cell.bandIndex === null ? '' : text(model.bands[cell.bandIndex]!.label);
-  const columnsStyle = { gridTemplateColumns: `repeat(${count}, minmax(0, 1fr))` };
+  // 칸은 고르게 나누되, 글자가 긴 칸(「미참여」)은 글자만큼의 최소 폭을 갖고 나머지 칸이 그만큼 좁아진다.
+  // 막대·구간 띠·라벨이 이 열 틀 하나를 같이 써야 칸 폭이 달라져도 서로 어긋나지 않는다. 최소 폭은 칸
+  // 내용이 아니라 px 로 준다 — 내용 기준(min-content)이면 글자가 없는 띠·라벨 줄의 열이 따로 논다.
+  // 폭은 화면에 보이는 글자(토큰·인용을 푼 뒤)로 잰다.
+  const minWidths = resolveScaleBarCellMinWidths(model.cells.map((cell) => text(cell.text)));
+  const columnsStyle = {
+    gridTemplateColumns: minWidths.some((width) => width !== undefined)
+      ? minWidths
+          .map((width) => (width === undefined ? 'minmax(0, 1fr)' : `minmax(${width}px, 1fr)`))
+          .join(' ')
+      : `repeat(${count}, minmax(0, 1fr))`,
+  };
   const { left, middle, right } = model.anchors;
+  const anchorLayout = resolveScaleBarAnchorLayout(
+    model.anchors,
+    count,
+    minWidths.map((width) => width !== undefined),
+  );
   // 띠는 늘 그린다 — 헤더에 구간 줄이 없는 척도(칸마다 이름이 하나씩인 5점 등)는 칸마다 띠 하나다.
   // 구간 이름·선택값 표시는 여전히 헤더의 구간(model.bands)만 쓴다.
   const hasHeaderBands = model.bands.length > 0;
@@ -219,22 +237,76 @@ export const ChoiceGroupScaleBar = React.memo(function ChoiceGroupScaleBar({
           </div>
         }
         {hasAnchors && (
-          // 라벨은 글자 길이가 아니라 막대 칸에 붙인다 — 왼쪽은 첫 칸에서 오른쪽으로, 오른쪽은 마지막
-          // 칸에서 왼쪽으로 뻗고, 가운데는 그 칸 가운데에 둔다(양 끝 정렬이면 「보통」이 칸 사이로 밀린다).
-          <div aria-hidden className="relative mt-1 h-4 text-[11px] leading-4 text-gray-900">
-            {left !== undefined && (
-              <span className="absolute left-0 whitespace-nowrap">{text(left)}</span>
-            )}
-            {middle !== undefined && (
-              <span
-                className="absolute -translate-x-1/2 whitespace-nowrap"
-                style={{ left: `${((middle.index + 0.5) / count) * 100}%` }}
+          // 라벨은 글자 길이가 아니라 제 구간의 칸에 붙인다 — 라벨 줄은 막대와 같은 열 틀을 써, 칸 폭이 달라져도
+          // 자리가 맞는다. 라벨끼리 겹쳐 놓지 않고 자리를 나눠 쓰며, 길면 줄을 바꾼다(한 줄로 겹쳐 놓으면 긴 번역
+          // 라벨이 서로를 덮는다). 세 배치는 resolveScaleBarAnchorLayout 이 정한다.
+          <div
+            aria-hidden
+            data-testid="scale-bar-anchors"
+            className="mt-1 grid text-[11px] leading-4 text-gray-900"
+            style={columnsStyle}
+          >
+            {anchorLayout.kind === 'centered' && (
+              <div
+                data-testid="scale-bar-anchor-row"
+                className="grid gap-x-1.5"
+                style={{
+                  gridColumn: anchorLayout.gridColumn,
+                  gridTemplateColumns: anchorLayout.template,
+                }}
               >
-                {text(middle.label)}
-              </span>
+                <span className="min-w-0 text-left break-words">
+                  {left !== undefined ? text(left) : null}
+                </span>
+                <span className="min-w-0 text-center break-words">
+                  {middle !== undefined ? text(middle.label) : null}
+                </span>
+                <span className="min-w-0 text-right break-words">
+                  {right !== undefined ? text(right) : null}
+                </span>
+              </div>
             )}
-            {right !== undefined && (
-              <span className="absolute right-0 whitespace-nowrap">{text(right)}</span>
+            {anchorLayout.kind === 'spread' && (
+              <div
+                data-testid="scale-bar-anchor-row"
+                className="flex justify-between gap-x-2"
+                style={{ gridColumn: anchorLayout.gridColumn }}
+              >
+                {left !== undefined && (
+                  <span className="min-w-0 text-left break-words">{text(left)}</span>
+                )}
+                {right !== undefined && (
+                  <span className="ml-auto min-w-0 text-right break-words">{text(right)}</span>
+                )}
+              </div>
+            )}
+            {anchorLayout.kind === 'zones' && (
+              <>
+                {left !== undefined && (
+                  <span
+                    className="row-start-1 min-w-0 pr-1 text-left break-words"
+                    style={{ gridColumn: anchorLayout.left }}
+                  >
+                    {text(left)}
+                  </span>
+                )}
+                {middle !== undefined && (
+                  <span
+                    className="row-start-1 min-w-0 text-center break-words"
+                    style={{ gridColumn: anchorLayout.middle }}
+                  >
+                    {text(middle.label)}
+                  </span>
+                )}
+                {right !== undefined && (
+                  <span
+                    className="row-start-1 min-w-0 pl-1 text-right break-words"
+                    style={{ gridColumn: anchorLayout.right }}
+                  >
+                    {text(right)}
+                  </span>
+                )}
+              </>
             )}
           </div>
         )}

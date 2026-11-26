@@ -69,8 +69,6 @@ const MARKERS: Record<string, readonly string[]> = {
   'survey-response/lib/numeric-validation.ts': ['{현재값}', '{기준값}', '{묶음}'],
   // 서버 오류 문장과의 비교
   'survey-response/hooks/use-duplicate-guard.ts': ['테스트 링크가 더 이상 유효하지 않습니다'],
-  // 언어 바꾸기 버튼 — 이미 세 언어다
-  'survey-response/survey-response-flow.tsx': ['언어 변경 · 语言 · Language'],
 };
 
 /** 빌더·관리자 화면만 보는 문장 — 관리자 화면은 한국어로 둔다. */

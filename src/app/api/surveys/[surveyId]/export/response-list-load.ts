@@ -10,6 +10,8 @@ import {
   answerKeyOf,
   hydrateProfileColumns,
   visibleProfileColumns,
+  withoutAdminOnlyProfileColumns,
+  withoutClientHiddenProfileColumns,
 } from '@/lib/operations/profile-columns-format';
 import { buildStepLocationMap } from '@/lib/operations/profiles-format';
 import {
@@ -53,11 +55,14 @@ export type ResponseListLoadResult =
  * `maskPii`(게스트가 받는 파일)면 개인정보로 암호화해 저장하는 응답값 열과 명단의 개인정보 열을 가린다
  * (`lib/crypto/export-pii-mask` — 성명은 마지막 글자만). 화면은 그 값을 그대로 보이지만 파일은 밖으로
  * 나가는 사본이라 한 단계 더 가린다.
+ *
+ * `forClient`(고객 계정이 받는 파일)면 시작일시·소요시간 열을 뺀다 — 화면이 그 계정에 그 두 열을 보이지
+ * 않으므로 파일도 같다. 지금 이 주소는 내부 계정만 지나므로(export.download) 라우트가 언제나 false 로 부른다.
  */
 export async function loadResponseListTable(
   surveyId: string,
   scope: OperationsDataScope,
-  options: { maskPii: boolean },
+  options: { maskPii: boolean; forClient: boolean },
 ): Promise<ResponseListLoadResult> {
   const [contactScheme, profileScheme, entryParamNames, answerSources, answerChoices] =
     await Promise.all([
@@ -67,7 +72,7 @@ export async function loadResponseListTable(
       getProfileAnswerSources(surveyId),
       getProfileAnswerChoices(surveyId),
     ]);
-  const columns = visibleProfileColumns(
+  const configuredColumns = visibleProfileColumns(
     hydrateProfileColumns(
       contactScheme,
       profileScheme,
@@ -75,6 +80,14 @@ export async function loadResponseListTable(
       new Set(answerSources.map((s) => s.key)),
     ),
   );
+  // 게스트가 받는 파일에는 브라우저 ID·기기 사양 열을 내지 않는다(화면과 같은 규칙) — 값도 읽지 않는다.
+  const guestColumns = options.maskPii
+    ? withoutAdminOnlyProfileColumns(configuredColumns)
+    : configuredColumns;
+  // 고객 계정이 받는 파일에는 시작일시·소요시간 열을 내지 않는다(화면과 같은 규칙) — 종료일시는 남는다.
+  const columns = options.forClient
+    ? withoutClientHiddenProfileColumns(guestColumns)
+    : guestColumns;
 
   const [{ rows, total }, questionRows, groups, { hasContacts }] = await Promise.all([
     listResponsesForProfiles({
@@ -90,6 +103,7 @@ export async function loadResponseListTable(
       answerChoices,
       // 이 주소를 지나는 사람은 내부 계정뿐이다(export.download 관문) — 외주 담당 범위로 깎지 않는다.
       share: FIELDWORK_SHARE_ALL,
+      includeBrowserSignals: !options.maskPii,
     }),
     db
       .select({

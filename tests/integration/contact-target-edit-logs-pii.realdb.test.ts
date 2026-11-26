@@ -15,6 +15,7 @@ import { contactPii, contactTargetEditLogs, contactTargets, surveys } from '@/db
 import { upsertPiiValue } from '@/lib/crypto/contact-pii-repo';
 import { updateContactTarget } from '@/server/contacts/services/contact-targets';
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 // 요청 밖이라 쿠키가 없다 — 콘솔은 실데이터 파티션을 본다(server/data-scope).
 vi.mock('next/headers', () => ({
@@ -107,7 +108,7 @@ run('대상 정보 수정 현황 — 개인정보 열 (real DB)', () => {
         ],
       },
       false,
-      editor,
+      editor, FIELDWORK_SHARE_ALL,
     );
 
     const logs = await logsOf(targetId);
@@ -155,7 +156,7 @@ run('대상 정보 수정 현황 — 개인정보 열 (real DB)', () => {
         ],
       },
       false,
-      editor,
+      editor, FIELDWORK_SHARE_ALL,
     );
 
     expect(await logsOf(targetId)).toEqual([]);
@@ -172,7 +173,7 @@ run('대상 정보 수정 현황 — 개인정보 열 (real DB)', () => {
         piiUpdates: [{ columnKey: '대표자휴대폰', fieldType: 'phone', plain: '010-5555-6666' }],
       },
       false,
-      editor,
+      editor, FIELDWORK_SHARE_ALL,
     );
 
     const logs = await logsOf(targetId);
@@ -200,7 +201,7 @@ run('대상 정보 수정 현황 — 개인정보 열 (real DB)', () => {
         piiUpdates: [{ columnKey: '대표자휴대폰', fieldType: 'phone', plain: '010-1111-2222' }],
       },
       false,
-      editor,
+      editor, FIELDWORK_SHARE_ALL,
     );
 
     const logs = await logsOf(targetId);
@@ -217,7 +218,7 @@ run('대상 정보 수정 현황 — 개인정보 열 (real DB)', () => {
     await updateContactTarget(
       { id: targetId, surveyId, attrs: { 지역: '부산' } },
       false,
-      editor,
+      editor, FIELDWORK_SHARE_ALL,
     );
 
     const logs = await logsOf(targetId);
@@ -241,7 +242,7 @@ run('대상 정보 수정 현황 — 개인정보 열 (real DB)', () => {
         piiUpdates: [{ columnKey: '옛휴대폰', fieldType: 'phone', plain: '010-7777-8888' }],
       },
       false,
-      editor,
+      editor, FIELDWORK_SHARE_ALL,
     );
     // 나중에 열 이름을 바꿔도 기록은 그때 이름 그대로다.
     await db

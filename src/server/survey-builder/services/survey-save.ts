@@ -209,6 +209,9 @@ function toQuestionRow(question: SurveyType['questions'][number], surveyId: stri
     titleHtml: question.titleHtml ?? null,
     collapseButtonLabel: question.collapseButtonLabel ?? null,
     collapseAttachToPrevious: question.collapseAttachToPrevious ?? false,
+    distinctGroup: question.distinctGroup ?? null,
+    // 빌더 저장은 문항을 통째로 다시 쓴다 — 키가 없으면 꺼진 것이다
+    scaleSlider: question.scaleSlider ?? null,
     sumConstraints: question.sumConstraints as NewQuestion['sumConstraints'],
     dynamicRowConfigs:
       question.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
@@ -223,6 +226,8 @@ function toQuestionRow(question: SurveyType['questions'][number], surveyId: stri
     mobileDrilldownOmitLeadingColumns: question.mobileDrilldownOmitLeadingColumns,
     mobileDrilldownRepeatHeaderStartRow: question.mobileDrilldownRepeatHeaderStartRow,
     mobileDrilldownRepeatHeaderEndRow: question.mobileDrilldownRepeatHeaderEndRow,
+    mobileDrilldownReverseColumns: question.mobileDrilldownReverseColumns ?? false,
+    mobileDrilldownColumnsPerView: question.mobileDrilldownColumnsPerView ?? null,
     mobileItemCardBlockColumns: question.mobileItemCardBlockColumns ?? null,
     hideTitle: question.hideTitle,
     displayCondition: question.displayCondition as NewQuestion['displayCondition'],
@@ -286,6 +291,8 @@ const QUESTION_UPSERT_SET = {
   titleHtml: sql`excluded.title_html`,
   collapseButtonLabel: sql`excluded.collapse_button_label`,
   collapseAttachToPrevious: sql`excluded.collapse_attach_previous`,
+  distinctGroup: sql`excluded.distinct_group`,
+  scaleSlider: sql`excluded.scale_slider`,
   sumConstraints: sql`excluded.sum_constraints`,
   dynamicRowConfigs: sql`excluded.dynamic_row_config`,
   rowRepeatConfig: sql`excluded.row_repeat_config`,
@@ -301,6 +308,8 @@ const QUESTION_UPSERT_SET = {
     sql`excluded.mobile_drilldown_repeat_header_start_row`,
   mobileDrilldownRepeatHeaderEndRow:
     sql`excluded.mobile_drilldown_repeat_header_end_row`,
+  mobileDrilldownReverseColumns: sql`excluded.mobile_drilldown_reverse_columns`,
+  mobileDrilldownColumnsPerView: sql`excluded.mobile_drilldown_columns_per_view`,
   mobileItemCardBlockColumns: sql`excluded.mobile_item_card_block_columns`,
   hideTitle: sql`excluded.hide_title`,
   displayCondition: sql`excluded.display_condition`,

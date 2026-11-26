@@ -26,8 +26,8 @@ import { getContactColumnScheme, listContactsForSurvey } from './contacts';
  * 이 화면이 뒤늦게 추측하면 컬럼마다 답이 갈린다.
  */
 
-/** 게스트에게 보이지 않는 컬럼 — 메일 축은 스펙 §5 에서 항상 차단이다. */
-const HIDDEN_SOURCES = new Set(['system.email_count']);
+/** 게스트에게 보이지 않는 컬럼 — 메일 축(수신 상황·링크 클릭)은 스펙 §5 에서 항상 차단이다. */
+const HIDDEN_SOURCES = new Set(['system.email_count', 'system.link_click']);
 
 export async function listGuestContacts(
   surveyId: string,

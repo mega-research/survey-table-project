@@ -18,9 +18,14 @@ import {
   getCellTextStyle,
   toCellStyleFieldProps,
 } from '@/utils/cell-style';
-import { type HeaderBulkStyle, withHeaderStyle } from '@/features/survey-builder/table-editor/utils/header-style';
+import {
+  type HeaderCellStyle,
+  withHeaderRightBorder,
+  withHeaderStyle,
+} from '@/features/survey-builder/table-editor/utils/header-style';
 
 import { CellStyleFields } from './cell-style-fields';
+import { HeaderRightBorderField } from './header-right-border-field';
 
 interface HeaderGridEditorProps {
   headerGrid: HeaderCell[][];
@@ -282,6 +287,10 @@ export function HeaderGridEditor({
     const firstRef = occupiedMap[minRow]?.[minCol];
     const firstCell = firstRef ? headerGrid[firstRef.rowIdx]?.[firstRef.cellIdx] : undefined;
     const mergedLabel = firstCell?.label ?? '';
+    // 병합한 칸의 오른쪽 선은 영역의 오른쪽 끝 칸이 그리던 선이다 — 그 칸의 숨김 설정을 따른다
+    const rightRef = occupiedMap[minRow]?.[maxCol];
+    const rightCell = rightRef ? headerGrid[rightRef.rowIdx]?.[rightRef.cellIdx] : undefined;
+    const mergedHidesRightBorder = rightCell?.hideRightBorder === true;
 
     // 새 그리드 구성
     const newGrid: HeaderCell[][] = [];
@@ -302,13 +311,18 @@ export function HeaderGridEditor({
         if (mergedRefs.has(refKey)) {
           // 이 셀은 병합 영역에 속함
           if (!mergedCellInserted && rowIdx === minRow && gridCol === minCol) {
-            newRow.push({
-              ...firstCell,
-              id: generateId(),
-              label: mergedLabel,
-              colspan: mergeColspan,
-              rowspan: mergeRowspan,
-            });
+            newRow.push(
+              withHeaderRightBorder(
+                {
+                  ...firstCell,
+                  id: generateId(),
+                  label: mergedLabel,
+                  colspan: mergeColspan,
+                  rowspan: mergeRowspan,
+                },
+                mergedHidesRightBorder,
+              ),
+            );
             mergedCellInserted = true;
           }
           // 나머지는 건너뜀
@@ -362,20 +376,32 @@ export function HeaderGridEditor({
       const origColspan = cell.colspan;
       const origRowspan = cell.rowspan;
 
+      // 병합 칸의 오른쪽 선 숨김은 나뉜 영역의 오른쪽 끝 열만 물려받는다 — 안쪽 열까지 물려받으면
+      // 풀자마자 그 사이 선이 전부 사라진다
+      const hidesRightBorder = cell.hideRightBorder === true;
+      const inheritRightBorder = (column: number) =>
+        hidesRightBorder && column === origColspan - 1;
+
       // 1. 원본 셀을 1x1로 변경
       cell.colspan = 1;
       cell.rowspan = 1;
+      if (!inheritRightBorder(0)) delete cell.hideRightBorder;
 
       // 2. 같은 행에 빈 셀 추가
       const sameRowCells: HeaderCell[] = [];
       for (let c = 1; c < origColspan; c++) {
-        sameRowCells.push({
-          ...cell,
-          id: generateId(),
-          label: '',
-          colspan: 1,
-          rowspan: 1,
-        });
+        sameRowCells.push(
+          withHeaderRightBorder(
+            {
+              ...cell,
+              id: generateId(),
+              label: '',
+              colspan: 1,
+              rowspan: 1,
+            },
+            inheritRightBorder(c),
+          ),
+        );
       }
       const currentRow = currentGrid[rowIdx];
       if (currentRow) currentRow.splice(cellIdx + 1, 0, ...sameRowCells);
@@ -402,13 +428,18 @@ export function HeaderGridEditor({
 
         const fillCells: HeaderCell[] = [];
         for (let c = 0; c < origColspan; c++) {
-          fillCells.push({
-            ...cell,
-            id: generateId(),
-            label: '',
-            colspan: 1,
-            rowspan: 1,
-          });
+          fillCells.push(
+            withHeaderRightBorder(
+              {
+                ...cell,
+                id: generateId(),
+                label: '',
+                colspan: 1,
+                rowspan: 1,
+              },
+              inheritRightBorder(c),
+            ),
+          );
         }
         targetRow.splice(insertPos, 0, ...fillCells);
       }
@@ -432,9 +463,20 @@ export function HeaderGridEditor({
 
   // 셀별 스타일 변경. 빈 색은 스타일 제거를 뜻하므로 withHeaderStyle 규칙에 맡긴다.
   const updateCellStyle = useCallback(
-    (rowIdx: number, cellIdx: number, style: HeaderBulkStyle) => {
+    (rowIdx: number, cellIdx: number, style: HeaderCellStyle) => {
       const newGrid = headerGrid.map((row, r) => row.map((cell, c) => (
         r === rowIdx && c === cellIdx ? withHeaderStyle(cell, style) : { ...cell }
+      )));
+      onChange(newGrid);
+    },
+    [headerGrid, onChange],
+  );
+
+  // 오른쪽 세로선 숨김 — 굵기·색과 따로 켜고 끈다(색을 고쳐도 이 값은 그대로다)
+  const updateCellRightBorder = useCallback(
+    (rowIdx: number, cellIdx: number, hidden: boolean) => {
+      const newGrid = headerGrid.map((row, r) => row.map((cell, c) => (
+        r === rowIdx && c === cellIdx ? withHeaderRightBorder(cell, hidden) : { ...cell }
       )));
       onChange(newGrid);
     },
@@ -619,7 +661,8 @@ export function HeaderGridEditor({
                 ) : (
                   <span
                     className={cn(
-                      'whitespace-pre-line',
+                      // 응답 화면·미리보기와 같이 줄바꿈과 연속 공백을 적은 그대로 그린다
+                      'whitespace-pre-wrap',
                       cell.label ? 'text-gray-800' : 'text-gray-400 italic',
                       getCellTextClassName(cell),
                     )}
@@ -641,6 +684,10 @@ export function HeaderGridEditor({
                 )}
                 {cell.hostsColumnReveal && columnRevealAvailable && (
                   <span className="mt-0.5 block text-[11px] text-blue-600">열 추가 버튼</span>
+                )}
+                {/* 편집 격자는 선을 그대로 그리므로 켜진 것을 글자로 알린다 */}
+                {cell.hideRightBorder && (
+                  <span className="mt-0.5 block text-[11px] text-blue-600">오른쪽 선 숨김</span>
                 )}
 
                 <Popover>
@@ -665,6 +712,12 @@ export function HeaderGridEditor({
                         updateCellStyle(rowIdx, cellIdx, style)
                       ))}
                     />
+                    <div className="mt-4">
+                      <HeaderRightBorderField
+                        checked={cell.hideRightBorder === true}
+                        onCheckedChange={(hidden) => updateCellRightBorder(rowIdx, cellIdx, hidden)}
+                      />
+                    </div>
                     {rows && (
                       <HeaderCellLinkFields
                         cell={cell}
@@ -684,7 +737,7 @@ export function HeaderGridEditor({
 
       <p className="text-xs text-gray-500">
         셀을 드래그하여 선택 후 &quot;병합&quot; 버튼을 클릭하세요. 더블클릭으로 라벨을, 셀 우측 상단
-        팔레트 버튼으로 색상을 편집할 수 있습니다.
+        팔레트 버튼으로 색상과 오른쪽 세로선 숨김을 편집할 수 있습니다.
       </p>
     </div>
   );

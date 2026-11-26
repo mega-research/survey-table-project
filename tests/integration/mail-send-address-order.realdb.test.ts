@@ -102,6 +102,7 @@ run('메일 발송 주소 순서 — 컬럼 설정이 실제 발송 주소를 �
       { surveyId, mailTemplateId: templateId, title: '기본', contactTargetIds: [id] },
       { accountUserId: randomUUID(), fieldworkLinkId: null },
       false,
+      { share: FIELDWORK_SHARE_ALL },
     );
 
     expect((await sentAddresses(result.campaignId)).get(id)).toBe('ceo@example.com');
@@ -128,6 +129,7 @@ run('메일 발송 주소 순서 — 컬럼 설정이 실제 발송 주소를 �
       },
       { accountUserId: randomUUID(), fieldworkLinkId: null },
       false,
+      { share: FIELDWORK_SHARE_ALL },
     );
 
     const sent = await sentAddresses(result.campaignId);
@@ -171,6 +173,7 @@ run('메일 발송 주소 순서 — 컬럼 설정이 실제 발송 주소를 �
       },
       { accountUserId: randomUUID(), fieldworkLinkId: null },
       false,
+      { share: FIELDWORK_SHARE_ALL },
     );
     const sent = await sentAddresses(result.campaignId);
     expect(sent.get(hasStaff)).toBe('staff-d@example.com');

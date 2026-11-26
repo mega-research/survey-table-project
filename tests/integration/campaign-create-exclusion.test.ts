@@ -287,6 +287,7 @@ vi.mock('@/server/read-models/result-code-statuses', async () => {
 
 import { blindIndex } from '@/lib/crypto/blind';
 import { createCampaign } from '@/server/mail/services/campaigns';
+import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 
 const SURVEY_ID = '00000000-0000-4000-8000-000000000040';
 const USER_ID = '00000000-0000-4000-8000-0000000000ff';
@@ -328,6 +329,7 @@ describe('createCampaign — 부정 결과코드 컨택 제외 (preflight 동기
       },
       { accountUserId: USER_ID, fieldworkLinkId: null },
       false,
+      { share: FIELDWORK_SHARE_ALL },
     );
 
     // valid 1명만 큐잉, negative 1명은 skip
@@ -353,6 +355,7 @@ describe('createCampaign — 부정 결과코드 컨택 제외 (preflight 동기
       },
       { accountUserId: USER_ID, fieldworkLinkId: null },
       false,
+      { share: FIELDWORK_SHARE_ALL },
     );
 
     // recipient 행은 1개만, skip 은 0 (phantom 없음)
@@ -377,6 +380,7 @@ describe('createCampaign — 부정 결과코드 컨택 제외 (preflight 동기
       },
       { accountUserId: USER_ID, fieldworkLinkId: null },
       false,
+      { share: FIELDWORK_SHARE_ALL },
     );
 
     expect(state.insertedRecipientContactIds).toContain(idValid);
@@ -399,6 +403,7 @@ describe('createCampaign — 부정 결과코드 컨택 제외 (preflight 동기
       },
       { accountUserId: USER_ID, fieldworkLinkId: null },
       false,
+      { share: FIELDWORK_SHARE_ALL },
     );
 
     expect(result.queuedCount).toBe(1);
@@ -421,6 +426,7 @@ describe('createCampaign — 부정 결과코드 컨택 제외 (preflight 동기
       },
       { accountUserId: USER_ID, fieldworkLinkId: null },
       false,
+      { share: FIELDWORK_SHARE_ALL },
     );
 
     expect(state.insertedRecipients).toEqual([
@@ -442,6 +448,7 @@ describe('createCampaign — 부정 결과코드 컨택 제외 (preflight 동기
       },
       { accountUserId: USER_ID, fieldworkLinkId: null },
       false,
+      { share: FIELDWORK_SHARE_ALL },
     );
 
     expect(state.insertedRecipients).toEqual([
@@ -462,6 +469,7 @@ describe('createCampaign — 부정 결과코드 컨택 제외 (preflight 동기
       },
       { accountUserId: USER_ID, fieldworkLinkId: null },
       false,
+      { share: FIELDWORK_SHARE_ALL },
     );
 
     expect(state.insertedRecipients).toEqual([
@@ -485,7 +493,7 @@ describe('createCampaign — 부정 결과코드 컨택 제외 (preflight 동기
       },
       { accountUserId: USER_ID, fieldworkLinkId: null },
       false,
-      { kind: 'single' },
+      { share: FIELDWORK_SHARE_ALL, kind: 'single' },
     );
 
     expect(state.insertedRecipientContactIds).toContain(idBounced);

@@ -55,7 +55,11 @@ export async function listQuotaAttrValues(
   const scope = await loadOperationsDataScope(surveyId);
   const rows = await buildAttrValuesQuery(db, surveyId, attrKey, scope);
 
-  const values = rows.map((r) => r.value);
+  // SQL 의 ORDER BY 는 글자순(1, 10, 2) — 카테고리가 그 순서로 채워지지 않게 숫자 인식으로 다시 세운다
+  // (조사 대상 목록의 깔때기 값 목록과 같은 순서).
+  const values = rows
+    .map((r) => r.value)
+    .sort((a, b) => a.localeCompare(b, 'ko', { numeric: true }));
   return {
     values: values.slice(0, MAX_QUOTA_ATTR_VALUES),
     truncated: values.length > MAX_QUOTA_ATTR_VALUES,

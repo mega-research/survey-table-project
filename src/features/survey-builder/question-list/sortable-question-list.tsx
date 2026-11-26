@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 
 import {
   DndContext,
@@ -166,6 +166,9 @@ const SortableQuestion = React.memo(function SortableQuestion({
   const resolvedTitleHtml = resolveQuestionTitleHtml(question, attrs, quotes);
   const displayTitleHtml =
     resolvedTitleHtml !== undefined ? sanitizeTitleHtml(resolvedTitleHtml) : null;
+  // 카드 제목 요소의 id — 미리보기의 척도 슬라이더(라디오 문항)가 낭독 이름으로 가리킨다. 문항 id 로 짓지
+  // 않는다 — 끌어 옮기는 동안 같은 문항의 카드가 한 장 더 그려져 id 가 겹친다.
+  const titleElementId = useId();
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -289,12 +292,15 @@ const SortableQuestion = React.memo(function SortableQuestion({
         <div className="mb-4">
           {displayTitleHtml ? (
             <h4
+              id={titleElementId}
               className="mb-2 text-base font-medium text-gray-900 [&_p]:m-0 [&_p]:inline"
               data-testid="builder-question-title-rich"
               dangerouslySetInnerHTML={{ __html: displayTitleHtml }}
             />
           ) : (
-            <h4 className="mb-2 text-base font-medium text-gray-900">{displayTitle}</h4>
+            <h4 id={titleElementId} className="mb-2 text-base font-medium text-gray-900">
+              {displayTitle}
+            </h4>
           )}
           {!isEmptyHtml(question.description) && (
             <div
@@ -327,7 +333,11 @@ const SortableQuestion = React.memo(function SortableQuestion({
               <QuestionTestBody question={question} lookups={lookups} />
             </LazyMount>
           ) : (
-            <QuestionTestBody question={question} lookups={lookups} />
+            <QuestionTestBody
+              question={question}
+              lookups={lookups}
+              titleElementId={titleElementId}
+            />
           )}
         </div>
       </div>

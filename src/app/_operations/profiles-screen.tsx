@@ -18,6 +18,7 @@ import {
   entryKeyOf,
   hydrateProfileColumns,
   visibleProfileColumns,
+  withoutAdminOnlyProfileColumns,
 } from '@/lib/operations/profile-columns-format';
 import {
   PROFILES_PAGE_SIZE,
@@ -26,7 +27,7 @@ import {
   normalizeListArgs,
 } from '@/lib/operations/profiles-format';
 import type { OperationsDataScope } from '@/server/data-scope';
-import type { FieldworkShare } from '@/server/fieldwork-share-scope';
+import { type FieldworkShare, withoutShareColumn } from '@/server/fieldwork-share-scope';
 import { getSurveyContactStats } from '@/server/operations/services/contact-stats';
 import { loadProfileAnswerValues } from '@/server/operations/services/profile-answer-values';
 import { listResponsesForProfiles } from '@/server/operations/services/profiles';
@@ -101,6 +102,10 @@ export async function ProfilesScreen({
 }: Props) {
   const canManageResponses = capabilities.has('responses.manage');
   const canConfigureColumns = capabilities.has('survey.edit');
+  // 브라우저 ID·기기 사양은 응답자 브라우저에 남는 식별값이라 내부 계정만 본다 — 외주 링크에는 열도 값도 싣지 않는다.
+  // 응답을 지우고 되살리는 칸(`responses.manage`)은 내부 계정에만 있어 그것으로 가른다(이 화면은 주체를 받지 않는다) —
+  // 그 칸이 없는 내부 열람 계정에도 두 열은 보이지 않는다(닫는 쪽).
+  const showBrowserSignals = canManageResponses;
 
   // col/q 는 다중 조건 필터로 전환돼 배열일 수 있다 — normalize 는 스칼라 파라미터만 받는다.
   // 휴지통은 복원(responses.manage)을 위한 보기다 — 그 칸이 없으면 주소로 넣어도 전체로 접는다.
@@ -112,7 +117,7 @@ export async function ProfilesScreen({
     ...(sp.sort !== undefined ? { sort: sp.sort } : {}),
     ...(sp.dir !== undefined ? { dir: sp.dir } : {}),
   });
-  const [contactScheme, profileScheme, entryParamNames, answerSources, answerChoices] =
+  const [loadedContactScheme, profileScheme, entryParamNames, answerSources, answerChoices] =
     await Promise.all([
       getContactColumnScheme(surveyId, scope),
       getProfileColumnScheme(surveyId),
@@ -120,8 +125,11 @@ export async function ProfilesScreen({
       getProfileAnswerSources(surveyId),
       getProfileAnswerChoices(surveyId),
     ]);
+  // 범위를 가르는 명단 열은 범위에 묶인 주체에게 없는 열이다 — 표시 열·검색 후보·정렬에서 함께 빠진다
+  // (외주 링크의 범위는 명단 열이 아니라 따로 둔 표라 지금은 빠지는 열이 없다).
+  const contactScheme = withoutShareColumn(loadedContactScheme, share);
   // 표시 컬럼 스킴 — NULL(미설정)이면 hydrate 가 기본 스킴(기존 9컬럼)을 만든다.
-  const displayColumns = visibleProfileColumns(
+  const configuredColumns = visibleProfileColumns(
     hydrateProfileColumns(
       contactScheme,
       profileScheme,
@@ -129,6 +137,10 @@ export async function ProfilesScreen({
       new Set(answerSources.map((s) => s.key)),
     ),
   );
+  // 브라우저 ID·기기 사양은 내부 계정만 본다 — 연구원이 켜 둔 열이라도 외주 링크 화면에서는 뺀다.
+  const displayColumns = showBrowserSignals
+    ? configuredColumns
+    : withoutAdminOnlyProfileColumns(configuredColumns);
   const filterableAnswerKeys = new Set(
     answerSources.filter((s) => !s.encrypted).map((s) => s.key),
   );
@@ -190,6 +202,7 @@ export async function ProfilesScreen({
       view: args.view,
       clauses,
       answerChoices,
+      includeBrowserSignals: showBrowserSignals,
     }),
     db
       .select({

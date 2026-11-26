@@ -77,11 +77,10 @@ describe('listContactAttrValues', () => {
     selectResults.push([{ scheme: visibleScheme }]);
     selectResults.push([{ v: '상장' }, { v: '코스닥' }]);
 
-    const result = await listContactAttrValues({
+    const result = await listContactAttrValues({ share: FIELDWORK_SHARE_ALL,
       surveyId: 'sv-1',
       attrsKey: '기업유형',
       scope: 'real',
-      share: FIELDWORK_SHARE_ALL,
     });
 
     expect(result).toEqual({ values: ['상장', '코스닥'], truncated: false, hasEmpty: false });
@@ -92,11 +91,10 @@ describe('listContactAttrValues', () => {
     selectResults.push([{ v: '상장' }, { v: '__none__' }]);
     selectResults.push([]);
 
-    const result = await listContactAttrValues({
+    const result = await listContactAttrValues({ share: FIELDWORK_SHARE_ALL,
       surveyId: 'sv-1',
       attrsKey: '기업유형',
       scope: 'real',
-      share: FIELDWORK_SHARE_ALL,
     });
 
     // 파서는 이 문자열을 무조건 빈 값 플래그로 승격시키므로, 선택지로 내밀면
@@ -109,11 +107,10 @@ describe('listContactAttrValues', () => {
     selectResults.push([{ v: '상장' }]);
     selectResults.push([{ id: 'ct-1' }]); // 빈 값 존재 확인 쿼리
 
-    const result = await listContactAttrValues({
+    const result = await listContactAttrValues({ share: FIELDWORK_SHARE_ALL,
       surveyId: 'sv-1',
       attrsKey: '기업유형',
       scope: 'real',
-      share: FIELDWORK_SHARE_ALL,
     });
 
     // 빈 값은 values 에 섞이지 않고 플래그로만 알린다.
@@ -126,11 +123,10 @@ describe('listContactAttrValues', () => {
       Array.from({ length: ATTR_VALUES_CHECKBOX_LIMIT + 1 }, (_, i) => ({ v: `값${i}` })),
     );
 
-    const result = await listContactAttrValues({
+    const result = await listContactAttrValues({ share: FIELDWORK_SHARE_ALL,
       surveyId: 'sv-1',
       attrsKey: '기업유형',
       scope: 'real',
-      share: FIELDWORK_SHARE_ALL,
     });
 
     expect(result.truncated).toBe(true);
@@ -143,11 +139,10 @@ describe('listContactAttrValues', () => {
     selectResults.push([{ scheme: visibleScheme }]);
     selectResults.push([{ v: '값1' }, { v: '값10' }, { v: '값2' }]);
 
-    const result = await listContactAttrValues({
+    const result = await listContactAttrValues({ share: FIELDWORK_SHARE_ALL,
       surveyId: 'sv-1',
       attrsKey: '기업유형',
       scope: 'real',
-      share: FIELDWORK_SHARE_ALL,
     });
 
     expect(result.values).toEqual(['값1', '값2', '값10']);
@@ -185,13 +180,31 @@ describe('listContactAttrValues', () => {
     ]);
     selectResults.push([{ v: 'A' }, { v: 'B' }]);
 
-    const result = await listContactAttrValues({
+    const result = await listContactAttrValues({ share: FIELDWORK_SHARE_ALL,
       surveyId: 'sv-1',
       attrsKey: '숨김컬럼',
       scope: 'real',
-      share: FIELDWORK_SHARE_ALL,
     });
     expect(result.values).toEqual(['A', 'B']);
+  });
+
+  it('조사 대상에선 hidden 이어도 메일 표시를 켠 열이면 허용 — 단체 메일 미리보기의 깔때기', async () => {
+    selectResults.push([
+      {
+        scheme: schemeWith([
+          { key: 'resid', label: '번호', source: 'system.resid', order: 1 },
+          { key: 'c2', label: '전시회ID', source: 'attrs.전시회ID', order: 2, hidden: true, showInMail: true },
+        ]),
+      },
+    ]);
+    selectResults.push([{ v: '1' }, { v: '12' }]);
+
+    const result = await listContactAttrValues({ share: FIELDWORK_SHARE_ALL,
+      surveyId: 'sv-1',
+      attrsKey: '전시회ID',
+      scope: 'real',
+    });
+    expect(result.values).toEqual(['1', '12']);
   });
 
   it('스킴 자체가 없으면 ForbiddenAttrColumnError', async () => {

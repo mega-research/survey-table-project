@@ -14,9 +14,14 @@ import { resolveMailEmailOrder } from '@/lib/contacts/mail-email-order';
 import { inngest } from '@/lib/inngest/client';
 import { resolveSendAddress } from '@/lib/mail/send-address';
 import { withTestPrefix } from './test-campaign';
-import { FIELDWORK_SHARE_ALL } from '@/server/fieldwork-share-scope';
 import { loadOperationsDataScope, lockWriteScope } from '@/server/data-scope';
 import type { ActorAttribution } from '@/server/survey-access';
+import {
+  FIELDWORK_SHARE_ALL,
+  type FieldworkShare,
+  isShareRestricted,
+  shareTargetCondition,
+} from '@/server/fieldwork-share-scope';
 import {
   NO_BOUNCED_ADDRESSES,
   decryptSendAddressCells,
@@ -58,13 +63,19 @@ import type {
  * creator 는 인증된 주체에서 procedure 가 파생해 주입한다 — 계정이면 created_by, 외주 실사
  * 링크(단건 발송, ADR-0027)면 fieldwork_link_id 가 채워진다(0133 배타 CHECK). isExternal 도
  * procedure 가 주체에서 파생해 주입 — 서비스는 auth 를 재조회하지 않는다.
+ *
+ * `opts.share` 는 발송자의 담당 범위다 — **필수**. 단체 발송은 계정만 지나는 표면이라 `FIELDWORK_SHARE_ALL`
+ * 이고, 단건 발송(`sendSingleCampaign`)이 발송자의 범위를 넘긴다. 범위는 **설문 행 잠금 아래에서** 다시 본다 —
+ * 단건 발송의 사전 확인과 이 트랜잭션 사이에 대상이 다른 범위로 옮겨지면 여기서 걸린다. 범위 밖 대상은 주소를
+ * 복호화하기 전에 NOT_FOUND 로 끝난다.
  */
 export async function createCampaign(
   input: CreateCampaignInput,
   creator: ActorAttribution,
   isExternal: boolean,
-  opts: { kind?: MailCampaignKind } = {},
+  opts: { kind?: MailCampaignKind; share: FieldworkShare },
 ): Promise<CreateCampaignResult> {
+  const { share } = opts;
   const kind: MailCampaignKind = opts.kind ?? 'bulk';
   const filterSnapshot: CampaignFilterSnapshot = (input.filterSnapshot ??
     {}) as CampaignFilterSnapshot;
@@ -98,9 +109,14 @@ export async function createCampaign(
           eq(contactTargets.surveyId, input.surveyId),
           eq(contactTargets.isTest, isTest),
           inArray(contactTargets.id, uniqueTargetIds),
+          shareTargetCondition(share),
         ),
       );
     if (selectedTargets.length !== uniqueTargetIds.length) {
+      // 범위에 묶인 발송자 — 범위 밖(또는 그 사이 범위가 옮겨진) 대상은 없는 대상과 같다.
+      if (isShareRestricted(share)) {
+        throw new ORPCError('NOT_FOUND', { message: '조사 대상을 찾을 수 없습니다.' });
+      }
       throw new ORPCError('CONFLICT', {
         message: '운영 모드가 변경되었습니다. 화면을 새로고침한 뒤 다시 시도하세요.',
       });
@@ -196,6 +212,7 @@ export async function createCampaign(
           eq(contactTargets.surveyId, input.surveyId),
           eq(contactTargets.isTest, isTest),
           inArray(contactTargets.id, uniqueTargetIds),
+          shareTargetCondition(share),
           isNull(contactTargets.unsubscribedAt),
           // 최근 결과코드 수신거부 — status(negative) 무관하게 발송 제외 (수신거부 3축).
           sql`NOT (${latestResultUnsubscribedSql})`,

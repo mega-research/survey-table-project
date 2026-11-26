@@ -466,6 +466,7 @@ describe('GET /export — 응답 내역 목록', () => {
     expect(res.status).toBe(200);
     expect(loadResponseListTableMock).toHaveBeenCalledWith(LIST_SURVEY_ID, 'real', {
       maskPii: false,
+      forClient: false,
     });
     expect(res.headers.get('Cache-Control')).toBe('no-store');
     expect(res.headers.get('Content-Disposition')).toContain(encodeURIComponent('응답내역'));

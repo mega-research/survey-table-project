@@ -169,6 +169,36 @@ describe('HeaderFilterPopover', () => {
     expect(p.getAll('hv')).toEqual(['제조']);
   });
 
+  // 단체 메일은 조건을 캠페인 스냅샷으로 다시 보낸다(필터 결과 전체 선택·발송). 스냅샷이 받는 길이를
+  // 넘는 조건을 화면이 적용해 버리면 미리보기에는 걸리는데 전체 선택과 발송이 거부된다.
+  it('maxValueLength — 고른 값을 이은 길이가 넘으면 적용하지 않고 줄이라고 알린다', async () => {
+    const user = userEvent.setup();
+    renderPopover({
+      source: 'system.email_count',
+      label: '수신 상황',
+      fixedOptions: [
+        { value: '가'.repeat(6), label: '첫째' },
+        { value: '나'.repeat(6), label: '둘째' },
+      ],
+      maxValueLength: 12,
+    });
+
+    await user.click(screen.getByRole('button', { name: '수신 상황 필터' }));
+    await user.click(screen.getByRole('checkbox', { name: '첫째' }));
+    await user.click(screen.getByRole('checkbox', { name: '둘째' }));
+    await user.click(screen.getByRole('button', { name: '적용' }));
+
+    // 6 + 구분자 1 + 6 = 13자 > 12
+    expect(pushMock).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent('고른 값이 너무 많습니다');
+
+    // 하나를 풀면 안내가 사라지고 적용된다.
+    await user.click(screen.getByRole('checkbox', { name: '둘째' }));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '적용' }));
+    expect(pushedParams().getAll('hv')).toEqual(['가'.repeat(6)]);
+  });
+
   it('pii 컬럼 — distinct 조회 없이 전문 일치 입력, 적용 시 hm=exact', async () => {
     const user = userEvent.setup();
     renderPopover({ source: 'pii.mobile', label: '전화번호', piiType: 'mobile' });

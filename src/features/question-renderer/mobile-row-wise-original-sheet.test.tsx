@@ -31,6 +31,8 @@ function question(rowId: string, title: string): MobileRowWiseOriginalQuestion {
     rowId,
     title,
     omittedAnswerCells: [],
+    belowTitleCells: [],
+    hidesPiece: false,
     projection: {
       columns: [{ id: 'answer', label: '응답', width: 240 }],
       row: { id: rowId, label: title, cells: [sharedCell] },
@@ -146,5 +148,72 @@ describe('MobileRowWiseOriginalSheet', () => {
     ]);
     expect(screen.getByText('직무')).toHaveClass('text-red-700');
     expect(screen.getByText('멘토링')).toHaveClass('text-red-700');
+  });
+
+  it('제목 아래 입력칸 줄은 원본 표 조각 없이 행 제목 바로 아래에 칸을 그린다', () => {
+    const essay: MobileRowWiseOriginalQuestion = {
+      ...question('essay-row', '가장 개선이 필요한 점을 적어 주세요.'),
+      belowTitleCells: [{ id: 'essay-input', type: 'input', content: '', mobileBelowRowTitle: true }],
+      hidesPiece: true,
+    };
+    const { container } = render(
+      <MobileRowWiseOriginalSheet
+        model={{ sections: [{ id: 's', label: '', subgroups: [{ id: 'g', label: '', questions: [essay] }] }] }}
+        errorCellIds={new Set(['essay-input'])}
+        renderCell={(cell, _question, _scope, invalid) => (
+          <textarea aria-label={cell.id} data-invalid={invalid ? 'true' : 'false'} />
+        )}
+      />,
+    );
+    const group = screen.getByRole('group', { name: '가장 개선이 필요한 점을 적어 주세요.' });
+    // 조각(가로로 미는 표)을 그리지 않는다 — 조각의 칸(shared-answer)도 없다
+    expect(container.querySelector('[role="grid"]')).toBeNull();
+    expect(screen.queryByLabelText('shared-answer')).toBeNull();
+    const field = screen.getByLabelText('essay-input');
+    expect(group.contains(field)).toBe(true);
+    // 오류 표시는 조각 칸과 같은 판정(errorCellIds)을 따른다
+    expect(field.getAttribute('data-invalid')).toBe('true');
+    expect(container.querySelector('[data-below-title-cell="essay-input"]')).not.toBeNull();
+  });
+
+  it('제목 아래 입력칸은 오류 「위치로 이동」 표식을 갖고, 원본 표용 고정 너비 없이 그린다', () => {
+    const essay: MobileRowWiseOriginalQuestion = {
+      ...question('essay-row', '개선점'),
+      belowTitleCells: [
+        { id: 'essay-input', type: 'input', content: '', mobileBelowRowTitle: true, inputWidth: 60 },
+      ],
+      hidesPiece: true,
+    };
+    const rendered: Array<number | undefined> = [];
+    const { container } = render(
+      <MobileRowWiseOriginalSheet
+        model={{ sections: [{ id: 's', label: '', subgroups: [{ id: 'g', label: '', questions: [essay] }] }] }}
+        renderCell={(cell) => {
+          rendered.push(cell.inputWidth);
+          return <textarea aria-label={cell.id} />;
+        }}
+      />,
+    );
+    // 조각의 칸과 같은 표식 규약 — scrollToIssue 가 data-cell-instance-id → data-cell-id 순으로 찾는다
+    const wrapper = container.querySelector('[data-cell-id="essay-input"]')!;
+    expect(wrapper.getAttribute('data-cell-instance-id')).toBe('essay-row:essay-row:essay-input');
+    expect(wrapper.contains(screen.getByLabelText('essay-input'))).toBe(true);
+    expect(rendered).toEqual([undefined]);
+  });
+
+  it('제외한 앞쪽 열의 응답 칸도 오류 「위치로 이동」 표식을 갖는다', () => {
+    const etc: MobileRowWiseOriginalQuestion = {
+      ...question('etc-row', '기타'),
+      omittedAnswerCells: [{ id: 'etc-input', type: 'input', content: '' }],
+    };
+    const { container } = render(
+      <MobileRowWiseOriginalSheet
+        model={{ sections: [{ id: 's', label: '', subgroups: [{ id: 'g', label: '', questions: [etc] }] }] }}
+        renderCell={(cell) => <input aria-label={cell.id} />}
+      />,
+    );
+    const wrapper = container.querySelector('[data-cell-id="etc-input"]')!;
+    expect(wrapper.getAttribute('data-cell-instance-id')).toBe('etc-row:etc-row:etc-input');
+    expect(wrapper.contains(screen.getByLabelText('etc-input'))).toBe(true);
   });
 });

@@ -222,7 +222,11 @@ describe('응답 화면의 현재 언어', () => {
   it('언어를 고르기 전에는 lang 을 달지 않고, 고르면 그 언어가 된다', async () => {
     const { container } = renderMultilingualFlow();
     await screen.findByText('언어를 선택해 주세요');
-    expect(container.querySelector('[lang]')).toBeNull();
+    // 감싸는 요소에는 언어가 없다 — 언어 보기 라벨만 제 언어를 단다
+    expect(container.querySelector('[data-locale-undetermined]')).not.toBeNull();
+    expect(container.querySelector('[data-locale-undetermined]')?.hasAttribute('lang')).toBe(false);
+    expect(screen.getByText('中文')).toHaveAttribute('lang', 'zh');
+    expect(screen.getByText('한국어')).toHaveAttribute('lang', 'ko');
 
     fireEvent.click(screen.getByText('中文'));
     await screen.findByPlaceholderText('zh-1 입력');
@@ -418,6 +422,50 @@ describe('응답 화면의 현재 언어', () => {
       );
       await screen.findByText('첫 질문');
       expect(screen.getAllByText('통계법 제33조(비밀의 보호)').length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('베트남어 (한·영·베트남어 설문)', () => {
+    const VI_LANG_QUESTION: Question = {
+      ...LANG_QUESTION,
+      options: [
+        { id: 'o-ko', label: '한국어', value: '1', locale: 'ko' },
+        { id: 'o-en', label: 'English', value: '2', locale: 'en' },
+        { id: 'o-vi', label: 'Tiếng Việt', value: '3', locale: 'vi' },
+      ],
+    };
+    const VI_SETS: QuestionGroup[] = [
+      { id: 'g-lang', surveyId: 'lang-survey', name: '언어', order: 0 },
+      languageSet('g-ko', 1, '1'),
+      languageSet('g-vi', 2, '3'),
+    ];
+    const VI_QUESTIONS: Question[] = [
+      { ...VI_LANG_QUESTION, groupId: 'g-lang' },
+      pageQuestion('ko-1', 'g-ko', 1),
+      pageQuestion('vi-1', 'g-vi', 2),
+      pageQuestion('vi-2', 'g-vi', 3),
+    ];
+
+    it('베트남어를 고르면 lang 이 vi 이고 이동 버튼이 베트남어다', async () => {
+      const { container } = renderFlow(VI_QUESTIONS, null, null, VI_SETS);
+      await screen.findByText('언어를 선택해 주세요');
+
+      fireEvent.click(screen.getByText('Tiếng Việt'));
+      await screen.findByPlaceholderText('vi-1 입력');
+      expect(container.querySelector('[lang]')?.getAttribute('lang')).toBe('vi');
+      expect(screen.getByRole('button', { name: /Tiếp theo/ })).toBeInTheDocument();
+      expect(screen.queryByPlaceholderText('ko-1 입력')).toBeNull();
+    });
+
+    it('「언어 변경」 글자는 이 설문이 제공하는 언어만 쓴다 — 중국어가 없다', async () => {
+      renderFlow(VI_QUESTIONS, null, null, VI_SETS);
+      await screen.findByText('언어를 선택해 주세요');
+      fireEvent.click(screen.getByText('Tiếng Việt'));
+      await screen.findByPlaceholderText('vi-1 입력');
+      expect(
+        screen.getByRole('button', { name: '언어 변경 · Language · Ngôn ngữ' }),
+      ).toBeInTheDocument();
+      expect(languageSwitch()).toBeNull();
     });
   });
 

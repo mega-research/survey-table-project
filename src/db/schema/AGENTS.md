@@ -6,13 +6,13 @@
 
 ## 데이터베이스 스키마
 
-스키마 파일은 도메인별로 분리: `auth.ts`, `workspace.ts`, `surveys.ts`, `survey-documents.ts`, `contacts.ts`, `mail.ts`, `mail-billing.ts`, `r2-lifecycle.ts`. JSONB 컬럼의 문서 형태(어휘)는 `src/shared/contracts/<domain>.ts`에 두고 스키마가 `$type<>()`로 참조한다(DB→shared 단방향). 영속 질문 필드 SSOT는 `question-persisted-fields.ts`. `users.status`·`users.user_type` 컬럼 어휘와 **허용 상태 전이표**(`USER_STATUS_TRANSITIONS`) SSOT는 `shared/contracts/auth.ts`, 사용자 관리 RPC 입출력은 `shared/contracts/auth-io.ts`. 팀 어휘(`teams.status`·`team_members.role`·감사 action)와 팀 관리 권한 술어, 그리고 `surveys.visibility` 어휘 + **화면 표기 SSOT**(`SURVEY_VISIBILITY_LABEL` — 「팀 공개」/「초대된 멤버만」, "팀 전체" 금지), `survey_participants.kind` 어휘와 제외 권한 술어(`canRemoveSurveyParticipant`), 내 태그 색 어휘·이름 규칙(`personalTagColorValues`·`normalizePersonalTagName`)은 `shared/contracts/workspace.ts`, 팀 RPC 입출력은 `shared/contracts/workspace-io.ts`.
+스키마 파일은 도메인별로 분리: `auth.ts`, `workspace.ts`, `surveys.ts`, `survey-documents.ts`, `contacts.ts`, `mail.ts`, `mail-billing.ts`, `r2-lifecycle.ts`. JSONB 컬럼의 문서 형태(어휘)는 `src/shared/contracts/<domain>.ts`에 두고 스키마가 `$type<>`로 참조한다(DB→shared 단방향). 영속 질문 필드 SSOT는 `question-persisted-fields.ts`. `users.status`·`users.user_type` 컬럼 어휘와 **허용 상태 전이표**(`USER_STATUS_TRANSITIONS`) SSOT는 `shared/contracts/auth.ts`, 사용자 관리 RPC 입출력은 `shared/contracts/auth-io.ts`. 팀 어휘(`teams.status`·`team_members.role`·감사 action)와 팀 관리 권한 술어, 그리고 `surveys.visibility` 어휘 + **화면 표기 SSOT**(`SURVEY_VISIBILITY_LABEL` — 「팀 공개」/「초대된 멤버만」, "팀 전체" 금지), `survey_participants.kind` 어휘와 제외 권한 술어(`canRemoveSurveyParticipant`), 내 태그 색 어휘·이름 규칙(`personalTagColorValues`·`normalizePersonalTagName`)은 `shared/contracts/workspace.ts`, 팀 RPC 입출력은 `shared/contracts/workspace-io.ts`.
 
 ### 인증 도메인 (auth.ts — Better Auth 관할)
 
 ```
 users                      # 계정 (Better Auth user 모델 + 확장 컬럼)
-├── id (uuid PK — 앱이 crypto.randomUUID() 생성, DB default 없음)
+├── id (uuid PK — 앱이 crypto.randomUUID 생성, DB default 없음)
 ├── name, email (UNIQUE), emailVerified, image
 ├── status                 # pending|active|rejected|suspended|departed — pending/rejected 는
 │                          # 도달 불가 어휘(공개 가입 폐기, ADR-0018). DB default 'pending' 은 안전장치
@@ -135,7 +135,7 @@ survey_favorites           # 즐겨찾기 = 한 사람이 설문 하나에 켜�
 personal_survey_tags       # 내 태그 = 한 사람이 만든 키워드 이름 + 색 (0150, 티켓 07). 만든 사람만 본다
 ├── id, userId (FK **cascade**), name, color, createdAt, updatedAt
 └── UNIQUE(userId, lower(btrim(name))) · CHECK(char_length(btrim(name)) 1~20) · CHECK(color 8색)
-                           # 색 어휘는 shared/contracts/workspace 배열 · 스키마 check() · 0150 CHECK 세 사본(대조 테스트 있음)
+                           # 색 어휘는 shared/contracts/workspace 배열 · 스키마 check · 0150 CHECK 세 사본(대조 테스트 있음)
                            # 300개 한도는 코드 — 만들기(createTag)가 사용자 advisory lock 아래서 센다
 
 personal_survey_tag_links  # 내 태그 연결 (0150) — 행 있음 = 붙음, 쓰기는 결과 상태 지정
@@ -169,24 +169,25 @@ surveys                    # 설문 설정
 ├── id, title, description, slug, privateToken, previewToken
 ├── cardTitle                     # 카드 제목 (0140, nullable) — 목록 카드·운영 콘솔 머리의 관리용 이름. NULL 이면 title. 응답자는 안 본다
 ├── isPublic, allowMultipleResponses, showProgressBar, shuffleQuestions, requireLogin
-│                                 #   allowMultipleResponses = 「중복 응답 허용」(조사원 대리 응답, 2026-10-30) — 라이브 컬럼(control 로 흘린다). 켜면 초대 토큰 없는 응답의 기기 중복 검사(Track B)를 진입·첫 답 저장 둘 다 건너뛰고 완료 화면에 「새 응답 시작」. 초대 링크는 그대로 토큰당 하나
+│                                 #   allowMultipleResponses = 「중복 응답 허용」(조사원 대리 응답) — 라이브 컬럼(control 로 흘린다). 켜면 초대 토큰 없는 응답의 기기 중복 검사(Track B)를 진입·첫 답 저장 둘 다 건너뛰고 완료 화면에 「새 응답 시작」. 초대 링크는 그대로 토큰당 하나
 ├── endDate, maxResponses, thankYouMessage, screenedOutMessage (자격미달 종료 문구, NULL=완료 문구 폴백, 0110), contactEmail, responseHeader (JSONB)
-├── localizedMessages (JSONB)     # 언어별 설문 글자 { zh?, en? : { title, description, thankYou, screenedOut } } (0145, NULL=한국어만, 빈 칸은 한국어 폴백). 발행 스냅샷 settings 에 얼린다(라이브 아님). 계약 shared/contracts/survey 의 LocalizedSurveyTexts — src/features/AGENTS.md "다국어 설문"
+├── localizedMessages (JSONB)     # 언어별 설문 글자 (0145, NULL=한국어만) — 발행 스냅샷에 얼린다. 계약 LocalizedSurveyTexts, src/features/AGENTS.md 「다국어 설문」
 ├── piiRetentionUntil (개인정보 보관기한)
 ├── contactColumns / testContactColumns (JSONB)  # 컨택리스트 표시 컬럼 스킴 (실/테스트 분리)
+│                                 #   시스템 열 system.link_click 은 0170 전 스킴에 없어 읽을 때 끼운다(withLinkClickColumn)
 │                                 #   컬럼별 플래그: hidden(목록 숨김) · piiType · groupLevel(진척보고 분류 축)
 │                                 #   · showInMail(단체 메일 위저드·캠페인 상세 수신자 표·수신거부 명단에 열 노출 — attrs.* 는 값, pii.* 는 마스킹 힌트(켠 열만 서버가 읽는다), system.contact_owner 는 컨택원 이름(외부 주체 화면 제외), system.resid 는 기본 보임이라 끈 경우만 false. 해석 lib/contacts/mail-display-columns)
 │                                 #   · mailOrder(메일 발송 주소 순서 1부터, 이메일로 암호화된 열 전용 — `src/server/mail/AGENTS.md` 「메일 발송 주소 순서」)
 ├── lookups (JSONB)               # 설문에 복사된 LUT 사본 목록
 ├── contactResultCodes (JSONB)    # 결과코드 사용자 정의
 ├── progressColumns (JSONB)       # 진척률 표 컬럼 픽커
-├── profileColumns (JSONB)        # 응답 내역 표 컬럼 픽커 — 열 키 sys.·attrs.·pii.·entry.·answer.<문항 id>[.<칸 id>](응답값 열, 2026-10-23: 단답형·장문형·표 입력 칸을 변수명으로 찾아 추가, 저장은 id, 쪽 행만 JSONB 에서 꺼내 암호문은 복호화, 정렬 없음. 2026-10-30 부터 선택형(단일·복수·드롭다운, 보기 그룹이 default 하나인 보기 표)과 표 선택 칸(단일·드롭다운·체크박스)도 — 보기 글자로 보이고(복수는 「, 」, 상세 기재는 괄호) 검색·깔때기도 보기 글자로 맞춘다(글자 → 저장값으로 바꿔 jsonb_path 로 비교, 번호로는 안 걸림). 후보·보기 목록 lib/operations/profile-answer-sources, 변환 profile-answer-choices. 검색바·전체 검색·머리 깔때기는 부분일치와 값 없음/있음(profiles-filters 의 answerTextSql), 암호화 저장 칸은 후보에서 빠진다. 후보 read-models/profile-column-scheme 의 getProfileAnswerSources, 값 server/operations/services/profile-answer-values)
+├── profileColumns (JSONB)        # 응답 내역 표 컬럼 — 열 키 sys.·attrs.·pii.·entry.·answer.<문항 id>[.<칸 id>]. 응답값 열 후보는 read-models/profile-column-scheme
 ├── quotaConfig (JSONB)           # 쿼터 플랜 (NULL = 쿼터 없음) — 라이브 컬럼
 ├── isPaused, pausedMessage       # 응답 일시중지 — 라이브 컬럼
 ├── testModeEnabled, testToken    # 테스트 환경 (테스트 링크가 산다). 콘솔이 테스트 파티션을 보는 건 브라우저 쿠키까지 켠 곳만 — src/server/AGENTS.md 「테스트 모드」
 ├── priorWaveLabel                # 추적조사 지난 회차 라벨 — 라이브 컬럼
 ├── priorAnswerImportConfig (JSONB)  # 이월 응답 임포트 확정 매핑 (문항코드 블록 → 문항 id + 값 대응)
-├── endRedirects (JSONB)          # 종료 후 이동 주소 {completed, screenedOut, quotaClosed, passParams} — 라이브 컬럼(0138), 판정 lib/survey/end-redirect, CONTEXT.md 「종료 후 이동 주소」
+├── endRedirects (JSONB)          # 종료 후 이동 주소 — 라이브 컬럼(0138), 판정 lib/survey/end-redirect
 ├── changeConfirmEnabled          # 문항별 변동 확인 사용 여부(기본 false) — 라이브 컬럼.
 │                                 #   false 면 이월 값을 표시되는 문항에 미리 깔고 응답자가 고치면 덮어쓴다
 ├── requireInviteToken            # invite token 강제 여부
@@ -207,7 +208,7 @@ surveys                    # 설문 설정
 
 question_groups            # 질문 그룹 (계층 구조, self-reference)
 ├── id, surveyId, parentGroupId, name, description
-├── order, color, collapsed, hideName, nameDesign (JSONB)   # nameDesign = 그룹 이름 디자인(배경·글자색·폭). 응답 화면에서 상위 그룹 배지와 하위 그룹 소제목(2026-10-29) 둘 다 적용, 없으면 하위 그룹은 회색 소제목, hideName 이면 안 그린다
+├── order, color, collapsed, hideName, nameDesign (JSONB)   # nameDesign = 그룹 이름 디자인(배경·글자색·폭) — 상위 그룹 배지·하위 그룹 소제목
 ├── displayCondition (JSONB)
 └── createdAt, updatedAt
 
@@ -217,30 +218,34 @@ questions                  # 개별 질문
 ├── title, description, required, requiredMessage, order, hideTitle
 ├── collapseButtonLabel           # 문항 접어 두기 버튼 글자(0154, NULL·공백=꺼짐) — 응답 화면에서 그 버튼을 눌러야 문항이 펼쳐진다(CONTEXT.md 「문항 접어 두기」)
 ├── collapseAttachToPrevious      # 그 버튼을 바로 앞 문항 설명 밑에 붙이기(기본 false, 0155)
+├── distinctGroup                 # 문항 사이의 중복 불가 묶음 이름(0171, NULL·공백=없음, CONTEXT.md 「중복 불가 묶음」)
 ├── titleHtml                     # 제목 서식본(굵게·밑줄·글자색·글자 크기, 0125). 정본은 평문 title — 응답 화면 제목 표시만 우선하고, 글자가 평문과 어긋나면 버린다(lib/survey/question-title-html)
 ├── options, selectLevels, choiceGroups (JSONB)
 ├── tableTitle, tableColumns, tableRowsData, tableHeaderGrid (JSONB)  # 테이블
 ├── tableValidationRules, dynamicRowConfigs, sumConstraints (JSONB)   # 검증/합계 제약
 ├── rowRepeatConfig (JSONB)       # 행 반복 — 응답자가 + 로 늘리는 연속 행 묶음 {enabled, templateRowIds, maxRepeats, addLabel}
-├── stagedRowsConfig (JSONB)      # 행 차례로 열기 — 저작된 연속 행 묶음을 처음 몇 행만 보이고 + 로 한 행씩 연다 {enabled, rowIds, initialVisibleCount, addLabel} (0132). 구조는 건드리지 않고 가시성만 정한다 — 행 반복과 다른 개념(ADR 0028)
+├── stagedRowsConfig (JSONB)      # 행 차례로 열기 {enabled, rowIds, initialVisibleCount, addLabel} (0132) — 가시성만 정한다, 행 반복과 다른 개념(ADR 0028)
 ├── rankingConfig (JSONB)         # 순위형 전용
 ├── optionsColumns, optionsAlign, mobileOptionsColumns, minSelections, maxSelections, allowOtherOption
 ├── maxSelectionsSource (JSONB)   # 최대 선택 개수를 다른 문항의 숫자 응답에서 가져온다 {questionId, unlimitedFrom} — NULL=고정값만 (0130)
-├── placeholder, defaultValueTemplate  # 단답형(prefill 토큰 지원 — 명단 값이 있으면 그 값으로 잠그고, 치환 결과가 비면 잠그지 않아 응답자가 직접 적는다. 표 input 셀의 defaultValueTemplate 도 같은 규칙이고 셀에는 `prefillEditable`(응답자가 고칠 수 있게 — 잠그지 않고 처음 한 번만 깐다)이 더 있다, CONTEXT.md "이월 값과 본문 프리필 토큰의 우선순위")
+├── placeholder, defaultValueTemplate  # 단답형(prefill 토큰 — 명단 값이 있으면 잠그고 비면 잠그지 않는다. 표 input 셀은 `prefillEditable` 도, CONTEXT.md 「이월 값과 본문 프리필 토큰의 우선순위」)
 ├── inputType, emptyDefault, numberFormat (JSONB)  # 단답형 입력 모드 (숫자 | 형식 5종)
 ├── inputRows, inputAutoGrow      # 단답형·장문형 입력칸 줄 수(1~20, NULL=유형 기본: 단답형 1줄·장문형 4줄)·입력한 만큼 높이 늘리기. 숫자·형식 칸은 한 줄 고정 (0124)
-├── textValidation (JSONB)        # 단답형·장문형 응답 품질 검사 {minLength, maxLength, rejectMeaningless} — 평문 모드 전용, 클라이언트 차단 (0109, features/question-renderer/utils/text-quality)
+├── textValidation (JSONB)        # 응답 품질 검사 {minLength, maxLength, rejectMeaningless} (0109, utils/text-quality)
 ├── piiEncrypted                  # 응답값 암호화 저장 여부 (단답형·장문형). 표 input 셀은 tableRowsData 의 셀 piiEncrypted
 ├── questionCode, isCustomSpssVarName, exportLabel, spssVarType, spssMeasure, exportCellOrder  # SPSS export
 ├── answerQuoteEnabled, answerQuoteName, answerQuoteText  # 이전 응답 인용
-├── mobileOriginalTable, mobileTableDisplayMode,  # 표시 방식 auto|drilldown-original-row|row-wise-original|row-wise-scale|row-cards|row-group-cards|axis-cards|item-cards|original (0129 CHECK — 어휘를 늘리면 배열·check()·마이그레이션 셋을 함께, 루트 AGENTS.md 주의사항 1). 방식별 규칙은 `types/mobile-table-display.ts` 머리 주석과 CONTEXT.md 방식별 용어 절
+├── mobileOriginalTable, mobileTableDisplayMode,  # 표시 방식 auto|drilldown-original-row|row-wise-original|row-wise-scale|row-cards|row-group-cards|axis-cards|item-cards|original (0129 CHECK — 어휘를 늘리면 배열·check·마이그레이션 셋을 함께, 루트 AGENTS.md 주의사항 1). 방식별 규칙은 `types/mobile-table-display.ts` 머리 주석과 CONTEXT.md 방식별 용어 절
 │   mobileDrilldownOmitLeadingColumns,
 │   mobileDrilldownRepeatHeaderStartRow/EndRow      # 모바일 표 렌더
+│   mobileDrilldownReverseColumns,                  # 조각 좌우 반전 (기본 false, 0174) · 조각 한 화면 칸 수 (NULL=원본 열 폭, 3~6 CHECK — 범위는 `@/types/mobile-table-display`,
+│   mobileDrilldownColumnsPerView                   #   `tests/repo/mobile-piece-columns-per-view-column.test.ts` 가 대조). `src/features/question-renderer/AGENTS.md`
 ├── mobileItemCardBlockColumns (JSONB)  # 「항목 단위 카드」 블록 시작 열 번호 배열(1부터, 작성 열 순서, NULL=블록 없음, 0131). 경계는 저작자가 적는다(자동 추정 없음) — CONTEXT.md 「블록 단위로 세우기」
 ├── hideColumnLabels, pageBreakBefore
 ├── stickyColumnCount            # 좌측 고정 열 개수 (NULL=자동 판정, 0~3=명시 지정)
 ├── fitTableToWidth              # 화면 폭에 맞춰 표 줄이기 (기본 false, 0146) — `src/features/AGENTS.md` 「질문 유형」의 좌측 고정 열 다음 항목
-├── scaleMeanEnabled             # 평균 산출 = 운영 콘솔 「척도 평균」의 「문항 선택」 (기본 false, 0147) — 그 표의 줄. radio·select·table 전용. 빌더는 쓰지 않는 콘솔 소유 컬럼(CONSOLE_OWNED_QUESTION_FIELDS), `src/features/AGENTS.md` 「질문 유형」
+├── scaleSlider                  # 슬라이더 방향 (NULL=꺼짐, 0173 CHECK — 어휘 `@/types/scale-slider`). `src/features/question-renderer/AGENTS.md`
+├── scaleMeanEnabled             # 척도 평균의 「문항 선택」 (기본 false, 0147) — 빌더는 쓰지 않는 콘솔 소유 컬럼(CONSOLE_OWNED_QUESTION_FIELDS)
 ├── priorAnswerCondition (JSONB), priorAnswerDisabled  # 추적조사 — 문항별 이월값 불러오기 조건(0102, 참→거짓으로 뒤집히면 프리필 회수)·끄기(0103, 켜면 이월값을 깔지 않고 Raw includePriorAnswers 도 비운다)
 ├── noticeContent, noticeBgColor, requiresAcknowledgment  # 공지 (배경색: NULL=기본 파랑, 'none'=무색, hex=커스텀)
 ├── imageUrl, videoUrl
@@ -282,7 +287,7 @@ survey_versions            # 설문 버전 스냅샷 (불변)
 ├── id, surveyId, versionNumber   # 테스트 버전은 음수 번호(배포 번호 max+1 과 겹치지 않게)
 ├── status                        # 'published' | 'superseded' | 'test'(테스트 버전, 0141 — 버전 목록·배포 번호에서 뺀다) ('closed' 미구현)
 ├── snapshot (JSONB)              # 배포 시점 전체 설문 구조 (prune 시 NULL 가능 — 직전 테스트 버전은 새 테스트 버전을 만들 때 바로 비운다).
-│                                 #   비우지 않는 버전: 지금 배포본·테스트 버전 · 실응답(휴지통 포함)이 가리킴 · 이관 출처 · 이관 이력 from/to (version-retention, 2026-10-23)
+│                                 #   비우지 않는 버전: 지금 배포본·테스트 버전 · 실응답(휴지통 포함)이 가리킴 · 이관 출처 · 이관 이력 from/to (version-retention)
 ├── fingerprints (JSONB)          # 테스트 버전 지문 {revision, questions, groups} (0141) — snapshot 을 비워도 남긴다. 배포 버전은 NULL
 ├── changeNote, publishedAt, closedAt, prunedAt, deletedAt
 └── createdAt
@@ -377,7 +382,7 @@ contact_target_edit_logs   # 대상 정보 수정 현황 (0152) — 조사 대�
 ├── action                        # info_edit | attempt_edit | attempt_delete | assignment_change (CHECK)
 ├── changes (JSONB)               # ContactTargetEditChange[] (shared/contracts/contacts) — 열·컨택원 이름은 그때 스냅샷, pii 는 값 없이 op 만, 값은 1,000자에서 자름
 ├── editedBy (text), editorEmail  # 편집자 — 계정은 id·이메일, 외주 링크는 `link:<링크 id>`·「외주」
-└── createdAt                     # clock_timestamp() — 잠금 뒤 줄 선 저장끼리 최신순이 뒤집히지 않게. INDEX (contactTargetId, createdAt desc)
+└── createdAt                     # clock_timestamp — 잠금 뒤 줄 선 저장끼리 최신순이 뒤집히지 않게. INDEX (contactTargetId, createdAt desc)
 
 contact_id_lists           # 필터 붙여넣기 ID 목록 저장 (0084) — 인라인 상한 2,000개 초과분
 ├── id, surveyId (cascade), ids (JSONB 정수 배열, 중복 제거·오름차순), idCount
@@ -422,9 +427,13 @@ mail_recipients            # 수신자별 status + Resend message id
 ├── sentAt, deliveredAt, openedAt, bouncedAt, complainedAt, archivedAt
 └── createdAt, updatedAt  (UNIQUE campaignId+contactTargetId)
 
+mail_link_clicks           # 링크 클릭 — 메일 본문 링크를 누른 기록 (0170, CONTEXT.md 「링크 클릭」, ADR 0042)
+├── id, recipientId (cascade), clickedAt, ipHash, userAgent, createdAt   # 클릭 한 번이 한 줄, INDEX (recipientId, linkKind)
+└── linkKind, linkUrl      # survey|unsubscribe|other (CHECK, 어휘 shared/contracts/mail). linkUrl 은 other 만 — 전용 토큰이 든 주소는 남기지 않는다
+
 webhook_events             # Resend webhook idempotency dedupe (id = svix-id)
 ├── id, source, eventType, receivedAt
-│                          # eventType = 알림 종류 그대로. 회신 전달·답장 중계(email.received)만 결과 줄·자리 줄·발송 기록 줄을 갈라 적는다(id 는 알림 id 또는 거기서 파생) — 값은 `src/server/mail/AGENTS.md` 「회신 전달」의 「장부의 이벤트 종류 칸」
+│                          # eventType = 알림 종류 그대로. 회신 전달(email.received)의 줄 종류는 `src/server/mail/AGENTS.md` 「회신 전달」
 
 mail_billing_periods       # 메일 비용 정산 (요금제+결제일 시계열)
 ├── id, startDate (UNIQUE), billingDayOfMonth, planLabel
@@ -479,7 +488,8 @@ surveys (1) ─┬─ (N) survey_documents ── (N) survey_document_anchors
              ├─ (N) survey_versions ── (N) survey_responses [versionId]
              ├─ (N) contact_uploads ── (N) contact_targets
              ├─ (N) mail_templates ── (N) mail_campaigns
-             └─ (N) mail_campaigns ── (N) mail_recipients ── (1) contact_targets
+             └─ (N) mail_campaigns ── (N) mail_recipients ─┬─ (1) contact_targets
+                                                            └─ (N) mail_link_clicks
 
 contact_targets ─┬─ (N) contact_pii (암호화 PII)
                  ├─ (N) contact_attempts (결과 회차)

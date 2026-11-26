@@ -34,6 +34,7 @@ function row(resid: number, assignment: ContactsRow['assignment']): ContactsRow 
     respondedAt: null,
     progressPct: null,
     latestMailStatus: null,
+    linkClick: null,
     responseStatus: null,
     inviteToken: 'tok',
     createdAt: new Date('2026-10-01T00:00:00Z'),

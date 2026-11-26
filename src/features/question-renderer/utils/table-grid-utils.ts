@@ -22,8 +22,9 @@ export function calcTotalWidth(columns: TableColumn[]): number {
 /**
  * 표 grid 컨테이너의 폭 스타일. 헤더·본문·가상화 본문이 같은 값을 써야 열이 어긋나지 않는다.
  * - 끔(기본): 열 폭을 px 로 고정한다. 화면이 좁으면 표가 넘쳐 가로 스크롤이 된다.
- * - 켬(문항 설정 fitTableToWidth, 모바일 모드가 아닐 때): 열 폭을 비율(fr)로 바꿔 화면에 맞춰 줄고,
- *   넓은 화면에서는 지정한 총폭을 넘지 않는다. 표가 넘치지 않으므로 좌측 고정 열은 호출측이 끈다.
+ * - 켬(문항 설정 fitTableToWidth 를 켰고 창이 패드 폭일 때 — 판정은 `hooks/use-fit-table-to-width`):
+ *   열 폭을 비율(fr)로 바꿔 화면에 맞춰 줄고, 지정한 총폭을 넘지 않는다. 표가 넘치지 않으므로 좌측
+ *   고정 열은 호출측이 끈다. 데스크톱 폭에서는 켠 문항도 「끔」과 같이 그린다.
  */
 export function resolveTableGridSizing(
   columns: TableColumn[],
@@ -64,6 +65,14 @@ export function resolveTableGridSizing(
  */
 export function fitTableMarker(fitToWidth: boolean): { 'data-fit-table'?: '' } {
   return fitToWidth ? { 'data-fit-table': '' } : {};
+}
+
+/**
+ * 좁은 칸 모드(조각 한 화면 칸 수)의 본문 표식 — globals.css 가 이 표식 안에서만 글자 없는 보기 칸의 컨트롤
+ * 줄에 라벨 한 줄 높이를 준다(`[data-narrow-cells] .choice-opt-bare-control`). 표식이 없는 표는 그대로다.
+ */
+export function narrowCellsMarker(narrowCells: boolean): { 'data-narrow-cells'?: '' } {
+  return narrowCells ? { 'data-narrow-cells': '' } : {};
 }
 
 // ── 응답 페이지 컨테이너 폭 판정 ──
@@ -151,6 +160,25 @@ export function getHorizontalJustifyClass(horizontalAlign?: 'left' | 'center' | 
  */
 export function getCellBorderClasses(cell: Pick<TableCell, 'hideRightBorder'>): string {
   return cn('border-b border-gray-400', !cell.hideRightBorder && 'border-r');
+}
+
+/**
+ * 머리글 칸의 오른쪽 세로선 숨김 — `hideRightBorder` 를 켠 머리글 칸(다단 헤더 칸·한 줄 머리글의 열)에
+ * 오른쪽 선을 지우는 클래스를 준다(응답 화면·미리보기 공용. 빌더 편집 격자는 경계를 보여야 해서 쓰지 않는다).
+ * 머리글 칸의 기본 클래스 뒤에 `cn` 으로 붙인다.
+ *
+ * 표의 마지막 열에 닿는 칸은 지우지 않는다 — 화면 폭에 맞춰 줄인 표는 마지막 칸이 표의 오른쪽 끝선을 그리므로
+ * 지우면 표가 열린 채로 보인다. 일괄로 모든 머리글에 켜도 끝선은 남는다.
+ *
+ * @param endColumn 이 칸이 덮는 마지막 열(1부터)
+ * @param columnCount 지금 그려지는 열 수
+ */
+export function getHeaderRightBorderClass(
+  header: { hideRightBorder?: boolean | undefined },
+  endColumn: number,
+  columnCount: number,
+): string | undefined {
+  return header.hideRightBorder === true && endColumn < columnCount ? 'border-r-0' : undefined;
 }
 
 const V_JUSTIFY_MAP = {

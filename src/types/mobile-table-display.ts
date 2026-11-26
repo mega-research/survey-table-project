@@ -17,6 +17,11 @@
  * - row-wise-scale 「행별 척도」는 행별 원본과 같은 시트에서 각 보기 그룹을 그룹 카드와 같은 보기 모양(세로
  *   타일 기본 · 원본 한 줄 · 척도 막대)으로, 그룹 없는 보기 소스 표는 보기 전체를 막대로, 그 밖의 응답 칸은 열
  *   순서대로 원본 표 조각으로 그린다(행 배치 question-renderer/utils/row-scale-bars).
+ * - **척도 슬라이더가 그려지는 표는 이 값보다 슬라이더의 배치가 앞선다**(CONTEXT.md 「척도 슬라이더」) — 슬라이더로
+ *   그려지는 행이 있으면 넓은 화면도 표 대신 행 단위 배치이고, 좁은 화면은 row-group-cards 만 그 카드 안에서·그
+ *   밖의 값은 무엇이든 row-wise-scale 처럼 그린다(보기 그룹은 제 보기 모양). 그려지는 행이 없으면 이 값
+ *   그대로다. 판정은 question-renderer/utils/scale-slider-table-layout 한 곳이고 호스트와 빌더 안내가 같이 쓴다.
+ *   보기 그룹의 보기 모양은 넷(세로 타일 · 원본 한 줄 · 척도 막대 · 척도 슬라이더)이고 슬라이더만 웹에도 적용된다.
  * - row-group-cards 는 보기 그룹 표 전용(보기 소스 표·table 유형 둘 다) — 행 카드 안을 보기 그룹(축)별 섹션으로
  *   나누고 구분 셀은 행 카드와 같은 고정 머리(sticky)에 줄바꿈·서식본(contentHtml) 그대로 항상 보임(2026-09-29
  *   — 첫 줄 제목·나머지 회색 설명으로 가르던 것을 걷어냈다. 섹션 제목은
@@ -26,6 +31,8 @@
  * - `ChoiceGroup.mobileScaleBar` 를 켜면 그 그룹을 가로 스크롤 없는 척도 막대로 그린다 — `mobileOriginalLine`
  *   과 배타, 읽기·쓰기는 question-renderer/utils/choice-group-mobile-view, 판정은 choice-group-scale-bar(못
  *   그리면 이유 코드와 함께 원본 한 줄 폴백, 빌더 경고는 survey-builder/lib/scale-bar-diagnostics)).
+ * - `ChoiceGroup.mobileScaleBarMiddleLabel` 을 켜면 그 그룹의 척도 막대가 한가운데의 여러 칸짜리 구간
+ *   이름(10점 척도의 「보통」)도 띠 아래에 둔다 — 기본 꺼짐(CONTEXT.md 「척도 막대」).
  * - axis-cards 는 보기 소스 표에서는 보기 그룹이 축 — 축(그룹)마다 카드 하나, 제목은 열 헤더(sticky), 타일은 행
  *   제목.
  * - 테이블 유형에서는 응답 칸이 놓인 열이 축이라 그룹 없이도 열마다 카드 하나(행 제목 + 그 칸의 입력, 투영
@@ -61,4 +68,26 @@ export type MobileTableDisplayMode = (typeof MOBILE_TABLE_DISPLAY_MODES)[number]
 export function isMobileTableDisplayMode(value: unknown): value is MobileTableDisplayMode {
   return typeof value === 'string'
     && (MOBILE_TABLE_DISPLAY_MODES as readonly string[]).includes(value);
+}
+
+/**
+ * 조각 한 화면 칸 수(`Question.mobileDrilldownColumnsPerView`)의 범위 — 값 범위의 SSOT.
+ *
+ * 좁은 화면의 원본 표 조각에서 자리 폭을 이 수로 나눠 칸 폭을 정한다(끔 = null, 원본 열 폭 그대로).
+ * 상한이 6 인 이유: 360px 폰에서 조각이 쓰는 폭이 약 278px 이라 6칸이면 칸이 46px 남짓이고, 보기 라벨의
+ * 최소 누름 폭이 44px 이다. 범위를 바꾸면 이 상수와 함께 문항 컬럼의 스키마 check() · 마이그레이션 CHECK 를
+ * 고친다(루트 AGENTS.md 주의사항 1) — 셋의 대조는 tests/repo/mobile-piece-columns-per-view-column.test.ts.
+ * 이미 적용된 마이그레이션은 고치지 말고 새 마이그레이션에서 제약을 갈아끼운다.
+ */
+export const MOBILE_PIECE_COLUMNS_PER_VIEW_MIN = 3;
+export const MOBILE_PIECE_COLUMNS_PER_VIEW_MAX = 6;
+
+/** 범위 안의 정수만 켜진 값이다 — 그 밖(없음·null·범위 밖·소수)은 꺼진 것으로 읽는다 */
+export function resolveMobilePieceColumnsPerView(value: unknown): number | null {
+  return typeof value === 'number'
+    && Number.isInteger(value)
+    && value >= MOBILE_PIECE_COLUMNS_PER_VIEW_MIN
+    && value <= MOBILE_PIECE_COLUMNS_PER_VIEW_MAX
+    ? value
+    : null;
 }

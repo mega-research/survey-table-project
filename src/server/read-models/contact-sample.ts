@@ -12,6 +12,7 @@ import {
 } from '@/server/data-scope';
 import { type FieldworkShare, shareTargetCondition } from '@/server/fieldwork-share-scope';
 
+
 import { loadSendEmailForTarget } from './send-address';
 
 export interface FirstContactSample {

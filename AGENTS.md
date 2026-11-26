@@ -31,6 +31,7 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 | DB 스키마 (테이블·컬럼·관계)                                                                                                              | `src/db/schema/AGENTS.md`                        |
 | 마이그레이션 번호 고르기·배열 순서·배포 전후 · DB 드리프트 점검                                                                           | `supabase/AGENTS.md`                             |
 | 프론트 기능 묶음 트리 · 질문 유형·셀 타입·테이블 검증 규칙 · 행 반복·차례로 열기 · 다국어 설문                                            | `src/features/AGENTS.md`                         |
+| 응답 화면 렌더 — 보기 모양·척도 슬라이더 · 모바일 원본 표 조각(좌우 반전·한 화면 칸 수) · 표 줄이기                                       | `src/features/question-renderer/AGENTS.md`       |
 | 설문 편집기 하위 폴더 지도 (설문 목록·공유·질문 편집·표 편집기 …)                                                                         | `src/features/survey-builder/AGENTS.md`          |
 | 숨은 답 지우기 — 저장 경계 순서·조건 평가 컨텍스트·경로 밖 문항·표의 숨은 칸                                                              | `src/lib/survey/AGENTS.md`                       |
 | lib 트리 · 레이트리밋 · 로깅 · Sentry                                                                                                     | `src/lib/AGENTS.md`                              |
@@ -413,7 +414,7 @@ z.custom 이 남아도 되는 자리는 둘이다 — **출력 스키마**(요�
 
 18. **설문 종료는 「새로 들어오는 사람」만 막는다 — 진행 중 응답은 끝까지 제출된다**(ADR-0030): 응답 접수 판정표(`server/survey-response/domain/acceptance.ts`)의 `survey_closed` 는 **신규 진입과 재응답 허용**만 거부하고 완료 제출·진행 중 계속은 통과시킨다(마감일과 같은 결 — 즉시 전면 중단의 수단은 `isPaused` 다). 술어가 **설문 행만** 본다: 종료는 버전 행을 건드리지 않아 버전은 published 로 남으므로 「설문 또는 버전」으로 물으면 새 응답이 그대로 들어온다. 반대로 `status_not_published` 는 closed 를 「발행된 적 있는 설문」으로 통과시킨다 — 한 술어에 섞으면 완료 게이트가 종료된 설문의 진행 중 응답을 미배포로 잘라낸다. **첫 화면 차단도 같은 범위다**: 종료된 설문은 이어 갈 것이 없는 방문자에게만 접수 종료 화면(`not_accepting`)을 그린다. 「이어 갈 것」은 서버가 초대 토큰의 조사 대상에게 열린 응답이 있는지 본 값(`SurveyControl.resumableByInvite`)과 브라우저의 세션 키 둘로 판정한다(`use-duplicate-guard` 의 `closedEntry`) — 중단처럼 무조건 첫 화면에서 막으면 새로고침 한 번에 진행 중 응답이 버려진다. 새 접수 게이트를 만들 때 종료를 중단과 같은 줄에 넣지 말 것.
 
-19. **`useEffectEvent` 를 `React.memo`·`forwardRef` 컴포넌트 안에 쓰지 말 것**: React 19.2.3 은 그런 컴포넌트의 `useEffectEvent` 를 갱신하지 않아 이벤트가 첫 렌더 값을 계속 읽는다(dev·prod 둘 다). 컴포넌트 단위로 걸리므로 그 컴포넌트가 부르는 훅 안에 숨어 있어도 같다. ref 가 필요하면 forwardRef 대신 React 19 의 `ref` prop 을, memo 가 필요하면 바깥 컴포넌트를 memo 로 두고 안쪽은 일반 함수 컴포넌트로 둔다. `tests/repo/effect-event-in-memo.test.ts` 가 막는다 — **React 를 올리면 제약이 풀렸는지 확인하고 그 테스트를 지울 것.**
+19. **`useEffectEvent` 를 `React.memo`·`forwardRef` 컴포넌트 안에 쓰지 말 것**: React 19.2.3 은 그런 컴포넌트의 `useEffectEvent` 를 갱신하지 않아 이벤트가 첫 렌더 값을 계속 읽는다. 19.3.1 에서는 고쳐졌다(2026-11-26 `package.json` 을 19.3.1 로 올리며 시험) — 다만 **운영 화면은 `package.json` 의 React 가 아니라 Next 가 내장한 React 로 돈다**(App Router). 내장 판에서는 확인하지 못했으므로 제약을 그대로 둔다. 컴포넌트 단위로 걸리므로 그 컴포넌트가 부르는 훅 안에 숨어 있어도 같다. ref 가 필요하면 forwardRef 대신 React 19 의 `ref` prop 을, memo 가 필요하면 바깥 컴포넌트를 memo 로 두고 안쪽은 일반 함수 컴포넌트로 둔다. `tests/repo/effect-event-in-memo.test.ts` 가 막는다 — **Next 를 올려 내장 React 에서도 풀린 것을 확인하면 그 테스트를 지울 것.**
 
 ---
 

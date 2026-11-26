@@ -12,7 +12,7 @@ describe('HeaderBulkStyleDialog', () => {
       <HeaderBulkStyleDialog
         open
         onOpenChange={vi.fn()}
-        initialStyle={{ textBold: false, backgroundColor: '', textColor: '', isMixed: false, styledCount: 0 }}
+        initialStyle={{ textBold: false, backgroundColor: '', textColor: '', hideRightBorder: false, isMixed: false, styledCount: 0 }}
         onApply={onApply}
       />,
     );
@@ -30,6 +30,7 @@ describe('HeaderBulkStyleDialog', () => {
       textBold: true,
       backgroundColor: '#AABBCC',
       textColor: '',
+      hideRightBorder: false,
     });
   });
 
@@ -40,7 +41,7 @@ describe('HeaderBulkStyleDialog', () => {
       <HeaderBulkStyleDialog
         open
         onOpenChange={vi.fn()}
-        initialStyle={{ textBold: false, backgroundColor: '', textColor: '', isMixed: false, styledCount: 0 }}
+        initialStyle={{ textBold: false, backgroundColor: '', textColor: '', hideRightBorder: false, isMixed: false, styledCount: 0 }}
         onApply={onApply}
       />,
     );
@@ -59,7 +60,7 @@ describe('HeaderBulkStyleDialog', () => {
       <HeaderBulkStyleDialog
         open
         onOpenChange={vi.fn()}
-        initialStyle={{ textBold: false, backgroundColor: '', textColor: '', isMixed: false, styledCount: 0 }}
+        initialStyle={{ textBold: false, backgroundColor: '', textColor: '', hideRightBorder: false, isMixed: false, styledCount: 0 }}
         onApply={onApply}
       />,
     );
@@ -71,7 +72,7 @@ describe('HeaderBulkStyleDialog', () => {
       <HeaderBulkStyleDialog
         open
         onOpenChange={vi.fn()}
-        initialStyle={{ textBold: false, backgroundColor: '', textColor: '', isMixed: false, styledCount: 0 }}
+        initialStyle={{ textBold: false, backgroundColor: '', textColor: '', hideRightBorder: false, isMixed: false, styledCount: 0 }}
         onApply={onApply}
       />,
     );
@@ -87,7 +88,7 @@ describe('HeaderBulkStyleDialog', () => {
       <HeaderBulkStyleDialog
         open
         onOpenChange={vi.fn()}
-        initialStyle={{ textBold: true, backgroundColor: '#112233', textColor: '', isMixed: false, styledCount: 0 }}
+        initialStyle={{ textBold: true, backgroundColor: '#112233', textColor: '', hideRightBorder: false, isMixed: false, styledCount: 0 }}
         onApply={onApply}
       />,
     );
@@ -96,6 +97,6 @@ describe('HeaderBulkStyleDialog', () => {
     await user.click(screen.getByRole('button', { name: '배경색 없음' }));
     await user.click(screen.getByRole('button', { name: '전체 헤더에 적용' }));
 
-    expect(onApply).toHaveBeenCalledWith({ textBold: false, backgroundColor: '', textColor: '' });
+    expect(onApply).toHaveBeenCalledWith({ textBold: false, backgroundColor: '', textColor: '', hideRightBorder: false });
   });
 });

@@ -168,9 +168,17 @@ export const ChoiceOptCell = React.memo(function ChoiceOptCell({
   return (
     <div className="flex w-full min-w-0 flex-col gap-1.5">
       {/* items-start + mt-1: 라벨이 두 줄로 감겨도 컨트롤이 첫 줄에 고정된다.
-          가로 정렬은 이 행이 직접 — 뿌리가 w-full 이라 셀 래퍼의 items-* 가 닿지 않는다. */}
+          가로 정렬은 이 행이 직접 — 뿌리가 w-full 이라 셀 래퍼의 items-* 가 닿지 않는다.
+          글자 없는 칸(이름을 머리에만 둔 「해당없음」)은 라벨 줄이 없어 줄 상자가 26px 대신 20px 이고, 칸의 세로
+          정렬이 가운데·아래일 때 컨트롤이 글자 있는 이웃 칸보다 3 ~ 6px 낮게 선다. 표식(choice-opt-bare-control)만
+          달아 두고 높이는 globals.css 가 **좁은 칸 모드의 조각 안에서만** 준다 — 그 밖의 표(PC · 기존 문항)는
+          컨트롤 자리와 행 높이가 지금 그대로다. */}
       <div
-        className={cn('flex items-start gap-2', getHorizontalJustifyClass(cell.horizontalAlign))}
+        className={cn(
+          'flex items-start gap-2',
+          getHorizontalJustifyClass(cell.horizontalAlign),
+          !visibleText && 'choice-opt-bare-control',
+        )}
       >
         {control}
         {visibleText && (

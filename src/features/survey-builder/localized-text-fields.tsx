@@ -9,7 +9,7 @@ import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-s
 import { withLocalizedText } from '@/features/survey-builder/utils/localized-texts';
 import type { LocalizedSurveyText, LocalizedSurveyTexts } from '@/shared/contracts/survey';
 import { SURVEY_LOCALE_LABELS, TRANSLATED_SURVEY_LOCALES } from '@/types/survey-locale';
-import { findLanguageQuestion } from '@/utils/survey-language';
+import { findLanguageQuestion, resolveOfferedLocales } from '@/utils/survey-language';
 
 /** 설문에 언어 문항이 있는가 — 있을 때만 언어별 입력칸을 보인다(CONTEXT.md 「언어 문항」). */
 export function useHasLanguageQuestion(): boolean {
@@ -20,7 +20,8 @@ export function useHasLanguageQuestion(): boolean {
 }
 
 /**
- * 언어별 설문 글자 입력칸 (CONTEXT.md 「다국어 설문」) — 한국어 칸 아래에 中文·English 칸을 둔다.
+ * 언어별 설문 글자 입력칸 (CONTEXT.md 「다국어 설문」) — 한국어 칸 아래에 이 설문이 제공하는 언어
+ * (언어 문항 보기의 언어)의 칸을 둔다. 이미 글자가 든 언어의 칸은 보기에서 그 언어를 빼도 남긴다.
  * 비워 두면 응답 화면은 한국어 글자를 쓴다. 부르는 쪽이 `useHasLanguageQuestion` 으로 보일지 정한다.
  */
 export function LocalizedTextFields({
@@ -36,9 +37,16 @@ export function LocalizedTextFields({
   onChange: (next: LocalizedSurveyTexts | null) => void;
   multiline?: boolean;
 }) {
+  const { questions, groups } = useSurveyBuilderStore(
+    useShallow((s) => ({ questions: s.currentSurvey.questions, groups: s.currentSurvey.groups })),
+  );
+  const offered = resolveOfferedLocales(questions, groups ?? []);
+  const locales = TRANSLATED_SURVEY_LOCALES.filter(
+    (locale) => offered.includes(locale) || (texts?.[locale]?.[field] ?? '') !== '',
+  );
   return (
     <div className="space-y-2">
-      {TRANSLATED_SURVEY_LOCALES.map((locale) => {
+      {locales.map((locale) => {
         const id = `localized-${field}-${locale}`;
         const value = texts?.[locale]?.[field] ?? '';
         const handle = (next: string) => onChange(withLocalizedText(texts, locale, field, next));

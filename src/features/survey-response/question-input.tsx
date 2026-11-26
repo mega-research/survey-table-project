@@ -20,6 +20,10 @@ import {
   usePriorAnswers,
   usePriorHighlight,
 } from '@/features/question-renderer/prior-answers-context';
+import {
+  RadioQuestionScaleSlider,
+  useRadioQuestionScaleSlider,
+} from '@/features/question-renderer/radio-question-scale-slider';
 import { RankingQuestion } from '@/features/question-renderer/ranking-question';
 import {
   ResponseSourcesProvider,
@@ -70,7 +74,7 @@ import { type PriorAnswers, hasPriorAnswer, priorAnswerText } from '@/lib/survey
 import { substituteTokens, substituteTokensInHtml } from '@/lib/survey/substitute-tokens';
 import { type InputFormat, isInputFormat } from '@/types/input-type';
 import { Question, QuestionOption } from '@/types/survey';
-import type { SurveyLocale } from '@/types/survey-locale';
+import { type SurveyLocale, isSurveyLocale } from '@/types/survey-locale';
 import { resolveChoicePrefill } from '@/utils/choice-prefill';
 import { isChoiceTableSource } from '@/utils/choice-source';
 import { systemText } from '@/utils/system-strings';
@@ -101,6 +105,11 @@ interface QuestionInputProps {
    * 필수 게이트와 같은 판정(resolveChoiceTableVisibleCellIds)으로 상위가 계산해 넘긴다.
    */
   requiredVisibleCellIds?: ReadonlySet<string> | undefined;
+  /**
+   * 문항 카드가 화면에 그린 제목 요소의 id — 척도 슬라이더로 그리는 라디오 문항이 라디오 묶음의 낭독 이름으로
+   * 가리킨다. 그 요소가 문서에 있을 때만 넘긴다(제목을 숨긴 문항은 넘기지 않는다).
+   */
+  titleElementId?: string | undefined;
 }
 
 // 타입 정의
@@ -251,6 +260,7 @@ function QuestionInputControl({
   onDynamicRowSelectionChange,
   showRequiredHighlight,
   requiredVisibleCellIds,
+  titleElementId,
 }: QuestionInputProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
@@ -337,6 +347,7 @@ function QuestionInputControl({
             question={question}
             value={(value ?? null) as SingleChoiceResponse}
             onChange={onChange}
+            titleElementId={titleElementId}
           />
         </div>
       );
@@ -428,6 +439,8 @@ function QuestionInputControl({
           {...(question.mobileDrilldownRepeatHeaderEndRow !== undefined
             ? { mobileDrilldownRepeatHeaderEndRow: question.mobileDrilldownRepeatHeaderEndRow }
             : {})}
+          mobileDrilldownReverseColumns={question.mobileDrilldownReverseColumns}
+          mobileDrilldownColumnsPerView={question.mobileDrilldownColumnsPerView}
           {...(question.mobileItemCardBlockColumns != null
             ? { mobileItemCardBlockColumns: question.mobileItemCardBlockColumns }
             : {})}
@@ -468,10 +481,13 @@ function RadioQuestion({
   question,
   value,
   onChange,
+  titleElementId,
 }: {
   question: Question;
   value: SingleChoiceResponse;
   onChange: (value: SingleChoiceResponse) => void;
+  /** 문항 카드의 제목 요소 id — 척도 슬라이더로 그릴 때의 낭독 이름. 보기 목록은 쓰지 않는다 */
+  titleElementId?: string | undefined;
 }) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
@@ -510,6 +526,25 @@ function RadioQuestion({
   const priorHighlight = usePriorHighlight();
 
   const isMobileView = useMobileView();
+
+  // 척도 슬라이더(문항 설정) — 켜져 있고 그릴 수 있으면 보기 목록 대신 슬라이더다. 그릴지는 렌더러의 조각이
+  // 정하고(빌더 미리보기 카드와 같은 판정), 쓰기는 위의 변경 처리 그대로라 값·잠금 규칙이 달라지지 않는다.
+  // 모델이 없으면(설정 없음·폴백) 아래 보기 목록이 지금과 똑같이 그려진다. 열 배치 설정은 여기서 읽지 않는다.
+  const sliderModel = useRadioQuestionScaleSlider(question);
+  if (sliderModel) {
+    const selectedValue = isOtherChoiceValue(value) ? value.selectedValue : value;
+    return (
+      <RadioQuestionScaleSlider
+        question={question}
+        model={sliderModel}
+        selectedValue={typeof selectedValue === 'string' ? selectedValue : null}
+        onToggleOption={handleOptionChange}
+        locked={isLocked}
+        titleElementId={titleElementId}
+      />
+    );
+  }
+
   const effectiveColumns = isMobileView
     ? resolveMobileOptionsColumns(
         question.mobileOptionsColumns,
@@ -552,6 +587,8 @@ function RadioQuestion({
             />
             <label
               htmlFor={`${question.id}-${option.id}`}
+              // 언어 보기는 그 언어로 읽고 그린다(스크린리더 발음 · 베트남어·중국어 글꼴)
+              lang={isSurveyLocale(option.locale) ? option.locale : undefined}
               onClick={(e) => {
                 e.preventDefault();
                 handleOptionChange(option.value);

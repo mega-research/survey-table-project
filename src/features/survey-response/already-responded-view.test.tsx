@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { AlreadyRespondedView } from '@/features/survey-response/already-responded-view';
+import { OfferedLocalesProvider } from '@/features/survey-response/system-text';
 
 describe('AlreadyRespondedView', () => {
   it('문의 이메일을 mailto 링크가 아닌 텍스트로 표시한다', () => {
@@ -110,6 +111,44 @@ describe('AlreadyRespondedView', () => {
       expect(
         screen.getByText('The survey has been paused. Please try again later.'),
       ).toBeInTheDocument();
+    });
+
+    it('언어 미정이면 그 설문이 제공하는 언어의 기본 문구만 쌓는다', () => {
+      render(
+        <OfferedLocalesProvider locales={['ko', 'en', 'vi']}>
+          <AlreadyRespondedView
+            reason="survey_paused"
+            surveyTitle="테스트 설문"
+            contactEmail={null}
+            customBody={KO_DEFAULT}
+            locale={null}
+          />
+        </OfferedLocalesProvider>,
+      );
+      expect(screen.getByText(KO_DEFAULT)).toBeInTheDocument();
+      expect(
+        screen.getByText('The survey has been paused. Please try again later.'),
+      ).toBeInTheDocument();
+      expect(screen.getByText('Khảo sát đang tạm dừng. Vui lòng thử lại sau.')).toHaveAttribute(
+        'lang',
+        'vi',
+      );
+      expect(screen.queryByText('问卷已暂停。请稍后再试。')).not.toBeInTheDocument();
+    });
+
+    it('언어가 정해진 다국어 응답이면 화면 루트에 그 언어의 lang 을 단다 (글꼴·스크린리더)', () => {
+      const { container } = render(
+        <AlreadyRespondedView
+          reason="survey_paused"
+          surveyTitle="테스트 설문"
+          contactEmail={null}
+          customBody={KO_DEFAULT}
+          locale="vi"
+        />,
+      );
+      const body = screen.getByText('Khảo sát đang tạm dừng. Vui lòng thử lại sau.');
+      expect(body.closest('[lang]')).toBe(container.firstElementChild);
+      expect(container.firstElementChild).toHaveAttribute('lang', 'vi');
     });
 
     it('다국어 설문이 아니면(한국어) 글자 그대로 한 줄이다', () => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useId, useMemo, useState } from 'react';
 
 import { ChevronRight, ListChecks } from 'lucide-react';
 
@@ -40,7 +40,7 @@ import { PRIOR_HIGHLIGHT_CONTROL_CLS, isPriorChoice } from '@/features/question-
 import { usePriorHighlight } from '@/features/question-renderer/prior-answers-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
-import type { Question, TableCell, TableColumn, TableRow } from '@/types/survey';
+import type { ChoiceGroup, Question, TableCell, TableColumn, TableRow } from '@/types/survey';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 import {
   type GroupedChoiceAnswer,
@@ -51,13 +51,18 @@ import {
   isGroupedChoiceQuestion,
 } from '@/utils/choice-group-helpers';
 import { buildChoiceGroupOutline } from './utils/choice-group-outline';
-import { projectChoiceGroupSectionView } from './utils/choice-group-section-view';
+import { projectChoiceGroupSectionViewWithSlider } from './utils/choice-group-section-view';
 import { resolveChoiceGroupSectionLabel } from './utils/choice-group-section-label';
 import {
-  type RowScaleLayout,
-  projectRowWiseScaleLayouts,
+  type RowSliderLayout,
+  projectRowWiseSliderLayouts,
   resolveUngroupedSelectionType,
 } from './utils/row-scale-bars';
+import {
+  choiceTableHasScaleSliderRow,
+  resolveChoiceTableQuestionSliderDirection,
+  resolveRenderedTableDisplay,
+} from './utils/scale-slider-table-layout';
 import { collectChoiceOptCells, resolveChoiceOptions } from '@/utils/choice-source';
 import {
   collectProjectedCellIds,
@@ -81,6 +86,7 @@ import { MobileOptionCard, MobileSectionCard } from './mobile-card-shared';
 import { MobileOriginalRowTable } from './mobile-original-row-table';
 import { OptionTextInput } from './option-text-input';
 import { OptionTextInputStack, type OptionTextStackEntry } from './option-text-input-stack';
+import { ScaleSlider } from './scale-slider';
 import { collectInCellOptionTextIds } from './utils/option-text-in-cell';
 import { ValidationIssueBanner } from './validation-issue-banner';
 
@@ -125,6 +131,25 @@ interface ChoiceTableResponseProps {
  * - 데스크톱: tableRowsData 의 choice_opt 셀만 인터랙티브 input 으로 바꾼 TablePreview
  * - 모바일: 행마다 MobileOptionCard (라벨 + 표시 셀 + 체크/라디오 컨트롤)
  * 응답은 일반 radio/checkbox shape(radio=cell.id | null, checkbox=cell.id[])로 저장한다.
+ *
+ * ── 척도 슬라이더의 배선과 규칙 (CONTEXT.md 「척도 슬라이더」) ──
+ * - **켜는 설정은 표마다 하나다.** 보기 그룹이 있는 표는 그룹의 보기 모양, 그룹 없는 라디오 표는 문항 설정
+ *   (`Question.scaleSlider`)이다. 그룹이 있는 표는 문항 설정이 켜져 있어도 읽지 않는다 — 어느 표가 문항
+ *   설정을 읽는지는 `resolveChoiceTableQuestionSliderDirection` 한 곳이 정한다(빌더의 스위치도 같은 판정).
+ * - **배치는 표 문항과 같은 판정이다**(`resolveRenderedTableDisplay`). 슬라이더로 그려지는 행이 있으면
+ *   넓은 폭에서도 원본 표 대신 행 단위 배치(행별 원본·행별 척도와 같은 시트)로 그리고, 좁은 폭은 「행 단위
+ *   그룹 카드」만 그 카드 안에서, 나머지 표시 방식은 전부 행 단위 배치다. 그려지는 행이 없으면(설정이
+ *   없거나 모든 행이 폴백) 화면은 한 글자도 달라지지 않는다.
+ * - **표시 방식별 분기는 그 판정이 낸 「지금 유효한 표시 방식」(`activeMode`)만 견준다** — 문항의 저작
+ *   값을 직접 읽으면 슬라이더가 가져간 화면에 그 방식의 전용 장치가 샌다.
+ * - **선택 쓰기는 이 호스트의 기존 토글이다.** 그룹 표는 그룹 맵에 보기 칸 id, 그룹 없는 표는 보기 칸 id
+ *   하나 — 슬라이더를 끈 같은 문항과 응답 모양이 같다. 고른 자리를 다시 누르면 비워진다(척도 막대와 같다).
+ *   슬라이더는 끄는 동안 토글을 부르지 않고 손을 뗄 때 한 번만 부른다.
+ * - 그룹 없는 라디오 표는 문항 전체가 단일 선택이다 — 행마다 슬라이더가 서도 답은 하나다(끈 문항과 같다).
+ * - 필수 강조는 기존 미충족 그룹 칸 집합에서, 이월 잠금은 문항을 감싼 `fieldset disabled` 에서 온다(잠금
+ *   prop 을 뚫지 않는다). 칸 단위 비활성(체크박스 문항의 최대 선택 수)만 세로 타일과 같은 판정으로 넘긴다.
+ * - 넓은 폭의 행 단위 배치는 모바일 행 단위 배치와 같은 칸 그리기를 쓴다 — 격자 전용 장치(상세 기재 자리
+ *   셀 · 보기 칸 안 상세 기재 · 표 아래 상세 기재 줄 · 좌측 고정 열)는 읽지 않고 상세 기재는 그 칸 안에 선다.
  */
 /** 행별 원본 문항 모드에서 "답할 수 있는 행"으로 치는 셀 타입 — 렌더러가 인터랙티브로
  * 그리는 것과 같은 집합이어야 한다(보기 셀 + 단답 input + 선택형 컨트롤 셀). */
@@ -149,6 +174,7 @@ export function ChoiceTableResponse(props: ChoiceTableResponseProps) {
 
 const EMPTY_COLUMNS: TableColumn[] = [];
 const EMPTY_ROWS: TableRow[] = [];
+const EMPTY_CHOICE_GROUPS: ChoiceGroup[] = [];
 
 function ChoiceTableResponseBody({
   question,
@@ -165,6 +191,8 @@ function ChoiceTableResponseBody({
   // 그룹별 선택 모드 여부 — radio 또는 checkbox 그룹이 1개 이상 정의된 경우 true.
   // isCheckbox 가드를 제거하여 checkbox 질문도 grouped 경로를 밟을 수 있게 한다.
   const isGrouped = isGroupedChoiceQuestion(question);
+  // 그룹 없는 묶음의 슬라이더 방향 — 그룹 없는 라디오 표의 문항 설정. 그룹이 있는 표·체크박스 문항은 null
+  const ungroupedSliderDirection = resolveChoiceTableQuestionSliderDirection(question);
   const priorHighlight = usePriorHighlight();
 
   /**
@@ -183,6 +211,8 @@ function ChoiceTableResponseBody({
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
   const locale = useInlineSurveyLocale();
+  // 그룹 카드의 제목·낭독용 오류 문구 id — 슬라이더가 서는 카드에서만 쓴다
+  const groupCardIdPrefix = useId();
   // 조건 평가 컨텍스트 — 빠뜨리면 attr/lookup 피연산자가 undefined 로 평가된다.
   const branchEvalCtx = useBranchEvalCtx(allResponses);
   const [activeDynamicGroupId, setActiveDynamicGroupId] = useState<string | null>(null);
@@ -837,7 +867,7 @@ function ChoiceTableResponseBody({
     grouped = false,
   ) => (
     <div className={perRow ? 'space-y-3' : 'space-y-2'}>
-      {rows.flatMap((row) => {
+      {rows.flatMap((row, rowIndex) => {
         const choiceCells = row.cells.filter((c) => c.type === 'choice_opt' && !c.isHidden);
         // 보기 셀이 아닌 인터랙티브 셀(단답 input·선택형 컨트롤) — 행 단위 카드에서만 그린다.
         // 셀 단위 카드는 보기 셀마다 카드라 이 셀들이 설 자리가 없다(기존 동작 유지).
@@ -929,6 +959,42 @@ function ChoiceTableResponseBody({
           // 제목으로 쓴 구분 셀은 표시 셀 목록에서 뺀다 — 모바일 표시가 '표시'로 켜져 있으면
           // 제목과 본문에 같은 내용이 두 번 나온다.
           const displayCells = headerCell ? row.cells.filter((c) => c !== headerCell) : row.cells;
+          // 그룹 카드의 섹션 보기 모양 — 척도 슬라이더 / 척도 막대 / 원본 한 줄(폴백 포함) / 세로 타일.
+          // 선택 방식은 쓰기와 같은 판정(getGroupTypeOfCell)이라 복수 선택 그룹은 폴백이다.
+          // 그룹 없는 섹션의 슬라이더는 문항 설정이 켠다(그룹 없는 라디오 표).
+          // 섹션을 그리기 전에 정한다 — 슬라이더가 서는 카드인지가 카드 제목의 id 와 낭독용 오류 문구를 정한다
+          const sections = grouped
+            ? groupChoiceCellsByGroup(choiceCells).map(({ groupId, cells }) => {
+                const group = (question.choiceGroups ?? []).find((g) => g.id === groupId);
+                const view = projectChoiceGroupSectionViewWithSlider({
+                  group,
+                  selectionType: getGroupTypeOfCell(question, cells[0]!.id),
+                  columns: rowWiseLayout.columns,
+                  headerGrid: rowWiseLayout.headerGrid,
+                  hideColumnLabels: question.hideColumnLabels ?? false,
+                  row,
+                  groupCells: cells,
+                  ungroupedSliderDirection,
+                });
+                // 「다음」을 누른 뒤 미충족 필수 그룹은 섹션을 붉게 두른다 — 데스크톱 표의
+                // 보기 그룹 외곽선과 같은 판정(unfilledGroupCellIds)이라 어긋나지 않는다.
+                const unfilled = cells.some((c) => unfilledGroupCellIds.has(c.id));
+                return { groupId, cells, group, view, unfilled };
+              })
+            : [];
+          const sliderSections = sections.filter(
+            ({ view }) => view.kind === 'scale-slider' || view.kind === 'ungrouped-scale-slider',
+          );
+          // 슬라이더의 낭독 이름이 가리킬 카드 제목 — 슬라이더가 서는 카드에서만 id 를 단다.
+          // 미충족 필수 슬라이더 섹션이 있는 동안만 낭독용 오류 문구를 둔다(행 단위 배치의 행마다 문구와 같다)
+          const cardTitle = cardLabel.replace(/\s+/g, ' ').trim();
+          const cardTitleId =
+            sliderSections.length > 0 && cardTitle
+              ? `${groupCardIdPrefix}-${rowIndex}-title`
+              : undefined;
+          const cardErrorId = sliderSections.some(({ unfilled }) => unfilled)
+            ? `${groupCardIdPrefix}-${rowIndex}-error`
+            : undefined;
           return [
             // 그룹 카드도 행 카드와 같은 고정 머리 — 구분 셀을 줄 단위로 제목·설명으로 가르지 않고
             // 서식본(contentHtml)까지 그대로 둔다. 둘째 줄을 회색 설명으로 내리면 셀 편집기에서
@@ -937,6 +1003,7 @@ function ChoiceTableResponseBody({
               key={row.id}
               variant="section"
               testId={`row-card-${row.id}`}
+              labelId={cardTitleId}
               label={
                 <span
                   className={getCellTextClassName(labelStyleSource)}
@@ -970,27 +1037,17 @@ function ChoiceTableResponseBody({
                         hasMobileDisplayCells(displayCells) && 'border-t border-gray-100 pt-3',
                       )}
                     >
-                      {groupChoiceCellsByGroup(choiceCells).map(({ groupId, cells }) => {
-                        const group = (question.choiceGroups ?? []).find((g) => g.id === groupId);
+                      {cardErrorId ? (
+                        <p id={cardErrorId} className="sr-only">
+                          {systemText('mobile.checkAnswerOf', locale, { title: cardTitle })}
+                        </p>
+                      ) : null}
+                      {sections.map(({ groupId, cells, group, view, unfilled }) => {
                         const sectionLabel = resolveChoiceGroupSectionLabel(
                           group?.label ? substituteTokens(group.label, attrs, quotes) : '',
                           headerText ? substituteTokens(headerText, attrs, quotes) : '',
                           resolveChoiceAxisLabel(row, cells[0]!),
                         );
-                        // 「다음」을 누른 뒤 미충족 필수 그룹은 섹션을 붉게 두른다 — 데스크톱 표의
-                        // 보기 그룹 외곽선과 같은 판정(unfilledGroupCellIds)이라 어긋나지 않는다.
-                        const unfilled = cells.some((c) => unfilledGroupCellIds.has(c.id));
-                        // 그룹 보기 모양 — 척도 막대 / 원본 한 줄(막대 폴백 포함) / 세로 타일.
-                        // 선택 방식은 쓰기와 같은 판정(getGroupTypeOfCell)이라 복수 선택 그룹은 폴백이다.
-                        const view = projectChoiceGroupSectionView({
-                          group,
-                          selectionType: getGroupTypeOfCell(question, cells[0]!.id),
-                          columns: rowWiseLayout.columns,
-                          headerGrid: rowWiseLayout.headerGrid,
-                          hideColumnLabels: question.hideColumnLabels ?? false,
-                          row,
-                          groupCells: cells,
-                        });
                         const selectedInGroup = cells.find((c) => getChoiceCellState(c).checked)?.id;
                         // 세로 타일과 같은 비활성 판정(문항 최대 선택 수) — 막대 칸도 누를 수 없다
                         const disabledInGroup = new Set(
@@ -1005,7 +1062,38 @@ function ChoiceTableResponseBody({
                               unfilled && 'rounded-lg border border-red-300 bg-red-50/40 p-2',
                             )}
                           >
-                            {view.kind === 'scale-bar' ? (
+                            {view.kind === 'scale-slider' ||
+                            view.kind === 'ungrouped-scale-slider' ? (
+                              // 슬라이더도 머리 줄에 섹션 제목과 고른 값 표시를 나란히 둔다. 쓰기는 세로
+                              // 타일과 같은 이 문항의 보기 선택 쓰기다. 이 카드는 좁은 화면 전용이다.
+                              // 그룹 없는 섹션(문항 설정으로 켠 슬라이더)은 머리를 비운다 — 카드 제목(행
+                              // 제목)이 곧 이름이다. 키는 행 단위 배치의 그룹 없는 묶음과 같은 규칙이다.
+                              // 낭독 이름은 화면의 카드 제목 요소이고(머리가 있으면 「카드 제목, 섹션 제목」),
+                              // 미충족이면 카드의 낭독용 오류 문구를 잇는다. 글자는 제목이 빈 카드의 폴백이다.
+                              <ScaleSlider
+                                questionId={question.id}
+                                sliderId={
+                                  view.kind === 'scale-slider'
+                                    ? view.group.id
+                                    : `run:${cells[0]!.id}`
+                                }
+                                model={view.model}
+                                label={view.kind === 'scale-slider' ? sectionLabel : ''}
+                                ariaLabelledBy={cardTitleId}
+                                ariaLabel={
+                                  view.kind === 'scale-slider'
+                                    ? view.group.label || cardLabel
+                                    : cardLabel
+                                }
+                                ariaDescribedBy={unfilled ? cardErrorId : undefined}
+                                invalid={unfilled}
+                                selectedChoiceId={selectedInGroup}
+                                onToggleChoice={(cellId) => toggle(cellId, cellId !== selectedInGroup)}
+                                disabledChoiceIds={disabledInGroup}
+                                narrow
+                                inputIdScope={row.id}
+                              />
+                            ) : view.kind === 'scale-bar' ? (
                               // 막대는 머리 줄에 섹션 제목과 선택값 표시를 나란히 둔다. 쓰기는 세로
                               // 타일과 같은 이 문항의 보기 선택 쓰기 — 그룹 맵에 원래 보기 칸 id
                               <ChoiceGroupScaleBar
@@ -1030,7 +1118,9 @@ function ChoiceTableResponseBody({
                                 {sectionLabel}
                               </p>
                             ) : null}
-                            {view.kind === 'scale-bar' ? null : view.kind === 'original-line' ? (
+                            {view.kind === 'scale-slider' ||
+                            view.kind === 'ungrouped-scale-slider' ||
+                            view.kind === 'scale-bar' ? null : view.kind === 'original-line' ? (
                               <div data-testid={`choice-group-original-line-${groupId}`}>
                                 <MobileOriginalRowTable
                                   columns={view.line.columns}
@@ -1316,9 +1406,24 @@ function ChoiceTableResponseBody({
     );
   };
 
-  const mobileMode = resolveMobileTableDisplayMode(question);
+  // 척도 슬라이더 — 슬라이더로 그려지는 행이 있는 표는 넓은 폭에서도 표 대신 행 단위 배치로 그린다
+  // (scale-slider-table-layout, 표 문항과 같은 판정). 그려지는 행은 표의 구조로 판정해, 답에 따라 배치가
+  // 오가지 않는다.
+  // (메모의 재료는 문항 하나다 — 방향을 바깥 변수로 받으면 React Compiler 가 이 메모를 보존하지 못한다.)
+  const hasScaleSliderRow = useMemo(() => choiceTableHasScaleSliderRow(question), [question]);
+  // 지금 유효한 표시 방식 — **아래의 방식별 분기는 문항의 저작 값이 아니라 이 값만 읽는다.** 슬라이더가
+  // 행 단위 배치로 가져간 화면에서 저작 값을 직접 읽으면 그 방식의 전용 장치가 샌다
+  // (scale-slider-table-layout 머리 주석). 넓은 화면의 원본 표면 null 이다. 문항 카드(group-step-item)도
+  // 같은 판정(resolveChoiceTableRenderedDisplay)으로 이 값을 읽는다.
+  const { activeMode } = resolveRenderedTableDisplay({
+    hasSliderRow: hasScaleSliderRow,
+    narrow: isMobile,
+    mobileMode: resolveMobileTableDisplayMode(question),
+  });
+  // 행별 원본 · 행별 척도 — 같은 시트 구조, 행 본문만 다르다. 슬라이더의 행 단위 배치도 이 시트다.
+  const usesRowWiseSheet = activeMode !== null && isRowWiseMobileTableDisplayMode(activeMode);
   const rowWiseOriginalModel = useMemo(() => {
-    if (!isRowWiseMobileTableDisplayMode(mobileMode)) return { sections: [] };
+    if (!usesRowWiseSheet) return { sections: [] };
     const columns = question.tableColumns ?? [];
     const rows = question.tableRowsData ?? [];
     const model = buildMobileRowWiseOriginalModel({
@@ -1356,18 +1461,26 @@ function ChoiceTableResponseBody({
         })),
       })),
     };
-  }, [attrs, quotes, mobileMode, question, resolveChoiceLabel, rowWiseLayout]);
-  // 행별 척도 — 행마다 막대로 바꿀 수 있는지. 못 바꾸는 행은 원본 표 조각 그대로다.
+  }, [attrs, quotes, question, resolveChoiceLabel, rowWiseLayout, usesRowWiseSheet]);
+  // 행별 척도 — 행마다 막대·슬라이더로 바꿀 수 있는지. 못 바꾸는 행은 원본 표 조각 그대로다.
+  // 슬라이더의 행 단위 배치는 고른 표시 방식과 무관하게 「행별 척도」와 같이 그린다. 넓은 폭에서는
+  // 슬라이더가 아닌 보기 그룹을 제 보기 모양(세로 타일·척도 막대) 대신 원본 조각으로 낸다.
+  const rowWiseWide = !isMobile;
+  const projectsRowScaleLayouts = activeMode === 'row-wise-scale';
   const rowScaleLayouts = useMemo(
     () =>
-      mobileMode === 'row-wise-scale'
-        ? projectRowWiseScaleLayouts(
+      projectsRowScaleLayouts
+        ? projectRowWiseSliderLayouts(
             rowWiseOriginalModel,
-            question.choiceGroups ?? [],
+            question.choiceGroups ?? EMPTY_CHOICE_GROUPS,
             resolveUngroupedSelectionType(question.type),
+            {
+              wide: rowWiseWide,
+              ungroupedSliderDirection: resolveChoiceTableQuestionSliderDirection(question),
+            },
           )
-        : new Map<string, RowScaleLayout>(),
-    [mobileMode, question.choiceGroups, question.type, rowWiseOriginalModel],
+        : new Map<string, RowSliderLayout>(),
+    [projectsRowScaleLayouts, question, rowWiseOriginalModel, rowWiseWide],
   );
 
   const confirmDynamicRows = (rowIds: string[]) => {
@@ -1479,7 +1592,8 @@ function ChoiceTableResponseBody({
   const renderSelectedRowCell = (cell: TableCell, inputIdScope?: string) =>
     renderCell(cell.mobileDisplay === 'hidden' ? blankCellContent(cell) : cell, true, inputIdScope);
 
-  if (isMobile && isRowWiseMobileTableDisplayMode(mobileMode)) {
+  // 행 단위 배치 — 좁은 폭의 행별 원본·행별 척도, 그리고 폭과 무관한 슬라이더의 행 단위 배치
+  if (usesRowWiseSheet) {
     return (
       <div className="space-y-2">
         {dynamicRowSelector}
@@ -1532,6 +1646,47 @@ function ChoiceTableResponseBody({
               />
             );
           }}
+          renderScaleSlider={(
+            slider,
+            rowQuestion,
+            { inputIdScope, sharesRow, titleId, errorDescriptionId },
+          ) => {
+            // 쓰기는 막대·세로 타일·원본 조각과 같은 이 문항의 보기 선택 쓰기 — 원래 보기 칸 id.
+            // 끈 같은 문항과 응답 모양이 같고, 고른 자리를 다시 누르면 비워진다.
+            const selected = slider.cells.find((c) => getChoiceCellState(c).checked)?.id;
+            const groupLabel = slider.group?.label ?? '';
+            const disabledIds = slider.cells
+              .filter((c) => getChoiceCellState(c).disabled)
+              .map((c) => c.id);
+            const unfilled = slider.cells.some((c) => unfilledGroupCellIds.has(c.id));
+            return (
+              <ScaleSlider
+                questionId={question.id}
+                sliderId={slider.key}
+                model={slider.model}
+                // 행 제목이 위에 있다 — 행에 응답 묶음이 여럿일 때만 그룹 이름으로 가른다
+                label={sharesRow ? substituteTokens(groupLabel, attrs, quotes) : ''}
+                // 낭독 이름은 화면에 보이는 행 제목 요소다(머리에 그룹 이름이 있으면 슬라이더가 뒤에 잇는다).
+                // 제목 없는 행은 가리킬 요소가 없어 글자로 넘긴다
+                ariaLabelledBy={titleId}
+                ariaLabel={sharesRow ? groupLabel || rowQuestion.title : rowQuestion.title}
+                // 필수인데 답하지 않은 묶음에는 그 행의 낭독용 오류 문구를 잇는다 — 답하면 풀린다
+                ariaDescribedBy={unfilled ? errorDescriptionId : undefined}
+                invalid={unfilled}
+                selectedChoiceId={selected}
+                onToggleChoice={(cellId) => toggle(cellId, cellId !== selected)}
+                // 칸 단위 비활성(체크박스 문항의 최대 선택 수)만 넘긴다 — 잠금은 fieldset disabled 가 한다
+                {...(disabledIds.length > 0 ? { disabledChoiceIds: new Set(disabledIds) } : {})}
+                narrow={isMobile}
+                inputIdScope={inputIdScope}
+              />
+            );
+          }}
+          wide={rowWiseWide}
+          pieceSettings={{
+            reverseColumns: question.mobileDrilldownReverseColumns,
+            columnsPerView: question.mobileDrilldownColumnsPerView,
+          }}
         />
         {counter}
         {dynamicRowModal}
@@ -1539,7 +1694,7 @@ function ChoiceTableResponseBody({
     );
   }
 
-  if (isMobile && mobileMode === 'drilldown-original-row') {
+  if (activeMode === 'drilldown-original-row') {
     return withDynamicRowSelector(
       <ChoiceTableDrilldown
         question={question}
@@ -1554,22 +1709,19 @@ function ChoiceTableResponseBody({
     );
   }
 
-  if (isMobile && mobileMode === 'axis-cards') {
+  if (activeMode === 'axis-cards') {
     return withDynamicRowSelector(renderAxisCards());
   }
 
-  if (
-    isMobile &&
-    (mobileMode === 'auto' || mobileMode === 'row-cards' || mobileMode === 'row-group-cards')
-  ) {
+  if (activeMode === 'auto' || activeMode === 'row-cards' || activeMode === 'row-group-cards') {
     // 카드도 보이는 격자의 행을 쓴다 — 조건이 참이 된 행(병역특례 여부·기타 상세 기재)이 카드로
     // 나오고, 숨은 행은 카드로 나오지 않는다. 자동 카드가 전 행을 그리던 시절에는 데스크톱에서
     // 숨은 행의 보기를 모바일 응답자가 고를 수 있었다 — 그 선택은 저장 경계에서 지워진다.
     return withDynamicRowSelector(
       renderMobileOptionCards(
-        mobileMode !== 'auto',
+        activeMode !== 'auto',
         rowWiseLayout.rows,
-        mobileMode === 'row-group-cards',
+        activeMode === 'row-group-cards',
       ),
     );
   }

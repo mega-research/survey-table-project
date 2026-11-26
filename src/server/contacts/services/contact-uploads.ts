@@ -34,6 +34,7 @@ import {
 import type { PiiFieldType } from '@/lib/crypto/pii-fields';
 import { logger } from '@/lib/logger';
 import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts-format';
+import { LINK_CLICK_COLUMN_LABEL } from '@/lib/operations/filter-shared';
 import {
   loadOperationsDataScope,
   readBrowserTestView,
@@ -631,6 +632,12 @@ function autoGenerateColumnScheme(
     order: order++,
   });
   columns.push({ key: 'email_count', label: '메일', source: 'system.email_count', order: order++ });
+  columns.push({
+    key: 'link_click',
+    label: LINK_CLICK_COLUMN_LABEL,
+    source: 'system.link_click',
+    order: order++,
+  });
   columns.push({ key: 'web', label: 'web', source: 'system.web', order: order++ });
   columns.push({
     key: 'contact_owner',

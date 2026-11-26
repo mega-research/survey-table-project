@@ -228,6 +228,7 @@ describe('HeaderBulkStyleDialog 확인 단계', () => {
           textBold: false,
           backgroundColor: '',
           textColor: '',
+          hideRightBorder: false,
           isMixed: false,
           styledCount: 0,
         }}
@@ -237,7 +238,7 @@ describe('HeaderBulkStyleDialog 확인 단계', () => {
 
     await userEvent.click(screen.getByRole('button', { name: '전체 헤더에 적용' }));
 
-    expect(onApply).toHaveBeenCalledWith({ textBold: false, backgroundColor: '', textColor: '' });
+    expect(onApply).toHaveBeenCalledWith({ textBold: false, backgroundColor: '', textColor: '', hideRightBorder: false });
   });
 
   it('스타일이 섞여 있으면 확인 문구를 먼저 띄우고 적용하지 않는다', async () => {
@@ -250,6 +251,7 @@ describe('HeaderBulkStyleDialog 확인 단계', () => {
           textBold: false,
           backgroundColor: '',
           textColor: '',
+          hideRightBorder: false,
           isMixed: true,
           styledCount: 3,
         }}
@@ -275,6 +277,7 @@ describe('HeaderBulkStyleDialog 확인 단계', () => {
           textBold: false,
           backgroundColor: '',
           textColor: '',
+          hideRightBorder: false,
           isMixed: true,
           styledCount: 3,
         }}
@@ -304,6 +307,7 @@ describe('HeaderBulkStyleDialog 확인 단계', () => {
           textBold: true,
           backgroundColor: '#AABBCC',
           textColor: '',
+          hideRightBorder: false,
           isMixed: true,
           styledCount: 3,
         }}
@@ -318,6 +322,7 @@ describe('HeaderBulkStyleDialog 확인 단계', () => {
       textBold: true,
       backgroundColor: '#AABBCC',
       textColor: '',
+      hideRightBorder: false,
     });
   });
 
@@ -331,6 +336,7 @@ describe('HeaderBulkStyleDialog 확인 단계', () => {
           textBold: false,
           backgroundColor: '',
           textColor: '',
+          hideRightBorder: false,
           isMixed: true,
           styledCount: 2,
         }}
@@ -356,6 +362,7 @@ describe('HeaderBulkStyleDialog 확인 단계', () => {
           textBold: false,
           backgroundColor: '',
           textColor: '',
+          hideRightBorder: false,
           isMixed: true,
           styledCount: 2,
         }}
@@ -418,3 +425,122 @@ describe('TableHeaderSection 열 차례로 열기', () => {
     expect(onUpdateColumnReveal).toHaveBeenCalledWith(0, { revealStep: 3 });
   });
 });
+
+describe('머리글 오른쪽 세로선 숨김', () => {
+  it('다단계 헤더 칸의 스타일 팝오버에서 켜면 그 칸에만 적힌다', async () => {
+    const onChange = vi.fn();
+    render(<HeaderGridEditor headerGrid={grid()} columnCount={2} onChange={onChange} />);
+
+    await userEvent.click(screen.getAllByRole('button', { name: '헤더 셀 스타일' })[0]!);
+    await userEvent.click(await screen.findByRole('switch', { name: '오른쪽 세로선 숨김' }));
+
+    expect(onChange).toHaveBeenCalledWith([
+      [
+        { id: 'h1', label: '상반기', colspan: 1, rowspan: 1, hideRightBorder: true },
+        { id: 'h2', label: '하반기', colspan: 1, rowspan: 1 },
+      ],
+    ]);
+  });
+
+  it('켜진 칸에서 끄면 필드가 지워지고, 색을 고쳐도 숨김은 남는다', async () => {
+    const onChange = vi.fn();
+    const hidden: HeaderCell[][] = [
+      [
+        { id: 'h1', label: '상반기', colspan: 1, rowspan: 1, hideRightBorder: true },
+        { id: 'h2', label: '하반기', colspan: 1, rowspan: 1 },
+      ],
+    ];
+    render(<HeaderGridEditor headerGrid={hidden} columnCount={2} onChange={onChange} />);
+
+    await userEvent.click(screen.getAllByRole('button', { name: '헤더 셀 스타일' })[0]!);
+    await userEvent.type(await screen.findByLabelText('배경색 HEX'), 'abc');
+    await userEvent.tab();
+    expect(onChange).toHaveBeenLastCalledWith([
+      [
+        { id: 'h1', label: '상반기', colspan: 1, rowspan: 1, hideRightBorder: true, backgroundColor: '#AABBCC' },
+        { id: 'h2', label: '하반기', colspan: 1, rowspan: 1 },
+      ],
+    ]);
+
+    await userEvent.click(screen.getByRole('switch', { name: '오른쪽 세로선 숨김' }));
+    expect(onChange).toHaveBeenLastCalledWith(grid());
+  });
+
+  it('편집 격자는 선을 그대로 그리고, 켜진 칸을 글자로 알린다', () => {
+    const hidden: HeaderCell[][] = [
+      [
+        { id: 'h1', label: '상반기', colspan: 1, rowspan: 1, hideRightBorder: true },
+        { id: 'h2', label: '하반기', colspan: 1, rowspan: 1 },
+      ],
+    ];
+    render(<HeaderGridEditor headerGrid={hidden} columnCount={2} onChange={vi.fn()} />);
+
+    const marks = screen.getAllByText('오른쪽 선 숨김');
+    expect(marks).toHaveLength(1);
+    const cell = marks[0]!.closest('.group')!;
+    expect(cell).toHaveTextContent('상반기');
+    expect(cell).toHaveClass('border-r');
+    expect(cell).not.toHaveClass('border-r-0');
+  });
+
+  it('전체 헤더 스타일에서 켜면 적용 값에 실린다', async () => {
+    const onApply = vi.fn();
+    render(
+      <HeaderBulkStyleDialog
+        open
+        onOpenChange={vi.fn()}
+        initialStyle={{
+          textBold: false,
+          backgroundColor: '',
+          textColor: '',
+          hideRightBorder: false,
+          isMixed: false,
+          styledCount: 0,
+        }}
+        onApply={onApply}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('switch', { name: '오른쪽 세로선 숨김' }));
+    await userEvent.click(screen.getByRole('button', { name: '전체 헤더에 적용' }));
+
+    expect(onApply).toHaveBeenCalledWith({
+      textBold: false,
+      backgroundColor: '',
+      textColor: '',
+      hideRightBorder: true,
+    });
+  });
+
+  it('전체 헤더 스타일은 이미 전부 켜진 표에서 켜진 채로 열린다', () => {
+    render(
+      <HeaderBulkStyleDialog
+        open
+        onOpenChange={vi.fn()}
+        initialStyle={{
+          textBold: false,
+          backgroundColor: '',
+          textColor: '',
+          hideRightBorder: true,
+          isMixed: false,
+          styledCount: 5,
+        }}
+        onApply={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole('switch', { name: '오른쪽 세로선 숨김' })).toBeChecked();
+  });
+});
+
+describe('HeaderGridEditor 머리글 글자의 공백', () => {
+  it('편집 격자도 연속 공백을 적은 그대로 그린다 — 응답 화면과 같은 값', () => {
+    const dots: HeaderCell[][] = [
+      [{ id: 'h1', label: '•     •     •', colspan: 1, rowspan: 1 }],
+    ];
+    render(<HeaderGridEditor headerGrid={dots} columnCount={1} onChange={vi.fn()} />);
+
+    const label = screen.getByText((_, el) => el?.textContent === '•     •     •' && el.tagName === 'SPAN');
+    expect(label).toHaveClass('whitespace-pre-wrap');
+  });
+});
+

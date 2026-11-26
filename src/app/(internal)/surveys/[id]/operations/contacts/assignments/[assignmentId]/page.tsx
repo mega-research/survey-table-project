@@ -37,7 +37,8 @@ export default async function ContactAssignmentEditPage({ params }: PageProps) {
     getAssignmentForEdit(surveyId, scope, assignmentId),
     loadContactFilterContext(surveyId, scope, {
       isExternal: false,
-      surface: 'contacts',
+      // 컨택원 수정 화면은 「링크 클릭」 조건을 받지 않는다 — 후보에서 빠진다(`assignments` 표면)
+      surface: 'assignments',
       share: FIELDWORK_SHARE_ALL,
     }),
   ]);

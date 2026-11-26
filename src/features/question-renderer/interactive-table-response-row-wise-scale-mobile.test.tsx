@@ -7,6 +7,7 @@ import type { MobileTableDisplayMode } from '@/types/mobile-table-display';
 import type { ChoiceGroup, HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 
 import { InteractiveTableResponse } from './interactive-table-response';
+import { buildRowWiseCellInstanceIds, scrollToIssue } from './scroll-to-issue';
 
 /**
  * 표 문항 — 모바일 표시 방식 「행별 척도」(row-wise-scale). 「행별 원본 문항」과 같은 시트 구조에서
@@ -309,3 +310,63 @@ describe('행별 척도 — 표 문항', () => {
     expect(screen.getAllByRole('radio').length).toBeGreaterThanOrEqual(33);
   });
 });
+
+describe('행별 척도 — 제목 아래 입력칸(mobileBelowRowTitle)', () => {
+  // 청암대 재학생 문31 — 척도 줄 아래 서술형 줄. 질문 글자가 항목 열에, 입력칸이 척도 열 전체에 걸친다.
+  const essayRow = (flagged: boolean): TableRow => ({
+    id: 'essay',
+    label: '서술형',
+    cells: [
+      { id: 'essay-title', type: 'text', content: '가장 개선이 필요한 점을 적어 주세요.' },
+      {
+        id: 'essay-input',
+        type: 'input',
+        content: '',
+        colspan: CIRC.length,
+        inputRows: 2,
+        ...(flagged ? { mobileBelowRowTitle: true } : {}),
+      },
+      ...CIRC.slice(1).map(
+        (_, n): TableCell => ({ id: `essay-hidden-${n}`, type: 'text', content: '', isHidden: true }),
+      ),
+    ],
+  });
+
+  it('표식을 켠 서술형 줄은 가로로 미는 표 조각 없이 제목 아래 입력칸으로 그리고 값을 그 칸에 쓴다', () => {
+    render(<Harness rowsOverride={[...rows, essayRow(true)]} />);
+    const block = rowBlock('essay');
+    expect(within(block).getByText('가장 개선이 필요한 점을 적어 주세요.')).toBeInTheDocument();
+    expect(within(block).queryByRole('grid')).toBeNull();
+    const field = within(block).getByRole('textbox');
+    expect(block.querySelector('[data-below-title-cell="essay-input"]')!.contains(field)).toBe(true);
+    fireEvent.change(field, { target: { value: '실습실 확충' } });
+    expect(valueOf()['essay-input']).toBe('실습실 확충');
+    // 척도 줄은 그대로 막대다
+    expect(within(rowBlock('r1')).getByTestId('choice-group-scale-bar-g1')).toBeInTheDocument();
+  });
+
+  it('오류 「위치로 이동」이 제목 아래 입력칸으로 가고, 고정 너비를 준 칸도 좁게 그리지 않는다', () => {
+    const narrow = essayRow(true);
+    narrow.cells[1] = { ...narrow.cells[1]!, inputWidth: 60 };
+    const allRows = [...rows, narrow];
+    render(<Harness rowsOverride={allRows} errorCellIds={new Set(['essay-input'])} />);
+    const field = within(rowBlock('essay')).getByRole('textbox');
+    expect(field.closest('[style*="60px"]')).toBeNull();
+    Element.prototype.scrollIntoView = vi.fn();
+    scrollToIssue({
+      cellInstanceIds: buildRowWiseCellInstanceIds(allRows, ['essay-input']),
+      cellIds: ['essay-input'],
+      questionId: 'q1',
+    });
+    expect(document.activeElement).toBe(field);
+  });
+
+  it('표식이 없으면 종전대로 원본 표 조각 안에 그린다', () => {
+    render(<Harness rowsOverride={[...rows, essayRow(false)]} />);
+    const block = rowBlock('essay');
+    expect(block.querySelector('[data-below-title-cell]')).toBeNull();
+    expect(within(block).getByRole('grid')).toBeInTheDocument();
+    expect(within(block).getByRole('textbox')).toBeInTheDocument();
+  });
+});
+

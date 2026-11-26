@@ -141,6 +141,10 @@
     "0167_survey_list_title",
     "0168_survey_list_title_into_card_title",
     "0169_drop_survey_list_title",
-    "0166_survey_groups_nesting"
+    "0166_survey_groups_nesting",
+    "0170_mail_link_clicks",
+    "0171_question_distinct_group",
+    "0173_question_scale_slider",
+    "0174_question_mobile_piece_arrangement"
   ]
 }

@@ -13,8 +13,8 @@ import {
 } from '@/server/workflows/test-mail-archive';
 import { lockWriteScope } from '@/server/data-scope';
 import {
-  FIELDWORK_SHARE_ALL,
   type FieldworkShare,
+  shareAttrStamp,
   shareTargetCondition,
 } from '@/server/fieldwork-share-scope';
 import { generateInviteCode } from '@/lib/survey-url';
@@ -63,8 +63,9 @@ function assertStorablePiiUpdates(piiUpdates: UpdateContactTargetInput['piiUpdat
  * 못하도록, 설문 행과 대상 행을 같은 트랜잭션에서 순서대로 잠근다.
  *
  * 담당 범위(`share`)도 같은 잠금 조회의 조건이다 — 범위 밖 대상은 없는 대상과 같은 `NOT_FOUND`
- * (fieldwork-multi-company 티켓 05). 외주 링크에 열린 쓰기는 메모(`setContactTargetMemo`)뿐이고, 명단
- * 수정·삭제는 `contacts.manage` 라 링크에 닫혀 있어 `FIELDWORK_SHARE_ALL` 을 넘긴다.
+ * (fieldwork-multi-company 티켓 05). 외주 링크에 열린 쓰기는 메모(`setContactTargetMemo`)뿐이고 명단
+ * 추가·수정은 `contacts.manage` 라 링크에 닫혀 있지만, 범위는 어느 쓰기든 procedure 가 주체에서 풀어 넘긴다
+ * (`resolveFieldworkShare`) — 그 관문이 넓어져도 범위가 따라오게.
  */
 async function lockTargetAndReadCurrent(
   tx: DbTransaction,
@@ -92,6 +93,7 @@ async function lockTargetAndReadCurrent(
         eq(contactTargets.id, input.id),
         eq(contactTargets.surveyId, input.surveyId),
         eq(contactTargets.isTest, scope.isTest),
+        // 담당 범위도 잠금 조회의 조건이다 — 범위 밖 대상은 없는 대상과 똑같이 NOT_FOUND 다.
         shareTargetCondition(share),
       ),
     )
@@ -124,6 +126,19 @@ async function lockCurrentSurveyScope(
 }
 
 /**
+ * 담당 범위에 묶인 주체가 쓰는 명단 값에 범위 열을 박는다 — 입력이 그 열을 비우거나 다른 값으로 보내도
+ * 자기 범위 값이 저장된다. 범위를 명단 열 값으로 가르는 운영판(게스트 계정)의 장치이고, 외주 링크의 범위는
+ * 따로 둔 표라 찍을 값이 없다(`shareAttrStamp` 가 null) — 그때는 입력 그대로다. `none` 은 어느 판이든 닫는다.
+ */
+function withShareStamp(attrs: Record<string, string>, share: FieldworkShare): Record<string, string> {
+  if (share.kind === 'none') {
+    throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다.' });
+  }
+  const stamp = shareAttrStamp(share);
+  return stamp ? { ...attrs, [stamp.attrsKey]: stamp.value } : attrs;
+}
+
+/**
  * 컨택리스트의 "+ 컨택 추가" 모달 저장.
  * resid 는 next_contact_resid() 로 자동 발번.
  * PII 컬럼은 piiUpdates 로 별도 전달 → contact_pii 에 암호화 저장.
@@ -132,12 +147,15 @@ async function lockCurrentSurveyScope(
  *
  * isExternal 는 procedure 가 이미 인증한 context.user.id 에서 파생해 전달한다 — 서비스가
  * auth 를 재조회하면 그 실패가 fail-open(어드민 취급)으로 이어질 수 있다.
+ *
+ * `share` 는 열람자의 담당 범위다 — 범위 게스트가 추가한 대상에는 자기 범위 값이 찍힌다(`withShareStamp`).
  */
 export async function addContactTarget(
   input: AddContactTargetInput,
   isExternal: boolean,
+  share: FieldworkShare,
 ): Promise<ContactTargetRow> {
-  const { surveyId, attrs: rawAttrs, piiUpdates, memo, contactMethod, systemFieldKeys } = input;
+  const { surveyId, attrs: rawAttrs, piiUpdates, memo, contactMethod } = input;
   assertStorablePiiUpdates(piiUpdates);
 
   const result = await db.transaction(async (tx) => {
@@ -148,10 +166,7 @@ export async function addContactTarget(
       isExternal,
     });
     // 잠금 뒤 읽은 현재 스코프의 스킴으로 평문 PII 누적을 차단한다.
-    const attrs = sanitizeAttrsAgainstPiiScheme(rawAttrs, prepared.scheme);
-    // 빈 셀('')만 NULL 처리. '0' 등 falsy 문자열 group 라벨은 보존 (|| 사용 금지).
-    const rawGroup = systemFieldKeys?.group ? attrs[systemFieldKeys.group] : undefined;
-    const groupValue = rawGroup != null && rawGroup !== '' ? rawGroup : null;
+    const attrs = withShareStamp(sanitizeAttrsAgainstPiiScheme(rawAttrs, prepared.scheme), share);
 
     const resid = await allocateContactResid(tx, surveyId, prepared.isTest);
 
@@ -161,7 +176,7 @@ export async function addContactTarget(
         surveyId,
         resid,
         isTest: prepared.isTest,
-        groupValue,
+        // 그룹 값(group_value)은 명단 업로드만 채운다 — 한 명씩 추가한 대상은 비워 둔다(아래 수정 경로 주석).
         attrs,
         memo: memo ?? null,
         contactMethod: contactMethod ?? null,
@@ -236,20 +251,24 @@ export async function setContactTargetMemo(
 }
 
 /**
- * 행 단위 갱신 — attrs/group/memo/contactMethod + PII 변경분 upsert.
+ * 행 단위 갱신 — attrs/memo/contactMethod + PII 변경분 upsert. 그룹 값(group_value)은 쓰지 않는다.
  *
  * 바뀐 칸이 있으면 같은 트랜잭션에서 「대상 정보 수정 현황」 한 줄(`info_edit`)을 남긴다. 개인정보 열은
  * 값 없이 「입력 · 변경 · 삭제」만 남는다 — 지금 값은 잠금 아래에서 복호화해 비교에만 쓴다. 이전 값은
  * 화면이 보낸 값이 아니라 대상 행 잠금 아래에서 읽은 지금 값이다 — 그 사이 다른 사람이 고친 칸을
  * 이 저장이 옛 값으로 덮으면 그것도 변경으로 남는다. 기록 INSERT 가 실패하면 저장도 롤백된다.
  * editor 는 procedure 가 인증된 context 에서 넘긴다.
+ *
+ * `share` 는 열람자의 담당 범위다 — 범위 밖 대상은 NOT_FOUND 이고, 범위 게스트는 범위 열을 바꾸지 못한다
+ * (`withShareStamp` 가 자기 값으로 되돌린다).
  */
 export async function updateContactTarget(
   input: UpdateContactTargetInput,
   isExternal: boolean,
   editor: ContactEditor,
+  share: FieldworkShare,
 ): Promise<void> {
-  const { id, surveyId, attrs: rawAttrs, piiUpdates, memo, contactMethod, systemFieldKeys } = input;
+  const { id, surveyId, attrs: rawAttrs, piiUpdates, memo, contactMethod } = input;
   assertStorablePiiUpdates(piiUpdates);
 
   await db.transaction(async (tx) => {
@@ -257,20 +276,14 @@ export async function updateContactTarget(
       tx,
       { id, surveyId },
       isExternal,
-      // 명단 수정은 `contacts.manage` 라 외주 링크에 닫혀 있다 — 계정 주체의 범위는 언제나 설문 전체다.
-      FIELDWORK_SHARE_ALL,
+      share,
     );
     // 모드·대상 소속과 같은 잠금 스냅샷에서 확정한 스킴으로 PII 평문을 제거한다.
-    const attrs = sanitizeAttrsAgainstPiiScheme(rawAttrs, scheme);
+    const attrs = withShareStamp(sanitizeAttrsAgainstPiiScheme(rawAttrs, scheme), share);
 
-    // 분류 기준 키가 전달된 경우에만 group_value 재계산.
-    // systemFieldKeys.group 이 없으면(예: 자동 감지 실패) 기존 group_value 를 보존해야 함 —
-    // 무조건 set 하면 메모/PII 만 수정한 부분 업데이트에서 기존 분류값이 null 로 덮어써짐.
-    // 빈 셀('')만 NULL 처리. '0' 등 falsy 문자열 group 라벨은 보존 (|| 사용 금지).
-    const hasGroupKey = systemFieldKeys?.group != null;
-    const rawGroup = hasGroupKey ? attrs[systemFieldKeys.group as string] : undefined;
-    const groupValue = rawGroup != null && rawGroup !== '' ? rawGroup : null;
-
+    // 그룹 값(group_value)은 건드리지 않는다 — 명단 업로드가 채운 값 그대로 둔다. 전에는 화면이 넘긴 열
+    // 이름으로 다시 썼는데, 그 열을 이름(「전시회」)으로 추측해 저장할 때마다 다른 열 값으로 덮었다
+    // (2026-11-23 국내전시회 설문 — 314명의 그룹이 전시회ID 숫자로 바뀌었다).
     // 개인정보 열의 지금 값 — 같은 잠금 아래, 덮어쓰기 전에 읽어 메모리에서만 비교한다.
     const piiWrites = (piiUpdates ?? []).map((p) => ({
       columnKey: p.columnKey,
@@ -288,7 +301,6 @@ export async function updateContactTarget(
       .update(contactTargets)
       .set({
         attrs,
-        ...(hasGroupKey ? { groupValue } : {}),
         memo: memo ?? null,
         contactMethod: contactMethod ?? null,
         updatedAt: new Date(),

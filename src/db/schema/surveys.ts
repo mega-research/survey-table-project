@@ -40,7 +40,12 @@ import type {
   SurveyOwnershipStatus,
   SurveyVisibility,
 } from '@/shared/contracts/workspace';
-import { MOBILE_TABLE_DISPLAY_MODES } from '@/types/mobile-table-display';
+import {
+  MOBILE_PIECE_COLUMNS_PER_VIEW_MAX,
+  MOBILE_PIECE_COLUMNS_PER_VIEW_MIN,
+  MOBILE_TABLE_DISPLAY_MODES,
+} from '@/types/mobile-table-display';
+import { SCALE_SLIDER_DIRECTIONS } from '@/types/scale-slider';
 import type {
   ChoiceGroup,
   DynamicRowGroupConfig,
@@ -347,6 +352,12 @@ export const questions = pgTable(
     collapseButtonLabel: text('collapse_button_label'),
     // 접어 둔 문항을 페이지에서 바로 앞 문항의 설명 밑에 붙인다 (0155). 버튼 글자가 있을 때만 의미가 있다
     collapseAttachToPrevious: boolean('collapse_attach_previous').notNull().default(false),
+    // 문항 사이의 중복 불가 묶음 이름 (0171). NULL·공백 = 없음. 같은 이름의 단일 선택 문항끼리 같은 보기를 못 고른다
+    distinctGroup: text('distinct_group'),
+    // 문항의 슬라이더 방향 (0173). NULL = 꺼짐. 값이 있으면 척도 슬라이더로 그리고 그 값이 긍정 방향이다.
+    // 보통 라디오 문항과 묶음 없는 보기 소스 표만 읽는다 — 묶음이 있는 표는 묶음(choice_groups) 설정만 본다.
+    // { enum } 은 타입 전용이라 아래 check() 와 마이그레이션 CHECK 가 따로 있다 (어휘 @/types/scale-slider)
+    scaleSlider: text('scale_slider', { enum: SCALE_SLIDER_DIRECTIONS }),
 
     // 단답형·장문형 개인정보 암호화 토글 — 응답값을 encryptPii 암호문으로 저장 (ADR-0012)
     piiEncrypted: boolean('pii_encrypted').default(false).notNull(),
@@ -364,7 +375,7 @@ export const questions = pgTable(
     // 좌측 고정 열 개수 (표를 그리는 문항 전용). NULL = 자동 판정, 0~3 = 명시 지정
     stickyColumnCount: smallint('sticky_column_count'),
 
-    // 화면 폭에 맞춰 표 줄이기 (표를 그리는 문항 전용, 0146). false = 지정 px 고정(기존), true = 좁은 화면에서 비율로 줄임
+    // 화면 폭에 맞춰 표 줄이기 (표를 그리는 문항 전용, 0146). false = 지정 px 고정(기존), true = 패드 폭(768~1023px)에서 비율로 줄임
     fitTableToWidth: boolean('fit_table_to_width').notNull().default(false),
 
     // 평균 산출 (척도 평균, 0147). true = 운영 콘솔 척도 평균 표에 이 문항의 단일값 변수가 줄로 나온다.
@@ -390,6 +401,12 @@ export const questions = pgTable(
       'mobile_drilldown_repeat_header_start_row',
     ).default(0),
     mobileDrilldownRepeatHeaderEndRow: integer('mobile_drilldown_repeat_header_end_row').default(0),
+    // 조각 좌우 반전 · 조각 한 화면 칸 수 (0174) — 좁은 화면의 원본 표 조각에만 적용하는 표현 설정.
+    // 반전 false·칸 수 NULL = 꺼짐(기존 문항 전부). 칸 수 범위는 @/types/mobile-table-display 가 SSOT.
+    mobileDrilldownReverseColumns: boolean('mobile_drilldown_reverse_columns')
+      .notNull()
+      .default(false),
+    mobileDrilldownColumnsPerView: integer('mobile_drilldown_columns_per_view'),
     // 「항목 단위 카드」 블록 시작 열 (1부터). NULL = 블록 없음 (0131)
     mobileItemCardBlockColumns: jsonb('mobile_item_card_block_columns').$type<number[]>(),
 
@@ -420,6 +437,14 @@ export const questions = pgTable(
     check(
       'questions_mobile_table_display_mode_check',
       sql`${table.mobileTableDisplayMode} in ('auto', 'drilldown-original-row', 'row-wise-original', 'row-wise-scale', 'row-cards', 'row-group-cards', 'axis-cards', 'item-cards', 'original')`,
+    ),
+    check(
+      'questions_scale_slider_check',
+      sql`${table.scaleSlider} is null or ${table.scaleSlider} in ('positive-right', 'positive-left')`,
+    ),
+    check(
+      'questions_mobile_drilldown_columns_per_view_check',
+      sql`${table.mobileDrilldownColumnsPerView} is null or (${table.mobileDrilldownColumnsPerView} >= ${sql.raw(String(MOBILE_PIECE_COLUMNS_PER_VIEW_MIN))} and ${table.mobileDrilldownColumnsPerView} <= ${sql.raw(String(MOBILE_PIECE_COLUMNS_PER_VIEW_MAX))})`,
     ),
     check(
       'questions_input_rows_range',

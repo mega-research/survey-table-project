@@ -491,6 +491,8 @@ export function mapQuestionRow(q: QuestionRow): QuestionType {
     // 꺼진 값(NULL)은 싣지 않는다 — 기존 문항의 스냅샷·빌더 모양이 그대로다
     ...(q.collapseButtonLabel != null ? { collapseButtonLabel: q.collapseButtonLabel } : {}),
     ...(q.collapseAttachToPrevious ? { collapseAttachToPrevious: true } : {}),
+    ...(q.distinctGroup != null ? { distinctGroup: q.distinctGroup } : {}),
+    ...(q.scaleSlider != null ? { scaleSlider: q.scaleSlider } : {}),
     ...(q.sumConstraints != null
       ? { sumConstraints: q.sumConstraints as NonNullable<QuestionType['sumConstraints']> }
       : {}),
@@ -509,6 +511,11 @@ export function mapQuestionRow(q: QuestionRow): QuestionType {
       : {}),
     mobileDrilldownRepeatHeaderStartRow: q.mobileDrilldownRepeatHeaderStartRow,
     mobileDrilldownRepeatHeaderEndRow: q.mobileDrilldownRepeatHeaderEndRow,
+    // 꺼진 값(기본)은 싣지 않는다 — 기존 문항의 스냅샷·빌더 모양이 그대로다
+    ...(q.mobileDrilldownReverseColumns ? { mobileDrilldownReverseColumns: true } : {}),
+    ...(q.mobileDrilldownColumnsPerView != null
+      ? { mobileDrilldownColumnsPerView: q.mobileDrilldownColumnsPerView }
+      : {}),
     ...(q.mobileItemCardBlockColumns != null
       ? { mobileItemCardBlockColumns: q.mobileItemCardBlockColumns }
       : {}),

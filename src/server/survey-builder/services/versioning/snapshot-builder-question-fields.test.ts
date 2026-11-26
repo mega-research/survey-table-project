@@ -75,6 +75,8 @@ const SENTINEL = {
   titleHtml: '<p><strong>질문</strong></p>',
   collapseButtonLabel: '코드표 보기',
   collapseAttachToPrevious: true,
+  distinctGroup: 'leave',
+  scaleSlider: 'positive-left',
   piiEncrypted: true,
   tableValidationRules: [],
   sumConstraints: [],
@@ -87,6 +89,8 @@ const SENTINEL = {
   mobileDrilldownOmitLeadingColumns: 1,
   mobileDrilldownRepeatHeaderStartRow: 0,
   mobileDrilldownRepeatHeaderEndRow: 0,
+  mobileDrilldownReverseColumns: true,
+  mobileDrilldownColumnsPerView: 6,
   mobileItemCardBlockColumns: [1, 5],
   hideTitle: true,
   pageBreakBefore: true,
@@ -131,5 +135,73 @@ describe('발행 스냅샷 — 영속 필드 전수 대조', () => {
     const row = SENTINEL as unknown as Record<string, unknown>;
     const uncovered = READ_FIELDS.filter((field) => row[field] == null);
     expect(uncovered).toEqual([]);
+  });
+});
+
+describe('발행 스냅샷 — 문항의 슬라이더 방향', () => {
+  const snapshotQuestion = (question: Question) =>
+    buildSurveySnapshot({
+      id: 's1',
+      title: '설문',
+      questions: [question],
+      groups: [],
+      settings: { isPublic: true, allowMultipleResponses: false, showProgressBar: true },
+      lookups: [],
+    } as never).questions[0] as unknown as Record<string, unknown>;
+
+  const radio = { id: 'q1', type: 'radio', title: '추천 의향', required: true, order: 1 };
+
+  it.each(['positive-right', 'positive-left'] as const)('%s 를 그대로 얼린다', (direction) => {
+    const frozen = snapshotQuestion({ ...radio, scaleSlider: direction } as unknown as Question);
+    expect(frozen['scaleSlider']).toBe(direction);
+  });
+
+  it('꺼진 문항은 저장되는 스냅샷이 한 글자도 달라지지 않는다 — null 이 실려 와도 싣지 않는다', () => {
+    const before = JSON.stringify(snapshotQuestion(radio as unknown as Question));
+    const cleared = JSON.stringify(
+      snapshotQuestion({ ...radio, scaleSlider: null } as unknown as Question),
+    );
+
+    expect(cleared).toBe(before);
+    expect(cleared).not.toContain('scaleSlider');
+  });
+});
+
+describe('발행 스냅샷 — 조각 좌우 반전 · 조각 한 화면 칸 수', () => {
+  const snapshotQuestion = (question: Question) =>
+    buildSurveySnapshot({
+      id: 's1',
+      title: '설문',
+      questions: [question],
+      groups: [],
+      settings: { isPublic: true, allowMultipleResponses: false, showProgressBar: true },
+      lookups: [],
+    } as never).questions[0] as unknown as Record<string, unknown>;
+
+  const table = { id: 'q1', type: 'table', title: '만족도', required: true, order: 1 };
+
+  it('켠 값을 그대로 얼린다', () => {
+    const frozen = snapshotQuestion({
+      ...table,
+      mobileDrilldownReverseColumns: true,
+      mobileDrilldownColumnsPerView: 6,
+    } as unknown as Question);
+    expect(frozen['mobileDrilldownReverseColumns']).toBe(true);
+    expect(frozen['mobileDrilldownColumnsPerView']).toBe(6);
+  });
+
+  it('꺼진 문항은 저장되는 스냅샷이 한 글자도 달라지지 않는다 — false·null 이 실려 와도 싣지 않는다', () => {
+    const before = JSON.stringify(snapshotQuestion(table as unknown as Question));
+    const cleared = JSON.stringify(
+      snapshotQuestion({
+        ...table,
+        mobileDrilldownReverseColumns: false,
+        mobileDrilldownColumnsPerView: null,
+      } as unknown as Question),
+    );
+
+    expect(cleared).toBe(before);
+    expect(cleared).not.toContain('mobileDrilldownReverseColumns');
+    expect(cleared).not.toContain('mobileDrilldownColumnsPerView');
   });
 });
