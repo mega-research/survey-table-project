@@ -11,7 +11,9 @@ import { describe, expect, it } from 'vitest';
  * 이 검사는 `useEffectEvent` 를 (직접이든 다른 훅을 거쳐서든) 쓰는 훅을 먼저 모으고, memo·forwardRef 로
  * 감싼 컴포넌트가 그것을 부르는지 본다. 훅은 이름으로 잇는다(같은 이름의 훅은 하나로 본다 — 넓게 잡는 쪽).
  *
- * React 를 올려 이 제약이 풀렸는지 확인했으면 이 파일을 지운다.
+ * 19.3.1 에서는 고쳐졌다(2026-11-26 시험 — memo 컴포넌트의 이벤트가 최신 값을 읽는다). 그러나 운영 화면은
+ * `package.json` 의 React 가 아니라 Next 가 내장한 React 로 돌고, 그 판에서는 확인하지 못했다. Next 를 올려 내장
+ * React 에서도 풀린 것을 확인했으면 이 파일을 지운다.
  */
 
 const WRAPPERS = new Set(['memo', 'forwardRef']);
