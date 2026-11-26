@@ -73,8 +73,8 @@ interface MobileRowWiseOriginalSheetProps {
   /**
    * 넓은 화면의 행 단위 배치 — 척도 슬라이더가 켜진 표는 넓은 폭에서도 이 시트로 그린다(이름의 `Mobile` 은
    * 모바일 전용이던 때의 것이다). 줄의 안쪽 여백을 넓히고, 원본 표 조각을 가운데가 아니라 왼쪽에 붙이며(같은
-   * 줄의 슬라이더·행 제목과 축을 맞춘다), 글자 입력칸뿐인 조각은 「라벨 + 넓은 입력칸」으로 푼다(폭 상한은
-   * 슬라이더와 같다). 판정은 호스트의 기존 모바일 판정 하나라, 여기에 폭 분기점을 따로 두지 않는다.
+   * 줄의 슬라이더·행 제목과 축을 맞춘다), 글자 입력칸뿐인 조각은 「라벨 + 넓은 입력칸」으로 푼다(슬라이더처럼 자리를
+   * 꽉 채운다). 판정은 호스트의 기존 모바일 판정 하나라, 여기에 폭 분기점을 따로 두지 않는다.
    */
   wide?: boolean | undefined;
   /**
@@ -225,7 +225,7 @@ export function MobileRowWiseOriginalSheet({
                       const textFields = wide ? resolveWideTextInputFields(piece) : null;
                       if (textFields) {
                         return (
-                          <div key={key} className="max-w-[860px] space-y-2 px-1">
+                          <div key={key} className="space-y-2 px-1">
                             {textFields.map(({ cell, label }) => {
                               // 화면 폭으로 그린다 — 원본 표 칸에 맞춘 고정 너비(inputWidth)는 여기서 뜻이 없다
                               const wideCell = { ...cell };

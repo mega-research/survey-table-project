@@ -17,15 +17,37 @@ vi.mock('@/lib/rate-limit/rate-limiter', () => ({
   isRateLimitedFineTier: fineMock,
 }));
 
+// 로거가 쓴 줄을 캡처한다 — access 로그에 무엇이 실리는지 검증하는 테스트용.
+// 테스트 셋업이 LOG_LEVEL 을 silent 로 두므로 로거를 만들기 전에 수준을 올린다(hoisted).
+const { logLines } = vi.hoisted(() => {
+  vi.stubEnv('LOG_LEVEL', 'info');
+  return { logLines: [] as string[] };
+});
+
+vi.mock('@/lib/logger/logger', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('@/lib/logger/logger')>();
+  return {
+    ...mod,
+    logger: mod.createLogger({
+      write(line: string) {
+        logLines.push(line);
+      },
+    }),
+  };
+});
+
 import { POST } from '@/app/api/response/segment/route';
 
 const RESPONSE_ID = '11111111-2222-4333-8444-555555555555';
 
-function segmentRequest(headers: Record<string, string>): NextRequest {
+function segmentRequest(
+  headers: Record<string, string>,
+  responseId: string = RESPONSE_ID,
+): NextRequest {
   return new NextRequest('https://example.com/api/response/segment', {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...headers },
-    body: JSON.stringify({ responseId: RESPONSE_ID, action: 'hide' }),
+    body: JSON.stringify({ responseId, action: 'hide' }),
   });
 }
 
@@ -40,6 +62,17 @@ describe('POST /api/response/segment', () => {
   });
 
   afterEach(() => vi.clearAllMocks());
+
+  it('UUID 모양이 아닌 responseId 는 access 로그에 적지 않는다 — 무인증 경로라 아무 문자열이나 온다', async () => {
+    logLines.length = 0;
+    await POST(segmentRequest({ 'x-real-ip': '203.0.113.7' }, 'person@example.com'));
+    await POST(segmentRequest({ 'x-real-ip': '203.0.113.7' }));
+
+    expect(logLines).toHaveLength(2);
+    expect(logLines.join('')).not.toContain('person@example.com');
+    const last = JSON.parse(logLines[1] as string) as Record<string, unknown>;
+    expect(last['responseId']).toBe(RESPONSE_ID);
+  });
 
   it('파싱 전 IP 가드 → 검증 후 responseId fine 버킷의 2단계로 판정한다', async () => {
     const res = await POST(segmentRequest({ 'x-real-ip': '203.0.113.7' }));

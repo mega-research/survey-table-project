@@ -27,6 +27,7 @@ vi.mock('@/lib/logger/logger', async (importOriginal) => {
 
 vi.mock('@sentry/nextjs', () => ({ captureException: captureExceptionMock }));
 
+import { bindRequestLog } from '@/lib/logger/request-log-scope';
 import { withRouteLogging } from '@/lib/logger/route-logging';
 
 afterAll(() => {
@@ -79,6 +80,25 @@ describe('withRouteLogging', () => {
     expect(log['userId']).toBe('user-1');
     expect(log['role']).toBe('admin');
     expect(log['surveyId']).toBe('sv-1');
+  });
+
+  it('핸들러가 부른 서비스가 요청 로그에 실은 식별자도 access 로그에 합쳐진다', async () => {
+    const wrapped = withRouteLogging('/api/test', async () => {
+      // 서비스는 ctx 를 받지 않는다 — 응답 행을 읽은 자리에서 설문 id 를 싣는다
+      await Promise.resolve();
+      bindRequestLog({ surveyId: 'sv-from-service' });
+      return NextResponse.json({ ok: true });
+    });
+    await wrapped(request());
+
+    expect(lastLog()['surveyId']).toBe('sv-from-service');
+  });
+
+  it('요청 크기(Content-Length)를 reqBytes 로 남긴다', async () => {
+    const wrapped = withRouteLogging('/api/test', async () => NextResponse.json({ ok: true }));
+    await wrapped(request({ 'content-length': '512' }));
+
+    expect(lastLog()['reqBytes']).toBe(512);
   });
 
   it('ctx.log 는 현재까지 바인딩된 컨텍스트를 포함한 child logger 다', async () => {

@@ -255,6 +255,19 @@ run('링크 클릭 (mail link click)', () => {
       expect(await recipientStatus(campaignId, recipientId)).toBe('bounced');
     });
 
+    it('회신 전달·답장 중계 메일의 클릭은 기록하지 않는다', async () => {
+      const campaignId = await seedCampaign();
+      const { recipientId, messageId } = await seedRecipient(campaignId, await seedContact());
+
+      await click(messageId, SURVEY_LINK, { tags: { kind: 'reply-forward' } });
+      await click(messageId, SURVEY_LINK, { tags: { kind: 'reply-relay' } });
+
+      const row = await campaignRow(campaignId);
+      expect(row.clickedCount).toBe(0);
+      expect(row.openedCount).toBe(0);
+      expect(await recipientStatus(campaignId, recipientId)).toBe('delivered');
+    });
+
     describe('수신자당 상한', () => {
       /** 그 밖의 링크 클릭으로 상한을 채운 수신자. */
       async function seedRecipientAtCap() {

@@ -110,9 +110,8 @@ export function buildMrsetEntries(
   }
 
   // choice-group-item: (questionId, choiceGroupKey) 로 묶어 MCGROUP 생성.
-  // 그룹 라벨은 컬럼의 optionLabel 에서 추출한다 — generateSPSSColumns 에서
-  // optionLabel = "그룹라벨 - 보기라벨" 형식으로 설정되어 있으므로,
-  // 첫 번째 멤버의 optionLabel 을 파싱하는 대신 question.choiceGroups 에서 직접 lookup 한다.
+  // 그룹 라벨은 question.choiceGroups 에서 직접 lookup 한다 — 컬럼의 optionLabel 은 그룹이 하나뿐인
+  // 문항에서 그룹 라벨을 담지 않는다.
   // 세트명: default 그룹이면 $질문코드_default, 명시 그룹이면 $질문코드_groupKey.
   type CgiGroupKey = `${string}::${string}`; // questionId::groupKey
   const byCgiGroup = new Map<CgiGroupKey, SPSSExportColumn[]>();

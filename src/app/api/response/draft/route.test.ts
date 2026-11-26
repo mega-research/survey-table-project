@@ -17,6 +17,25 @@ vi.mock('@/lib/rate-limit/rate-limiter', () => ({
   isRateLimitedFineTier: fineMock,
 }));
 
+// 로거가 쓴 줄을 캡처한다 — access 로그에 무엇이 실리는지 검증하는 테스트용.
+// 테스트 셋업이 LOG_LEVEL 을 silent 로 두므로 로거를 만들기 전에 수준을 올린다(hoisted).
+const { logLines } = vi.hoisted(() => {
+  vi.stubEnv('LOG_LEVEL', 'info');
+  return { logLines: [] as string[] };
+});
+
+vi.mock('@/lib/logger/logger', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('@/lib/logger/logger')>();
+  return {
+    ...mod,
+    logger: mod.createLogger({
+      write(line: string) {
+        logLines.push(line);
+      },
+    }),
+  };
+});
+
 import { POST } from '@/app/api/response/draft/route';
 
 const RESPONSE_ID = '11111111-2222-4333-8444-555555555555';
@@ -89,6 +108,29 @@ describe('POST /api/response/draft', () => {
     expect(guardMock).toHaveBeenCalledTimes(1);
     expect(fineMock).not.toHaveBeenCalled();
     expect(saveMock).not.toHaveBeenCalled();
+  });
+
+  it('access 로그에 responseId·건수·요청 크기를 남긴다 — 답은 싣지 않는다', async () => {
+    logLines.length = 0;
+    const body = JSON.stringify({ responseId: RESPONSE_ID, answers: { q1: '홍길동' } });
+    await POST(draftRequest({ ...IP, 'content-length': String(Buffer.byteLength(body)) }, body));
+
+    const line = JSON.parse(logLines[logLines.length - 1] as string) as Record<string, unknown>;
+    expect(line).toMatchObject({
+      route: '/api/response/draft',
+      responseId: RESPONSE_ID,
+      answerCount: 1,
+      reqBytes: Buffer.byteLength(body),
+    });
+    expect(logLines.join('')).not.toContain('홍길동');
+  });
+
+  it('UUID 모양이 아닌 responseId 는 access 로그에 적지 않는다 — 무인증 경로라 아무 문자열이나 온다', async () => {
+    logLines.length = 0;
+    await POST(draftRequest(IP, { responseId: 'person@example.com', answers: { q1: 'a' } }));
+
+    expect(logLines.length).toBeGreaterThan(0);
+    expect(logLines.join('')).not.toContain('person@example.com');
   });
 
   it('responseId 가 128자를 넘으면 400 으로 거부한다', async () => {

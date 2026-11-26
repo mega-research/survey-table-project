@@ -48,8 +48,17 @@ export interface ProfilesRow {
   attrs: Record<string, string> | null;
   /** 매칭된 contact_targets.id — pii.* 컬럼 복호화 조인 키. 익명/미매칭이면 null. */
   contactTargetId: string | null;
-  /** 중복 감지용 ipHash. 표시는 formatIpHash 로 앞 8자만 노출한다. */
+  /** 중복 감지용 ipHash 의 앞 8자 — 서버가 줄여서 싣는다(pickResponseSignals). 전체 값은 싣지 않는다. */
   ipHash: string | null;
+  /**
+   * 브라우저 저장소에 심은 무작위 번호의 앞 8자(화면 이름 「브라우저 ID」). 저장소가 막힌 브라우저는 null.
+   * 관리자 조회에만 싣는다 — 게스트 조회는 늘 null.
+   */
+  deviceId: string | null;
+  /**
+   * 브라우저·화면·시간대·언어·OS 를 뭉친 해시의 앞 8자(화면 이름 「기기 사양」). 관리자 조회에만 싣는다.
+   */
+  fpHash: string | null;
   /** 들어온 링크에서 받은 이어 넘길 값(metadata.entryParams, 리멤버 euid 등). 없으면 null. */
   entryParams: Record<string, string> | null;
   /** 현재 서버 scope에 속한 응답의 테스트 여부. real scope는 false, test scope는 true로 고정된다. */

@@ -52,5 +52,5 @@ GET    /api/surveys/[surveyId]/demand-summary  # 문항 수요 집계표 엑셀 
 POST   /api/response/segment                   # 구간 응답 저장 (sendBeacon — REST 유지)
 POST   /api/response/draft                     # 이탈 시점 임시 저장 (sendBeacon — REST 유지)
 *      /api/inngest                            # Inngest 핸들러
-POST   /api/webhooks/resend                    # Resend webhook (svix 검증) — 상태 알림은 수신자 전이, `email.clicked` 는 링크 클릭 기록(`src/server/mail/AGENTS.md`)
+POST   /api/webhooks/resend                    # Resend webhook (svix 검증) — 상태 알림은 수신자 전이, `email.clicked` 는 링크 클릭 기록, `email.received` 는 회신 전달(`src/server/mail/AGENTS.md`)
 ```

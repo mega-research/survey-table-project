@@ -6,13 +6,15 @@ import {
   answerKeyOf,
   entryColumnKey,
   entryKeyOf,
-  formatIpHash,
+  formatResponseSignal,
   hydrateProfileColumns,
+  pickResponseSignals,
   PROFILE_SYS_COLUMNS,
   profileGroupText,
   responseLinkTypeOf,
   selectRawExportContactColumns,
   visibleProfileColumns,
+  withoutAdminOnlyProfileColumns,
 } from '@/lib/operations/profile-columns-format';
 import type { ProfileColumnScheme } from '@/shared/contracts/operations';
 
@@ -44,14 +46,26 @@ describe('hydrateProfileColumns', () => {
       'sys.completedAt',
       'sys.totalSeconds',
       'sys.ipHash',
+      'sys.deviceId',
+      'sys.fpHash',
       'attrs.업체명',
       'attrs.지역',
       'pii.담당자',
     ]);
 
-    // 기본 표시: 기존 9컬럼은 보임, ipHash 와 attrs/pii 는 숨김
+    // 기본 표시: 기존 9컬럼은 보임, 접속 식별값 셋(IP 해시·브라우저 ID·기기 사양)과 attrs/pii 는 숨김
     const hiddenKeys = cols.filter((c) => c.hidden).map((c) => c.key);
-    expect(hiddenKeys).toEqual(['sys.ipHash', 'attrs.업체명', 'attrs.지역', 'pii.담당자']);
+    expect(hiddenKeys).toEqual([
+      'sys.ipHash',
+      'sys.deviceId',
+      'sys.fpHash',
+      'attrs.업체명',
+      'attrs.지역',
+      'pii.담당자',
+    ]);
+    // 화면 이름은 코드 이름(deviceId·fpHash)과 다르다 — 브라우저에 심은 번호와 기기·브라우저 사양
+    expect(cols.find((c) => c.key === 'sys.deviceId')?.label).toBe('브라우저 ID');
+    expect(cols.find((c) => c.key === 'sys.fpHash')?.label).toBe('기기 사양');
   });
 
   it('sys.resid 기본 라벨은 컨택 스킴의 system.resid 라벨을 따른다', () => {
@@ -182,14 +196,65 @@ describe('visibleProfileColumns', () => {
   });
 });
 
-describe('formatIpHash', () => {
+describe('formatResponseSignal', () => {
   it('앞 8자만 반환한다', () => {
-    expect(formatIpHash('abcdef1234567890')).toBe('abcdef12');
+    expect(formatResponseSignal('abcdef1234567890')).toBe('abcdef12');
+    // 브라우저 ID 는 UUID — 첫 마디만 보인다
+    expect(formatResponseSignal('dc9c7347-1111-4222-8333-444444444444')).toBe('dc9c7347');
   });
 
   it('null·빈 문자열은 — 로 표시한다', () => {
-    expect(formatIpHash(null)).toBe('—');
-    expect(formatIpHash('')).toBe('—');
+    expect(formatResponseSignal(null)).toBe('—');
+    expect(formatResponseSignal('')).toBe('—');
+  });
+});
+
+describe('pickResponseSignals', () => {
+  const raw = {
+    ipHash: '1b2f67f8aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    deviceId: '5cce2545-1111-4222-8333-444444444444',
+    fpHash: 'ec7b3f35bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+  };
+
+  it('관리자 조회에는 세 값을 앞 8자로 줄여 싣는다 — 전체 값은 서버 밖으로 나가지 않는다', () => {
+    expect(pickResponseSignals(raw, true)).toEqual({
+      ipHash: '1b2f67f8',
+      deviceId: '5cce2545',
+      fpHash: 'ec7b3f35',
+    });
+  });
+
+  it('게스트 조회에는 브라우저 ID·기기 사양을 싣지 않는다 — IP 해시는 종전대로 앞 8자', () => {
+    expect(pickResponseSignals(raw, false)).toEqual({
+      ipHash: '1b2f67f8',
+      deviceId: null,
+      fpHash: null,
+    });
+  });
+
+  it('값이 없으면 null 이다', () => {
+    expect(pickResponseSignals({ ipHash: null, deviceId: undefined, fpHash: '' }, true)).toEqual({
+      ipHash: null,
+      deviceId: null,
+      fpHash: null,
+    });
+  });
+});
+
+describe('withoutAdminOnlyProfileColumns', () => {
+  it('관리자가 켜 둔 브라우저 ID·기기 사양 열을 빼고 나머지 순서는 그대로 둔다', () => {
+    const columns = [
+      { key: 'sys.idx', label: '순번', order: 0 },
+      { key: 'sys.deviceId', label: '브라우저 ID', order: 1 },
+      { key: 'sys.ipHash', label: 'IP 해시', order: 2 },
+      { key: 'sys.fpHash', label: '기기 사양', order: 3 },
+      { key: 'attrs.업체명', label: '업체명', order: 4 },
+    ];
+    expect(withoutAdminOnlyProfileColumns(columns).map((c) => c.key)).toEqual([
+      'sys.idx',
+      'sys.ipHash',
+      'attrs.업체명',
+    ]);
   });
 });
 

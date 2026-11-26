@@ -323,6 +323,9 @@ importers:
       pino-pretty:
         specifier: ^13.1.3
         version: 13.1.3
+      postal-mime:
+        specifier: 2.7.5
+        version: 2.7.5
       postgres:
         specifier: ^3.4.7
         version: 3.4.9

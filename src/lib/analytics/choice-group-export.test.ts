@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { columnCellLabel } from '@/lib/analytics/column-cell-label';
 import { buildDataRows, generateSPSSColumns } from '@/lib/analytics/spss-excel-export';
 import { generateMrsetsSyntax } from '@/lib/spss/mrsets-syntax';
 import { buildValueLabels } from '@/lib/spss/sav-builder';
@@ -781,8 +782,10 @@ describe('ranking 그룹 export — buildLabel (variable-meta)', () => {
       order: 1,
       questionCode: 'QE',
       rankingConfig: { positions: 2, optionsSource: 'table' },
+      // 그룹 라벨은 그룹이 둘 이상일 때만 붙는다 — 둘째 그룹을 둬야 접두 분기가 실행된다
       choiceGroups: [
         { id: 'rge1', groupKey: 'rnk1', type: 'ranking', label: '보유 장비' },
+        { id: 'rge2', groupKey: 'rnk2', type: 'ranking', label: '구매 예정 장비' },
       ],
       tableRowsData: [
         {
@@ -791,6 +794,7 @@ describe('ranking 그룹 export — buildLabel (variable-meta)', () => {
           cells: [
             { id: 'cellA', content: '노트북', type: 'ranking_opt', choiceGroupId: 'rge1', spssNumericCode: 1 },
             { id: 'cellB', content: '기타', type: 'ranking_opt', choiceGroupId: 'rge1', isOtherRankingCell: true },
+            { id: 'cellC', content: '태블릿', type: 'ranking_opt', choiceGroupId: 'rge2', spssNumericCode: 1 },
           ],
         },
       ],
@@ -1062,5 +1066,146 @@ describe('표 보기 칸의 변수번호 — cell.optionCode (2026-10-20)', () =
       type: 'radio', questionCode: 'D1_1',
     } as unknown as Question;
     expect(generateSPSSColumns([radio]).map((c) => c.spssVarName)).toEqual(['D1_1', 'D1_1_opt03_text']);
+  });
+});
+
+// ────────────────────────────────────────────────────────────
+// 그룹 라벨은 한 문항에 그룹이 둘 이상일 때만 셀라벨에 붙는다
+// ────────────────────────────────────────────────────────────
+
+describe('그룹이 하나뿐인 문항의 셀라벨 — 그룹 라벨을 붙이지 않는다', () => {
+  // 인공지능산업 실태조사 Q2 모양: 복수 선택 그룹 하나, 그룹 라벨이 문항 제목과 같은 말
+  const soleCheckboxGroup = {
+    id: 'qsole',
+    type: 'checkbox',
+    title: 'Q2. 귀사가 보유 중인 인공지능 기술 분야를 모두 선택해 주세요.',
+    required: false,
+    order: 1,
+    questionCode: 'Q2',
+    choiceGroups: [
+      { id: 'g1', groupKey: 'cb1', type: 'checkbox', label: '보유 중인 인공지능 기술 분야' },
+    ],
+    tableRowsData: [
+      {
+        id: 'r1',
+        label: '행1',
+        cells: [
+          { id: 'c1', content: '① 컴퓨터 비전', type: 'choice_opt', choiceGroupId: 'g1' },
+          { id: 'c2', content: '② 음성 인식', type: 'choice_opt', choiceGroupId: 'g1' },
+        ],
+      },
+    ],
+  } as unknown as Question;
+
+  it('복수 선택 그룹 하나 — 셀라벨은 보기 글자만이다', () => {
+    const cols = generateSPSSColumns([soleCheckboxGroup]);
+    const col = cols.find((c) => c.spssVarName === 'Q2_cb1_1');
+    if (!col) throw new Error('컬럼 없음');
+    expect(col.optionLabel).toBe('① 컴퓨터 비전');
+    expect(columnCellLabel(col)).toBe('① 컴퓨터 비전');
+    // .sav 변수 라벨도 같은 셀라벨을 쓴다
+    expect(buildLabel(col, 'Q2')).toBe('Q2 - ① 컴퓨터 비전');
+  });
+
+  it('그룹 없이 보기 칸만 있는 문항(default 그룹 하나)도 문항 제목을 앞에 붙이지 않는다', () => {
+    const defaultOnly = {
+      ...soleCheckboxGroup,
+      id: 'qdef',
+      // 그룹 정의는 있으나 칸이 소속되지 않아 default 그룹만 남는다
+      tableRowsData: [
+        {
+          id: 'r1',
+          label: '행1',
+          cells: [{ id: 'c1', content: '① 컴퓨터 비전', type: 'choice_opt' }],
+        },
+      ],
+    } as unknown as Question;
+    const cols = generateSPSSColumns([defaultOnly]);
+    const col = cols.find((c) => c.type === 'choice-group-item');
+    expect(col?.optionLabel).toBe('① 컴퓨터 비전');
+  });
+
+  it('그룹이 둘 이상이면 그룹 라벨로 가른다 — 같은 보기가 그룹마다 되풀이되는 표', () => {
+    const twoGroups = {
+      ...soleCheckboxGroup,
+      id: 'qtwo',
+      choiceGroups: [
+        { id: 'g1', groupKey: 'cb1', type: 'checkbox', label: '현재 활용' },
+        { id: 'g2', groupKey: 'cb2', type: 'checkbox', label: '활용 계획' },
+      ],
+      tableRowsData: [
+        {
+          id: 'r1',
+          label: '행1',
+          cells: [
+            { id: 'c1', content: '① 컴퓨터 비전', type: 'choice_opt', choiceGroupId: 'g1' },
+            { id: 'c2', content: '① 컴퓨터 비전', type: 'choice_opt', choiceGroupId: 'g2' },
+          ],
+        },
+      ],
+    } as unknown as Question;
+    const cols = generateSPSSColumns([twoGroups]);
+    expect(cols.map((c) => c.optionLabel)).toEqual([
+      '현재 활용 - ① 컴퓨터 비전',
+      '활용 계획 - ① 컴퓨터 비전',
+    ]);
+  });
+
+  it('테이블 유형에 든 복수 선택 그룹 하나도 보기 글자만이다', () => {
+    const tableWithSoleGroup = {
+      id: 'qtbl',
+      type: 'table',
+      title: '표 문항',
+      required: false,
+      order: 1,
+      questionCode: 'T1',
+      choiceGroups: [{ id: 'g1', groupKey: 'cb1', type: 'checkbox', label: '보유 분야' }],
+      tableColumns: [{ id: 'col1', label: '선택' }],
+      tableRowsData: [
+        {
+          id: 'r1',
+          label: '행1',
+          cells: [{ id: 'c1', content: '① 컴퓨터 비전', type: 'choice_opt', choiceGroupId: 'g1' }],
+        },
+        {
+          id: 'r2',
+          label: '행2',
+          cells: [{ id: 'c2', content: '② 음성 인식', type: 'choice_opt', choiceGroupId: 'g1' }],
+        },
+      ],
+    } as unknown as Question;
+    const cols = generateSPSSColumns([tableWithSoleGroup]).filter((c) => c.type === 'choice-group-item');
+    expect(cols.map((c) => c.optionLabel)).toEqual(['① 컴퓨터 비전', '② 음성 인식']);
+  });
+
+  it('순위 그룹 하나 — 셀라벨은 순위만이다', () => {
+    const soleRankingGroup = {
+      id: 'qrk',
+      type: 'ranking',
+      title: '장비 선호도',
+      required: false,
+      order: 1,
+      questionCode: 'QR',
+      rankingConfig: { positions: 2, optionsSource: 'table' },
+      choiceGroups: [{ id: 'rg1', groupKey: 'rnk1', type: 'ranking', label: '선호 장비' }],
+      tableRowsData: [
+        {
+          id: 'r1',
+          label: '행1',
+          cells: [
+            { id: 'cellA', content: '노트북', type: 'ranking_opt', choiceGroupId: 'rg1', allowTextInput: true },
+            { id: 'cellB', content: '기타', type: 'ranking_opt', choiceGroupId: 'rg1', isOtherRankingCell: true },
+          ],
+        },
+      ],
+    } as unknown as Question;
+    const cols = generateSPSSColumns([soleRankingGroup]);
+    const label = (name: string) => cols.find((c) => c.spssVarName === name)?.optionLabel;
+    expect(label('QR_rnk1_rk1')).toBe('1순위');
+    expect(label('QR_rnk1_rk1_etc')).toBe('1순위 기타 입력');
+    expect(label('QR_rnk1_rk1_text')).toBe('1순위 상세 기재');
+    const rk1 = cols.find((c) => c.spssVarName === 'QR_rnk1_rk1');
+    if (!rk1) throw new Error('컬럼 없음');
+    expect(buildLabel(rk1, 'QR')).toBe('QR (1순위)');
   });
 });

@@ -26,6 +26,7 @@ import {
   clientVisibleProfileSort,
   hydrateProfileColumns,
   visibleProfileColumns,
+  withoutAdminOnlyProfileColumns,
   withoutClientHiddenProfileColumns,
   withoutClientHiddenProfileTimings,
 } from '@/lib/operations/profile-columns-format';
@@ -117,10 +118,14 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
       new Set(answerSources.map((s) => s.key)),
     ),
   );
+  // 브라우저 ID·기기 사양은 관리자만 본다 — 관리자가 켜 둔 열이라도 게스트 화면에서는 뺀다.
+  const guestColumns = isGuest
+    ? withoutAdminOnlyProfileColumns(configuredColumns)
+    : configuredColumns;
   // 고객 계정(보기 전용)에는 시작일시·소요시간을 내지 않는다 — 열도, 그 값도, 그 열의 정렬도.
   const displayColumns = viewOnly
-    ? withoutClientHiddenProfileColumns(configuredColumns)
-    : configuredColumns;
+    ? withoutClientHiddenProfileColumns(guestColumns)
+    : guestColumns;
   const filterableAnswerKeys = new Set(
     answerSources.filter((s) => !s.encrypted).map((s) => s.key),
   );
@@ -183,6 +188,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
       view: args.view,
       clauses,
       answerChoices,
+      includeBrowserSignals: !isGuest,
     }),
     db
       .select({

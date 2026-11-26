@@ -78,13 +78,18 @@ export function profileGroupText(row: {
 interface SysColumnDef {
   key: string;
   label: string;
-  /** 스킴 미저장 시 기본 숨김 (ipHash 는 opt-in) */
+  /** 스킴 미저장 시 기본 숨김 (접속 식별값 열은 opt-in) */
   defaultHidden?: boolean;
 }
 
 /**
- * 시스템 컬럼 풀 — 기존 응답 내역 테이블 9컬럼 + 응답 경로 + ipHash(기본 숨김). 순서가 기본 순서.
+ * 시스템 컬럼 풀 — 기존 응답 내역 테이블 9컬럼 + 응답 경로 + 접속 식별값 셋(기본 숨김). 순서가 기본 순서.
  * 시스템ID·응답 경로 열은 조사 대상이 있는 설문에만 그린다(화면·엑셀이 각자 hasContacts 로 뺀다).
+ *
+ * 접속 식별값은 중복 응답 차단이 보는 세 값이다. 화면 이름은 코드·DB 이름과 다르다(2026-11-16):
+ * `deviceId`(device_id)는 기기 번호가 아니라 그 브라우저 저장소에 심은 무작위 번호라 「브라우저 ID」,
+ * `fpHash`(fp_hash)는 브라우저 종류·해상도·시간대·언어·OS 를 뭉친 값이라 「기기 사양」이다 —
+ * 사양이 같은 PC 끼리는 같은 값이 나온다. 같은 응답자인지는 브라우저 ID 가 같을 때만 확실하다.
  */
 export const PROFILE_SYS_COLUMNS: readonly SysColumnDef[] = [
   { key: 'sys.idx', label: '순번' },
@@ -98,6 +103,8 @@ export const PROFILE_SYS_COLUMNS: readonly SysColumnDef[] = [
   { key: 'sys.completedAt', label: '종료일시' },
   { key: 'sys.totalSeconds', label: '소요시간' },
   { key: 'sys.ipHash', label: 'IP 해시', defaultHidden: true },
+  { key: 'sys.deviceId', label: '브라우저 ID', defaultHidden: true },
+  { key: 'sys.fpHash', label: '기기 사양', defaultHidden: true },
 ];
 
 /**
@@ -203,12 +210,51 @@ export function withoutClientHiddenProfileTimings<
   return rows.map((r) => ({ ...r, startedAt: null, totalSeconds: null }));
 }
 
-/** ipHash 표시 자릿수 — 전체 해시는 노출하지 않는다. */
-export const IP_HASH_DISPLAY_LEN = 8;
+/** 접속 식별값(IP 해시·브라우저 ID·기기 사양) 표시 자릿수 — 전체 값은 노출하지 않는다. */
+export const RESPONSE_SIGNAL_DISPLAY_LEN = 8;
 
-export function formatIpHash(hash: string | null): string {
-  if (!hash) return '—';
-  return hash.slice(0, IP_HASH_DISPLAY_LEN);
+/** 접속 식별값 표시 — 앞 8자만. 같은 값끼리 견주는 용도라 그만큼이면 충분하다. */
+export function formatResponseSignal(value: string | null): string {
+  if (!value) return '—';
+  return value.slice(0, RESPONSE_SIGNAL_DISPLAY_LEN);
+}
+
+/**
+ * 관리자에게만 보이는 시스템 열 — 브라우저 ID·기기 사양. 게스트 화면·게스트가 받는 파일에는 열도 값도
+ * 나가지 않는다. 응답자 브라우저에 남아 있는 식별값을 응답 행과 묶어 밖으로 내보내지 않기 위해서다.
+ * IP 해시는 이 기능 전부터 게스트에게도 보이던 열이라 여기 넣지 않았다(기존 화면 유지).
+ */
+const ADMIN_ONLY_PROFILE_COLUMN_KEYS: ReadonlySet<string> = new Set([
+  'sys.deviceId',
+  'sys.fpHash',
+]);
+
+/** 게스트에게 보일 열 — 관리자 전용 열을 뺀다. 나머지 순서는 그대로다. */
+export function withoutAdminOnlyProfileColumns<T extends { key: string }>(
+  columns: readonly T[],
+): T[] {
+  return columns.filter((c) => !ADMIN_ONLY_PROFILE_COLUMN_KEYS.has(c.key));
+}
+
+/**
+ * 조회 결과에 실을 접속 식별값. 서버가 이 모양으로 줄여서만 내보낸다 — 화면에서 자르면 전체 값이
+ * RSC 데이터로 브라우저까지 간다. 브라우저 ID·기기 사양은 `includeBrowserSignals`(관리자 조회)일 때만 싣는다.
+ */
+export function pickResponseSignals(
+  raw: {
+    ipHash: string | null | undefined;
+    deviceId: string | null | undefined;
+    fpHash: string | null | undefined;
+  },
+  includeBrowserSignals: boolean,
+): { ipHash: string | null; deviceId: string | null; fpHash: string | null } {
+  const cut = (value: string | null | undefined) =>
+    value ? value.slice(0, RESPONSE_SIGNAL_DISPLAY_LEN) : null;
+  return {
+    ipHash: cut(raw.ipHash),
+    deviceId: includeBrowserSignals ? cut(raw.deviceId) : null,
+    fpHash: includeBrowserSignals ? cut(raw.fpHash) : null,
+  };
 }
 
 /**

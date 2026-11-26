@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { RecordVisibilitySegmentInput } from '@/server/survey-response/domain/lifecycle';
 import { recordVisibilitySegment } from '@/server/survey-response/services/lifecycle';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
+import { loggableUuid } from '@/lib/logger/request-log-scope';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
 import {
   isRateLimitedFineTier,
@@ -40,7 +41,12 @@ async function handleSegment(req: NextRequest, ctx: RouteLogContext) {
   if (!parsed.success || parsed.data.responseId.trim() === '') {
     return NextResponse.json({ error: 'invalid payload' }, { status: 400 });
   }
-  ctx.bind({ responseId: parsed.data.responseId, action: parsed.data.action });
+  // responseId 는 길이만 검증된 문자열이라 UUID 모양일 때만 적는다(무인증 경로).
+  const loggedResponseId = loggableUuid(parsed.data.responseId);
+  ctx.bind({
+    ...(loggedResponseId !== undefined ? { responseId: loggedResponseId } : {}),
+    action: parsed.data.action,
+  });
 
   // 2단계: 검증된 responseId 를 클라이언트 축으로 fine 버킷 판정 (응답 단위 격리).
   if (await isRateLimitedFineTier('response-segment', ip, parsed.data.responseId)) {

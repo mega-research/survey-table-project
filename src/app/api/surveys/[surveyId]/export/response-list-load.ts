@@ -10,6 +10,7 @@ import {
   answerKeyOf,
   hydrateProfileColumns,
   visibleProfileColumns,
+  withoutAdminOnlyProfileColumns,
   withoutClientHiddenProfileColumns,
 } from '@/lib/operations/profile-columns-format';
 import { buildStepLocationMap } from '@/lib/operations/profiles-format';
@@ -79,10 +80,14 @@ export async function loadResponseListTable(
       new Set(answerSources.map((s) => s.key)),
     ),
   );
+  // 게스트가 받는 파일에는 브라우저 ID·기기 사양 열을 내지 않는다(화면과 같은 규칙) — 값도 읽지 않는다.
+  const guestColumns = options.maskPii
+    ? withoutAdminOnlyProfileColumns(configuredColumns)
+    : configuredColumns;
   // 고객 계정이 받는 파일에는 시작일시·소요시간 열을 내지 않는다(화면과 같은 규칙) — 종료일시는 남는다.
   const columns = options.forClient
-    ? withoutClientHiddenProfileColumns(configuredColumns)
-    : configuredColumns;
+    ? withoutClientHiddenProfileColumns(guestColumns)
+    : guestColumns;
 
   const [{ rows, total }, questionRows, groups, { hasContacts }] = await Promise.all([
     listResponsesForProfiles({
@@ -98,6 +103,7 @@ export async function loadResponseListTable(
       view: 'active',
       clauses: [],
       answerChoices,
+      includeBrowserSignals: !options.maskPii,
     }),
     db
       .select({

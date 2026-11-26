@@ -16,7 +16,7 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 | ------------------------------------------------------------------------------------------------ | ------------------------------------------------ |
 | 운영 콘솔 라우트 트리 · 응답 진입 경로(초대 링크·짧은 링크) · API 엔드포인트                     | `src/app/AGENTS.md`                              |
 | 운영 집계·파티션 · 진척 보고 분류 키                                                             | `src/server/operations/AGENTS.md`                |
-| 메일 발송 주소·대체 발송                                                                         | `src/server/mail/AGENTS.md`                      |
+| 메일 발송 주소·대체 발송 · 회신 전달(받은 메일 넘기기)                                           | `src/server/mail/AGENTS.md`                      |
 | procedure 베이스·인증과 권한(게스트·보기 전용 게스트) · 테스트 모드·테스트 버전                  | `src/server/AGENTS.md`                           |
 | 쿼터                                                                                             | `src/server/quota/AGENTS.md`                     |
 | 문항 수요조사 (조사표·영역 앵커·분할 레이아웃)                                                   | `src/server/survey-document/AGENTS.md`           |
@@ -64,6 +64,7 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 | HTML sanitize  | sanitize-html                               |
 | 이메일 발송    | Resend + React Email                        |
 | 이메일 webhook | svix                                        |
+| 받은 메일 풀기 | postal-mime (회신 전달)                     |
 | 백그라운드 잡  | Inngest                                     |
 | 레이트리밋     | @upstash/ratelimit + @upstash/redis         |
 | 로깅           | pino + @axiomhq/js                          |
@@ -196,7 +197,7 @@ RSC (서버 컴포넌트)
 | `r2KeyRefAudit`       | cron `TZ=Asia/Seoul 0 3 1 * *`    | R2 참조 인덱스 전량 재추출 (월 1회)                       |
 | `mailFallbackSweeper` | cron `TZ=Asia/Seoul */10 * * * *` | 대체 발송 누락·큐 미발행 복구 (10분마다)                  |
 
-로컬 dev: `pnpm inngest`. **Inngest 자동 sync가 끊겨 있어 함수 변경 배포 후 대시보드에서 수동 Resync 필요.**
+로컬 dev: `pnpm inngest`. **Inngest 는 자동으로 sync 하지 않는다 — 함수를 더하거나 빼거나 트리거·예약·재시도 설정을 바꿔 배포했으면 대시보드에서 수동 Resync.** 함수 본문만 고친 배포는 Resync 없이 새 코드가 돈다. 대시보드에는 6개로 보인다 — `campaignDispatcher` 의 `onFailure` 가 `campaign-dispatcher (failure)` 로 따로 등록된다.
 
 ---
 
@@ -227,7 +228,7 @@ pnpm db:migrate       # 마이그레이션 실행 (_journal.json 기준 — 0019
 pnpm db:studio        # Drizzle Studio
 pnpm survey:backup    # 설문 백업
 pnpm survey:restore   # 백업에서 복원
-pnpm survey:find · survey:vars · survey:dump · survey:render  # 운영 설문 문구로 찾기 · 변수명 계산 · 응답 화면 그려 보기 (survey-ops 스킬 — 설문 고치기 도우미 포함)
+pnpm survey:find · survey:summary · survey:vars · survey:check · survey:dump · survey:render  # 운영 설문 문구로 찾기 · 구조 요약 · 변수명 계산 · 구조 점검 · 응답 화면 그려 보기 (survey-ops 스킬 — 설문 고치기 도우미 포함)
 pnpm versions:prune   # 버전 스냅샷 정리 (DRY_RUN 기본, :live 로 실행)
 pnpm ledger:seed      # R2 발송 장부 시드
 pnpm spss:migrate     # SPSS 필드 마이그레이션 (DRY_RUN 기본, :live 로 실행)

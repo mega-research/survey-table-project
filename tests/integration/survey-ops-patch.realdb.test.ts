@@ -6,6 +6,7 @@
  * - --allow-var-changes · --commit 이면 커밋하고 설문 updated_at 을 올린다
  * - 아무것도 안 바꾼 패치는 「변경 없음」으로 되돌린다
  * - 패치 안에서 던진 오류는 되돌리고 그대로 올라온다
+ * - 커밋할 때만 고치기 전 구조를 넘겨주고(beforeCommit), 그것이 던지면 되돌린다
  *
  * 실행: pnpm test:integration (로컬 supabase 54322 필요)
  */
@@ -131,6 +132,79 @@ describe.skipIf(!isLocalDb)('executeSurveyPatch', () => {
     const after = await read(surveyId, questionId);
     expect(after.optionCount).toBe(1);
     expect(after.surveyUpdatedAt).not.toBe('2026-01-01T00:00:00.000Z');
+  });
+
+  it('커밋할 때만 고치기 전 구조를 넘겨준다 — 시험 실행·거부에는 부르지 않는다', async () => {
+    const { surveyId, questionId } = await seed();
+    const rename = {
+      surveyId,
+      title: '제목 바꾸기',
+      apply: async ({
+        tx,
+        schema,
+        eq,
+      }: Parameters<Parameters<typeof executeSurveyPatch>[1]['apply']>[0]) => {
+        await tx
+          .update(schema.questions)
+          .set({ title: '바뀐 제목' })
+          .where(eq(schema.questions.id, questionId));
+      },
+    };
+    const seen: string[] = [];
+    const beforeCommit = (before: { questionRows: Array<{ title: string }> }) => {
+      seen.push(before.questionRows.map((r) => r.title).join(','));
+    };
+
+    await executeSurveyPatch(db, rename, {
+      commit: false,
+      allowVarChanges: false,
+      beforeCommit,
+      ...quiet,
+    });
+    expect(seen).toEqual([]);
+
+    const committed = await executeSurveyPatch(db, rename, {
+      commit: true,
+      allowVarChanges: false,
+      beforeCommit,
+      ...quiet,
+    });
+    expect(committed.outcome).toBe('committed');
+    // 넘겨받은 것은 고친 뒤가 아니라 고치기 전 제목이다
+    expect(seen).toEqual(['이용 경로']);
+    expect((await read(surveyId, questionId)).title).toBe('바뀐 제목');
+  });
+
+  it('고치기 전 구조를 남기지 못하면 커밋하지 않고 되돌린다', async () => {
+    const { surveyId, questionId } = await seed();
+    await expect(
+      executeSurveyPatch(
+        db,
+        {
+          surveyId,
+          title: '제목 바꾸기',
+          apply: async ({ tx, schema, eq }) => {
+            await tx
+              .update(schema.questions)
+              .set({ title: '바뀐 제목' })
+              .where(eq(schema.questions.id, questionId));
+          },
+        },
+        {
+          commit: true,
+          allowVarChanges: false,
+          beforeCommit: () => {
+            throw new Error('disk full');
+          },
+          ...quiet,
+        },
+      ),
+    ).rejects.toThrow('disk full');
+    expect(await read(surveyId, questionId)).toEqual({
+      surveyUpdatedAt: '2026-01-01T00:00:00.000Z',
+      title: '이용 경로',
+      optionCount: 2,
+    });
   });
 
   it('아무것도 바꾸지 않은 패치는 변경 없음으로 되돌린다', async () => {

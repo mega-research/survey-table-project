@@ -265,6 +265,7 @@ mail_link_clicks           # 링크 클릭 — 수신자가 메일 본문의 링
 
 webhook_events             # Resend webhook idempotency dedupe (id = svix-id)
 ├── id, source, eventType, receivedAt
+│                          # eventType = 알림 종류 그대로. 회신 전달·답장 중계(email.received)만 결과 줄·자리 줄·발송 기록 줄을 갈라 적는다(id 는 알림 id 또는 거기서 파생) — 값은 `src/server/mail/AGENTS.md` 「회신 전달」의 「장부의 이벤트 종류 칸」
 
 mail_billing_periods       # 메일 비용 정산 (요금제+결제일 시계열)
 ├── id, startDate (UNIQUE), billingDayOfMonth, planLabel

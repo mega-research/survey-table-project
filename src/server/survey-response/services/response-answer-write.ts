@@ -13,6 +13,7 @@ import {
   type QuestionPiiFlag,
 } from '@/lib/crypto/response-pii';
 import { logger } from '@/lib/logger';
+import { bindRequestLog } from '@/lib/logger/request-log-scope';
 import { collectPiiCellIds } from '@/lib/survey/pii-cells';
 import { getSurveyControlFlags } from '@/server/read-models/survey-control';
 import {
@@ -279,6 +280,8 @@ export async function loadResponseRowForMutation(responseId: string): Promise<Re
   if (!row) {
     throw new ORPCError('NOT_FOUND', { message: '응답을 찾을 수 없습니다.' });
   }
+  // 저장 요청 입력에는 responseId 만 있다 — 요청 로그 한 줄이 어느 설문의 저장인지 여기서 싣는다.
+  bindRequestLog({ surveyId: row.surveyId });
   return row;
 }
 

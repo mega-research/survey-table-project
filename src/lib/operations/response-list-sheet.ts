@@ -3,7 +3,7 @@ import { formatPlatformKo } from '@/lib/operations/parse-ua';
 import {
   answerKeyOf,
   entryKeyOf,
-  formatIpHash,
+  formatResponseSignal,
   RESPONSE_LINK_TYPE_LABELS,
   profileGroupText,
   responseLinkTypeOf,
@@ -113,7 +113,11 @@ function columnsOf(input: ResponseListSheetInput): SheetColumn[] {
       case 'sys.totalSeconds':
         return [{ header: c.label, value: (r) => formatTotalTime(r.totalSeconds, r.status) }];
       case 'sys.ipHash':
-        return [{ header: c.label, value: (r) => formatIpHash(r.ipHash) }];
+        return [{ header: c.label, value: (r) => formatResponseSignal(r.ipHash) }];
+      case 'sys.deviceId':
+        return [{ header: c.label, value: (r) => formatResponseSignal(r.deviceId) }];
+      case 'sys.fpHash':
+        return [{ header: c.label, value: (r) => formatResponseSignal(r.fpHash) }];
       default:
         // 알 수 없는 키(스킴 버전 차이 등) — 화면처럼 건너뛴다
         return [];

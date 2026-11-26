@@ -22,7 +22,7 @@
 
 `migration-journal-gate`는 디렉터리에 있는 `.sql`이 등재됐는지만 본다. **파일로 쓰지 않고 실 DB에 직접 적용한 SQL은 그 검사에 걸리지 않는다** — 실제로 `lookup_contact_by_invite_token` 함수와 컬럼 6개가 그렇게 들어와 몇 달간 방치됐다(2026-08-19 발견·복구). 이 스크립트가 그 반대 방향을 본다.
 
-- 전제: 먼저 `pnpm db:setup-test`로 로컬 테스트 DB가 최신이어야 한다. **로컬 supabase 도커는 워크트리 공용 단일 인스턴스라 다른 브랜치가 재생하면 통째로 바뀐다** — `setup-test-db.sh`가 `_repo_meta.migration_stamp`에 재생 지문을 찍고 `db:drift`가 대조해, 남의 DB와 대조하려 하면 exit 2로 멈춘다 (조용히 틀린 결과를 내던 것을 2026-08-31에 잡았다)
+- 전제: 기준 DB 가 이 레포의 마이그레이션으로 재생돼 있어야 한다. 기본 기준은 공유 DB 라 먼저 `pnpm db:setup-test` 가 필요한데, 그것은 공유 DB 를 통째로 다시 만든다. **공유 DB 에 개발 데이터가 있거나 다른 브랜치 계열로 만들어져 있으면 전용 DB 를 기준으로 삼는다** — `pnpm db:isolated <이름>` 이 출력한 URL 을 `DRIFT_REPO_DATABASE_URL=<URL> pnpm db:drift` 로 넘긴다(로컬 주소만 받고, 지문 대조는 그 DB 에 그대로 건다). **로컬 supabase 도커는 워크트리 공용 단일 인스턴스라 다른 브랜치가 재생하면 통째로 바뀐다** — `setup-test-db.sh`가 `_repo_meta.migration_stamp`에 재생 지문을 찍고 `db:drift`가 대조해, 남의 DB와 대조하려 하면 exit 2로 멈춘다 (조용히 틀린 결과를 내던 것을 2026-08-31에 잡았다)
 - 알려진 차이는 `supabase/drift-allowlist.json`에 **사유와 함께** 등재한다. 사유가 `미결`로 시작하면 결정이 남은 항목이며 매 실행 노출된다
 - 비-UNIQUE 성능 인덱스는 동작 무관이라 참고 카운트로만 센다
 - **배포 전에 돌릴 것.** 도구를 만든 것보다 정기적으로 돌리는 것이 값어치다

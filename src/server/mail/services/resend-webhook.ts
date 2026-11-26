@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/nextjs';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import 'server-only';
 
@@ -18,6 +19,8 @@ import {
   type ResendClickData,
   classifyClickedLink,
 } from '../domain/link-click';
+import { hasReplyForwardTag, isReplyForwardDeliveryFailure } from '../domain/reply-forward';
+import { hasReplyRelayTag } from '../domain/reply-relay';
 import { requestRecipientFallbacks } from './campaign-fallback';
 import {
   applyRecipientTransition,
@@ -41,6 +44,7 @@ interface LockedRecipient {
 /**
  * 알림이 가리키는 수신자를 찾아 잠근다 — 회차 행 → 수신자 행 순서다(이 수신자에 닿는 알림은 종류와 무관하게
  * 같은 순서로 잠가 서로 엇갈리지 않는다). 발송 서비스 메일 id 로 찾고, 없으면 발송 태그(수신자 id·회차 id)로 찾는다.
+ * 전달 메일(회신 전달)과 중계 메일(답장 중계)은 수신자 기록이 없는 메일이라 null 이다.
  * 발송 직후 메일 id 가 아직 안 적힌 수신자면 여기서 적는다.
  */
 async function lockRecipientForEvent(
@@ -48,6 +52,9 @@ async function lockRecipientForEvent(
   resendMessageId: string,
   tags?: Record<string, string>,
 ): Promise<LockedRecipient | null> {
+  // 전달 메일(회신 전달)과 중계 메일(답장 중계)은 수신자 기록이 없는 메일이다 — 수신자 상태·발송 회차 집계를 건드리지 않는다.
+  if (hasReplyForwardTag(tags) || hasReplyRelayTag(tags)) return null;
+
   const rows = await tx
     .select({
       id: mailRecipients.id,
@@ -235,9 +242,47 @@ export interface VerifiedResendWebhookEvent {
 }
 
 /**
+ * 전달 메일(회신 전달)이 회신 주소에 닿지 못했다 — 회신 주소 오타·메일함 폐쇄·수신 거부 목록·스팸 신고
+ * (`isReplyForwardDeliveryFailure`). 알림 종류는 태그 `eventType` 으로 갈린다.
+ * 수신자 기록이 없어 화면 어디에도 드러나지 않으므로 Sentry 경고로 알린다. 주소·제목은 싣지 않는다(식별자만).
+ */
+function reportReplyForwardDeliveryFailure(event: VerifiedResendWebhookEvent): void {
+  logger.warn(
+    { resendMessageId: event.resendMessageId, eventType: event.type },
+    '[reply-forward] 전달 메일 반송·실패',
+  );
+  Sentry.captureMessage('회신 전달 메일 반송·실패', {
+    level: 'warning',
+    tags: { operation: 'reply_forward_bounce', eventType: event.type },
+    extra: { messageId: event.resendMessageId, svixId: event.id },
+  });
+}
+
+/**
+ * 중계 메일(답장 중계)이 응답자에게 닿지 못했다 — 응답자 주소가 죽었거나 수신 거부 목록에 있거나 스팸으로 신고됐다.
+ * 담당자는 답장이 갔다고 믿는다. 화면 어디에도 드러나지 않으므로 Sentry 경고로 알린다(회신 전달의 경고와 문구·태그가 갈린다).
+ * 주소·제목은 싣지 않는다(식별자만).
+ */
+function reportReplyRelayDeliveryFailure(event: VerifiedResendWebhookEvent): void {
+  logger.warn(
+    { resendMessageId: event.resendMessageId, eventType: event.type },
+    '[reply-relay] 중계 메일 반송·실패',
+  );
+  Sentry.captureMessage('답장 중계 메일 반송·실패', {
+    level: 'warning',
+    tags: { operation: 'reply_relay_bounce', kind: 'reply-relay', eventType: event.type },
+    extra: { messageId: event.resendMessageId, svixId: event.id },
+  });
+}
+
+/**
  * webhook dedupe 기록과 recipient 전이를 한 transaction으로 커밋한다.
  * 전이 실패 시 dedupe insert도 rollback되어 provider retry가 이벤트를 다시 처리할 수 있다.
  * 클릭 알림(`email.clicked`)은 같은 트랜잭션에서 클릭 줄을 넣고 수신 상태를 열람으로 올린다(`applyClickEvent`).
+ *
+ * 전달 메일(`kind=reply-forward` 태그)과 중계 메일(`kind=reply-relay` 태그)의 상태 알림은 장부에만 적고 전이하지 않는다.
+ * 그 가운데 닿지 못했다는 알림(반송·실패·보내지 않음·스팸 신고)은 커밋 뒤 Sentry 경고를 낸다 — 수신자 전이로 옮길 수
+ * 없는 종류(`email.failed`·`email.suppressed`)도 낸다. 장부에 적힌 알림이 다시 오면 경고도 다시 내지 않는다.
  */
 export async function processResendWebhookEvent(
   event: VerifiedResendWebhookEvent,
@@ -266,6 +311,10 @@ export async function processResendWebhookEvent(
     );
     return { result: 'processed' as const, fallbackRecipientId };
   });
+  if (outcome.result !== 'deduped' && isReplyForwardDeliveryFailure(event.type)) {
+    if (hasReplyForwardTag(event.tags)) reportReplyForwardDeliveryFailure(event);
+    else if (hasReplyRelayTag(event.tags)) reportReplyRelayDeliveryFailure(event);
+  }
   if (outcome.fallbackRecipientId) await requestRecipientFallbacks([outcome.fallbackRecipientId]);
   return outcome.result;
 }

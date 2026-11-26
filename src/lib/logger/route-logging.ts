@@ -7,6 +7,7 @@ import type { Logger } from 'pino';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
 
 import { scheduleLogFlush } from './flush';
+import { readContentLength, runWithRequestLogScope } from './request-log-scope';
 import { withContext, type LogContext } from './with-context';
 
 /**
@@ -15,7 +16,8 @@ import { withContext, type LogContext } from './with-context';
  * sendBeacon 제약(draft/segment)·파일 스트림(export)·multipart(upload)·webhook 등
  * oRPC 인터셉터를 못 거치는 라우트에 method·route·status·durationMs·ip 를 자동
  * 바인딩한 access 로그를 남긴다. userId 등 인증 이후에만 알 수 있는 값은 핸들러가
- * `ctx.bind()` 로 주입한다.
+ * `ctx.bind()` 로 주입한다. 핸들러가 부른 서비스가 `bindRequestLog` 로 실은 식별자도
+ * 같은 묶음에 쌓인다(request-log-scope.ts).
  *
  * allowlist 관례: bind 에 싣는 값은 식별자·경로·건수뿐이다. body/answers/attrs 등
  * JSONB 컨테이너와 PII 평문 금지 (with-context.ts 참조).
@@ -72,10 +74,12 @@ export function withRouteLogging<A extends unknown[]>(
   return async (req, ...args) => {
     const startedAt = Date.now();
     const ip = getTrustedClientIpOrNull(req.headers);
+    const reqBytes = readContentLength(req.headers);
     const base: LogContext = {
       route,
       method: req.method,
       ...(ip !== null ? { ip } : {}),
+      ...(reqBytes !== undefined ? { reqBytes } : {}),
       ...(options.source !== undefined ? { source: options.source } : {}),
     };
     const bound: LogContext = {};
@@ -89,7 +93,7 @@ export function withRouteLogging<A extends unknown[]>(
     };
 
     try {
-      const res = await handler(req, ctx, ...args);
+      const res = await runWithRequestLogScope(bound, () => handler(req, ctx, ...args));
       const durationMs = Date.now() - startedAt;
       const line = { status: res.status, durationMs };
       if (res.status >= 500) {

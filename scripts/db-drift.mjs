@@ -9,14 +9,39 @@
 // 사용: pnpm db:drift [prod|staging]   (기본 prod)
 // 허용 목록의 기준선은 prod 다. staging 은 백업 복원 과정에서 ACL 이 초기화되는 등
 // 고유 격차가 있어 별도로 보고되며, 그것들은 허용이 아니라 수리 대상이다.
-// 전제: 로컬 테스트 DB 가 최신 상태여야 한다. 먼저 pnpm db:setup-test 를 돌릴 것.
+// 전제: 기준 DB(로컬 테스트 DB)가 이 레포의 마이그레이션으로 재생돼 있어야 한다.
+//   공유 DB 를 기준으로:   pnpm db:setup-test 뒤 pnpm db:drift           (공유 DB 를 통째로 다시 만든다)
+//   전용 DB 를 기준으로:   pnpm db:isolated <이름> 이 출력한 URL 로
+//                          DRIFT_REPO_DATABASE_URL=<URL> pnpm db:drift   (공유 DB 를 건드리지 않는다)
+//   공유 DB 에 개발 데이터가 있거나 다른 브랜치 계열로 만들어져 있으면 전용 DB 쪽을 쓴다.
 //
 // 모든 조회는 READ ONLY 트랜잭션에서 수행한다. 실 DB 를 건드리지 않는다.
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import postgres from 'postgres';
 
-const LOCAL_URL = 'postgresql://postgres:postgres@127.0.0.1:54322/postgres';
+const SHARED_LOCAL_URL = 'postgresql://postgres:postgres@127.0.0.1:54322/postgres';
+
+/** 기준 DB 주소 — 기본은 공유 로컬 DB, `DRIFT_REPO_DATABASE_URL` 로 전용 DB(db:isolated)를 가리킬 수 있다. 로컬 주소만 받는다. */
+function repoDbUrl() {
+  const override = process.env.DRIFT_REPO_DATABASE_URL?.trim();
+  if (!override) return SHARED_LOCAL_URL;
+  let host;
+  try {
+    host = new URL(override).hostname;
+  } catch {
+    console.error('ERROR: DRIFT_REPO_DATABASE_URL 이 주소가 아닙니다.');
+    process.exit(2);
+  }
+  if (!['127.0.0.1', 'localhost'].includes(host)) {
+    console.error(`ERROR: DRIFT_REPO_DATABASE_URL 은 로컬 주소만 받습니다 (받은 호스트: ${host}).`);
+    console.error('  기준 DB 는 레포가 만들어내는 DB 여야 합니다 — 실 DB 를 기준으로 두면 대조가 뜻을 잃습니다.');
+    process.exit(2);
+  }
+  return override;
+}
+const LOCAL_URL = repoDbUrl();
+const LOCAL_DB_NAME = new URL(LOCAL_URL).pathname.replace(/^\//, '') || 'postgres';
 const ALLOWLIST_PATH = 'supabase/drift-allowlist.json';
 
 const target = process.argv[2] ?? 'prod';
@@ -69,7 +94,8 @@ async function assertLocalDbMatchesRepo() {
   if (!stamp) {
     console.error('ERROR: 로컬 테스트 DB 에 재생 지문이 없습니다.');
     console.error('  이 DB 가 어느 브랜치의 마이그레이션으로 만들어졌는지 알 수 없어 대조할 수 없습니다.');
-    console.error('  pnpm db:setup-test 를 먼저 실행하십시오.');
+    console.error('  pnpm db:setup-test 를 먼저 실행하거나, pnpm db:isolated <이름> 으로 만든 DB 를');
+    console.error('  DRIFT_REPO_DATABASE_URL 로 넘기십시오(공유 DB 를 건드리지 않습니다).');
     process.exit(2);
   }
   if (stamp.order_hash !== expected) {
@@ -77,7 +103,8 @@ async function assertLocalDbMatchesRepo() {
     console.error(`  DB 지문   : ${stamp.order_hash} (${stamp.tag_count}건, ${stamp.stamped_at.toISOString()})`);
     console.error(`  레포 지문 : ${expected}`);
     console.error('  로컬 supabase 도커는 워크트리 공용이라 다른 브랜치가 재생하면 통째로 바뀝니다.');
-    console.error('  pnpm db:setup-test 를 다시 실행한 뒤 대조하십시오.');
+    console.error('  pnpm db:setup-test 를 다시 실행한 뒤 대조하거나, pnpm db:isolated <이름> 으로 만든 DB 를');
+    console.error('  DRIFT_REPO_DATABASE_URL 로 넘기십시오(공유 DB 를 건드리지 않습니다).');
     process.exit(2);
   }
 }
@@ -201,7 +228,7 @@ try {
 
 await assertLocalDbMatchesRepo();
 
-console.log(`대조: ${target} ↔ 로컬 테스트 DB\n`);
+console.log(`대조: ${target} ↔ 로컬 테스트 DB (${LOCAL_DB_NAME})\n`);
 const [live, repo] = await Promise.all([inventory(liveUrl()), inventory(LOCAL_URL)]);
 
 const findings = [];   // 조치가 필요한 차이

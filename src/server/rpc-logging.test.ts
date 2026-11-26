@@ -40,8 +40,18 @@ vi.mock('@/lib/logger', () => ({
   REDACT_PATHS: [],
 }));
 
+import { bindRequestLog } from '@/lib/logger/request-log-scope';
+
 import { authed, base, pub } from './orpc';
 import { isSentryCaptured } from './rpc-error-policy';
+
+// 입력에서 꺼내 적는 id 는 UUID 모양만 통과한다 — 픽스처도 실값 모양으로 둔다.
+const SVY_1 = '11111111-1111-4111-8111-111111111111';
+const SVY_9 = '99999999-1111-4111-8111-111111111111';
+const RESP_1 = '11111111-2222-4222-8222-222222222222';
+const RESP_9 = '99999999-2222-4222-8222-222222222222';
+const RESP_A = 'aaaaaaaa-2222-4222-8222-222222222222';
+const RESP_B = 'bbbbbbbb-2222-4222-8222-222222222222';
 
 beforeEach(() => {
   logged.info.mockReset();
@@ -73,7 +83,23 @@ const testRouter = {
   boom: pub.handler(() => {
     throw new Error('db down');
   }),
+  // 응답 저장 표면의 모양 — 입력에는 responseId 만 있고 설문 id 는 서비스가 행을 읽어야 안다.
+  saveDraft: pub
+    .input(z.object({ responseId: z.string(), answers: z.record(z.string(), z.unknown()) }))
+    .handler(async ({ input }) => {
+      // 서비스가 응답 행을 읽은 뒤 그 행의 설문 id 를 요청 로그에 싣는 자리
+      await Promise.resolve();
+      bindRequestLog({ surveyId: `svy-of-${input.responseId.slice(0, 8)}` });
+      return { ok: true };
+    }),
+  bindThenBoom: pub.handler(() => {
+    bindRequestLog({ surveyId: SVY_9, responseId: RESP_9 });
+    throw new Error('db down');
+  }),
   adminOnly: authed.handler(() => 'ok'),
+  adminSave: authed
+    .input(z.object({ surveyId: z.string(), responseId: z.string() }))
+    .handler(() => 'ok'),
   boomWithDetail: pub.handler(() => {
     throw Object.assign(new Error('해당 설문에 존재하지 않는 질문입니다.'), {
       sentryContext: { versionId: 'v1', missingQuestionIds: ['q1'] },
@@ -98,10 +124,10 @@ describe('rpcLoggingMiddleware', () => {
   it('중첩 라우터는 점 구분 경로(contacts.list)로 기록하고 surveyId 만 추출한다', async () => {
     vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     const client = createRouterClient(testRouter, { context: ctx('admin-1') });
-    await client.contacts.list({ surveyId: 'svy-1', attrs: { secret: 'pii' } });
+    await client.contacts.list({ surveyId: SVY_1, attrs: { secret: 'pii' } });
 
     const [fields] = logged.info.mock.calls[0] as [Record<string, unknown>];
-    expect(fields).toMatchObject({ rpc: 'contacts.list', surveyId: 'svy-1' });
+    expect(fields).toMatchObject({ rpc: 'contacts.list', surveyId: SVY_1 });
     // allowlist 관례 — input 본문(attrs 등)은 어떤 키로도 로그에 실리지 않는다
     expect(fields).not.toHaveProperty('attrs');
     expect(fields).not.toHaveProperty('input');
@@ -198,5 +224,95 @@ describe('rpcLoggingMiddleware', () => {
     expect(logged.info).toHaveBeenCalledTimes(1);
     const [fields] = logged.info.mock.calls[0] as [Record<string, unknown>];
     expect(fields).toMatchObject({ rpc: 'health' });
+  });
+
+  it('입력의 responseId 를 꺼내 기록한다 — 답(answers)은 싣지 않는다', async () => {
+    const client = createRouterClient(testRouter, { context: ctx(null) });
+    await client.saveDraft({ responseId: RESP_1, answers: { q1: '홍길동' } });
+
+    const [fields] = logged.info.mock.calls[0] as [Record<string, unknown>];
+    expect(fields).toMatchObject({ rpc: 'saveDraft', responseId: RESP_1 });
+    expect(fields).not.toHaveProperty('answers');
+    expect(JSON.stringify(fields)).not.toContain('홍길동');
+  });
+
+  it('검증 전 입력이라 UUID 모양이 아닌 값은 id 로 적지 않는다 — 이메일·전화번호·긴 문자열', async () => {
+    const client = createRouterClient(testRouter, { context: ctx(null) });
+    for (const planted of ['person@example.com', '010-1234-5678', 'x'.repeat(129), '']) {
+      await client.saveDraft({ responseId: planted, answers: {} });
+      await client.contacts.list({ surveyId: planted });
+    }
+
+    const lines = logged.info.mock.calls.map(([fields]) => fields as Record<string, unknown>);
+    expect(lines).toHaveLength(8);
+    for (const fields of lines) {
+      expect(fields['responseId']).toBeUndefined();
+      // saveDraft 줄의 surveyId 는 핸들러가 실은 값이다 — 입력에서 꺼낸 값만 본다
+      if (fields['rpc'] === 'contacts.list') expect(fields['surveyId']).toBeUndefined();
+    }
+    const serialized = JSON.stringify(lines);
+    expect(serialized).not.toContain('person@example.com');
+    expect(serialized).not.toContain('010-1234-5678');
+  });
+
+  it('거부된 요청(인증 실패)의 실패 로그에도 UUID 모양이 아닌 입력값은 남지 않는다', async () => {
+    const client = createRouterClient(testRouter, { context: ctx(null) });
+    await client
+      .adminSave({ surveyId: 'person@example.com', responseId: '010-1234-5678' })
+      .catch(() => undefined);
+
+    expect(logged.error).toHaveBeenCalledTimes(1);
+    const [fields] = logged.error.mock.calls[0] as [Record<string, unknown>];
+    expect(fields).toMatchObject({ rpc: 'adminSave', code: 'UNAUTHORIZED' });
+    expect(fields['surveyId']).toBeUndefined();
+    expect(fields['responseId']).toBeUndefined();
+  });
+
+  it('서비스가 요청 로그에 실은 식별자(설문 id)가 완료 로그 한 줄에 합쳐진다', async () => {
+    const client = createRouterClient(testRouter, { context: ctx(null) });
+    await client.saveDraft({ responseId: RESP_1, answers: {} });
+
+    expect(logged.info).toHaveBeenCalledTimes(1);
+    const [fields] = logged.info.mock.calls[0] as [Record<string, unknown>];
+    expect(fields).toMatchObject({ responseId: RESP_1, surveyId: `svy-of-${RESP_1.slice(0, 8)}` });
+  });
+
+  it('동시에 도는 요청끼리 실은 식별자가 섞이지 않는다', async () => {
+    const client = createRouterClient(testRouter, { context: ctx(null) });
+    await Promise.all([
+      client.saveDraft({ responseId: RESP_A, answers: {} }),
+      client.saveDraft({ responseId: RESP_B, answers: {} }),
+    ]);
+
+    const pairs = logged.info.mock.calls.map(([fields]) => {
+      const f = fields as Record<string, unknown>;
+      return `${String(f['responseId'])}:${String(f['surveyId'])}`;
+    });
+    expect(pairs.sort()).toEqual([`${RESP_A}:svy-of-aaaaaaaa`, `${RESP_B}:svy-of-bbbbbbbb`]);
+  });
+
+  it('실패해도 그때까지 실은 식별자가 실패 로그와 Sentry 태그에 남는다', async () => {
+    const client = createRouterClient(testRouter, { context: ctx(null) });
+    await client.bindThenBoom().catch(() => undefined);
+
+    const [fields] = logged.error.mock.calls[0] as [Record<string, unknown>];
+    expect(fields).toMatchObject({ rpc: 'bindThenBoom', surveyId: SVY_9, responseId: RESP_9 });
+    expect(sentry.tags[0]).toMatchObject({ surveyId: SVY_9 });
+  });
+
+  it('요청 크기(Content-Length)를 reqBytes 로 기록하고, 숫자가 아니면 뺀다', async () => {
+    const sized = createRouterClient(testRouter, {
+      context: ctx(null, new Headers({ 'content-length': '2048' })),
+    });
+    await sized.ping();
+    const broken = createRouterClient(testRouter, {
+      context: ctx(null, new Headers({ 'content-length': 'abc' })),
+    });
+    await broken.ping();
+
+    const [first] = logged.info.mock.calls[0] as [Record<string, unknown>];
+    const [second] = logged.info.mock.calls[1] as [Record<string, unknown>];
+    expect(first['reqBytes']).toBe(2048);
+    expect(second['reqBytes']).toBeUndefined();
   });
 });

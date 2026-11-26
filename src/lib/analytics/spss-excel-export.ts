@@ -141,7 +141,7 @@ export interface SPSSExportColumn {
   // 이 보기 선택 시 저장할 counted 숫자값 (spssNumericCode 또는 그룹 내 1-based 폴백)
   choiceGroupMemberCode?: number;
   // 그룹 접두 없는 순수 보기 라벨 — sps VALUE LABELS 카테고리 라벨용
-  // (optionLabel 은 변수 라벨용이라 "그룹라벨 - 보기라벨" 형식)
+  // (optionLabel 은 그룹이 둘 이상인 문항에서 "그룹라벨 - 보기라벨" 이라 따로 둔다)
   choiceGroupMemberLabel?: string;
   // === 'ranking-rank' / 'ranking-other' 전용 ===
   // 질문의 ranking 그룹이 1개뿐일 때 true.
@@ -216,12 +216,18 @@ function pruneUnusedRepeatRows(
  * 보기 그룹 변수 — radio 그룹은 코드 1열(choice-group), checkbox 그룹은 보기별 counted 열
  * (choice-group-item) + 상세기재 사이드카 열. 레거시 radio/checkbox 문항과 보기 그룹 표(table)가
  * 같은 규칙을 쓴다 — 변수명·값 라벨·MRSET 이 유형과 무관하게 같아야 한다.
+ *
+ * `questionGroupCount` 는 **그 문항 전체**의 그룹 수다(표 경로는 그룹을 하나씩 넘기므로 `groups.length` 와 다르다).
+ * 복수 선택 보기의 셀라벨에 그룹 라벨을 붙일지를 이것으로 정한다 — 그룹이 하나뿐이면 그룹 라벨은 문항 제목과
+ * 같은 말이라 「보유 중인 인공지능 기술 분야 - ① 컴퓨터 비전」처럼 겹치기만 한다(2026-11-19). 둘 이상이면
+ * 같은 보기가 그룹마다 되풀이되므로(현재 활용 / 활용 계획) 그룹 라벨로 가른다.
  */
 function emitChoiceGroupColumns(
   q: QuestionVariant,
   questionCode: string,
   columns: SPSSExportColumn[],
   groups: ReturnType<typeof collectChoiceGroups> = collectChoiceGroups(q),
+  questionGroupCount: number = groups.length,
 ): void {
   // choiceGroups 가 1개 이상 정의된 radio/checkbox 질문은 이 분기에서 처리.
   // 그룹 없는 checkbox 질문은 아래 else-if 의 기존 checkbox-item 경로를 탄다.
@@ -289,8 +295,8 @@ function emitChoiceGroupColumns(
         columns.push({
           spssVarName: varName,
           questionText: q.title,
-          // optionLabel 에 그룹 컨텍스트를 포함시켜 SPSS 변수 라벨로 바로 사용 가능하게 함
-          optionLabel: `${groupLabel} - ${optLabel}`,
+          // 그룹이 둘 이상인 문항에서만 그룹 라벨로 가른다 (함수 머리 주석)
+          optionLabel: questionGroupCount > 1 ? `${groupLabel} - ${optLabel}` : optLabel,
           questionId: q.id,
           type: 'choice-group-item',
           choiceGroupKey: group.groupKey,
@@ -440,6 +446,9 @@ export function generateSPSSColumns(
       if (isGroupedRankingQuestion(q)) {
         // grouped: 그룹별 순위 슬롯 변수. 명시 그룹 = 질문코드_{groupKey}_rk{k}, default = 질문코드_rk{k} (기존 호환)
         const groups = collectRankingGroups(q);
+        // 그룹 라벨은 그룹이 둘 이상일 때만 붙인다 — 하나뿐이면 문항 제목과 같은 말이다 (emitChoiceGroupColumns 와 같은 규칙)
+        const rankLabel = (g: (typeof groups)[number], tail: string) =>
+          g.label && groups.length > 1 ? `${g.label} - ${tail}` : tail;
         for (const g of groups) {
           const groupOptions = resolveRankingOptionsFromCells(g.cells);
           const requested = Math.max(1, q.rankingConfig?.positions ?? 3);
@@ -454,7 +463,7 @@ export function generateSPSSColumns(
             columns.push({
               spssVarName: `${prefix}_rk${k}`,
               questionText: q.title,
-              optionLabel: g.label ? `${g.label} - ${k}순위` : `${k}순위`,
+              optionLabel: rankLabel(g, `${k}순위`),
               questionId: q.id,
               type: 'ranking-rank',
               rankIndex: k,
@@ -466,7 +475,7 @@ export function generateSPSSColumns(
               columns.push({
                 spssVarName: `${prefix}_rk${k}_etc`,
                 questionText: q.title,
-                optionLabel: g.label ? `${g.label} - ${k}순위 기타 입력` : `${k}순위 기타 입력`,
+                optionLabel: rankLabel(g, `${k}순위 기타 입력`),
                 questionId: q.id,
                 type: 'ranking-other',
                 rankIndex: k,
@@ -478,7 +487,7 @@ export function generateSPSSColumns(
               columns.push({
                 spssVarName: `${prefix}_rk${k}_text`,
                 questionText: q.title,
-                optionLabel: g.label ? `${g.label} - ${k}순위 상세 기재` : `${k}순위 상세 기재`,
+                optionLabel: rankLabel(g, `${k}순위 상세 기재`),
                 questionId: q.id,
                 type: 'ranking-option-text',
                 rankIndex: k,
@@ -584,7 +593,7 @@ export function generateSPSSColumns(
         const choiceGroup = choiceGroupOfCell.get(cell.id);
         if (choiceGroup && !emittedChoiceGroups.has(choiceGroup)) {
           emittedChoiceGroups.add(choiceGroup);
-          emitChoiceGroupColumns(q, q.questionCode, columns, [choiceGroup]);
+          emitChoiceGroupColumns(q, q.questionCode, columns, [choiceGroup], pendingChoiceGroups.length);
         }
         // 병합(colspan/rowspan)으로 가려진 셀은 변수에서 제외 (변수명 중복 방지)
         if (cell.isHidden) continue;
@@ -808,7 +817,8 @@ export function generateSPSSColumns(
         }
       }
       const unreached = pendingChoiceGroups.filter((g) => !emittedChoiceGroups.has(g));
-      if (unreached.length > 0) emitChoiceGroupColumns(q, q.questionCode, columns, unreached);
+      if (unreached.length > 0)
+        emitChoiceGroupColumns(q, q.questionCode, columns, unreached, pendingChoiceGroups.length);
       // 순회가 닿지 않은 묶음은 표 끝에 — 열이 사라지지 않게. 단 멤버가 전부 아무도 안 쓴 뒤쪽 반복 벌에
       // 있는 묶음은 뺀다 — 벌마다 묶음 이름이 갈리므로(`bundleRadioGroupName`) 그 벌의 다른 칸과 같이 빠져야
       // 「안 쓴 벌의 열은 내지 않는다」가 라디오 묶음에도 성립한다.

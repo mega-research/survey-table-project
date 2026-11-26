@@ -37,6 +37,9 @@ vi.mock('@/server/read-models/profile-column-scheme', () => ({
       { key: 'pii.담당자', label: '담당자', order: 3 },
       { key: 'pii.연락처', label: '연락처', order: 4 },
       { key: 'sys.status', label: '상태', order: 5 },
+      // 관리자가 켜 둔 접속 식별값 열 — 게스트 파일에는 나가지 않아야 한다
+      { key: 'sys.deviceId', label: '브라우저 ID', order: 6 },
+      { key: 'sys.fpHash', label: '기기 사양', order: 7 },
     ],
   })),
   getProfileEntryParamNames: vi.fn(async () => []),
@@ -78,6 +81,8 @@ const ROW = {
   attrs: null,
   contactTargetId: 't1',
   ipHash: null,
+  deviceId: '5cce2545',
+  fpHash: 'ec7b3f35',
   entryParams: null,
   isTest: false,
 };
@@ -136,6 +141,21 @@ describe('loadResponseListTable', () => {
       상태: '완료',
       '마지막 응답 문항': '',
     });
+  });
+
+  it('브라우저 ID·기기 사양 열은 관리자 파일에만 나간다 — 게스트 파일은 열도 없고 값도 읽지 않는다', async () => {
+    expect(await firstRow(false)).toMatchObject({ '브라우저 ID': '5cce2545', '기기 사양': 'ec7b3f35' });
+    expect(listMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ includeBrowserSignals: true }),
+    );
+
+    const guest = await loadResponseListTable('s1', 'real', { maskPii: true, forClient: false });
+    if (guest.kind !== 'ok') throw new Error('ok 가 아니다');
+    expect(guest.headers).not.toContain('브라우저 ID');
+    expect(guest.headers).not.toContain('기기 사양');
+    expect(listMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ includeBrowserSignals: false }),
+    );
   });
 
   it('게스트가 받는 목록은 암호화 저장 응답값 열과 명단 개인정보 열만 가린다', async () => {
