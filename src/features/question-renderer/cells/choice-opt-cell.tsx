@@ -168,9 +168,16 @@ export const ChoiceOptCell = React.memo(function ChoiceOptCell({
   return (
     <div className="flex w-full min-w-0 flex-col gap-1.5">
       {/* items-start + mt-1: 라벨이 두 줄로 감겨도 컨트롤이 첫 줄에 고정된다.
-          가로 정렬은 이 행이 직접 — 뿌리가 w-full 이라 셀 래퍼의 items-* 가 닿지 않는다. */}
+          가로 정렬은 이 행이 직접 — 뿌리가 w-full 이라 셀 래퍼의 items-* 가 닿지 않는다.
+          글자 없는 칸(이름을 머리에만 둔 「해당없음」)은 라벨의 한 줄 높이(text-base × leading-relaxed = 26px)를
+          따로 준다 — 없으면 줄 상자가 20px 로 줄어, 칸의 세로 정렬이 가운데·아래일 때 컨트롤이 글자 있는 이웃 칸보다
+          3 ~ 6px 낮게 선다. */}
       <div
-        className={cn('flex items-start gap-2', getHorizontalJustifyClass(cell.horizontalAlign))}
+        className={cn(
+          'flex items-start gap-2',
+          getHorizontalJustifyClass(cell.horizontalAlign),
+          !visibleText && 'min-h-[1.625rem]',
+        )}
       >
         {control}
         {visibleText && (
