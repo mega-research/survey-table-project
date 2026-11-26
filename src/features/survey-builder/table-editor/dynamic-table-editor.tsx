@@ -13,6 +13,7 @@ import { headerPath } from '@/features/question-renderer/utils/column-axis-cards
 import { resolveUngroupedSelectionType } from '@/features/question-renderer/utils/row-scale-bars';
 import { resolveChoiceTableQuestionSliderDirection } from '@/features/question-renderer/utils/scale-slider-table-layout';
 import { isStagedColumnsActive } from '@/features/question-renderer/utils/staged-columns';
+import { diagnoseMobilePieceArrangement } from '@/features/survey-builder/lib/mobile-piece-diagnostics';
 import { diagnoseRowScaleBars } from '@/features/survey-builder/lib/scale-bar-diagnostics';
 import { summarizeTableScaleSlider } from '@/features/survey-builder/lib/scale-slider-diagnostics';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
@@ -189,6 +190,37 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
       mobileDrilldownRepeatHeaderRange,
       mobileTableDisplayMode,
       mobileTableQuestion,
+      useMultiRowHeader,
+    ],
+  );
+  // 조각 좌우 반전 · 조각 한 화면 칸 수의 폴백 진단 — 응답 화면과 같은 행별 모델·재배치 판정으로,
+  // 편집 중인 표 구조 기준이다. 켠 설정이 없으면 진단이 빈 목록을 낸다.
+  const pieceReverseColumns = mobileTableQuestion?.mobileDrilldownReverseColumns === true;
+  const pieceColumnsPerView = mobileTableQuestion?.mobileDrilldownColumnsPerView ?? null;
+  const pieceIssues = useMemo(
+    () =>
+      mobileTableQuestion
+        ? diagnoseMobilePieceArrangement({
+            rows: currentRows,
+            columns: currentColumns,
+            headerGrid: useMultiRowHeader ? currentHeaderGrid : undefined,
+            hideColumnLabels: mobileTableQuestion.hideColumnLabels ?? false,
+            omitLeadingColumns: mobileDrilldownOmitLeadingColumns,
+            repeatHeaderStartRow: mobileDrilldownRepeatHeaderRange?.startRow ?? null,
+            repeatHeaderEndRow: mobileDrilldownRepeatHeaderRange?.endRow ?? null,
+            reverseColumns: pieceReverseColumns,
+            columnsPerView: pieceColumnsPerView,
+          })
+        : [],
+    [
+      currentColumns,
+      currentHeaderGrid,
+      currentRows,
+      mobileDrilldownOmitLeadingColumns,
+      mobileDrilldownRepeatHeaderRange,
+      mobileTableQuestion,
+      pieceColumnsPerView,
+      pieceReverseColumns,
       useMultiRowHeader,
     ],
   );
@@ -732,6 +764,21 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
                   mobileDrilldownRepeatHeaderStartRow: repeatHeaderStartRow,
                   mobileDrilldownRepeatHeaderEndRow: repeatHeaderEndRow,
                   mobileItemCardBlockColumns: itemCardBlockColumns,
+                });
+              }}
+              pieceReverseColumns={pieceReverseColumns}
+              pieceColumnsPerView={pieceColumnsPerView}
+              pieceIssues={pieceIssues}
+              onPieceChange={({ reverseColumns, columnsPerView }) => {
+                if (!editingQuestionId) return;
+                // 끌 때도 키를 지우지 않고 false · null 을 적는다 — 부분 수정은 없는 키를 「그대로 두기」로 읽는다
+                silentUpdateQuestion(editingQuestionId, {
+                  ...(reverseColumns !== undefined
+                    ? { mobileDrilldownReverseColumns: reverseColumns }
+                    : {}),
+                  ...(columnsPerView !== undefined
+                    ? { mobileDrilldownColumnsPerView: columnsPerView }
+                    : {}),
                 });
               }}
             />

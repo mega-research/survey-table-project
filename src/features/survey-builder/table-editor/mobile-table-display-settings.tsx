@@ -15,6 +15,7 @@ import {
   type ScaleSliderTableLayout,
   resolveScaleSliderTableLayout,
 } from '@/features/question-renderer/utils/scale-slider-table-layout';
+import type { MobilePieceIssue } from '@/features/survey-builder/lib/mobile-piece-diagnostics';
 import type { ScaleBarIssue } from '@/features/survey-builder/lib/scale-bar-diagnostics';
 import type { TableScaleSliderSummary } from '@/features/survey-builder/lib/scale-slider-diagnostics';
 import { cn } from '@/lib/utils';
@@ -29,6 +30,7 @@ import {
   isRowWiseMobileTableDisplayMode,
 } from '@/utils/mobile-table-display-mode';
 
+import { MobilePieceArrangementFields } from './mobile-piece-arrangement-fields';
 import { ScaleBarIssueAlert } from './scale-bar-issue-alert';
 import { ScaleSliderInfoNote } from './scale-slider-guidance';
 
@@ -66,6 +68,18 @@ interface MobileTableDisplaySettingsProps {
    * 반복 헤더 범위)을 표시 방식과 무관하게 보인다. 표시 방식 선택은 막지 않는다. 없으면 지금 화면 그대로다.
    */
   scaleSlider?: TableScaleSliderSummary | undefined;
+  /**
+   * 조각 좌우 반전 · 조각 한 화면 칸 수 — 원본 행 상세 설정의 나머지 둘. `onPieceChange` 를 넘긴 호출자에게만
+   * 입력 칸을 보인다(앞쪽 열 제외 수 · 반복 헤더 범위와 같은 자리, 같은 조건). 값은 `onChange` 와 따로 흐른다 —
+   * 한쪽을 고칠 때 다른 쪽 값이 옛 값으로 다시 쓰이지 않게.
+   */
+  pieceReverseColumns?: boolean | undefined;
+  pieceColumnsPerView?: number | null | undefined;
+  /** 켰는데 적용되지 않는 행과 이유(diagnoseMobilePieceArrangement) */
+  pieceIssues?: readonly MobilePieceIssue[] | undefined;
+  onPieceChange?:
+    | ((patch: { reverseColumns?: boolean; columnsPerView?: number | null }) => void)
+    | undefined;
 }
 
 /**
@@ -146,6 +160,10 @@ export function MobileTableDisplaySettings({
   hasChoiceGroups = false,
   rowScaleBarIssues = [],
   scaleSlider,
+  pieceReverseColumns = false,
+  pieceColumnsPerView = null,
+  pieceIssues,
+  onPieceChange,
 }: MobileTableDisplaySettingsProps) {
   const isChoiceSourceTable = questionType === 'radio' || questionType === 'checkbox';
   const visibleOptions = OPTIONS.filter((option) => {
@@ -413,6 +431,14 @@ export function MobileTableDisplaySettings({
               비우면 반복하지 않습니다. 0은 진짜 헤더이며, 3 또는 0-2처럼 입력합니다.
             </p>
           </div>
+          {onPieceChange ? (
+            <MobilePieceArrangementFields
+              reverseColumns={pieceReverseColumns}
+              columnsPerView={pieceColumnsPerView}
+              issues={pieceIssues}
+              onChange={onPieceChange}
+            />
+          ) : null}
         </div>
       ) : null}
     </div>
