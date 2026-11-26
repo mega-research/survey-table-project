@@ -7,6 +7,7 @@ import {
   type MobilePiece,
   arrangeMobilePiece,
   resolveHeaderOverflowDirections,
+  resolvePieceFitColumnWidth,
 } from './mobile-piece-arrangement';
 
 const col = (id: string, extra: Partial<TableColumn> = {}): TableColumn => ({
@@ -521,5 +522,23 @@ describe('resolveHeaderOverflowDirections — 넘길 방향은 세로선이 숨�
       interactiveRowId: 'r1',
     };
     expect(directions(piece)).toEqual({ c1: 'right', c2: 'left', c3: 'none' });
+  });
+});
+
+describe('resolvePieceFitColumnWidth — 자리 폭을 나눈 칸 폭', () => {
+  it('자리 폭 278 · 6칸 — 여섯 칸이 왼쪽 테두리를 뺀 자리를 꽉 채운다', () => {
+    const width = resolvePieceFitColumnWidth(278, { columnsPerView: 6, divisor: 6 })!;
+    expect(width * 6 + 1).toBeCloseTo(278, 6);
+    // 열 11개의 전체 폭은 칸 폭의 11배다 — 가로로 밀어 나머지를 본다
+    expect(width * 11).toBeGreaterThan(278);
+  });
+
+  it('열 수가 칸 수보다 적으면 열 수로 나눈 폭이라 자리를 넘지 않는다', () => {
+    const width = resolvePieceFitColumnWidth(300, { columnsPerView: 6, divisor: 5 })!;
+    expect(width * 5 + 1).toBeCloseTo(300, 6);
+  });
+
+  it.each([0, 1, -5, Number.NaN])('자리 폭을 못 쟀으면(%s) null 이다', (slot) => {
+    expect(resolvePieceFitColumnWidth(slot, { columnsPerView: 6, divisor: 6 })).toBeNull();
   });
 });
