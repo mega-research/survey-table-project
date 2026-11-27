@@ -838,7 +838,7 @@ describe.skipIf(!isLocalDb)('클라이언트 링크 콘솔 (real local DB)', () 
           responseId: responseIds[0],
           scope: 'real',
           readOnly: true,
-          externalViewer: true,
+          externalViewer: { responseRef: key },
           closeHref: `/client/${token}/responses`,
           idx: 1,
         });
@@ -855,7 +855,7 @@ describe.skipIf(!isLocalDb)('클라이언트 링크 콘솔 (real local DB)', () 
           share: FIELDWORK_SHARE_ALL,
           idx: null,
           readOnly: true,
-          externalViewer: true,
+          externalViewer: { responseRef: 'view-key' },
         });
       }
       /** 본문 트리에서 편집기 props 를 꺼낸다 — 조각(<>…</>) 안의 마지막 자식이 편집기다. */
@@ -885,6 +885,9 @@ describe.skipIf(!isLocalDb)('클라이언트 링크 콘솔 (real local DB)', () 
         expect(props['initialPriorAnswers']).toBeNull();
         expect(props['documentView']).toBeNull();
         expect(props['readOnly']).toBe(true);
+        // 브라우저로 가는 트리 어디에도 응답 id 가 없다 — 흐름은 조회 키를 정체성으로 쓴다.
+        expect(props['responseId']).toBe('view-key');
+        expect(JSON.stringify(props)).not.toContain(responseIds[0]!);
       });
 
       it('배포 스냅샷이 없으면 흐름을 그리지 않고 안내만 — 브라우저 RPC 폴백을 열지 않는다', async () => {
