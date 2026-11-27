@@ -68,8 +68,10 @@ interface Props {
    *  - 이월 응답 없음(빨간 이월 표시용 — 지난 회차 답 전체가 실린다)
    *  - 명단 값은 설문이 실제로 읽는 열만 — 개인정보 열뿐 아니라 **일반 열도**(내부 명단 열이 실리지 않게)
    *  - 배포 스냅샷이 없으면 안내만 — 흐름이 브라우저 RPC 로 폴백하면 라이브 조사표·소유자 이메일이 실린다
+   *  - **응답 id 를 싣지 않는다** — 흐름에는 `responseRef`(그 화면의 조회 키)를 대신 넘긴다. 응답 id 는 진행 중
+   *    실응답의 공개 답 저장 권한이고, 흐름이 그 값을 쓰는 곳은 조회 전용에서 화면 정체성 키뿐이다.
    */
-  externalViewer?: boolean;
+  externalViewer?: { responseRef: string };
 }
 
 export async function ResponseEditScreen({
@@ -81,8 +83,9 @@ export async function ResponseEditScreen({
   idx,
   readOnly = false,
   closeHref,
-  externalViewer = false,
+  externalViewer,
 }: Props) {
+  const isExternal = externalViewer !== undefined;
   // surveyId 는 read-model 의 WHERE 로 내려간다 — 사후 비교로 두면 타 팀 응답 원문이
   // 이미 복호화된 뒤에 접히게 된다(티켓 15).
   const response = await getResponseById(responseId, { surveyId, includeDeleted: true, share });
@@ -137,7 +140,7 @@ export async function ResponseEditScreen({
     // 이월 표시(빨강)용. 관리자 편집에는 프리필도 변동 확인도 걸리지 않고 색만 붙는다.
     // 초대 토큰 경로를 쓸 수 없어(관리자는 링크로 들어오지 않는다) 조사 대상 id 로 읽는다.
     // 외부 열람은 읽지 않는다 — 지난 회차 답 전체가 브라우저로 나간다.
-    response.contactTargetId && !externalViewer
+    response.contactTargetId && !isExternal
       ? lookupPriorAnswersByContactTarget({
           surveyId,
           contactTargetId: response.contactTargetId,
@@ -147,7 +150,7 @@ export async function ResponseEditScreen({
   ]);
   // 외부 열람은 배포 스냅샷으로만 그린다 — 없으면 흐름이 브라우저 RPC(publicRead)로 폴백해 라이브 조사표와
   // 소유자 이메일을 받아 온다. 그 길을 열지 않고 안내만 그린다.
-  if (externalViewer && !version?.snapshot) {
+  if (isExternal && !version?.snapshot) {
     return (
       <main className="mx-auto max-w-xl px-6 py-12">
         <h1 className="text-xl font-bold">응답을 보여 드릴 수 없습니다</h1>
@@ -173,7 +176,7 @@ export async function ResponseEditScreen({
       : await loadRespondentContactAttrs(contactRow.id);
   // 외부 열람은 일반 명단 열도 설문이 읽는 열만 — 위 allowedKeys 는 개인정보 열만 거른다.
   const contactAttrs =
-    externalViewer && referencedKeys
+    isExternal && referencedKeys
       ? Object.fromEntries(Object.entries(loadedAttrs).filter(([key]) => referencedKeys.has(key)))
       : loadedAttrs;
 
@@ -198,7 +201,7 @@ export async function ResponseEditScreen({
 
   // 관리자도 조사표를 보면서 고친다 — 문항 번호만 보고는 무엇을 고치는지 알 수 없다.
   // 앵커는 렌더 버전 스냅샷의 얼린 좌표, 파일은 현재 것(라이브).
-  const documentView = !externalViewer
+  const documentView = !isExternal
     ? await buildDocumentView(
         surveyId,
         ((version?.snapshot as { anchors?: SurveyAnchorSnapshot[] } | null | undefined)?.anchors ??
@@ -219,7 +222,7 @@ export async function ResponseEditScreen({
       <AdminResponseEditor
         surveyId={surveyId}
         basePath={basePath}
-        responseId={responseId}
+        responseId={externalViewer?.responseRef ?? responseId}
         initialResponses={initialResponses}
         versionSnapshot={version?.snapshot ?? null}
         // 범위를 가르는 열의 값은 범위 게스트의 화면(RSC props)에 싣지 않는다.

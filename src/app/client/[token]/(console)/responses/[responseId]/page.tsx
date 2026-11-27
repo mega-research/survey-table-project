@@ -56,7 +56,7 @@ export default async function ClientLinkResponseViewPage({ params, searchParams 
       share={FIELDWORK_SHARE_ALL}
       idx={parseResponseIdx(sp.idx)}
       readOnly
-      externalViewer
+      externalViewer={{ responseRef: viewKey }}
       closeHref={responsesHref}
     />
   );
