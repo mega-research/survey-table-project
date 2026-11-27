@@ -6,6 +6,7 @@ import { type RouteLogContext, withRouteLogging } from '@/lib/logger';
 import { clientLinkPath } from '@/lib/survey-url';
 import {
   CLIENT_RESPONSES_EXPORT_LIMIT,
+  ClientLinkGoneError,
   clientResponseCellText,
   listClientResponsesForExport,
 } from '@/server/operations/services/client-responses';
@@ -28,7 +29,7 @@ const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.s
  * 상태(`?status=`) 하나뿐이다. 내부 내보내기(`/api/surveys/[id]/export`)를 쓰지 않는 것은 그 라우트의
  * 관문이 내부 계정 전용이라서다.
  *
- * 로그에는 행·열 수만 싣는다(값 금지). 명단 값이 열로 들어갈 수 있어 캐시에 남기지 않는다.
+ * 로그에는 링크 id·행·열 수만 싣는다(값 금지). 명단 값이 열로 들어갈 수 있어 캐시에 남기지 않는다.
  */
 async function handleClientResponsesExport(
   request: NextRequest,
@@ -42,13 +43,22 @@ async function handleClientResponsesExport(
   }
   if (check.kind === 'denied') return new NextResponse(null, { status: 404 });
 
-  const { surveyId } = check.viewer;
-  ctx.bind({ surveyId, role: 'client_link' });
+  const { surveyId, linkId } = check.viewer;
+  ctx.bind({ surveyId, linkId, role: 'client_link' });
   const status = request.nextUrl.searchParams.get('status') ?? undefined;
-  const [loaded, header] = await Promise.all([
-    listClientResponsesForExport(surveyId, status !== undefined ? { status } : {}),
-    getClientSurveyHeader(surveyId),
-  ]);
+  let loaded;
+  try {
+    // 열 설정은 관문이 승인한 이 링크의 것이다 — 그사이 닫혔으면 다른 링크 설정으로 접지 않고 404.
+    loaded = await listClientResponsesForExport(
+      surveyId,
+      status !== undefined ? { status } : {},
+      { linkId },
+    );
+  } catch (error) {
+    if (error instanceof ClientLinkGoneError) return new NextResponse(null, { status: 404 });
+    throw error;
+  }
+  const header = await getClientSurveyHeader(surveyId);
   if (!header) return new NextResponse(null, { status: 404 });
   if (loaded.kind === 'too_many') {
     return NextResponse.json(

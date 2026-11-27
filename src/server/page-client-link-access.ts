@@ -46,6 +46,11 @@ import { loadSurveyAccess, SurveyAccessError } from './survey-access';
 export interface ClientLinkPageViewer {
   /** 이 링크가 여는 설문 — 화면은 이 값만 쓴다(주소에서 읽지 않는다). */
   surveyId: string;
+  /**
+   * 관문이 승인한 링크 — 응답 내역의 열 설정·응답 조회 키는 이 링크로 묶는다. 설문 id 로 「지금 활성인
+   * 링크」를 다시 찾으면 그사이 링크가 바뀌었을 때 남의 링크 설정이 적용된다.
+   */
+  linkId: string;
   /** 지금 켜진 칩 — 탭 바·화면 머리·응답 현황 본문이 그대로 그린다. */
   tabs: ClientLinkTabs;
 }
@@ -92,7 +97,10 @@ export async function checkClientLinkAccess(
   // 딸린 칩(엑셀 다운로드·응답 조회·상세 통계)은 부모가 꺼지면 값과 무관하게 닫힌다.
   if (tab !== undefined && !isClientLinkTabOpen(tabs, tab)) return { kind: 'denied' };
 
-  return { kind: 'ok', viewer: { surveyId: session.actor.surveyId, tabs } };
+  return {
+    kind: 'ok',
+    viewer: { surveyId: session.actor.surveyId, linkId: session.actor.linkId, tabs },
+  };
 }
 
 export async function assertClientLinkPageAccess(

@@ -1,5 +1,10 @@
+import { notFound } from 'next/navigation';
+
 import { ClientResponsesTable } from '@/features/guest-console/client-responses-table';
-import { listClientResponses } from '@/server/operations/services/client-responses';
+import {
+  ClientLinkGoneError,
+  listClientResponses,
+} from '@/server/operations/services/client-responses';
 
 export interface ClientResponsesSearchParams {
   page?: string;
@@ -11,7 +16,9 @@ interface Props {
   /** 이 화면 자신의 주소 — 좁히기·페이지 링크가 여기에 쿼리를 붙인다. */
   basePath: string;
   searchParams: ClientResponsesSearchParams;
-  /** 「응답 조회」 칩 — 켜면 행마다 「조회」(`<basePath>/<응답 id>`)가 선다. 끄면 응답 id 를 싣지 않는다. */
+  /** 관문이 승인한 링크 — 열 설정과 조회 키를 이 링크로 묶는다. */
+  linkId: string;
+  /** 「응답 조회」 칩 — 켜면 행마다 「조회」(`<basePath>/<조회 키>`)가 선다. 끄면 조회 키를 싣지 않는다. */
   responseView: boolean;
   /** 「엑셀 다운로드」 칩이 열렸을 때의 내려받기 주소(상태 좁히기를 이 화면이 붙인다). 닫혔으면 없다. */
   exportHref?: string;
@@ -31,6 +38,7 @@ export async function ClientResponsesScreen({
   surveyId,
   basePath,
   searchParams,
+  linkId,
   responseView,
   exportHref,
 }: Props) {
@@ -40,8 +48,12 @@ export async function ClientResponsesScreen({
       ...(typeof searchParams.page === 'string' ? { page: searchParams.page } : {}),
       ...(typeof searchParams.status === 'string' ? { status: searchParams.status } : {}),
     },
-    { viewIds: responseView },
-  );
+    { linkId, viewKeys: responseView },
+  ).catch((error: unknown) => {
+    // 관문을 지난 뒤 링크가 닫혔다 — 다른 링크의 설정으로 그리지 않는다.
+    if (error instanceof ClientLinkGoneError) notFound();
+    throw error;
+  });
   // 내려받기는 지금 고른 상태 좁히기를 싣는다 — 화면에서 본 목록 그대로가 파일이 된다.
   const download =
     exportHref === undefined

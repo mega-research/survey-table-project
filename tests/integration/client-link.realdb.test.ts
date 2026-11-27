@@ -580,6 +580,9 @@ describe.skipIf(!isLocalDb)('클라이언트 링크 세션 (real local DB)', () 
       preview: true,
       overviewDetail: true,
       responses: false,
+      // 0144 뒤에 생긴 딸린 칩 — 옛 행에는 키가 없어 꺼진 채다(0144 가 채우지 않는다).
+      responsesExport: false,
+      responseView: false,
     });
 
     // 연구원이 끈 설문 보기는 다시 돌려도 꺼진 채다(재적용 안전).

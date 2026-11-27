@@ -62,10 +62,14 @@ interface Props {
    */
   closeHref?: string;
   /**
-   * 조사표 패널을 싣는가(기본 true). 조사표는 내부 산출물이라 클라이언트 링크의 조회에는 싣지 않는다
-   * (설문 보기 칩과도 별개다).
+   * 외부 열람(클라이언트 링크의 응답 조회) — `readOnly` 와 함께 켠다. 값이 직원이 아닌 사람의 브라우저(RSC
+   * props)로 나가므로 그 화면이 그리는 데 필요한 것만 싣는다:
+   *  - 조사표 패널 없음(내부 산출물, 설문 보기 칩과도 별개)
+   *  - 이월 응답 없음(빨간 이월 표시용 — 지난 회차 답 전체가 실린다)
+   *  - 명단 값은 설문이 실제로 읽는 열만 — 개인정보 열뿐 아니라 **일반 열도**(내부 명단 열이 실리지 않게)
+   *  - 배포 스냅샷이 없으면 안내만 — 흐름이 브라우저 RPC 로 폴백하면 라이브 조사표·소유자 이메일이 실린다
    */
-  withDocument?: boolean;
+  externalViewer?: boolean;
 }
 
 export async function ResponseEditScreen({
@@ -77,7 +81,7 @@ export async function ResponseEditScreen({
   idx,
   readOnly = false,
   closeHref,
-  withDocument = true,
+  externalViewer = false,
 }: Props) {
   // surveyId 는 read-model 의 WHERE 로 내려간다 — 사후 비교로 두면 타 팀 응답 원문이
   // 이미 복호화된 뒤에 접히게 된다(티켓 15).
@@ -132,7 +136,8 @@ export async function ResponseEditScreen({
     isResponseExcluded(surveyId, responseId, scope),
     // 이월 표시(빨강)용. 관리자 편집에는 프리필도 변동 확인도 걸리지 않고 색만 붙는다.
     // 초대 토큰 경로를 쓸 수 없어(관리자는 링크로 들어오지 않는다) 조사 대상 id 로 읽는다.
-    response.contactTargetId
+    // 외부 열람은 읽지 않는다 — 지난 회차 답 전체가 브라우저로 나간다.
+    response.contactTargetId && !externalViewer
       ? lookupPriorAnswersByContactTarget({
           surveyId,
           contactTargetId: response.contactTargetId,
@@ -140,18 +145,37 @@ export async function ResponseEditScreen({
         })
       : Promise.resolve(null),
   ]);
+  // 외부 열람은 배포 스냅샷으로만 그린다 — 없으면 흐름이 브라우저 RPC(publicRead)로 폴백해 라이브 조사표와
+  // 소유자 이메일을 받아 온다. 그 길을 열지 않고 안내만 그린다.
+  if (externalViewer && !version?.snapshot) {
+    return (
+      <main className="mx-auto max-w-xl px-6 py-12">
+        <h1 className="text-xl font-bold">응답을 보여 드릴 수 없습니다</h1>
+        <p className="mt-2 text-sm text-slate-500">
+          이 응답의 설문 화면을 불러올 수 없습니다. 담당 연구원에게 문의해 주세요.
+        </p>
+      </main>
+    );
+  }
+
   // contactTargetId 가 없으면 익명 응답이므로 빈 객체. 응답 화면과 같은 명단 값 —
   // 개인정보 열까지 합친 것(서버 재평가도 같은 값을 본다).
   // 조회 전용은 그리는 설문이 토큰·조건으로 실제로 읽는 개인정보 열만 싣는다 — 이 값은 브라우저로
   // 나가고(RSC props) 보는 사람이 내부 직원이 아닐 수 있다. 화면에 안 쓰는 연락처까지 실으면 안 된다
   // (응답자 브라우저로 가는 조회와 같은 규칙, 2026-11-16 Codex 리뷰).
-  const contactAttrs = !contactRow
+  const referencedKeys = readOnly ? collectReferencedContactKeys(version?.snapshot ?? null) : null;
+  const loadedAttrs = !contactRow
     ? {}
-    : readOnly
+    : referencedKeys
       ? await loadRespondentContactAttrs(contactRow.id, db, {
-          allowedKeys: async () => collectReferencedContactKeys(version?.snapshot ?? null),
+          allowedKeys: async () => referencedKeys,
         })
       : await loadRespondentContactAttrs(contactRow.id);
+  // 외부 열람은 일반 명단 열도 설문이 읽는 열만 — 위 allowedKeys 는 개인정보 열만 거른다.
+  const contactAttrs =
+    externalViewer && referencedKeys
+      ? Object.fromEntries(Object.entries(loadedAttrs).filter(([key]) => referencedKeys.has(key)))
+      : loadedAttrs;
 
   // 구버전 응답을 최신 형식으로 열 때: 같은 구조만 프리필, 다른 구조는 비움 (스펙 결정 2).
   // 렌더만으로는 DB 를 바꾸지 않는다 — 저장 시점에 service 가 이관한다.
@@ -174,7 +198,7 @@ export async function ResponseEditScreen({
 
   // 관리자도 조사표를 보면서 고친다 — 문항 번호만 보고는 무엇을 고치는지 알 수 없다.
   // 앵커는 렌더 버전 스냅샷의 얼린 좌표, 파일은 현재 것(라이브).
-  const documentView = withDocument
+  const documentView = !externalViewer
     ? await buildDocumentView(
         surveyId,
         ((version?.snapshot as { anchors?: SurveyAnchorSnapshot[] } | null | undefined)?.anchors ??

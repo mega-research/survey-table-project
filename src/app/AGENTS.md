@@ -142,7 +142,7 @@ GET    /api/legacy-guest-link/[surveyId]/[[...rest]]  # 옛 게스트 주소 다
                                   # 연구원이 켠 탭만 열린다. 게스트 콘솔과 **같은 본문**(app/_client-console)
 /client/[token]/preview           # 설문지 미리보기 — 「설문 보기」 칩이 연다
 /client/[token]/responses         # 응답 내역(보기 전용 투영) — 「응답 내역」 칩. 딸린 칩 둘이 아래 둘을 연다(부모 AND, isClientLinkTabOpen)
-/client/[token]/responses/[responseId]  # 응답 조회 — 「응답 조회」 칩. 응답 수정 본문을 readOnly 로(조사표 없음, 닫으면 응답 내역)
+/client/[token]/responses/[responseId]  # 응답 조회 — 「응답 조회」 칩. 주소 값은 응답 id 가 아니라 링크에 묶인 조회 키. 응답 수정 본문을 readOnly·externalViewer 로
 /client/[token]/responses/export  # 응답 내역 엑셀(Route Handler) — 「엑셀 다운로드」 칩. 화면의 열 그대로, ?status= 만, no-store
                                   # 관문은 assertClientLinkPageAccess(token, tab?) — 접속 전·닫힘은 입구로, 탭 밖은 notFound
 /fw/[token]                       # 외주 실사 링크의 입구 — 비밀번호 화면 + 닫힘 안내 (ADR-0026)
