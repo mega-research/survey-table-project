@@ -12,6 +12,7 @@ import {
   type AccessLinkKind,
   type AccessLinkSurveyBlock,
   CLIENT_LINK_TAB_LABEL,
+  CLIENT_LINK_TAB_PARENT,
   type ClientLinkTab,
   type ClientLinkTabs,
   clientLinkTabValues,
@@ -773,10 +774,11 @@ function LinkLabelHeader({
 
 /**
  * 다른 칩에 딸린 칩 — 부모가 꺼져 있으면 잠근다. 상세 통계는 응답 현황 화면 안의 카드라 응답
- * 현황이 닫혀 있으면 켜도 보이는 곳이 없다. **값은 지우지 않는다** — 부모를 다시 켜면 연구원이
- * 두었던 대로 돌아온다(잠근 칩도 지금 값을 체크로 보인다).
+ * 현황이 닫혀 있으면 켜도 보이는 곳이 없다(엑셀 다운로드·응답 조회는 응답 내역에 딸린다).
+ * **값은 지우지 않는다** — 부모를 다시 켜면 연구원이 두었던 대로 돌아온다(잠근 칩도 지금 값을
+ * 체크로 보인다). 표는 계약(`CLIENT_LINK_TAB_PARENT`)의 것 — 관문이 같은 표로 연다.
  */
-const CHIP_PARENT: Partial<Record<ClientLinkTab, ClientLinkTab>> = { overviewDetail: 'overview' };
+const CHIP_PARENT = CLIENT_LINK_TAB_PARENT;
 
 /**
  * 클라이언트 링크의 화면 칩 — 게스트 넷에 설문 보기·상세 통계·응답 내역을 더한 어휘다.

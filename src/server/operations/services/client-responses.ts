@@ -10,6 +10,7 @@ import { formatPlatformKo } from '@/lib/operations/parse-ua';
 import { answerKeyOf, entryKeyOf } from '@/lib/operations/profile-columns-format';
 import {
   PROFILES_PAGE_SIZE,
+  type StatusFilter,
   type StepLocation,
   buildStepLocationMap,
   formatTotalTime,
@@ -24,7 +25,11 @@ import {
 } from '@/server/read-models/client-response-columns';
 import { getQuestionGroupsBySurvey } from '@/server/read-models/survey-structure';
 import type { ProfilesRow } from '@/shared/contracts/operations-io';
-import type { ClientResponseCell, ClientResponsesPage } from '@/shared/contracts/workspace-io';
+import type {
+  ClientResponseCell,
+  ClientResponseRow,
+  ClientResponsesPage,
+} from '@/shared/contracts/workspace-io';
 
 import { loadProfileAnswerValues } from './profile-answer-values';
 import { listResponsesForProfiles } from './profiles';
@@ -46,9 +51,18 @@ import { listResponsesForProfiles } from './profiles';
  * 클라이언트의 일이 아니다).
  */
 
+export interface ClientResponsesOptions {
+  /**
+   * 행마다 응답 id(`viewId`)를 싣는다 — 「응답 조회」 칩(`responseView`)이 열린 링크에서만 켠다.
+   * 끄면 지금처럼 payload 에 응답 id 가 없다(행이 갈 곳이 없다). `.scratch/client-link-response-extras`.
+   */
+  viewIds?: boolean;
+}
+
 export async function listClientResponses(
   surveyId: string,
   params: { page?: string; status?: string },
+  options: ClientResponsesOptions = {},
 ): Promise<ClientResponsesPage> {
   const args = normalizeListArgs({
     ...(params.page !== undefined ? { page: params.page } : {}),
@@ -57,6 +71,53 @@ export async function listClientResponses(
       ? { status: params.status }
       : {}),
   });
+  const built = await buildClientResponses(surveyId, {
+    page: args.page,
+    pageSize: PROFILES_PAGE_SIZE,
+    status: args.status,
+    viewIds: options.viewIds === true,
+  });
+  return { ...built, pageSize: PROFILES_PAGE_SIZE, status: args.status };
+}
+
+/** 엑셀 내려받기의 한 번 상한 — 내부 내보내기(`MAX_EXPORT_RESPONSES`)와 같은 값이다. */
+export const CLIENT_RESPONSES_EXPORT_LIMIT = 10_000;
+
+export type ClientResponsesExport =
+  | { kind: 'ok'; columns: string[]; rows: ClientResponseRow[] }
+  | { kind: 'too_many'; total: number };
+
+/**
+ * 엑셀 내려받기의 재료 — 화면(`listClientResponses`)과 **같은 열·같은 칸 규칙**의 전체 행. 좁히기는
+ * 화면에서 고른 상태 하나뿐이다(페이지만 없다). 응답 id 는 싣지 않는다.
+ */
+export async function listClientResponsesForExport(
+  surveyId: string,
+  params: { status?: string },
+): Promise<ClientResponsesExport> {
+  const args = normalizeListArgs({
+    ...(params.status !== undefined && params.status !== 'deleted' ? { status: params.status } : {}),
+  });
+  const built = await buildClientResponses(surveyId, {
+    page: 1,
+    pageSize: CLIENT_RESPONSES_EXPORT_LIMIT,
+    status: args.status,
+    viewIds: false,
+  });
+  if (built.total > CLIENT_RESPONSES_EXPORT_LIMIT) return { kind: 'too_many', total: built.total };
+  return { kind: 'ok', columns: built.columns, rows: built.rows };
+}
+
+/** 엑셀 한 칸 — 화면의 칸을 글자로 접는다(상태는 라벨 + 진행 위치, 빈 칸은 빈 글자). */
+export function clientResponseCellText(cell: ClientResponseCell): string {
+  if (cell.kind === 'status') return cell.sub ? `${cell.label} · ${cell.sub}` : cell.label;
+  return cell.text ?? '';
+}
+
+async function buildClientResponses(
+  surveyId: string,
+  args: { page: number; pageSize: number; status: StatusFilter; viewIds: boolean },
+): Promise<{ columns: string[]; rows: ClientResponseRow[]; total: number; page: number }> {
   const scope = EXTERNAL_VIEWER_DATA_SCOPE;
 
   // 열은 링크 행의 설정이다(티켓 04) — 연구원이 「열 설정」에서 고른 것. 저장된 키를 **지금 구조로
@@ -85,7 +146,7 @@ export async function listClientResponses(
       scope,
       // 클라이언트 링크에는 담당 범위 축이 없다 — 설문 전체(ADR-0029, ADR-0035).
       share: FIELDWORK_SHARE_ALL,
-      pageSize: PROFILES_PAGE_SIZE,
+      pageSize: args.pageSize,
       page: args.page,
       status: args.status,
       sort: 'idx',
@@ -125,14 +186,13 @@ export async function listClientResponses(
     columns: keys.map((key) => labels.get(key) ?? key),
     rows: rows.map((row) => ({
       idx: row.idx,
+      ...(args.viewIds ? { viewId: row.id } : {}),
       cells: keys.map((key) =>
         cellOf(key, row, stepLocations, totalSteps, answerValues[row.id] ?? {}),
       ),
     })),
     total,
     page,
-    pageSize: PROFILES_PAGE_SIZE,
-    status: args.status,
   };
 }
 

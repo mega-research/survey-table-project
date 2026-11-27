@@ -4,7 +4,11 @@ import { headers } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 
 import { clientLinkPath } from '@/lib/survey-url';
-import type { ClientLinkTab, ClientLinkTabs } from '@/shared/contracts/workspace';
+import {
+  type ClientLinkTab,
+  type ClientLinkTabs,
+  isClientLinkTabOpen,
+} from '@/shared/contracts/workspace';
 
 import { resolveClientLinkActor } from './access-link';
 import { loadSurveyAccess, SurveyAccessError } from './survey-access';
@@ -46,14 +50,27 @@ export interface ClientLinkPageViewer {
   tabs: ClientLinkTabs;
 }
 
-export async function assertClientLinkPageAccess(
+/**
+ * 관문의 판정만 — 던지지 않고 결과를 돌려준다. 페이지(아래 `assertClientLinkPageAccess`)와 파일을 내려
+ * 주는 Route Handler(응답 내역 엑셀)가 같은 판정을 쓴다 — 둘이 따로 짜면 칩·capability·종류 확인 중
+ * 하나가 한쪽에서 빠진다.
+ *  - `entrance` — 접속 전·세션 끊김·닫힘·없는 토큰(입구로 보낸다)
+ *  - `denied` — 유효한 세션이지만 이 화면이 열려 있지 않다(사유를 갈라 말하지 않는다)
+ */
+export type ClientLinkAccessCheck =
+  | { kind: 'ok'; viewer: ClientLinkPageViewer }
+  | { kind: 'entrance' }
+  | { kind: 'denied' };
+
+export async function checkClientLinkAccess(
   token: string,
+  requestHeaders: Headers,
   tab?: ClientLinkTab,
-): Promise<ClientLinkPageViewer> {
-  const session = await resolveClientLinkActor(token, await headers());
+): Promise<ClientLinkAccessCheck> {
+  const session = await resolveClientLinkActor(token, requestHeaders);
   // 사유 셋(unknown·closed·unauthenticated)이 모두 입구로 모인다 — 그 화면이 이미 「닫힘」과
   // 「비밀번호를 다시」를 갈라 그린다.
-  if (!session.ok) redirect(clientLinkPath(encodeURIComponent(token)));
+  if (!session.ok) return { kind: 'entrance' };
 
   let access;
   try {
@@ -61,18 +78,29 @@ export async function assertClientLinkPageAccess(
   } catch (error) {
     // 없는 설문·삭제된 설문은 코어가 not_found 로 던진다. 그 밖의 예외(DB 장애)는 404 로
     // 접지 않는다 — 조용한 404 는 장애를 「권한 없음」으로 오독하게 만든다.
-    if (error instanceof SurveyAccessError) notFound();
+    if (error instanceof SurveyAccessError) return { kind: 'denied' };
     throw error;
   }
 
-  if (!access.capabilities.has('operations.view')) notFound();
+  if (!access.capabilities.has('operations.view')) return { kind: 'denied' };
   // 칩은 주체가 든 값을 읽는다 — 판정 코어의 `guestTabs` 는 게스트 넷만 아는 모양이라 칩 셋이
   // 타입에서 빠진다. 값은 같다: 코어가 클라이언트 주체에게 돌려주는 것이 바로 이 객체다
   // (capability 가 비면 위에서 이미 막혔다). 종류는 입구가 WHERE 로 못 박았지만 방어적으로
   // 다시 접는다 — 탭이 없는 주체를 「전부 열림」으로 읽는 실수가 가장 넓게 새는 자리다.
-  if (session.actor.linkKind !== 'client') notFound();
+  if (session.actor.linkKind !== 'client') return { kind: 'denied' };
   const tabs = session.actor.clientTabs;
-  if (tab !== undefined && !tabs[tab]) notFound();
+  // 딸린 칩(엑셀 다운로드·응답 조회·상세 통계)은 부모가 꺼지면 값과 무관하게 닫힌다.
+  if (tab !== undefined && !isClientLinkTabOpen(tabs, tab)) return { kind: 'denied' };
 
-  return { surveyId: session.actor.surveyId, tabs };
+  return { kind: 'ok', viewer: { surveyId: session.actor.surveyId, tabs } };
+}
+
+export async function assertClientLinkPageAccess(
+  token: string,
+  tab?: ClientLinkTab,
+): Promise<ClientLinkPageViewer> {
+  const check = await checkClientLinkAccess(token, await headers(), tab);
+  if (check.kind === 'entrance') redirect(clientLinkPath(encodeURIComponent(token)));
+  if (check.kind === 'denied') notFound();
+  return check.viewer;
 }

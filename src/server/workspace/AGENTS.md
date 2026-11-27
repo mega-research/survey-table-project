@@ -241,6 +241,11 @@
   - 콘솔 관문은 `assertClientLinkPageAccess(token, tab?)` — **설문 id 를 받지 않고 돌려준다.**
     접속 전·끊김·닫힘·없는 토큰은 입구로 redirect, **탭 밖은 사유 구분 없이 notFound**(주소
     조작으로 탭 구성이 확인되면 안 된다). 화면은 게스트 콘솔과 한 벌이다(`app/_client-console`).
+    판정만 떼어 낸 `checkClientLinkAccess(token, headers, tab?)`(던지지 않는다)를 파일을 내려 주는
+    Route Handler(응답 내역 엑셀)가 같이 쓴다. **딸린 칩**(상세 통계 → 응답 현황, 엑셀 다운로드·응답
+    조회 → 응답 내역)은 부모와 AND 로만 열린다 — 판정은 `isClientLinkTabOpen` 하나, 부모 표는
+    `CLIENT_LINK_TAB_PARENT`(공유 설정의 칩 잠금도 같은 표). 응답 id 는 「응답 조회」 칩이 열린 링크의
+    목록 payload 에만 실린다(`listClientResponses` 의 `viewIds`).
   - 음성 검증: `client-link.realdb`(세션 — 종류 칸막이·중단 중 열림·종료 닫힘·세션 폐기·탭 반영·
     조사 이름 미노출·scoped 전수 위조)와 `client-console.realdb`(관문 — 탭·거부의 두 갈래·
     마스킹 투영), `capability-matrix-spec` 의 클라이언트 링크 열.

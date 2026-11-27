@@ -57,6 +57,18 @@ describe('ClientResponsesTable', () => {
     }
   });
 
+  it('응답 조회가 열린 목록은 행 끝에 「조회」가 서고, 응답 id 와 순번을 주소에 싣는다', () => {
+    const base = pageOf();
+    const page = {
+      ...base,
+      rows: base.rows.map((row, i) => ({ ...row, viewId: `00000000-0000-4000-8000-00000000000${i}` })),
+    };
+    render(<ClientResponsesTable page={page} basePath={BASE} />);
+    const link = screen.getByRole('link', { name: '응답 2번 조회' });
+    expect(link).toHaveAttribute('href', `${BASE}/00000000-0000-4000-8000-000000000000?idx=2`);
+    expect(screen.getAllByRole('link', { name: /번 조회$/ })).toHaveLength(2);
+  });
+
   it('상태 좁히기는 첫 페이지로 가고, 고른 상태가 표시된다', () => {
     render(<ClientResponsesTable page={pageOf({ status: 'drop' })} basePath={BASE} />);
     expect(screen.getByRole('link', { name: '완료' })).toHaveAttribute(

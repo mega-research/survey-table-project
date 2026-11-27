@@ -53,9 +53,19 @@ interface Props {
   /**
    * 조회 전용 — 값을 바꿀 수 없고 저장도 없다(운영 main 의 응답 조회 화면 본문). 아무것도 쓰지 않고
    * (테스트 버전 맞추기 생략), 브라우저로 보내는 명단 개인정보도 설문이 실제로 읽는 열로 줄인다.
-   * 지금 이 값을 켜는 라우트는 없다 — 외부 주체에게 응답 조회를 열 때 그 라우트가 켠다.
+   * 이 값을 켜는 라우트는 클라이언트 링크의 응답 조회(`/client/<t>/responses/<응답 id>`)다.
    */
   readOnly?: boolean;
+  /**
+   * 조회를 닫으면 돌아갈 주소 — 기본은 `basePath` 의 응답 내역(`operations/profiles`). 클라이언트 링크는
+   * 응답 내역 주소가 달라(`/client/<t>/responses`) 이 값으로 넘긴다.
+   */
+  closeHref?: string;
+  /**
+   * 조사표 패널을 싣는가(기본 true). 조사표는 내부 산출물이라 클라이언트 링크의 조회에는 싣지 않는다
+   * (설문 보기 칩과도 별개다).
+   */
+  withDocument?: boolean;
 }
 
 export async function ResponseEditScreen({
@@ -66,6 +76,8 @@ export async function ResponseEditScreen({
   share,
   idx,
   readOnly = false,
+  closeHref,
+  withDocument = true,
 }: Props) {
   // surveyId 는 read-model 의 WHERE 로 내려간다 — 사후 비교로 두면 타 팀 응답 원문이
   // 이미 복호화된 뒤에 접히게 된다(티켓 15).
@@ -162,10 +174,13 @@ export async function ResponseEditScreen({
 
   // 관리자도 조사표를 보면서 고친다 — 문항 번호만 보고는 무엇을 고치는지 알 수 없다.
   // 앵커는 렌더 버전 스냅샷의 얼린 좌표, 파일은 현재 것(라이브).
-  const documentView = await buildDocumentView(
-    surveyId,
-    ((version?.snapshot as { anchors?: SurveyAnchorSnapshot[] } | null | undefined)?.anchors ?? []),
-  );
+  const documentView = withDocument
+    ? await buildDocumentView(
+        surveyId,
+        ((version?.snapshot as { anchors?: SurveyAnchorSnapshot[] } | null | undefined)?.anchors ??
+          []),
+      )
+    : null;
 
   return (
     <>
@@ -191,6 +206,7 @@ export async function ResponseEditScreen({
         renderedVersionId={pinnedId}
         migratedFromOldVersion={migratedFromOldVersion}
         readOnly={readOnly}
+        {...(closeHref !== undefined ? { closeHref } : {})}
       />
     </>
   );

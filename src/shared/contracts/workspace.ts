@@ -301,11 +301,18 @@ export function normalizeSurveyGuestTabs(raw: unknown): SurveyGuestTabs {
  *  - `overviewDetail` — 응답 현황의 상세 카드(일자별 표·응답시간·이탈 위치·체류시간).
  *    탭이 아니라 응답 현황에 딸린 표시 설정이다 — 페이지 관문이 묻지 않는다.
  *  - `responses` — 응답 내역(보기 전용, 서버 투영).
+ *  - `responsesExport` — 응답 내역의 「엑셀 다운로드」(화면의 열 그대로). `responses` 에 딸린 칩.
+ *  - `responseView` — 응답 내역 행마다 「조회」(응답 한 건, 답 원문). `responses` 에 딸린 칩.
+ *    (`.scratch/client-link-response-extras` — 운영 보기 전용 고객 계정의 `allowExport`·`allowResponseView` 대응)
+ *
+ * 딸린 칩은 **부모와 AND** 로만 열린다 — 판정은 `isClientLinkTabOpen` 하나다.
  */
 export interface ClientLinkTabs extends SurveyGuestTabs {
   preview: boolean;
   overviewDetail: boolean;
   responses: boolean;
+  responsesExport: boolean;
+  responseView: boolean;
 }
 
 /** 칩 순서의 정본 — 공유 설정의 클라이언트 블록이 이 순서로 그린다. */
@@ -316,14 +323,34 @@ export const clientLinkTabValues = [
   'contactsMasked',
   'quota',
   'responses',
+  'responsesExport',
+  'responseView',
   'preview',
 ] as const satisfies ReadonlyArray<keyof ClientLinkTabs>;
 export type ClientLinkTab = (typeof clientLinkTabValues)[number];
+
+/**
+ * 딸린 칩 → 부모 칩. 딸린 칩은 부모가 꺼지면 값과 무관하게 닫힌다(값은 지우지 않는다 — 부모를 다시
+ * 켜면 연구원이 두었던 대로 돌아온다). 공유 설정의 칩 잠금도 이 표를 읽는다.
+ */
+export const CLIENT_LINK_TAB_PARENT: Partial<Record<ClientLinkTab, ClientLinkTab>> = {
+  overviewDetail: 'overview',
+  responsesExport: 'responses',
+  responseView: 'responses',
+};
+
+/** 이 칩이 지금 열려 있는가 — 자기 값 ∧ 부모 값. 관문·화면·버튼이 이 함수 하나로 묻는다. */
+export function isClientLinkTabOpen(tabs: ClientLinkTabs, tab: ClientLinkTab): boolean {
+  const parent = CLIENT_LINK_TAB_PARENT[tab];
+  return tabs[tab] && (parent === undefined || tabs[parent]);
+}
 
 export const CLIENT_LINK_TAB_LABEL: Record<ClientLinkTab, string> = {
   ...SURVEY_GUEST_TAB_LABEL,
   overviewDetail: '상세 통계',
   responses: '응답 내역',
+  responsesExport: '엑셀 다운로드',
+  responseView: '응답 조회',
   preview: '설문 보기',
 };
 
@@ -337,6 +364,8 @@ export const DEFAULT_CLIENT_LINK_TABS: ClientLinkTabs = {
   ...DEFAULT_SURVEY_GUEST_TABS,
   overviewDetail: true,
   responses: false,
+  responsesExport: false,
+  responseView: false,
   preview: true,
 };
 
@@ -345,6 +374,8 @@ export const NO_CLIENT_LINK_TABS: ClientLinkTabs = {
   ...NO_SURVEY_GUEST_TABS,
   overviewDetail: false,
   responses: false,
+  responsesExport: false,
+  responseView: false,
   preview: false,
 };
 
