@@ -104,6 +104,12 @@ export const CLIENT_EMPTY_SEGMENT = 'empty';
 export const CLIENT_RESPONSES_SEGMENT = 'responses';
 
 /**
+ * 응답 내역 엑셀 내려받기 — 응답 내역 아래 Route Handler(`/client/<t>/responses/export`).
+ * 응답 id 는 UUID 라 이 이름과 겹치지 않는다(조회 페이지 `/responses/<응답 id>` 와 형제).
+ */
+export const CLIENT_RESPONSES_EXPORT_SEGMENT = 'export';
+
+/**
  * 클라이언트 링크의 탭 줄 — 게스트 탭에 응답 내역을 더한다. 응답 내역은 **응답 현황 바로 뒤**다
  * (내부 콘솔 「실사 현황」 탭의 응답 현황 · 응답 내역 순서). 설문 보기는 화면 머리의 버튼이고
  * 상세 통계는 응답 현황 안의 표시 설정이라 탭 줄에 서지 않는다.

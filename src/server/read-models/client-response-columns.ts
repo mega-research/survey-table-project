@@ -78,6 +78,29 @@ export async function loadClientResponseColumnMaterial(
  * 링크가 없으면 기본 열이다. 클라이언트 콘솔은 링크 세션을 지난 뒤에만 이 값을 읽으므로 실제로는
  * 링크가 있다 — 없을 때 기본 열로 접는 것은 테스트·내부 미리보기에서 표가 사라지지 않게 하려는 것이다.
  */
+/**
+ * 한 링크의 열 설정 — 관문이 승인한 그 링크가 아직 열린 클라이언트 링크일 때만. 닫혔거나 없으면 null
+ * (그 요청은 더 진행하지 않는다 — 설문의 다른 링크 설정으로 접지 않는다).
+ */
+export async function getClientLinkResponseColumns(
+  surveyId: string,
+  linkId: string,
+): Promise<ClientResponseColumns | null> {
+  const [row] = await db
+    .select({ columns: surveyAccessLinks.clientResponseColumns })
+    .from(surveyAccessLinks)
+    .where(
+      and(
+        eq(surveyAccessLinks.id, linkId),
+        eq(surveyAccessLinks.surveyId, surveyId),
+        eq(surveyAccessLinks.kind, 'client'),
+        isNull(surveyAccessLinks.closedAt),
+      ),
+    )
+    .limit(1);
+  return row ? normalizeClientResponseColumns(row.columns ?? null) : null;
+}
+
 export async function getActiveClientLinkResponseColumns(
   surveyId: string,
 ): Promise<ClientResponseColumns> {

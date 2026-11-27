@@ -41,6 +41,8 @@ const TABS = {
   preview: true,
   overviewDetail: true,
   responses: false,
+  responsesExport: false,
+  responseView: false,
 };
 
 const LINK_ID = '11111111-1111-4111-8111-111111111111';
@@ -220,6 +222,34 @@ describe('AccessLinkPanel', () => {
 
     await waitFor(() =>
       expect(setTab).toHaveBeenCalledWith({ surveyId: 's-1', tab: 'responses', enabled: true }),
+    );
+  });
+
+  /**
+   * 엑셀 다운로드·응답 조회는 응답 내역에 딸린 칩이다(`.scratch/client-link-response-extras`) — 새
+   * 링크에서는 꺼져 있고, 응답 내역이 꺼져 있으면 잠긴다. 켜면 그 칩 하나만 저장한다.
+   */
+  it('엑셀 다운로드·응답 조회 칩 — 응답 내역이 꺼져 있으면 잠기고, 켜져 있으면 그 칩만 저장한다', async () => {
+    state.data = linkState('client');
+    const { unmount } = render(<AccessLinkPanel surveyId="s-1" kind="client" />);
+    for (const name of ['엑셀 다운로드', '응답 조회']) {
+      const chip = screen.getByRole('checkbox', { name });
+      expect(chip).not.toBeChecked();
+      expect(chip).toBeDisabled();
+    }
+    unmount();
+
+    const base = linkState('client');
+    state.data = { ...base, links: [{ ...base.link, clientTabs: { ...TABS, responses: true } }] };
+    const user = userEvent.setup();
+    render(<AccessLinkPanel surveyId="s-1" kind="client" />);
+    await user.click(screen.getByRole('checkbox', { name: '응답 조회' }));
+    await waitFor(() =>
+      expect(setTab).toHaveBeenCalledWith({ surveyId: 's-1', tab: 'responseView', enabled: true }),
+    );
+    await user.click(screen.getByRole('checkbox', { name: '엑셀 다운로드' }));
+    await waitFor(() =>
+      expect(setTab).toHaveBeenCalledWith({ surveyId: 's-1', tab: 'responsesExport', enabled: true }),
     );
   });
 

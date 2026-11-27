@@ -29,7 +29,8 @@ const TONE_CLASS: Record<Extract<ClientResponseCell, { kind: 'status' }>['tone']
  * 조사 대상 표(`GuestContactsTable`)와 같은 이유로 운영 콘솔의 표를 쓰지 않는다 — 저쪽은 헤더
  * 필터 팝오버가 RPC 를 당기고(이 트리에는 RPC 표면이 없다) 행 메뉴가 수정·삭제 화면으로 간다.
  * 여기는 **정렬도 값 검색도 없는 읽기 표**이고, 링크는 상태 좁히기와 페이지 이동뿐이다. 도착하는
- * 행에는 표시 값만 있다(서버 투영 `listClientResponses`) — 응답 id 가 없으니 행이 갈 곳도 없다.
+ * 행에는 표시 값만 있다(서버 투영 `listClientResponses`). 「응답 조회」 칩이 열린 링크에서만 행에
+ * 응답 id(`viewId`)가 실리고, 그 줄 끝에 「조회」가 선다(`<basePath>/<viewId>?idx=`).
  *
  * 상태 칸은 내부 표의 알약과 같은 얼굴이다(색 + 진행 위치). 운영 콘솔의 `StatusPill` 을 쓰지
  * 못하는 것은 기능 묶음끼리 import 하지 않기 때문이고, 색 표는 그쪽과 같은 값이다.
@@ -38,6 +39,8 @@ const TONE_CLASS: Record<Extract<ClientResponseCell, { kind: 'status' }>['tone']
  */
 export function ClientResponsesTable({ page, basePath }: Props) {
   const totalPages = Math.max(1, Math.ceil(page.total / page.pageSize));
+  // 한 줄이라도 조회 주소가 있으면 끝 열을 세운다 — 칩이 꺼진 링크의 표 모양은 그대로다.
+  const hasView = page.rows.some((row) => row.viewId !== undefined);
   const href = (params: { status?: string; page?: number }) => {
     const query = new URLSearchParams();
     if (params.status && params.status !== 'all') query.set('status', params.status);
@@ -86,6 +89,11 @@ export function ClientResponsesTable({ page, basePath }: Props) {
                       {label}
                     </th>
                   ))}
+                  {hasView && (
+                    <th scope="col" className="px-3 py-2">
+                      <span className="sr-only">응답 조회</span>
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -99,6 +107,19 @@ export function ClientResponsesTable({ page, basePath }: Props) {
                         <Cell cell={cell} />
                       </td>
                     ))}
+                    {hasView && (
+                      <td className="px-3 py-2 text-right whitespace-nowrap">
+                        {row.viewId !== undefined && (
+                          <Link
+                            href={`${basePath}/${encodeURIComponent(row.viewId)}?idx=${row.idx}`}
+                            aria-label={`응답 ${row.idx}번 조회`}
+                            className="inline-flex h-[26px] items-center rounded-[8px] border border-[#E5E5EA] px-2.5 text-[12px] font-medium text-[#374151] hover:bg-[#F5F5F7]"
+                          >
+                            조회
+                          </Link>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

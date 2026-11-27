@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_CLIENT_LINK_TABS,
   DEFAULT_CLIENT_RESPONSE_COLUMN_KEYS,
+  NO_CLIENT_LINK_TABS,
   clientLinkTabValues,
+  isClientLinkTabOpen,
   normalizeClientLinkTabs,
   normalizeClientResponseColumns,
   normalizeSurveyGuestTabs,
@@ -17,6 +19,40 @@ import {
  * 게스트 넷에 셋(설문 보기·상세 통계·응답 내역)을 더한다. 게스트 어휘·정규화는 그대로여야
  * 한다 — 철거 대상인 게스트 콘솔이 새 칸을 얻으면 안 된다.
  */
+/**
+ * 딸린 칩 — 엑셀 다운로드·응답 조회는 응답 내역에, 상세 통계는 응답 현황에 딸린다
+ * (`.scratch/client-link-response-extras`). 부모가 꺼지면 값과 무관하게 닫힌다.
+ */
+describe('isClientLinkTabOpen', () => {
+  it('딸린 칩은 자기 값 ∧ 부모 값', () => {
+    const on = { ...NO_CLIENT_LINK_TABS, responses: true, responsesExport: true, responseView: true };
+    expect(isClientLinkTabOpen(on, 'responsesExport')).toBe(true);
+    expect(isClientLinkTabOpen(on, 'responseView')).toBe(true);
+    const parentOff = { ...on, responses: false };
+    expect(isClientLinkTabOpen(parentOff, 'responsesExport')).toBe(false);
+    expect(isClientLinkTabOpen(parentOff, 'responseView')).toBe(false);
+    expect(isClientLinkTabOpen({ ...on, responseView: false }, 'responseView')).toBe(false);
+  });
+
+  it('부모 없는 칩은 자기 값만 본다', () => {
+    expect(isClientLinkTabOpen({ ...NO_CLIENT_LINK_TABS, responses: true }, 'responses')).toBe(true);
+    expect(isClientLinkTabOpen({ ...NO_CLIENT_LINK_TABS, overviewDetail: true }, 'overviewDetail')).toBe(false);
+  });
+
+  it('새 두 칩은 새 링크·옛 행에서 꺼져 있다', () => {
+    expect(DEFAULT_CLIENT_LINK_TABS.responsesExport).toBe(false);
+    expect(DEFAULT_CLIENT_LINK_TABS.responseView).toBe(false);
+    const old = normalizeClientLinkTabs({ overview: true, responses: true, preview: true });
+    expect(old.responsesExport).toBe(false);
+    expect(old.responseView).toBe(false);
+  });
+
+  it('칩 순서 — 딸린 칩은 응답 내역 바로 뒤', () => {
+    const at = clientLinkTabValues.indexOf('responses');
+    expect(clientLinkTabValues.slice(at, at + 3)).toEqual(['responses', 'responsesExport', 'responseView']);
+  });
+});
+
 describe('normalizeClientLinkTabs', () => {
   it('컬럼이 비어 있으면 기본값 — 응답 현황·설문 보기·상세 통계만 켜짐', () => {
     expect(normalizeClientLinkTabs(null)).toEqual({
@@ -27,6 +63,8 @@ describe('normalizeClientLinkTabs', () => {
       preview: true,
       overviewDetail: true,
       responses: false,
+      responsesExport: false,
+      responseView: false,
     });
     expect(normalizeClientLinkTabs(null)).toEqual(DEFAULT_CLIENT_LINK_TABS);
   });
@@ -40,6 +78,8 @@ describe('normalizeClientLinkTabs', () => {
       preview: false,
       overviewDetail: false,
       responses: false,
+      responsesExport: false,
+      responseView: false,
     });
   });
 

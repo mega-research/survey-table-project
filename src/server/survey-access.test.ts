@@ -644,6 +644,8 @@ describe('resolveSurveyCapabilities — 클라이언트 링크', () => {
     preview: true,
     overviewDetail: true,
     responses: true,
+    responsesExport: true,
+    responseView: true,
   };
   const OVERVIEW_ONLY = {
     ...ALL_TABS,

@@ -159,6 +159,8 @@ const COLUMNS = {
         preview: true,
         overviewDetail: true,
         responses: true,
+        responsesExport: true,
+        responseView: true,
       },
     },
     participation: null,

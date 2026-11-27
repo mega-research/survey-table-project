@@ -41,7 +41,7 @@ src/
 │   ├── client/[token]/         # 클라이언트 링크 (ADR-0029) — 고객사가 계정 없이 그 설문의 현황을 본다
 │   │   ├── page.tsx            # 비밀번호 화면 + 닫힘 안내 (가드 없음). **조사 이름을 받지 않는다** — 접속된
 │   │   │                       # 세션은 허용된 첫 탭(없으면 미리보기)으로 보낸다. 「탭 없는 주소」가 곧 이 화면이다
-│   │   └── (console)/          # 셸(화면 머리·탭·나가기) + overview·report·contacts·quota·preview. 라우트 그룹인
+│   │   └── (console)/          # 셸(화면 머리·탭·나가기) + overview·report·contacts·quota·responses(·[responseId]·export)·preview. 라우트 그룹인
 │   │                           # 이유는 입구 화면에 셸이 서면 비밀번호 전에 조사 이름이 그려지기 때문이다.
 │   │                           # QueryProvider 를 열지 않는다(부를 데이터 RPC 가 없다)
 │   │                           # **얼굴은 운영 콘솔과 한 벌이다** — 화면 머리는 `OperationsPageHeader`(internalShell=false:
@@ -140,7 +140,10 @@ GET    /api/legacy-guest-link/[surveyId]/[[...rest]]  # 옛 게스트 주소 다
                                   # **설문 중단은 닫힘이 아니다.** 접속된 세션은 허용된 첫 탭(없으면 미리보기)으로 보낸다
 /client/[token]/overview          # 응답 현황 · report 진척 보고 · contacts 조사 대상(마스킹) · quota 쿼터 현황 —
                                   # 연구원이 켠 탭만 열린다. 게스트 콘솔과 **같은 본문**(app/_client-console)
-/client/[token]/preview           # 설문지 미리보기 — 탭 화이트리스트 밖(링크가 열려 있으면 언제나)
+/client/[token]/preview           # 설문지 미리보기 — 「설문 보기」 칩이 연다
+/client/[token]/responses         # 응답 내역(보기 전용 투영) — 「응답 내역」 칩. 딸린 칩 둘이 아래 둘을 연다(부모 AND, isClientLinkTabOpen)
+/client/[token]/responses/[responseId]  # 응답 조회 — 「응답 조회」 칩. 주소 값은 응답 id 가 아니라 링크에 묶인 조회 키. 응답 수정 본문을 readOnly·externalViewer 로
+/client/[token]/responses/export  # 응답 내역 엑셀(Route Handler) — 「엑셀 다운로드」 칩. 화면의 열 그대로, ?status= 만, no-store
                                   # 관문은 assertClientLinkPageAccess(token, tab?) — 접속 전·닫힘은 입구로, 탭 밖은 notFound
 /fw/[token]                       # 외주 실사 링크의 입구 — 비밀번호 화면 + 닫힘 안내 (ADR-0026)
                                   # 가드가 **없는 것이 정의**다(세션을 만드는 자리). 없는 토큰과 틀린

@@ -26,6 +26,8 @@ interface Props {
   migratedFromOldVersion: boolean;
   /** 조회 전용(응답 조회 화면) — 값을 바꿀 수 없고 저장을 부르지 않는다. */
   readOnly?: boolean;
+  /** 조회를 닫으면 갈 주소 — 없으면 `basePath` 의 응답 내역. */
+  closeHref?: string;
 }
 
 /**
@@ -36,8 +38,8 @@ interface Props {
  * - 내부 콘솔과 외주 실사 링크 트리가 함께 쓴다(ADR-0027) — 돌아갈 주소만 `basePath` 로 갈린다.
  * - amber 헤더로 "어드민 수정 모드" 명시.
  * - `readOnly` 면 응답 조회 화면이다 — 같은 흐름을 잠가 그리고(값 쓰기·검증·저장 없음) 마지막 쪽은
- *   「닫기」로 응답 내역에 돌아간다. 지금 이 모드로 여는 라우트는 없다 — 운영(main)의 보기 전용 고객
- *   계정용 응답 조회를 본문만 옮겨 둔 것이고, 외부 주체에게 열 때 라우트와 관문을 세운다.
+ *   「닫기」로 응답 내역에 돌아간다(`closeHref`). 이 모드로 여는 라우트는 클라이언트 링크의 응답 조회
+ *   (「응답 조회」 칩)다 — 운영(main)의 보기 전용 고객 계정 응답 조회와 같은 본문.
  */
 export function AdminResponseEditor({
   surveyId,
@@ -52,9 +54,10 @@ export function AdminResponseEditor({
   renderedVersionId,
   migratedFromOldVersion,
   readOnly = false,
+  closeHref,
 }: Props) {
   const router = useRouter();
-  const profilesHref = operationsPaths(basePath).profiles;
+  const profilesHref = closeHref ?? operationsPaths(basePath).profiles;
 
   return (
     <div>

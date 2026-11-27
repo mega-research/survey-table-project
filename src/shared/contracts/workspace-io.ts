@@ -772,6 +772,8 @@ export const ClientLinkTabsSchema = SurveyGuestTabsSchema.extend({
   preview: z.boolean(),
   overviewDetail: z.boolean(),
   responses: z.boolean(),
+  responsesExport: z.boolean(),
+  responseView: z.boolean(),
 }) satisfies z.ZodType<ClientLinkTabs>;
 
 /** 공유 모달의 게스트 행 (.pen 4-2 클라이언트 블록). */
@@ -933,9 +935,13 @@ export type ClientResponseCell =
       sub?: string;
     };
 
-/** 표 한 줄 — 응답 id 가 없다. 줄의 이름은 접수 순번이다(행 key 로도 쓴다). */
+/**
+ * 표 한 줄 — 줄의 이름은 접수 순번이다(행 key 로도 쓴다). 응답 id 는 기본으로 없고, 「응답 조회」
+ * 칩이 열린 링크에서만 `viewId` 로 실린다(그 줄의 「조회」 주소).
+ */
 export interface ClientResponseRow {
   idx: number;
+  viewId?: string;
   cells: ClientResponseCell[];
 }
 

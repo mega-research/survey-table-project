@@ -34,7 +34,13 @@ import {
   users as usersTable,
 } from '@/db/schema';
 import type { ORPCContext } from '@/server/context';
-import { listClientResponses } from '@/server/operations/services/client-responses';
+import { encryptAnswerValue } from '@/lib/crypto/response-pii';
+import {
+  ClientLinkGoneError,
+  decodeClientResponseViewKey,
+  encodeClientResponseViewKey,
+  listClientResponses,
+} from '@/server/operations/services/client-responses';
 import {
   type ClientLinkTabs,
   clientLinkTabValues,
@@ -187,10 +193,12 @@ describe.skipIf(!isLocalDb)('클라이언트 링크 콘솔 (real local DB)', () 
 
   describe('탭 관문', () => {
     it('허용된 탭은 통과하고, 관문이 설문 id 와 탭 구성을 돌려준다', async () => {
-      const { token } = await issueAndEnter();
+      const { token, linkId } = await issueAndEnter();
       // 설문 id 는 주소가 아니라 링크 행에서 나온다 — 화면이 다른 설문을 지목할 길이 없다.
+      // 승인한 링크 id 도 돌려준다 — 열 설정·조회 키를 그 링크로 묶는다.
       await expect(assertClientLinkPageAccess(token, 'overview')).resolves.toEqual({
         surveyId,
+        linkId,
         tabs: NEW_LINK_TABS,
       });
     });
@@ -227,10 +235,11 @@ describe.skipIf(!isLocalDb)('클라이언트 링크 콘솔 (real local DB)', () 
     });
 
     it('칩이 전부 꺼져도 셸(탭 없는 관문)은 열린다 — 빈 안내를 그릴 자리다', async () => {
-      const { token } = await issueAndEnter();
+      const { token, linkId } = await issueAndEnter();
       await setTabs(NO_CLIENT_LINK_TABS);
       await expect(assertClientLinkPageAccess(token)).resolves.toEqual({
         surveyId,
+        linkId,
         tabs: NO_CLIENT_LINK_TABS,
       });
     });
@@ -654,6 +663,238 @@ describe.skipIf(!isLocalDb)('클라이언트 링크 콘솔 (real local DB)', () 
       const deleted = await listClientResponses(surveyId, { status: 'deleted' });
       expect(deleted.status).toBe('all');
       expect(deleted.total).toBe(2);
+    });
+
+    // ── 딸린 칩 둘 (.scratch/client-link-response-extras) ──────────────────────
+    it('엑셀 다운로드·응답 조회는 새 링크에서 꺼져 있고, 응답 내역이 꺼지면 값과 무관하게 닫힌다', async () => {
+      const { token } = await issueAndEnter();
+      await admin.accessLinks.setClientTab({ surveyId, tab: 'responses', enabled: true });
+      for (const tab of ['responsesExport', 'responseView'] as const) {
+        await expect(assertClientLinkPageAccess(token, tab)).rejects.toThrow('NEXT_NOT_FOUND');
+        await admin.accessLinks.setClientTab({ surveyId, tab, enabled: true });
+        await expect(assertClientLinkPageAccess(token, tab)).resolves.toMatchObject({ surveyId });
+      }
+      // 부모를 끈다 — 딸린 칩 값은 남아 있지만 닫힌다.
+      await admin.accessLinks.setClientTab({ surveyId, tab: 'responses', enabled: false });
+      for (const tab of ['responsesExport', 'responseView'] as const) {
+        await expect(assertClientLinkPageAccess(token, tab)).rejects.toThrow('NEXT_NOT_FOUND');
+      }
+    });
+
+    it('응답 조회가 켜진 목록만 행마다 조회 키를 싣는다 — 응답 id 는 어디에도 없고, 키는 그 링크에서만 풀린다', async () => {
+      const [completed, dropped, deleted, test] = responseIds;
+      const { linkId } = await issueAndEnter();
+      const off = JSON.stringify(await listClientResponses(surveyId, {}, { linkId }));
+      for (const id of responseIds) expect(off).not.toContain(id);
+
+      const on = await listClientResponses(surveyId, {}, { linkId, viewKeys: true });
+      const serialized = JSON.stringify(on);
+      // 응답 id 는 진행 중 실응답의 쓰기 권한이다 — 조회 키에도 평문으로 들어 있지 않다.
+      for (const id of responseIds) expect(serialized).not.toContain(id);
+      expect(serialized).not.toContain(targetId);
+      const keys = on.rows.map((r) => r.viewId!);
+      expect(keys.every((k) => /^[A-Za-z0-9._-]+$/.test(k))).toBe(true);
+      expect(keys.map((k) => decodeClientResponseViewKey(linkId, k)).sort()).toEqual(
+        [completed, dropped].sort(),
+      );
+      expect(keys.map((k) => decodeClientResponseViewKey(linkId, k))).not.toContain(deleted);
+      expect(keys.map((k) => decodeClientResponseViewKey(linkId, k))).not.toContain(test);
+      // 다른 링크·손상된 키는 풀리지 않는다.
+      expect(decodeClientResponseViewKey(crypto.randomUUID(), keys[0]!)).toBeNull();
+      expect(decodeClientResponseViewKey(linkId, `${keys[0]!.slice(0, -2)}AA`)).toBeNull();
+      expect(decodeClientResponseViewKey(linkId, completed!)).toBeNull();
+    });
+
+    it('관문이 승인한 링크가 그사이 닫히면 다른 링크의 열 설정으로 접지 않는다', async () => {
+      const { linkId } = await issueAndEnter();
+      await admin.accessLinks.close({ surveyId, linkId });
+      await admin.accessLinks.issue({ surveyId, kind: 'client', password: PASSWORD });
+      await expect(listClientResponses(surveyId, {}, { linkId })).rejects.toBeInstanceOf(
+        ClientLinkGoneError,
+      );
+    });
+
+    it('개인정보 저장을 나중에 끈 문항의 옛 암호문 답은 목록·엑셀에서 비운다', async () => {
+      const questionId = crypto.randomUUID();
+      await db.insert(questionsTable).values({
+        id: questionId,
+        surveyId,
+        type: 'text',
+        title: '담당자 연락처',
+        order: 0,
+        questionCode: 'Q9',
+      });
+      await db
+        .update(responsesTable)
+        .set({ questionResponses: { [questionId]: encryptAnswerValue('010-1234-5678') } })
+        .where(eq(responsesTable.id, responseIds[0]!));
+      await db
+        .update(responsesTable)
+        .set({ questionResponses: { [questionId]: '평문 새 답' } })
+        .where(eq(responsesTable.id, responseIds[1]!));
+      const { linkId } = await issueAndEnter();
+      await admin.accessLinks.setClientResponseColumns({
+        surveyId,
+        keys: ['sys.idx', `answer.${questionId}`],
+        expectedVersion: 0,
+      });
+      const page = await listClientResponses(surveyId, {}, { linkId });
+      const serialized = JSON.stringify(page);
+      expect(serialized).not.toContain('010-1234-5678');
+      expect(serialized).toContain('평문 새 답');
+    });
+
+    describe('엑셀 다운로드', () => {
+      const exportUrl = (token: string, qs = '') =>
+        `http://localhost:3000/client/${token}/responses/export${qs}`;
+      async function download(token: string, qs = '') {
+        const { GET } = await import('@/app/client/[token]/(console)/responses/export/route');
+        const { NextRequest } = await import('next/server');
+        const req = new NextRequest(exportUrl(token, qs), { headers: requestState.headers });
+        return GET(req, { params: Promise.resolve({ token }) });
+      }
+      async function sheetRows(res: Response): Promise<string[][]> {
+        const ExcelJS = (await import('exceljs')).default;
+        const wb = new ExcelJS.Workbook();
+        await wb.xlsx.load(await res.arrayBuffer());
+        const rows: string[][] = [];
+        wb.worksheets[0]!.eachRow((row) => {
+          rows.push((row.values as unknown[]).slice(1).map((v) => String(v ?? '')));
+        });
+        return rows;
+      }
+
+      it('칩이 꺼져 있으면 404, 세션이 없으면 입구로 보낸다', async () => {
+        const { token } = await issueAndEnter();
+        await admin.accessLinks.setClientTab({ surveyId, tab: 'responses', enabled: true });
+        expect((await download(token)).status).toBe(404);
+        // 딸린 칩만 켜고 부모를 끄면 역시 닫힌다.
+        await admin.accessLinks.setClientTab({ surveyId, tab: 'responsesExport', enabled: true });
+        await admin.accessLinks.setClientTab({ surveyId, tab: 'responses', enabled: false });
+        expect((await download(token)).status).toBe(404);
+
+        requestState.headers = new Headers();
+        const res = await download(token);
+        expect(res.status).toBe(307);
+        expect(res.headers.get('location')).toContain(`/client/${token}`);
+      });
+
+      it('화면의 열 그대로 · 실 파티션의 살아 있는 응답만 · 상태로 좁힌다 · 캐시에 남기지 않는다', async () => {
+        const { token } = await issueAndEnter();
+        await admin.accessLinks.setClientTab({ surveyId, tab: 'responses', enabled: true });
+        await admin.accessLinks.setClientTab({ surveyId, tab: 'responsesExport', enabled: true });
+
+        const res = await download(token);
+        expect(res.status).toBe(200);
+        expect(res.headers.get('cache-control')).toBe('no-store');
+        expect(res.headers.get('content-disposition')).toContain('attachment');
+        const rows = await sheetRows(res);
+        const screen = await listClientResponses(surveyId, {});
+        expect(rows[0]).toEqual(screen.columns);
+        expect(rows).toHaveLength(1 + 2);
+        const flat = JSON.stringify(rows);
+        for (const id of responseIds) expect(flat).not.toContain(id);
+        expect(flat).not.toContain(SECRET_IP);
+        expect(flat).not.toContain(SECRET_EUID);
+        expect(flat).not.toContain(SECRET_ATTR);
+
+        const completedOnly = await sheetRows(await download(token, '?status=completed'));
+        expect(completedOnly).toHaveLength(1 + 1);
+      });
+    });
+
+    describe('응답 조회', () => {
+      async function openView(token: string, key: string) {
+        const { default: Page } = await import(
+          '@/app/client/[token]/(console)/responses/[responseId]/page'
+        );
+        return Page({
+          params: Promise.resolve({ token, responseId: key }),
+          searchParams: Promise.resolve({ idx: '1' }),
+        });
+      }
+
+      it('칩이 꺼져 있으면 notFound · 응답 id 를 직접 넣어도 · 다른 링크의 키도 notFound', async () => {
+        const { token, linkId } = await issueAndEnter();
+        const key = encodeClientResponseViewKey(linkId, responseIds[0]!);
+        await admin.accessLinks.setClientTab({ surveyId, tab: 'responses', enabled: true });
+        await expect(openView(token, key)).rejects.toThrow('NEXT_NOT_FOUND');
+        await admin.accessLinks.setClientTab({ surveyId, tab: 'responseView', enabled: true });
+        await expect(openView(token, responseIds[0]!)).rejects.toThrow('NEXT_NOT_FOUND');
+        await expect(
+          openView(token, encodeClientResponseViewKey(crypto.randomUUID(), responseIds[0]!)),
+        ).rejects.toThrow('NEXT_NOT_FOUND');
+        await expect(openView(token, 'not-a-key')).rejects.toThrow('NEXT_NOT_FOUND');
+      });
+
+      it('키를 풀어 잠근 조회 화면을 외부 열람 모드로 그리고, 닫으면 클라이언트 응답 내역으로 간다', async () => {
+        const { token, linkId } = await issueAndEnter();
+        await admin.accessLinks.setClientTab({ surveyId, tab: 'responses', enabled: true });
+        await admin.accessLinks.setClientTab({ surveyId, tab: 'responseView', enabled: true });
+        const key = encodeClientResponseViewKey(linkId, responseIds[0]!);
+        const element = (await openView(token, key)) as { props: Record<string, unknown> };
+        expect(element.props).toMatchObject({
+          surveyId,
+          responseId: responseIds[0],
+          scope: 'real',
+          readOnly: true,
+          externalViewer: true,
+          closeHref: `/client/${token}/responses`,
+          idx: 1,
+        });
+      });
+
+      async function renderExternal(sid: string, responseId: string) {
+        const { ResponseEditScreen } = await import('@/app/_operations/response-edit-screen');
+        const { FIELDWORK_SHARE_ALL } = await import('@/server/fieldwork-share-scope');
+        return ResponseEditScreen({
+          surveyId: sid,
+          responseId,
+          basePath: '/client/x',
+          scope: 'real',
+          share: FIELDWORK_SHARE_ALL,
+          idx: null,
+          readOnly: true,
+          externalViewer: true,
+        });
+      }
+      /** 본문 트리에서 편집기 props 를 꺼낸다 — 조각(<>…</>) 안의 마지막 자식이 편집기다. */
+      function editorProps(tree: unknown): Record<string, unknown> {
+        const children = (tree as { props: { children: unknown[] } }).props.children;
+        const editor = [children].flat(2).filter(Boolean).at(-1) as { props: Record<string, unknown> };
+        return editor.props;
+      }
+
+      it('본문은 삭제된 응답·테스트 응답·남의 설문 응답을 없는 응답으로 접는다', async () => {
+        const [, , deleted, test] = responseIds;
+        await expect(renderExternal(surveyId, deleted!)).rejects.toThrow('NEXT_NOT_FOUND');
+        await expect(renderExternal(surveyId, test!)).rejects.toThrow('NEXT_NOT_FOUND');
+        const other = await seedSurvey('남의 조사');
+        try {
+          await expect(renderExternal(other, responseIds[0]!)).rejects.toThrow('NEXT_NOT_FOUND');
+        } finally {
+          await db.delete(surveysTable).where(eq(surveysTable.id, other));
+        }
+      });
+
+      it('외부 열람은 설문이 읽지 않는 명단 열·이월 응답·조사표를 싣지 않는다', async () => {
+        const props = editorProps(await renderExternal(surveyId, responseIds[0]!));
+        // 스냅샷({})이 아무 명단 열도 읽지 않는다 — 일반 열 「기관명」도 실리지 않는다.
+        expect(props['initialContactAttrs']).toEqual({});
+        expect(JSON.stringify(props)).not.toContain(SECRET_ATTR);
+        expect(props['initialPriorAnswers']).toBeNull();
+        expect(props['documentView']).toBeNull();
+        expect(props['readOnly']).toBe(true);
+      });
+
+      it('배포 스냅샷이 없으면 흐름을 그리지 않고 안내만 — 브라우저 RPC 폴백을 열지 않는다', async () => {
+        await db
+          .update(versionsTable)
+          .set({ snapshot: null as never })
+          .where(eq(versionsTable.surveyId, surveyId));
+        const tree = await renderExternal(surveyId, responseIds[0]!);
+        expect(JSON.stringify(tree)).toContain('응답을 보여 드릴 수 없습니다');
+      });
     });
   });
 });
